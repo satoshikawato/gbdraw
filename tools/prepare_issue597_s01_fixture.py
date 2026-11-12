@@ -85,7 +85,7 @@ def main():
             for i in range(12)
         )
     )
-    fixture = out / "real-full-pairwise.gbdraw-session.json.gz"
+    fixture = out / "real-full-pairwise.gbdraw"
     subprocess.run(
         [sys.executable, "-m", "gbdraw.cli", "setup-losat"],
         cwd=ROOT,

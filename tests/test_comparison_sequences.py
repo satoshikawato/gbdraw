@@ -14,6 +14,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparison_sequences import read_comparison_sequence_file
 from gbdraw.session_io import canonicalize_cli_invocation
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import read_session_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
@@ -207,7 +208,7 @@ def test_saved_session_keeps_the_persisted_wire_name(tmp_path: Path) -> None:
         "--conservation_sequence", str(DANIO_GENBANK), "--conservation_reference", "subject",
         "-o", str(prefix), "-f", "svg", "--save_session",
     ])
-    session = session_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    session = session_view(read_session_payload(prefix.with_suffix(".gbdraw")))
     options = session["renderRequest"]["diagramOptions"]
     assert options["conservationFastaFiles"] == [
         [{"resourceId": "conservation-fasta-files-1-1", "representation": "file"}]
@@ -220,7 +221,7 @@ def test_saved_session_keeps_the_persisted_wire_name(tmp_path: Path) -> None:
 def test_main_v39_session_with_conservation_fasta_replays(tmp_path: Path) -> None:
     """Main first-parent sessions (v32-v39) may record --conservation_fasta."""
 
-    session_path = tmp_path / "v39.gbdraw-session.json"
+    session_path = tmp_path / "v39.gbdraw"
     session_path.write_bytes(gzip.decompress(V39_SESSION.read_bytes()))
     session = json.loads(session_path.read_text(encoding="utf-8"))
     replay = tmp_path / "replay"

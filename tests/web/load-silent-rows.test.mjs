@@ -13,6 +13,7 @@ import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { gallerySessionDocument, sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -49,18 +50,17 @@ const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
   return JSON.parse(name.endsWith('.gz') ? gunzipSync(bytes) : bytes);
 };
-const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+const GALLERY = Object.fromEntries(await Promise.all(['lambda_basic_linear', 'tobacco-chloroplast'].map(async (id) => [id, await gallerySessionDocument(id)])));
+const gallery = (name) => structuredClone(GALLERY[name.replace('.gbdraw', '')]);
 const VECTORS = JSON.parse(readFileSync(new URL('../fixtures/session_admission_vectors.json', import.meta.url), 'utf8'));
-const input = (value) => ({
-  target: { files: [new File([JSON.stringify(value)], 'session.json', { type: 'application/json' })], value: 'selected' }
-});
+const input = (value) => sessionLoadEvent(value);
 const BASES = {
   v30: () => fixture('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'),
   v44: () => fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'),
   v44L: () => fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'),
   so46: () => structuredClone(VECTORS.bases['settings-only-46'].document),
   // The bundled Gallery Session is a 49: a leaf is edited in its drawing (`drawings[0]`), and a row names it there.
-  g47L: () => gallery('lambda_basic_linear.gbdraw-session.json'),
+  g47L: () => gallery('lambda_basic_linear.gbdraw'),
   // tests/utils/two_mode_session.py: a Circular Session 46 with a Linear `otherModeResult`.
   twoMode: () => evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()')
 };
@@ -71,14 +71,14 @@ const set = (value, path, leaf) => {
   return value;
 };
 const load = async (file) => {
-  const loaded = await importSession(input(file), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await input(file), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.ok(['ok', 'legacy'].includes(loaded.status), JSON.stringify(loaded.error));
   return loaded.repairs.map(({ code, path }) => `${code} ${path}`);
 };
 const saved = async () => {
   const result = await exportSession('E1b', { askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
-  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return await readSavedSession(result.blob);
 };
 // A 49 Load names a place in `drawings` by its index: `drawings.0.x` is the row `drawings[0].x`.
 const rowOf = (path) => path.replace(/\.(\d+)(?=\.|$)/g, '[$1]');
@@ -180,7 +180,7 @@ test('K14: record display drafts of no list are listed before the dialog and app
         reverseComplementOverride: null, anchorIntent: null
       });
       const dialogs = [];
-      const loaded = await importSession(input(set(base(), path, value)), {
+      const loaded = await importSession(await input(set(base(), path, value)), {
         transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; }
       });
       const label = `${name} ${JSON.stringify(value)}`;
@@ -220,7 +220,7 @@ test('OV-892: a Label blacklist that is no text is listed and keeps its text', a
       [5, '5', false], [null, '', false]
     ]) {
       const dialogs = [];
-      const loaded = await importSession(input(set(base(), path, value)), {
+      const loaded = await importSession(await input(set(base(), path, value)), {
         transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; }
       });
       const label = `${name} ${JSON.stringify(value)}`;
@@ -375,7 +375,7 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   const session = fixture('synthetic_conservation.gbdraw-session.json.gz');
   session.webFiles.bindings.c_conservation_blasts[1].resourceId = 'zz';
   const dialogs = [];
-  const result = await importSession(input(session), {
+  const result = await importSession(await input(session), {
     transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(...dialog.items); return true; }
   });
   assert.deepEqual(result.repairs.map(({ code, path }) => `${code} ${path}`), [
@@ -421,7 +421,7 @@ test('a lost table of two of one name drops its own series; the other rings keep
   const droppedSeries = (result) => result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]);
   const legacy = fixture('synthetic_conservation.gbdraw-session.json.gz');
   loseFirstOfTwoOfOneName(legacy.webFiles.bindings, legacy.config.circularConservation.series);
-  assert.deepEqual(droppedSeries(await importSession(input(legacy), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
+  assert.deepEqual(droppedSeries(await importSession(await input(legacy), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
     [['config.circularConservation.series[0]', 'comparison-b']], 'Session 40');
   assert.deepEqual(drawn(), kept, 'Session 40');
 
@@ -429,7 +429,7 @@ test('a lost table of two of one name drops its own series; the other rings keep
   const current = await saved();
   const at = current.drawings.findIndex((drawing) => drawing.mode === 'circular');
   loseFirstOfTwoOfOneName(current.drawings[at].webFiles.bindings, current.drawings[at].config.circularConservation.series);
-  assert.deepEqual(droppedSeries(await importSession(input(current), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
+  assert.deepEqual(droppedSeries(await importSession(await input(current), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
     [[`drawings[${at}].config.circularConservation.series[0]`, 'comparison-b']], 'Session 51');
   assert.deepEqual(drawn(), kept, 'Session 51');
 });
@@ -463,7 +463,7 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
   const drawn = () => orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
     .map(({ label, file }) => [label, file.name]);
   for (const entry of [5, null, {}]) {
-    const result = await importSession(input(rings(entry)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const result = await importSession(await input(rings(entry)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]),
       [['files.c_conservation_blasts[0]', 'a']], JSON.stringify(entry));
     assert.deepEqual(drawn(), [['b', 'second.tsv']], JSON.stringify(entry));
@@ -481,13 +481,13 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
   past.files.c_conservation_blasts = [first, null, past.files.c_conservation_blasts[1]];
   past.config.circularConservation.series = [{ label: 'A', fileName: first.name }];
   past.config.circularConservation.labels = 'A,b,c';
-  const pastRows = (await importSession(input(past), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })).repairs;
+  const pastRows = (await importSession(await input(past), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })).repairs;
   assert.deepEqual(pastRows.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]),
     [['files.c_conservation_blasts[1]', 'b']]);
   assert.deepEqual(drawn(), [['A', first.name], ['c', 'second.tsv']]);
   // A series label with a comma does not shift the labels past the series (#1777 round 10, OV-3197).
   past.config.circularConservation.series = [{ label: 'A, x', fileName: first.name }];
-  await importSession(input(past), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  await importSession(await input(past), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.deepEqual(drawn(), [['A, x', first.name], ['c', 'second.tsv']]);
 });
 
@@ -495,7 +495,7 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
 test('OV-896: a Load that leaves out every comparison series turns the comparison off', async () => {
   const session = fixture('synthetic_conservation.gbdraw-session.json.gz');
   session.webFiles.bindings.c_conservation_blasts.forEach((binding) => { binding.resourceId = 'zz'; });
-  const result = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const result = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path }) => path),
     [2, 1, 0].map((index) => `config.circularConservation.series[${index}]`));
   const conservation = modeDrawing(state, 'circular').circularConservation;
@@ -632,7 +632,7 @@ test('U8: Save writes the Results that currentResults returns', async () => {
 // off after the Load waits whole: the live track apply judges its hides with
 // the stack on, as loaded (`committedTrackHideDrawing`).
 test('Load records the Use custom stack switch of the loaded Circular draft beside its request (tobacco)', async () => {
-  await load(gallery('tobacco-chloroplast.gbdraw-session.json'));
+  await load(gallery('tobacco-chloroplast.gbdraw'));
   const drawing = modeDrawing(state, 'circular');
   assert.equal(drawing.adv.circular_track_slots_enabled, true);
   drawing.adv.circular_track_slots_enabled = false;

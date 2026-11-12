@@ -382,8 +382,17 @@ selection are unsupported.
 
 ## Sessions and output
 
-`--save_session` writes `<output>.gbdraw-session.json`;
-`--session_output PATH` selects a `.json` or `.json.gz` path and implies save.
+A Session is one `.gbdraw` file (a ZIP file; see
+[The Session file](session-and-request-compatibility.md#the-session-file)).
+`--save_session` writes `<prefix>.gbdraw` (with `-o prefix`), otherwise
+`<svg stem>.gbdraw`, otherwise `gbdraw.gbdraw`.
+`--session_output PATH` selects the path and implies save; a name that ends with
+`.json` or `.json.gz` is refused before anything is written ("A Session is saved
+as a .gbdraw file. Use a name that ends with .gbdraw, not .json or .json.gz:
+{path}"), and another name, such as `.zip`, is written as given.
+`--session` reads a `.gbdraw` file of any name and an older JSON Session (plain
+or gzip) by its content; `gbdraw render --session old.json.gz --session_output
+new.gbdraw` converts an older Session.
 With `--session`, only output and format overrides, session-output options,
 `--font_file`, `--no_font_embedding`, `--dpi`, `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
 persisted and new settings. Without `--dpi`, a PNG is drawn at the PNG DPI a web app Session saved, else at

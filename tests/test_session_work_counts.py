@@ -36,14 +36,15 @@ from gbdraw.api import (
     RenderOutputRequest,
 )
 from gbdraw.session import save_session_document
-from gbdraw.session_io import SESSION_FORMAT, validate_session, write_session_json
+from gbdraw.session_io import SESSION_FORMAT, validate_session_resources
+from tests.utils.session_files import read_session_payload, write_session_file, write_unchecked_session_file
 from tests.utils.session_drawing_view import drawing_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
-CIRCULAR_SESSION = GALLERY_SESSIONS / "HmmtDNA_basic_circular.gbdraw-session.json"
+CIRCULAR_SESSION = GALLERY_SESSIONS / "HmmtDNA_basic_circular.gbdraw"
 # Five records with current LOSATP raw entries and a protein identity manifest.
-PROTEIN_SESSION = GALLERY_SESSIONS / "BGC0000708-BGC0000713.gbdraw-session.json"
+PROTEIN_SESSION = GALLERY_SESSIONS / "BGC0000708-BGC0000713.gbdraw"
 
 
 def _count_calls(
@@ -59,7 +60,7 @@ def _count_calls(
         return function(*args, **kwargs)
 
     for module in list(sys.modules.values()):
-        if not getattr(module, "__name__", "").startswith("gbdraw"):
+        if not getattr(module, "__name__", "").startswith(("gbdraw", "tests.utils.session_files")):
             continue
         for name, value in list(vars(module).items()):
             if value is function:
@@ -105,20 +106,20 @@ def test_session_writers_validate_each_payload_once(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    validations = _count_calls(monkeypatch, validate_session)
+    validations = _count_calls(monkeypatch, validate_session_resources)
 
     # A built document was validated when it was built; its write does not
     # validate it again.
-    save_session_document(tmp_path / "built.gbdraw-session.json", _small_request(tmp_path))
+    save_session_document(tmp_path / "built.gbdraw", _small_request(tmp_path))
     assert len(validations) == 1
 
     # A payload from outside is validated by the writer.
     validations.clear()
-    payload = json.loads((tmp_path / "built.gbdraw-session.json").read_text(encoding="utf-8"))
-    write_session_json(tmp_path / "external.gbdraw-session.json", payload)
+    payload = read_session_payload(tmp_path / "built.gbdraw")
+    write_session_file(tmp_path / "external.gbdraw", payload)
     assert len(validations) == 1
-    assert (tmp_path / "external.gbdraw-session.json").read_bytes() == (
-        tmp_path / "built.gbdraw-session.json"
+    assert (tmp_path / "external.gbdraw").read_bytes() == (
+        tmp_path / "built.gbdraw"
     ).read_bytes()
 
 
@@ -126,7 +127,7 @@ def test_cli_save_session_validates_the_built_sidecar_once(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    validations = _count_calls(monkeypatch, validate_session)
+    validations = _count_calls(monkeypatch, validate_session_resources)
     _run_cli(
         "circular",
         "--gbk",
@@ -140,14 +141,14 @@ def test_cli_save_session_validates_the_built_sidecar_once(
     # The canonical document inside the sidecar, then the sidecar that
     # build_session_json returns; the write validates neither again.
     assert len(validations) == 2
-    assert (tmp_path / "saved.gbdraw-session.json").is_file()
+    assert (tmp_path / "saved.gbdraw").is_file()
 
 
 def test_cli_session_render_validates_and_copies_the_session_once(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    validations = _count_calls(monkeypatch, validate_session)
+    validations = _count_calls(monkeypatch, validate_session_resources)
     copies = _count_deepcopy_callers(monkeypatch)
     _run_cli("circular", "--session", str(CIRCULAR_SESSION), "-o", str(tmp_path / "replayed"), "-f", "svg")
     # The Session is validated once, when it is loaded, and the loaded document
@@ -170,14 +171,14 @@ def test_cli_session_render_validates_and_copies_the_session_once(
         "-f",
         "svg",
         "--session_output",
-        str(tmp_path / "resaved.gbdraw-session.json"),
+        str(tmp_path / "resaved.gbdraw"),
     )
     assert len(validations) == 2
     assert copies == Counter(
         {
             "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
             # Only the written document copies the drawing state, once.
-            "gbdraw.session.__post_init__": 1,
+            "gbdraw.session._built": 1,
         }
     )
 
@@ -204,7 +205,7 @@ def _legacy_session(tmp_path: Path, mode: str) -> Path:
         "ui": {"mode": mode, "cInputType": "gb", "lInputType": "gb"},
         "files": {"c_gb": embedded} if mode == "circular" else {"linearSeqs": [{"gb": embedded}]},
     }
-    path = tmp_path / "legacy.gbdraw-session.json"
+    path = tmp_path / "legacy.gbdraw"
     path.write_text(json.dumps(session), encoding="utf-8")
     return path
 
@@ -216,7 +217,7 @@ def test_cli_legacy_session_replay_reads_the_loaded_payload(
     tmp_path: Path,
 ) -> None:
     session_path = _legacy_session(tmp_path, mode)
-    validations = _count_calls(monkeypatch, validate_session)
+    validations = _count_calls(monkeypatch, validate_session_resources)
     copies = _count_deepcopy_callers(monkeypatch)
     _run_cli(mode, "--session", str(session_path), "-o", str(tmp_path / "replayed"), "-f", "svg")
     assert (tmp_path / "replayed.svg").exists()
@@ -249,7 +250,7 @@ def _count_manifest_checks(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, .
 
 
 def _resave_args(tmp_path: Path, save: bool) -> list[str]:
-    return ["--session_output", str(tmp_path / "resaved.gbdraw-session.json")] if save else []
+    return ["--session_output", str(tmp_path / "resaved.gbdraw")] if save else []
 
 
 @pytest.mark.parametrize("save", [False, True], ids=["no-save", "save"])
@@ -267,7 +268,7 @@ def test_cli_linear_session_checks_the_identity_manifest_once(
     # the manifest it builds, and the render and the writer trust both proofs.
     assert len(checks) == 1
     assert (tmp_path / "replayed.svg").is_file()
-    assert (tmp_path / "resaved.gbdraw-session.json").is_file() is save
+    assert (tmp_path / "resaved.gbdraw").is_file() is save
 
 
 @pytest.mark.parametrize("save", [False, True], ids=["no-save", "save"])
@@ -278,12 +279,12 @@ def test_cli_circular_session_checks_its_identity_manifest_once(
 ) -> None:
     # A Circular drawing extracts no proteins: the render and the writer carry
     # the loaded Session's own manifest.
-    session = json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8"))
-    manifest = drawing_view(json.loads(PROTEIN_SESSION.read_text(encoding="utf-8")))["proteinIdentityManifest"]
+    session = read_session_payload(CIRCULAR_SESSION)
+    manifest = drawing_view(read_session_payload(PROTEIN_SESSION))["proteinIdentityManifest"]
     assert manifest["recordInstances"]
     session["drawings"][0]["proteinIdentityManifest"] = manifest
-    path = tmp_path / "manifest.gbdraw-session.json"
-    path.write_text(json.dumps(session), encoding="utf-8")
+    path = tmp_path / "manifest.gbdraw"
+    write_unchecked_session_file(path, session)
     checks = _count_manifest_checks(monkeypatch)
     _run_cli(
         "circular", "--session", str(path), "-o", str(tmp_path / "replayed"), "-f", "svg",
@@ -291,7 +292,7 @@ def test_cli_circular_session_checks_its_identity_manifest_once(
     )
     assert len(checks) == 1
     if save:
-        resaved = json.loads((tmp_path / "resaved.gbdraw-session.json").read_text(encoding="utf-8"))
+        resaved = read_session_payload(tmp_path / "resaved.gbdraw")
         assert drawing_view(resaved)["proteinIdentityManifest"] == manifest
 
 
@@ -304,7 +305,7 @@ def test_cli_fresh_linear_render_trusts_its_own_extraction(
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
     request, _identities = _request("similarity_groups", tmp_path)
     checks = _count_manifest_checks(monkeypatch)
-    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    sidecar = tmp_path / "fresh.gbdraw"
     _run_cli(
         "linear", "--gbk", *(str(record.source.path) for record in request.records),
         "--losat", "losatp", "--losatp_mode", "similarity_groups",
@@ -315,4 +316,4 @@ def test_cli_fresh_linear_render_trusts_its_own_extraction(
     # the writer checks its own empty manifest, as before.)
     assert [args for args in checks if args[0]["recordInstances"]] == []
     assert len(checks) == 2
-    assert drawing_view(json.loads(sidecar.read_text(encoding="utf-8")))["proteinIdentityManifest"]["recordInstances"]
+    assert drawing_view(read_session_payload(sidecar))["proteinIdentityManifest"]["recordInstances"]

@@ -58,6 +58,7 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.io.regions import RecordWindow
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 
 _FAKE_LOSAT = """#!{python}
 import sys
@@ -541,9 +542,9 @@ def test_the_receipts_command_draws_the_plan_with_only_the_listed_window_pairs(
 
     # The Session stores the tables of the four window pairs, and replays them.
     assert _run([*command[:-1], "FIG2", "--save_session"], monkeypatch, "linear") == 0
-    session = drawing_view(json.loads((tmp_path / "FIG2.gbdraw-session.json").read_text(encoding="utf-8")))
+    session = drawing_view(read_session_payload(tmp_path / "FIG2.gbdraw"))
     assert _stored_pairs(session) == [(0, 2), (1, 3), (2, 4), (3, 4)]
-    assert _run(["--session", "FIG2.gbdraw-session.json", "-o", "FIG3"], monkeypatch, "linear") == 0
+    assert _run(["--session", "FIG2.gbdraw", "-o", "FIG3"], monkeypatch, "linear") == 0
     assert (tmp_path / "FIG3.svg").read_bytes() == (tmp_path / "FIG2.svg").read_bytes()
 
 
@@ -646,7 +647,7 @@ def test_a_window_whose_record_id_would_not_read_back_is_named_by_its_number(
     monkeypatch.chdir(tmp_path)
     command = "--records_table P.records.tsv --comparisons_table P.comparisons.tsv --losat losatp -o FIG --save_session"
     assert _run(command.split(), monkeypatch, "linear") == 0
-    session = drawing_view(json.loads((tmp_path / "FIG.gbdraw-session.json").read_text(encoding="utf-8")))
+    session = drawing_view(read_session_payload(tmp_path / "FIG.gbdraw"))
     expected = [(0, 1), (0, 2)] + ([(1, 3), (2, 3)] if case == "id-of-another-window" else [])
     assert _stored_pairs(session) == expected
 

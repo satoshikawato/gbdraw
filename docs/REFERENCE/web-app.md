@@ -25,8 +25,8 @@ application on a free port instead. That is another address to the browser: a
 choice made there is not kept, and copies left there are deleted only when
 that port is used again.
 
-When you choose an input file, the page writes its contents (a gzip file's
-expanded contents) to a temporary file in the browser's private storage for
+When you choose an input file, the page writes its contents (a gzip file as
+it is) to a temporary file in the browser's private storage for
 the site, the origin private file system, and releases them from memory.
 Generate, Save Session, and every later reading of the file read that copy, so
 a file changed, moved, renamed, or deleted on disk after it was chosen
@@ -90,10 +90,11 @@ feature popup are shared. A saved Session keeps each mode's settings
 
 Every file input also takes a gzip-compressed file (`.gb.gz`, `.fna.gz`,
 `.gff.gz`, a gzip TSV): it is read as the plain file it holds, told by its
-first two bytes, and a saved Session keeps the plain file
+first two bytes, and a saved Session keeps the gzip file as it is
 ([input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files)).
-A gzip file that expands to more than 512 MiB is refused with its name; choose
-its plain file instead.
+A gzip file that expands to more than 512 MiB is refused with its name as soon
+as it is chosen, and one in a loaded Session when you Generate; choose its
+plain file instead.
 
 A Circular GenBank upload starts in **Add GenBank/DDBJ files**, and its File
 card then holds the file in **GenBank/DDBJ File**. Each Linear **File** card
@@ -348,13 +349,14 @@ settings always show in full.
 
 **Save Session** asks for a **Session title** in a dialog when none is set
 (Enter saves, Escape cancels) and downloads
-`<title>.gbdraw-session.json.gz`. The title beside **Session** in the header
+`<title>.gbdraw`. The title beside **Session** in the header
 opens the same dialog as **Rename Session**. Saving again under the same file name first
-asks whether to **Download again**. When the compressed Session is larger
+asks whether to **Download again**. When the Session file is larger
 than 50 MiB, Save names its size and asks before it downloads. **Cancel** in
 either dialog saves nothing. When the download starts, a notice above the Result
-names the file. **Load Session** accepts `.gbdraw-session.json` and
-`.gbdraw-session.json.gz` files; after a load, the notice names the loaded file
+names the file. **Load Session** accepts `.gbdraw` and `.zip` Session files
+and older `.gbdraw-session.json` and `.gbdraw-session.json.gz` files (`.json`,
+`.gz`); after a load, the notice names the loaded file
 and lists any warnings about older Session content. Dismiss the notice with its
 close button; the next notice replaces it. Generate keeps it, since it describes
 the loaded Session; **Reset Settings** and a switch between Circular and Linear
@@ -388,10 +390,13 @@ generating or updating, **Save Session** and **Load Session** are unavailable,
 and the header names the reason, such as **Generating diagram. Retry after
 generation finishes.**
 
-A plain Session file larger than 200 MiB, or a gzip Session that expands beyond
-512 MiB, is rejected. Save refuses before downloading a Session that would expand beyond
-512 MiB or whose gzip file is larger than 200 MiB, and names its size and its largest inputs. Save needs browser gzip compression. Load needs Web
-Workers and, for `.gz` files, gzip decompression. A rejected or failed Save or
+A `.gbdraw` Session file has no limit on the size of its inputs; only its
+settings and results (`gbdraw-session.json`) are limited to 512 MiB, on Save and
+on Load. Load first checks that the browser has room to store the inputs, and
+Save refuses when the browser has no room for the file; each refusal names the
+sizes. An older JSON Session file larger than 200 MiB, or a gzip one that
+expands beyond 512 MiB, is rejected. Load needs Web Workers and, for `.gz`
+files, gzip decompression. A rejected or failed Save or
 Load shows its error and keeps the current Result, settings, and Undo history.
 A failed Load shows its reason and correction under **Session not loaded**,
 unless a more specific step names the error: for example, that the file is not

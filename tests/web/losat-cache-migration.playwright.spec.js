@@ -17,6 +17,7 @@ const {
   generatedConstant
 } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -42,10 +43,8 @@ const expandedSessionBytes = (path) => {
   return bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes;
 };
 
-const readSession = (path) => JSON.parse(expandedSessionBytes(path).toString('utf8'));
-
 const importSession = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
@@ -67,7 +66,7 @@ const saveSession = async (page) => {
   savedSessionCount += 1;
   const destination = join(
     savedSessionDir,
-    `saved-${savedSessionCount}.gbdraw-session.json.gz`
+    `saved-${savedSessionCount}.gbdraw`
   );
   await download.saveAs(destination);
   return destination;
@@ -766,7 +765,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await assertHydratedUtf8PromptBoundary(page);
 
   const migratedPath = await saveSession(page);
-  const migratedSession = readSession(migratedPath);
+  const migratedSession = await readSessionFile(migratedPath);
   assertCurrentProteinArtifacts(migratedSession);
   assertRenamedZeroMtimeResources(migratedSession);
 
@@ -787,7 +786,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
 
   const expectedUploadBytes = await installUserUploadedTsv(page);
   const uploadedSessionPath = await saveSession(page);
-  expect(shownSavedDrawing(readSession(uploadedSessionPath)).losatDerivedCache?.entries || []).toEqual([]);
+  expect(shownSavedDrawing(await readSessionFile(uploadedSessionPath)).losatDerivedCache?.entries || []).toEqual([]);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, uploadedSessionPath);

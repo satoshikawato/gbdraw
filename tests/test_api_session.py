@@ -5,6 +5,8 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -44,7 +46,10 @@ from gbdraw.api import (
 )
 from gbdraw.api.options import losatp_analysis_mode
 from gbdraw.exceptions import ValidationError
-from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
+from gbdraw.session import SessionDocument
+from gbdraw.session_container import BytesResourceSource
+from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session, read_source_bytes, split_resource_bytes
+from tests.utils.session_files import embedded_session, load_session_mapping, read_session_payload, write_session_file
 from tests.utils.session_drawing_view import build_mode_scoped_session_document, drawing_view, upgrade_to_mode_scoped
 from tests.utils.web_render_result import web_result_svg, web_session_results
 
@@ -76,7 +81,8 @@ def test_session_document_round_trip_owns_resource_lifetime(
     assert document.version == CURRENT_SESSION_VERSION
     assert document.mode == mode
     assert document.has_canonical_request is True
-    assert document.to_dict()["resources"]["record-1-genbank"]["encoding"] == "base64"
+    # A new resource's bytes stay in their source until the Session file is written.
+    assert "encoding" not in document.to_dict()["resources"]["record-1-genbank"]
     written = drawing_view(document.to_dict())
     assert written["renderRequest"]["output"]["overwrite"] is False
     assert written["results"] == []
@@ -112,11 +118,12 @@ def test_session_document_save_load_and_render(tmp_path: Path) -> None:
             overwrite=True,
         ),
     )
-    session_path = tmp_path / "canonical.gbdraw-session.json"
+    session_path = tmp_path / "canonical.gbdraw"
     save_session_document(session_path, request)
-    assert session_path.read_text(encoding="utf-8").startswith(
-        f'{{"format":"gbdraw-session","version":{CURRENT_SESSION_VERSION},'
-    )
+    with zipfile.ZipFile(session_path) as archive:
+        names = archive.namelist()
+        assert json.loads(archive.read("gbdraw-session.json"))["version"] == CURRENT_SESSION_VERSION
+    assert names == ["gbdraw-session.json", "resources/record-1-genbank"]
     document = load_session_document(session_path)
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
@@ -127,21 +134,77 @@ def test_session_document_save_load_and_render(tmp_path: Path) -> None:
     assert result.output_paths[0].is_file()
 
 
-def test_session_document_gzip_save_load(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", ["canonical.json", "canonical.json.gz", "CANONICAL.JSON"])
+def test_session_document_refuses_a_json_output_name(tmp_path: Path, name: str) -> None:
     request = CircularDiagramRequest(records=(_record(),))
-    session_path = tmp_path / "canonical.gbdraw-session.json.gz"
+    session_path = tmp_path / name
+
+    with pytest.raises(SessionFormatError) as refused:
+        save_session_document(session_path, request)
+
+    assert str(refused.value) == (
+        "A Session is saved as a .gbdraw file. Use a name that ends with .gbdraw, "
+        f"not .json or .json.gz: {session_path}"
+    )
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("name", ["canonical.zip", "canonical"])
+def test_session_document_keeps_any_other_output_name(tmp_path: Path, name: str) -> None:
+    request = CircularDiagramRequest(records=(_record(),))
+    session_path = tmp_path / name
 
     save_session_document(session_path, request)
-    document = load_session_document(session_path)
 
-    assert session_path.read_bytes().startswith(b"\x1f\x8b")
-    assert document.version == CURRENT_SESSION_VERSION
-    assert document.mode == "circular"
+    assert list(tmp_path.iterdir()) == [session_path]
+    assert load_session_document(session_path).mode == "circular"
+
+
+def test_session_file_stores_a_gzip_input_as_it_is(tmp_path: Path) -> None:
+    import gzip
+    import io
+
+    from Bio import SeqIO
+
+    from gbdraw.api import GenBankInputSource
+
+    text = io.StringIO()
+    SeqIO.write(_record().source.record, text, "genbank")
+    genbank = tmp_path / "input.gb.gz"
+    genbank.write_bytes(gzip.compress(text.getvalue().encode(), mtime=0))
+    request = CircularDiagramRequest(records=(RecordInput(source=GenBankInputSource(genbank)),))
+    session_path = tmp_path / "gzip.gbdraw"
+
+    save_session_document(session_path, request)
+
+    with zipfile.ZipFile(session_path) as archive:
+        (entry,) = [info for info in archive.infolist() if info.filename.startswith("resources/")]
+        assert entry.compress_type == zipfile.ZIP_STORED
+        assert archive.read(entry) == genbank.read_bytes()
+    with materialize_session(load_session_document(session_path), output_directory=tmp_path) as materialized:
+        (path,) = materialized.resource_paths.values()
+        assert path.read_bytes() == genbank.read_bytes()
+
+
+def test_a_json_session_51_is_refused(tmp_path: Path) -> None:
+    request = CircularDiagramRequest(records=(_record(),))
+    session_path = tmp_path / "canonical.gbdraw"
+    save_session_document(session_path, request)
+    json_path = tmp_path / "canonical.gbdraw"
+    with zipfile.ZipFile(session_path) as archive:
+        json_path.write_bytes(archive.read("gbdraw-session.json"))
+
+    with pytest.raises(SessionFormatError) as refused:
+        load_session_document(json_path)
+
+    assert str(refused.value) == (
+        f"A Session version {CURRENT_SESSION_VERSION} file must be a .gbdraw file, not JSON: {json_path}"
+    )
 
 
 def test_session_document_requires_explicit_overwrite(tmp_path: Path) -> None:
     request = CircularDiagramRequest(records=(_record(),))
-    session_path = tmp_path / "canonical.gbdraw-session.json"
+    session_path = tmp_path / "canonical.gbdraw"
 
     save_session_document(session_path, request)
     original = session_path.read_bytes()
@@ -187,7 +250,7 @@ def test_current_document_quarantines_legacy_protein_cache_on_save(
         "text": "p_r_old\tp_r_other\n",
         "program": "blastp",
     }
-    session_path = tmp_path / "legacy-round-trip.gbdraw-session.json"
+    session_path = tmp_path / "legacy-round-trip.gbdraw"
 
     saved = save_session_document(
         session_path,
@@ -229,7 +292,7 @@ def test_legacy_session_has_no_public_typed_conversion(tmp_path: Path) -> None:
 
 
 def test_duplicate_json_resource_id_is_rejected(tmp_path: Path) -> None:
-    session_path = tmp_path / "duplicate.gbdraw-session.json"
+    session_path = tmp_path / "duplicate.gbdraw"
     session_path.write_text(
         '{"format":"gbdraw-session","version":31,'
         '"renderRequest":{},"resources":{"same":{},"same":{}}}',
@@ -241,26 +304,26 @@ def test_duplicate_json_resource_id_is_rejected(tmp_path: Path) -> None:
 
 
 def test_duplicate_sanitized_resource_name_is_rejected(tmp_path: Path) -> None:
-    data = build_session_document(
-        LinearDiagramRequest(records=(_record("a"), _record("b")))
-    ).to_dict()
+    built = build_session_document(LinearDiagramRequest(records=(_record("a"), _record("b"))))
+    data = embedded_session(built.to_dict(), built.resources.sources)
     resource_ids = list(data["resources"])
     data["resources"][resource_ids[1]]["name"] = data["resources"][resource_ids[0]]["name"]
 
     with pytest.raises(SessionResourceError, match="Duplicate canonical resource filename"):
-        load_session_document(data)
+        load_session_mapping(data)
 
 
 def _session_with_resource_field(tmp_path: Path, field: str, value) -> tuple[dict, Path]:
-    """A saved Session whose GenBank resource also carries ``field``.
+    """A saved JSON Session 48 whose GenBank resource also carries ``field``.
 
     ``value`` maps the SHA-256 hex digest of the resource bytes to the value.
+    A Session file's resources carry no checksum (its entries' CRC-32 replaces it).
     """
 
-    data = build_session_document(CircularDiagramRequest(records=(_record(),))).to_dict()
+    data = build_mode_scoped_session_document(CircularDiagramRequest(records=(_record(),)))
     resource = data["resources"]["record-1-genbank"]
     resource[field] = value(hashlib.sha256(base64.b64decode(resource["data"])).hexdigest())
-    path = tmp_path / "resource-field.gbdraw-session.json"
+    path = tmp_path / "resource-field.json"
     path.write_text(json.dumps(data), encoding="utf-8")
     return data, path
 
@@ -279,12 +342,12 @@ def test_resource_checksum_loads_through_both_session_loaders(
     checksum,
 ) -> None:
     data, path = _session_with_resource_field(tmp_path, "checksum", checksum)
-    declared = data["resources"]["record-1-genbank"]["checksum"]
 
     document = load_session_document(path)
-    assert document.to_dict()["resources"]["record-1-genbank"]["checksum"] == declared
+    # The checksum is checked where the bytes are read, then dropped with them.
+    assert "checksum" not in document.to_dict()["resources"]["record-1-genbank"]
     assert load_session_document(data).to_dict() == document.to_dict()
-    assert load_session(path)["resources"]["record-1-genbank"]["checksum"] == declared
+    assert load_session(path)["resources"] == document.to_dict()["resources"]
     with materialize_session(document, output_directory=tmp_path) as materialized:
         records = normalize_request_records(session_to_request(materialized))
     assert [record.id for record in records] == ["record"]
@@ -339,11 +402,12 @@ def test_web_saved_resource_checksum_loads_through_both_session_loaders(
         canonical["resources"]["record-1-genbank"]["checksum"]
         == data["resources"]["record-1-genbank"]["checksum"]
     )
-    saved_path = tmp_path / "web-saved.gbdraw-session.json"
+    # A JSON Session 48 (the mode-scoped layout ``data`` already has) holding what the Web wrote.
+    saved_path = tmp_path / "web-saved.json"
     saved_path.write_text(
         json.dumps(
             {
-                **drawing_view(data),
+                **data,
                 "version": 48,
                 "renderRequest": canonical["renderRequest"],
                 "resources": canonical["resources"],
@@ -360,15 +424,16 @@ def test_web_saved_resource_checksum_loads_through_both_session_loaders(
 
 
 def test_partial_materialization_failure_cleans_owned_directory(tmp_path: Path) -> None:
-    data = build_session_document(
-        LinearDiagramRequest(records=(_record("a"), _record("b")))
-    ).to_dict()
-    data["resources"]["record-2-genbank"]["data"] = "not-base64!"
+    built = build_session_document(LinearDiagramRequest(records=(_record("a"), _record("b"))))
+    # The second resource's bytes are shorter than its descriptor says.
+    document = SessionDocument._built(
+        built.to_dict(), {**built.resources.sources, "record-2-genbank": BytesResourceSource(b"short")}
+    )
     root = tmp_path / "materialized"
 
     with pytest.raises(SessionResourceError, match="record-2-genbank"):
         with materialize_session(
-            data,
+            document,
             output_directory=tmp_path,
             temporary_directory=root,
         ):
@@ -694,7 +759,7 @@ def test_python_typed_protein_round_trip_with_explicit_adjacent_comparison(
             collinearity_blocks=collinearity,
         ),
     )
-    session_path = tmp_path / f"typed-{collinearity_value_kind}.json"
+    session_path = tmp_path / f"typed-{collinearity_value_kind}.gbdraw"
     save_session_document(session_path, request)
 
     completed = subprocess.run(
@@ -755,7 +820,8 @@ def test_two_depth_tracks_naming_one_resource_render_as_two_copies(tmp_path: Pat
         )),
         output=RenderOutputRequest(output_prefix="depth", overwrite=True),
     )
-    copies = build_session_document(request).to_dict()
+    built = build_session_document(request)
+    copies = embedded_session(built.to_dict(), built.resources.sources)
     (drawing,) = copies["drawings"]
     tracks = drawing["renderRequest"]["diagramOptions"]["depthTracks"]
     first, second = (track["source"]["resourceId"] for track in tracks)
@@ -766,8 +832,8 @@ def test_two_depth_tracks_naming_one_resource_render_as_two_copies(tmp_path: Pat
     del once["resources"][second]
     svgs = []
     for name, document in (("copies", copies), ("once", once)):
-        session_path = tmp_path / f"{name}.gbdraw-session.json"
-        session_path.write_text(json.dumps(document), encoding="utf-8")
+        session_path = tmp_path / f"{name}.gbdraw"
+        write_session_file(session_path, document)
         output = tmp_path / name
         output.mkdir()
         with materialize_session(load_session_document(session_path), output_directory=output) as materialized:
@@ -817,9 +883,9 @@ def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:
             ),
         ),
     )
-    session_path = tmp_path / "python-canonical-depth.gbdraw-session.json"
+    session_path = tmp_path / "python-canonical-depth.gbdraw"
     save_session_document(session_path, request)
-    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
+    session = drawing_view(read_session_payload(session_path))
 
     assert len(session["renderRequest"]["diagramOptions"]["depthTracks"]) == 2
     subprocess.run(
@@ -930,7 +996,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
     assert len(comparison_paths(interactive_source)) == 1
     assert [path.get("d") for path in comparison_paths(web_result_svg(web["results"][0]))] == [paths[0].get("d")]
 
-    session_path = tmp_path / "mixed.gbdraw-session.json"
+    session_path = tmp_path / "mixed.gbdraw"
     saved = save_session_document(session_path, drawings=[SessionDrawingSpec(request, state={
         "results": web_session_results(web),
         "editorState": {"featureCatalog": web["featureCatalog"]},
@@ -971,8 +1037,7 @@ def test_composite_document_replays_only_committed_request(tmp_path):
     })
     document = load_session_document(payload)
     saved = tmp_path / 'composite.json'
-    from gbdraw.session_io import write_session_json
-    write_session_json(saved, document.to_dict())
+    write_session_file(saved, document.to_dict(), document.resources.sources)
     restored = load_session_document(saved)
     assert restored.to_dict()['webFiles'] == payload['webFiles']
     with materialize_session(restored, output_directory=tmp_path / 'composite') as materialized:
@@ -1016,6 +1081,7 @@ def test_an_upgrade_stores_the_protein_results_of_a_reversed_record_in_the_searc
     source = _two_drawings(version)
     upgrade = upgrade_session_document(source, temporary_directory=tmp_path)
     upgraded = upgrade.document.to_dict()
+    source_document, source_sources = split_resource_bytes(source)
 
     assert upgrade.warnings == ()
     assert upgraded["version"] == CURRENT_SESSION_VERSION == 51
@@ -1023,13 +1089,16 @@ def test_an_upgrade_stores_the_protein_results_of_a_reversed_record_in_the_searc
     # Bytes change under the stored IDs, only for the protein results.
     assert upgraded["resources"].keys() == source["resources"].keys()
     changed = sorted(
-        key for key, descriptor in upgraded["resources"].items() if descriptor != source["resources"][key]
+        key for key, descriptor in upgraded["resources"].items()
+        if descriptor != source_document["resources"][key]
+        or upgrade.document.resources.read(key) != read_source_bytes(source_sources[key], descriptor["size"])
     )
     assert changed == sorted(f"linear-{key}" for key in _PROTEIN_RESOURCES)
     for key in changed:
-        stored = base64.b64decode(upgraded["resources"][key]["data"])
+        stored = upgrade.document.resources.read(key)
         assert upgraded["resources"][key]["size"] == len(stored)
-    assert upgrade_session_document(upgraded, temporary_directory=tmp_path).document.to_dict() == upgraded
+    again = upgrade_session_document(upgrade.document, temporary_directory=tmp_path).document
+    assert again.to_dict() == upgraded
 
 
 def test_a_cli_resave_of_a_session_47_writes_the_search_frame_for_both_drawings(
@@ -1037,12 +1106,12 @@ def test_a_cli_resave_of_a_session_47_writes_the_search_frame_for_both_drawings(
 ) -> None:
     from gbdraw.cli_utils.session import render_main
     from gbdraw.session import load_session_document, upgrade_session_document
-    from gbdraw.session_io import write_session_json
+    from tests.utils.session_files import write_session_file
 
-    source = tmp_path / "two.gbdraw-session.json"
-    write_session_json(source, _two_drawings(47))
+    source = tmp_path / "two.gbdraw"
+    write_session_file(source, _two_drawings(47))
     render_main(["--session", str(source), "-o", str(tmp_path / "fig"), "-f", "svg", "--save_session"])
-    resaved = load_session_document(tmp_path / "fig.gbdraw-session.json")
+    resaved = load_session_document(tmp_path / "fig.gbdraw")
     upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document
 
     assert resaved.version == CURRENT_SESSION_VERSION
@@ -1063,7 +1132,7 @@ def test_a_cli_resave_of_a_session_47_writes_the_search_frame_for_both_drawings(
     # The re-save keeps the IDs of the converted resources, as the upgrade does
     # (the base re-save wrote the table under a new ID).
     for key in (f"linear-{key}" for key in _PROTEIN_RESOURCES):
-        assert resaved.to_dict()["resources"][key]["data"] == upgraded.to_dict()["resources"][key]["data"]
+        assert resaved.resources.read(key) == upgraded.resources.read(key)
 
 
 def test_python_load_reads_a_session_47_and_a_settings_only_session_47() -> None:
@@ -1096,7 +1165,7 @@ def test_session_save_warns_about_a_linear_record_once_and_refuses_an_existing_o
         annotations={"molecule_type": "DNA", "topology": "linear"},
     )
     request = CircularDiagramRequest(records=(RecordInput(source=InMemoryRecordSource(seqrecord)),))
-    session_path = tmp_path / "linear.gbdraw-session.json"
+    session_path = tmp_path / "linear.gbdraw"
     question = "Are you sure you want to visualize it as circular?"
 
     with caplog.at_level(logging.WARNING):
@@ -1115,3 +1184,159 @@ def test_session_save_warns_about_a_linear_record_once_and_refuses_an_existing_o
         save_session_document(session_path, request)
     assert builds == []
     assert question not in caplog.text
+
+
+def test_an_edited_document_of_a_session_file_loads_with_the_files_of_its_source(tmp_path: Path) -> None:
+    """``to_dict()`` holds no bytes; the edited mapping loads with the
+    resources of the document it came from, and a mapping without them is
+    refused as it was before."""
+
+    source = load_session_document(
+        Path(__file__).resolve().parents[1] / "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw"
+    )
+    edited = source.to_dict()
+    edited["title"] = "edited"
+
+    document = load_session_document(edited, resources=source.resources)
+
+    assert document.to_dict()["title"] == "edited"
+    assert {resource_id: document.resources.read(resource_id) for resource_id in document.to_dict()["resources"]} == {
+        resource_id: source.resources.read(resource_id) for resource_id in source.to_dict()["resources"]
+    }
+    with pytest.raises(ValidationError, match="has no bytes"):
+        load_session_document(edited)
+
+
+RETIRED_JSON_51 = (
+    Path(__file__).resolve().parent / "retired_sessions/refused/drawings-per-drawing-cards.v51.gbdraw-session.json.gz"
+)
+
+
+def test_a_json_session_51_that_dev_wrote_is_refused_by_every_reader(tmp_path: Path) -> None:
+    """A JSON Session 51 never reached main; each reader refuses the one dev wrote (PD-OI-127)."""
+
+    message = f"A Session version {CURRENT_SESSION_VERSION} file must be a .gbdraw file, not JSON: {RETIRED_JSON_51}"
+    with pytest.raises(SessionFormatError) as refused:
+        load_session_document(RETIRED_JSON_51)
+    assert str(refused.value) == message
+    with pytest.raises(ValidationError) as refused_payload:
+        load_session(RETIRED_JSON_51)
+    assert str(refused_payload.value) == message
+    completed = subprocess.run(
+        [sys.executable, "-m", "gbdraw.cli", "render", "--session", str(RETIRED_JSON_51), "-o", str(tmp_path / "out")],
+        capture_output=True, text=True, encoding="utf-8", timeout=300,
+    )
+    assert completed.returncode == 1
+    assert message in completed.stderr
+    assert not any(tmp_path.iterdir())
+
+
+GZIP_AND_PLAIN = Path(__file__).resolve().parent / "fixtures/sessions/cli-circular-gzip-and-plain.v51.gbdraw"
+
+
+def test_the_session_file_stores_a_gzip_input_as_it_is_and_deflates_a_plain_one(tmp_path: Path) -> None:
+    """The positive fixture of the Session file container: its gzip input
+    entry is stored, its plain table entry is deflated, and it replays the
+    figure it holds."""
+
+    with zipfile.ZipFile(GZIP_AND_PLAIN) as archive:
+        entries = archive.infolist()
+    assert entries[0].filename == "gbdraw-session.json"
+    methods = {entry.filename: entry.compress_type for entry in entries[1:]}
+    assert methods["resources/record-1-genbank"] == zipfile.ZIP_STORED
+    assert methods["resources/colors-color-table"] == zipfile.ZIP_DEFLATED
+
+    document = load_session_document(GZIP_AND_PLAIN)
+    assert document.version == CURRENT_SESSION_VERSION
+    assert document.resources.read("record-1-genbank")[:2] == b"\x1f\x8b"
+    assert b"cytochrome b\t#e41a1c" in document.resources.read("colors-color-table")
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        result = render_session(materialized)
+    (stored,) = drawing_view(document.to_dict())["results"]
+    assert result.output_paths[0].read_text(encoding="utf-8") == stored["content"]
+
+
+GALLERY_BASIC = Path(__file__).resolve().parents[1] / "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw"
+
+
+def _with_damaged_deflate(source: Path, entry_name: str, target: Path) -> Path:
+    """``source`` with the deflated data of ``entry_name`` made unreadable (an invalid block type)."""
+
+    data = bytearray(source.read_bytes())
+    info = zipfile.ZipFile(source).getinfo(entry_name)
+    assert info.compress_type == zipfile.ZIP_DEFLATED
+    name_length, extra_length = int.from_bytes(data[info.header_offset + 26: info.header_offset + 28], "little"), int.from_bytes(
+        data[info.header_offset + 28: info.header_offset + 30], "little")
+    start = info.header_offset + 30 + name_length + extra_length
+    data[start: start + 2] = b"\xff\xff"
+    target.write_bytes(bytes(data))
+    return target
+
+
+def test_a_session_file_whose_document_data_is_damaged_is_refused_as_damaged(tmp_path: Path) -> None:
+    damaged = _with_damaged_deflate(GALLERY_BASIC, "gbdraw-session.json", tmp_path / "damaged.gbdraw")
+
+    with pytest.raises(SessionFormatError) as refused:
+        load_session_document(damaged)
+
+    assert str(refused.value) == "This file is not a gbdraw Session: it is incomplete or damaged."
+
+
+def test_a_session_file_whose_input_data_is_damaged_is_refused_as_damaged(tmp_path: Path) -> None:
+    damaged = _with_damaged_deflate(GALLERY_BASIC, "resources/record-1-genbank", tmp_path / "damaged.gbdraw")
+
+    document = load_session_document(damaged)
+    with pytest.raises(SessionResourceError, match="This file is not a gbdraw Session: it is incomplete or damaged."):
+        with materialize_session(document, output_directory=tmp_path):
+            pass
+    completed = subprocess.run(
+        [sys.executable, "-m", "gbdraw.cli", "render", "--session", str(damaged), "-o", str(tmp_path / "out")],
+        capture_output=True, text=True, encoding="utf-8", timeout=300,
+    )
+    assert completed.returncode == 1
+    assert "This file is not a gbdraw Session: it is incomplete or damaged." in completed.stderr
+    assert "Traceback" not in completed.stderr
+
+
+def test_a_session_file_holding_an_older_document_version_is_refused(tmp_path: Path) -> None:
+    """Only a Session 51 was ever written as a .gbdraw file (PD-OI-127)."""
+
+    path = tmp_path / "older.gbdraw"
+    with zipfile.ZipFile(GALLERY_BASIC) as source, zipfile.ZipFile(path, "w") as target:
+        for info in source.infolist():
+            data = source.read(info)
+            if info.filename == "gbdraw-session.json":
+                data = json.dumps({**json.loads(data), "version": 50}).encode("utf-8")
+            target.writestr(info, data)
+
+    with pytest.raises(SessionFormatError) as refused:
+        load_session_document(path)
+
+    assert str(refused.value) == "Unsupported session version: 50."
+
+
+def test_a_session_51_mapping_with_embedded_inputs_is_refused() -> None:
+    """A JSON Session 51 never reached main, as a file or as a mapping (PD-OI-127)."""
+
+    source = load_session_document(GALLERY_BASIC)
+    mapping = embedded_session(source.to_dict(), source.resources.sources)
+
+    for read in (load_session_document, SessionDocument):
+        with pytest.raises(ValidationError) as refused:
+            read(mapping)
+        assert str(refused.value) == (
+            f"A Session version {CURRENT_SESSION_VERSION} file must be a .gbdraw file, not JSON: <mapping>"
+        )
+
+
+def test_a_mapping_without_its_resources_names_how_to_pass_them() -> None:
+    mapping = load_session_document(GALLERY_BASIC).to_dict()
+    message = (
+        "Canonical resource 'record-1-genbank' has no bytes: pass resources=document.resources with a "
+        "document's to_dict(), or save and load the .gbdraw file."
+    )
+
+    for read in (load_session_document, SessionDocument):
+        with pytest.raises(ValidationError) as refused:
+            read(mapping)
+        assert str(refused.value) == message

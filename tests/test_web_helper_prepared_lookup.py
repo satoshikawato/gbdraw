@@ -396,7 +396,8 @@ def test_a_second_identical_generate_reads_no_comparison_table(
     # After two renders the shared frame is still the frame the parse
     # returned (no reader changed it), and the drawing is the same.
     (stored,) = [
-        entry.value if isinstance(entry.value, pd.DataFrame) else entry.value[1]
+        # A nucleotideBlast edge keeps (text, gzip bytes, frame); its frame is last.
+        entry.value if isinstance(entry.value, pd.DataFrame) else entry.value[-1]
         for entry in cache._layers["decoded"].values()
         if isinstance(entry.value, (pd.DataFrame, tuple))
     ]

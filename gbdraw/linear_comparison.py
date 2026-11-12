@@ -93,6 +93,11 @@ class LinearComparison:
     decoder read them from a ``nucleotideBlast`` resource; the Session persists
     it as a ``nucleotideBlast`` resource, as the Web does.
 
+    ``search_frame_gzip`` is the gzip file the decoder read ``search_frame_text``
+    from, when it was gzip: a re-saved Session stores it as it is, as the Web
+    does (receipt session.file-container). A writer that changes
+    ``search_frame_text`` sets it to None.
+
     ``source_name`` is the name of the file the decoder read the rows from.
 
     ``drawn_feature_ids`` marks a table of a Session up to 40 without
@@ -105,6 +110,7 @@ class LinearComparison:
     subject_record_index: int
     matches: DataFrame
     search_frame_text: str | None = field(default=None, repr=False, compare=False)
+    search_frame_gzip: bytes | None = field(default=None, repr=False, compare=False)
     drawn_feature_ids: bool = field(default=False, repr=False, compare=False)
     # The file the rows were read from, when they were (the input summary names it).
     source_name: str | None = field(default=None, repr=False, compare=False)

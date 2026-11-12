@@ -10,8 +10,6 @@ the same way, and a CLI re-save of any of them holds no Web draft. The Web app's
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from gbdraw.cli_utils.session import collect_embedded_files_from_cli_args
@@ -24,6 +22,7 @@ from tests.utils.cli_session_cross_surface import (
     write_case,
 )
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import read_session_payload
 
 CASES = load_cases()
 # The table options of the CLI and the request field each one writes. The
@@ -53,7 +52,7 @@ def test_label_blacklist_is_recorded_as_keywords_never_as_a_file(mode):
 def test_cli_session_draws_the_cli_figure_on_the_cli_and_in_python(case, tmp_path):
     files = write_case(case, tmp_path)
     if "args" in case:
-        session = session_view(json.loads(files.cli_session.read_text()))
+        session = session_view(read_session_payload(files.cli_session))
         request = session["renderRequest"]
         for option, path in TABLE_FIELDS.items():
             if option in case["args"]:
@@ -64,14 +63,14 @@ def test_cli_session_draws_the_cli_figure_on_the_cli_and_in_python(case, tmp_pat
         if "-b" in case["args"]:
             assert "nucleotideBlast" in [item["kind"] for item in request["comparisons"]]
         # A CLI Session has no Web draft, so its CLI re-save writes none (D-02).
-        resaved_modes = session_view(json.loads(files.cli_resave.read_text())).get("modes", {})
+        resaved_modes = session_view(read_session_payload(files.cli_resave)).get("modes", {})
         assert [mode for mode, scoped in resaved_modes.items() if "config" in scoped] == []
 
     for drawing, expected in files.svgs.items():
         python_resave = files.python_resaves[drawing]
         # A drawing of a Session of several is found by its ID; a Python re-save holds that one drawing.
         mode = case.get("mode") or next(
-            item["mode"] for item in json.loads(files.cli_session.read_text())["drawings"] if item["id"] == drawing
+            item["mode"] for item in read_session_payload(files.cli_session)["drawings"] if item["id"] == drawing
         )
         named = {"drawing": drawing} if "args" not in case else {}
         drawings = {

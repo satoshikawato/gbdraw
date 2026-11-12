@@ -81,7 +81,7 @@ def test_a_released_legacy_session_with_an_unknown_palette_or_format_still_repla
         del args[args.index("-f") : args.index("-f") + 2]
         args[args.index("-o") + 1] = name
         args.extend(extra)
-        path = tmp_path / f"{name}.gbdraw-session.json"
+        path = tmp_path / f"{name}.gbdraw"
         path.write_text(json.dumps(session), encoding="utf-8")
         linear_cli_module.linear_main(["--session", str(path)])
         svgs[name] = (tmp_path / f"{name}.svg").read_text(encoding="utf-8").replace(name, "OUT")

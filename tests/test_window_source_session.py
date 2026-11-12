@@ -7,7 +7,6 @@ cut from and the crop's window in it, so the replay crops it again and draws wha
 from __future__ import annotations
 
 import copy
-import json
 import random
 import re
 from pathlib import Path
@@ -37,6 +36,7 @@ from gbdraw.api import (
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions, LinearMultiRecordOptions
 from gbdraw.api.request_render import _materialized_record_inputs, resolve_request_records
 from gbdraw.api.requests import GenBankInputSource, RecordCollectionOptions, RecordPresentation, RecordSelector
+from gbdraw.session_container import read_session_container
 from gbdraw.io.regions import RecordWindow
 from gbdraw.core.record_metadata import held_record_origin
 
@@ -63,7 +63,7 @@ def _replayed(request, tmp_path: Path) -> tuple[str, str]:
 
     render_request(request)
     live = (tmp_path / "live.svg").read_text()
-    path = tmp_path / "saved.gbdraw-session.json"
+    path = tmp_path / "saved.gbdraw"
     save_session_document(path, request)
     replay_dir = tmp_path / "replay"
     replay_dir.mkdir()
@@ -107,7 +107,7 @@ def test_a_session_redraws_an_in_memory_crop_with_its_flanks(
 
 
 def _saved_records(tmp_path: Path) -> list[dict]:
-    document = json.loads((tmp_path / "saved.gbdraw-session.json").read_text())
+    document = read_session_container(tmp_path / "saved.gbdraw").document
     return document["drawings"][0]["renderRequest"]["records"]
 
 
@@ -140,7 +140,7 @@ def test_a_circular_grid_or_batch_session_redraws_in_memory_crops_with_their_fla
     )
     request = _circular_grid_or_batch(grouping, records, tmp_path)
     render_request(request)
-    path = tmp_path / "saved.gbdraw-session.json"
+    path = tmp_path / "saved.gbdraw"
     save_session_document(path, request)
     saved = _saved_records(tmp_path)
     assert [(record["recordKey"], record["windows"]) for record in saved] == [
@@ -235,7 +235,7 @@ def _two_windows(source, tmp_path: Path, second: str) -> LinearDiagramRequest:
 
 
 def _saved_windows(tmp_path: Path) -> list[tuple[str, int]]:
-    document = json.loads((tmp_path / "saved.gbdraw-session.json").read_text())
+    document = read_session_container(tmp_path / "saved.gbdraw").document
     return [(item["recordKey"], len(item.get("windows", ()))) for item in document["drawings"][0]["renderRequest"]["records"]]
 
 
@@ -384,12 +384,12 @@ def _flanked_source() -> SeqRecord:
 
 
 def _saved_source(tmp_path: Path) -> SeqRecord:
-    import base64
     import io
 
-    document = json.loads((tmp_path / "saved.gbdraw-session.json").read_text())
-    [saved] = document["drawings"][0]["renderRequest"]["records"]
-    data = base64.b64decode(document["resources"][saved["source"]["resourceId"]]["data"])
+    container = read_session_container(tmp_path / "saved.gbdraw")
+    [saved] = container.document["drawings"][0]["renderRequest"]["records"]
+    with container.resource(saved["source"]["resourceId"]).open_bytes() as stream:
+        data = stream.read()
     return SeqIO.read(io.StringIO(data.decode("utf-8")), "genbank")
 
 

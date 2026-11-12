@@ -61,7 +61,7 @@ def _with_sizes(fixture: Path, sizes: dict[str, object]) -> dict[str, Any]:
 
 
 def _cli_svg(session: dict[str, Any], tmp_path: Path, name: str) -> bytes:
-    path = tmp_path / f"{name}.gbdraw-session.json"
+    path = tmp_path / f"{name}.gbdraw"
     path.write_text(json.dumps(session), encoding="utf-8")
     linear_cli_module.linear_main(["--session", str(path), "-o", name, "-f", "svg"])
     return (tmp_path / f"{name}.svg").read_bytes()
@@ -230,7 +230,7 @@ RELEASED_CLI = {
 def _replay(mode: str, session: dict[str, Any], tmp_path: Path, name: str) -> bytes:
     import gbdraw.circular as circular_cli_module
 
-    path = tmp_path / f"{name}.gbdraw-session.json"
+    path = tmp_path / f"{name}.gbdraw"
     path.write_text(json.dumps(session), encoding="utf-8")
     main = linear_cli_module.linear_main if mode == "linear" else circular_cli_module.circular_main
     main(["--session", str(path), "-o", name, "-f", "svg"])
@@ -276,7 +276,7 @@ def test_a_released_cli_session_with_a_font_size_still_invalid_gives_the_cli_err
     session = _session(RELEASED_CLI["linear"])
     args = session["cliInvocation"]["args"]
     args[args.index("--label_font_size") + 1] = "nan"
-    path = tmp_path / "stored.gbdraw-session.json"
+    path = tmp_path / "stored.gbdraw"
     path.write_text(json.dumps(session), encoding="utf-8")
     result = subprocess.run(
         [sys.executable, "-m", "gbdraw.cli", "linear", "--session", str(path), "-o", "out", "-f", "svg"],

@@ -11,6 +11,7 @@ padding. How the drawn rows match the Web's executor is pinned by
 
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload
 import html
 import json
 import re
@@ -335,7 +336,7 @@ def test_the_cli_options_draw_the_edits_and_a_saved_session_replays_them(
 ) -> None:
     rows = _rows_table(tmp_path, ROWS_TSV)
     out = tmp_path / "out"
-    session = tmp_path / "out.gbdraw-session.json"
+    session = tmp_path / "out.gbdraw"
     status, err = _gbdraw(monkeypatch, capsys, mode, "--gbk", str(MITO), "--legend_rows", str(rows),
                           "--canvas_padding", "10,20,30,40", "-o", str(out), "-f", "svg", "--save_session",
                           "--session_output", str(session))
@@ -428,11 +429,11 @@ def test_a_saved_session_holds_the_new_config_fields_only_when_set(tmp_path: Pat
     """A Session without the edits is the one written before the fields existed (its full config lacks them)."""
 
     def saved_config(*args: str) -> dict:
-        session = tmp_path / f"s{len(args)}.json"
+        session = tmp_path / f"s{len(args)}.gbdraw"
         status, err = _gbdraw(monkeypatch, capsys, "linear", "--gbk", str(MITO), *args, "-o", str(tmp_path / "o"),
                               "-f", "svg", "--save_session", "--session_output", str(session), "--overwrite")
         assert status == 0, err
-        document = json.loads(session.read_text(encoding="utf-8"))
+        document = read_session_payload(session)
         return document["drawings"][0]["renderRequest"]["diagramOptions"]["config"]
 
     plain = saved_config()

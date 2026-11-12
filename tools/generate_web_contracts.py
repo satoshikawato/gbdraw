@@ -88,6 +88,15 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
     ("GALLERY_SESSION_DRAWN_DRAWINGS", "gbdraw.session_contract", "GALLERY_SESSION_DRAWN_DRAWINGS"),
+    # The Session file's entries and its refusals (the twin's vectors pin the rest).
+    ("SESSION_DOCUMENT_ENTRY", "gbdraw.session_container", "SESSION_DOCUMENT_ENTRY"),
+    ("SESSION_RESOURCE_ENTRY_PREFIX", "gbdraw.session_container", "SESSION_RESOURCE_ENTRY_PREFIX"),
+    ("SESSION_CONTAINER_DAMAGED_MESSAGE", "gbdraw.session_container", "SESSION_CONTAINER_DAMAGED_MESSAGE"),
+    ("SESSION_CONTAINER_NO_DOCUMENT_MESSAGE", "gbdraw.session_container", "SESSION_CONTAINER_NO_DOCUMENT_MESSAGE"),
+    ("SESSION_ENTRY_STORED", "gbdraw.session_container", "SESSION_ENTRY_STORED"),
+    ("SESSION_ENTRY_DEFLATED", "gbdraw.session_container", "SESSION_ENTRY_DEFLATED"),
+    ("SESSION_ENTRY_ENCRYPTED_FLAGS", "gbdraw.session_container", "SESSION_ENTRY_ENCRYPTED_FLAGS"),
+    ("SESSION_ENTRY_DATE_TIME", "gbdraw.session_container", "SESSION_ENTRY_DATE_TIME"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
     # A "This feature only" color rule names a feature instance; the Source
     # recipe names the CLI record of its record key.
@@ -97,6 +106,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.core.numeric", "UNSET_NUMBER_SPELLINGS"),
     # The most bytes a gzip input file expands to; the Web stops reading past it.
     ("MAX_EXPANDED_INPUT_BYTES", "gbdraw.io.input_text", "MAX_EXPANDED_INPUT_BYTES"),
+    # The most characters of an input file's name a refusal names; the page cuts at the same count.
+    ("INPUT_NAME_CHARACTERS", "gbdraw.web_support.error_adapter", "INPUT_NAME_CHARACTERS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.
     ("FLAT_DRAFT_TOP_LEVEL_FIELDS", "gbdraw.session_io", "FLAT_DRAFT_TOP_LEVEL_FIELDS"),
     ("OTHER_MODE_RESULT_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_FIELDS"),
@@ -222,6 +233,12 @@ def _declaration(web_name: str, value: object) -> str:
         # Strings in the owner's order, each typed as itself (a typedef may name them).
         return (
             f"/** @type {{readonly [{', '.join(_scalar(item) for item in value)}]}} */\n"
+            f"export const {web_name} = {_frozen(list(value))};\n"
+        )
+    if isinstance(value, tuple) and value and all(type(item) is int for item in value):
+        # A fixed tuple of numbers, such as a date and time.
+        return (
+            f"/** @type {{readonly [{', '.join('number' for _ in value)}]}} */\n"
             f"export const {web_name} = {_frozen(list(value))};\n"
         )
     if isinstance(value, (frozenset, set)):
@@ -456,7 +473,11 @@ def _references(shape: object) -> set[str]:
 
 
 def render_session_typedefs_module() -> str:
-    from gbdraw.session_contract import describe_session_admission, describe_session_document
+    from gbdraw.session_contract import (
+        describe_session_admission,
+        describe_session_container_resource,
+        describe_session_document,
+    )
     from gbdraw.session_request_codec import describe_canonical_request
 
     description = describe_session_document()
@@ -496,6 +517,7 @@ def render_session_typedefs_module() -> str:
         "\n"
         f"/** @import {{ {', '.join(imported)} }} from './{REQUEST_TARGET.name}' */\n"
         + _typedefs(types)
+        + _typedefs(describe_session_container_resource()["types"])
         + "/** @typedef {SessionInput & { format: "
         + f"{_jsdoc_type(root['format'])}, version: {_jsdoc_type(root['version'])}"
         + " }} SessionEnvelope */\n"

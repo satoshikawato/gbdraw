@@ -11,7 +11,8 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from gbdraw.session_io import load_session
+from gbdraw.session import load_session_document
+from tests.utils.session_files import embedded_session
 from tools import test_data
 
 
@@ -166,7 +167,10 @@ def test_inputs_dir() -> Path:
 def load_cached_gallery_session() -> Callable[[Path], dict[str, object]]:
     @cache
     def load(path: Path) -> dict[str, object]:
-        return load_session(path)
+        # The validated document with its resources' bytes embedded (base64),
+        # so tests read a Gallery input's bytes from the document.
+        document = load_session_document(path)
+        return embedded_session(document.to_dict(), document.resources.sources)
 
     return lambda path: load(path.resolve())
 

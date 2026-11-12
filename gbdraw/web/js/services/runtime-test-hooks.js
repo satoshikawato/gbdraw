@@ -6,7 +6,7 @@ export const runtimeTestHooksEnabled = () => Boolean(testHooks());
 /**
  * A test's stand-in for a byte cap, so a browser case needs no file of 200 or
  * 512 MiB: a saved Session's caps, or the expanded size of a gzip input file.
- * @param {'maxExpandedSessionBytes' | 'maxSessionFileBytes' | 'maxExpandedInputBytes'} name The cap it stands in for.
+ * @param {'maxExpandedSessionBytes' | 'maxExpandedInputBytes'} name The cap it stands in for.
  * @returns {number | undefined}
  */
 export const testByteCap = (name) => {

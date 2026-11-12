@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { resolve } = require('node:path');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { writeGallerySessionFile } = require('./helpers/session-file.cjs');
 const {
   openApp, reveal, generateAndWaitForResult, expectSessionLoadedWithoutWarnings, assertSessionLoadLeftWorkerIdle
 } = require('./helpers/app-lifecycle.cjs');
@@ -12,7 +13,7 @@ const {
 // registered in the page and in the diagram Worker, the drawing's font becomes
 // its CSS list, and Generate draws and measures the diagram with it.
 
-const SESSION = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+const SESSION = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw');
 const FAMILY = 'Gbdraw Test Serif';
 const FONT_LIST = `'${FAMILY}', serif`;
 
@@ -91,7 +92,7 @@ else:
 // Load the Session, load a font file in Font (it becomes the drawing's font), and Generate.
 const generateWithFontFile = async (page, fontFile, family) => {
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(SESSION);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await loadFontFile(page, fontFile, family);
   await generateAndWaitForResult(page);
@@ -127,7 +128,7 @@ test('a font file chosen in Font is one History step and draws and measures the 
   test.setTimeout(300_000);
   const fontFile = renamedFont(testInfo.outputPath('gbdraw-test-serif.ttf'));
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(SESSION);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
 
   const select = page.locator('[data-font-select]');
@@ -177,16 +178,15 @@ test('a font file chosen in Font is one History step and draws and measures the 
 test('a Session with a font that is not available asks first, and Load with the nearest font keeps its name', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const MISSING = "'Garamond Premier Pro', serif";
-  const session = JSON.parse(readFileSync(SESSION, 'utf8'));
-  const drawing = shownSavedDrawing(session);
-  drawing.config.adv.font_family = MISSING;
-  drawing.renderRequest.diagramOptions.configOverrides = {
-    ...drawing.renderRequest.diagramOptions.configOverrides, 'objects.text.font_family': MISSING
-  };
-  const sessionFile = testInfo.outputPath('garamond.gbdraw-session.json');
-  writeFileSync(sessionFile, JSON.stringify(session));
+  const sessionFile = await writeGallerySessionFile('HmmtDNA_basic_circular', testInfo.outputPath('garamond.gbdraw'), (session) => {
+    const drawing = shownSavedDrawing(session);
+    drawing.config.adv.font_family = MISSING;
+    drawing.renderRequest.diagramOptions.configOverrides = {
+      ...drawing.renderRequest.diagramOptions.configOverrides, 'objects.text.font_family': MISSING
+    };
+  });
   await openApp(page);
-  const sessionInput = page.locator('input[type="file"][accept^=".json,"]');
+  const sessionInput = page.locator('input[type="file"][accept*=".gbdraw"]');
   const prompt = page.locator('[data-choice-prompt]');
   const select = page.locator('[data-font-select]');
 
@@ -357,7 +357,7 @@ test('Choose installed font… lists, searches, and loads an installed family, a
     };
   }, { family: INSTALLED, data: base64 });
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(SESSION);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   const select = page.locator('[data-font-select]');
   await reveal(select);
@@ -391,7 +391,7 @@ test('Choose installed font… lists, searches, and loads an installed family, a
 test('PDF export draws each label once on its box, centred on its SVG anchor', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(resolve('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'));
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(resolve('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw'));
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await generateAndWaitForResult(page);
   const svgFile = testInfo.outputPath('lambda.svg');

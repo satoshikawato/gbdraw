@@ -5,7 +5,7 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile, writeGallerySessionFile } = require('./helpers/session-file.cjs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { HMMT, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
@@ -156,23 +156,20 @@ const expectHeading = async (page, record, span) => {
  * Generate (D-36); the Gallery's own Sessions now carry the axis, so the test removes it.
  * @param {import('@playwright/test').TestInfo} testInfo
  */
-const sessionWithoutAxis = (testInfo) => {
-  const session = JSON.parse(readFileSync(seeds.circular, 'utf8'));
-  const records = session.drawings[0].runMetadata.trackSlotGeometry.records;
-  expect(records.length).toBeGreaterThan(0);
-  for (const record of records) {
-    expect(record.axis, 'the Gallery Session carries the axis').toBeDefined();
-    delete record.axis;
-    delete record.recordKey;
-  }
-  const path = testInfo.outputPath('HmmtDNA_basic_circular-no-axis.gbdraw-session.json');
-  writeFileSync(path, JSON.stringify(session));
-  return path;
-};
+const sessionWithoutAxis = (testInfo) => writeGallerySessionFile(
+  'HmmtDNA_basic_circular', testInfo.outputPath('HmmtDNA_basic_circular-no-axis.gbdraw'), (session) => {
+    const records = session.drawings[0].runMetadata.trackSlotGeometry.records;
+    expect(records.length).toBeGreaterThan(0);
+    for (const record of records) {
+      expect(record.axis, 'the Gallery Session carries the axis').toBeDefined();
+      delete record.axis;
+      delete record.recordKey;
+    }
+  });
 
 test('Circular: a loaded Result without axis disables Select region; after Generate a drag selects a span that Add to annotation set draws', async ({ browser }, testInfo) => {
   test.setTimeout(420_000);
-  const page = await load(browser, sessionWithoutAxis(testInfo));
+  const page = await load(browser, await sessionWithoutAxis(testInfo));
   try {
     const toggle = page.locator('[data-region-select-toggle]');
     // The Result was saved without the axis: no Python starts at Load.
@@ -510,9 +507,10 @@ test('Save Session keeps the axis of the Result, and its Load enables Select reg
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT);
   await generateAndWaitForResult(page);
-  // The Session is the positive fixture tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.gbdraw-session.json.gz.
-  const saved = testInfo.outputPath('region-axis.gbdraw-session.json.gz');
-  const session = JSON.parse(gunzipSync(await download(page, 'Save Session', saved, { title: '' })).toString('utf8'));
+  // The Session is the positive fixture tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.gbdraw.
+  const saved = testInfo.outputPath('region-axis.gbdraw');
+  await download(page, 'Save Session', saved, { title: '' });
+  const session = await readSessionFile(saved);
   const [record] = session.drawings[0].runMetadata.trackSlotGeometry.records;
   expect(record).toMatchObject({ recordKey: expect.any(String), axis: { kind: 'circular', source: { drawnLength: 16_569 } } });
   await loadSessionFile(page, saved);
@@ -523,7 +521,7 @@ test('Save Session keeps the axis of the Result, and its Load enables Select reg
 // Result before any Generate.
 test('a Session saved by the gbdraw command enables Select region at Load: a drag selects a span without Generate', async ({ browser }, testInfo) => {
   test.setTimeout(300_000);
-  const saved = testInfo.outputPath('cli.gbdraw-session.json');
+  const saved = testInfo.outputPath('cli.gbdraw');
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', 'circular', '--gbk', HMMT, '-o', testInfo.outputPath('cli'), '-f', 'svg', '--session_output', saved
   ], { cwd: process.cwd(), env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe' });
@@ -595,7 +593,7 @@ test('Add to annotation set right after a Load reads the records first and binds
   writeFileSync(input, arcGenbank('ARC1') + arcGenbank('ARC2'));
   await openWithGenBank(page, input, () => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
   await generateAndWaitForResult(page);
-  const saved = testInfo.outputPath('two-arcs.gbdraw-session.json.gz');
+  const saved = testInfo.outputPath('two-arcs.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   await loadSessionFile(page, saved);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status)).not.toBe('ready');
@@ -619,7 +617,7 @@ test('Linear: Add to annotation set whose record read fails adds nothing, takes 
   try {
     await generate(page);
     // The Gallery Session has a title, so Save asks for none.
-    const saved = testInfo.outputPath('lambda-axis.gbdraw-session.json.gz');
+    const saved = testInfo.outputPath('lambda-axis.gbdraw');
     await download(page, 'Save Session', saved);
     await loadSessionFile(page, saved);
     // A Load reads no records (OV-373). From now on the card's file cannot be read, as a file gone from the disk.

@@ -618,7 +618,10 @@ const renderArtifactList = (parent, sample) => {
       note: sample.sourceOutput || ''
     },
     {
-      label: sample.session?.endsWith('.gz') ? 'Session JSON (gzip)' : 'Session JSON',
+      // A Gallery Session is a Session file (`.gbdraw`, receipt session.file-container); a catalog may still
+      // name an older JSON Session, plain or gzip.
+      label: sample.session?.endsWith('.gbdraw') ? 'Session file (.gbdraw)'
+        : sample.session?.endsWith('.gz') ? 'Session JSON (gzip)' : 'Session JSON',
       href: sample.session,
       note: sample.sourceSession || ''
     },
@@ -776,7 +779,7 @@ const updateActionLinks = (sample) => {
     sessionLink.href = sessionHref;
     sessionLink.setAttribute(
       'download',
-      sample.session.split('/').pop() || `${sample.id}.gbdraw-session.json`
+      sample.session.split('/').pop() || `${sample.id}.gbdraw`
     );
   } else {
     sessionLink.hidden = true;

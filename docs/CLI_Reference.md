@@ -64,7 +64,7 @@ Examples:
   gbdraw linear --gff input.gff --fasta input.fna
   gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
-  gbdraw render --session project.gbdraw-session.json
+  gbdraw render --session project.gbdraw
   gbdraw locate --reference_gbk ref.gb --reference_region 1000-25000 --targets genome1.gb genome2.gb -o plan
   gbdraw gui
 
@@ -766,15 +766,15 @@ options:
                         it draws (the whole font when its license forbids
                         subsetting), unless its license (OS/2 fsType) forbids
                         embedding.
-  --session SESSION     Regenerate a diagram from a plain or gzip-compressed
-                        gbdraw GUI session JSON file.
+  --session SESSION     Regenerate a diagram from a gbdraw Session file
+                        (.gbdraw, or an older .json or .json.gz).
   --drawing ID          With --session, the drawing to render, by ID or name
                         (default: the Session's only drawing of this mode).
-  --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
-                        for this run.
+  --save_session        Write one GUI-loadable .gbdraw Session file for this
+                        run.
   --session_output PATH
-                        Write the session sidecar to PATH; use a .gz suffix
-                        for gzip compression; implies --save_session.
+                        Write the Session file to PATH (.gbdraw; not .json or
+                        .json.gz); implies --save_session.
 ```
 
 <!-- END GENERATED CIRCULAR HELP -->
@@ -1988,15 +1988,15 @@ options:
                         Reverse complement record per input file (repeatable;
                         order matches input files). Accepted values: 1/0,
                         true/false, yes/no.
-  --session SESSION     Regenerate a diagram from a plain or gzip-compressed
-                        gbdraw GUI session JSON file.
+  --session SESSION     Regenerate a diagram from a gbdraw Session file
+                        (.gbdraw, or an older .json or .json.gz).
   --drawing ID          With --session, the drawing to render, by ID or name
                         (default: the Session's only drawing of this mode).
-  --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
-                        for this run.
+  --save_session        Write one GUI-loadable .gbdraw Session file for this
+                        run.
   --session_output PATH
-                        Write the session sidecar to PATH; use a .gz suffix
-                        for gzip compression; implies --save_session.
+                        Write the Session file to PATH (.gbdraw; not .json or
+                        .json.gz); implies --save_session.
 ```
 
 <!-- END GENERATED LINEAR HELP -->
@@ -2116,7 +2116,7 @@ are skipped with a notice.
 
 options:
   -h, --help            show this help message and exit
-  --session FILE        The gbdraw Session file (.gbdraw-session.json or
+  --session FILE        The gbdraw Session file (.gbdraw, or an older .json or
                         .json.gz).
   --drawing ID [ID ...]
                         Render only these drawings, by ID or name; repeatable.
@@ -2137,8 +2137,7 @@ options:
                         -o.
   --session_output PATH
                         Write the Session again with the rendered drawings
-                        replaced to PATH; use a .gz suffix for gzip
-                        compression.
+                        replaced to PATH (.gbdraw; not .json or .json.gz).
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
                         default: 300, or with --session the PNG DPI the
                         Session saved; 96 draws one pixel per SVG pixel). PNG

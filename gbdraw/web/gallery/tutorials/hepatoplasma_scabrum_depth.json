@@ -92,7 +92,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 2,
       "selector": ".card[data-settings-section='input-genomes']",
       "cropPadding": 14,
@@ -125,7 +125,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 2,
       "selector": ".card[data-settings-section='basic']",
       "cropPadding": 14,
@@ -160,7 +160,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 3,
       "viewport": {
        "width": 1400,
@@ -239,7 +239,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 4,
       "viewport": {
        "width": 1280,
@@ -276,7 +276,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 4,
       "viewport": {
        "width": 1400,
@@ -352,7 +352,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 5,
       "viewport": {
        "width": 1400,
@@ -458,7 +458,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 6,
       "viewport": {
        "width": 1280,
@@ -511,7 +511,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 6,
       "viewport": {
        "width": 1400,
@@ -581,7 +581,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 7,
       "viewport": {
        "width": 1280,
@@ -624,7 +624,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "replayThrough": 7,
       "viewport": {
        "width": 1400,
@@ -671,7 +671,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw",
       "viewport": {
        "width": 1280,
        "height": 900

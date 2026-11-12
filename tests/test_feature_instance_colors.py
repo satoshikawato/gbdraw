@@ -27,7 +27,8 @@ from gbdraw.features.colors import get_color, preprocess_color_tables
 from gbdraw.features.ids import compute_source_feature_hash, feature_instance, feature_instances
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.exceptions import ValidationError
-from gbdraw.session import build_session_document
+from gbdraw.session import SessionDocument, build_session_document
+from tests.utils.session_files import embedded_session
 from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 from gbdraw.web_support.rule_matching import evaluate_rules_json, exact_value_pattern
@@ -156,8 +157,12 @@ def _source_twins_request(**options) -> LinearDiagramRequest:
     )
 
 
+def _embedded(document: SessionDocument) -> dict:
+    return embedded_session(document.to_dict(), document.resources.sources)
+
+
 def _web_render(tmp_path: Path, request: LinearDiagramRequest) -> tuple[list[dict], str]:
-    document = drawing_view(build_session_document(request).to_dict())
+    document = drawing_view(_embedded(build_session_document(request)))
     reply = render_embedded_canonical_web_request(
         document["renderRequest"], resources=document["resources"],
         workspace=tmp_path / str(len(list(tmp_path.iterdir()))),

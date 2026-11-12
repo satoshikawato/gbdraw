@@ -119,6 +119,31 @@ export const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
 // gbdraw/session_contract.py: GALLERY_SESSION_DRAWN_DRAWINGS
 export const GALLERY_SESSION_DRAWN_DRAWINGS = 1;
 
+// gbdraw/session_container.py: SESSION_DOCUMENT_ENTRY
+export const SESSION_DOCUMENT_ENTRY = 'gbdraw-session.json';
+
+// gbdraw/session_container.py: SESSION_RESOURCE_ENTRY_PREFIX
+export const SESSION_RESOURCE_ENTRY_PREFIX = 'resources/';
+
+// gbdraw/session_container.py: SESSION_CONTAINER_DAMAGED_MESSAGE
+export const SESSION_CONTAINER_DAMAGED_MESSAGE = 'This file is not a gbdraw Session: it is incomplete or damaged.';
+
+// gbdraw/session_container.py: SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
+export const SESSION_CONTAINER_NO_DOCUMENT_MESSAGE = 'This file is not a gbdraw Session: it has no gbdraw-session.json.';
+
+// gbdraw/session_container.py: SESSION_ENTRY_STORED
+export const SESSION_ENTRY_STORED = 0;
+
+// gbdraw/session_container.py: SESSION_ENTRY_DEFLATED
+export const SESSION_ENTRY_DEFLATED = 8;
+
+// gbdraw/session_container.py: SESSION_ENTRY_ENCRYPTED_FLAGS
+export const SESSION_ENTRY_ENCRYPTED_FLAGS = 65;
+
+// gbdraw/session_container.py: SESSION_ENTRY_DATE_TIME
+/** @type {readonly [number, number, number, number, number, number]} */
+export const SESSION_ENTRY_DATE_TIME = Object.freeze([1980, 1, 1, 0, 0, 0]);
+
 // gbdraw/api/options.py: LEGEND_POSITIONS
 /** @type {Readonly<Record<'circular' | 'linear', readonly string[]>>} */
 export const LEGEND_POSITIONS = Object.freeze({
@@ -141,6 +166,9 @@ export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 
 
 // gbdraw/io/input_text.py: MAX_EXPANDED_INPUT_BYTES
 export const MAX_EXPANDED_INPUT_BYTES = 536870912;
+
+// gbdraw/web_support/error_adapter.py: INPUT_NAME_CHARACTERS
+export const INPUT_NAME_CHARACTERS = 200;
 
 // gbdraw/session_io.py: FLAT_DRAFT_TOP_LEVEL_FIELDS
 /** @type {readonly string[]} */

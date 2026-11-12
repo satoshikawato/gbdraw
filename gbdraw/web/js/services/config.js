@@ -96,7 +96,7 @@ import {
   applyLiveSettingWrites,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
-  decodeCanonicalResourceText,
+  loadedResourceText,
   draftFieldsForConfigValues,
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
@@ -113,6 +113,7 @@ import {
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
+  readEditorTableTexts,
   readStoredRenderRequest,
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
@@ -138,10 +139,14 @@ import {
   base64ToBytes,
   fileDescriptorOf,
   getSessionResourceSource,
+  copyInputStream,
   holdReadBytes,
-  readFileBytes,
+  inputCopiesAvailable,
+  keepSaveData,
   readFileContentFacts,
-  rememberFileDescriptor
+  readStoredBytes,
+  rememberFileDescriptor,
+  storedFileBytes
 } from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
@@ -149,6 +154,7 @@ import {
   fileBackedDescriptor,
   renamedResourceDescriptor,
   sessionResourceViewReader,
+  storedResourceBytes,
   isSessionResourceFileView,
   webBindingInputSlot
 } from './session-resource-backing.js';
@@ -179,17 +185,18 @@ import {
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
 import {
-  compressSessionData,
-  encodeSessionResources,
-  largeSessionDownloadMegabytes
+  browserStorageFreeBytes,
+  largeSessionDownloadMegabytes,
+  sessionContainerResources,
+  writeSessionFile
 } from './session-file.js';
-// The Session file writer's encoding of the inputs Generate described: the exact replay Session uses it too.
-export { encodeSessionResources };
 // The windows a Linear card writes in its request, the places its drawn cards write (the drawn-unit plan reads them)
 // and the records its window plan reads, for the shown-drawing readers and Generate (services/session-request.js owns
 // all three).
 export { linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf };
+import { openSessionContainerEntry } from './session-container.js';
 import { importSessionFile } from './session-import-client.js';
+/** @import { SessionImportCandidate, SessionImportContainer } from './session-import-client.js' */
 import {
   convertStoredProteinResultFrames, withConvertedResources
 } from './main-session-comparison-frame.js';
@@ -255,6 +262,7 @@ import {
   readSessionAuthorityParts,
   readSessionDocument,
   readSessionInput,
+  assertSessionFileVersion,
   restoresNothing,
   settingsOnlySessionCandidate,
   storedRequestSchemas,
@@ -372,7 +380,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
-/** @import { CanonicalRenderEnvelope, RequestRecordDisplayRow } from './session-request.js' */
+/** @import { CanonicalRenderEnvelope, RequestRecordDisplayRow, ResourceTexts } from './session-request.js' */
 /** @import { DerivedRegionDrawing } from '../contracts/locate.generated.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
@@ -652,12 +660,30 @@ const makeSafeFilename = (name) => {
   return cleaned || 'gbdraw_session';
 };
 
+// A Session is one `.gbdraw` file (receipt session.file-container): `<title>.gbdraw`, or `gbdraw_session.gbdraw`.
 /** @param {unknown} title */
 const buildSessionFilename = (title) => {
   const base = String(title || '').trim();
-  if (!base) return 'gbdraw_session.json.gz';
-  const safe = makeSafeFilename(base);
-  return `${safe}.gbdraw-session.json.gz`;
+  return `${base ? makeSafeFilename(base) : 'gbdraw_session'}.gbdraw`;
+};
+
+/**
+ * The Session file of `document`, whose `resources` are the checked
+ * descriptors of its inputs: the one writer of a Session file (Save Session,
+ * and the exact replay Session of the reproducibility files, OV-2695). It
+ * stores each resource's `SessionContainerResource` with the size of what the
+ * file stores for it (`storedResourceBytes`: a gzip input as it is) and
+ * streams those bytes from its copy into the container, each written entry
+ * waiting in a temporary copy (`keepSaveData`).
+ * @param {Record<string, unknown> & { resources: Readonly<Record<string, RawSessionResourceDescriptor>> }} document
+ */
+export const writeSessionDocumentFile = (document) => {
+  const stored = Object.fromEntries(Object.entries(document.resources).map(([id, descriptor]) => [id, storedResourceBytes(descriptor)]));
+  const resources = Object.fromEntries(Object.entries(document.resources).map(([id, descriptor]) => [id, { ...descriptor, size: stored[id].size }]));
+  return writeSessionFile(
+    { ...document, resources: sessionContainerResources(resources) },
+    { readResource: async (resourceId) => stored[resourceId].open(), keep: inputCopiesAvailable() ? keepSaveData : null }
+  );
 };
 
 // Load reads a stored configuration's older Linear visibility (every caller is a Load path).
@@ -1628,8 +1654,9 @@ const overlayModeSliceConfig = (projection, sliceConfig, saved) => {
 /**
  * What a stored drawing's file says of its palette's rows: its saved `ui`
  * (the colors its Result shows), and its committed request with the
- * resources that hold its Default colors table.
- * @typedef {{ ui: unknown, request: unknown, resources: unknown }} SavedPaletteState
+ * resources that hold its Default colors table and the tables' texts Load
+ * read from a Session file's entries (`readEditorTableTexts`).
+ * @typedef {{ ui: unknown, request: unknown, resources: unknown, resourceTexts: ResourceTexts }} SavedPaletteState
  */
 /**
  * A drawing's saved colors with the rows a released writer saved as its
@@ -1640,7 +1667,7 @@ const overlayModeSliceConfig = (projection, sliceConfig, saved) => {
  * @param {SavedPaletteState} saved
  * @returns {Record<string, unknown>}
  */
-const savedPaletteRows = (configPalette, configColors, { ui, request, resources }) => {
+const savedPaletteRows = (configPalette, configColors, { ui, request, resources, resourceTexts }) => {
   const savedUi = isPlainObject(ui) ? ui : {};
   const palette = String(configPalette || 'default');
   const colors = /** @type {UnvalidatedFields<'defaultColors' | 'defaultColorsFile'> | undefined} */ (
@@ -1651,7 +1678,7 @@ const savedPaletteRows = (configPalette, configColors, { ui, request, resources 
     paletteColors: paletteColorsFromDefinitions(palette),
     earlier: MODE_SLICE_DEFAULTS.earlierPaletteRows.palettes,
     committedColors: () => (ref?.resourceId && isPlainObject(resources)
-      ? parseColorTable(decodeCanonicalResourceText(resources, String(ref.resourceId)), { legacyRows: true }).colors : {}),
+      ? parseColorTable(loadedResourceText(resources, String(ref.resourceId), resourceTexts), { legacyRows: true }).colors : {}),
     appliedPaletteName: savedUi.appliedPaletteName,
     appliedPaletteColors: isPlainObject(savedUi.appliedPaletteColors) ? savedUi.appliedPaletteColors : null
   });
@@ -2668,6 +2695,8 @@ const drawingInputTypeOf = (stored, requestInputType) => {
  * @property {boolean} cardRowsAreFileRows
  * @property {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
  * @property {StoredLeafReadings} leafReadings Python's readings of the stored leaves the form cannot hold (`readStoredLeaves`).
+ * @property {ResourceTexts} resourceTexts The texts of the tables the projection reads that Load read from their copies
+ *   (`readEditorTableTexts`, OV-2732).
  */
 /**
  * The one builder of a drawing's request projection input (B2d-3a-3a): the
@@ -2679,7 +2708,7 @@ const drawingInputTypeOf = (stored, requestInputType) => {
  */
 const drawingProjectionInputOf = (view, {
   sourceSessionVersion, drawingsBand, currentSession, comparisonClassification, storedConfig, hasStoredDraft, cardRowsAreFileRows,
-  sessionResourceTable, leafReadings
+  sessionResourceTable, leafReadings, resourceTexts
 }) => {
   const request = /** @type {UnvalidatedFields<'mode'>} */ (view.renderRequest);
   return {
@@ -2704,6 +2733,7 @@ const drawingProjectionInputOf = (view, {
     // A Session without a Web draft (CLI, Python) holds its tables only
     // in the request, so Load reads them; a draft holds them already.
     deferResourceContent: currentSession && hasStoredDraft,
+    resourceTexts,
     adoptCanonicalPayloads: currentSession,
     // OV-1280: from Session 48 on, a Session without a draft holds each
     // table as its card's file (what only the source says, DESIGN §6).
@@ -2748,9 +2778,10 @@ const drawingProjectionInputOf = (view, {
  * @param {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
  * @param {SourceFacts} sourceFacts The source facts of the file the document came from.
  * @param {StoredLeafReadings} leafReadings Python's readings of the stored leaves the form cannot hold (`readStoredLeaves`).
+ * @param {ResourceTexts} resourceTexts The tables' texts Load read (`readEditorTableTexts`).
  * @returns {StoredDrawingInputs}
  */
-const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFacts, leafReadings) => {
+const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFacts, leafReadings, resourceTexts) => {
   const view = /** @type {SessionInput} */ (/** @type {unknown} */ (drawingViewOf(document, drawing)));
   const { mode } = drawing;
   const ui = /** @type {UnvalidatedFields<'cInputType' | 'lInputType'>} */ (view.ui);
@@ -2782,7 +2813,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     // A drawing without a draft holds each table as its card's file when its file says so (DESIGN §6).
     cardRowsAreFileRows: sourceFacts.cardRowsAreFileRows,
     sessionResourceTable,
-    leafReadings
+    leafReadings,
+    resourceTexts
   }));
   const inputType = drawingInputTypeOf(storedInputType, projection.inputType || null);
   const overrides = unmanagedConfigValidationOf(projection.mode, storedConfig,
@@ -2790,7 +2822,7 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
   return {
     files: projection.files, comparisonClassification, inputType,
     restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig({ mode, config: projection.config }, storedConfig, {
-      ui: view.ui, request, resources: view.resources
+      ui: view.ui, request, resources: view.resources, resourceTexts
     })),
     requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
     requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState },
@@ -2976,9 +3008,14 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     upgrade = { ...upgrade, document: { ...document, drawings } };
   }
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
+  // The editor tables every drawing's projection reads, read once from their copies (OV-2732).
+  const resourceTexts = await readEditorTableTexts(
+    upgrade ? upgrade.document.drawings.map((entry) => entry.renderRequest) : [cacheData.renderRequest], cacheData.resources
+  );
   return {
     sourceSessionVersion, drawingsBand, openedDrawingAt, requestRead, currentSession, upgrade, adoptedSession,
-    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData, leafReadings
+    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData, leafReadings,
+    resourceTexts
   };
 };
 
@@ -2992,7 +3029,9 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
  */
 const readCommittedRequestProjection = (read, sessionData, repairs) => {
-  const { sourceSessionVersion, drawingsBand, requestRead, currentSession, currentResourceTable, data: cacheData, leafReadings } = read;
+  const {
+    sourceSessionVersion, drawingsBand, requestRead, currentSession, currentResourceTable, data: cacheData, leafReadings, resourceTexts
+  } = read;
   let { upgrade } = read;
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
@@ -3059,7 +3098,8 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
         hasStoredDraft,
         cardRowsAreFileRows: Boolean(upgrade?.sourceFacts.cardRowsAreFileRows),
         sessionResourceTable: currentResourceTable,
-        leafReadings
+        leafReadings,
+        resourceTexts
       })
     : null;
   /** @type {SessionRequestProjection | null} */
@@ -3140,7 +3180,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // `readSessionDocument` read each slice's keys and kinds; the reader table reads its settings.
   recordSessionLifecycleEvent('current-draft-validation-start');
   let restoredConfig = canonicalProjection && !settingsOnly
-    ? overlayModeSliceConfig(canonicalProjection, runtimeStoredConfig, { ui: data.ui, request: storedRequest, resources: data.resources })
+    ? overlayModeSliceConfig(canonicalProjection, runtimeStoredConfig, {
+      ui: data.ui, request: storedRequest, resources: data.resources, resourceTexts: read.resourceTexts
+    })
     : null;
   if (restoredConfig) {
     // As for Sessions 40-44: the stored draft owns the active controls and the
@@ -3202,7 +3244,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     upgrade,
     // Each other Session 51 drawing's inputs, by drawing ID.
     storedDrawingInputs: new Map(document50 && upgrade ? document50.drawings.filter((entry) => entry !== openedDrawingOf(document50))
-      .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document50, entry, currentResourceTable, upgrade.sourceFacts, read.leafReadings)]) : []),
+      .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document50, entry, currentResourceTable, upgrade.sourceFacts, read.leafReadings, read.resourceTexts)]) : []),
     openedDrawingAt,
     // The drawing whose set Load projects: a Session 51's opened drawing.
     projectedDrawingId: drawingsBand ? /** @type {DrawingId} */ (openedDrawingOf(/** @type {Session51} */ (/** @type {unknown} */ (sessionData))).id) : null
@@ -3750,19 +3792,23 @@ export const serializeFile = async (file) => {
   const { byteLength } = await readFileContentFacts(/** @type {FileLike} */ (file));
   // `readFileContentFacts` resolves only for an object (or a function) with `arrayBuffer()`.
   const owner = /** @type {object} */ (file);
+  // File-backed: the request and the committed Session name the File's bytes as
+  // chosen (a gzip file's gzip bytes, which Python expands), which Generate
+  // sends and a Session writer streams from the File's copy (`writeSessionDocumentFile`, OV-2612).
+  // Awaited before the shared check, so two serializations of one File keep one descriptor.
+  const viewReader = sessionResourceViewReader(file);
+  const stored = viewReader ? null : await storedFileBytes(/** @type {FileLike} */ (file));
   const shared = fileDescriptorOf(owner);
   if (shared) return shared;
   recordStructuralMetric('resourceReencodeCount', 1, {
     resourceName: String(view?.name || 'file')
   });
-  // File-backed: the request and the committed Session name the File's bytes;
-  // a Session writer encodes them (`encodeSessionResources`, OV-2612).
   const descriptor = fileBackedDescriptor({
     name: String(view?.name || 'file'),
     type: String(view?.type || ''),
     size: byteLength,
     lastModified: Number(view?.lastModified ?? Date.now())
-  }, sessionResourceViewReader(file) ?? (() => readFileBytes(file)));
+  }, viewReader ?? (() => readStoredBytes(file)), stored);
   return cacheSerializedFileDescriptor(owner, descriptor);
 };
 
@@ -6660,6 +6706,54 @@ const losatEntriesOfDrawing = (request, conservationPairs, entries, catalog) => 
 };
 
 /**
+ * Writes a checked Session document as its Session file and hands it to the
+ * browser, after the large-download confirm. A handed-off file's temporary
+ * copies stay until the page closes: the browser may still read the download,
+ * and a page cannot see when a download ends, so a later Save never deletes
+ * them. Equal entries share one copy (`keepSaveData`), so saving the same
+ * inputs again adds no storage. A Save that hands off no file gives its
+ * copies back at once.
+ * @param {Record<string, unknown> & { resources: Readonly<Record<string, RawSessionResourceDescriptor>> }} document
+ * @param {string} sessionFilename
+ * @param {{ askChoice: DownloadChoicePort, isCurrent: () => boolean }} ports
+ * @returns {Promise<SessionSaveResult>}
+ */
+const downloadSessionFile = async (document, sessionFilename, { askChoice, isCurrent }) => {
+  recordSessionLifecycleEvent('session-save-compression-start');
+  const sessionFile = await writeSessionDocumentFile(document);
+  const compressed = sessionFile.blob;
+  recordSessionLifecycleEvent('session-save-compression-end', {
+    compressedSize: compressed.size
+  });
+  if (!isCurrent()) {
+    sessionFile.release();
+    return { status: 'canceled' };
+  }
+  const largeMegabytes = largeSessionDownloadMegabytes(compressed);
+  if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
+    title: t('Download a large Session?'),
+    description: t('The Session file is {size} MB.', { size: largeMegabytes.toFixed(1) })
+  })) {
+    recordSessionLifecycleEvent('session-save-download-canceled', {
+      reason: 'large-download',
+      compressedSize: compressed.size
+    });
+    sessionFile.release();
+    return { status: 'canceled', compressedSize: compressed.size };
+  }
+  if (!isCurrent()) {
+    sessionFile.release();
+    return { status: 'canceled' };
+  }
+  downloadBlob(compressed, sessionFilename);
+  recordSessionLifecycleEvent('session-save-download-handoff-completed', {
+    compressedSize: compressed.size
+  });
+  lastSessionFilename = sessionFilename;
+  return { status: 'saved', blob: compressed, filename: sessionFilename };
+};
+
+/**
  * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
  * @returns {Promise<SessionSaveResult>}
@@ -6766,7 +6860,6 @@ const exportSessionDocument = async (
   });
   // The project's original-name hints, from every drawing's request metadata; the Session file holds the inputs' bytes.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
-  const writtenResources = await encodeSessionResources(built.resources, resourceOriginalNames);
   const createdAt = new Date().toISOString();
   const legacyArtifacts = buildSessionLegacyArtifacts({
     legacyRawCandidates,
@@ -6788,7 +6881,7 @@ const exportSessionDocument = async (
         ...(legacyArtifacts ? { legacyArtifacts } : {}),
         ui: { ...projectUi, ...ui },
         renderRequest: built.written[index].renderRequest,
-        resources: writtenResources,
+        resources: built.resources,
         webFiles: {
           ...built.written[index].webFiles,
           ...(Object.keys(resourceOriginalNames).length ? { resourceOriginalNames } : {})
@@ -6830,30 +6923,7 @@ const exportSessionDocument = async (
   }
 
   recordSessionLifecycleEvent('session-save-projection-end');
-  recordSessionLifecycleEvent('session-save-compression-start');
-  const compressed = await compressSessionData(sessionData);
-  recordSessionLifecycleEvent('session-save-compression-end', {
-    compressedSize: compressed.size
-  });
-  if (!isCurrent()) return { status: 'canceled' };
-  const largeMegabytes = largeSessionDownloadMegabytes(compressed);
-  if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
-    title: t('Download a large Session?'),
-    description: t('The Session file is {size} MB.', { size: largeMegabytes.toFixed(1) })
-  })) {
-    recordSessionLifecycleEvent('session-save-download-canceled', {
-      reason: 'large-download',
-      compressedSize: compressed.size
-    });
-    return { status: 'canceled', compressedSize: compressed.size };
-  }
-  if (!isCurrent()) return { status: 'canceled' };
-  downloadBlob(compressed, sessionFilename);
-  recordSessionLifecycleEvent('session-save-download-handoff-completed', {
-    compressedSize: compressed.size
-  });
-  lastSessionFilename = sessionFilename;
-  return { status: 'saved', blob: compressed, filename: sessionFilename };
+  return downloadSessionFile({ ...sessionData, resources: built.resources }, sessionFilename, { askChoice, isCurrent });
 };
 
 /**
@@ -6952,6 +7022,18 @@ const withdrawStoredFigure = (withdrawal, preview) => {
   applyResultsData(withdrawal.results, { selectedResultIndex: withdrawal.selectedResultIndex });
   state.failedGeneratePreservedResult.value = withdrawal.failedGeneratePreservedResult;
   preview?.restore(withdrawal.view);
+};
+/**
+ * What a Load that did not end ok gives back: the copies of its Session file
+ * container's inputs (`readSessionFileForLoad`), and the stored figure it
+ * showed while Python upgraded a Session 27-44.
+ * @param {(() => void)[]} loadCopies
+ * @param {StoredFigureWithdrawal | null} withdrawal
+ * @param {StoredFigurePreview | undefined} preview
+ */
+const giveBackUnfinishedLoad = (loadCopies, withdrawal, preview) => {
+  loadCopies.splice(0).forEach((release) => release());
+  if (withdrawal) withdrawStoredFigure(withdrawal, preview);
 };
 /** @param {string} at @param {string} field The field's place in the file under the part at `at`. */
 const pathIn = (at, field) => (at ? `${at}.${field}` : field);
@@ -7202,7 +7284,8 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
   const repairs = [];
   const leafReadings = await readStoredLeaves(document);
   await readStoredRecordIdReadings(document, table, leafReadings, repairs);
-  const inputs = storedDrawingInputsOf(document, entry, table, sessionSourceFactsOf(SESSION_VERSION, false), leafReadings);
+  const inputs = storedDrawingInputsOf(document, entry, table, sessionSourceFactsOf(SESSION_VERSION, false), leafReadings,
+    await readEditorTableTexts([renderRequest], resources));
   if (inputs.restoredConfig && inputs.requestOverrides) {
     inputs.restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(inputs.requestOverrides);
   }
@@ -7396,6 +7479,93 @@ export const makeRegionDrawing = async (derivation, { runSavedComparison }) => {
 const recordLoadedStack = (loaded, drawing) => {
   if (loaded) recordLoadedStackSwitch(/** @type {CommittedCanonicalSession} */ (loaded), drawing);
 };
+// The copies a loaded container's inputs were written to are given back once nothing reads them: when
+// their reader, which every descriptor of the resource shares, is collected.
+/** @type {FinalizationRegistry<() => void>} */
+const loadedInputCopies = new FinalizationRegistry((release) => release());
+
+/**
+ * Writes the inputs of a Session file container into the input copies
+ * (PD-OI-121), one entry at a time, before Load commits anything, and makes
+ * each resource of `parsed` file-backed by its copy: no input is held whole
+ * and none becomes a base64 text (receipt session.file-container). Before it
+ * writes, it compares the declared input total with the free browser storage
+ * and refuses when it is short. When the browser lets no copy be written, an
+ * input is read from the Session file itself, after one checked read here.
+ * A damaged entry refuses the Load. The returned release gives the copies back
+ * (a Load that does not end ok).
+ * @param {File} file
+ * @param {SessionImportContainer} container
+ * @param {{ resources: Record<string, unknown> }} parsed The document the import Worker read; its resources are replaced.
+ * @returns {Promise<() => void>}
+ */
+const copyContainerInputs = async (file, { resources: entries, inputBytes }, parsed) => {
+  const free = inputCopiesAvailable() ? await browserStorageFreeBytes() : undefined;
+  if (free !== undefined && inputBytes > free) {
+    throw diagnosticError('SESSION_SIZE_LIMIT', { storageNeedBytes: inputBytes, storageFreeBytes: free },
+      { stage: 'read', operation: 'session-load' });
+  }
+  /** @type {(() => void)[]} */
+  const releases = [];
+  const release = () => releases.splice(0).forEach((end) => end());
+  try {
+    for (const [resourceId, entry] of Object.entries(entries)) {
+      // The container reader proved each declared descriptor an object whose size is its entry's.
+      const fields = /** @type {{ kind?: unknown, name: string, type: string, size: number, lastModified: number }} */ (
+        parsed.resources[resourceId]);
+      const openEntry = () => openSessionContainerEntry(file, entry);
+      const written = await copyInputStream(openEntry());
+      // The entry's bytes as stored (a gzip input's gzip bytes): what its descriptor counts and a Save stores.
+      if (written.copy) {
+        const { copy, facts } = written;
+        const readBytes = () => copy.read();
+        loadedInputCopies.register(readBytes, copy.release, readBytes);
+        releases.push(() => {
+          loadedInputCopies.unregister(readBytes);
+          copy.release();
+        });
+        parsed.resources[resourceId] = fileBackedDescriptor(fields, readBytes,
+          { size: fields.size, open: async () => (await copy.blob()).stream(), token: async () => facts.token });
+      } else {
+        await openEntry().pipeTo(new WritableStream());
+        parsed.resources[resourceId] = fileBackedDescriptor(fields,
+          async () => new Uint8Array(await new Response(openEntry()).arrayBuffer()), { size: fields.size, open: async () => openEntry(), token: null });
+      }
+    }
+  } catch (error) {
+    release();
+    throw error;
+  }
+  return release;
+};
+
+/**
+ * Load's reading of a Session file before anything changes (PD-OI-016): the
+ * import Worker reads it off the main thread and refuses a document with an
+ * unsafe own key (OV-952) or a key written twice (OV-2694); a Session file
+ * container's inputs then go into the input copies, whose release joins
+ * `loadCopies`. A JSON Session 51 is refused: a Session 51 is a container,
+ * and a JSON Session 51 never reached a release (receipt session.file-container).
+ * @param {File} file
+ * @param {{ signal?: AbortSignal, isCurrent: () => boolean }} options
+ * @param {(() => void)[]} loadCopies
+ * @returns {Promise<SessionImportCandidate | null>} null when the Load is no longer current.
+ */
+const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) => {
+  const candidate = await importSessionFile(file, { signal });
+  if (!isCurrent()) return null;
+  recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
+  const parsed = candidate.data;
+  // A file of a version its form never held is refused before any input is copied.
+  assertSessionFileVersion(parsed, candidate.container !== null);
+  if (candidate.container) {
+    loadCopies.push(await copyContainerInputs(file, candidate.container,
+      /** @type {{ resources: Record<string, unknown> }} */ (parsed)));
+    return isCurrent() ? candidate : null;
+  }
+  return candidate;
+};
+
 /**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
@@ -7447,12 +7617,11 @@ const importSessionDocument = async (e, options = {}) => {
    */
   const legacyFileSets = new Map();
   const previousAlert = state.errorLog.value;
+  /** @type {(() => void)[]} Gives back the copies of a container's inputs unless the Load ends ok. */ const loadCopies = [];
 
   try {
-    const candidate = await importSessionFile(file, { signal: options.signal });
-    if (!options.isCurrent()) return { status: 'canceled' };
-    recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
-    // The import Worker refused a document with an unsafe own key (OV-952).
+    const candidate = await readSessionFileForLoad(file, { signal: options.signal, isCurrent: options.isCurrent }, loadCopies);
+    if (!candidate) return { status: 'canceled' };
     const parsed = candidate.data;
     if (isLegacyConfigPayload(parsed)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
@@ -8813,8 +8982,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
-    // A Load that did not end ok withdraws the stored figure it showed.
-    if (storedFigureWithdrawal && !loadedOk) withdrawStoredFigure(storedFigureWithdrawal, storedFigurePreview);
+    if (!loadedOk) giveBackUnfinishedLoad(loadCopies, storedFigureWithdrawal, storedFigurePreview);
   }
 };
 

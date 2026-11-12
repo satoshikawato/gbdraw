@@ -9,6 +9,8 @@ draw the same SVG. Fixed Similarity groups replace LOSATP.
 
 from __future__ import annotations
 
+from tests.utils.session_files import embedded_session
+
 from dataclasses import replace
 from pathlib import Path
 
@@ -447,13 +449,17 @@ def test_existing_output_stops_the_render_before_the_analysis(
     assert analysis_calls == []
 
 
+def _embedded_document(document):
+    return embedded_session(document.to_dict(), document.resources.sources)
+
+
 def _stored_tables(request: LinearDiagramRequest) -> list[DataFrame]:
     import base64
     from io import StringIO
 
     import pandas as pd
 
-    payload = session_view(build_session_document(request).to_dict())
+    payload = session_view(_embedded_document(build_session_document(request)))
     return [
         pd.read_csv(StringIO(base64.b64decode(payload["resources"][item["resourceId"]]["data"]).decode()), sep="\t")
         for item in payload["renderRequest"]["comparisons"]

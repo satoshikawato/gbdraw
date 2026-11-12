@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import base64
-import gzip
 import hashlib
 import json
 import math
 import re
 import xml.etree.ElementTree as ET
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -68,7 +67,7 @@ EDIT_STROKE = "#5e35b1"
 EDIT_STROKE_WIDTH = 2.5
 EDIT_LEGEND = "Oxidative phosphorylation"
 SESSION_TITLE = "reproducible_work"
-SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
+SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
 CURRENT_RENDER_REQUEST_SCHEMA = 10
@@ -1095,11 +1094,17 @@ def _validate_current_session(
     expected_title: str = SESSION_TITLE,
     expected_output_prefix: str | None = None,
 ) -> dict[str, Any]:
-    contents = path.read_bytes()
-    if contents[:2] != b"\x1f\x8b":
-        raise AssertionError("Saved session is not gzip-compressed")
-    with gzip.open(path, "rt", encoding="utf-8") as handle:
-        payload = json.load(handle)
+    if not zipfile.is_zipfile(path):
+        raise AssertionError("Saved session is not a Session file (.gbdraw)")
+    with zipfile.ZipFile(path) as archive:
+        if archive.namelist()[:1] != ["gbdraw-session.json"]:
+            raise AssertionError("Saved session does not start with gbdraw-session.json")
+        payload = json.loads(archive.read("gbdraw-session.json"))
+        resource_bytes = {
+            name.removeprefix("resources/"): archive.read(name)
+            for name in archive.namelist()
+            if name.startswith("resources/")
+        }
     if payload.get("format") != "gbdraw-session":
         raise AssertionError("Saved session format marker is missing")
     if payload.get("version") != CURRENT_SESSION_VERSION:
@@ -1127,10 +1132,10 @@ def _validate_current_session(
         raise AssertionError("Saved session is missing the committed result or editor state")
 
     matching_resources = []
-    for resource in payload.get("resources", {}).values():
-        if resource.get("kind") != "genbank" or resource.get("encoding") != "base64":
+    for resource_id, resource in payload.get("resources", {}).items():
+        if resource.get("kind") != "genbank" or resource_id not in resource_bytes:
             continue
-        decoded = base64.b64decode(resource.get("data", ""), validate=True)
+        decoded = resource_bytes[resource_id]
         if len(decoded) != FIRST_CIRCULAR_FIXTURE_SIZE:
             continue
         if hashlib.sha256(decoded).hexdigest() == FIRST_CIRCULAR_FIXTURE_SHA256:
@@ -1139,7 +1144,7 @@ def _validate_current_session(
         raise AssertionError("Current session does not embed the exact HmmtDNA input")
     return {
         "filename": path.name,
-        "bytes": len(contents),
+        "bytes": path.stat().st_size,
         "version": payload["version"],
         "renderRequestSchema": render_request["schema"],
         "resources": len(payload.get("resources", {})),
@@ -1164,7 +1169,7 @@ def _save_current_session(
     download = download_info.value
     if download.failure() is not None:
         raise AssertionError(f"Session download failed: {download.failure()}")
-    expected_filename = f"{title}.gbdraw-session.json.gz"
+    expected_filename = f"{title}.gbdraw"
     if download.suggested_filename != expected_filename:
         raise AssertionError(
             f"Expected {expected_filename}, downloaded {download.suggested_filename}"

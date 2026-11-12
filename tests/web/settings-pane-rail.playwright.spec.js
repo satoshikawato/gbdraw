@@ -5,9 +5,8 @@
 // mounted in both displays. The browser remembers the display; the Session,
 // History, the settings, and the Result do not know it.
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { openApp, waitForSessionLoadAtRest } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
@@ -15,7 +14,7 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 test.use({ actionTimeout: 20_000 });
 
 const STORAGE_KEY = 'gbdraw.settings-pane-display';
-const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw-session.json';
+const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw';
 
 // Short name and section title of every rail entry, per mode, in rail order.
 const RAIL = {
@@ -45,7 +44,7 @@ const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUnd
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
   await waitForSessionLoadAtRest(page, { timeout: 180000 });
 };
 
@@ -602,23 +601,21 @@ test('Save Session, Load Session, and Reset Settings leave the display alone', a
   const download = await pending;
   const saved = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(saved);
-  const bytes = readFileSync(saved);
-  const text = (bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8');
   const keys = new Set();
-  JSON.parse(text, (key, value) => { keys.add(key); return value; });
+  JSON.parse(JSON.stringify(await readSessionFile(saved)), (key, value) => { keys.add(key); return value; });
   expect([...keys].filter((key) => /settings.?pane|sidebar|docked/i.test(key)), 'the Session holds no pane display').toEqual([]);
   expect(await paneState(page)).toMatchObject({ display: 'rail', docked: 'labels', stored: 'rail' });
 
   // Loading the Session saved in the rail into the stacked display leaves it stacked.
   await toStacked(page).click();
-  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
   await page.waitForTimeout(300);
   expect(await paneState(page)).toMatchObject({ display: 'stacked', docked: null, stored: 'stacked' });
   // And loading it in the rail keeps the rail and the docked entry.
   await toRail(page).click();
   await entry(page, 'Features').click();
-  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
   await page.waitForTimeout(300);
   expect(await paneState(page)).toMatchObject({ display: 'rail', docked: 'features', shown: ['features'], stored: 'rail' });
@@ -791,7 +788,7 @@ test('Edit pattern of a failed color rule leads to the pattern field in every di
   test.setTimeout(420_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
-  await loadSession(page, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  await loadSession(page, 'HmmtDNA_basic_circular.gbdraw');
   await entry(page, 'Colors').click();
   await page.getByLabel('Qualifier name', { exact: true }).fill('product');
   const pattern = page.getByLabel('New color rule pattern', { exact: true });

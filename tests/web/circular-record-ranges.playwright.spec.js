@@ -16,7 +16,7 @@ const mito = path.join(FIXTURES, 'sessions', 'cli-web-mito.gb');
 const cliSession = async (testInfo, rows, extra = []) => {
   const table = testInfo.outputPath('records.tsv');
   require('node:fs').writeFileSync(table, `gbk\trecord_id\tregion\n${rows.map((row) => row.join('\t')).join('\n')}\n`);
-  const output = testInfo.outputPath('cli.gbdraw-session.json.gz');
+  const output = testInfo.outputPath('cli.gbdraw');
   await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular', '--records_table', table, ...extra,
     '-o', testInfo.outputPath('cli'), '-f', 'svg', '--session_output', output],
   { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() }, timeout: 300_000 });
@@ -25,7 +25,7 @@ const cliSession = async (testInfo, rows, extra = []) => {
 const loadSession = async (page, file) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180_000 }).toBe(true);
 };
 const committedWindows = (page) => page.evaluate(async () => {

@@ -15,10 +15,9 @@
 // Undo and Redo are not walked: a History restore installs the series, the stack rows and the file bindings it
 // captured together (R11), after a step this walk checks, and calls no reconcile or re-key.
 import assert from 'node:assert/strict';
-import { File } from 'node:buffer';
 import { test } from 'node:test';
-import { gunzipSync } from 'node:zlib';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { readSavedSession, sessionLoadEvent } from './helpers/session-documents.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
@@ -395,7 +394,7 @@ const runWalk = async (seed, steps) => {
         // LOSAT rings could not read one ring's genome files: outside a replay that ring goes; in a LOSAT-cache replay
         // its table stays, so it is drawn, and the next Generate does not search it.
         const result = await exportSession('ring walk', { askChoice: async () => 'download' });
-        const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+        const saved = await readSavedSession(result.blob);
         const withGenome = model.map((ring, index) => (ring.lost ? -1 : index)).filter((index) => index >= 0);
         // In a replay, half the Loads that lose a genome loses every ring's genome, so the next Generate
         // searches no ring (OV-3199).
@@ -417,7 +416,7 @@ const runWalk = async (seed, steps) => {
           kinds.set('a Load that lost a genome', (kinds.get('a Load that lost a genome') || 0) + 1);
         }
         const before = drawing;
-        const loaded = await importSession({ target: { files: [new File([JSON.stringify(saved)], 'walk.gbdraw.json', { type: 'application/json' })], value: 'x' } },
+        const loaded = await importSession(await sessionLoadEvent(saved),
           { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
         assert.equal(loaded.status, 'ok', `the Load (seed ${seed}: ${trail.join(' > ')})`);
         drawing = circular();

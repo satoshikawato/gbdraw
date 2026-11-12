@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 const repoRoot = new URL('../..', import.meta.url);
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-pairwise-payload-'));
@@ -800,10 +801,10 @@ const pairwiseElementsFromSvg = (svg) => Array.from(
 );
 
 const exactFixturePath = new URL(
-  'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz',
+  'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw',
   repoRoot
 );
-const exactSaved = JSON.parse(gunzipSync(await readFile(exactFixturePath)).toString('utf8'));
+const exactSaved = await readSavedSession(new Blob([await readFile(exactFixturePath)]));
 const exactSession = savedDrawingView(exactSaved, exactSaved.ui.activeDrawingId);
 const exactAdmission = admitFeatureCatalog(
   exactSession.editorState.featureCatalog,

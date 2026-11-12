@@ -22,6 +22,7 @@ import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionDocumentOfViews } from '../../gbdraw/web/js/services/session-drawings-upgrade.js';
+import { gallerySessionDocument, sessionFileOf, sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -68,7 +69,8 @@ const galleryView = (saved) => {
 };
 const asSaved = ({ drawingOrigin, ...view }) => (drawingOrigin
   ? sessionDocumentOfViews([{ ...drawingOrigin, view }], drawingOrigin.id) : view);
-const gallery = (name) => galleryView(read(`gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`));
+const GALLERY = Object.fromEntries(await Promise.all(['BGC0000708-BGC0000713', 'HmmtDNA_ATskew', 'HmmtDNA_basic_circular', 'lambda_basic_linear', 'tobacco-chloroplast'].map(async (id) => [id, await gallerySessionDocument(id)])));
+const gallery = (name) => galleryView(structuredClone(GALLERY[name]));
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const contextOf = (session, path = 'renderRequest') => ({
   featureCatalog: session.editorState?.featureCatalog ?? null,
@@ -83,13 +85,11 @@ const readRequest = (session, change = () => {}) => {
 };
 const rows = (result) => result.repairs.map(({ code, path, used }) => ({ code, path, ...(used === undefined ? {} : { used }) }));
 
-const input = (session) => ({
-  target: { files: [new File([JSON.stringify(asSaved(session))], 'session.json', { type: 'application/json' })], value: 'selected' }
-});
+const input = (session) => sessionLoadEvent(asSaved(session));
 /** Load with [Load] answered; the dialog lines and the result. */
 const load = async (session) => {
   const dialogs = [];
-  const result = await importSession(input(session), {
+  const result = await importSession(await input(session), {
     transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; }
   });
   return { result, dialogs };
@@ -449,7 +449,7 @@ test('Save writes the request Load read: the legacy alignment keeps the feature 
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
   const saved = await exportSession('probe', { askChoice: async () => 'download' });
   assert.equal(saved.status, 'saved', JSON.stringify(saved.error));
-  const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+  const document = await readSavedSession(saved.blob);
   // A Session 51 holds the request in its drawing's entry; the Load opened the stored Result's drawing.
   const session = savedDrawingView(document, document.ui.activeDrawingId);
   assert.equal(session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
@@ -548,12 +548,10 @@ test('a Circular track gap below zero or not finite takes its default with a row
   assert.deepEqual(rows(zero), []);
   // At Load, through the file's text, in the shown drawing and in another one, the gap is listed, never an
   // unrecognized failure.
-  const fileOf = (document, stored) => new File(
-    [JSON.stringify(document).replace('"stored-gap"', stored)], 'session.json', { type: 'application/json' }
-  );
+  const fileOf = (document, stored) => sessionFileOf(document, (written) => JSON.stringify(written).replace('"stored-gap"', stored));
   const loadFile = async (file) => {
     const dialogs = [];
-    const result = await importSession({ target: { files: [file], value: 'selected' } }, {
+    const result = await importSession({ target: { files: [await file], value: 'selected' } }, {
       transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; }
     });
     assert.equal(result.status, 'ok', JSON.stringify(result.error));
@@ -686,12 +684,12 @@ test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is
   const directory = mkdtempSync(join(tmpdir(), 'gbdraw-cli-47-'));
   let cliCurrent;
   try {
-    const file = join(directory, 'cli.gbdraw-session.json.gz');
+    const file = join(directory, 'cli.gbdraw');
     execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', fileURLToPath(new URL('tests/test_inputs/NC_001416.gb', REPO)),
       '-o', join(directory, 'cli'), '-f', 'svg', '--session_output', file], {
       cwd: directory, env: { ...process.env, PYTHONPATH: fileURLToPath(REPO) }, stdio: 'pipe'
     });
-    cliCurrent = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+    cliCurrent = await readSavedSession(new Blob([readFileSync(file)]));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -881,7 +879,7 @@ test('a schema-1 Session takes a live edit and Save before any Generate (H2)', a
     assert.equal(edited.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
     const saved = await save(name);
     assert.equal(saved.status, 'saved', `${name}: ${saved.error?.code}`);
-    const saved49 = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    const saved49 = await readSavedSession(saved.blob);
     const document = savedDrawingView(saved49, saved49.ui.activeDrawingId);
     assert.equal(document.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
   }

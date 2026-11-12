@@ -282,11 +282,19 @@ def synthetic(pc, name, seed):
     raise ValueError(name)
 
 
+def gallery_session_path(root, name):
+    """A Gallery Session of the checkout ``root``: a Session file, or the gzip JSON of a checkout before v0.15.0."""
+    path = root / f"gbdraw/web/gallery/sessions/{name}.gbdraw"
+    return path if path.exists() else root / f"gbdraw/web/gallery/sessions/{name}.gbdraw-session.json.gz"
+
+
 def gallery_input(root, name, pc):
     from Bio import SeqIO
-    path = root / f"gbdraw/web/gallery/sessions/{name}.gbdraw-session.json.gz"
+    from gbdraw.session import load_session_document
     from gbdraw.session_drawings import _drawing_view
-    document = json.loads(gzip.decompress(path.read_bytes()))
+    path = gallery_session_path(root, name)
+    loaded = load_session_document(path)
+    document = loaded.to_dict()
     (drawing,) = document["drawings"]  # a Gallery Session holds one drawing
     session = _drawing_view(document, drawing)
     specs = session["renderRequest"]["records"]
@@ -294,7 +302,7 @@ def gallery_input(root, name, pc):
     for spec in specs:
         rid = spec["source"]["resourceId"]
         if rid not in parsed_sources:
-            data = base64.b64decode(session["resources"][rid]["data"], validate=True)
+            data = loaded.resources.read(rid)
             source_hashes[rid] = digest(data)
             parsed_sources[rid] = list(SeqIO.parse(io.StringIO(data.decode()), "genbank"))
         parsed = parsed_sources[rid]
@@ -535,7 +543,7 @@ def build_case(root, pc, cc, name, seed, path_representation="graph", unit_stage
                 "boundary": "support candidate stage with precomputed membership; includes index construction"}, {"support_scan": support_scan}
     if name == "render-gallery":
         from gbdraw.api import load_session_document, materialize_session, render_session
-        paths = [root / f"gbdraw/web/gallery/sessions/{g}.gbdraw-session.json.gz" for g in GALLERIES[:2]]
+        paths = [gallery_session_path(root, g) for g in GALLERIES[:2]]
         documents = [load_session_document(p) for p in paths]
         def replay(document):
             with tempfile.TemporaryDirectory(prefix="gbdraw-comparison-render-") as directory:

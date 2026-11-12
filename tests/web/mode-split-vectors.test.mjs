@@ -21,6 +21,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { sessionLoadEvent } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -97,9 +98,7 @@ const readFixture = (path) => {
   return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
 };
 const load = async (session) => {
-  const outcome = await importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
+  const outcome = await importSession(await sessionLoadEvent(session), { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
 };
 // The drawings as Save writes them (complete slices).

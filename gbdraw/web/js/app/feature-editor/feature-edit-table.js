@@ -10,7 +10,7 @@ import {
   updateFeatureOverride
 } from '../../services/feature-placement.js';
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { cloneFileBytesForTransfer, createRetryCopyHold, holdFileCopy } from '../../services/file-content-cache.js';
+import { createRetryCopyHold, helperInputFile, holdFileCopy } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { featureEditsOf } from '../../services/drawing/feature-edits.js';
 import { errorText } from '../../utils/error-text.js';
@@ -146,7 +146,7 @@ export const createFeatureEditTableActions = ({
       }
       // app-setup wires the helper; a missing one throws here and is reported as a Feature edits TSV error.
       const response = await /** @type {NonNullable<typeof readFeatureOverrideTable>} */ (readFeatureOverrideTable)({
-        files: [{ role: 'featureOverrides', bytes: await cloneFileBytesForTransfer(file) }],
+        files: [await helperInputFile('featureOverrides', file)],
         canonicalRequest: committed.renderRequest,
         resources: committed.resources
       });

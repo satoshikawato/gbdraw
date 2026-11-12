@@ -17,7 +17,7 @@ Any input file may be gzip-compressed, as NCBI and ENA distribute them
 depth file, or a Session. gbdraw tells a gzip file by its first two bytes, not
 its name, and reads it as the plain file it holds, in the command line, the
 Python API, and the Web app alike. A Session saved from a gzip upload holds the
-plain file under the uploaded name. bzip2, xz, and zstd files are not read.
+gzip file as it is, under the uploaded name. bzip2, xz, and zstd files are not read.
 A gzip input file expands to at most 512 MiB (536,870,912 bytes): a larger one
 is refused with its name, because a small gzip file can expand to many
 gigabytes. Decompress it and give the plain file, which has no size limit. A

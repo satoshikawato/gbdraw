@@ -21,6 +21,7 @@ import pytest
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 from tests.utils.svg_compare import compare_svgs
 
 pytestmark = pytest.mark.browser
@@ -115,7 +116,7 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
             page.goto(origin + "/gbdraw/web/index.html")
             page.wait_for_function("Boolean(window.__GBDRAW_APP__)")
             page.locator(
-                'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+                'input[type="file"][accept*=".gbdraw"]'
             ).set_input_files(fixture)
             page.wait_for_function("""() => {
                 const app = window.__GBDRAW_APP__;
@@ -188,8 +189,10 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
     assert external_requests == []
     (tmp_path / "history.json").write_text(json.dumps(snapshots), encoding="utf-8")
     with zipfile.ZipFile(archive) as bundle:
-        assert bundle.namelist() == ["out.gbdraw-session.json"]
-        document = json.loads(bundle.read("out.gbdraw-session.json"))
+        assert bundle.namelist() == ["out.gbdraw"]
+        (tmp_path / "out.gbdraw").write_bytes(bundle.read("out.gbdraw"))
+    # The replay Session is a Session file (a .gbdraw container) the Web writer wrote.
+    document = read_session_payload(tmp_path / "out.gbdraw")
     assert document["version"] == CURRENT_SESSION_VERSION
     # A Session 49 of the drawn drawing alone, which it opens (OV-1806).
     assert [drawing["mode"] for drawing in document["drawings"]] == ["circular"]

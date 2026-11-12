@@ -61,7 +61,7 @@ def main():
         "tests/test_inputs/MjeNMV.gbk",
         "tests/test_inputs/NC_013668.gff3",
         "tests/test_inputs/NC_013668.fasta",
-        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw",
         "tests/fixtures/sessions/settings-only.v42.json.gz",
     ]
     evidence["fixtures"] = {p: sha(ROOT / p) for p in inputs}

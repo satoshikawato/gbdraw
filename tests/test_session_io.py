@@ -5,7 +5,6 @@ import copy
 import gzip
 import json
 import hashlib
-import io
 import os
 import re
 from datetime import datetime
@@ -18,6 +17,7 @@ from Bio.SeqRecord import SeqRecord
 
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.circular as circular_cli_module
+import gbdraw.session_container as session_container_module
 import gbdraw.session_io as session_io_module
 from gbdraw.analysis.protein_colinearity import (
     build_protein_losat_cache_key,
@@ -56,6 +56,16 @@ from gbdraw.api.requests import (
     RecordPresentation,
     RenderOutputRequest,
 )
+from tests.utils.session_files import (
+    build_session_payload,
+    read_session_payload,
+    embedded_session,
+    json_document,
+    legacy_file_tree,
+    load_session_mapping,
+    write_session_file,
+    write_unchecked_session_file,
+)
 from gbdraw.session_io import (
     CURRENT_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION,
@@ -70,7 +80,6 @@ from gbdraw.session_io import (
     SUPPORTED_SESSION_VERSIONS,
     SessionBuildContext,
     _json_values_equal,
-    build_session_json,
     compact_session_feature_catalog,
     decode_depth_payload,
     legend_edits_by_row_key,
@@ -82,9 +91,8 @@ from gbdraw.session_io import (
     migrate_persisted_web_state_field_names,
     session_to_cli_args,
     validate_current_web_state_field_names,
+    SessionResources,
     validate_session,
-    write_serialized_session,
-    write_session_json,
 )
 from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view, view_at
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
@@ -147,7 +155,7 @@ def _canonical_request_with_scale_visibility(mode: str, *, show: bool):
 def test_write_session_json_does_not_use_predictable_temp_path(
     tmp_path: Path,
 ) -> None:
-    output_path = tmp_path / "saved.gbdraw-session.json"
+    output_path = tmp_path / "saved.gbdraw"
     old_temp_path = output_path.with_name(
         f".{output_path.name}.{os.getpid()}.tmp"
     )
@@ -158,7 +166,7 @@ def test_write_session_json_does_not_use_predictable_temp_path(
     except OSError as exc:
         pytest.skip(f"file symlinks are unavailable: {exc}")
 
-    write_session_json(output_path, _minimal_session({}))
+    write_session_file(output_path, _minimal_session({}))
 
     assert protected_path.read_text(encoding="utf-8") == "keep"
     assert old_temp_path.is_symlink()
@@ -169,8 +177,8 @@ def test_write_session_json_no_replace_commit_preserves_late_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    output_path = tmp_path / "saved.gbdraw-session.json"
-    real_commit = session_io_module.commit_staged_output_file
+    output_path = tmp_path / "saved.gbdraw"
+    real_commit = session_container_module.commit_staged_output_file
 
     def create_target_immediately_before_commit(
         staged_path: Path,
@@ -182,15 +190,17 @@ def test_write_session_json_no_replace_commit_preserves_late_target(
         real_commit(staged_path, target_path, overwrite=overwrite)
 
     monkeypatch.setattr(
-        session_io_module,
+        session_container_module,
         "commit_staged_output_file",
         create_target_immediately_before_commit,
     )
 
+    document, sources = session_io_module.split_resource_bytes(_current_session())
     with pytest.raises(ValidationError, match="overwrite=True"):
-        write_session_json(
+        session_container_module.write_session_container(
+            document,
+            sources,
             output_path,
-            _minimal_session({}),
             overwrite=False,
         )
 
@@ -279,7 +289,7 @@ def _current_derived_session(
     *,
     mode: str = "collinear",
 ) -> dict:
-    return build_session_json(
+    return build_session_payload(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -426,7 +436,7 @@ def test_current_session_materializes_manifest_once_for_multiple_protein_entries
 
 
 _COPY_CROP_SESSION = (
-    Path(__file__).parent / "fixtures" / "sessions" / "BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw-session.json.gz"
+    Path(__file__).parent / "fixtures" / "sessions" / "BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw"
 )
 
 
@@ -436,7 +446,7 @@ def test_web_session_with_colliding_record_instance_keys_loads() -> None:
     manifest. The Web Save writes into each drawing only the protein entries its own
     manifest resolves, and the CLI admits it. tests/web/mode-scoped-session.test.mjs
     checks that a Load-then-Save of this Session stays so."""
-    session = json.loads(gzip.decompress(_COPY_CROP_SESSION.read_bytes()))
+    session = read_session_payload(_COPY_CROP_SESSION)
     for drawing in session["drawings"]:
         proteins = [
             entry for entry in drawing["losatCache"]["entries"] if "queryRecordInstanceKey" in entry
@@ -453,11 +463,11 @@ def test_web_session_with_colliding_record_instance_keys_loads() -> None:
 def test_web_session_refuses_a_drawing_with_another_drawings_protein_entries(tmp_path: Path) -> None:
     """The refusal OV-3273's Save ran into: a drawing that holds the other drawing's
     protein entries, which its own manifest does not resolve."""
-    session = json.loads(gzip.decompress(_COPY_CROP_SESSION.read_bytes()))
+    session = read_session_payload(_COPY_CROP_SESSION)
     drawings = {drawing["id"]: drawing for drawing in session["drawings"]}
     drawings["linear-2"]["losatCache"] = copy.deepcopy(drawings["linear"]["losatCache"])
-    path = tmp_path / "mixed.gbdraw-session.json"
-    path.write_text(json.dumps(session), encoding="utf-8")
+    path = tmp_path / "mixed.gbdraw"
+    write_unchecked_session_file(path, session)
     with pytest.raises(ValidationError, match="does not resolve through the manifest"):
         load_session(path)
 
@@ -480,7 +490,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     output_prefix = tmp_path / "diagram"
     rendered_svg = make_rendered_svg(str(output_prefix))
     rendered_svg.svg_path.write_text("<svg></svg>", encoding="utf-8")
-    sidecar = tmp_path / "diagram.gbdraw-session.json"
+    sidecar = tmp_path / "diagram.gbdraw"
     run_result = DiagramRunResult(
         mode="linear",
         render_formats=("interactive_svg",),
@@ -653,16 +663,17 @@ def test_session_46_upgrade_and_cli_resave_key_the_legend_edits_by_row(tmp_path:
         for store, shown, key in LEGEND_RENAMED_ROWS_V46_MOVES
     ]
 
-    written = upgrade_session_document(LEGEND_RENAMED_ROWS_V46).document.to_dict()
+    upgraded_document = upgrade_session_document(LEGEND_RENAMED_ROWS_V46).document
+    written = upgraded_document.to_dict()
     assert written["version"] == CURRENT_SESSION_VERSION
     upgraded = drawing_view(written)
     assert _legend_edits(upgraded) == ROW_KEYED_LEGEND_EDITS
     expected_legend = source["modes"]["circular"]["editorState"]["legend"] | ROW_KEYED_LEGEND_EDITS
     assert upgraded["modes"]["circular"]["editorState"]["legend"] == expected_legend
     # A current Session is read as it is.
-    assert _legend_edits(drawing_view(upgrade_session_document(written).document.to_dict())) == ROW_KEYED_LEGEND_EDITS
+    assert _legend_edits(drawing_view(upgrade_session_document(upgraded_document).document.to_dict())) == ROW_KEYED_LEGEND_EDITS
 
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
     circular_main(["--session", str(LEGEND_RENAMED_ROWS_V46), "--output", str(tmp_path / "replay"),
                    "--format", "svg", "--session_output", str(sidecar)])
     resaved = load_session(sidecar)
@@ -732,17 +743,17 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         canonical_request=_canonical_request("linear"),
     )
     payload["modes"] = {"linear": {"config": {"palette": "default"}}}
-    path = tmp_path / "schema-3-feature-catalog.gbdraw-session.json"
+    path = tmp_path / "schema-3-feature-catalog.gbdraw"
 
-    write_session_json(path, payload)
+    write_session_file(path, payload)
 
-    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    on_disk = read_session_payload(path)
     assert on_disk["editorState"]["featureCatalog"] == catalog
     assert on_disk["modes"] == {"linear": {"config": {"palette": "default"}}}
     assert "features" not in on_disk
     assert on_disk["orthogroupState"] == {}
-    assert load_session(path) == on_disk
-    assert load_session_document(path).to_dict() == on_disk
+    assert load_session(path) == json_document(on_disk)
+    assert load_session_document(path).to_dict() == json_document(on_disk)
 
     unknown_field = copy.deepcopy(on_disk)
     unknown_field["branchOnlyState"] = {}
@@ -750,7 +761,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         ValidationError,
         match="unclassified top-level field.*branchOnlyState",
     ):
-        write_session_json(tmp_path / "unknown-field.json", unknown_field)
+        write_session_file(tmp_path / "unknown-field.json", unknown_field)
 
     missing_results = copy.deepcopy(on_disk)
     missing_results.pop("results")
@@ -758,12 +769,12 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         ValidationError,
         match="requires a results array",
     ):
-        write_session_json(tmp_path / "missing-results.json", missing_results)
+        write_session_file(tmp_path / "missing-results.json", missing_results)
 
     empty_draft = copy.deepcopy(on_disk)
     empty_draft["results"] = []
     empty_draft["editorState"]["featureCatalog"] = None
-    write_session_json(tmp_path / "empty-draft.json", empty_draft)
+    write_session_file(tmp_path / "empty-draft.json", empty_draft)
 
     missing_empty_catalog = copy.deepcopy(empty_draft)
     missing_empty_catalog["editorState"].pop("featureCatalog")
@@ -771,7 +782,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         ValidationError,
         match="requires editorState.featureCatalog",
     ):
-        write_session_json(
+        write_session_file(
             tmp_path / "missing-empty-catalog.json",
             missing_empty_catalog,
         )
@@ -782,7 +793,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         ValidationError,
         match=r"Session orthogroupState must be an object",
     ):
-        write_session_json(
+        write_session_file(
             tmp_path / "invalid-orthogroupState.json",
             invalid_container,
         )
@@ -790,7 +801,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
     flat_draft = copy.deepcopy(on_disk)
     flat_draft["features"] = {}
     with pytest.raises(ValidationError, match="it cannot contain features") as excinfo:
-        write_session_json(tmp_path / "flat-draft.json", flat_draft)
+        write_session_file(tmp_path / "flat-draft.json", flat_draft)
     assert excinfo.value.diagnostic == {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 
     interactive_result = copy.deepcopy(on_disk)
@@ -802,7 +813,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         ValidationError,
         match="named plain SVG",
     ):
-        write_session_json(
+        write_session_file(
             tmp_path / "interactive-result.json",
             interactive_result,
         )
@@ -813,7 +824,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         ValidationError,
         match="Results require editorState.featureCatalog",
     ):
-        write_session_json(
+        write_session_file(
             tmp_path / "missing-catalog.json",
             missing_catalog,
         )
@@ -832,7 +843,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         ValidationError,
         match="invalid biological feature reference",
     ):
-        write_session_json(
+        write_session_file(
             tmp_path / "duplicate-feature.json",
             duplicate_feature,
         )
@@ -977,9 +988,9 @@ def test_current_session_rejects_obsolete_web_state_field_names(
 
     with pytest.raises(ValidationError, match=re.escape(message)):
         validate_session(payload)
-    output_path = tmp_path / "obsolete-current-session.gbdraw-session.json"
+    output_path = tmp_path / "obsolete-current-session.gbdraw"
     with pytest.raises(ValidationError, match=re.escape(message)):
-        write_session_json(output_path, payload)
+        write_session_file(output_path, payload)
     assert not output_path.exists()
 
     payload["version"] = 33
@@ -1056,9 +1067,9 @@ def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later
         "editorState": {"featureCatalog": None},
     }
     with pytest.raises(ValidationError, match="requires editorState.alignmentResetReceipt"):
-        session_io_module._validate_alignment_reset_receipt(session)
+        session_io_module._validate_alignment_reset_receipt(session, {})
     session["editorState"]["alignmentResetReceipt"] = None
-    session_io_module._validate_alignment_reset_receipt(session)
+    session_io_module._validate_alignment_reset_receipt(session, {})
 
 
 def _receipt_session(schema: int, placement: str, binding: str) -> dict[str, object]:
@@ -1113,12 +1124,14 @@ _RECORD_SELECTOR_BINDING = "cf9c72f1cdbb85e4b89178634a5a22c54a7a6250e5357b985a45
     (CANONICAL_REQUEST_SCHEMA, "record", _RECORD_SELECTOR_BINDING),
 ])
 def test_alignment_reset_receipt_binds_the_request_as_stored(schema: int, placement: str, binding: str) -> None:
-    session_io_module._validate_alignment_reset_receipt(_receipt_session(schema, placement, binding))
+    session_io_module._validate_alignment_reset_receipt(
+        *session_io_module.split_resource_bytes(_receipt_session(schema, placement, binding)))
 
 
 def test_alignment_reset_receipt_of_a_region_selector_is_not_the_promoted_binding() -> None:
     with pytest.raises(ValidationError, match="binding changed"):
-        session_io_module._validate_alignment_reset_receipt(_receipt_session(9, "region", _RECORD_SELECTOR_BINDING))
+        session_io_module._validate_alignment_reset_receipt(
+            *session_io_module.split_resource_bytes(_receipt_session(9, "region", _RECORD_SELECTOR_BINDING)))
 
 
 def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> None:
@@ -1722,7 +1735,7 @@ def test_current_writer_resolves_noncanonical_request_before_encoding() -> None:
         ),
     )
 
-    payload = drawing_view(build_session_json(
+    payload = drawing_view(build_session_payload(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -2243,9 +2256,9 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
         "recordInstances": {},
     }
 
-    session_path = tmp_path / "promoted.gbdraw-session.json.gz"
-    write_session_json(session_path, promoted)
-    assert load_session(session_path) == promoted
+    session_path = tmp_path / "promoted.json"
+    write_session_file(session_path, promoted)
+    assert load_session(session_path) == json_document(promoted)
 
 
 def test_future_session_version_fails() -> None:
@@ -2273,7 +2286,7 @@ def test_session_without_integer_version_fails_validation(
     with pytest.raises(SessionVersionError, match="Session version is required"):
         load_session_document(session)
     with pytest.raises(ValidationError, match="Session version is required"):
-        write_session_json(tmp_path / "written.json", session)
+        write_session_file(tmp_path / "written.json", session)
 
 
 def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> None:
@@ -2310,7 +2323,7 @@ def test_branch_internal_session_versions_are_rejected_at_read_and_rewrite_bound
     assert version not in SUPPORTED_SESSION_VERSIONS
 
     with pytest.raises(ValidationError, match=f"Unsupported session version: {version}"):
-        build_session_json(
+        build_session_payload(
             SessionBuildContext(
                 mode="circular",
                 output_prefix="out",
@@ -2331,7 +2344,7 @@ def test_branch_internal_request_schemas_are_rejected_at_session_boundaries(
     schema: int,
     session_version: int,
 ) -> None:
-    build = build_mode_scoped_session_json if session_version == 33 else build_session_json
+    build = build_mode_scoped_session_json if session_version == 33 else build_session_payload
     session = build(
         SessionBuildContext(
             mode="circular",
@@ -2354,22 +2367,22 @@ def test_branch_internal_request_schemas_are_rejected_at_session_boundaries(
     with pytest.raises(ValidationError, match=message):
         validate_session(session)
     with pytest.raises(SessionFormatError, match=message):
-        load_session_document(session)
+        load_session_mapping(session)
 
     input_path = (
         tmp_path
-        / f"version-{session_version}-schema-{schema}-input.gbdraw-session.json"
+        / f"version-{session_version}-schema-{schema}-input.gbdraw"
     )
-    input_path.write_text(json.dumps(session), encoding="utf-8")
+    write_unchecked_session_file(input_path, session)
     with pytest.raises(ValidationError, match=message):
         load_session(input_path)
 
     output_path = (
         tmp_path
-        / f"version-{session_version}-schema-{schema}-output.gbdraw-session.json"
+        / f"version-{session_version}-schema-{schema}-output.gbdraw"
     )
     with pytest.raises(ValidationError, match=message):
-        write_session_json(output_path, session)
+        write_session_file(output_path, session)
     assert not output_path.exists()
 
 
@@ -2461,7 +2474,7 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
     head_ratio: str,
     shaft_ratio: str,
 ) -> None:
-    payload = drawing_view(build_session_json(
+    payload = drawing_view(build_session_payload(
         SessionBuildContext(
             mode=mode,
             output_prefix="out",
@@ -2525,7 +2538,7 @@ def test_main_backed_and_current_canonical_session_schemas_remain_supported(
 
 
 def test_current_canonical_session_schema_is_supported() -> None:
-    session = build_session_json(
+    session = build_session_payload(
         SessionBuildContext(mode="circular", output_prefix="out", render_formats=("svg",)),
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={},
@@ -2538,50 +2551,24 @@ def test_current_canonical_session_schema_is_supported() -> None:
     assert drawing_view(session)["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
 
 
-def test_session_json_gzip_round_trip(tmp_path: Path) -> None:
-    session = _minimal_session({})
-    session_path = tmp_path / "session.gbdraw-session.json.gz"
-
-    write_session_json(session_path, session)
-
-    assert session_path.read_bytes().startswith(b"\x1f\x8b")
-    assert load_session(session_path) == session
-
-
-def test_session_json_gzip_decompresses_to_the_plain_bytes(tmp_path: Path) -> None:
-    import gzip
-
-    session = _minimal_session({})
-    write_session_json(tmp_path / "session.json", session)
-    write_session_json(tmp_path / "session.json.gz", session)
-
-    assert gzip.decompress((tmp_path / "session.json.gz").read_bytes()) == (
-        tmp_path / "session.json"
-    ).read_bytes()
+def _current_session(embedded_files: dict | None = None) -> dict:
+    return build_session_payload(
+        SessionBuildContext(mode="circular", output_prefix="out", render_formats=("svg",)),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files=embedded_files or {},
+        generated_at=datetime(2026, 7, 30),
+        canonical_request=_canonical_request("circular"),
+    )
 
 
-def test_every_session_gz_is_the_rsyncable_writer_output_of_its_json(tmp_path: Path) -> None:
-    from gbdraw.io.rsyncable_gzip import RsyncableGzipWriter
+def test_a_session_file_is_a_container_that_loads_back(tmp_path: Path) -> None:
+    session = _current_session()
+    session_path = tmp_path / "session.gbdraw"
 
-    # Large enough for several content-defined cuts.
-    genbank = b"".join(b"%09d acgtacgtta gcatgcatgc ttaaccggtt\n" % index for index in range(20_000))
-    session = _minimal_session({"c_gb": _file_entry("input.gb", genbank)})
-    write_session_json(tmp_path / "session.json", session)
-    write_session_json(tmp_path / "session.json.gz", session)
-    write_session_json(tmp_path / "again.json.gz", session)
-    plain = (tmp_path / "session.json").read_bytes()
-    write_serialized_session(tmp_path / "serialized.json.gz", plain)
-    write_serialized_session(tmp_path / "serialized.json", plain)
-    expected = io.BytesIO()
-    with RsyncableGzipWriter(expected) as writer:
-        writer.write(plain)
+    write_session_file(session_path, session)
 
-    assert len(plain) > 1_000_000
-    assert (tmp_path / "session.json.gz").read_bytes() == expected.getvalue()
-    assert (tmp_path / "again.json.gz").read_bytes() == expected.getvalue()
-    assert (tmp_path / "serialized.json.gz").read_bytes() == expected.getvalue()
-    assert (tmp_path / "serialized.json").read_bytes() == plain
-    assert load_session(tmp_path / "serialized.json.gz") == session
+    assert session_path.read_bytes().startswith(b"PK\x03\x04")
+    assert load_session(session_path) == json_document(session)
 
 
 def test_embedded_file_materialization_sanitizes_name(tmp_path: Path) -> None:
@@ -2973,7 +2960,7 @@ def test_cli_session_round_trip_rewrites_bom_records_table_first_column(
         "linear",
         ["--records_table", str(table_path), "-f", "svg"],
     )
-    session = _minimal_session(files, mode="linear")
+    session = _minimal_session(legacy_file_tree(files), mode="linear")
     session["cliInvocation"] = {
         "schema": 1,
         "mode": "linear",
@@ -3370,7 +3357,7 @@ def test_cli_session_keeps_hidden_scale_in_canonical_request(
                 "--ruler_on_axis",
             ]
         )
-    payload = drawing_view(build_session_json(
+    payload = drawing_view(build_session_payload(
         SessionBuildContext(
             mode=mode,
             output_prefix="out",
@@ -3434,7 +3421,7 @@ def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
         "orthogroup_top",
     )
 
-    payload = drawing_view(build_session_json(
+    payload = drawing_view(build_session_payload(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -3482,7 +3469,7 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
         "--similarity_alignment_feature",
         "target_feature",
     )
-    payload = drawing_view(build_session_json(
+    payload = drawing_view(build_session_payload(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -3522,7 +3509,7 @@ def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> Non
         "--region",
         "#2:30-40",
     )
-    payload = drawing_view(build_session_json(
+    payload = drawing_view(build_session_payload(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -3548,7 +3535,7 @@ def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> Non
 def test_session_pre_parse_rejects_unsupported_options() -> None:
     with pytest.raises(SystemExit):
         parse_session_pre_args(
-            ["--session", "session.gbdraw-session.json", "--gbk", "input.gb"],
+            ["--session", "session.gbdraw", "--gbk", "input.gb"],
             mode="circular",
         )
 
@@ -3561,8 +3548,7 @@ def test_session_cli_help_uses_underscore_options(capsys: pytest.CaptureFixture[
     help_text = capsys.readouterr().out
     assert "--save_session" in help_text
     assert "--session_output" in help_text
-    assert ".gz suffix" in help_text
-    assert "gzip compression" in help_text
+    assert ".gbdraw" in help_text
     assert "--save-session" not in help_text
     assert "--session-output" not in help_text
 
@@ -3572,7 +3558,7 @@ def test_session_cli_help_uses_underscore_options(capsys: pytest.CaptureFixture[
     "option_args",
     [
         ["--save-session"],
-        ["--session-output", "roundtrip.gbdraw-session.json"],
+        ["--session-output", "roundtrip.gbdraw"],
     ],
 )
 def test_session_preparser_rejects_removed_hyphen_aliases(
@@ -3581,7 +3567,7 @@ def test_session_preparser_rejects_removed_hyphen_aliases(
 ) -> None:
     with pytest.raises(SystemExit):
         parse_session_pre_args(
-            ["--session", "session.gbdraw-session.json", *option_args],
+            ["--session", "session.gbdraw", *option_args],
             mode=mode,
         )
 
@@ -3601,7 +3587,7 @@ def test_current_session_output_controls_are_stripped_before_writing() -> None:
             "--gbk",
             "input.gb",
             "--save_session",
-            "--session_output=roundtrip.gbdraw-session.json",
+            "--session_output=roundtrip.gbdraw",
         ]
     ) == ["--gbk", "input.gb"]
 
@@ -3618,12 +3604,12 @@ def test_default_sidecar_path_resolution(tmp_path: Path) -> None:
         explicit_path=None,
         output_prefix=str(tmp_path / "prefix"),
         outputs=[output],
-    ) == tmp_path / "prefix.gbdraw-session.json"
+    ) == tmp_path / "prefix.gbdraw"
     assert resolve_session_sidecar_path(
         explicit_path=None,
         output_prefix=None,
         outputs=[output],
-    ) == tmp_path / "diagram.gbdraw-session.json"
+    ) == tmp_path / "diagram.gbdraw"
 
 
 def test_render_formats_do_not_include_session_json_aliases() -> None:
@@ -3633,7 +3619,7 @@ def test_render_formats_do_not_include_session_json_aliases() -> None:
 
 def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path) -> None:
     output_prefix = tmp_path / "circular_session"
-    session_path = tmp_path / "custom-session.gbdraw-session.json"
+    session_path = tmp_path / "custom-session.gbdraw"
     circular_main(
         [
             "--gbk",
@@ -3652,7 +3638,8 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert svg_path.exists()
     assert session_path.exists()
 
-    document = load_session(session_path)
+    load_session(session_path)
+    document = read_session_payload(session_path)
     assert document["format"] == SESSION_FORMAT
     assert document["version"] == CURRENT_SESSION_VERSION
     payload = drawing_view(document)
@@ -3733,7 +3720,7 @@ def test_cli_session_saves_the_run_metadata_the_worker_reports(tmp_path: Path, c
     lambda_gb = root / "tests/test_inputs/NC_001416.gb"
     mito_gb = root / "tests/fixtures/sessions/cli-web-mito.gb"
     tables = _run_notice_inputs(tmp_path)
-    session_path = tmp_path / "cli.gbdraw-session.json"
+    session_path = tmp_path / "cli.gbdraw"
     common = ["-o", str(tmp_path / "cli"), "-f", "svg", "--session_output", str(session_path),
               "--annotation_table", str(tables["annotations"])]
     if case == "circular":
@@ -3746,7 +3733,8 @@ def test_cli_session_saves_the_run_metadata_the_worker_reports(tmp_path: Path, c
             "-b", str(tables["blast"]), "--feature_override_table", str(tables["overrides"]),
             "--region", "NC_001416.1:20000-30000",
         ])
-    payload = drawing_view(load_session(session_path))
+    # The Worker reads the resources' bytes, which a Session file holds beside the document.
+    payload = drawing_view(read_session_payload(session_path))
     reply = render_embedded_canonical_web_request(
         payload["renderRequest"], resources=payload["resources"], workspace=tmp_path / "web"
     )["metadata"]
@@ -3799,7 +3787,7 @@ def test_cli_resave_of_a_session_30_replaces_its_run_metadata(tmp_path: Path) ->
                 "records": [{"resultIndex": 0, "resultName": "again", "recordIndex": 0}]}
 
     def resave(run_metadata: dict | None) -> dict:
-        document = build_session_json(
+        document = build_session_payload(
             SessionBuildContext(mode="circular", output_prefix="again", render_formats=("svg",),
                                 source_session=source, run_metadata=run_metadata),
             svg_results=(("again", "<svg></svg>"),),
@@ -3867,14 +3855,14 @@ def test_cli_session_binds_each_unmodified_input_file_to_its_records(
     """
 
     single, multi = _cli_session_inputs(tmp_path)
-    session_path = tmp_path / f"{mode}.gbdraw-session.json"
+    session_path = tmp_path / f"{mode}.gbdraw"
     prefix = tmp_path / mode
     main = circular_main if mode == "circular" else linear_main
     inputs = [str(single)] if mode == "circular" else [str(single), str(multi)]
     main(["--gbk", *inputs, "-o", str(prefix), "-f", "svg",
           "--session_output", str(session_path)])
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     bindings = session["webFiles"]["bindings"]
     records = session["renderRequest"]["records"]
     if mode == "circular":
@@ -3907,12 +3895,12 @@ def test_cli_session_binds_unmodified_gff_and_fasta_inputs_to_their_record(
     tmp_path: Path,
 ) -> None:
     inputs = Path(__file__).parent / "test_inputs"
-    session_path = tmp_path / "gff.gbdraw-session.json"
+    session_path = tmp_path / "gff.gbdraw"
     circular_main(["--gff", str(inputs / "NC_013668.gff3"), "--fasta",
                    str(inputs / "NC_013668.fasta"), "-o", str(tmp_path / "gff"),
                    "-f", "svg", "--session_output", str(session_path)])
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     (card,) = session["webFiles"]["bindings"]["circularSources"]
     assert (card["uid"], card["gb"]) == ("record-1", None)
     assert [record["source"] for record in session["renderRequest"]["records"]] == [{
@@ -3954,7 +3942,7 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     """
 
     single, multi = _cli_session_inputs(tmp_path)
-    session_path = tmp_path / f"{case}.gbdraw-session.json"
+    session_path = tmp_path / f"{case}.gbdraw"
     prefix = tmp_path / case
     if case == "options":
         args = ["--gbk", str(single), str(multi),
@@ -3966,7 +3954,7 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
         single_region = [{"start": 21, "end": 300, "reverseComplement": True, "column": None}]
     linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
     assert [
@@ -4006,7 +3994,7 @@ def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_fi
     """
 
     single, multi = _cli_session_inputs(tmp_path)
-    session_path = tmp_path / f"{case}.gbdraw-session.json"
+    session_path = tmp_path / f"{case}.gbdraw"
     prefix = tmp_path / case
     if case == "options":
         args = ["--gbk", str(single), str(multi), "--record_id", "", "--record_id", "cli_multi_b"]
@@ -4027,7 +4015,7 @@ def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_fi
         selected = [{"kind": "recordIndex", "index": 2}, {"kind": "recordId", "value": "cli_unique"}]
     linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
     assert [(record["source"]["resourceId"], record["selector"], record["windows"])
@@ -4103,11 +4091,11 @@ def test_circular_cli_grid_and_batch_sessions_save_crops_as_source_and_range(
         "multi.gbk\tcli_multi_b\t301-1800\t1\n",
         encoding="utf-8",
     )
-    session_path = tmp_path / "circular.gbdraw-session.json"
+    session_path = tmp_path / "circular.gbdraw"
     circular_main(["--records_table", str(table), *(["--multi_record_canvas"] if canvas else []),
                    "-o", str(tmp_path / "circular"), "-f", "svg", "--session_output", str(session_path)])
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     records = session["renderRequest"]["records"]
     assert session["renderRequest"]["grouping"] == ("grid" if canvas else "batch")
     assert [(record["windows"], record["presentation"]["reverseComplement"]) for record in records] == [
@@ -4132,11 +4120,11 @@ def test_circular_cli_one_record_session_is_a_single_drawing(tmp_path: Path) -> 
     """One record drawn without --multi_record_canvas is saved as the Web saves a one-record drawing (OV-3297)."""
 
     single, _multi = _varied_cli_session_inputs(tmp_path)
-    session_path = tmp_path / "one.gbdraw-session.json"
+    session_path = tmp_path / "one.gbdraw"
     circular_main(["--gbk", str(single), "-o", str(tmp_path / "one"), "-f", "svg",
                    "--session_output", str(session_path)])
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     request = session["renderRequest"]
     [record] = request["records"]
     assert (request["grouping"], request["output"]["prefix"]) == ("single", "one")
@@ -4161,11 +4149,11 @@ def test_circular_cli_one_records_table_row_saves_its_crop_as_a_single_drawing(t
         "multi.gbk\tcli_multi_b\t301-1800\t1\tMyB\n",
         encoding="utf-8",
     )
-    session_path = tmp_path / "one.gbdraw-session.json"
+    session_path = tmp_path / "one.gbdraw"
     circular_main(["--records_table", str(table), "-o", str(tmp_path / "one"), "-f", "svg",
                    "--session_output", str(session_path)])
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     request = session["renderRequest"]
     [record] = request["records"]
     assert (request["grouping"], request["output"]["prefix"]) == ("single", "one")
@@ -4193,11 +4181,12 @@ def test_circular_cli_grid_of_one_and_batch_of_two_keep_their_grouping(
     _varied_cli_session_inputs(tmp_path)
     table = tmp_path / "records.tsv"
     table.write_text("gbk\trecord_id\n" + table_rows, encoding="utf-8")
-    session_path = tmp_path / "kept.gbdraw-session.json"
+    session_path = tmp_path / "kept.gbdraw"
     circular_main(["--records_table", str(table), *extra_args, "-o", str(tmp_path / "kept"), "-f", "svg",
                    "--session_output", str(session_path)])
 
-    request = drawing_view(load_session(session_path))["renderRequest"]
+    load_session(session_path)  # the saved file loads with its checks
+    request = drawing_view(read_session_payload(session_path))["renderRequest"]
     assert request["grouping"] == grouping
     assert isinstance(request["output"], list) is (grouping == "batch")
 
@@ -4210,10 +4199,10 @@ def test_python_api_batch_of_one_saves_its_crop_on_the_input_file(tmp_path: Path
         records=(RecordInput(source=GenBankInputSource(single), region=parse_region_spec("201-1500")),),
         outputs=(RenderOutputRequest(output_prefix="one", output_directory=tmp_path),),
     ))
-    session_path = tmp_path / "one.gbdraw-session.json"
+    session_path = tmp_path / "one.gbdraw"
     save_session_document(session_path, rendered.request)
 
-    session = drawing_view(load_session(session_path))
+    session = drawing_view(read_session_payload(session_path))
     [record] = session["renderRequest"]["records"]
     assert session["renderRequest"]["grouping"] == "batch"
     assert record["windows"] == [{"start": 201, "end": 1500, "reverseComplement": False, "column": None}]
@@ -4235,8 +4224,8 @@ def test_single_circular_session_records_crop_on_the_unchanged_input_file(
         ),),
         output=RenderOutputRequest(output_prefix="single", output_directory=tmp_path),
         grouping="single",
-    )).to_dict()
-    document = drawing_view(document)
+    ))
+    document = drawing_view(embedded_session(document.to_dict(), document.resources.sources))
 
     [record] = document["renderRequest"]["records"]
     assert (record["selector"], record["windows"], record["presentation"]["reverseComplement"]) == (
@@ -4283,9 +4272,10 @@ def test_schema1_frozen_main_writer_is_preserved(tmp_path):
     fixture = root / 'single.v41-bindings1.json'
     provenance = json.loads((root / 'single.v41-bindings1.provenance.json').read_text())
     assert hashlib.sha256(fixture.read_bytes()).hexdigest() == provenance['sha256']
-    payload = load_session(fixture)
+    load_session(fixture)
+    payload = read_session_payload(fixture)
     output = tmp_path / 'preserved.json'
-    write_session_json(output, payload)
+    write_session_file(output, payload)
     assert load_session(output)['webFiles']['bindings'] == payload['webFiles']['bindings']
     assert payload['webFiles']['bindings']['schema'] == 1
 
@@ -4300,9 +4290,14 @@ def test_cli_writes_one_circular_file_card_per_gbk_input(tmp_path, monkeypatch, 
     first, second = tmp_path / "first.gb", tmp_path / "second.gb"
     first.write_bytes(b"same bytes\n")
     second.write_bytes(first.read_bytes())
-    monkeypatch.setattr(cli_session, "serialize_file_entry", lambda path, **_kwargs: {
-        **_file_entry("", Path(path).read_bytes()), "type": "", "lastModified": modified,
-    })
+    real_entry = session_io_module.file_resource_entry
+
+    def unnamed_entry(path):
+        entry = real_entry(path)
+        descriptor = {**entry["descriptor"], "name": "", "type": "", "lastModified": int(modified)}
+        return {**entry, "descriptor": descriptor, "name": "", "type": "", "lastModified": modified}
+
+    monkeypatch.setattr(cli_session, "file_resource_entry", unnamed_entry)
     files, provenance = collect_embedded_files_from_cli_args(
         "circular", ["--gbk", str(first), str(second), str(first)]
     )
@@ -4313,7 +4308,7 @@ def test_cli_writes_one_circular_file_card_per_gbk_input(tmp_path, monkeypatch, 
     for index, binding in enumerate(provenance):
         assert binding.slot == f"files.circularSources[{index}].gb"
         assert session_io_module.get_session_slot({"files": files}, binding.slot) == cards[index]["gb"]
-    payload = build_session_json(
+    payload = build_session_payload(
         SessionBuildContext(mode="circular", output_prefix="out", render_formats=("svg",)),
         svg_results=[], embedded_files=files, generated_at=datetime(2026, 9, 11),
         canonical_request=_canonical_request("circular"),
@@ -4350,7 +4345,7 @@ def test_cli_writes_one_circular_file_card_per_gff_and_fasta_pair(tmp_path):
 def test_schema2_composite_load_write_preserves_order_and_metadata(tmp_path):
     payload = _composite_binding_session()
     output = tmp_path / 'composite.json'
-    write_session_json(output, payload)
+    write_session_file(output, payload)
     assert load_session(output)['webFiles']['bindings'] == payload['webFiles']['bindings']
 
 
@@ -4387,21 +4382,33 @@ def test_schema2_composite_rejects_malformed_bindings(invalid):
 
 
 
-def test_composite_sidecar_reads_a_new_repeated_component_once_without_reencoding(monkeypatch):
+def test_composite_sidecar_binds_a_new_repeated_component_once_without_reencoding(monkeypatch):
     source = _composite_binding_session()
+    load_session_document(source)
+    document, sources = session_io_module.split_resource_bytes(source)
     payload = {'resources': {}, 'webFiles': {}}
     reads = []
-    original = session_io_module._embedded_entry_bytes
-    monkeypatch.setattr(session_io_module, '_embedded_entry_bytes', lambda entry: (reads.append(id(entry)), original(entry))[1])
+
+    class CountedSource:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def open_bytes(self):
+            reads.append(1)
+            return self.inner.open_bytes()
+
     def unexpected_encode(_data):
         raise AssertionError('Existing base64 payload must not be re-encoded')
     monkeypatch.setattr(session_io_module.base64, 'b64encode', unexpected_encode)
-    load_session_document(source)
+    counted = {resource_id: CountedSource(source) for resource_id, source in sources.items()}
     inventory = session_io_module._project_web_file_binding(
-        source['resources'], source['webFiles']['bindings']['c_gb'], schema=2,
+        SessionResources(document['resources'], counted), document['webFiles']['bindings']['c_gb'], schema=2,
     )
-    session_io_module._attach_current_web_file_bindings(payload, {'c_gb': inventory})
-    assert len(reads) == 1
+    payload_sources = {}
+    session_io_module._attach_current_web_file_bindings(payload, {'c_gb': inventory}, payload_sources)
+    # Binding carries each source; its bytes are read once, when the Session file is written.
+    assert reads == []
+    assert list(payload_sources.values()) == [counted[next(iter(counted))]]
     assert len(payload['resources']) == 1
     assert len(payload['webFiles']['bindings']['c_gb']['components']) == 2
 
@@ -4452,18 +4459,19 @@ def _card_files(session, cards):
     return [_draft_identity(session, card['gb']) for card in cards]
 
 
-def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
-    source_path = tmp_path / 'source.json'
-    write_session_json(source_path, source)
+def _replay_cli_sidecar(source, tmp_path):
+    source_path = tmp_path / ('source.gbdraw' if source['version'] == CURRENT_SESSION_VERSION else 'source.json')
+    write_session_file(source_path, source)
     original = source_path.read_bytes()
     prefix = tmp_path / 'replayed'
-    sidecar = tmp_path / f'replayed.session{suffix}'
+    sidecar = tmp_path / 'replayed.gbdraw'
     circular_main([
         '--session', str(source_path), '-o', str(prefix),
         '--session_output', str(sidecar),
     ])
     assert source_path.read_bytes() == original
-    written = load_session_document(sidecar).to_dict()
+    load_session_document(sidecar)
+    written = read_session_payload(sidecar)
     result = drawing_view(written)
     assert (written['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (CURRENT_SESSION_VERSION, 2, CANONICAL_REQUEST_SCHEMA)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
@@ -4476,9 +4484,8 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     return result
 
 
-@pytest.mark.parametrize('suffix', ['.json', '.json.gz'])
 @pytest.mark.parametrize('collision', [False, True])
-def test_cli_i24ab_composite_sidecar_preserves_six_sources(tmp_path, suffix, collision):
+def test_cli_i24ab_composite_sidecar_preserves_six_sources(tmp_path, collision):
     # A Session 50 whose Circular input is a composite replays to a Session 51
     # with one File card per component, in order (circular-multi-file D-03).
     source = _cli_composite_source()
@@ -4493,7 +4500,7 @@ def test_cli_i24ab_composite_sidecar_preserves_six_sources(tmp_path, suffix, col
         part['resourceId'] = committed_id
     source['resources'] = dict(reversed(list(source['resources'].items())))
     expected = [_draft_identity(source, part) for part in binding['components']]
-    result = _replay_cli_sidecar(source, tmp_path, suffix)
+    result = _replay_cli_sidecar(source, tmp_path)
     bindings = result['webFiles']['bindings']
     assert 'c_gb' not in bindings
     cards = bindings['circularSources']
@@ -4519,15 +4526,15 @@ def test_cli_i24a_repeated_component_occurrences_survive_dedup(tmp_path):
 
 
 def test_cli_i24c_frozen_schema1_replay_emits_current_bindings(tmp_path):
-    source = load_session(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
-    result = _replay_cli_sidecar(source, tmp_path, '.json.gz')
+    source = read_session_payload(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
+    result = _replay_cli_sidecar(source, tmp_path)
     (card,) = result['webFiles']['bindings']['circularSources']
     assert card['uid'] == 'record-1'
     assert _draft_identity(result, card['gb']) == _draft_identity(source, source['webFiles']['bindings']['c_gb'])
 
 
 def test_cli_i24c_schema1_defaults_and_independent_arrays(tmp_path):
-    source = load_session(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
+    source = read_session_payload(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
     bindings = source['webFiles']['bindings']
     leaf = {'resourceId': bindings['c_gb']['resourceId']}
     bindings['c_gb'] = leaf
@@ -4594,7 +4601,6 @@ def test_cli_i24e_explicit_slots_override_direct_sources(tmp_path, field, slot, 
 @pytest.mark.parametrize('invalid', ['missing', 'metadata', 'dangling', 'unsupported', 'nested'])
 @pytest.mark.parametrize('sentinels', [False, True])
 def test_cli_i24f_invalid_bindings_reject_before_render_or_publication(tmp_path, monkeypatch, invalid, sentinels):
-    import gbdraw.cli_utils.session as cli_session
 
     source = _cli_composite_source()
     bindings = source['webFiles']['bindings']
@@ -4611,9 +4617,9 @@ def test_cli_i24f_invalid_bindings_reject_before_render_or_publication(tmp_path,
     elif invalid == 'nested':
         composite['components'][0] = copy.deepcopy(composite)
     source_path = tmp_path / 'invalid.json'
-    source_path.write_text(json.dumps(source))
+    write_unchecked_session_file(source_path, source)
     original = source_path.read_bytes()
-    svg, sidecar = tmp_path / 'rejected.svg', tmp_path / 'rejected.json.gz'
+    svg, sidecar = tmp_path / 'rejected.svg', tmp_path / 'rejected.gbdraw'
     if sentinels:
         svg.write_bytes(b'existing diagram')
         sidecar.write_bytes(b'existing sidecar')
@@ -4647,7 +4653,8 @@ def test_cli_projection_request_only_session_keeps_no_inventory():
     source = _cli_composite_source()
     del source['webFiles']
     load_session_document(source)
-    assert _project_web_file_inventory(source) is None
+    document, sources = session_io_module.split_resource_bytes(source)
+    assert _project_web_file_inventory(document, SessionResources(document['resources'], sources)) is None
 
 
 @pytest.mark.parametrize('invalid', ['mixed-leaf', 'mixed-composite', 'nested', 'null'])
@@ -4656,7 +4663,8 @@ def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
     from gbdraw.session_migration import _project_web_file_inventory
 
     load_session_document(source)
-    inventory = _project_web_file_inventory(source)
+    document, sources = session_io_module.split_resource_bytes(source)
+    inventory = _project_web_file_inventory(document, SessionResources(document['resources'], sources))
     composite = inventory['c_gb']
     if invalid == 'mixed-leaf':
         composite['components'][0]['data'] = 'eA=='
@@ -4667,7 +4675,7 @@ def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
     else:
         composite['components'][0] = None
     with pytest.raises(ValidationError):
-        session_io_module._attach_current_web_file_bindings({'resources': {}}, inventory)
+        session_io_module._attach_current_web_file_bindings({'resources': {}}, inventory, {})
 
 
 def _linear_session_with_cards(source_session: dict | None = None, **card_fields: str) -> dict:
@@ -4716,7 +4724,7 @@ def test_session_mode_slices_keep_records_off_and_reject_unknown_keys() -> None:
         )
 
     # A CLI re-save keeps the OFF records of both slices.
-    resaved = build_session_json(
+    resaved = build_session_payload(
         SessionBuildContext(mode="linear", output_prefix="again", render_formats=("svg",), source_session=payload),
         svg_results=(("again", "<svg></svg>"),),
         embedded_files={
@@ -4787,10 +4795,10 @@ def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
     first, second, third = session["losatCache"]["entries"]
     first["filename"] = {}
     second["filename"] = 7
-    edited = tmp_path / "edited.gbdraw-session.json"
+    edited = tmp_path / "edited.gbdraw"
     edited.write_text(json.dumps(session), encoding="utf-8")
 
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
     circular_main(["--session", str(edited), "--output", str(tmp_path / "replay"),
                    "--format", "svg", "--session_output", str(sidecar)])
     assert [entry["filename"] for entry in drawing_view(load_session(sidecar), mode="circular")["losatCache"]["entries"]] == [
@@ -4817,7 +4825,8 @@ def test_a_cli_resave_keeps_a_circular_drawing_without_web_file_bindings(tmp_pat
     from gbdraw.session_resources import drawing_resource_ids
 
     source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
-    session = upgrade_session_document(source, temporary_directory=tmp_path).document.to_dict()
+    upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document
+    session = embedded_session(upgraded.to_dict(), upgraded.resources.sources)
     drawing = next(drawing for drawing in session["drawings"] if drawing["mode"] == "circular")
     web_files = drawing["webFiles"]
     del web_files["bindings"]
@@ -4826,14 +4835,14 @@ def test_a_cli_resave_keeps_a_circular_drawing_without_web_file_bindings(tmp_pat
     # The publication keeps only the resources that its drawings name.
     named = set().union(*(drawing_resource_ids(each) for each in session["drawings"]))
     session["resources"] = {key: value for key, value in session["resources"].items() if key in named}
-    edited = tmp_path / "published.gbdraw-session.json"
-    edited.write_text(json.dumps(session), encoding="utf-8")
+    edited = tmp_path / "published.gbdraw"
+    write_session_file(edited, session)
 
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
     circular_main(["--session", str(edited), "--output", str(tmp_path / "replay"),
                    "--format", "svg", "--session_output", str(sidecar)])
 
-    saved = load_session(sidecar)
+    saved = read_session_payload(sidecar)
     saved_drawing = next(saved_drawing for saved_drawing in saved["drawings"] if saved_drawing["id"] == drawing["id"])
     assert "bindings" not in saved_drawing["webFiles"]
     assert saved_drawing["webFiles"]["conservationLosatFastaSources"] == fasta_ids
@@ -4861,7 +4870,7 @@ def test_a_cli_resave_writes_a_hidden_losat_entry_without_a_name_as_the_web_does
 
 _PROTEIN_GALLERY_SESSION = (
     Path(__file__).resolve().parents[1]
-    / "gbdraw" / "web" / "gallery" / "sessions" / "BGC0000708-BGC0000713.gbdraw-session.json"
+    / "gbdraw" / "web" / "gallery" / "sessions" / "BGC0000708-BGC0000713.gbdraw"
 )
 
 
@@ -4892,7 +4901,7 @@ def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_wr
     from gbdraw.api.request_render import CurrentRequestArtifacts
 
     # The drawing's view is the 48 layout this case exercises (a 49 holds no top-level manifest).
-    payload = view_at(drawing_view(json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))), 48)
+    payload = view_at(drawing_view(read_session_payload(_PROTEIN_GALLERY_SESSION)), 48)
     raw = copy.deepcopy(payload["proteinIdentityManifest"])
     protein = next(iter(raw["proteinSets"].values()))["proteins"][0]
     protein["locationParts"] = tuple(tuple(part) for part in protein["locationParts"])
@@ -4954,7 +4963,7 @@ def test_python_card_bindings_keep_the_card_windows_as_the_web_writes_them() -> 
     # One card shape (the Web's `linearBindings` in services/session-resources.js): a card's windows travel with it.
     windows = [{"start": 16000, "end": 100, "reverseComplement": False, "column": None}]
     payload: dict = {"resources": {}}
-    session_io_module._attach_current_web_file_bindings(payload, {"linearSeqs": [{"uid": "a", "windows": windows}]})
+    session_io_module._attach_current_web_file_bindings(payload, {"linearSeqs": [{"uid": "a", "windows": windows}]}, {})
     card = payload["webFiles"]["bindings"]["linearSeqs"][0]
     assert card["windows"] == windows
 
@@ -4986,10 +4995,9 @@ def test_legacy_feature_index_keys_an_all_input_record_with_the_expanded_record_
 def _session_with_plan_edge(edge_extra: dict[str, object]) -> dict:
     fixture = (
         Path(__file__).resolve().parent
-        / "fixtures/sessions/drawings-linear-pair-losat.v51.gbdraw-session.json.gz"
+        / "fixtures/sessions/drawings-linear-pair-losat.v51.gbdraw"
     )
-    with gzip.open(fixture, "rt", encoding="utf-8") as handle:
-        payload = json.load(handle)
+    payload = json_document(read_session_payload(fixture))
     payload["drawings"][0]["config"]["linearComparisonPlan"]["edges"] = [
         {
             "id": "edge-a-b",
@@ -5014,10 +5022,9 @@ def test_current_comparison_plan_admits_window_pair_names() -> None:
     # A Web Save Session with a typed window-pair name (see its .provenance.json).
     saved = (
         Path(__file__).resolve().parent
-        / "fixtures/sessions/web-linear-window-pair-names.v51.gbdraw-session.json.gz"
+        / "fixtures/sessions/web-linear-window-pair-names.v51.gbdraw"
     )
-    with gzip.open(saved, "rt", encoding="utf-8") as handle:
-        validate_session(json.load(handle))
+    validate_session(json_document(read_session_payload(saved)))
     for bad in ({"a~w1->b": ""}, {" ": "mine.tsv"}, {"a~w1->b": 3}, ["mine.tsv"]):
         with pytest.raises(ValidationError, match="windowLosatFilenames") as excinfo:
             validate_session(_session_with_plan_edge({"windowLosatFilenames": bad}))

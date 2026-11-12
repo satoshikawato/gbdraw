@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from tests.utils.session_files import embedded_session, load_session_mapping
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -304,13 +305,14 @@ def test_a_region_carries_compatibility_depth_inputs_in_their_canonical_form(tmp
 
 
 def test_a_row_of_every_record_of_a_file_is_pinned_by_index(tmp_path: Path) -> None:
-    document = build_session_document(
+    built = build_session_document(
         LinearDiagramRequest(
             records=[RecordInput(GenBankInputSource(TWO_RECORDS), selector=RecordSelector("#1", None, 0), record_key="pair")]
         )
-    ).to_dict()
+    )
+    document = embedded_session(built.to_dict(), built.resources.sources)
     document["drawings"][0]["renderRequest"]["records"][0].update(cardinality="all", selector=None)
-    with materialize_session(document, output_directory=tmp_path / "out") as materialized:
+    with materialize_session(load_session_mapping(document), output_directory=tmp_path / "out") as materialized:
         region = derive_region_drawing(materialized, [RegionSelection("pair:2", 1, 20)])
     [record] = region.drawing.request.records
     assert (record.record_key, record.selector.record_index) == ("pair:2", 1)

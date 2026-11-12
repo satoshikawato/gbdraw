@@ -43,7 +43,7 @@ const history = async (page, name) => {
 for(const width of [1440,390]) {
   test(`a caption written in several colors stays as written and draws numbered names through live/native/edit/session/download (${width}px)`,async({browser},testInfo)=>{
     test.setTimeout(1_800_000);
-    const page=await load(browser,'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json',{width,height:1000});
+    const page=await load(browser,'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw',{width,height:1000});
     let fresh;
     try {
       page.setDefaultTimeout(180000);
@@ -137,7 +137,7 @@ for(const width of [1440,390]) {
       expect(tsv).not.toContain(' [#');
       expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');const {state}=await import('./js/state.js');return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.files.t_color));})).toBe(source.text);
       expect(final.fileName).toBe('multicolor.tsv');
-      const sessionPath=testInfo.outputPath('canonical.gbdraw-session.json.gz');
+      const sessionPath=testInfo.outputPath('canonical.gbdraw');
       await download(page,'Save Session',sessionPath);
       const svgPath=testInfo.outputPath('canonical.svg');
       const svgPending=page.waitForEvent('download');
@@ -184,7 +184,7 @@ with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
 
 test('a rule row whose key is the key of another listed row is refused, and a Session draft of one caption in two colors keeps it',async({browser},testInfo)=>{
   test.setTimeout(1_800_000);
-  const page=await load(browser,'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+  const page=await load(browser,'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
   page.setDefaultTimeout(180000);
   let fresh;
   try {
@@ -237,7 +237,7 @@ test('a rule row whose key is the key of another listed row is refused, and a Se
       const results=[...window.__GBDRAW_APP__.currentResults()];results[s.selectedResultIndex.value]={...results[s.selectedResultIndex.value],content:serializeCleanSvg(svg)};
       s.results.value=results;
     },ids);
-    const draft=await inspect(page),saved=testInfo.outputPath('historical.gbdraw-session.json.gz');
+    const draft=await inspect(page),saved=testInfo.outputPath('historical.gbdraw');
     await download(page,'Save Session',saved);
     fresh=await load(browser,saved);fresh.setDefaultTimeout(180000);
     const loaded=await inspect(fresh);
@@ -267,7 +267,7 @@ test('a rule row whose key is the key of another listed row is refused, and a Se
 
 test('Linear comparison numbers a caption written in two colors in both legend orientations',async({browser},testInfo)=>{
   test.setTimeout(1_800_000);
-  const page=await load(browser,'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+  const page=await load(browser,'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
   page.setDefaultTimeout(180000);
   try {
     await generate(page);
@@ -312,7 +312,7 @@ for (const width of [1440, 390]) {
   // color, so the whole row, hidden features included, takes it at once.
   test(`loaded palette row takes its new default color atomically (${width}px)`, async ({ browser }, info) => {
     test.setTimeout(180000);
-    const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', { width, height: 1000 });
+    const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw', { width, height: 1000 });
     let fresh;
     try {
       const evidence = () => page.evaluate(async () => {

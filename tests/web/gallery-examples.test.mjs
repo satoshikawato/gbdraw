@@ -4,24 +4,27 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { gunzipSync } from 'node:zlib';
 
 import {
   galleryExamplesFromCatalog,
   galleryTitleParts
 } from '../../gbdraw/web/js/services/gallery-examples.js';
 import { isReusableLosatEntry } from '../../gbdraw/web/js/services/losat-cache.js';
+import { readSessionContainer } from '../../gbdraw/web/js/services/session-container.js';
 import { normalizeOptionalHexColor } from '../../gbdraw/web/js/utils/color-utils.js';
 
 const CATALOG_URL = new URL('https://gbdraw.app/gallery/examples.json');
 const catalog = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/examples.json', import.meta.url), 'utf8'));
 const galleryFile = (path) => new URL(`../../gbdraw/web/gallery/${path.replace(/^\.\//, '')}`, import.meta.url);
 const sessions = new Map();
-/** The Session of a catalog entry, parsed once for every test of this file. */
+/**
+ * The document of a catalog entry's Session file (a `.gbdraw` container), read once for every test of this file; its
+ * inputs stay unread.
+ */
 const gallerySession = (entry) => {
   if (!sessions.has(entry.session)) {
-    const bytes = readFileSync(galleryFile(entry.session));
-    sessions.set(entry.session, JSON.parse((entry.session.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8')));
+    const file = new Blob([readFileSync(galleryFile(entry.session))]);
+    sessions.set(entry.session, readSessionContainer(file).then(({ document }) => document));
   }
   return sessions.get(entry.session);
 };
@@ -39,7 +42,8 @@ test('every shipped catalog entry is an example, in catalog order, with its Sess
     assert.equal(entry.tutorialStatus, 'ready');
     assert.equal(example.tutorialUrl, `https://gbdraw.app/gallery/${encodeURIComponent(entry.id)}#Tutorial`);
   }
-  assert.ok(examples.some((example) => example.sessionName.endsWith('.json.gz')));
+  // Load reads a Gallery Session by its content; its name is one the Load Session picker takes.
+  assert.ok(examples.every((example) => /\.(?:gbdraw|zip|json|gz)$/.test(example.sessionName)));
 });
 
 test('a title shows its <i> runs as italics and every other character as text', () => {
@@ -81,11 +85,13 @@ test('an unusable catalog or entry gives no example', () => {
     { ...valid, title: ' ' },
     { ...valid, session: 'https://example.org/a.gbdraw-session.json' },
     { ...valid, session: './sessions/a.svg' },
-    { ...valid, id: 'b', mode: 'linear', thumbnail: 'https://example.org/b.webp' }
+    { ...valid, id: 'b', mode: 'linear', thumbnail: 'https://example.org/b.webp' },
+    { ...valid, id: 'c', session: './sessions/c.gbdraw' }
   ], CATALOG_URL);
   assert.deepEqual(examples.map(({ id, mode, thumbnailUrl }) => ({ id, mode, thumbnailUrl })), [
     { id: 'a', mode: '', thumbnailUrl: '' },
-    { id: 'b', mode: 'Linear', thumbnailUrl: '' }
+    { id: 'b', mode: 'Linear', thumbnailUrl: '' },
+    { id: 'c', mode: '', thumbnailUrl: '' }
   ]);
 });
 
@@ -96,7 +102,7 @@ test('an unusable catalog or entry gives no example', () => {
 // PD-OI-110: a ring's colour in a Gallery Session is its own exactly when the
 // tutorial sets it (D-15 keeps the E. coli tutorial's three colours); a ring
 // the tutorial leaves alone takes the Ring colors scheme (null).
-test('a Gallery Session ring has its own colour exactly when its tutorial sets one', () => {
+test('a Gallery Session ring has its own colour exactly when its tutorial sets one', async () => {
   let checked = 0;
   for (const entry of catalog) {
     const tutorial = JSON.parse(readFileSync(galleryFile(entry.tutorial), 'utf8'));
@@ -106,7 +112,7 @@ test('a Gallery Session ring has its own colour exactly when its tutorial sets o
         const match = String(action.selector ?? '').match(/Comparison ring color for (.+?)'/);
         return match ? [[match[1], String(action.value).toLowerCase()]] : [];
       }));
-    for (const drawing of gallerySession(entry).drawings ?? []) {
+    for (const drawing of (await gallerySession(entry)).drawings ?? []) {
       const series = drawing.config?.circularConservation?.series ?? [];
       series.forEach((row, index) => {
         const name = [...setColours.keys()].find((fileName) => String(row.fileName).startsWith(fileName.replace(/\.[^.]+$/, '')));
@@ -124,10 +130,10 @@ test('a Gallery Session ring has its own colour exactly when its tutorial sets o
 // build would (isReusableLosatEntry): rows of another LOSAT Wasm build are
 // searched again, so a LOSAT update re-searches them in the Session with
 // tools/refresh_gallery_sessions.py.
-test('every LOSAT result a Gallery Session stores is one that Generate reuses', () => {
+test('every LOSAT result a Gallery Session stores is one that Generate reuses', async () => {
   let checked = 0;
   for (const entry of catalog) {
-    for (const drawing of gallerySession(entry).drawings ?? []) {
+    for (const drawing of (await gallerySession(entry)).drawings ?? []) {
       for (const result of drawing.losatCache?.entries ?? []) {
         assert.ok(isReusableLosatEntry(result), `${entry.id}: ${result.filename ?? result.key} (${JSON.stringify(result.runtime)}); `
           + `search it again: python tools/refresh_gallery_sessions.py --session ${entry.id}`);

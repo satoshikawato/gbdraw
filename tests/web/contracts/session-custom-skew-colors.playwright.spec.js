@@ -1,9 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { CURRENT_REQUEST_SCHEMA, openApp, expectSessionLoadedWithoutWarnings } = require('../helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
+const { readSessionFile } = require('../helpers/session-file.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -247,7 +247,7 @@ const saveSessionThroughUi = async (page) => {
   const download = await downloadPromise;
   const path = await download.path();
   expect(path).toBeTruthy();
-  const saved = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
+  const saved = await readSessionFile(path);
   return { path, saved };
 };
 

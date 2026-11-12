@@ -13,6 +13,7 @@ import {
   validateSessionAuthorityInventory
 } from '../../gbdraw/web/js/services/session-authority.js';
 import { validateWebFileBindings } from '../../gbdraw/web/js/services/session-resource-backing.js';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
@@ -183,7 +184,7 @@ test('a committed Result set is read as far as it can be restored before the dia
   }
 });
 
-test('run notices that do not match their Results are dropped before the dialog with no row; Save refuses them (E-OD16)', () => {
+test('run notices that do not match their Results are dropped before the dialog with no row; Save refuses them (E-OD16)', async () => {
   const base = fixture(V44_CIRCULAR);
   const read = (document) => {
     const repairs = [];
@@ -205,12 +206,12 @@ test('run notices that do not match their Results are dropped before the dialog 
   }
   // The other mode's set: its stale notices are dropped and the set is kept.
   // The one-drawing view of the bundled Session 49, in the 46 layout this case builds `otherModeResult` on.
-  const gallery = (name) => {
-    const saved = JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+  const gallery = async (name) => {
+    const saved = await readSavedSession(new Blob([readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url))]));
     return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
   };
-  const circular = gallery('HmmtDNA_basic_circular.gbdraw-session.json');
-  const linear = gallery('lambda_basic_linear.gbdraw-session.json');
+  const circular = await gallery('HmmtDNA_basic_circular.gbdraw');
+  const linear = await gallery('lambda_basic_linear.gbdraw');
   const other = {
     renderRequest: linear.renderRequest, results: linear.results,
     editorState: { featureCatalog: linear.editorState.featureCatalog, alignmentResetReceipt: null,
@@ -250,14 +251,14 @@ test('a Session 27-39 Result set Load could not admit is read again without its 
   assert.equal(kept.labelTextFeatureOverrides, v39.features.labelTextFeatureOverrides);
 });
 
-test('a Result set Load\'s composition transform could not compose is read again without its Results (A20, E-OD16)', () => {
+test('a Result set Load\'s composition transform could not compose is read again without its Results (A20, E-OD16)', async () => {
   // The one-drawing view of the bundled Session 49, in the 46 layout this case builds `otherModeResult` on.
-  const gallery = (name) => {
-    const saved = JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+  const gallery = async (name) => {
+    const saved = await readSavedSession(new Blob([readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url))]));
     return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
   };
-  const circular = gallery('HmmtDNA_basic_circular.gbdraw-session.json');
-  const linear = gallery('lambda_basic_linear.gbdraw-session.json');
+  const circular = await gallery('HmmtDNA_basic_circular.gbdraw');
+  const linear = await gallery('lambda_basic_linear.gbdraw');
   const other = {
     renderRequest: linear.renderRequest, results: linear.results,
     editorState: { featureCatalog: linear.editorState.featureCatalog, alignmentResetReceipt: null,

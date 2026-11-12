@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 
 import {
   discoverGffFastaRecords,
   discoverSequenceRecords,
+  readAllSequenceRecords,
   formatInferredOrganismStrain,
   extractGenBankMetadata,
   parseSequenceRecordText
@@ -182,5 +184,34 @@ test('record discovery returns the loader records or declines to the Worker', as
       // An upload whose records the fast path can read does not start the Worker.
       assert.equal(observed.calls.length, 0, `${testCase.name}: answered without the Worker`);
     }
+  }
+});
+
+// A gzip input past the expanded cap is the same refusal in the browser reader and in Python (PD-OI-116): the
+// fast path gives it with the chosen file's name instead of declining to the Worker, which would expand it again.
+test('record discovery refuses a gzip input past the expanded cap without the Worker', async () => {
+  const cap = 1024 * 1024;
+  const gzipFile = (name) => {
+    const bytes = Uint8Array.from(gzipSync(Buffer.alloc(cap + 1, 0x41)));
+    return { name, size: bytes.byteLength, async arrayBuffer() { return bytes.slice().buffer; }, async text() { return ''; } };
+  };
+  const calls = [];
+  const runHelperOperation = async (operation) => { calls.push(operation); return { result: { records: [] } }; };
+  const refused = (inputName) => (error) => {
+    assert.deepEqual([error.code, error.context], ['INPUT_UNREADABLE', { reason: 'GZIP_EXPANDED_SIZE', inputName, limit: 1 }]);
+    return true;
+  };
+  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: cap };
+  try {
+    await assert.rejects(discoverSequenceRecords({ file: gzipFile('big genome.gb.gz'), format: 'genbank', runHelperOperation }),
+      refused('big genome.gb.gz'));
+    await assert.rejects(readAllSequenceRecords(gzipFile('big.fasta.gz'), 'fasta', runHelperOperation), refused('big.fasta.gz'));
+    await assert.rejects(discoverGffFastaRecords({
+      gffFile: gzipFile('big.gff.gz'), fastaFile: new File(['>a\nACGT\n'], 'small.fasta'),
+      runHelperOperation
+    }), refused('big.gff.gz'));
+    assert.deepEqual(calls, []);
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
   }
 });

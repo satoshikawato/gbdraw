@@ -98,7 +98,7 @@ def main():
             page.goto(f'http://127.0.0.1:{server.server_port}/gbdraw/web/index.html')
             page.wait_for_function('() => window.__GBDRAW_APP__ && Object.keys(window.__GBDRAW_APP__.paletteDefinitions || {}).length')
             for mode, fixture in [('circular', 'HmmtDNA_basic_circular'), ('linear', 'lambda_basic_linear')]:
-                load_session(page, ROOT / f'gbdraw/web/gallery/sessions/{fixture}.gbdraw-session.json')
+                load_session(page, ROOT / f'gbdraw/web/gallery/sessions/{fixture}.gbdraw')
                 page.evaluate('() => { window.__s01Metrics={}; }')
                 initial = page.evaluate("""async () => {
                   const a=window.__GBDRAW_APP__; a.form.plot_title='Composition continuity';
@@ -161,7 +161,7 @@ def main():
                 figure.close()
                 with page.expect_download() as download:
                     page.evaluate("async () => { window.__GBDRAW_APP__.sessionTitle='S01 continuity'; await window.__GBDRAW_APP__.saveSessionWithTitle(); }")
-                session_path=args.evidence_dir/f'{mode}.gbdraw-session.json'; download.value.save_as(session_path)
+                session_path=args.evidence_dir/f'{mode}.gbdraw'; download.value.save_as(session_path)
                 load_session(page,session_path)
                 assert_deltas(page.evaluate(READ), dragged)
                 loaded=page.evaluate('async () => await window.__GBDRAW_APP__.runAnalysis()')
@@ -195,7 +195,7 @@ def main():
                     'sessionGenerate':loaded, 'targetFailure':failed, 'recovery':recovered})
                 print(f'{mode}: pointer drag, Generate x2, baseline change, History, export, Session, failure/Reset PASS', flush=True)
             # Two real batch outputs; the second edit must survive while unselected.
-            load_session(page,ROOT / 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')
+            load_session(page,ROOT / 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw')
             created=page.evaluate("""async () => {
               const a=window.__GBDRAW_APP__, {readFileText}=await import('./js/services/file-content-cache.js'),
                 {state}=await import('./js/state.js'),
@@ -234,7 +234,7 @@ def main():
                 batch_runs.append(metrics)
             with page.expect_download() as download:
                 page.evaluate("async () => { window.__GBDRAW_APP__.sessionTitle='S01 batch'; await window.__GBDRAW_APP__.saveSessionWithTitle(); }")
-            batch_session=args.evidence_dir/'batch.gbdraw-session.json'; download.value.save_as(batch_session)
+            batch_session=args.evidence_dir/'batch.gbdraw'; download.value.save_as(batch_session)
             load_session(page,batch_session)
             outcome=page.evaluate('async () => await window.__GBDRAW_APP__.runAnalysis()')
             assert outcome['status']=='ok', outcome

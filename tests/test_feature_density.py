@@ -410,7 +410,7 @@ def test_an_explicit_slot_names_its_track_and_an_unknown_track_is_refused(cfg: G
 # --- Request ------------------------------------------------------------------------------------------------------
 
 
-DENSITY_SESSION = Path(__file__).resolve().parent / "fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz"
+DENSITY_SESSION = Path(__file__).resolve().parent / "fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw"
 
 
 def test_a_cli_session_with_feature_density_tracks_replays_as_it_was_drawn(tmp_path: Path) -> None:

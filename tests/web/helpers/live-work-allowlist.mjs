@@ -268,7 +268,7 @@ export const WORK_ALLOWLIST = [
     // A Session this page saved, loaded into it: its Results already show
     // their drawing's intent, so the Load compiles nothing and asks nothing.
     kind: 'Session Load', stages: [], compiles: 0, requests: [],
-    before: (page) => download(page, 'Save Session', test.info().outputPath('work-allowlist.gbdraw-session.json'), { title: '' }),
+    before: (page) => download(page, 'Save Session', test.info().outputPath('work-allowlist.gbdraw'), { title: '' }),
     run: async (page) => {
       const shown = () => page.evaluate(async () => {
         const { getCommittedSvgResultRuntimeIdentity } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
@@ -276,7 +276,7 @@ export const WORK_ALLOWLIST = [
         return app.sessionImportPending ? null : getCommittedSvgResultRuntimeIdentity(app.results[app.selectedResultIndex]);
       });
       const before = await shown();
-      await page.locator('input[accept^=".json,"]').setInputFiles(test.info().outputPath('work-allowlist.gbdraw-session.json'));
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(test.info().outputPath('work-allowlist.gbdraw'));
       await expect.poll(async () => { const now = await shown(); return now !== null && now !== before; }, { timeout: 180_000 }).toBe(true);
       await settleLive(page);
     }

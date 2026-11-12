@@ -4,19 +4,30 @@ import { recordSessionLifecycleEvent } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @import { BoundedJsonPart, BoundedJsonValue } from './bounded-json-transport.js' */
+/** @import { SessionContainerEntry } from './session-container.js' */
 
 /**
  * What the Worker measured, in milliseconds.
  * @typedef {{ readMs: number, parseMs: number, replyMs: number }} SessionImportTimings
  */
 /**
- * The reassembled, still unvalidated JSON of a Session file.
- * @typedef {{ data: BoundedJsonValue, characters: number, timings: SessionImportTimings }} SessionImportCandidate
+ * Where the inputs of a Session file container are: the entry of each resource
+ * its document declares, by resource id, and the declared sizes of all its
+ * entries but the document, added up (the browser storage their copies need).
+ * @typedef {{ resources: Readonly<Record<string, SessionContainerEntry>>, inputBytes: number }} SessionImportContainer
+ */
+/**
+ * The reassembled, still unvalidated JSON of a Session file; `container` is
+ * null for a JSON Session.
+ * @typedef {{
+ *   data: BoundedJsonValue, characters: number, timings: SessionImportTimings, container: SessionImportContainer | null
+ * }} SessionImportCandidate
  */
 /**
  * A message of the Session import Worker: a transport part, the final result, or a diagnostic.
  * @typedef {(BoundedJsonPart & { operationId: number, status: 'part' })
- *   | { operationId: number, status: 'ok', characters: number, timings: SessionImportTimings }
+ *   | { operationId: number, status: 'ok', characters: number, timings: SessionImportTimings,
+ *     container: SessionImportContainer | null }
  *   | { operationId: number, status: 'error', error?: { code?: string, stage?: string, context?: Record<string, unknown> } }
  * } SessionImportReply
  */
@@ -88,7 +99,7 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
       fail(diagnosticError(code, context, { stage }));
     } else if (reply.status === 'ok' && Number.isSafeInteger(reply.characters) && reply.characters >= 0) {
       try {
-        succeed({ data: assembly.getValue(), characters: reply.characters, timings: reply.timings });
+        succeed({ data: assembly.getValue(), characters: reply.characters, timings: reply.timings, container: reply.container });
       } catch { unreadable(); }
     } else {
       unreadable();

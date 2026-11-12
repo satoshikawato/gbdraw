@@ -6,7 +6,6 @@
 // feature with neither, and the edits wait in the draft for Circular.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const { basename } = require('node:path');
 const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.cjs');
@@ -14,8 +13,9 @@ const { download } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
-const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
+const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw';
 const LAMBDA = 'tests/test_inputs/NC_001416.gb';
 
 const committed = (page, id) => page.evaluate(async (featureId) => {
@@ -160,13 +160,13 @@ const strokeOf = (page, key) => page.evaluate(async ({ strokeKey, strokeColor, s
 
 // Saves the Session and loads it into a fresh page; returns the loaded strokes.
 const strokesAfterSessionRoundTrip = async (page, browser, testInfo, keys, name) => {
-  const saved = testInfo.outputPath(`${name}.gbdraw-session.json`);
+  const saved = testInfo.outputPath(`${name}.gbdraw`);
   await download(page, 'Save Session', saved, { title: '' });
   const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
   try {
     const fresh = await context.newPage();
     await openFresh(fresh);
-    await fresh.locator('input[accept^=".json,"]').setInputFiles(saved);
+    await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
     await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
     await settle(fresh);
@@ -200,8 +200,9 @@ for (const [mode, otherMode] of [['circular', 'linear'], ['linear', 'circular']]
       const otherKey = await strokeFirstCds(page);
       await settle(page);
       expect(otherKey).not.toBe(key);
-      const bytes = await download(page, 'Save Session', testInfo.outputPath(`${mode}-stroke.gbdraw-session.json`), { title: '' });
-      const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+      const strokePath = testInfo.outputPath(`${mode}-stroke.gbdraw`);
+      await download(page, 'Save Session', strokePath, { title: '' });
+      const saved = await readSessionFile(strokePath);
       expect(savedDrawing(saved, mode).editorState.featureStrokes.overrides[key]).toMatchObject(STROKE);
       expect(savedDrawing(saved, otherMode).editorState.featureStrokes.overrides[otherKey]).toMatchObject(STROKE);
       expect(savedDrawing(saved, otherMode).editorState.featureStrokes.overrides[key]).toBeUndefined();

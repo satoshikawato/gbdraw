@@ -67,7 +67,7 @@ def test_cli_existing_output_error_names_the_overwrite_option(tmp_path: Path) ->
     assert "ERROR: Output file already exists: " in again.stderr
     assert "Use --overwrite to replace it." in again.stderr
     assert "overwrite=True" not in again.stderr
-    sessions = sorted(tmp_path.glob("*.gbdraw-session.json*"))
+    sessions = sorted(tmp_path.glob("*.gbdraw"))
     assert sessions, sorted(path.name for path in tmp_path.iterdir())
     replay = _gbdraw("render", "--session", str(sessions[0]), "-o", "replay",
                      "--session_output", sessions[0].name, cwd=tmp_path, timeout=300)
@@ -191,7 +191,7 @@ def test_no_reader_logs_an_error_it_raises() -> None:
     assert offenders == []
 
 
-GALLERY_SESSION = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "HmmtDNA_basic_circular.gbdraw-session.json"
+GALLERY_SESSION = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "HmmtDNA_basic_circular.gbdraw"
 
 
 @pytest.mark.parametrize("damage", ["truncated_gzip", "corrupt_gzip", "invalid_utf8"])
@@ -261,12 +261,11 @@ def test_session_shape_errors_name_the_file_version(layout: str, tmp_path: Path)
     Both layouts: the last one-request Session (48) and a drawing of a Session 49.
     """
 
-    import json
-
     from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION
     from tests.utils.session_drawing_view import drawings_document_of_view, session_view
+    from tests.utils.session_files import read_session_payload, write_unchecked_session_file
 
-    view = session_view(json.loads(GALLERY_SESSION.read_text(encoding="utf-8")))
+    view = session_view(read_session_payload(GALLERY_SESSION))
     view["version"] = MODE_SCOPED_SESSION_MAX_VERSION
     if layout == "drawings":
         payload, version = drawings_document_of_view(view), CURRENT_SESSION_VERSION
@@ -274,8 +273,9 @@ def test_session_shape_errors_name_the_file_version(layout: str, tmp_path: Path)
     else:
         payload, version = view, MODE_SCOPED_SESSION_MAX_VERSION
         payload["results"] = "x"
-    target = tmp_path / "badresults.json"
-    target.write_text(json.dumps(payload), encoding="utf-8")
+    # A Session 51 is a Session file; the one-request Session 48 is JSON.
+    target = tmp_path / ("badresults.gbdraw" if layout == "drawings" else "badresults.json")
+    write_unchecked_session_file(target, payload)
     result = _gbdraw("render", "--session", str(target), "-o", "out", cwd=tmp_path)
     assert result.returncode == 1
     assert f"Session version {version} requires a results array." in result.stderr

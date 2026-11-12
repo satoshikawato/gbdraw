@@ -1,12 +1,12 @@
 """Regression coverage for editing the published chloroplast session."""
 
 import copy
-import json
 import math
 from pathlib import Path
 
 import pytest
 
+from tests.utils.session_files import load_session_mapping, read_session_payload
 from gbdraw.api import materialize_session, session_to_request
 from gbdraw.api.request_render import plan_request
 from gbdraw.diagrams.circular import assemble
@@ -18,17 +18,17 @@ from gbdraw.labels.circular_radial import (
 )
 
 
-SESSION = Path(__file__).parents[1] / "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json"
+SESSION = Path(__file__).parents[1] / "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw"
 
 
 @pytest.fixture
 def chloroplast_session():
-    return json.loads(SESSION.read_text())
+    return read_session_payload(SESSION)
 
 
 def _build(document, tmp_path):
     # The published Session is the CLI command's one-record drawing (PD-OI-044).
-    with materialize_session(document, output_directory=tmp_path) as materialized:
+    with materialize_session(load_session_mapping(document), output_directory=tmp_path) as materialized:
         return plan_request(session_to_request(materialized)).build()
 
 

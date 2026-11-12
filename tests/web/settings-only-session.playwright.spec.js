@@ -7,6 +7,7 @@ const path = require('node:path');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { readSessionFile, readSessionFileEntries, readSessionFileJson, sessionFileBytesOf } = require('./helpers/session-file.cjs');
 
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
@@ -47,16 +48,16 @@ const save = async (page, testInfo, label, { again = false, title } = {}) => {
     await fs.writeFile(testInfo.outputPath(`${label}-save-boundary.json`), JSON.stringify(boundary, null, 2));
     expect(boundary.error, 'Ordinary source-free Save must produce a Session download').toBeNull();
     expect(downloaded).toBeTruthy();
-    const file = testInfo.outputPath(`${label}.gbdraw-session.json.gz`);
+    const file = testInfo.outputPath(`${label}.gbdraw`);
     await downloaded.saveAs(file);
-    return { file, document: JSON.parse(gunzipSync(await fs.readFile(file))) };
+    return { file, document: await readSessionFile(file), entries: (await readSessionFileEntries(file)).resources };
   } finally {
     page.off('download', listener);
   }
 };
 
 const loadFile = async (page, file, message = 'Session loaded') => {
-  const input = page.locator('input[accept^=".json,"]');
+  const input = page.locator('input[accept*=".gbdraw"]');
   await input.setInputFiles(file);
   if (typeof message === 'string') {
     // A Session 27-44 Load converts through Python, which starts the diagram Worker first: without
@@ -170,7 +171,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     await assertDiagramWorkerIdle(page);
 
     const restored = await fresh();
-    await restored.locator('input[accept^=".json,"]').setInputFiles(saved.file);
+    await restored.locator('input[accept*=".gbdraw"]').setInputFiles(saved.file);
     await expectSessionLoadedWithoutWarnings(restored);
     await restored.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     const after = await snapshot(restored);
@@ -231,7 +232,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   page.setDefaultTimeout(20000);
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  await loadFile(page, path.join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await loadFile(page, path.join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   const runMetadata = await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.annotationWarnings.value = [{ code: 'feature_selector_unmatched', setId: 'annotation-set',
@@ -308,13 +309,14 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     ['resource', d => { d.resources = {}; }, [requestDropped, unbound('circularSources[0].gb')]]
   ];
   for (const [name, mutate, expected] of cases) {
-    const candidate = structuredClone(full.document);
+    // The saved file with its document changed: a Session 51 is a .gbdraw file (receipt session.file-container).
+    const candidate = await readSessionFileJson(full.file);
     mutate(candidate);
-    const file = testInfo.outputPath(`${name}.json`);
-    await fs.writeFile(file, JSON.stringify(candidate));
+    const file = testInfo.outputPath(`${name}.gbdraw`);
+    await fs.writeFile(file, await sessionFileBytesOf(candidate));
     let error = null;
     if (Array.isArray(expected)) {
-      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
       await answerLoadRepairs(page, expected, 'cancel');
       // The Cancel click leaves the pointer over the diagram; its hover is not Session state.
       await page.mouse.move(0, 0);
@@ -371,7 +373,7 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   const original = await save(page, testInfo, 'profiles', { title: 'Profiles and priority' });
   await assertDiagramWorkerIdle(page);
   const binding = savedDrawing(original.document, 'linear').webFiles.bindings.qualifier_priority;
-  expect(Buffer.from(original.document.resources[binding.resourceId].data, 'base64')).toEqual(bytes);
+  expect(original.entries[binding.resourceId].bytes).toEqual(bytes);
   expect(savedDrawing(original.document, 'circular').config.adv.axis_stroke_color).toBe('#13579b');
   expect(savedDrawing(original.document, 'linear').config.adv.axis_stroke_color).toBe('#2468ac');
   const context = await browser.newContext();
@@ -387,6 +389,7 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
     const again = await save(restored, testInfo, 'profiles-again');
     expect(again.document.drawings).toEqual(original.document.drawings);
     expect(again.document.resources).toEqual(original.document.resources);
+    expect(again.entries).toEqual(original.entries);
     await showDrawing(restored, { kind: 'circular' });
     expect((await snapshot(restored)).config.adv.axis_stroke_color).toBe('#13579b');
     await showDrawing(restored, { kind: 'linear' });

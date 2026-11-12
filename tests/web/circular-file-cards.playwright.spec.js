@@ -13,13 +13,13 @@ const mito = path.resolve('tests/fixtures/sessions/cli-web-mito.gb');
 
 test('a feature edit on the second file of a CLI Session stays on its record through Generate', async ({ page }, testInfo) => {
   test.setTimeout(900_000);
-  const output = testInfo.outputPath('cli.gbdraw-session.json.gz');
+  const output = testInfo.outputPath('cli.gbdraw');
   await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', twoRecords, mito,
     '--multi_record_canvas', '-o', testInfo.outputPath('cli'), '--session_output', output],
   { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() }, timeout: 600_000 });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(output);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(output);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
   const mitoRecordId = await page.evaluate(() => {

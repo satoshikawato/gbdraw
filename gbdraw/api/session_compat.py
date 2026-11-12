@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import base64
 import copy
-import hashlib
 import json
 import logging
 import re
@@ -38,12 +36,14 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
 )
+from gbdraw.session_container import BytesResourceSource, SessionResourceSource
+from gbdraw.session_contract import SessionContainerResource
 from gbdraw.session_drawings import SessionDrawingArtifacts, drawing_draft_config
 from gbdraw.session_io import (
     DRAWN_HASH_RULE_SESSION_MAX_VERSION,
     FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
     DrawnFeature,
-    SessionResourceDescriptor,
+    SessionResources,
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
     source_hash_selector_value,
@@ -1258,7 +1258,7 @@ class SearchFrameNucleotideTables:
     names it too.
     """
 
-    resources: dict[str, SessionResourceDescriptor]
+    resources: SessionResources
     pair_resources: dict[tuple[str, str], str]
 
 
@@ -1266,7 +1266,7 @@ def search_frame_nucleotide_resources(
     payload: Mapping[str, object],
     request: DiagramRequest,
     converted: DiagramRequest,
-    resources: Mapping[str, SessionResourceDescriptor],
+    resources: SessionResources,
 ) -> SearchFrameNucleotideTables:
     """``resources`` with the stored nucleotide tables of ``payload`` in the search frame.
 
@@ -1285,29 +1285,29 @@ def search_frame_nucleotide_resources(
     by_resource: dict[str, list[_SearchFrameItem]] = {}
     for item in _search_frame_items(payload, request, converted, _STORED_NUCLEOTIDE_TABLE_KINDS):
         by_resource.setdefault(item.resource_id, []).append(item)
-    tables = dict(resources)
+    tables, sources = dict(resources.descriptors), dict(resources.sources)
     moved: list[tuple[_SearchFrameItem, bytes]] = []
     for resource_id, items in by_resource.items():
         items.sort(key=lambda item: item.record_pair)
         kept = None if any(item.content is None for item in items) else items[0].content
         if kept is not None:
-            tables[resource_id] = replace_resource_bytes(resources[resource_id], kept)
+            tables[resource_id], sources[resource_id] = replace_resource_bytes(tables[resource_id], kept)
         moved.extend((item, item.content) for item in items if item.content not in (None, kept))
-    table = SessionResourceTable(tables)
+    table = SessionResourceTable(SessionResources(tables, sources))
     pair_resources: dict[tuple[str, str], str] = {}
     for item, content in moved:
-        stored = resources[item.resource_id]
+        stored = resources.descriptors[item.resource_id]
         resource_id = table.request().add_bytes(
             item.resource_id, kind=stored.get("kind", ""), name=stored.get("name", ""), content=content,
         )
         if resource_id not in tables:
-            tables[resource_id] = replace_resource_bytes(
-                {**stored, "name": table.descriptors()[resource_id]["name"]}, content,
+            tables[resource_id], sources[resource_id] = replace_resource_bytes(
+                {**stored, "name": table.resources().descriptors[resource_id]["name"]}, content,
             )
         query_key, subject_key = (request.records[index].record_key for index in item.record_pair)
         if query_key is not None and subject_key is not None:
             pair_resources[(query_key, subject_key)] = resource_id
-    return SearchFrameNucleotideTables(tables, pair_resources)
+    return SearchFrameNucleotideTables(SessionResources(tables, sources), pair_resources)
 
 
 @dataclass(frozen=True)
@@ -1342,14 +1342,13 @@ def _search_frame_items(
 
     from gbdraw.session_request_codec import encode_canonical_request
     from gbdraw.session_resources import SessionResourceTable
-    from gbdraw.session_io import _embedded_resource_bytes
 
     def items_of(
         value: DiagramRequest,
-    ) -> tuple[dict[tuple[object, ...], Mapping[str, object]], dict[str, SessionResourceDescriptor]]:
+    ) -> tuple[dict[tuple[object, ...], Mapping[str, object]], SessionResources]:
         table = SessionResourceTable()
         encoded = encode_canonical_request(value, table=table).payload
-        return _comparison_items(encoded.get("comparisons"), kinds), table.descriptors()
+        return _comparison_items(encoded.get("comparisons"), kinds), table.resources()
 
     # ``request`` as stored: its tables encode to the bytes they were read from.
     as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
@@ -1360,7 +1359,7 @@ def _search_frame_items(
     items: list[_SearchFrameItem] = []
     for identity, item in stored.items():
         old, new = before[identity], after[identity]
-        content = _embedded_resource_bytes(after_resources[_comparison_resource_id(new)])
+        content = after_resources.read(_comparison_resource_id(new))
         query, subject = (identity[1], identity[2]) if len(identity) == 4 else (-1, -1)
         if not isinstance(query, int) or not isinstance(subject, int):
             raise ValidationError("A stored comparison result requires integer record indices.",
@@ -1368,7 +1367,7 @@ def _search_frame_items(
         items.append(_SearchFrameItem(
             _comparison_resource_id(item),
             (query, subject),
-            None if content == _embedded_resource_bytes(before_resources[_comparison_resource_id(old)]) else content,
+            None if content == before_resources.read(_comparison_resource_id(old)) else content,
         ))
     return items
 
@@ -1412,17 +1411,13 @@ def _comparison_resource_id(item: Mapping[str, object]) -> str:
     return resource_id
 
 
-def replace_resource_bytes(descriptor: SessionResourceDescriptor, content: bytes) -> SessionResourceDescriptor:
-    """``descriptor`` holding ``content``: base64 data, size and any checksum."""
+def replace_resource_bytes(
+    descriptor: SessionContainerResource,
+    content: bytes,
+) -> tuple[SessionContainerResource, SessionResourceSource]:
+    """``descriptor`` sized for ``content``, and ``content`` as its bytes' source."""
 
-    replaced: SessionResourceDescriptor = {
-        **descriptor, "encoding": "base64", "data": base64.b64encode(content).decode("ascii"), "size": len(content),
-    }
-    checksum = descriptor.get("checksum")
-    if checksum not in (None, ""):
-        prefix = "sha256:" if str(checksum).lower().startswith("sha256:") else ""
-        replaced["checksum"] = prefix + hashlib.sha256(content).hexdigest()
-    return replaced
+    return {**descriptor, "size": len(content)}, BytesResourceSource(content)
 
 
 def _main_display_frame_rows_to_search_frame(
@@ -1459,6 +1454,7 @@ def _main_display_frame_rows_to_search_frame(
         if before.search_frame_text is None or before.matches.equals(after.matches)
         else replace(
             after,
+            search_frame_gzip=None,
             search_frame_text=reverse_endpoint_table_text(
                 before.search_frame_text,
                 *(

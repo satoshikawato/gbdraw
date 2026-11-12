@@ -3,6 +3,7 @@ const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise, fetchRou
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 
 test('real Python adapters retain causes through one lazy Worker and successful retry', async ({ page }) => {
   test.setTimeout(180000);
@@ -11,7 +12,8 @@ test('real Python adapters retain causes through one lazy Worker and successful 
   page.on('pageerror', error => consoleMessages.push(error.message));
   await openApp(page);
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
-  const observations = await page.evaluate(async () => {
+  const session = await (await sessionDocuments()).gallerySessionDocument('HmmtDNA_basic_circular');
+  const observations = await page.evaluate(async (session) => {
     const service = await import('/gbdraw/web/js/services/diagram-generation.js');
     const { normalizeUserFacingError } = await import('/gbdraw/web/js/utils/error-normalization.js');
     const pattern = '😀[PRIVATE_PATTERN_SENTINEL';
@@ -29,7 +31,6 @@ test('real Python adapters retain causes through one lazy Worker and successful 
         }
       }
     }
-    const session = await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).json();
     const drawing = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
     const request = structuredClone(drawing.renderRequest);
     request.diagramOptions.colors.colorTable = { resourceId: 'error-colors', representation: 'canonicalTsv' };
@@ -48,7 +49,7 @@ test('real Python adapters retain causes through one lazy Worker and successful 
     });
     return { failures, render, success: successful.results.length,
       hasCatalog: Boolean(successful.metadata.featureCatalog), helperRetry: helperRetry.result };
-  });
+  }, session);
   for (const { kind, model, again } of observations.failures) {
     expect(model.code).toBe('REGEX_SYNTAX');
     expect(model.operation).toBe('evaluateRules');
@@ -108,7 +109,7 @@ for (const mode of ['circular', 'linear']) {
         await expect(page.getByRole('alert', {name:'Generation Error'})).toContainText('No successful Result is available yet');
       }
       const session = mode === 'circular' ? 'HmmtDNA_basic_circular' : 'BGC0000708-BGC0000713';
-      await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), `gbdraw/web/gallery/sessions/${session}.gbdraw-session.json`));
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), `gbdraw/web/gallery/sessions/${session}.gbdraw`));
       await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
       const snapshot = () => page.evaluate(async () => {
         const { getCommittedCanonicalSession } = await import('./js/services/config.js');
@@ -151,7 +152,7 @@ const setNextDisplayStart = (page, startCoordinate) => page.evaluate((start) => 
   };
 }, startCoordinate);
 const loadSession = async (page, name) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), `gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), `gbdraw/web/gallery/sessions/${name}.gbdraw`));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
 };
 
@@ -393,7 +394,7 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   test.setTimeout(180000);
   page.on('dialog', dialog=>dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   const query=page.getByRole('searchbox',{name:'Search features',exact:true});
   await page.getByRole('combobox',{name:'Field to search',exact:true}).selectOption('qualifier-value');
@@ -437,7 +438,7 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
 test('table import failures retain exact cause and concrete retry without a draft lifecycle',async({page})=>{
   test.setTimeout(180000);page.on('dialog',dialog=>dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,rules:JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules),history:window.__GBDRAW_HISTORY__.getUndoCount()}));
   const uploader=page.getByLabel('Specific rules file',{exact:true});
@@ -471,7 +472,7 @@ test('table import failures retain exact cause and concrete retry without a draf
 test('Label TSV retry retains its real reselect input and accepted History', async ({page})=>{
   test.setTimeout(180000);page.on('dialog',dialog=>dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   await page.evaluate(()=>window.__GBDRAW_APP__.openRightDrawerTab('features'));
   const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,history:window.__GBDRAW_HISTORY__.getUndoCount()}));

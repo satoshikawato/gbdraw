@@ -1,4 +1,3 @@
-import json
 import math
 import random
 import re
@@ -13,6 +12,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 import pytest
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 from xml.etree import ElementTree
 
 from gbdraw.api import (
@@ -1258,9 +1258,8 @@ def test_circular_region_labels_count_an_earlier_curved_label_as_one_obstacle(mo
 def test_circular_annotation_labels_of_the_tobacco_gallery_figure_keep_their_label_offset(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    session = json.loads(
-        (Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "tobacco-chloroplast.gbdraw-session.json")
-        .read_text(encoding="utf-8")
+    session = read_session_payload(
+        Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "tobacco-chloroplast.gbdraw"
     )
     session = drawing_view(session)
     drawings: list = []

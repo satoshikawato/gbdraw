@@ -7,6 +7,7 @@ const { copyFileSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -49,16 +50,16 @@ const drawnSvg = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContaine
 const xs = (translations, count) => Array.from({ length: count }, (_, index) => translations?.[index]?.x ?? 0);
 
 // The CLI run of the Web's Source recipe with --anchor_feature, and the request its Session stores.
-const cliRequest = (recipe, testInfo) => {
+const cliRequest = async (recipe, testInfo) => {
   const directory = testInfo.outputPath('cli');
   execFileSync('mkdir', ['-p', directory]);
   for (const file of INPUTS) copyFileSync(file, path.join(directory, path.basename(file)));
-  const session = path.join(directory, 'anchored.gbdraw-session.json');
+  const session = path.join(directory, 'anchored.gbdraw');
   const args = recipe[0] === 'linear' ? recipe.slice(1) : recipe;
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', 'linear', ...args, '--anchor_feature', 'gene=COX1', '--save_session', '--session_output', session
   ], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
-  return JSON.parse(readFileSync(session, 'utf8')).drawings[0].renderRequest;
+  return (await readSessionFile(session)).drawings[0].renderRequest;
 };
 
 // Open the Record Layout controls, type the selector, and resolve it.
@@ -120,7 +121,7 @@ test('Align at feature rotates both mitogenomes in one step, Display start shows
   await expect(zebrafish).toHaveValue('6425');
   // The CLI draws the same recipe with --anchor_feature with the same starts and places.
   expect(recipe.length, 'the Source recipe is available').toBeGreaterThan(0);
-  const cli = cliRequest(recipe, testInfo);
+  const cli = await cliRequest(recipe, testInfo);
   expect(cli.records.map(({ display }) => display.startCoordinate)).toEqual([5904, 6425]);
   expect(xs(cli.layout.recordTranslations, 2)).toEqual([0, 0]);
 
@@ -151,7 +152,7 @@ test('Align at feature on a loaded Session of a two-record file rotates each rec
   execFileSync('mkdir', ['-p', directory]);
   const file = path.join(directory, 'two-mitogenomes.gb');
   writeFileSync(file, INPUTS.map((input) => readFileSync(input, 'utf8')).join(''));
-  const session = path.join(directory, 'two-mitogenomes.gbdraw-session.json');
+  const session = path.join(directory, 'two-mitogenomes.gbdraw');
   execFileSync(process.env.PYTHON || 'python', ['-m', 'gbdraw.cli', 'linear', '--gbk', file, '-o', 'two',
     '--save_session', '--session_output', session], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
   await openFresh(page);
@@ -190,7 +191,7 @@ test('Align at feature on a loaded Session of a two-record file rotates each rec
 test('Align at feature over an active Similarity alignment clears it in the same step, and one Undo restores both', async ({ page }) => {
   test.setTimeout(480_000);
   await openFresh(page);
-  await loadSessionFile(page, path.join(root, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await loadSessionFile(page, path.join(root, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'));
   const before = await placement(page);
   expect(before.plan).not.toBe('null');
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());

@@ -284,7 +284,7 @@ const undoOrRedo = async (page, action) => {
 const loadSession = async (page, path) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
 };

@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    fixture = ROOT / "gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz"
+    fixture = ROOT / "gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw"
     wheel, = (ROOT / "gbdraw/web").glob("gbdraw-*-py3-none-any.whl")
     report = {"fixtureSha256": hashlib.sha256(fixture.read_bytes()).hexdigest(),
               "wheelSha256": hashlib.sha256(wheel.read_bytes()).hexdigest(), "runs": []}
@@ -81,7 +81,7 @@ def main():
                 checks.require(generate()[0] == first, "Repeated Generate changed geometry")
                 saved = acceptance._save_session(page, checks)
                 saved_data = saved.read_bytes()
-                saved_path = artifacts / f"{width}.gbdraw-session.json"
+                saved_path = artifacts / f"{width}.gbdraw"
                 saved_path.write_bytes(saved_data)
                 run["sessionSha256"] = hashlib.sha256(saved_data).hexdigest()
                 page.reload(wait_until="domcontentloaded")

@@ -213,6 +213,27 @@ export const readSessionInput = (value) => {
 // two version tests below (tests/web/mode-scoped-session.test.mjs).
 /** A Session 51 or later is a list of drawings. @param {number} version */
 export const versionHoldsDrawings = (version) => version >= SESSION_DRAWINGS_LAYOUT.version;
+/**
+ * The Session of a file Load opened is of a version that file form holds:
+ * a Session file container (`.gbdraw`) holds a Session 51 or newer, and a
+ * JSON Session one older than 51 (a JSON Session 51 never reached a release,
+ * PD-OI-127). Anything else is refused as a version this gbdraw does not
+ * read, except a version newer than this app reads, which `readSessionInput`
+ * refuses as saved by a newer gbdraw. Python's container reader refuses an
+ * older container document with the same outcome (the shared vectors).
+ * @param {unknown} document The parsed Session document.
+ * @param {boolean} container Whether it came from a Session file container.
+ */
+export const assertSessionFileVersion = (document, container) => {
+  if (!isPlainObject(document) || typeof document.version !== 'number' || !Number.isInteger(document.version)) return;
+  if (versionHoldsDrawings(document.version) === container) {
+    if (container) readSessionInput(document);
+    return;
+  }
+  if (!container) readSessionInput(document);
+  throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED' },
+    { stage: 'parse', operation: 'session-load' });
+};
 /** A Session 46 or later keeps each mode's draft in its slice. @param {number} version */
 export const versionKeepsModeSlices = (version) => version >= MODE_SCOPED_SESSION_VERSION;
 /** @param {SessionChecked} document @returns {document is SessionChecked51} */

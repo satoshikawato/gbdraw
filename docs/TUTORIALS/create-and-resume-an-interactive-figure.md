@@ -26,9 +26,9 @@ Each interface creates these files:
 
 | Interface | You create | gbdraw writes | Compare with |
 | --- | --- | --- | --- |
-| Web app | — | `interactive_human_mitochondrion.interactive.svg` (offline Interactive SVG, Step 3), `interactive_handoff.gbdraw-session.json.gz` (project session, saved in Step 5 and loaded in Step 6), `restored_interactive_figure.svg` (static SVG regenerated from the loaded session, Step 6) | The figure above |
-| Command line | — | `interactive_human_mitochondrion.svg` (the static master), `interactive_human_mitochondrion.interactive.svg`, `interactive_handoff.gbdraw-session.json.gz`, `restored_interactive_figure.svg` | [`restored_interactive_figure.svg`](../images/t-cli-11/restored_interactive_figure.svg) |
-| Python | `interactive_handoff.py`, the program from Step 2 | `interactive_human_mitochondrion.svg`, `interactive_human_mitochondrion.interactive.svg`, `interactive_handoff.gbdraw-session.json.gz`, `restored_interactive_figure.svg` | [`restored_interactive_figure.svg`](../images/t-py-08/restored_interactive_figure.svg) |
+| Web app | — | `interactive_human_mitochondrion.interactive.svg` (offline Interactive SVG, Step 3), `interactive_handoff.gbdraw` (project session, saved in Step 5 and loaded in Step 6), `restored_interactive_figure.svg` (static SVG regenerated from the loaded session, Step 6) | The figure above |
+| Command line | — | `interactive_human_mitochondrion.svg` (the static master), `interactive_human_mitochondrion.interactive.svg`, `interactive_handoff.gbdraw`, `restored_interactive_figure.svg` | [`restored_interactive_figure.svg`](../images/t-cli-11/restored_interactive_figure.svg) |
+| Python | `interactive_handoff.py`, the program from Step 2 | `interactive_human_mitochondrion.svg`, `interactive_human_mitochondrion.interactive.svg`, `interactive_handoff.gbdraw`, `restored_interactive_figure.svg` | [`restored_interactive_figure.svg`](../images/t-py-08/restored_interactive_figure.svg) |
 
 For the command line and Python, install gbdraw and start in an empty working
 directory.
@@ -83,7 +83,7 @@ Close the popup and clear the search.
 ### Step 5: Save the project session
 
 Select **Save Session**, enter `interactive_handoff`, and save
-`interactive_handoff.gbdraw-session.json.gz`.
+`interactive_handoff.gbdraw`.
 
 ![Finished project after downloading the interactive handoff session](../images/t-gui-09/05-session-download.png)
 
@@ -94,7 +94,7 @@ compatible render request needed to continue editing.
 ### Step 6: Reproduce the figure in a fresh context
 
 Open a fresh gbdraw page with no files selected, select **Load Session**, and
-choose `interactive_handoff.gbdraw-session.json.gz`. Editing controls wait
+choose `interactive_handoff.gbdraw`. Editing controls wait
 while **Loading session…** is shown. After the result is restored, **Source
 records** shows **Records not inspected** because the saved preview is displayed
 without reading the embedded GenBank record again. Change **Output Prefix** to
@@ -156,12 +156,12 @@ gbdraw circular \
   --labels out \
   --species '<i>Homo sapiens</i>' \
   --legend right \
-  --session_output interactive_handoff.gbdraw-session.json.gz \
+  --session_output interactive_handoff.gbdraw \
   -o interactive_human_mitochondrion \
   -f svg,interactive_svg
 
 gbdraw circular \
-  --session interactive_handoff.gbdraw-session.json.gz \
+  --session interactive_handoff.gbdraw \
   -o restored_interactive_figure \
   -f svg
 ```
@@ -170,7 +170,7 @@ gbdraw circular \
 Expected output: the first command writes
 `interactive_human_mitochondrion.svg`,
 `interactive_human_mitochondrion.interactive.svg`, and
-`interactive_handoff.gbdraw-session.json.gz`. The second command reads only
+`interactive_handoff.gbdraw`. The second command reads only
 the session and writes `restored_interactive_figure.svg`.
 
 ### Step 2: Verify the restored figure
@@ -252,7 +252,7 @@ request = CircularDiagramRequest(
 result = render_request(request)
 assert isinstance(result, RequestRenderResult)
 
-session_path = Path("interactive_handoff.gbdraw-session.json.gz")
+session_path = Path("interactive_handoff.gbdraw")
 session_document = save_session_document(
     session_path,
     request,

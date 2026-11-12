@@ -3,11 +3,11 @@
 // fit the figure again; its Undo and Redo do too. A color or stroke edit, and an Auto figure, rerender nothing. While
 // the rerender runs, the line under the Figure size field says the figure is being fitted.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { gallerySessionDocument } from './helpers/session-documents.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -130,8 +130,9 @@ test('a Canvas padding change fits again when it changes the padding Python draw
 const COMPOSITION = 'data-gbdraw-composition';
 const decodeAttribute = (value) => value.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&amp;/g, '&');
+const galleryDocuments = { HmmtDNA_basic_circular: await gallerySessionDocument('HmmtDNA_basic_circular') };
 const galleryRoot = (base) => {
-  const saved = JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${base}.gbdraw-session.json`, import.meta.url), 'utf8'));
+  const saved = galleryDocuments[base];
   const content = savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content;
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   svg.setAttribute(COMPOSITION, decodeAttribute(svg.getAttribute(COMPOSITION)));

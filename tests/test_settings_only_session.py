@@ -8,6 +8,7 @@ import pytest
 
 from gbdraw.api import load_session_document, materialize_session, session_to_request
 from gbdraw.session import SessionConversionError, SessionError
+from tests.utils.session_files import read_session_payload
 
 
 @pytest.fixture
@@ -75,7 +76,7 @@ def test_settings_only_rejects_inconsistent_documents(settings, damage, reason):
     elif damage == 'binding_schema':
         document['webFiles']['bindings']['schema'] = 99
     elif damage == 'source':
-        full = load_session_document(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json').to_dict()
+        full = read_session_payload(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
         document['resources'] = full['resources']
         document['webFiles'] = full['webFiles']
     elif damage == 'result':

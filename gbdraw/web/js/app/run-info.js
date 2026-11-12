@@ -2696,7 +2696,7 @@ export const buildRunInfo = ({
       params: { files: helperFileList(sourceHelpers) }
     });
     noteParts.push({
-      text: msg('If you save a .gbdraw-session.json.gz and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the compressed JSON; these TSV files do not need to be saved separately for session restore.')
+      text: msg('To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a .gbdraw file) and load it again; you do not need to keep these TSV files for that.')
     });
   }
   if (source.unresolvedFileArgs.length > 0) {

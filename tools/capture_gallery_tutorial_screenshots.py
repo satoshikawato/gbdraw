@@ -695,7 +695,7 @@ def wait_for_app_shell(page) -> None:
 
 
 def load_web_app_session(page, session_path: Path) -> None:
-    page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
+    page.locator('input[accept*=".gbdraw"]').set_input_files(str(session_path))
     # A loaded Session shows the notice `Session loaded: <file name>`.
     try:
         page.locator("[data-app-notice]").filter(has_text="Session loaded").wait_for(

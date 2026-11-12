@@ -5,7 +5,7 @@ const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const loadSession = async (page) => {
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
 };
 // A rule that changes the Legend asks for the automatic rerender (OV-42, OV-43,
@@ -116,7 +116,7 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
   // changes nothing. Once the edit is applied, the loaded Session replaces
   // the rules and their fills. (The caption normalization request that a
   // Load used to take over is gone with the caption rewrite.)
-  const sessionFile = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+  const sessionFile = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw');
   await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     window.__RELEASE_RULES__ = null;
@@ -130,7 +130,7 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
   });
   const beforeLoad = await held();
   expect(beforeLoad).toMatchObject({ available: false, importing: false });
-  await page.locator('input[accept^=".json,"]').setInputFiles(sessionFile);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionFile);
   expect(await held()).toEqual(beforeLoad);
   await page.evaluate(async () => { window.__RELEASE_RULES__(); await window.__OLD_RULE_EDIT__; });
   expect(await page.evaluate(() => {
@@ -138,7 +138,7 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
     return [a.sessionLoadAvailable, a.manualSpecificRules.map((rule) => rule.val)];
   })).toEqual([true, ['(?i)nadh']]);
   expect((await fills(page)).length).toBeGreaterThan(0);
-  await page.locator('input[accept^=".json,"]').setInputFiles(sessionFile);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionFile);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && !window.__GBDRAW_APP__.manualSpecificRules.length);
   expect(await fills(page)).toEqual([]);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules)).toEqual([]);
@@ -158,7 +158,7 @@ test('Session preview stays lazy and saved Python rules remain editable and rege
   const fresh = await context.newPage();
   fresh.on('dialog', dialog => dialog.accept());
   await openApp(fresh);
-  await fresh.locator('input[accept^=".json,"]').setInputFiles(file);
+  await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   expect((await getDiagramWorkerActivity(fresh)).constructions).toBe(0);
   expect(await fills(fresh)).toHaveLength(7);
@@ -236,7 +236,7 @@ test('the mitochondrion preset updates the legend; Undo, Redo and Generate agree
 test('the plastid preset replaces the tobacco Gallery rules through the Preset scheme select', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   const preset = await page.evaluate(() => window.__GBDRAW_APP__.specificRulePresets.find((entry) => entry.id === 'plastid'));
   const select = page.getByLabel('Preset scheme', { exact: true });

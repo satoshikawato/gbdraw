@@ -1,8 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { readFileSync, writeFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { join } = require('node:path');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(join(__dirname, 'helpers/session-documents.mjs')).href);
+const writeSessionFile = async (file, document) => writeFileSync(file, Buffer.from(await (await (await sessionDocuments()).sessionFileOf(document)).arrayBuffer()));
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
@@ -13,8 +15,8 @@ const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 // draft feature slot runs through one transition, which asks before it leaves
 // a lane Feature placement undrawable. Reset applies the edit and removes those
 // rows as one History step; Cancel keeps the control's value and records none.
-const HMMT = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
-const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
+const HMMT = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw';
+const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw';
 
 const placeLane = (page, side) => page.evaluate(async (lane) => {
   const app = window.__GBDRAW_APP__;
@@ -174,7 +176,7 @@ test('Linear Use custom stack asks before dropping a Linear lane, and Circular S
 // the features row, the start the Row actions journey needs.
 test('Circular Track on Axis and the Row actions run from the menu and by keyboard, and focus stays with the row', async ({ browser }) => {
   test.setTimeout(300000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw');
   try {
     await openStack(page, 'circular');
     const axisRow = () => page.evaluate(() => {
@@ -377,7 +379,7 @@ test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis 
 // with Use custom stack off, ask with one dialog. Cancel changes nothing and
 // records no step; the choice is one Undo step, its Undo and Redo restore the
 // source, the row, and the switches together, and Generate then draws.
-const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
+const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw';
 const REGIONS_TSV = 'set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\tNC_001416.1\t100\t900\n';
 const depthTsv = (record) => [0, 1, 2, 3].map((index) => `${record}\t${index * 700 + 1}\t${10 + index}`).join('\n');
 const rev7Depth = (mode, count) => ({ mode, count, tsv: depthTsv(mode === 'circular' ? 'NC_001879.2' : 'NC_001416.1') });
@@ -686,7 +688,7 @@ test('rev 7: Circular Hide GC Content with Use custom stack off asks, and the st
 // strings. Load makes the draft's rows from them, and the dialog names the row.
 test('rev 7: a Session whose request holds string slot specs asks on Remove and on Hide GC Content, by slot id', async ({ browser }, testInfo) => {
   test.setTimeout(420000);
-  const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
+  const session = await (await sessionDocuments()).readSavedSession(new Blob([readFileSync(TOBACCO)]));
   const specOf = (slot) => {
     const params = Object.entries(slot.params || {}).filter(([key]) => key !== 'marks').map(([key, value]) => `${key}=${value}`);
     if (slot.side) params.push(`side=${slot.side}`);
@@ -696,8 +698,8 @@ test('rev 7: a Session whose request holds string slot specs asks on Remove and 
   const tracks = shownSavedDrawing(session).renderRequest.diagramOptions.tracks;
   tracks.circularTrackSlots = tracks.circularTrackSlots.map(specOf);
   delete shownSavedDrawing(session).config.adv.circular_track_slots;
-  const file = testInfo.outputPath('string-slots.gbdraw-session.json');
-  writeFileSync(file, JSON.stringify(session));
+  const file = testInfo.outputPath('string-slots.gbdraw');
+  await writeSessionFile(file, session);
   const page = await load(browser, file);
   try {
     await openStack(page, 'circular');
@@ -733,7 +735,7 @@ const linearDepthRows = (page) => page.evaluate(async () => (await import('./js/
 const savedSession = async (saved, file) => {
   const titled = await saved.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
   await download(saved, 'Save Session', file, titled ? {} : { title: 'rev7' });
-  return JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+  return (await sessionDocuments()).readSavedSession(new Blob([readFileSync(file)]));
 };
 const heightsInSession = (session) => {
   const depthRows = (rows) => rows.filter((row) => row.renderer === 'depth').map((row) => row.height);
@@ -754,7 +756,7 @@ const generatedLinear = async (browser, { reach = false } = {}) => {
 // writes, as `dev` saves it.
 const loadedWithWrittenHeight = async (browser, testInfo, options) => {
   const saved = await generatedLinear(browser, options);
-  const file = testInfo.outputPath('written-height.gbdraw-session.json');
+  const file = testInfo.outputPath('written-height.gbdraw');
   const session = await savedSession(saved, file);
   await saved.context().close();
   const writeHeight = (height) => (row) => (row.renderer === 'depth' ? { ...row, height } : row);
@@ -762,7 +764,7 @@ const loadedWithWrittenHeight = async (browser, testInfo, options) => {
   adv.linear_track_slots = adv.linear_track_slots.map(writeHeight('10px'));
   const { tracks } = shownSavedDrawing(session).renderRequest.diagramOptions;
   tracks.linearTrackSlots = tracks.linearTrackSlots.map(writeHeight({ value: 10, unit: 'px' }));
-  writeFileSync(file, JSON.stringify(session));
+  await writeSessionFile(file, session);
   const page = await load(browser, file);
   expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '10px' }]);
   return page;
@@ -797,7 +799,7 @@ test('rev 7: a Linear Generate keeps the written height, and a Depth file remova
   try {
     await test.step('rev 7: a Linear Generate keeps the written height in the row, in the Session draft and its request', async () => {
       expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '10px' }]);
-      expect(heightsInSession(await savedSession(page, testInfo.outputPath('kept-height.gbdraw-session.json'))))
+      expect(heightsInSession(await savedSession(page, testInfo.outputPath('kept-height.gbdraw'))))
         .toEqual({ draft: ['10px'], request: [{ value: 10, unit: 'px' }] });
     });
     await test.step('rev 7: Linear Depth file removal with no row reaching it after Generate takes the row out without a question, and Generate draws',
@@ -821,7 +823,7 @@ test(`rev 7: Linear Depth file and series removals with no row reaching them ${W
     try { await linearFileRemovalNoReach(page); } finally { await page.context().close(); }
   });
   await test.step(`rev 7: Linear Depth series removal ${WRITTEN_LOAD} takes the row out, and Generate draws`, async () => {
-    const page = await load(browser, testInfo.outputPath('written-height.gbdraw-session.json'));
+    const page = await load(browser, testInfo.outputPath('written-height.gbdraw'));
     try {
       expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '10px' }]);
       await linearSeriesRemovalNoReach(page);
@@ -856,7 +858,7 @@ test('rev 7: a typed Linear Depth height: the row leaves with its last file, the
     await expectGenerates(page);
     await settleLive(page);
     const seriesHeight = () => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().adv.depth_tracks[0].height);
-    const before = await drawnFrom(page, testInfo.outputPath('typed-before.gbdraw-session.json'));
+    const before = await drawnFrom(page, testInfo.outputPath('typed-before.gbdraw'));
     expect(before.options.depthTracks[0].height).toBe(40);
     expect(await seriesHeight()).toBe(40);
     await removeDepthFile(page, 'linear');
@@ -868,7 +870,7 @@ test('rev 7: a typed Linear Depth height: the row leaves with its last file, the
     expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '' }]);
     expect(await seriesHeight()).toBe(40);
     await expectGenerates(page);
-    expect(await drawnFrom(page, testInfo.outputPath('typed-after.gbdraw-session.json'))).toEqual(before);
+    expect(await drawnFrom(page, testInfo.outputPath('typed-after.gbdraw'))).toEqual(before);
     expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '40px' }]);
   } finally { await page.context().close(); }
 });
@@ -1005,7 +1007,7 @@ const reachUndoCell = async (page, mode, route, after, testInfo) => {
   expect(await reflowError(page)).toBeNull();
   expect(await slotDrawnCount(page, 'mark'), 'Undo draws it again').toBe(drawnBefore);
   expect(await committedSlotsOf(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
-  const saved = await savedSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
+  const saved = await savedSession(page, testInfo.outputPath('after-undo.gbdraw'));
   expect(slotIdsOf(shownSavedDrawing(saved).renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds it').toContain('mark');
   await historyStep(page, 'redo');
   expect(await slotDrawnCount(page, 'mark'), 'Redo takes it out again').toBe(0);
@@ -1027,7 +1029,7 @@ const reachUndoTitle = (mode, route, after) => `rev 7: Undo and Redo of a chosen
 for (const mode of ['circular', 'linear']) {
   test(`rev 7: reach matrix (${mode}): Depth file, series and row removals a row reaches, after Generate and after Load`, async ({ browser }, testInfo) => {
     test.setTimeout(420000);
-    const file = testInfo.outputPath(`saved-${mode}.gbdraw-session.json`);
+    const file = testInfo.outputPath(`saved-${mode}.gbdraw`);
     const page = await generatedWithReach(browser, mode);
     try {
       // The Session `after Load` steps load: this drawing, saved before any step.
@@ -1105,7 +1107,7 @@ const offRowJourney = async (current, browser, mode, testInfo) => {
   await historyStep(current.page, 'redo');
   await expectGenerates(current.page);
   expect(depthRowsOf(await stackState(current.page, mode))).toEqual(['depth:false']);
-  const savedFile = testInfo.outputPath('off-removed.gbdraw-session.json');
+  const savedFile = testInfo.outputPath('off-removed.gbdraw');
   await savedSession(current.page, savedFile);
   await addDepthFile(current.page, mode);
   await settleLive(current.page);
@@ -1133,7 +1135,7 @@ for (const mode of ['circular', 'linear']) {
       await current.page.context().close();
       current.page = await offRowDrawing(browser, mode);
       await expectGenerates(current.page);
-      const file = testInfo.outputPath('off.gbdraw-session.json');
+      const file = testInfo.outputPath('off.gbdraw');
       await savedSession(current.page, file);
       await test.step(title('after a Generate'), () => offRowJourney(current, browser, mode, testInfo));
       await test.step(title('after a Load'), async () => {
@@ -1423,7 +1425,7 @@ test('rev 7: Linear File removal: Cancel on the second question keeps the File, 
     await historyStep(page, 'undo');
     expect(await files()).toEqual(filesBefore);
     expect(await stackState(page, 'linear')).toEqual(start);
-    const saved = await savedSession(page, testInfo.outputPath('undo.gbdraw-session.json'));
+    const saved = await savedSession(page, testInfo.outputPath('undo.gbdraw'));
     expect(shownSavedDrawing(saved).config.adv.linear_track_slots.find((row) => row.id === 'mark0').enabled).toBe(true);
     await expectGenerates(page);
   } finally { await page.context().close(); }
@@ -1497,7 +1499,7 @@ const loadRingSession = async (browser, { stack = true, session = ringSessionUpl
   await page.addInitScript(() => { window.__LIFECYCLE__ = []; window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: (event) => window.__LIFECYCLE__.push(event) }; });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => window.__LIFECYCLE__.some((event) => event.name === 'interactiveReady') && !window.__GBDRAW_APP__.sessionImportPending);
   await page.locator('[data-setting="region-annotations"] input[type=file]').first().setInputFiles({
     name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\treference-a\t100\t900\n')
@@ -1523,7 +1525,7 @@ test('rev 7: Circular removing a comparison source whose managed ring row anothe
       expect(await rings()).toBe(2);
       await historyStep(page, 'undo');
       expect(await rings()).toBe(3);
-      const saved = await savedSession(page, testInfo.outputPath('ring-undo.gbdraw-session.json'));
+      const saved = await savedSession(page, testInfo.outputPath('ring-undo.gbdraw'));
       expect(shownSavedDrawing(saved).config.adv.circular_track_slots.find((row) => row.id === 'mark').enabled).not.toBe(false);
       await historyStep(page, 'redo');
     };

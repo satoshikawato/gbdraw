@@ -158,7 +158,7 @@ const saveAndLoadFresh = async (page, browser, path) => {
   const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
   const fresh = await context.newPage();
   await openFresh(fresh);
-  await fresh.locator('input[accept^=".json,"]').setInputFiles(path);
+  await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await fresh.evaluate(() => window.__GBDRAW_APP__.errorLog), 'Load').toBeNull();
   await settleLive(fresh);
@@ -247,7 +247,7 @@ test('OV-159 label_rendering (b): Linear Above Feature does not reset Circular E
   await generate(page);
   const fields = { rendering: 'adv.label_rendering', placement: 'adv.label_placement' };
   expect((await readDrawings(page, fields)).circular.rendering, 'Circular before Save').toBe('external_only');
-  const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('ov159.gbdraw-session.json'));
+  const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('ov159.gbdraw'));
   try {
     const loaded = await readDrawings(fresh, fields);
     expect(loaded.circular.rendering, 'Circular label_rendering after Load').toBe('external_only');
@@ -286,7 +286,7 @@ test('Label Line and Label Protection draw in their mode and survive Save and Lo
   expect(after.halos, 'Linear halos').toBeGreaterThan(0);
 
   const fields = { line: 'adv.label_line', protection: 'adv.label_protection' };
-  const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('label-style.gbdraw-session.json'));
+  const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('label-style.gbdraw'));
   try {
     const loaded = await readDrawings(fresh, fields);
     expect(loaded.linear, 'Linear after Load').toEqual({ line: 'none', protection: 'halo' });
@@ -403,7 +403,7 @@ for (const { name, row, renamed, prepare, hide } of OV120_CASES) {
     await generate(page);
     expect((await legendState(page)).drawn.map(({ caption }) => caption), 'the Generate without the row').not.toContain(renamed);
 
-    const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('ov120.gbdraw-session.json'));
+    const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('ov120.gbdraw'));
     try {
       await hide(fresh, false);
       await settleLive(fresh);
@@ -523,7 +523,7 @@ for (const { fixture, from, to, path, value } of OV106_CASES) {
   test(`OV-106: a ${MODE_NAMES[from]} unmanaged override (${path}) does not fail the ${MODE_NAMES[to]} Generate and Save`, async ({ page }, testInfo) => {
     test.setTimeout(300_000);
     await openFresh(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles({
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles({
       name: `ov106-${from}.gbdraw-session.json`, mimeType: 'application/json', buffer: withConfigOverride(fixture, path, value)
     });
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
@@ -542,7 +542,7 @@ for (const { fixture, from, to, path, value } of OV106_CASES) {
       await settleLive(page);
     }
     expect(await generateOutcome(page), `the ${to} Generate`).toEqual({ status: 'ok', error: null });
-    await download(page, 'Save Session', testInfo.outputPath('ov106.gbdraw-session.json'));
+    await download(page, 'Save Session', testInfo.outputPath('ov106.gbdraw'));
     const after = await readDrawings(page, overrides);
     expect(Object.keys(after[from].overrides), `the ${from} override stays in ${from}`).toContain(path);
     expect(Object.keys(after[to].overrides), `${to} has no ${from} override`).not.toContain(path);

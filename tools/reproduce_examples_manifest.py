@@ -1761,7 +1761,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         SessionVariantRecipe(
             source_session_path=(
                 "gbdraw/web/gallery/sessions/"
-                "HmmtDNA_ATskew.gbdraw-session.json"
+                "HmmtDNA_ATskew.gbdraw"
             ),
             config_overrides=(
                 (
@@ -1775,7 +1775,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             ),
         ),
         required_inputs=(
-            "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw",
         ),
     )
     add(
@@ -1784,7 +1784,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         SessionVariantRecipe(
             source_session_path=(
                 "gbdraw/web/gallery/sessions/"
-                "BGC0000708-BGC0000713.gbdraw-session.json"
+                "BGC0000708-BGC0000713.gbdraw"
             ),
             config_overrides=(
                 (
@@ -1799,7 +1799,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         ),
         required_inputs=(
             "gbdraw/web/gallery/sessions/"
-            "BGC0000708-BGC0000713.gbdraw-session.json",
+            "BGC0000708-BGC0000713.gbdraw",
         ),
     )
     add(

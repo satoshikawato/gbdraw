@@ -51,6 +51,7 @@ from gbdraw.session_drawings import (
 from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION
 from gbdraw.web_support.request_render import render_canonical_web_request
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import embedded_session, write_session_file
 from tests.utils.web_render_result import web_session_results
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -249,9 +250,9 @@ def test_session_renders_keep_their_error_surface(
         render_session_drawings(materialized)
 
     # An error of the body keeps its type: the CLI words this refusal with --overwrite.
-    source = tmp_path / "two.gbdraw-session.json"
-    source.write_text(json.dumps(document.to_dict()), encoding="utf-8")
-    sidecar = tmp_path / "existing.gbdraw-session.json"
+    source = tmp_path / "two.gbdraw"
+    write_session_file(source, embedded_session(document.to_dict(), document.resources.sources))
+    sidecar = tmp_path / "existing.gbdraw"
     sidecar.write_text("keep", encoding="utf-8")
     with pytest.raises(OutputExistsError) as refused:
         render_main(["--session", str(source), "-o", str(tmp_path / "fig"), "--session_output", str(sidecar)])
@@ -307,7 +308,7 @@ def test_build_session_document_writes_two_drawings(tmp_path: Path) -> None:
     assert data["ui"] == {"activeDrawingId": "linear"}
     assert document.active_drawing_id == "linear"
 
-    path = tmp_path / "two.gbdraw-session.json"
+    path = tmp_path / "two.gbdraw"
     circular, linear = _requests()
     save_session_document(
         path,
@@ -586,15 +587,16 @@ def test_a_composite_circular_input_upgrades_to_one_file_card_per_file(tmp_path:
     # cards take uids no flat record key has (D-12, OV-2843).
     source = load_session_document(SESSION_FIXTURES / "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz")
     components = source.to_dict()["webFiles"]["bindings"]["c_gb"]["components"]
-    upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document.to_dict()
+    upgraded_document = upgrade_session_document(source, temporary_directory=tmp_path).document
+    upgraded = upgraded_document.to_dict()
     view = drawing_view(upgraded, "circular")
     bindings = view["webFiles"]["bindings"]
     assert not {"c_gb", "c_gff", "c_fasta"} & set(bindings)
     cards = bindings["circularSources"]
     assert [card["uid"] for card in cards] == ["source-1", "source-2", "source-3"]
     assert [card["gb"]["name"] for card in cards] == [part["name"] for part in components]
-    assert [upgraded["resources"][card["gb"]["resourceId"]]["data"] for card in cards] == [
-        source.to_dict()["resources"][part["resourceId"]]["data"] for part in components
+    assert [upgraded_document.resources.read(card["gb"]["resourceId"]) for card in cards] == [
+        source.resources.read(part["resourceId"]) for part in components
     ]
     assert all(card["gff"] is None and card["fasta"] is None for card in cards)
     assert [record["recordKey"] for record in view["renderRequest"]["records"]] == ["record-1", "record-2", "record-3"]

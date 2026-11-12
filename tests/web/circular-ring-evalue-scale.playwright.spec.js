@@ -31,7 +31,8 @@ const genbankRecord = (id, sequence) => [
   '//'
 ].join('\n');
 
-// A gzip reference is staged for the plan with the size of its expanded bytes, the size the Generate's request names.
+// A gzip reference is staged for the plan as Generate's request names it (its gzip bytes, PD-OI-121 revision 3); Python
+// expands it, so the search space is that of the expanded records.
 for (const gzip of [false, true]) test(`a ring of two files searches with the search space of the genome pair Python plans${
   gzip ? ', from a gzip reference' : ''}`, async ({ page }, testInfo) => {
   test.setTimeout(300_000);

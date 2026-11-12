@@ -889,6 +889,12 @@ const rangedCircularDrawing = async (app, uids = ['card-1']) => {
   const { replaceCircularSources, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   replaceCircularSources(drawing.slices.inputs, uids.map((uid) => createCircularSource({ uid })));
   for (const uid of uids) app.setCircularSourceFile(uid, 'gb', new File(['LOCUS'], `${uid}.gb`));
+  // The stand-in files hold no record: their real read ends in an error. Wait for it before the cards are read as
+  // CARD_RECORDS says, so it cannot land on them during a later step.
+  for (let tick = 0; tick < 500 && drawing.circularRecordDiscovery.status !== 'error'; tick += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.equal(drawing.circularRecordDiscovery.status, 'error');
   drawing.form.multi_record_canvas = false;
   drawing.form.circular_record_selector = '';
   await readCards(drawing);

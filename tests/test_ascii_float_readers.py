@@ -197,7 +197,6 @@ def _readers() -> dict[str, Callable[[str], object]]:
         normalize_definition_line_font_size,
         normalize_definition_line_font_weight,
     )
-    from gbdraw.session_io import _is_depth_text
     from gbdraw.session_request_codec import _expanded_depth_numeric_metadata
     from gbdraw.tracks.scalars import ScalarSpec
     from gbdraw.web_support.feature_catalog import _integer_or_none
@@ -214,7 +213,6 @@ def _readers() -> dict[str, Callable[[str], object]]:
         "definition line font size": normalize_definition_line_font_size,
         "definition line font weight": normalize_definition_line_font_weight,
         "font weight": _css_weight,
-        "Session depth table value": _is_depth_text,
         "depth track metadata": lambda text: _expand_track_float_metadata([text], track_count=1, field_name="f"),
         "request depth metadata": lambda text: _expanded_depth_numeric_metadata([text], track_count=1, field_name="f"),
         "depth track option": lambda text: _optional_positive_float(text, field_name="f"),

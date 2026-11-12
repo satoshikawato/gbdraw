@@ -92,7 +92,7 @@ test('a Region End past the record end is drawn to the record end, and the note 
     })).toEqual({ code: 'REGION_INVALID', reason: 'RECORD_BOUNDS' });
 
     // Linear: the note follows the record the entry draws.
-    const linear = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+    const linear = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw');
     try {
       // Generate reads the entry's records, so their length is known.
       await generateAndWaitForResult(linear);

@@ -118,7 +118,7 @@ test('batch Results: the drawer, edits that reach the other Result, its export, 
     expect(exported).toContain('#ff0000');
 
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'batch-edits'; });
-    const sessionFile = testInfo.outputPath('batch-edits.gbdraw-session.json.gz');
+    const sessionFile = testInfo.outputPath('batch-edits.gbdraw');
     await download(page, 'Save Session', sessionFile);
     const fresh = await load(browser, sessionFile);
     try {
@@ -461,7 +461,7 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
 // case fails the legend-free step.
 test('lambda: a Linear legend side change applies on Generate or at once, and a position change after a legend-free Generate raises no page error', async ({ browser }) => {
   test.setTimeout(120_000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw');
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
   try {
@@ -563,7 +563,7 @@ test('a horizontal legend keeps a sort and a featureless rename through Generate
       .toEqual(edited.filter((caption) => caption !== 'GC percent').sort((left, right) => right.localeCompare(left)));
     await generate(page);
     expect(await legendCaptions(page, { source: 'result' })).toEqual(edited);
-    const sessionFile = testInfo.outputPath('legend-order.gbdraw-session.json.gz');
+    const sessionFile = testInfo.outputPath('legend-order.gbdraw');
     await download(page, 'Save Session', sessionFile);
     const fresh = await load(browser, sessionFile);
     try {
@@ -662,7 +662,7 @@ test('Label visibility On shows only its label under Show Labels None, live and 
 
 test('Label visibility On and Off apply under First Record Only, live and after Generate', async ({ browser }) => {
   test.setTimeout(600_000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
   const labelState = () => labelEditorState(page, 'labels.linear.scope');
   try {
     await generate(page);

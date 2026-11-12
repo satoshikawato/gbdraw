@@ -1,11 +1,11 @@
 const { test, expect } = require('@playwright/test');
 const { readFile, writeFile } = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
-const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { openApp, assertDiagramWorkerIdle, getDiagramWorkerActivity, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 // The card's own summary; each annotation row has a Style disclosure with a summary too.
@@ -59,8 +59,8 @@ for (const width of [1440, 390]) {
     expect(downloads).toHaveLength(0);
 
     // A saved Result remains present while its annotation draft is edited.
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-      .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
+    await page.locator('input[type=file][accept*=".gbdraw"]')
+      .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
     // A phone Load shows the Preview pane; the annotation panel is in Settings.
     await showPhonePane(page, 'settings');
@@ -178,8 +178,8 @@ for (const width of [1440, 390]) {
       await dialog.accept();
     });
     await openApp(page);
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-      .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
+    await page.locator('input[type=file][accept*=".gbdraw"]')
+      .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     // A phone Load shows the Preview pane; the annotation panel is in Settings.
     await showPhonePane(page, 'settings');
@@ -298,9 +298,9 @@ for (const width of [1440, 390]) {
     const pendingSession = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
     const sessionDownload = await pendingSession;
-    const sessionPath = testInfo.outputPath('annotations.gbdraw-session.json.gz');
+    const sessionPath = testInfo.outputPath('annotations.gbdraw');
     await sessionDownload.saveAs(sessionPath);
-    const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
+    const session = await readSessionFile(sessionPath);
     expect(shownSavedDrawing(session).config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
     expect(JSON.stringify(session)).not.toContain('PRIVATE-CELL');
     for (const name of good.ignored) expect(JSON.stringify(shownSavedDrawing(session).config.annotationSets)).not.toContain(name);
@@ -315,7 +315,7 @@ for (const width of [1440, 390]) {
       await expect.poll(() => freshInput.inputValue()).toBe('');
       await expect.poll(() => fresh.evaluate(() => window.__GBDRAW_APP__.annotationImportNotice)).toContain('Ignored annotation table columns:');
       await assertDiagramWorkerIdle(fresh);
-      await fresh.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]').setInputFiles(sessionPath);
+      await fresh.locator('input[type=file][accept*=".gbdraw"]').setInputFiles(sessionPath);
       await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
       await expect.poll(() => effectiveRows(fresh)).toEqual(rows);
       expect(await fresh.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(controlSvg);

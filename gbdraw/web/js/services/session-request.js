@@ -257,6 +257,7 @@ import {
 import {
   adoptedSessionResourceDescriptor,
   createSessionResourceFileView,
+  expandInputBytes,
   fileBackedDescriptor,
   fileBackedReaderOf,
   validateWebFileBindings,
@@ -5315,8 +5316,7 @@ const addResourceOriginalNameHint = (target, resourceId, name) => {
 /**
  * The projection's unvalidated Session parts, read through views.
  * @param {{
- *   renderRequest: UnvalidatedFields<'records' | 'mode'> & UnvalidatedFields<'diagramOptions', UnvalidatedFields<'colors',
- *     UnvalidatedFields<'defaultColorsFile' | 'defaultColors' | 'colorTableFile' | 'colorTable', UnvalidatedFields<'resourceId'>>>>,
+ *   renderRequest: UnvalidatedFields<'records' | 'mode'>,
  *   legacyFiles: unknown,
  *   fileBindings: unknown
  * }} input
@@ -5326,16 +5326,16 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
   const hints = {};
   /** @type {readonly UnvalidatedFields<'source', UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId'>>[]} */
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
-  const options = renderRequest?.diagramOptions || {};
   // The cast: an object other than an array, read through views of its properties.
   const files = legacyFiles && typeof legacyFiles === 'object' && !Array.isArray(legacyFiles)
     ? /** @type {Readonly<Record<string, UnvalidatedFields<'name'>>>} */ (legacyFiles)
     : {};
+  const tableRefs = editorTableTextRefs(renderRequest);
   const namedOptionResources = {
-    d_color: referencedResourceId(options.colors?.defaultColorsFile || options.colors?.defaultColors),
-    t_color: referencedResourceId(options.colors?.colorTableFile || options.colors?.colorTable),
-    whitelist: referencedResourceId(editorTableRef(options, 'whitelist')),
-    qualifier_priority: referencedResourceId(editorTableRef(options, 'priority'))
+    d_color: referencedResourceId(tableRefs.defaultColors),
+    t_color: referencedResourceId(tableRefs.colorTable),
+    whitelist: referencedResourceId(tableRefs.whitelist),
+    qualifier_priority: referencedResourceId(tableRefs.priority)
   };
   Object.entries(namedOptionResources).forEach(([slot, resourceId]) => {
     addResourceOriginalNameHint(hints, resourceId, files?.[slot]?.name);
@@ -6013,9 +6013,10 @@ export const readCanonicalResourceText = async (resources, resourceId) => {
 };
 
 /**
- * The bytes of a committed Session resource that a File holds (its payload
- * owner, or the reader of a file-backed descriptor, OV-2612); null when its
- * descriptor holds them as text.
+ * The plain bytes of a committed Session resource that a File holds (its
+ * payload owner, or the reader of a file-backed descriptor, OV-2612), a gzip
+ * input's expanded as `readFileBytes` expands them; null when its descriptor
+ * holds them as text.
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {string} resourceId
  * @returns {Promise<Uint8Array | null>}
@@ -6025,7 +6026,8 @@ export const readCanonicalResourceFileBytes = async (resources, resourceId) => {
   const fileOwner = resourceFileOwner(descriptor);
   if (fileOwner) return readFileBytes(/** @type {FileLike} */ (fileOwner));
   const readFile = fileBackedReaderOf(descriptor);
-  return readFile ? readFile() : null;
+  // A file-backed descriptor's reader reads what it counts: an entry a Load copied holds a gzip input as stored.
+  return readFile ? expandInputBytes(String(/** @type {{ name?: unknown }} */ (descriptor).name ?? ''), await readFile()) : null;
 };
 
 /**
@@ -6050,13 +6052,82 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
 };
 
 /**
+ * The texts of a Session's editor tables whose bytes a File or a copy holds (the entries of a Session file
+ * container, PD-OI-121), by resource id, as Load read them before a projection (`readEditorTableTexts`). A table
+ * its descriptor holds as base64 text (an older JSON Session) is not in it.
+ * @typedef {ReadonlyMap<string, string>} ResourceTexts
+ */
+/** @type {ResourceTexts} */
+const NO_RESOURCE_TEXTS = new Map();
+
+/**
+ * A table's text: the one Load read (`resourceTexts`), else its descriptor's base64 text.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources
+ * @param {string} resourceId
+ * @param {ResourceTexts} resourceTexts
+ * @returns {string}
+ */
+export const loadedResourceText = (resources, resourceId, resourceTexts) => (
+  resourceTexts.get(resourceId) ?? decodeCanonicalResourceText(resources, resourceId)
+);
+
+/**
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources
  * @param {{ resourceId?: unknown } | null | undefined} ref
+ * @param {ResourceTexts} [resourceTexts]
  */
-const resourceTextFromRef = (resources, ref) => (
+const resourceTextFromRef = (resources, ref, resourceTexts = NO_RESOURCE_TEXTS) => (
   // A property key is the value's string form, so `String` reads the same entry.
-  ref?.resourceId ? decodeCanonicalResourceText(resources, String(ref.resourceId)) : null
+  ref?.resourceId ? loadedResourceText(resources, String(ref.resourceId), resourceTexts) : null
 );
+
+/**
+ * The editor tables a request's projection reads as text, each its reference, or null when the request names
+ * none: the one reader of these references for the projection and `editorTableResourceIds`.
+ * @param {unknown} renderRequest A request of the current schema (unvalidated).
+ */
+const editorTableTextRefs = (renderRequest) => {
+  // Views of unvalidated values: each reference is read through its `resourceId`.
+  const options = /** @type {UnvalidatedFields<'diagramOptions', Record<string, unknown>>} */ (renderRequest)?.diagramOptions ?? {};
+  const colors = /** @type {UnvalidatedFields<'defaultColorsFile' | 'defaultColors' | 'colorTableFile' | 'colorTable',
+    UnvalidatedFields<'resourceId'>>} */ (options.colors);
+  /** @param {UnvalidatedFields<'resourceId'>} ref */
+  const named = (ref) => (ref?.resourceId ? /** @type {{ resourceId: unknown }} */ (ref) : null);
+  return {
+    defaultColors: named(colors?.defaultColorsFile || colors?.defaultColors),
+    colorTable: named(colors?.colorTableFile || colors?.colorTable),
+    whitelist: editorTableRef(options, 'whitelist'),
+    priority: editorTableRef(options, 'priority'),
+    visibility: editorTableRef(options, 'visibility'),
+    labelOverrides: editorTableRef(options, 'labelOverrides')
+  };
+};
+
+/**
+ * The resource ids of the editor tables a request's projection reads as text (OV-2732).
+ * @param {unknown} renderRequest A request of the current schema (unvalidated).
+ * @returns {string[]}
+ */
+export const editorTableResourceIds = (renderRequest) => [...new Set(
+  Object.values(editorTableTextRefs(renderRequest)).flatMap((ref) => (ref ? [String(ref.resourceId)] : []))
+)];
+
+/**
+ * The texts of the editor tables these requests' projections read whose bytes a File or a copy holds, each read
+ * once: what Load passes to the projection as `resourceTexts` (OV-2732). They decode as strictly as base64 text.
+ * @param {readonly unknown[]} renderRequests Requests of the current schema (unvalidated).
+ * @param {unknown} resources The Session's resources (unvalidated: a value that is no object holds no table).
+ * @returns {Promise<ResourceTexts>}
+ */
+export const readEditorTableTexts = async (renderRequests, resources) => {
+  const table = isPlainObject(resources) ? resources : null;
+  const ids = table ? [...new Set(renderRequests.flatMap(editorTableResourceIds))] : [];
+  const read = await Promise.all(ids.map(async (resourceId) => {
+    const bytes = await readCanonicalResourceFileBytes(table, resourceId);
+    return bytes ? /** @type {[string, string][]} */ ([[resourceId, bytesToText(bytes, { fatal: true })]]) : [];
+  }));
+  return new Map(read.flat());
+};
 
 // A table the Session stores is named in its failure: the user corrects the
 // Session file, not a table in this page.
@@ -6089,14 +6160,18 @@ const featureVisibilityRowsKey = (rows) => JSON.stringify(featureVisibilityRows(
  * @param {CommittedCanonicalSession | null | undefined} committedSession
  * @param {unknown} activeRulesTsv
  * @param {unknown} [activeOverrideRows]
+ * @param {ResourceTexts} [committedTexts] The committed tables' texts the caller read (`readEditorTableTexts`).
  */
-export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv, activeOverrideRows = []) => {
+export const committedFeatureVisibilityMatches = (
+  committedSession, activeRulesTsv, activeOverrideRows = [], committedTexts = NO_RESOURCE_TEXTS
+) => {
   /** @param {unknown} text */
   const normalize = (text) => serializeFeatureVisibilityRules(parseFeatureVisibilityRules(String(text ?? '')).rules);
   try {
     return normalize(resourceTextFromRef(
       committedSession?.resources,
-      editorTableRef(committedSession?.renderRequest?.diagramOptions, 'visibility')
+      editorTableRef(committedSession?.renderRequest?.diagramOptions, 'visibility'),
+      committedTexts
     )) === normalize(activeRulesTsv)
       && featureVisibilityRowsKey(committedSession?.renderRequest?.diagramOptions?.featureOverrides)
         === featureVisibilityRowsKey(activeOverrideRows);
@@ -6574,6 +6649,8 @@ export const projectCanonicalSessionRequest = ({
   repairLegacyTableRows = false,
   sessionResourceTable = null,
   deferResourceContent = false,
+  // The tables' texts Load read from their copies (`readEditorTableTexts`).
+  resourceTexts = NO_RESOURCE_TEXTS,
   adoptCanonicalPayloads = false,
   markCardFileRows = false,
   bindingInputSlot,
@@ -7044,14 +7121,17 @@ export const projectCanonicalSessionRequest = ({
   const readLegacyTable = (table, ref, parse) => {
     // `resourceTextFromRef` read a set id so: a property key is the id's string form.
     const parsed = readSessionTable(table, () => parse(
-      decodeCanonicalResourceText(resources, String(ref.resourceId)), { legacyRows: repairLegacyTableRows }
+      loadedResourceText(resources, String(ref.resourceId), resourceTexts), { legacyRows: repairLegacyTableRows }
     ));
     legacyTableRepairs.push(...(parsed.repairs || []).map(({ row, repair }) => loadRepair({
       code: `table-row-${repair}`, path: table, effect: repair === 'joined' ? 'changed' : 'dropped', line: row
     })));
     return parsed;
   };
-  const defaultColorsRef = options.colors?.defaultColorsFile || options.colors?.defaultColors;
+  const {
+    defaultColors: defaultColorsRef, colorTable: colorTableRef, whitelist: whitelistRef, priority: qualifierPriorityRef,
+    visibility: visibilityRef, labelOverrides: labelOverrideRef
+  } = editorTableTextRefs(renderRequest);
   let projectedDefaultColors = deferResourceContent
     && storedConfig?.colors
     && typeof storedConfig.colors === 'object'
@@ -7066,7 +7146,6 @@ export const projectCanonicalSessionRequest = ({
       projectedDefaultColors = readLegacyTable('default-colors', defaultColorsRef, parseColorTable).colors;
     }
   }
-  const colorTableRef = options.colors?.colorTableFile || options.colors?.colorTable;
   let projectedSpecificRules = deferResourceContent && Array.isArray(storedConfig?.rules)
     ? storedConfig.rules
     : [];
@@ -7076,14 +7155,13 @@ export const projectCanonicalSessionRequest = ({
       : resourceAsLegacyFile(resources, colorTableRef.resourceId);
     if (!deferResourceContent) {
       projectedSpecificRules = readSessionTable('specific-colors', () => parseSpecificRules(
-        resourceTextFromRef(resources, colorTableRef)
+        resourceTextFromRef(resources, colorTableRef, resourceTexts)
       )).rules;
     }
   }
   let projectedWhitelist = deferResourceContent && Array.isArray(storedConfig?.whitelist)
     ? storedConfig.whitelist
     : [];
-  const whitelistRef = editorTableRef(options, 'whitelist');
   if (whitelistRef) {
     files.whitelist = resolveResourceFile
       ? resolveResourceFile(whitelistRef.resourceId)
@@ -7092,7 +7170,6 @@ export const projectCanonicalSessionRequest = ({
       projectedWhitelist = readLegacyTable('label-whitelist', whitelistRef, parseWhitelistRules).rules;
     }
   }
-  const qualifierPriorityRef = editorTableRef(options, 'priority');
   let projectedPriorityRules = deferResourceContent
     && Array.isArray(storedConfig?.qualifierPriorityRules)
     ? storedConfig.qualifierPriorityRules
@@ -7113,16 +7190,14 @@ export const projectCanonicalSessionRequest = ({
     if (whitelistRef) projectedWhitelist = markedRows(projectedWhitelist, 'whitelist');
     if (qualifierPriorityRef) projectedPriorityRules = markedRows(projectedPriorityRules, 'qualifier_priority');
   }
-  const visibilityRef = editorTableRef(options, 'visibility');
   const projectedFeatureVisibilityRules = !deferResourceContent && visibilityRef
     ? readSessionTable('feature-visibility', () => parseFeatureVisibilityRules(
-        resourceTextFromRef(resources, visibilityRef)
+        resourceTextFromRef(resources, visibilityRef, resourceTexts)
       )).rules
     : [];
-  const labelOverrideRef = editorTableRef(options, 'labelOverrides');
   const projectedLabelOverrideRows = !deferResourceContent && labelOverrideRef
     ? readSessionTable('label-overrides', () => parseLabelOverrideTsv(
-      resourceTextFromRef(resources, labelOverrideRef)
+      resourceTextFromRef(resources, labelOverrideRef, resourceTexts)
     )).map((row) => ({
         recordId: row.recordId,
         featureType: row.featureType,

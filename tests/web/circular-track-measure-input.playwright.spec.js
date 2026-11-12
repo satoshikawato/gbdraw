@@ -1,17 +1,18 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const {
   openApp, reveal, answerSessionTitle, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
   settleLive
 } = require('./helpers/app-lifecycle.cjs');
 
-const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
-const sessionInput = 'input[type="file"][accept^=".json,"]';
+const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
+const sessionInput = 'input[type="file"][accept*=".gbdraw"]';
 const valueControl = (page, slot, field) => page.getByRole('textbox', { name: `Circular track slot ${slot} ${field} value`, exact: true });
 const unitControl = (page, slot, field) => page.getByRole('combobox', { name: `Circular track slot ${slot} ${field} unit`, exact: true });
 const dialogs = new WeakMap();
@@ -125,10 +126,10 @@ const save = async (page, testInfo, name, { title } = {}) => {
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
   if (title !== undefined) await answerSessionTitle(page, title);
   const download = await pending;
-  const path = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
+  const path = testInfo.outputPath(`${name}.gbdraw`);
   await download.saveAs(path);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
-  return { path, document: JSON.parse(gunzipSync(readFileSync(path))) };
+  return { path, document: await readSessionFile(path) };
 };
 const freshLoad = async (browser, testInfo, file, verify) => {
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
@@ -368,11 +369,11 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
   const download = await downloadPromise;
-  const path = testInfo.outputPath('pending-draft.gbdraw-session.json.gz');
+  const path = testInfo.outputPath('pending-draft.gbdraw');
   await download.saveAs(path);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
   expect(await snapshot(page)).toEqual(edited);
-  const saved = JSON.parse(gunzipSync(readFileSync(path)));
+  const saved = await (await sessionDocuments()).readSavedSession(new Blob([readFileSync(path)]));
   const row = savedDrawing(saved, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
   expect(row.width).toEqual({ value: '1.', unit: 'px' });
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
@@ -396,7 +397,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     const circularIndex = rejected.drawings.findIndex(drawing => drawing.id === 'circular');
     // A Width Load cannot use is listed before Load changes anything (OV-758);
     // after Cancel the notice of the earlier Load stays and the state is unchanged.
-    await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, [
+    await load(fresh, { name: 'invalid.gbdraw', mimeType: 'application/octet-stream', buffer: Buffer.from(await (await (await sessionDocuments()).sessionFileOf(rejected)).arrayBuffer()) }, [
       `Settings: the value "{"value":"1e","unit":"px"}" (drawings[${circularIndex}].config.adv.circular_track_slots[${gcIndex}].width) cannot be used;`
         + ' it is left unset.'
     ]);
@@ -634,7 +635,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
       const app = window.__GBDRAW_APP__;
       app.adv.circular_track_slots_enabled = true;
       app.adv.circular_track_slots = slots.filter(row => row.renderer !== 'annotations');
-    }, shownSavedDrawing(JSON.parse(readFileSync(fixture, "utf8"))).config.adv.circular_track_slots);
+    }, shownSavedDrawing(await readSessionFile(fixture)).config.adv.circular_track_slots);
     await openPanel(page);
     await edit(page, '1e-12');
     await selectUnit(page, 'px');
@@ -678,8 +679,8 @@ test('CLI-origin Session continues through numeric edits, Generate, Save and fre
   const args = ['-m', 'gbdraw.cli', 'circular', '--gbk', resolve('tests/fixtures/sessions/cli-web-mito.gb'),
     '--output', prefix, '--format', 'svg', '--save_session'];
   execFileSync('python', args, { env: { ...process.env, PYTHONPATH: process.cwd() } });
-  const path = `${prefix}.gbdraw-session.json`;
-  const cli = JSON.parse(readFileSync(path, 'utf8'));
+  const path = `${prefix}.gbdraw`;
+  const cli = await readSessionFile(path);
   expect(cli.config).toBeUndefined();
   expect(cli.modes).toBeUndefined();
   await load(page, path);
@@ -791,10 +792,10 @@ test('OV-1656: a gap typed as 1px is stored, saved, and shown as 1 after a fresh
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
   const download = await downloadPromise;
-  const path = testInfo.outputPath('gap.gbdraw-session.json.gz');
+  const path = testInfo.outputPath('gap.gbdraw');
   await download.saveAs(path);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
-  const saved = JSON.parse(gunzipSync(readFileSync(path)));
+  const saved = await readSessionFile(path);
   expect(savedDrawing(saved, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').inner_gap_px).toBe('1');
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
   try {

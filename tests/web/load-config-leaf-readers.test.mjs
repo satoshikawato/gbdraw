@@ -12,6 +12,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { gallerySessionDocument, sessionLoadEvent } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -43,11 +44,10 @@ const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
   return JSON.parse(name.endsWith('.gz') ? gunzipSync(bytes) : bytes);
 };
-const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+const GALLERY = Object.fromEntries(await Promise.all(['lambda_basic_linear'].map(async (id) => [id, await gallerySessionDocument(id)])));
+const gallery = (name) => structuredClone(GALLERY[name.replace('.gbdraw', '')]);
 const VECTORS = JSON.parse(readFileSync(new URL('../fixtures/session_admission_vectors.json', import.meta.url), 'utf8'));
-const input = (value) => ({
-  target: { files: [new File([JSON.stringify(value)], 'session.json', { type: 'application/json' })], value: 'selected' }
-});
+const input = (value) => sessionLoadEvent(value);
 const BASES = {
   v30: () => fixture('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'),
   v40: () => {
@@ -58,7 +58,7 @@ const BASES = {
   v44L: () => fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'),
   v46: () => fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'),
   // The bundled Gallery Session is a 49: a leaf is edited in its drawing (`drawings[0]`), and a row names it there.
-  g47L: () => gallery('lambda_basic_linear.gbdraw-session.json')
+  g47L: () => gallery('lambda_basic_linear.gbdraw')
 };
 const set = (value, path, leaf) => {
   const parts = path.split('.');
@@ -67,7 +67,7 @@ const set = (value, path, leaf) => {
   return value;
 };
 const load = async (file) => {
-  const loaded = await importSession(input(file), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await input(file), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.ok(['ok', 'legacy'].includes(loaded.status), JSON.stringify(loaded.error));
   return loaded.repairs.map(({ code, path }) => `${code} ${path}`);
 };

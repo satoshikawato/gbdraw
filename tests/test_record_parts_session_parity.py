@@ -13,7 +13,6 @@ Slow: a Vnig render takes about 3.5 s; each Session runs alone.
 from __future__ import annotations
 
 import copy
-import gzip
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -23,6 +22,7 @@ import pytest
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from tests.test_web_render_preparation_cache import _render
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import read_session_payload
 
 pytestmark = pytest.mark.slow
 
@@ -104,7 +104,7 @@ def _gc_toggle(request: Request) -> None:
 _STROKE = _override(objects__features__block_stroke_color="#1a5fb4")
 # (row, prepare or None, change): the S-run rows; the values that draw new bytes (SW2 design 7, OV-1314).
 _ROWS: dict[str, tuple[tuple[str, Change | None, Change], ...]] = {
-    "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": (
+    "Vnig_TUMSAT-TG-2018.gbdraw": (
         ("definition font", None, _override(objects__definition__circular__font_size=22)),
         ("scale interval", None, _override(objects__scale__interval=500000)),
         ("window", None, _option("window", 40000)),
@@ -112,7 +112,7 @@ _ROWS: dict[str, tuple[tuple[str, Change | None, Change], ...]] = {
         ("custom stack", None, _tracks("centerReservedRadius", 60)),
         ("GC toggle", None, _gc_toggle),
     ),
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz": (
+    "hepatoplasmataceae_orthogroup.gbdraw": (
         ("record label", None, _record_label("Test record X")),
         (
             "definition font",
@@ -125,7 +125,7 @@ _ROWS: dict[str, tuple[tuple[str, Change | None, Change], ...]] = {
         ("stroke", None, _STROKE),
         ("GC toggle", None, _gc_toggle),
     ),
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz": (
+    "vibrio-harveyi-group-collinear.gbdraw": (
         ("record label", None, _record_label("Test record X")),
         ("titles", None, _override(objects__definition__linear__line_styles__name__font_size=22)),
         ("scale interval", None, _override(objects__scale__interval=500000)),
@@ -145,8 +145,7 @@ _ROWS: dict[str, tuple[tuple[str, Change | None, Change], ...]] = {
 @pytest.mark.parametrize("session", list(_ROWS))
 def test_the_g2_changes_of_a_gallery_session_render_warm_as_cold(session: str, tmp_path: Path) -> None:
     path = SESSIONS / session
-    with gzip.open(path, "rt", encoding="utf-8") as handle:
-        document = session_view(json.load(handle))
+    document = session_view(read_session_payload(path))
     base = document["renderRequest"]
     cache = PreparedBiologicalInputCache()
     request_ids = iter(range(1, 10_000))

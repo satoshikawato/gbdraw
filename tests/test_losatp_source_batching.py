@@ -7,6 +7,7 @@ carry the Web ``searchContext`` when a side holds several records.
 
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload
 import hashlib
 import json
 from pathlib import Path
@@ -104,7 +105,7 @@ def _run(tmp_path: Path, name: str, inputs: list[str], mode: str) -> tuple[dict,
         *inputs, "--losat", "losatp", "--losatp_mode", mode, "--losat_bin", losat,
         "--losat_threads", "1", "-o", str(prefix), "-f", "svg", "--save_session",
     ])
-    session = drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    session = drawing_view(read_session_payload(prefix.with_suffix(".gbdraw")))
     return session, _searches(log)
 
 
@@ -190,7 +191,7 @@ def test_single_record_files_search_each_pair(tmp_path: Path) -> None:
 
 def _replay(session_path: Path, prefix: Path) -> dict:
     linear_main(["--session", str(session_path), "-o", str(prefix), "-f", "svg", "--save_session"])
-    return drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    return drawing_view(read_session_payload(prefix.with_suffix(".gbdraw")))
 
 
 @pytest.mark.linear
@@ -210,7 +211,7 @@ def test_cli_session_keeps_one_file_as_one_source_on_replay(
     monkeypatch.setattr(protein_colinearity, "run_losatp_blastp", search_attempted)
     source = tmp_path / mode / "out"
     replay = tmp_path / mode / "replay"
-    replayed = _replay(source.with_suffix(".gbdraw-session.json"), replay)
+    replayed = _replay(source.with_suffix(".gbdraw"), replay)
     assert replay.with_suffix(".svg").read_bytes() == source.with_suffix(".svg").read_bytes()
 
     # The Web shape: one GenBank resource per source file, named after it,

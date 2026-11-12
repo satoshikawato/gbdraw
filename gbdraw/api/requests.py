@@ -507,10 +507,10 @@ def _contains_ascii_control(value: str) -> bool:
     return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
-# The longest name written from a prefix is the CLI Session sidecar
-# "<prefix>.gbdraw-session.json", staged as ".<name>.<random>.tmp" (34 more
-# bytes). 200 bytes keeps it within the 255-byte file name limit of common
-# filesystems.
+# The CLI Session sidecar "<prefix>.gbdraw" is staged as
+# ".<name>.<random>.tmp" (21 bytes more than the prefix); 200 bytes keeps it,
+# and "<prefix>.interactive.svg", within the 255-byte file name limit of
+# common filesystems.
 # A File card (RecordCardinality.ALL) that expands names its records "<card key>:<position>".
 EXPANDED_RECORD_KEY_SEPARATOR = ":"
 

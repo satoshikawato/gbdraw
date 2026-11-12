@@ -50,7 +50,7 @@ def test_python_reads_the_released_flat_50_into_one_linear_drawing_with_its_valu
 
 
 def test_replaying_the_released_wrapped_cli_session_draws_wrapped_rows(tmp_path: Path) -> None:
-    session_path = tmp_path / "released.gbdraw-session.json"
+    session_path = tmp_path / "released.gbdraw"
     session_path.write_bytes(gzip.decompress(FIXTURE.read_bytes()))
     replay = subprocess.run(
         [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", session_path.name,

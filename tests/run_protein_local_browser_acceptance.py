@@ -90,7 +90,7 @@ def main():
             assert run['inputSha256'] == digest((case['pairsText'] + case['rawText']).encode())
         for run in previous['flows']:
             mode = run['case'].split('-')[1]
-            fixture = ROOT / f'gbdraw/web/gallery/sessions/hepatoplasmataceae_{mode}.gbdraw-session.json.gz'
+            fixture = ROOT / f'gbdraw/web/gallery/sessions/hepatoplasmataceae_{mode}.gbdraw'
             assert run['fixtureSha256'] == digest(fixture.read_bytes())
             assert run['sessionSha256'] == digest((ROOT / run['sessionPath']).read_bytes())
         report = previous
@@ -158,7 +158,7 @@ def main():
                     label = f'{viewport[0]}-{mode}-{infer}-{limit}'
                     if any(flow['case'] == label for flow in report['flows']):
                         continue
-                    fixture = ROOT / f'gbdraw/web/gallery/sessions/hepatoplasmataceae_{mode}.gbdraw-session.json.gz'
+                    fixture = ROOT / f'gbdraw/web/gallery/sessions/hepatoplasmataceae_{mode}.gbdraw'
                     checks = acceptance.AcceptanceChecks()
                     context, page, external, errors, paths = context_for('current', viewport)
                     acceptance._import_session(page, fixture, checks)
@@ -216,7 +216,7 @@ def main():
                     assert generate(page)[0] == first
                     (artifacts / f'{label}.svg').write_bytes(svg)
                     saved = acceptance._save_session(page, checks)
-                    saved_path = artifacts / f'{label}.gbdraw-session.json.gz'
+                    saved_path = artifacts / f'{label}.gbdraw'
                     saved_path.write_bytes(saved.read_bytes())
                     run['sessionSha256'] = digest(saved.read_bytes())
                     run['sessionPath'] = str(saved_path.relative_to(ROOT))
@@ -294,7 +294,7 @@ INTEGRATION_OBSERVER = r"""(() => {
 
 
 def integration_import(page, fixture):
-    page.locator('input[accept^=".json,"]').first.set_input_files(str(fixture))
+    page.locator('input[accept*=".gbdraw"]').first.set_input_files(str(fixture))
     page.locator('[data-app-notice]').filter(has_text='Session loaded').wait_for(
         state='visible', timeout=120_000
     )
@@ -462,7 +462,7 @@ def run_integration(args):
                 elif args.integration == 'offline':
                     for viewport in ((1280, 720), (390, 844)):
                         context, page, record = context_for(viewport)
-                        fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+                        fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw'
                         integration_import(page, fixture)
                         record['preparation'] = integration_prepare(page, 'hep-on')
                         record['linear'] = integration_generate(page)
@@ -489,7 +489,7 @@ def run_integration(args):
                         print(viewport[0], 'offline Linear/Circular reuse and release passed', flush=True)
                 else:
                     for case in args.cases:
-                        fixture = ROOT / f'gbdraw/web/gallery/sessions/{INTEGRATION_CASES[case][0]}.gbdraw-session.json.gz'
+                        fixture = ROOT / f'gbdraw/web/gallery/sessions/{INTEGRATION_CASES[case][0]}.gbdraw'
                         values = report['cases'][case] = {'fixtureSha256': digest(fixture.read_bytes()), 'raw-cold': [], 'saved-raw': [], 'derived-warm': []}
                         # One real raw search; independent fresh-context saved-raw samples.
                         for state, count in (('raw-cold', 1), ('saved-raw', args.samples)):
@@ -536,7 +536,7 @@ def run_integration(args):
 
 def run_session_writer(args, context_for, close_context, save):
     """Reject corrupted save metadata, then save/load/reanalyse real saved raw."""
-    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw'
     artifacts = ROOT / '.venv' / (args.output.name.split('.')[0] + '-artifacts')
     artifacts.mkdir(parents=True, exist_ok=True)
     for viewport in ((1280, 720), (390, 844)):
@@ -593,7 +593,7 @@ def run_session_writer(args, context_for, close_context, save):
             assert row['status'] is None and row['preserved'] and row['downloads'] == 0, row
         saved = acceptance._save_session(page, acceptance.AcceptanceChecks())
         assert page.evaluate('() => window.__s09SaveSnapshot() === window.__s09BeforeSave')
-        target = artifacts / f'{viewport[0]}.gbdraw-session.json.gz'
+        target = artifacts / f'{viewport[0]}.gbdraw'
         target.write_bytes(saved.read_bytes())
         document = json.loads(gzip.decompress(target.read_bytes()))
         record['savedSha256'] = digest(target.read_bytes())
@@ -624,7 +624,7 @@ def run_session_writer(args, context_for, close_context, save):
 
 def run_manifest_merge(context_for, close_context, save):
     """Saved-raw merge and malformed extraction failure through the real Worker."""
-    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw'
     for viewport in ((1280, 720), (390, 844)):
         context, page, record = context_for(viewport)
         integration_import(page, fixture)
@@ -701,7 +701,7 @@ def run_integration_lifecycle(args, report, context_for, close_context, save):
     """Real raw search, Python analysis/render, cancel/stale, retry and replacement."""
     artifacts = ROOT / '.venv' / (args.output.name.split('.')[0] + '-artifacts')
     artifacts.mkdir(parents=True, exist_ok=True)
-    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw'
     # Mobile regeneration/release is covered by offline mode and archived parity
     # flows. Exercise the longer real-search mutation sequence once on desktop.
     for viewport in ((1280, 720),):
@@ -839,7 +839,7 @@ def run_integration_lifecycle(args, report, context_for, close_context, save):
         assert history == {'undone': True, 'redo': True, 'restored': True}
         record['history'] = history
         saved = acceptance._save_session(page, acceptance.AcceptanceChecks())
-        target = artifacts / f'{viewport[0]}.gbdraw-session.json.gz'
+        target = artifacts / f'{viewport[0]}.gbdraw'
         target.write_bytes(saved.read_bytes())
         record['savedSha256'] = digest(target.read_bytes())
         record['savedPath'] = str(target.relative_to(ROOT))

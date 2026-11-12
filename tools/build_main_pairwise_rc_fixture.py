@@ -61,7 +61,7 @@ KEEP = ("record-1", "record-2")
 REVERSED = "record-2"
 RID = "comparison-resolved-1"
 
-src = MAIN / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json"
+src = MAIN / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw"
 session = json.loads(src.read_bytes())
 VERSION = session["version"]
 assert VERSION in (39, 40), VERSION

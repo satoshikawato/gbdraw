@@ -1,7 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
+const { pathToFileURL } = require('node:url');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
@@ -13,21 +14,26 @@ const {
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const sourceSession = JSON.parse(readFileSync(join(
-  repoRoot,
-  'gbdraw',
-  'web',
-  'gallery',
-  'sessions',
-  'HmmtDNA_basic_circular.gbdraw-session.json'
-), 'utf8'));
+const sessionDocuments = () => import(pathToFileURL(join(__dirname, 'helpers/session-documents.mjs')).href);
+const sessionBytesOf = async document => Buffer.from(await (await (await sessionDocuments()).sessionFileOf(document)).arrayBuffer());
+let sourceSession;
+test.beforeAll(async () => {
+  sourceSession = await (await sessionDocuments()).readSavedSession(new Blob([readFileSync(join(
+    repoRoot,
+    'gbdraw',
+    'web',
+    'gallery',
+    'sessions',
+    'HmmtDNA_basic_circular.gbdraw'
+  ))]));
+});
 const unmanagedPath = 'objects.gc_content.percent_background_opacity';
 
 const loadSessionPayload = async (page, payload) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles({
-    name: 'unmanaged-config.gbdraw-session.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(payload))
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles({
+    name: 'unmanaged-config.gbdraw',
+    mimeType: 'application/octet-stream',
+    buffer: await sessionBytesOf(payload)
   });
   const notice = page.locator('[data-app-notice]');
   await expect(notice).toContainText('Session loaded', { timeout: 180000 });
@@ -39,7 +45,7 @@ const readSessionDownload = async (download) => {
   expect(path).toBeTruthy();
   return {
     path,
-    session: JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'))
+    session: await readSessionFile(path)
   };
 };
 
@@ -69,7 +75,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   ] = 'percent';
 
   expect(await loadSessionPayload(page, preservedSession)).toContain(
-    'Session loaded: unmanaged-config.gbdraw-session.json'
+    'Session loaded: unmanaged-config.gbdraw'
   );
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   const disclosure = page.locator('[data-unmanaged-config-override]');
@@ -101,7 +107,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(saved.path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(saved.path);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await expect(disclosure).toContainText(unmanagedPath);
 
@@ -123,10 +129,10 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   shownSavedDrawing(rejectedSession).renderRequest.diagramOptions.configOverrides[
     'objects.gc_content.unknown'
   ] = 1;
-  const outcome = await evaluateWithRetainedPromise(page, async payload => {
-    const file = new File([JSON.stringify(payload)], 'invalid-overrides.gbdraw-session.json', { type: 'application/json' });
+  const outcome = await evaluateWithRetainedPromise(page, async raw => {
+    const file = new File([Uint8Array.from(atob(raw), c => c.charCodeAt(0))], 'invalid-overrides.gbdraw');
     return await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: 'selected' } });
-  }, rejectedSession);
+  }, (await sessionBytesOf(rejectedSession)).toString('base64'));
   expect(outcome).toMatchObject({ status: 'error', error: {
     code: 'INPUT_INVALID', operation: 'validateConfigOverrides', stage: 'helper', context: { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' }
   } });

@@ -1,7 +1,6 @@
 """Exercise the exact embedded Python render/helper boundary for Node transport tests."""
 from __future__ import annotations
 
-import base64
 import builtins
 import json
 from pathlib import Path
@@ -37,12 +36,13 @@ def render_failure(namespace, pattern, display_start=None, genbank_text=None, co
     record = SeqRecord(Seq('ATGC' * 25), id='PRIVATE_RECORD_SENTINEL')
     record.annotations['molecule_type'] = 'DNA'
     # The one drawing of the Session 49 the Python writer writes, as its one-drawing view.
-    document = drawing_view(build_session_document(CircularDiagramRequest(
+    session_document = build_session_document(CircularDiagramRequest(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
         options=CircularDiagramOptions(colors=ColorOptions(color_table=DataFrame([
             dict(feature_type='CDS', qualifier_key='product', value='VALID_PLACEHOLDER', color='#ff0000', caption='')
         ]))),
-    )).to_dict())
+    ))
+    document = drawing_view(session_document.to_dict())
     if display_start is not None:
         document['renderRequest']['records'][0]['display']['startCoordinate'] = display_start
     if config_overrides is not None:
@@ -53,9 +53,9 @@ def render_failure(namespace, pattern, display_start=None, genbank_text=None, co
         resources.mkdir(parents=True)
         (workspace / '.gbdraw-worker-render-workspace').touch()
         paths = {}
-        for index, (resource_id, entry) in enumerate(document['resources'].items()):
+        for index, resource_id in enumerate(document['resources']):
             path = resources / f'{index}.bin'
-            data = base64.b64decode(entry['data'])
+            data = session_document.resources.read(resource_id)
             if resource_id == 'colors-color-table':
                 data = data.replace(b'VALID_PLACEHOLDER', pattern.encode('utf-8'))
             if genbank_text is not None and resource_id.endswith('-genbank'):

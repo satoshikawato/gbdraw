@@ -389,7 +389,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(sessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(
     () => (

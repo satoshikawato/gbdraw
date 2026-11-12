@@ -1282,8 +1282,7 @@
       "vector": "tests/fixtures/session_container_vectors.json",
       "reason": "Web Save writes the file from the browser copies of the inputs and Web Load reads it into those copies one entry at a time, before Python runs and without it (a Load that only shows the saved figure starts no Python, PD-OI-044), while the command line and the Python API read and write the same file in Python; the shared vectors pin the entries, the checks and the refusals on both sides (PD-SESSION receipt, Owner 2026-11-08)",
       "retireWhen": "Web Save and Load read and write the container through the Python owner instead of their own reader and writer",
-      "source": "large-inputs-20261106 Q4 (Owner 2026-11-08: Python owns the container, the Web reader and writer is a registered twin)",
-      "pending": true
+      "source": "large-inputs-20261106 Q4 (Owner 2026-11-08: Python owns the container, the Web reader and writer is a registered twin)"
     },
     {
       "id": "vector:tests/fixtures/ring-genome-files-vectors.json",

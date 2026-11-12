@@ -19,6 +19,7 @@ from docs.recipes._scenario_support import (
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 
 
 pytestmark = pytest.mark.recipe
@@ -268,9 +269,9 @@ def test_python_evidence_recipes_regenerate_from_a_clean_external_context(
 
 def test_typed_session_artifact_is_current_and_deterministic() -> None:
     artifact_root = PUBLISHED_IMAGE_ROOT / "h-py-05"
-    session_path = artifact_root / "typed_request.session.json"
+    session_path = artifact_root / "typed_request.gbdraw"
     svg_path = artifact_root / "typed_request.svg"
-    payload = json.loads(session_path.read_text(encoding="utf-8"))
+    payload = read_session_payload(session_path)
 
     assert payload["format"] == "gbdraw-session"
     assert payload["version"] == CURRENT_SESSION_VERSION

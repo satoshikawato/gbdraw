@@ -198,7 +198,7 @@ def print_help_message() -> NoReturn:
     print("  gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt")
     print("  gbdraw linear --gbk input1.gb input2.gb --losat losatp --losatp_mode pairwise")
     print("  gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt")
-    print("  gbdraw render --session project.gbdraw-session.json")
+    print("  gbdraw render --session project.gbdraw")
     print("  gbdraw locate --reference_gbk ref.gb --reference_region 1000-25000 --targets genome1.gb genome2.gb -o plan")
     print("  gbdraw gui")
     print("")

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `146`
+- Contract revision: `147`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -45,7 +45,7 @@ Status: active Product authority
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
   `PD-OI-116`, `PD-OI-117`,
   `PD-OI-118`, `PD-OI-119`, `PD-OI-120`, `PD-OI-121`, `PD-OI-122`,
-  `PD-OI-123`, `PD-OI-124`, `PD-OI-125`, and `PD-OI-126`
+  `PD-OI-123`, `PD-OI-124`, `PD-OI-125`, `PD-OI-126`, and `PD-OI-127`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -5543,6 +5543,76 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime and tests
     that implement it are in the same pull request, and the Review is
     `REQUIRED`.
+- Revision 147 changes: `PD-OI-127` is added and `PD-OI-121` gains
+  scenario revision `3`.
+  `PD-OI-127` (concern `session.file-container`, scenario revision `1`; the
+  outcome `A GBDRAW-ZIP-CONTAINER`): a Session is one ZIP file named
+  `<title>.gbdraw`: its first entry `gbdraw-session.json` holds the settings
+  and results (a Session version 51 document without input bytes), and each
+  input is one `resources/<id>` entry. Web Save Session, Python
+  `save_session_document`, and the CLI `--session_output` and `--save_session`
+  write only this file and refuse an output name that ends with `.json` or
+  `.json.gz`. Web, the CLI, and Python open this file and the JSON Sessions
+  27 to 33, 39 to 42, 44, and 46 to 50 by content, not by name; a JSON
+  Session version 51 is not opened. The inputs of a container Session have no
+  size limit; only `gbdraw-session.json` is limited to 512 MiB in Web.
+  gbdraw 0.14.5 and older cannot open the file, and the compatibility table
+  and the release notes say that version 51 Sessions open in v0.15.0 and later.
+  `PD-OI-121` (concern `input.file-changed-after-choosing`, scenario revision
+  `3`; the outcome `B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY` is unchanged): the
+  temporary copy of a gzip input holds the file as chosen, still gzip, and
+  every read expands it without keeping the expanded bytes in the copy or in
+  memory; Generate passes the gzip file to the Worker, whose Python expands
+  it. Annotation tables and the sequence search query file are read once when
+  chosen and get no copy. A gzip input past the expanded cap (`PD-OI-116`) is
+  refused right after it is chosen, or at the later points the receipt names
+  (a GFF3 and FASTA pair, the Depth and BLAST table fields and the comparison
+  sequence of a Circular similarity ring without the browser's private site
+  storage, and inputs read from a Session). The Session sentences point to
+  `PD-OI-127`, and the Accepted residual risk names the cases where a changed
+  file continues with its new contents in Firefox and the time to expand a
+  gzip input at every read. The receipt below states every change.
+  - The Product Decision Owner `satoshikawato` approved the complete
+    `PD-OI-127` receipt below on `2026-11-08`, in the campaign
+    `large-inputs-20261106`.
+  - On `2026-11-09` the Product Decision Owner `satoshikawato` was asked
+    question Q1 of the campaign `large-inputs-20261106` (`DECISIONS.md`
+    `D-61`), with the complete `PD-OI-121` scenario revision `3` receipt shown
+    verbatim and the options 「Q1=A（全文このまま承認）」 and
+    「Q1=B：〈直したい箇所〉」, and answered 「A」. That receipt named the
+    Session container record `PD-OI-125`.
+  - Revision 136 then recorded another decision as `PD-OI-125`. On
+    `2026-11-10` the Product Decision Owner `satoshikawato` was asked question
+    Q1 of the same campaign (`DECISIONS.md` `D-68`), with the complete
+    receipt shown verbatim: the receipt of `2026-11-09` with its three
+    `PD-OI-125` references changed to `PD-OI-126`. The Owner answered
+    「#1760 Q1：A」 (`D-69`).
+  - Revision 143 then recorded another decision as `PD-OI-126`. On
+    `2026-11-11` the Product Decision Owner `satoshikawato` was asked question
+    Q1 of the same campaign (`DECISIONS.md` `D-73`), with the complete
+    receipt below shown verbatim: the receipt of `2026-11-10` with its three
+    `PD-OI-126` references changed to `PD-OI-127`, the number the Session
+    container record takes here. The Owner answered 「Q1=A Q2=A」
+    (`D-74`).
+  - The receipts and JSON reproduce the approved fields without translation or
+    additional terms. The `PD-OI-121` scenario revision `2` receipt and JSON
+    are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-127` scenario revision `1`
+    `b544e4b1d3ec53bd7b8d5f0cacef1034b2d89f4a6d8a1092a35d29c1e550a78a`;
+    `PD-OI-121` scenario revision `3`
+    `ca5c3d45760631284309bc8d9fb591ba04b183c05ffc1b5b3fea458dd1db0c8e`.
+  - `PD-OI-121` scenario revision `3` supersedes scenario revision `2`; its
+    May retire names what it retires.
+  - `PD-OI-099`, `PD-OI-116`, and `PD-OI-118` are kept unchanged: the
+    `PD-OI-127` receipt names the parts it retires in them and in `PD-OI-121`
+    scenario revision `2` (the limits and the "Session format and limits are
+    unchanged" sentences, for a container Session only) in its May retire,
+    and what it keeps in its Must preserve. Older JSON Sessions keep every one
+    of those sentences.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -13644,23 +13714,34 @@ Decision date: 2026-11-07
 ### PD-OI-121: Input file kept in a browser copy after choosing
 
 - Concern key: `input.file-changed-after-choosing`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-120`, scenario revision `1`
-  (`A REFUSE-CHANGED-FILE`), for every file whose copy was written. A file
-  whose copy could not be written keeps the `PD-OI-120` outcome, as the
-  receipt below says.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-121`, scenario revision `2` (Revision 126 entry above).
+  Scenario revision `3` keeps its outcome and changes the sentences the
+  Revision 147 entry above names. Like scenario revision `2`, it
+  supersedes `PD-OI-120`, scenario revision `1` (`A REFUSE-CHANGED-FILE`), for
+  every file whose copy was written; a file whose copy could not be written
+  keeps the `PD-OI-120` outcome, as the receipt below says.
 - Status: `ACCEPTED`
 - Selected outcome: `B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Product Decision Owner's choice and approval of
+- Normative outcome: exactly the complete approved scenario revision `3`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below.
+  The scenario revision `2` receipt and JSON are kept as they were approved.
+- Decision source (scenario revision `2`): the Product Decision Owner's choice and approval of
   `2026-11-07` described in the Revision 126 entry above. The receipt and
   JSON below reproduce all nine fields of the approved receipt without
   translation or additional terms. The runtime that implements it merges with
   it (static Product Contract co-change); this record supplies no runtime
   acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `78aa51447d63731b714770906f8441bdc31d6b113492db77b888bdb97f507b95`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-11-09`,
+  `2026-11-10`, and `2026-11-11` quoted in the Revision 147 entry above
+  (D-61, D-69, and D-74). The receipt and JSON below reproduce all nine fields of the approved
+  receipt without translation or additional terms. The runtime, tests, and
+  documentation that implement it merge with it (static Product Contract
+  co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `ca5c3d45760631284309bc8d9fb591ba04b183c05ffc1b5b3fea458dd1db0c8e`.
 
 ```text
 PRODUCT_DECISION
@@ -13692,6 +13773,40 @@ Decision date: 2026-11-07
   "acceptedResidualRisk": "選んだときに、入力と同じ大きさの書き込みが裏で起きる（1.12 GiB で約 1 秒）。書き終わる前に Generate を押すと、書き終わるまで待つ。ディスクに、使っている入力の合計の大きさ（gzip 入力は展開後の大きさ）の空きが要り、History に残っている入力のぶんも含む。シークレットウィンドウでは、ブラウザが一時ファイルをメモリに置くので、メモリは減らない。一時ファイルを書けなかったファイルは、選んだ後に変わると止まる。ページやブラウザが異常終了すると、次にページを開くまで一時ファイルがディスクに残る。確かめたのは Chromium と Firefox だけで、Safari は確かめていない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-07"
+}
+```
+
+```text
+PRODUCT_DECISION
+Concern: input.file-changed-after-choosing（選んだ後にディスク上で変わった入力ファイル）
+Scenario revision: 3
+Choice: B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY
+  - ファイルを選ぶと、ページはその中身を選んだときのまま（gzip の入力は gzip のまま）、ブラウザのサイト専用の保存領域（OPFS）に一時ファイルとして書き、メモリからは手放す。Generate、Save Session、選んだ後の読み直し（入力の種類の切り替え、取り込みに失敗したカードの Retry など）は、この一時ファイルを読む。注釈の表と配列検索のクエリのファイルは、選んだときに一度だけ読んで、その中身を注釈とクエリの欄に入れ、一時ファイルは作らない。
+  - gzip の入力は、読むたびに展開し、展開したバイト列は一時ファイルにもメモリにも残さない。展開して読んだ配列（LOSAT の比較や比較リングに使うもの）は、gzip でない入力と同じく、そのファイルを使うあいだメモリに残る。Generate で描くときは、入力ファイルを gzip のまま Worker に渡し、Worker の Python が展開する（LOSAT の比較などのために、ページが展開して読むこともある）。色、ラベル、注釈、Feature Edits などの表は、選んだときに読み込んだ内容で描く。展開後が上限（PD-OI-116）を超える gzip の入力は、今までどおり、ファイル名と 512 MiB を示して断り、描画に使わない。ファイルを選ぶ欄で選んだものは、選んだ直後に断る（GFF3 と FASTA を組で選ぶ欄では、組の両方を選んだとき。Circular でファイルカードが複数あるときは、すべてのカードの組がそろったとき）。ただし、ブラウザに一時ファイルの保存領域（OPFS）がないときは、Depth と BLAST の表の欄と、Circular の比較リングで BLAST の表に添える比較配列の欄で選んだものを、そのファイルを初めて読むとき（遅くとも Generate）に断る。Session から読んだものは、そのファイルを初めて読むとき（遅くとも Generate）に断る。
+  - 選んだ後に元のファイルがディスク上で変更・移動・改名・削除されても、内容が同じで更新日時だけが変わっても、選んだ時点の中身で続ける。止まらない。新しい中身を使うときは、ファイルを選び直す。
+  - 一時ファイルは、そのファイルを使う状態がなくなったとき（差し替えや取り外しのあと、History からもそのファイルがなくなったとき）と、ページを閉じたときに消す。異常終了などで残った一時ファイルは、次に同じアドレスでページを開いたときに消す。ほかのタブが使っている一時ファイルは消さない。
+  - 一時ファイルを書けなかったファイル（空き容量が足りない、ブラウザが保存領域を使わせない、など）は、元のファイルを直接読む。そのファイルが選んだ後に変わっていれば、PD-OI-120 と同じく INPUT_UNREADABLE で止まり、"An input could not be read. Replace or reselect it." を表示する。ただし、初めて読む前に変わったものは、ブラウザが変更を知らせないとき（Firefox）、新しい中身で続ける。
+  - 一時ファイルは、ブラウザのプロファイルの中（ディスク上）に置かれ、ほかのサイトからは読めず、外部には送らない。FAQ と Web アプリの説明（実行・プライバシー・オフラインの節）に、このことを書く。
+  - 表示、Generate の結果、gzip の展開の上限（PD-OI-116）は変えない。Session の中身と形式、Session から読んだ入力の扱いは PD-OI-127 のとおり（gzip の入力は gzip のまま入る）。
+Rationale: 0.14.5 と同じく、選んだ時点の中身で描ける。gzip の入力を gzip のまま持つので、ディスクは展開後でなく gzip の大きさだけ使い、Session には gzip のまま入れられる（PD-OI-127）。中身をメモリに持たないので、そのぶんメモリが減る（1.12 GiB の depth の表なら 1.12 GiB）。変わったファイルの扱いはブラウザによって違う（Chromium は読み込みを拒み、Firefox は新しい中身を返す）ので、PD-OI-120 の形では、ブラウザによって結果が変わる。一時ファイルなら、どのブラウザでも同じになる。
+Must preserve: 選んだファイルの中身だけで描き、ほかの中身では描かないこと（PD-OI-055）。失敗しても直前の Result、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。入力ファイルをアップロードしないこと。Save Session が、選んだ時点の中身を Session に入れること。Session の形式と上限（PD-OI-127）。gzip の展開の上限とその断り方（PD-OI-116）。
+May retire: 一時ファイルを書けたファイルについて、選んだ後に変わったら Generate と Save Session が止まること（PD-OI-120）。gzip の入力を展開した中身を一時ファイルに書くこと。
+Accepted residual risk: 選んだときに、入力と同じ大きさの書き込みが裏で起きる（1.12 GiB で約 1 秒）。書き終わる前に Generate を押すと、書き終わるまで待つ。ディスクに、使っている入力の合計の大きさ（gzip の入力は gzip のままの大きさ）の空きが要り、History に残っている入力のぶんも含む。シークレットウィンドウでは、ブラウザが一時ファイルをメモリに置くので、メモリは減らない。一時ファイルを書けなかったファイルは、選んだ後に変わると止まる。ただし、ブラウザに一時ファイルの保存領域（OPFS）がないとき、選んですぐには読まない欄（Depth と BLAST の表、比較配列）のファイルが初めて読む前に変わると、Firefox では新しい中身で描き、止まらない。Save Session も、大きさが変わっていなければ新しい中身を入れる。確認を求める欄（ほかの drawing も使うファイルの差し替え、カスタムトラックスロットの行が使っている比較リングのファイルの差し替え）では、答えたときにファイルを読んで一時ファイルを書く。答える前にファイルが変わると、Chromium では INPUT_UNREADABLE で止まり、Firefox では新しい中身で続ける。ページやブラウザが異常終了すると、次にページを開くまで一時ファイルがディスクに残る。gzip の入力をページで読み直すたびに展開するので、その時間がかかる。確かめたのは Chromium と Firefox だけで、Safari は確かめていない。
+Owner: satoshikawato
+Decision date: 2026-11-09
+```
+
+```json
+{
+  "concern": "input.file-changed-after-choosing（選んだ後にディスク上で変わった入力ファイル）",
+  "scenarioRevision": 3,
+  "choice": "B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY\n  - ファイルを選ぶと、ページはその中身を選んだときのまま（gzip の入力は gzip のまま）、ブラウザのサイト専用の保存領域（OPFS）に一時ファイルとして書き、メモリからは手放す。Generate、Save Session、選んだ後の読み直し（入力の種類の切り替え、取り込みに失敗したカードの Retry など）は、この一時ファイルを読む。注釈の表と配列検索のクエリのファイルは、選んだときに一度だけ読んで、その中身を注釈とクエリの欄に入れ、一時ファイルは作らない。\n  - gzip の入力は、読むたびに展開し、展開したバイト列は一時ファイルにもメモリにも残さない。展開して読んだ配列（LOSAT の比較や比較リングに使うもの）は、gzip でない入力と同じく、そのファイルを使うあいだメモリに残る。Generate で描くときは、入力ファイルを gzip のまま Worker に渡し、Worker の Python が展開する（LOSAT の比較などのために、ページが展開して読むこともある）。色、ラベル、注釈、Feature Edits などの表は、選んだときに読み込んだ内容で描く。展開後が上限（PD-OI-116）を超える gzip の入力は、今までどおり、ファイル名と 512 MiB を示して断り、描画に使わない。ファイルを選ぶ欄で選んだものは、選んだ直後に断る（GFF3 と FASTA を組で選ぶ欄では、組の両方を選んだとき。Circular でファイルカードが複数あるときは、すべてのカードの組がそろったとき）。ただし、ブラウザに一時ファイルの保存領域（OPFS）がないときは、Depth と BLAST の表の欄と、Circular の比較リングで BLAST の表に添える比較配列の欄で選んだものを、そのファイルを初めて読むとき（遅くとも Generate）に断る。Session から読んだものは、そのファイルを初めて読むとき（遅くとも Generate）に断る。\n  - 選んだ後に元のファイルがディスク上で変更・移動・改名・削除されても、内容が同じで更新日時だけが変わっても、選んだ時点の中身で続ける。止まらない。新しい中身を使うときは、ファイルを選び直す。\n  - 一時ファイルは、そのファイルを使う状態がなくなったとき（差し替えや取り外しのあと、History からもそのファイルがなくなったとき）と、ページを閉じたときに消す。異常終了などで残った一時ファイルは、次に同じアドレスでページを開いたときに消す。ほかのタブが使っている一時ファイルは消さない。\n  - 一時ファイルを書けなかったファイル（空き容量が足りない、ブラウザが保存領域を使わせない、など）は、元のファイルを直接読む。そのファイルが選んだ後に変わっていれば、PD-OI-120 と同じく INPUT_UNREADABLE で止まり、\"An input could not be read. Replace or reselect it.\" を表示する。ただし、初めて読む前に変わったものは、ブラウザが変更を知らせないとき（Firefox）、新しい中身で続ける。\n  - 一時ファイルは、ブラウザのプロファイルの中（ディスク上）に置かれ、ほかのサイトからは読めず、外部には送らない。FAQ と Web アプリの説明（実行・プライバシー・オフラインの節）に、このことを書く。\n  - 表示、Generate の結果、gzip の展開の上限（PD-OI-116）は変えない。Session の中身と形式、Session から読んだ入力の扱いは PD-OI-127 のとおり（gzip の入力は gzip のまま入る）。",
+  "rationale": "0.14.5 と同じく、選んだ時点の中身で描ける。gzip の入力を gzip のまま持つので、ディスクは展開後でなく gzip の大きさだけ使い、Session には gzip のまま入れられる（PD-OI-127）。中身をメモリに持たないので、そのぶんメモリが減る（1.12 GiB の depth の表なら 1.12 GiB）。変わったファイルの扱いはブラウザによって違う（Chromium は読み込みを拒み、Firefox は新しい中身を返す）ので、PD-OI-120 の形では、ブラウザによって結果が変わる。一時ファイルなら、どのブラウザでも同じになる。",
+  "mustPreserve": "選んだファイルの中身だけで描き、ほかの中身では描かないこと（PD-OI-055）。失敗しても直前の Result、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。入力ファイルをアップロードしないこと。Save Session が、選んだ時点の中身を Session に入れること。Session の形式と上限（PD-OI-127）。gzip の展開の上限とその断り方（PD-OI-116）。",
+  "mayRetire": "一時ファイルを書けたファイルについて、選んだ後に変わったら Generate と Save Session が止まること（PD-OI-120）。gzip の入力を展開した中身を一時ファイルに書くこと。",
+  "acceptedResidualRisk": "選んだときに、入力と同じ大きさの書き込みが裏で起きる（1.12 GiB で約 1 秒）。書き終わる前に Generate を押すと、書き終わるまで待つ。ディスクに、使っている入力の合計の大きさ（gzip の入力は gzip のままの大きさ）の空きが要り、History に残っている入力のぶんも含む。シークレットウィンドウでは、ブラウザが一時ファイルをメモリに置くので、メモリは減らない。一時ファイルを書けなかったファイルは、選んだ後に変わると止まる。ただし、ブラウザに一時ファイルの保存領域（OPFS）がないとき、選んですぐには読まない欄（Depth と BLAST の表、比較配列）のファイルが初めて読む前に変わると、Firefox では新しい中身で描き、止まらない。Save Session も、大きさが変わっていなければ新しい中身を入れる。確認を求める欄（ほかの drawing も使うファイルの差し替え、カスタムトラックスロットの行が使っている比較リングのファイルの差し替え）では、答えたときにファイルを読んで一時ファイルを書く。答える前にファイルが変わると、Chromium では INPUT_UNREADABLE で止まり、Firefox では新しい中身で続ける。ページやブラウザが異常終了すると、次にページを開くまで一時ファイルがディスクに残る。gzip の入力をページで読み直すたびに展開するので、その時間がかかる。確かめたのは Chromium と Firefox だけで、Safari は確かめていない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-09"
 }
 ```
 
@@ -14039,6 +14154,66 @@ Decision date: 2026-11-10
   "acceptedResidualRisk": "利用者が track stack を、どの Session も保存していない track stack と行ごとに同じ形に戻すと、保存していないものとして扱い、Use custom stack を On にしたとき簡易の設定から作り直す（作り直した track stack は簡易の設定が描いていた図と同じ）。Legend の編集画面で Heatmap の行の名前を変えることはできない（Legend name の欄で変える）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-10"
+}
+```
+
+### PD-OI-127: Session file container
+
+- Concern key: `session.file-container`
+- Scenario revision: `1`
+- Supersedes: none. Parts of `PD-OI-099`, `PD-OI-116`, `PD-OI-118`, and
+  `PD-OI-121` scenario revision `2` are retired for a container Session as the
+  receipt's May retire says; `PD-OI-099`, `PD-OI-116`, and `PD-OI-118` are
+  kept unchanged, and `PD-OI-121` scenario revision `3` (Revision 147
+  entry above) points to this record for the Session.
+- Status: `ACCEPTED`
+- Selected outcome: `A GBDRAW-ZIP-CONTAINER`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's approval of `2026-11-08`
+  described in the Revision 147 entry above. The receipt and JSON below
+  reproduce all nine fields of the approved receipt without translation or
+  additional terms. The runtime that implements it merges with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `b544e4b1d3ec53bd7b8d5f0cacef1034b2d89f4a6d8a1092a35d29c1e550a78a`.
+
+```text
+PRODUCT_DECISION
+Concern: session.file-container（Session ファイルの器）
+Scenario revision: 1
+Choice: A GBDRAW-ZIP-CONTAINER
+  - Session は 1 つの ZIP 形式のファイルで、名前は `<題名>.gbdraw`（題名が空なら `gbdraw_session.gbdraw`）。題名の使えない文字を置き換える今の規則は変えない。ファイルの先頭の項目 `gbdraw-session.json` が設定と結果（Session 版 51 の文書。入力のバイト列は含まない）で、続く `resources/<id>` が入力ファイル 1 つにつき 1 項目。gzip でない入力は圧縮して入れ、すでに gzip の入力はそのまま入れる。入力を base64 の文字列にして JSON に埋め込むことはしない。Session の版は 51 のまま。
+  - Web の Save Session、Python の `save_session_document`、CLI の `--session_output` と `--save_session` の副産物は、この器だけを書く。JSON の Session は書かない。CLI の副産物の既定の名前は `<prefix>.gbdraw`。Web の Save Session は、入力を 1 つずつブラウザ内コピー（PD-OI-121）から読んで圧縮しながら書き、入力の全体をメモリに持たない。50 MB を超えるときに「Download a large Session?」と聞くのは今までどおり。
+  - 出力の名前が `.json` または `.json.gz` で終わるときは、何も書かずに、"A Session is saved as a .gbdraw file. Use a name that ends with .gbdraw, not .json or .json.gz: {path}" と断る（名前を黙って変えない）。それ以外の名前（`.zip` や拡張子なしなど）は、その名前のまま書く。
+  - Web・CLI・Python は、ファイルの名前でなく中身で判断して、次を開く。(a) この器のファイル（名前が `.gbdraw`、`.zip`、そのほか何でも）。(b) 今までの JSON の Session 27〜33、39〜42、44、46〜50（平文でも gzip でも、名前が `.json`、`.json.gz`、`.gz` のどれでも）。Web のファイル選択は `.gbdraw`、`.zip`、`.json`、`.gz` を受け付ける。JSON の版 51（出荷されていない形式）は開かない。Python は "A Session version 51 file must be a .gbdraw file, not JSON: {path}" と断り、Web は今ある "Load a Session file that this version of gbdraw supports." を示す。古い Session を読み込む前の確認 dialog と「次に Save Session すると最新の形式で保存される」は PD-OI-099 のとおり。古い JSON の Session の上限（Web は 200 MB のファイルと展開後 512 MB）は今のまま。
+  - この器のファイルを開くとき、Web は入力をメモリに戻さず、1 項目ずつブラウザ内コピー（PD-OI-121）に書く。ブラウザが保存領域を使わせないときは、PD-OI-121 と同じく、入力を Session ファイルから直接読む。次のファイルは、読み込まずに断る。ZIP の目次が読めない・途切れている、項目の大きさか CRC-32 が合わない、同じ名前の項目が 2 つある、暗号化や未対応の圧縮方式の項目がある。文は "This file is not a gbdraw Session: it is incomplete or damaged." 項目 `gbdraw-session.json` がない ZIP は "This file is not a gbdraw Session: it has no gbdraw-session.json." と断る。壊れ方の検査は、ZIP の CRC-32 と大きさで行う。SHA-256 の `checksum` 欄は、この器には書かない（古い JSON の Session では今までどおり読む）。
+  - 大きさ。この器の Session には、入力の大きさの上限も 200 MB のファイルの上限もない。設定と結果（`gbdraw-session.json`）だけは、Web で展開後 512 MiB まで。超えるとき、Save は "The Session was not saved: its settings and results are {size} MB, and the browser loads at most 512 MB. Draw a smaller region, or turn off tracks or labels you do not need, then save again." と断り、Load は "The Session was not loaded: its settings and results are {size} MB, and the browser loads at most 512 MB. The gbdraw command line can draw this Session." と断る。CLI と Python には上限がない（今の Python の読み込みと同じ）。
+  - ブラウザの保存領域。Load は、書き始める前に、入力の合計（`gbdraw-session.json` 以外の項目の、宣言された大きさの合計）とブラウザの空き容量を比べ、足りなければ何も読み込まずに "The Session was not loaded: its inputs need {need} MB of browser storage and {free} MB is free. Free up disk space, then load it again. The gbdraw command line can draw this Session." と断る。Save は、保存に使う一時的な領域をブラウザが「場所がない」と答えたとき、書いた分を消して "The Session was not saved: it needs up to {need} MB of browser storage and {free} MB is free. Largest inputs: {names}. Free up disk space, or close private windows, then save again." と断る。{need} は入力と設定と結果の大きさの合計（圧縮すると小さくなるので、実際に要る量はこれ以下）、{free} は `navigator.storage.estimate()` の空き。ブラウザが空き容量を答えないときは、Save の文を "The Session was not saved: the browser has no room for it (up to {need} MB). Largest inputs: {names}. Free up disk space, or close private windows, then save again." にする。断られたとき、直前の Result、draft、History は変わらず、ファイルは書かれない。
+  - 古い gbdraw（0.14.5 以前）はこの器のファイルを開けず、Python は "Not a valid JSON session file: {path}"、Web は "This file is not a gbdraw Session: it is not valid JSON." と答える。古い版は変えられない。互換表（docs/REFERENCE/session-and-request-compatibility.md）とリリースノートに、「版 51 の Session は v0.15.0 以降で開く」と書く。
+  - Gallery の Session 10 本は、この器に変えて公開する（名前は `<id>.gbdraw`）。Gallery の例を開いて描く図と、CLI で描く図は変わらない。Gallery の Session の合計は約 22 % 小さくなる（実測 77.2 MiB から 60.4 MiB）。
+  - CLI と Python。`gbdraw render --session`、`gbdraw circular --session`、`gbdraw linear --session`、`load_session_document`、`materialize_session` は、この器と JSON の Session 27〜50 を開く。この器の入力は、base64 を戻さず、1 項目ずつ一時フォルダに書く。古い Session は `gbdraw render --session 古い.json.gz --session_output 新しい.gbdraw` で変換できる。ZIP の目次の項目名は、入力の resource ID だけで探し、項目名でファイルの場所を決めない。
+  - 変えないもの。Session の版（51）と、文書の中身（drawing、設定、request、Result、LOSAT の cache、編集）、その検査。Save と Load が一つの整合した操作であること（PD-OI-045）。古い Session の読み込み前の確認（PD-OI-099）。旧形式の Session は Generate してから Save（PD-OI-079）。保存済みの図を見るだけの Load が Python を起動しないこと。題名を聞く dialog。gzip 入力の展開の上限（PD-OI-116）。ブラウザ内コピー（PD-OI-121）。描画結果が大きすぎるときの文（PD-OI-118）。塩基配列を Session に入れるかどうかは、この受領書では変えない。
+Rationale: いまの Session は、入力を base64 にして 1 つの JSON に埋め込み、読み込むときは全体を 1 つの文字列にするので、入力は合計で約 384 MiB までしか入らず、描けた図でも Save が断られる。入力を ZIP の項目としてそのまま入れれば、Web はブラウザ内コピーから 1 つずつ書き、1 つずつ読め、入力の全体をメモリに持たずに済む。Python は標準の ZIP の読み書きだけで開ける。切れたファイルは目次がないのでその場で断れ、項目ごとの CRC-32 で壊れも分かり、`unzip -l` で中身が見える。Gallery の Session は約 22 % 小さくなり、最大の Gallery の Session を Python で開くときのメモリは約 4 割下がる（315 MiB から 184 MiB）。Session の版 51 はまだ main に出ていないので、利用者が出会う保存形式の変更は 1 回で済む。拡張子は `.gbdraw` にする（短く、Mac の Safari が ZIP の拡張子 `.zip` のファイルを自動で解凍する設定を避けられる見込み。確かめてはいない）。
+Must preserve: Session の中身と版 51（drawing の一覧と drawing ごとの設定と Result、PD-OI-090）。保存した図、設定、入力ファイル、編集、cache を Load で取り戻せること。古い Session 27〜50 の読み込みと、読み込む前の確認（PD-OI-099）。Save と Load が、一つの整合した操作として終わり、主スレッドの応答を保つこと（PD-OI-045）。Generate してから Save（PD-OI-079）。保存済みの図を見るだけの Load が Python を起動しないこと（PD-OI-044）。失敗しても直前の Result、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。gzip 入力の展開の上限とその断り方（PD-OI-116）。ブラウザ内コピーが選んだ時点の中身で続けること（PD-OI-121）。大きすぎる描画結果の文（PD-OI-118）。入力ファイルをアップロードしないこと。
+May retire: 新しい Session を JSON（`.gbdraw-session.json`、`.gbdraw-session.json.gz`）で書くこと。新しい Session で入力を base64 にして埋め込むこと。新しい Session について、Web が入力を合計約 384 MiB まで、ファイルを 200 MB まで、展開後を 512 MB までとすること（設定と結果の 512 MiB だけが残る）。JSON の Session 51（main に出ていない形式）を読むこと。PD-OI-116 の「Session ファイルの扱いは今のまま」と PD-OI-099 の断る一覧の「大きすぎるファイル（200 MB、展開して 512 MB を超えるもの）」のうち、この器の Session に当たる部分（古い JSON の Session には今までどおり当たる）。PD-OI-118、PD-OI-121 の「Session の形式と上限」を、この器の Session について変えないとする部分。
+Accepted residual risk: ブラウザで必要な保存領域は、まだ測っていない。Load は入力の合計がそのまま要り、Save は圧縮した一時的な領域が要る。その量は入力の合計以下としか言えず、「入力の約 1.25 倍」という見積りも測定していない。Save は、書き始めて時間がたってから「場所がない」と断られることがある（そのとき何も保存されない）。ブラウザでの 1〜2 GiB の Save と Load の時間とメモリは、実装の PR で測るまで分からない。Chromium のシークレットウィンドウでは保存領域がメモリ上にあるので、大きい Session は早く断られうる。確かめたのは Chromium と Firefox のブラウザ内コピーまでで、この器の Save と Load はまだ動かしていない。Safari は確かめていない。`.gbdraw` が自動で解凍されないことも、確かめていない。圧縮した出力のバイトは zlib の版で変わりうるので、同じ内容の Session でも、PC によって再生成するとファイルのバイトが違うことがある（図は変わらない）。0.14.5 以前の gbdraw は新しいファイルを「JSON として読めない」と答え、「新しい版」とは答えない。CRC-32 は壊れを見つける検査で、改ざんを防ぐものではない。JSON を手で書き換えるには、解凍して直し、ZIP に戻す必要がある。CLI で作った Session には、Web が Generate できない大きさの入力が入りうる（Load は保存済みの図を見せ、Generate すると PD-OI-118 の文が出る）。CLI と Python は、悪意のある Session が宣言する大きさにも上限がなく、一時フォルダのディスクの空きを使い切りうる（今の Python の読み込みと同じ）。ブラウザが保存領域を使わせないときの Load は、Session ファイルを選んだ後に変えると止まる。
+Owner: satoshikawato
+Decision date: 2026-11-08
+```
+
+```json
+{
+  "concern": "session.file-container（Session ファイルの器）",
+  "scenarioRevision": 1,
+  "choice": "A GBDRAW-ZIP-CONTAINER\n  - Session は 1 つの ZIP 形式のファイルで、名前は `<題名>.gbdraw`（題名が空なら `gbdraw_session.gbdraw`）。題名の使えない文字を置き換える今の規則は変えない。ファイルの先頭の項目 `gbdraw-session.json` が設定と結果（Session 版 51 の文書。入力のバイト列は含まない）で、続く `resources/<id>` が入力ファイル 1 つにつき 1 項目。gzip でない入力は圧縮して入れ、すでに gzip の入力はそのまま入れる。入力を base64 の文字列にして JSON に埋め込むことはしない。Session の版は 51 のまま。\n  - Web の Save Session、Python の `save_session_document`、CLI の `--session_output` と `--save_session` の副産物は、この器だけを書く。JSON の Session は書かない。CLI の副産物の既定の名前は `<prefix>.gbdraw`。Web の Save Session は、入力を 1 つずつブラウザ内コピー（PD-OI-121）から読んで圧縮しながら書き、入力の全体をメモリに持たない。50 MB を超えるときに「Download a large Session?」と聞くのは今までどおり。\n  - 出力の名前が `.json` または `.json.gz` で終わるときは、何も書かずに、\"A Session is saved as a .gbdraw file. Use a name that ends with .gbdraw, not .json or .json.gz: {path}\" と断る（名前を黙って変えない）。それ以外の名前（`.zip` や拡張子なしなど）は、その名前のまま書く。\n  - Web・CLI・Python は、ファイルの名前でなく中身で判断して、次を開く。(a) この器のファイル（名前が `.gbdraw`、`.zip`、そのほか何でも）。(b) 今までの JSON の Session 27〜33、39〜42、44、46〜50（平文でも gzip でも、名前が `.json`、`.json.gz`、`.gz` のどれでも）。Web のファイル選択は `.gbdraw`、`.zip`、`.json`、`.gz` を受け付ける。JSON の版 51（出荷されていない形式）は開かない。Python は \"A Session version 51 file must be a .gbdraw file, not JSON: {path}\" と断り、Web は今ある \"Load a Session file that this version of gbdraw supports.\" を示す。古い Session を読み込む前の確認 dialog と「次に Save Session すると最新の形式で保存される」は PD-OI-099 のとおり。古い JSON の Session の上限（Web は 200 MB のファイルと展開後 512 MB）は今のまま。\n  - この器のファイルを開くとき、Web は入力をメモリに戻さず、1 項目ずつブラウザ内コピー（PD-OI-121）に書く。ブラウザが保存領域を使わせないときは、PD-OI-121 と同じく、入力を Session ファイルから直接読む。次のファイルは、読み込まずに断る。ZIP の目次が読めない・途切れている、項目の大きさか CRC-32 が合わない、同じ名前の項目が 2 つある、暗号化や未対応の圧縮方式の項目がある。文は \"This file is not a gbdraw Session: it is incomplete or damaged.\" 項目 `gbdraw-session.json` がない ZIP は \"This file is not a gbdraw Session: it has no gbdraw-session.json.\" と断る。壊れ方の検査は、ZIP の CRC-32 と大きさで行う。SHA-256 の `checksum` 欄は、この器には書かない（古い JSON の Session では今までどおり読む）。\n  - 大きさ。この器の Session には、入力の大きさの上限も 200 MB のファイルの上限もない。設定と結果（`gbdraw-session.json`）だけは、Web で展開後 512 MiB まで。超えるとき、Save は \"The Session was not saved: its settings and results are {size} MB, and the browser loads at most 512 MB. Draw a smaller region, or turn off tracks or labels you do not need, then save again.\" と断り、Load は \"The Session was not loaded: its settings and results are {size} MB, and the browser loads at most 512 MB. The gbdraw command line can draw this Session.\" と断る。CLI と Python には上限がない（今の Python の読み込みと同じ）。\n  - ブラウザの保存領域。Load は、書き始める前に、入力の合計（`gbdraw-session.json` 以外の項目の、宣言された大きさの合計）とブラウザの空き容量を比べ、足りなければ何も読み込まずに \"The Session was not loaded: its inputs need {need} MB of browser storage and {free} MB is free. Free up disk space, then load it again. The gbdraw command line can draw this Session.\" と断る。Save は、保存に使う一時的な領域をブラウザが「場所がない」と答えたとき、書いた分を消して \"The Session was not saved: it needs up to {need} MB of browser storage and {free} MB is free. Largest inputs: {names}. Free up disk space, or close private windows, then save again.\" と断る。{need} は入力と設定と結果の大きさの合計（圧縮すると小さくなるので、実際に要る量はこれ以下）、{free} は `navigator.storage.estimate()` の空き。ブラウザが空き容量を答えないときは、Save の文を \"The Session was not saved: the browser has no room for it (up to {need} MB). Largest inputs: {names}. Free up disk space, or close private windows, then save again.\" にする。断られたとき、直前の Result、draft、History は変わらず、ファイルは書かれない。\n  - 古い gbdraw（0.14.5 以前）はこの器のファイルを開けず、Python は \"Not a valid JSON session file: {path}\"、Web は \"This file is not a gbdraw Session: it is not valid JSON.\" と答える。古い版は変えられない。互換表（docs/REFERENCE/session-and-request-compatibility.md）とリリースノートに、「版 51 の Session は v0.15.0 以降で開く」と書く。\n  - Gallery の Session 10 本は、この器に変えて公開する（名前は `<id>.gbdraw`）。Gallery の例を開いて描く図と、CLI で描く図は変わらない。Gallery の Session の合計は約 22 % 小さくなる（実測 77.2 MiB から 60.4 MiB）。\n  - CLI と Python。`gbdraw render --session`、`gbdraw circular --session`、`gbdraw linear --session`、`load_session_document`、`materialize_session` は、この器と JSON の Session 27〜50 を開く。この器の入力は、base64 を戻さず、1 項目ずつ一時フォルダに書く。古い Session は `gbdraw render --session 古い.json.gz --session_output 新しい.gbdraw` で変換できる。ZIP の目次の項目名は、入力の resource ID だけで探し、項目名でファイルの場所を決めない。\n  - 変えないもの。Session の版（51）と、文書の中身（drawing、設定、request、Result、LOSAT の cache、編集）、その検査。Save と Load が一つの整合した操作であること（PD-OI-045）。古い Session の読み込み前の確認（PD-OI-099）。旧形式の Session は Generate してから Save（PD-OI-079）。保存済みの図を見るだけの Load が Python を起動しないこと。題名を聞く dialog。gzip 入力の展開の上限（PD-OI-116）。ブラウザ内コピー（PD-OI-121）。描画結果が大きすぎるときの文（PD-OI-118）。塩基配列を Session に入れるかどうかは、この受領書では変えない。",
+  "rationale": "いまの Session は、入力を base64 にして 1 つの JSON に埋め込み、読み込むときは全体を 1 つの文字列にするので、入力は合計で約 384 MiB までしか入らず、描けた図でも Save が断られる。入力を ZIP の項目としてそのまま入れれば、Web はブラウザ内コピーから 1 つずつ書き、1 つずつ読め、入力の全体をメモリに持たずに済む。Python は標準の ZIP の読み書きだけで開ける。切れたファイルは目次がないのでその場で断れ、項目ごとの CRC-32 で壊れも分かり、`unzip -l` で中身が見える。Gallery の Session は約 22 % 小さくなり、最大の Gallery の Session を Python で開くときのメモリは約 4 割下がる（315 MiB から 184 MiB）。Session の版 51 はまだ main に出ていないので、利用者が出会う保存形式の変更は 1 回で済む。拡張子は `.gbdraw` にする（短く、Mac の Safari が ZIP の拡張子 `.zip` のファイルを自動で解凍する設定を避けられる見込み。確かめてはいない）。",
+  "mustPreserve": "Session の中身と版 51（drawing の一覧と drawing ごとの設定と Result、PD-OI-090）。保存した図、設定、入力ファイル、編集、cache を Load で取り戻せること。古い Session 27〜50 の読み込みと、読み込む前の確認（PD-OI-099）。Save と Load が、一つの整合した操作として終わり、主スレッドの応答を保つこと（PD-OI-045）。Generate してから Save（PD-OI-079）。保存済みの図を見るだけの Load が Python を起動しないこと（PD-OI-044）。失敗しても直前の Result、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。gzip 入力の展開の上限とその断り方（PD-OI-116）。ブラウザ内コピーが選んだ時点の中身で続けること（PD-OI-121）。大きすぎる描画結果の文（PD-OI-118）。入力ファイルをアップロードしないこと。",
+  "mayRetire": "新しい Session を JSON（`.gbdraw-session.json`、`.gbdraw-session.json.gz`）で書くこと。新しい Session で入力を base64 にして埋め込むこと。新しい Session について、Web が入力を合計約 384 MiB まで、ファイルを 200 MB まで、展開後を 512 MB までとすること（設定と結果の 512 MiB だけが残る）。JSON の Session 51（main に出ていない形式）を読むこと。PD-OI-116 の「Session ファイルの扱いは今のまま」と PD-OI-099 の断る一覧の「大きすぎるファイル（200 MB、展開して 512 MB を超えるもの）」のうち、この器の Session に当たる部分（古い JSON の Session には今までどおり当たる）。PD-OI-118、PD-OI-121 の「Session の形式と上限」を、この器の Session について変えないとする部分。",
+  "acceptedResidualRisk": "ブラウザで必要な保存領域は、まだ測っていない。Load は入力の合計がそのまま要り、Save は圧縮した一時的な領域が要る。その量は入力の合計以下としか言えず、「入力の約 1.25 倍」という見積りも測定していない。Save は、書き始めて時間がたってから「場所がない」と断られることがある（そのとき何も保存されない）。ブラウザでの 1〜2 GiB の Save と Load の時間とメモリは、実装の PR で測るまで分からない。Chromium のシークレットウィンドウでは保存領域がメモリ上にあるので、大きい Session は早く断られうる。確かめたのは Chromium と Firefox のブラウザ内コピーまでで、この器の Save と Load はまだ動かしていない。Safari は確かめていない。`.gbdraw` が自動で解凍されないことも、確かめていない。圧縮した出力のバイトは zlib の版で変わりうるので、同じ内容の Session でも、PC によって再生成するとファイルのバイトが違うことがある（図は変わらない）。0.14.5 以前の gbdraw は新しいファイルを「JSON として読めない」と答え、「新しい版」とは答えない。CRC-32 は壊れを見つける検査で、改ざんを防ぐものではない。JSON を手で書き換えるには、解凍して直し、ZIP に戻す必要がある。CLI で作った Session には、Web が Generate できない大きさの入力が入りうる（Load は保存済みの図を見せ、Generate すると PD-OI-118 の文が出る）。CLI と Python は、悪意のある Session が宣言する大きさにも上限がなく、一時フォルダのディスクの空きを使い切りうる（今の Python の読み込みと同じ）。ブラウザが保存領域を使わせないときの Load は、Session ファイルを選んだ後に変えると止まる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-08"
 }
 ```
 

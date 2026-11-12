@@ -5,7 +5,7 @@
 // (pr2/images/mock-q2q3/captures.json of the custom-fonts campaign).
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
-import { gunzipSync } from 'node:zlib';
+import { readSavedSession } from './helpers/session-documents.mjs';
 import test from 'node:test';
 
 import {
@@ -79,11 +79,10 @@ test('the question names every missing family and nearest font', () => {
 // Gallery Sessions never ask: every font list they hold resolves with no font loaded.
 test('no Gallery Session names a font that is not bundled', async () => {
   const directory = new URL('../../gbdraw/web/gallery/sessions/', import.meta.url);
-  const names = (await readdir(directory)).filter((name) => /\.gbdraw-session\.json(?:\.gz)?$/.test(name));
+  const names = (await readdir(directory)).filter((name) => /\.gbdraw$/.test(name));
   assert.ok(names.length >= 5);
   for (const name of names) {
-    const bytes = await readFile(new URL(name, directory));
-    const text = (name.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8');
+    const text = JSON.stringify(await readSavedSession(new Blob([await readFile(new URL(name, directory))])));
     const lists = [...text.matchAll(/"font_family"\s*:\s*("(?:[^"\\]|\\.)*")/g)].map((match) => JSON.parse(match[1]));
     assert.equal(missingSessionFonts(lists, []), null, name);
   }

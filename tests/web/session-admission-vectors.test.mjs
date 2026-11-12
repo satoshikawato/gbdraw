@@ -9,11 +9,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import test from 'node:test';
-import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 // R4 has one owner (E-OD22): an R4 vector passes only when `restoresNothing`
 // decided the refusal, not another producer of the same diagnostic.
@@ -48,11 +48,14 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const REPO = new URL('../../', import.meta.url);
 const FIXTURE = JSON.parse(readFileSync(new URL('tests/fixtures/session_admission_vectors.json', REPO), 'utf8'));
 
+// A base fixture is a Session file container, or an older JSON (plain or gzip) file; both read in the JSON form.
+const FIXTURE_DOCUMENTS = Object.fromEntries(await Promise.all(Object.entries(FIXTURE.bases)
+  .filter(([, entry]) => !entry.document)
+  .map(async ([name, entry]) => [name, await readSavedSession(new Blob([readFileSync(new URL(entry.fixture, REPO))]))])));
 const base = (name) => {
   const entry = FIXTURE.bases[name];
   if (entry.document) return structuredClone(entry.document);
-  const bytes = readFileSync(new URL(entry.fixture, REPO));
-  return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+  return structuredClone(FIXTURE_DOCUMENTS[name]);
 };
 const edited = (vector) => {
   const document = base(vector.base);
@@ -80,9 +83,7 @@ for (const vector of FIXTURE.vectors) {
   test(`${vector.id}: the Web's Load: ${vector.web} (${vector.finding})`, async () => {
     const verdicts = [];
     globalThis.restoresNothingVerdicts = verdicts;
-    const outcome = await importSession({
-      target: { files: [new Blob([JSON.stringify(edited(vector))], { type: 'application/json' })], value: 'selected' }
-    }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const outcome = await importSession(await sessionLoadEvent(edited(vector)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     const repairs = (outcome?.repairs ?? []).filter((repair) => !nodeOnly(repair)).map(({ code, path }) => `${code}@${path}`);
     const verdict = outcome?.status !== 'ok' ? 'refused' : repairs.length > 0 ? 'repaired' : 'loaded';
     assert.equal(verdict, vector.web, JSON.stringify(outcome?.error ?? repairs));
@@ -105,9 +106,7 @@ test('a Session 40-43 display row without the fields Session 44 added loads into
   const [row] = document.config.recordDisplayDrafts;
   delete row.reverseComplementOverride;
   delete row.anchorIntent;
-  const outcome = await importSession({
-    target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
-  }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const outcome = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
   assert.deepEqual((outcome.repairs ?? []).filter((repair) => !nodeOnly(repair)).map(({ code, path }) => `${code}@${path}`), []);
   // The drawing that opens is the file's Circular one (its `ui.mode`).

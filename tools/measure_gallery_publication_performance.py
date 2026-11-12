@@ -35,7 +35,7 @@ def _operation_command(operation: str) -> list[str]:
             "--no-incremental-marking",
             "tests/web/session-request.test.mjs",
             "--project-session",
-            "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw",
         ]
     raise ValueError(f"Unsupported Gallery performance operation: {operation}")
 

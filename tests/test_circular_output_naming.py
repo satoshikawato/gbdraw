@@ -113,4 +113,4 @@ def test_circular_batch_session_writes_all_outputs_and_sidecar(
 
     assert (tmp_path / "record-1.svg").is_file()
     assert (tmp_path / "record-2.svg").is_file()
-    assert (tmp_path / "gbdraw.gbdraw-session.json").is_file()
+    assert (tmp_path / "gbdraw.gbdraw").is_file()

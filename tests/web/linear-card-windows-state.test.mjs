@@ -4,10 +4,9 @@
 // comparisons, whose unit indexes the change shifts; a Start or End edit keeps them (F7).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { gallerySessionDocument, readSavedSession, sessionLoadEvent } from './helpers/session-documents.mjs';
 import { validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
@@ -39,18 +38,16 @@ const { createLinearRecordEdits, createLinearSourceEdits } = await import('../..
 const { createLinearComparisonView } = await import('../../gbdraw/web/js/app/linear-comparison-panel.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
-const lambda = () => JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', import.meta.url), 'utf8'));
-const input = (value) => ({
-  target: { files: [new File([JSON.stringify(value)], 'session.json', { type: 'application/json' })], value: 'selected' }
-});
+const LAMBDA = await gallerySessionDocument('lambda_basic_linear');
+const lambda = () => structuredClone(LAMBDA);
 const load = async (file) => {
-  const loaded = await importSession(input(file), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await sessionLoadEvent(file), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.ok(['ok', 'legacy'].includes(loaded.status), JSON.stringify(loaded.error));
 };
 const saved = async () => {
   const result = await exportSession('windows', { askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
-  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return readSavedSession(result.blob);
 };
 
 test('a card\'s windows load as the card saved them: across the origin, reversed, and empty', async () => {

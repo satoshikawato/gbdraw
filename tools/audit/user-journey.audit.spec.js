@@ -451,8 +451,8 @@ const J3_SESSIONS = [
       .map((caption) => `data-legend-key="${caption}"`).concat('Aminoglycoside biosynthetic gene clusters from') },
   { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz'),
     draftMarks: ['d="M 1350.5,-48 L 1450.5,-48 L 1450.5,-8 L 1350.5,-8 z" data-gbdraw-feature-id="fd6a65bce_record_2"'] },
-  { key: 'gallery-hmmt', name: 'Gallery HmmtDNA_basic_circular (Circular)', file: GALLERY('HmmtDNA_basic_circular.gbdraw-session.json') },
-  { key: 'gallery-bgc', name: 'Gallery BGC0000708-BGC0000713 (Linear, LOSATP comparisons)', file: GALLERY('BGC0000708-BGC0000713.gbdraw-session.json') }
+  { key: 'gallery-hmmt', name: 'Gallery HmmtDNA_basic_circular (Circular)', file: GALLERY('HmmtDNA_basic_circular.gbdraw') },
+  { key: 'gallery-bgc', name: 'Gallery BGC0000708-BGC0000713 (Linear, LOSATP comparisons)', file: GALLERY('BGC0000708-BGC0000713.gbdraw') }
 ];
 
 journey('J3', 'Session round trip across versions', 30, async ({ steps, dir, freshPage }) => {
@@ -508,7 +508,7 @@ journey('J4', 'Legend editing and History', 15, async ({ page, steps }) => {
   let floor;
   await steps.step('Load the Gallery Session HmmtDNA_basic_circular and Generate', async () => {
     await openApp(page);
-    await loadSession(page, GALLERY('HmmtDNA_basic_circular.gbdraw-session.json'));
+    await loadSession(page, GALLERY('HmmtDNA_basic_circular.gbdraw'));
     await generate(page);
     start = await shown();
     floor = (await historyDepth(page)).undo;
@@ -661,7 +661,7 @@ journey('J6', 'Comparisons', 20, async ({ page, steps, dir }) => {
   let before;
   await steps.step('Load the Gallery Session BGC0000708-BGC0000713 (Linear, LOSATP pairs)', async () => {
     await openApp(page);
-    return loadSession(page, GALLERY('BGC0000708-BGC0000713.gbdraw-session.json'));
+    return loadSession(page, GALLERY('BGC0000708-BGC0000713.gbdraw'));
   }, { limitMs: 600_000 });
   await steps.step('Generate equals the loaded preview', async () => {
     const outcome = await generateEqualsLoadedPreview(page, dir, 'bgc');

@@ -173,3 +173,17 @@ assert.equal(await readFileText(plainNamedGz), 'LOCUS plain');
   const other = await readFileBytes(aborted).then(() => null, (cause) => cause);
   assert.equal(other?.name, 'AbortError', 'a failure that is not a refused read keeps its own error');
 }
+
+// PD-OI-116, OV-2947, OV-2948: every input file the page reads through this
+// module may be gzip (GenBank/DDBJ/EMBL, GFF3, FASTA, TSV tables, depth tables,
+// comparison tables), so every input picker of the page offers gzip files. The
+// Session picker reads Sessions, not input files, and the uploader template
+// binds the accept list its user passes.
+{
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const pickers = [...html.matchAll(/\saccept="([^"]*)"/g)].map((match) => match[1])
+    .filter((accept) => !accept.includes('.gbdraw') && !accept.startsWith('accept ||'));
+  assert.ok(pickers.length >= 20, `found ${pickers.length} input pickers`);
+  assert.deepEqual(pickers.filter((accept) => !accept.split(',').includes('.gz') || !accept.split(',').includes('application/gzip')), []);
+}

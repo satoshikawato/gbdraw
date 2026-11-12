@@ -20,8 +20,8 @@ test('chloroplast multipart placement survives strand and label changes and sess
   page.on('dialog', (dialog) => dialog.dismiss());
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(
-    'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
+    'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length === 1), { timeout: 180000 }).toBe(true);
 
@@ -97,7 +97,7 @@ test('chloroplast multipart placement survives strand and label changes and sess
   page = await restoredContext.newPage();
   page.on('dialog', (dialog) => dialog.dismiss());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length === 1), { timeout: 180000 }).toBe(true);
   // The saved preview needs no Python, so opening the first editor starts the Worker.

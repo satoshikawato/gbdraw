@@ -2,15 +2,19 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { gunzipSync } = require('node:zlib');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const { answerChoicePrompt, answerSessionTitle, openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
-const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
-const loadedAnnotationCount = shownSavedDrawing(JSON.parse(require('node:fs').readFileSync(fixture, 'utf8')))
-  .config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
+const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
+let loadedAnnotationCount;
+test.beforeAll(async () => {
+  loadedAnnotationCount = shownSavedDrawing(await readSessionFile(fixture))
+    .config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
+});
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-const input = 'input[accept^=".json,"]';
+const input = 'input[accept*=".gbdraw"]';
 
 const load = async (page, file) => {
   page.on('dialog', dialog => dialog.accept());
@@ -28,7 +32,7 @@ const save = async (page, file, { again = false, title } = {}) => {
   if (title !== undefined) await answerSessionTitle(page, title);
   if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await pending).saveAs(file);
-  return JSON.parse(gunzipSync(await fs.readFile(file)));
+  return (await sessionDocuments()).readSavedSession(new Blob([await fs.readFile(file)]));
 };
 
 const exportSvg = async page => {
@@ -72,7 +76,7 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   // One annotation per row of the loaded Session's sets (the four plastome regions and their four tints).
   expect(before.annotations).toHaveLength(loadedAnnotationCount);
   expect(before.annotations.every(annotation => annotation.key === null)).toBe(true);
-  const beforeFile = info.outputPath('before.gbdraw-session.json.gz');
+  const beforeFile = info.outputPath('before.gbdraw');
   const beforeSaved = await save(page, beforeFile);
   const oldExport = await exportSvg(page);
 
@@ -105,7 +109,7 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   expect(new Set(keys).size).toBe(1);
 
   const workerAfterFailure = await getDiagramWorkerActivity(page);
-  const failedFile = info.outputPath('failed.gbdraw-session.json.gz');
+  const failedFile = info.outputPath('failed.gbdraw');
   const failedSaved = await save(page, failedFile, { again: true });
   expect(await exportSvg(page)).toBe(oldExport);
   const workerAfterSaveAndExport = await getDiagramWorkerActivity(page);
@@ -134,7 +138,7 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
     expect(restored.positions).toEqual(failed.positions);
     expect(restored.annotations).toEqual(failed.annotations);
     expect(await exportSvg(fresh)).toBe(oldExport);
-    const resaved = await save(fresh, info.outputPath('reloaded.gbdraw-session.json.gz'));
+    const resaved = await save(fresh, info.outputPath('reloaded.gbdraw'));
     expect(resourceHashes(resaved)).toEqual(resourceHashes(beforeSaved));
     expect(savedDrawing(resaved, 'circular').renderRequest).toEqual(savedDrawing(beforeSaved, 'circular').renderRequest);
     expect(savedDrawing(resaved, 'circular').results).toEqual(savedDrawing(beforeSaved, 'circular').results);
@@ -206,7 +210,7 @@ test('canceled post-response Generate keeps valid bindings and old artifact thro
   expect(canceled.positions).toEqual([{ selector: 'record-1', row: 1 }]);
   expect(canceled.annotations.every(annotation => annotation.record?.value === 'NC_001879.2'
     && annotation.key?.endsWith('::[0,"NC_001879.2",155943]'))).toBe(true);
-  const canceledFile = info.outputPath('canceled.gbdraw-session.json.gz');
+  const canceledFile = info.outputPath('canceled.gbdraw');
   const saved = await save(page, canceledFile);
   expect(savedDrawing(saved, 'circular').renderRequest).toEqual(before.request);
   expect(savedDrawing(saved, 'circular').config.adv.multi_record_positions).toEqual(canceled.positions);
@@ -269,7 +273,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   await page.evaluate(() => {
     delete window.__GBDRAW_APP__.annotationSets[0].annotations[0].metadata._gbdraw_web_target_record_key;
   });
-  const beforeSaved = await save(page, info.outputPath('multi-before.gbdraw-session.json.gz'), { title: 'S04 multi' });
+  const beforeSaved = await save(page, info.outputPath('multi-before.gbdraw'), { title: 'S04 multi' });
   const before = await snapshot(page);
   // Record Order rows name the records by identity (`<card uid>:<k>`).
   const card = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().circularSources[0].uid);
@@ -295,7 +299,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   expect(failed.positions.map(position => position.selector)).toEqual([`${card}:1`, `${card}:2`]);
   expect(failed.annotations[0].record).toEqual(before.annotations[0].record);
   expect(failed.annotations[0].key).toMatch(/::\[1,"RecB",300\]$/);
-  const failedFile = info.outputPath('multi-failed.gbdraw-session.json.gz');
+  const failedFile = info.outputPath('multi-failed.gbdraw');
   const failedSaved = await save(page, failedFile, { again: true });
   expect(resourceHashes(failedSaved)).toEqual(resourceHashes(beforeSaved));
   expect(savedDrawing(failedSaved, 'circular').renderRequest).toEqual(savedDrawing(beforeSaved, 'circular').renderRequest);

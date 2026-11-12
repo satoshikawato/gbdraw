@@ -13,8 +13,9 @@ annotation targets moved to their source feature, which Load's notice names
 
 from __future__ import annotations
 
+import base64
 import json
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from gbdraw.session import LegacyResultSetSources, StoredResults, drawings_document_from_legacy
 from gbdraw.session_contract import GbdrawSession51
@@ -63,8 +64,16 @@ def legacy_session_to_drawings_json(document_json: str, stored_request_schema_js
         return json.dumps(
             {"error": serialize_web_error(exc, operation=UPGRADE_LEGACY_SESSION_OPERATION, stage="helper")}
         )
+    # The Web reads the resources of this reply as it reads a JSON Session's:
+    # each with its bytes in base64 (``services/session-resource-backing.js``).
+    resources = legacy.resources
+    document = cast(GbdrawSession51, {**legacy.document, "resources": {
+        resource_id: {**descriptor, "encoding": "base64",
+                      "data": base64.b64encode(resources.read(resource_id)).decode("ascii")}
+        for resource_id, descriptor in resources.descriptors.items()
+    }})
     payload: LegacySessionDrawings = {
-        "document": legacy.document,
+        "document": document,
         "storedResults": legacy.stored_results,
         "resultSetSources": legacy.result_set_sources,
         "warnings": list(legacy.repairs),

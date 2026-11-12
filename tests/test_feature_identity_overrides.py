@@ -46,6 +46,7 @@ from gbdraw.features.ids import compute_feature_hash
 from gbdraw.features.source import FeatureIdentity, IdentityBinding, resolve_feature_identities
 from gbdraw.io.regions import parse_region_spec
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import read_session_payload
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INPUTS = Path(__file__).parent / "test_inputs"
@@ -598,7 +599,7 @@ def test_cli_session_replay_applies_rows_and_logs_notices(tmp_path, caplog):
             FeatureOverride("k", "fdeadbeef", feature_visibility="off"),
         ),
     )
-    session = tmp_path / "identity.gbdraw-session.json"
+    session = tmp_path / "identity.gbdraw"
     document = save_session_document(session, request)
     assert session_view(document.to_dict())["renderRequest"]["diagramOptions"]["featureOverrides"] == [
         row.to_mapping() for row in request.options.feature_overrides
@@ -652,13 +653,13 @@ def test_session_catalog_of_cropped_same_coordinate_features_beside_another_reco
     twin = '     CDS             301..600\n                     /locus_tag="TWIN_A"\n'
     (tmp_path / "a.gb").write_text(testa.replace("     CDS             301..600\n", twin + "     CDS             301..600\n"))
     (tmp_path / "b.gb").write_text(testb)
-    session = tmp_path / "out.gbdraw-session.json"
+    session = tmp_path / "out.gbdraw"
     linear_main([
         "--gbk", str(tmp_path / "a.gb"), str(tmp_path / "b.gb"), "--region", "TESTA:201-3800",
         "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(session),
     ])
 
-    item = session_view(json.loads(session.read_text(encoding="utf-8")))["editorState"]["featureCatalog"]["items"][0]
+    item = session_view(read_session_payload(session))["editorState"]["featureCatalog"]["items"][0]
     twins = sorted(
         (feature["svgId"], feature["biologicalFeatureId"])
         for feature in item["features"]

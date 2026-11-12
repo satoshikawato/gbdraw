@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload
 import json
 from pathlib import Path
 import sys
@@ -83,7 +84,7 @@ def _searches(log: Path) -> list[list[str]]:
 
 
 def _session(prefix: Path) -> dict:
-    return drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    return drawing_view(read_session_payload(prefix.with_suffix(".gbdraw")))
 
 
 def _diagnostic(excinfo: pytest.ExceptionInfo) -> dict:
@@ -161,7 +162,7 @@ def test_saved_session_replays_without_losat(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
     replay = tmp_path / "replay"
     linear_main([
-        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "--session", str(prefix.with_suffix(".gbdraw")),
         "-o", str(replay), "-f", "svg",
     ])
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
@@ -179,7 +180,7 @@ def test_replayed_session_resaves_losatn_edges_as_nucleotide_blast(tmp_path: Pat
     ])
     replay = tmp_path / "replay"
     linear_main([
-        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "--session", str(prefix.with_suffix(".gbdraw")),
         "--save_session", "-o", str(replay), "-f", "svg",
     ])
     saved, resaved = _session(prefix), _session(replay)

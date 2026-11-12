@@ -7,6 +7,7 @@ const { promisify } = require('node:util');
 const path = require('node:path');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerChoicePrompt, answerLoadRepairs, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 
 // A CLI Session of three single-record GenBank files (`--gbk a b c`). The
 // Session 44 bound them as one composite `c_gb`; Load makes one Circular File
@@ -15,6 +16,11 @@ const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const seed = 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz';
 const recordCount = 3;
 const loadTimeout = 300_000;
+const OLDER_PAYLOAD_ROWS = [
+  'Saved diagram: the settings of the saved diagram (renderRequest) could not be read. The file loads as settings only; '
+    + 'the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.',
+  'Input files: 1 entry of resources.record-1-genbank could not be read and was dropped.'
+];
 const generateTimeout = 600_000;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const resourceIdentity = descriptor => ({
@@ -54,7 +60,7 @@ const load = async (browser, file, contexts, viewport = { width: 1600, height: 1
     };
   });
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: loadTimeout }).toBe(true);
   expect(external).toEqual([]);
@@ -124,11 +130,11 @@ const save = async (page, testInfo, label, { again = false } = {}) => {
       window.__GBDRAW_APP__.errorLog || 'pending'), { timeout: loadTimeout }).not.toBe('pending');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
     expect(download).not.toBeNull();
-    const saved = testInfo.outputPath(`${label}.gbdraw-session.json.gz`);
+    const saved = testInfo.outputPath(`${label}.gbdraw`);
     await download.saveAs(saved);
     expect(await download.failure()).toBeNull();
     const bytes = await fs.readFile(saved);
-    const session = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString());
+    const session = await (await sessionDocuments()).readSavedSession(new Blob([bytes]));
     const metrics = await page.evaluate(() => window.__CARD_METRICS__);
     await fs.writeFile(testInfo.outputPath(`${label}-metrics.json`), JSON.stringify({
       milliseconds: performance.now() - started, gzipBytes: bytes.length,
@@ -205,10 +211,9 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       const bindings = shownSavedDrawing(session).webFiles.bindings;
       expect(['c_gb', 'c_gff', 'c_fasta'].filter(slot => Object.hasOwn(bindings, slot))).toEqual([]);
       const rows = savedCards(session, original.cards);
-      // Save decodes nothing, and encodes no File Generate described more than once (OV-2612).
+      // Save decodes and encodes no base64: each input is an entry of the Session file (receipt session.file-container).
       expect(metrics.filter(metric => metric.name === 'base64DecodeCount')).toEqual([]);
-      const encoded = metrics.filter(metric => metric.name === 'base64EncodeCount').map(metric => metric.resourceName);
-      expect(new Set(encoded).size).toBe(encoded.length);
+      expect(metrics.filter(metric => metric.name === 'base64EncodeCount')).toEqual([]);
       const resources = Object.fromEntries(Object.entries(session.resources)
         .map(([id, descriptor]) => [id, resourceIdentity(descriptor)]));
       for (const [id, identity] of Object.entries(generated.resources)) expect(resources[id]).toEqual(identity);
@@ -278,7 +283,7 @@ test('Session CLI sidecar keeps the Circular File cards for fresh Web Load and G
     const { saved, session } = await save(page, testInfo, 'cli-source');
     await page.context().close();
     const prefix = testInfo.outputPath('cli-replayed');
-    const sidecar = `${prefix}.json.gz`;
+    const sidecar = `${prefix}.gbdraw`;
     const { stdout, stderr } = await promisify(execFile)('python', [
       '-m', 'gbdraw.cli', 'circular', '--session', saved,
       '-o', prefix, '--session_output', sidecar
@@ -288,7 +293,7 @@ test('Session CLI sidecar keeps the Circular File cards for fresh Web Load and G
       timeout: generateTimeout, maxBuffer: 1_000_000
     });
     await fs.writeFile(testInfo.outputPath('cli.log'), stdout + stderr);
-    const replayed = JSON.parse(gunzipSync(await fs.readFile(sidecar)));
+    const replayed = await (await sessionDocuments()).readSavedSession(new Blob([await fs.readFile(sidecar)]));
     expect([replayed.version, shownSavedDrawing(replayed).webFiles.bindings.schema, shownSavedDrawing(replayed).renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
     // The replay keeps each card, its uid and its file's name and bytes.
     const expected = savedCards(session, original.cards);
@@ -321,11 +326,12 @@ test('Session import lists malformed File card bindings and Cancel keeps existin
   test.setTimeout(6 * loadTimeout);
   const contexts = [];
   try {
-    const seedPath = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
+    const seedPath = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw';
     const { page, external } = await load(browser, seedPath, contexts);
     const before = await snapshot(page);
     const beforeHistory = await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
-    const seedSession = JSON.parse(await fs.readFile(seedPath));
+    const { gallerySessionDocument, sessionFileOf } = await sessionDocuments();
+    const seedSession = await gallerySessionDocument('HmmtDNA_basic_circular');
     const seedDrawing = shownSavedDrawing(seedSession);
     const resourceId = seedDrawing.renderRequest.records[0].source.resourceId;
     const at = `drawings[${seedSession.drawings.indexOf(seedDrawing)}]`;
@@ -348,18 +354,17 @@ test('Session import lists malformed File card bindings and Cancel keeps existin
       dangling: s => { cards(s)[0].gb.resourceId = 'missing'; },
       metadata: s => { cards(s)[0].gb.lastModified = -1; },
       // The slot the Circular input had before the File cards is no field of a Session 51 drawing.
-      retired: s => { shownSavedDrawing(s).webFiles.bindings.c_gb = structuredClone(leaf); },
-      payload: s => { s.resources[resourceId].encoding = 'unsupported'; }
+      retired: s => { shownSavedDrawing(s).webFiles.bindings.c_gb = structuredClone(leaf); }
+      // An input whose bytes cannot be read is no binding repair in a Session file
+      // container: its reader refuses the file before Load changes anything
+      // (session-import-worker.playwright.spec.js). An older JSON Session still
+      // names its input bytes in its resources; its dropped-entry repair is the
+      // JSON Session 44 case after this loop.
     };
     const rows = {
       schema: inventoryDropped, missing: inventoryDropped, list: inventoryDropped,
       field: entryDropped('[0]'), uid: entryDropped('[0]'), repeated: entryDropped('[1]'), null: entryDropped('[0]'),
-      retired: [`Session file: the field ${at}.webFiles.bindings.c_gb could not be read and was left out.`],
-      payload: [
-        `Saved diagram: the settings of the saved diagram (${at}.renderRequest) could not be read. The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.`,
-        `Input files: 1 entry of resources.${resourceId} could not be read and was dropped.`,
-        ...entryDropped('[0].gb')
-      ]
+      retired: [`Session file: the field ${at}.webFiles.bindings.c_gb could not be read and was left out.`]
     };
     const canceled = [];
     for (const [label, mutate] of Object.entries(mutations)) {
@@ -368,8 +373,8 @@ test('Session import lists malformed File card bindings and Cancel keeps existin
       invalidDrawing.webFiles ||= {};
       invalidDrawing.webFiles.bindings = { schema: 2, circularSources: [structuredClone(card)] };
       mutate(invalid);
-      await page.locator('input[accept^=".json,"]').setInputFiles({
-        name: `${label}.gbdraw-session.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalid))
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles({
+        name: `${label}.gbdraw`, mimeType: 'application/octet-stream', buffer: Buffer.from(await (await sessionFileOf(invalid)).arrayBuffer())
       });
       // The rows name places in the file, never the stored file names.
       await answerLoadRepairs(page, rows[label] || entryDropped('[0].gb'), 'cancel', { timeout: loadTimeout });
@@ -378,6 +383,19 @@ test('Session import lists malformed File card bindings and Cancel keeps existin
       expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(beforeHistory);
       canceled.push(label);
     }
+    // A JSON Session 44 whose input payload cannot be read: Load lists the
+    // dropped resource entry (and what the drawing loses with it) before it
+    // changes anything, and Cancel keeps the current work.
+    const older = JSON.parse(gunzipSync(await fs.readFile('tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz')));
+    older.resources['record-1-genbank'].encoding = 'unsupported';
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles({
+      name: 'payload.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(older))
+    });
+    await answerLoadRepairs(page, OLDER_PAYLOAD_ROWS, 'cancel', { timeout: loadTimeout });
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: loadTimeout }).toBe(false);
+    expect(await snapshot(page)).toEqual(before);
+    expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(beforeHistory);
+    canceled.push('older-payload');
     expect(external).toEqual([]);
     await fs.writeFile(testInfo.outputPath('transactional-cancels.json'), JSON.stringify(canceled, null, 2));
   } finally {

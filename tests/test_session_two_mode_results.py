@@ -9,6 +9,7 @@ drawing of its own mode and a re-save replaces only that drawing's set.
 
 from __future__ import annotations
 
+import base64
 import copy
 import gzip
 import json
@@ -30,7 +31,8 @@ from gbdraw.api import (
 from gbdraw.session import session_drawing_artifacts
 from gbdraw.cli_utils import session as cli_session
 from gbdraw.exceptions import ValidationError
-from gbdraw.session_io import load_session, validate_session, write_session_json
+from gbdraw.session_io import validate_session
+from tests.utils.session_files import read_session_payload, write_session_file
 from gbdraw.session_resources import canonical_resource_ids
 from tests.utils.two_mode_session import two_mode_session
 
@@ -111,11 +113,11 @@ def test_session_document_names_each_mode_as_a_drawing(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("mode", ("circular", "linear"))
 def test_cli_session_replay_renders_the_set_of_its_own_mode(tmp_path: Path, mode: str) -> None:
-    source = tmp_path / "two.gbdraw-session.json"
-    write_session_json(source, two_mode_session())
+    source = tmp_path / "two.gbdraw"
+    write_session_file(source, two_mode_session())
     output = tmp_path / f"replayed-{mode}"
     assert cli_session.render_canonical_session_if_present(
-        load_session(str(source)),
+        read_session_payload(source),
         mode=cast(Literal["circular", "linear"], mode),
         output_override=str(output),
         format_override="svg",
@@ -129,12 +131,12 @@ def test_cli_session_replay_renders_the_set_of_its_own_mode(tmp_path: Path, mode
 
 
 def test_cli_session_resave_keeps_the_other_mode_result_set(tmp_path: Path) -> None:
-    source = tmp_path / "two.gbdraw-session.json"
+    source = tmp_path / "two.gbdraw"
     session = two_mode_session()
-    write_session_json(source, session)
-    resaved = tmp_path / "resaved.gbdraw-session.json"
+    write_session_file(source, session)
+    resaved = tmp_path / "resaved.gbdraw"
     assert cli_session.render_canonical_session_if_present(
-        load_session(str(source)),
+        read_session_payload(source),
         mode="linear",
         output_override=str(tmp_path / "replayed"),
         format_override="svg",
@@ -153,15 +155,15 @@ def test_cli_session_resave_keeps_the_other_mode_result_set(tmp_path: Path) -> N
     assert circular["editorState"]["featureCatalog"] == session["editorState"]["featureCatalog"]
     # The kept Circular set is unchanged, and every resource it names keeps
     # its ID and bytes in the rebuilt table.
-    resaved_resources = document.to_dict()["resources"]
     for resource_id in canonical_resource_ids(session["renderRequest"]):
-        assert resaved_resources[resource_id]["data"] == session["resources"][resource_id]["data"]
+        assert document.resources.read(resource_id) == base64.b64decode(session["resources"][resource_id]["data"])
     # The re-rendered Linear set names its own bytes.
     linear = session_drawing_artifacts(document, "linear").fields
     assert linear["renderRequest"]["mode"] == "linear"
-    assert _first_source_bytes(dict(linear)) == _first_source_bytes({
+    linear_resource_id = linear["renderRequest"]["records"][0]["source"]["resourceId"]
+    assert document.resources.read(linear_resource_id) == base64.b64decode(_first_source_bytes({
         **session, "renderRequest": session["otherModeResult"]["renderRequest"]
-    })
+    }))
     with materialize_session(document, output_directory=tmp_path) as materialized:
         assert isinstance(session_to_request(materialized, drawing="circular"), CircularDiagramRequest)
 

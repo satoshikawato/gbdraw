@@ -44,7 +44,6 @@ from gbdraw.api.session_compat import (
     adapt_session_request,
     canonical_payload_for_session_decode,
     render_session_compatible_request,
-    replace_resource_bytes,
     rewrite_protein_artifact_references,
 )
 from gbdraw.exceptions import ValidationError
@@ -54,7 +53,6 @@ from gbdraw.session import (
     SessionConversionError,
     SessionDocument,
     SessionDrawingSpec,
-    SessionVersionError,
     build_session_document,
     drawings_document_from_legacy,
     load_session_document,
@@ -67,12 +65,15 @@ from gbdraw.session import (
 )
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
+    SessionResources,
+    split_resource_bytes,
     migrate_persisted_web_state_field_names,
     migrate_session_annotation_targets,
     migrate_session_feature_edits,
     migrate_session_hash_rules,
     source_hash_selector_value,
 )
+from tests.utils.session_files import embedded_session, load_session_mapping, read_session_payload, write_session_file
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     CanonicalRequestEncodingError,
@@ -177,6 +178,7 @@ def test_cli_writer_projects_released_web_config_to_session_46_mode_slices() -> 
     adjunct, web_file_inventory = (
         session_migration.project_session_adjunct_for_current_write(
             source,
+            SessionResources({}, {}),
             source_version=41,
         )
     )
@@ -280,7 +282,7 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
     tmp_path: Path,
 ) -> None:
     document = load_session_document(fixture_path)
-    current_path = tmp_path / f"{fixture_path.stem}.current.json"
+    current_path = tmp_path / f"{fixture_path.stem}.current.gbdraw"
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
@@ -347,7 +349,7 @@ def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
     tmp_path: Path,
 ) -> None:
     output_prefix = tmp_path / "legacy-aligned"
-    sidecar_path = tmp_path / "legacy-aligned.gbdraw-session.json"
+    sidecar_path = tmp_path / "legacy-aligned.gbdraw"
     rerendered_prefix = tmp_path / "legacy-aligned-rerendered"
 
     linear_main(
@@ -397,7 +399,7 @@ def test_release_0_13_0_session_replays_its_reverse_complemented_alignment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    session_path = tmp_path / "bgc.gbdraw-session.json"
+    session_path = tmp_path / "bgc.gbdraw"
     with gzip.open(_RELEASE_0_13_0_SESSION, "rt", encoding="utf-8") as handle:
         session_path.write_text(handle.read(), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -439,7 +441,7 @@ def test_release_0_13_0_session_replays_its_reverse_complemented_alignment(
             for decision in request.similarity_alignment.records
         ]
 
-    saved = load_session_document(tmp_path / "replay.gbdraw-session.json")
+    saved = load_session_document(tmp_path / "replay.gbdraw")
     with materialize_session(saved, output_directory=tmp_path) as materialized:
         replayed = session_to_request(materialized, drawing="linear")
     with materialize_session(
@@ -455,7 +457,7 @@ def test_release_0_13_0_session_replays_its_reverse_complemented_alignment(
 def test_released_legacy_alignment_session_rejects_ambiguous_group_metadata(
     tmp_path: Path,
 ) -> None:
-    payload = load_session_document(_VERSION_39_SESSION).to_dict()
+    payload = _embedded(load_session_document(_VERSION_39_SESSION))
     target = "ambiguous-legacy-target"
     payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] = target
     payload["orthogroupState"]["groups"][0]["members"][0]["label"] = target
@@ -503,7 +505,7 @@ def test_session_adapter_passes_plain_prepared_request_to_current_renderer(
     monkeypatch,
 ) -> None:
     request = _linear_request(tmp_path)
-    session_artifacts = build_session_document(request).to_dict()
+    session_artifacts = build_session_document(request)
     captured: list[type[PreparedDiagramRequest]] = []
 
     def fake_render(
@@ -565,6 +567,30 @@ def _released_canonical_session(
     if isinstance(nested_output, dict):
         nested_output["outputPrefix"] = "ignored-legacy-prefix"
     return data
+
+
+def _embedded(document: SessionDocument) -> dict[str, Any]:
+    """``document`` as a payload with its resources' bytes embedded."""
+
+    return embedded_session(document.to_dict(), document.resources.sources)
+
+
+def _with_bytes(entry: dict[str, Any], content: bytes) -> dict[str, Any]:
+    """An embedded resource entry holding ``content`` instead of its bytes."""
+
+    return {
+        **{key: value for key, value in entry.items() if key != "checksum"},
+        "size": len(content),
+        "encoding": "base64",
+        "data": base64.b64encode(content).decode("ascii"),
+    }
+
+
+def _split_for_resources(payload: dict[str, Any]) -> tuple[Any, Any]:
+    """The descriptors and byte sources of an embedded payload, as ``SessionResources`` takes them."""
+
+    document, sources = split_resource_bytes(payload)
+    return document["resources"], sources
 
 
 def _drawing(data: dict[str, Any] | SessionDocument):
@@ -714,7 +740,7 @@ def test_unresolved_session_batch_preflights_all_resolved_outputs(
         ),
         output_policy=CircularBatchOutputPolicy(output_prefix=output_prefix),
     )
-    session_artifacts = build_session_document(request).to_dict()
+    session_artifacts = build_session_document(request)
     second_output = tmp_path / "diagram_2.svg"
     second_output.write_text("occupied", encoding="utf-8")
     monkeypatch.setattr(
@@ -924,10 +950,10 @@ def test_released_session_versions_write_current_reloadable_sidecars(
             request_schema=request_schema,
         )
     )
-    session_path = tmp_path / f"released-v{version}.gbdraw-session.json"
+    session_path = tmp_path / f"released-v{version}.gbdraw"
     session_path.write_text(json.dumps(source_session), encoding="utf-8")
     output_prefix = tmp_path / f"rendered-v{version}"
-    sidecar_path = tmp_path / f"rendered-v{version}.gbdraw-session.json.gz"
+    sidecar_path = tmp_path / f"rendered-v{version}.gbdraw"
 
     linear_main(
         [
@@ -1043,7 +1069,7 @@ def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(
     tmp_path: Path,
 ) -> None:
     output_prefix = tmp_path / "released-replay"
-    sidecar_path = tmp_path / "released-replay.gbdraw-session.json.gz"
+    sidecar_path = tmp_path / "released-replay.gbdraw"
 
     linear_main(
         [
@@ -1094,7 +1120,7 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
     tmp_path: Path,
 ) -> None:
     source_document = load_session_document(_VERSION_39_SESSION)
-    source_payload = source_document.to_dict()
+    source_payload = _embedded(source_document)
     record_uids = [
         str(row["uid"])
         for row in source_payload["config"]["linearRecordLayout"]["rows"]
@@ -1136,9 +1162,11 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
             ],
         },
     }
+    split_source, split_sources = split_resource_bytes(migration_source)
     adjunct, web_file_inventory = (
         session_migration.project_session_adjunct_for_current_write(
             migration_source,
+            SessionResources(split_source["resources"], split_sources),
             source_version=39,
         )
     )
@@ -1157,9 +1185,9 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
         rewritten = build_session_document(
             drawings=[SessionDrawingSpec(session_to_request(materialized), state=linear_state)],
             web_file_inventory=web_file_inventory,
-        ).to_dict()
+        )
 
-    rewritten = drawing_view(rewritten, mode="linear")
+    rewritten = drawing_view(_embedded(rewritten), mode="linear")
     assert rewritten["modes"]["linear"]["config"]["linearComparisonPlan"]["edges"] == [
         {
             "id": "dormant-v39-upload",
@@ -1191,7 +1219,7 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
     source_document = upgrade_session_document(
         load_session_document(_SYNTHETIC_CONSERVATION_SESSION), temporary_directory=tmp_path
     ).document
-    source_payload = drawing_view(source_document.to_dict(), mode="circular")
+    source_payload = drawing_view(_embedded(source_document), mode="circular")
     source_web_files = source_payload["webFiles"]
     source_resources = source_payload["resources"]
     source_ids = source_web_files["conservationLosatFastaSources"]
@@ -1204,16 +1232,17 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
     adjunct, web_file_inventory = (
         session_migration.project_session_adjunct_for_current_write(
             source_payload,
+            SessionResources(*_split_for_resources(source_payload)),
             source_version=source_document.version,
         )
     )
     assert web_file_inventory is not None
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
-        rewritten = build_session_document(
+        rewritten = _embedded(build_session_document(
             drawings=[SessionDrawingSpec(session_to_request(materialized, drawing="circular"), state=adjunct)],
             web_file_inventory=web_file_inventory,
-        ).to_dict()
+        ))
 
     rewritten = drawing_view(rewritten, mode="circular")
     rewritten_web_files = rewritten["webFiles"]
@@ -1240,7 +1269,7 @@ def test_released_schema_v2_fixture_sidecar_collision_is_atomic(
     tmp_path: Path,
 ) -> None:
     output_prefix = tmp_path / "released-replay"
-    sidecar_path = tmp_path / "occupied.gbdraw-session.json"
+    sidecar_path = tmp_path / "occupied.gbdraw"
     sidecar_path.write_text("keep this session", encoding="utf-8")
 
     with pytest.raises(ValidationError, match="Session output already exists"):
@@ -1355,10 +1384,10 @@ def test_released_noncanonical_linear_cli_replay_promotes_current_sidecar(
             "generatedBy": "gbdraw",
         },
     }
-    session_path = tmp_path / "legacy-v30.gbdraw-session.json"
+    session_path = tmp_path / "legacy-v30.gbdraw"
     session_path.write_text(json.dumps(session), encoding="utf-8")
     output_prefix = tmp_path / "legacy-replay"
-    sidecar_path = tmp_path / "legacy-replay.gbdraw-session.json.gz"
+    sidecar_path = tmp_path / "legacy-replay.gbdraw"
 
     linear_main(
         [
@@ -1462,7 +1491,7 @@ def test_cli_replay_validates_the_sidecar_drafts_before_it_renders(
         return result
 
     monkeypatch.setattr(session_migration, "split_draft_into_modes", split_without_scopes)
-    sidecar = tmp_path / "out.gbdraw-session.json"
+    sidecar = tmp_path / "out.gbdraw"
 
     with pytest.raises(ValidationError):
         linear_main(
@@ -1495,7 +1524,7 @@ def test_session_44_placement_drafts_survive_the_cli_sidecar(
     source = json.loads(gzip.decompress(fixture.read_bytes()))
     assert source["version"] == 44
     record_key = source["renderRequest"]["records"][0]["recordKey"]
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
 
     main(
         [
@@ -1581,9 +1610,9 @@ def _gallery_session(_tmp_path: Path) -> dict[str, Any]:
         / "web"
         / "gallery"
         / "sessions"
-        / "tobacco-chloroplast.gbdraw-session.json"
+        / "tobacco-chloroplast.gbdraw"
     )
-    return json.loads(path.read_text(encoding="utf-8"))
+    return read_session_payload(path)
 
 
 @pytest.mark.parametrize(
@@ -1598,9 +1627,9 @@ def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
     # The Web writes a Session 49 (one drawing); the Python helper builds the 48 view.
     source = session_view(written)
     assert source["renderRequest"]["mode"] == "circular"
-    source_path = tmp_path / "source.gbdraw-session.json"
-    source_path.write_text(json.dumps(written), encoding="utf-8")
-    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    source_path = tmp_path / "source.gbdraw"
+    write_session_file(source_path, written)
+    sidecar = tmp_path / "resaved.gbdraw"
 
     circular_main(
         [
@@ -1611,7 +1640,7 @@ def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
         ]
     )
 
-    saved = drawing_view(load_session_document(sidecar).to_dict())
+    saved = drawing_view(read_session_payload(sidecar))
     # Every input's bytes are unchanged, so every resource keeps its ID,
     # file name and metadata, and the request names the same resources.
     assert saved["resources"] == source["resources"]
@@ -1911,7 +1940,7 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, fixture: str, main: Any
 ) -> None:
     case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
 
     main(
         [
@@ -1976,7 +2005,7 @@ def test_session_33_rendered_id_feature_edits_survive_the_cli_sidecar(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, fixture: str, main: Any
 ) -> None:
     case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
 
     main(
         [
@@ -2066,7 +2095,7 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     case = _MAIN_ANNOTATION_TARGET_VECTOR
     fixture = Path(__file__).parent / "fixtures" / case["fixture"]
     source = json.loads(gzip.decompress(fixture.read_bytes()))
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
     caplog.set_level("INFO", logger=session_migration.__name__)
 
     linear_main(
@@ -2220,7 +2249,7 @@ def test_session_30_rendered_id_color_rule_is_named_in_the_cli_sidecar(
     # by its source hash fbc76b20f (OV-416, OV-2043) and nothing is reported.
     fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
     source = json.loads(gzip.decompress(fixture.read_bytes()))
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
     caplog.set_level("INFO")
 
     linear_main(
@@ -2243,7 +2272,7 @@ def test_session_30_replay_draws_the_draft_colors(tmp_path: Path) -> None:
     # Generate of the file draws: TESTB_0006 in the rule's #ff0000, and the
     # written Session's request carries that rule and the palette.
     fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
 
     linear_main(
         [
@@ -2255,7 +2284,7 @@ def test_session_30_replay_draws_the_draft_colors(tmp_path: Path) -> None:
     )
 
     assert "#ff0000" in (tmp_path / "replay.svg").read_text(encoding="utf-8").lower()
-    saved = load_session_document(sidecar).to_dict()
+    saved = read_session_payload(sidecar)
     colors = drawing_view(saved, mode="linear")["renderRequest"]["diagramOptions"]["colors"]
     assert colors["defaultColorsPalette"] == "default"
     table = saved["resources"][colors["colorTable"]["resourceId"]]
@@ -2286,8 +2315,8 @@ def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path)
     # The canonical TSV round trip used to read the empty cell as a missing
     # value, which replayed the label as the text "nan" (OV-138).
     fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-circular.v33.gbdraw-session.json.gz"
-    first = tmp_path / "first.gbdraw-session.json"
-    second = tmp_path / "second.gbdraw-session.json"
+    first = tmp_path / "first.gbdraw"
+    second = tmp_path / "second.gbdraw"
 
     circular_main(
         ["--session", str(fixture), "--output", str(tmp_path / "first"),
@@ -2299,7 +2328,7 @@ def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path)
     )
 
     for sidecar in (first, second):
-        table = load_session_document(sidecar).to_dict()["resources"]["label-override-table"]
+        table = read_session_payload(sidecar)["resources"]["label-override-table"]
         rows = base64.b64decode(table["data"]).decode("utf-8").splitlines()
         assert rows[1].split("\t") == ["NC_012920.1", "CDS", "hash", "^f48b7bf2f$", ""]
     first_svg = (tmp_path / "first.svg").read_text(encoding="utf-8")
@@ -2318,16 +2347,14 @@ _SESSION_FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
 
 
 def _v47_protein_session(name: str, tmp_path: Path, resource_id: str = "", edit=None) -> Path:
-    from gbdraw.api.session_compat import replace_resource_bytes
-
     data = json.loads(gzip.decompress((_SESSION_FIXTURES / f"{name}.v47.gbdraw-session.json.gz").read_bytes()))
     if edit is not None:
         typed = json.loads(base64.b64decode(data["resources"][resource_id]["data"]))
         edit(typed["value"]["fields"])
-        data["resources"][resource_id] = replace_resource_bytes(
+        data["resources"][resource_id] = _with_bytes(
             data["resources"][resource_id], json.dumps(typed, separators=(",", ":")).encode("utf-8"),
         )
-    path = tmp_path / f"{name}.gbdraw-session.json"
+    path = tmp_path / f"{name}.gbdraw"
     path.write_text(json.dumps(data), encoding="utf-8")
     return path
 
@@ -2373,7 +2400,7 @@ def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_fram
         )
 
     expected = (_SESSION_FIXTURES / f"{name}.v47.replay.svg").read_text(encoding="utf-8")
-    resaved = tmp_path / "resaved.gbdraw-session.json"
+    resaved = tmp_path / "resaved.gbdraw"
     assert _replay(source, tmp_path, "replay", "--session_output", str(resaved)) == expected
     saved = load_session_document(resaved)
     assert saved.version == CURRENT_SESSION_VERSION
@@ -2404,7 +2431,7 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
     source = _SESSION_FIXTURES / f"BGC0000708-BGC0000709-rc.{_DRAWN_ID_SESSIONS[version]}.gbdraw-session.json.gz"
     document = load_session_document(source)
     assert document.version == version
-    direct = tmp_path / "direct.gbdraw-session.json"
+    direct = tmp_path / "direct.gbdraw"
     with materialize_session(document, output_directory=tmp_path) as materialized:
         stored = session_to_request(materialized)
         # A direct save writes the tables in the search frame, as an upgrade does.
@@ -2444,7 +2471,7 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
             plan_request(replace(stored, options=replace(
                 stored.options, linear_comparisons=(replace(table, matches=tagged),))))
 
-    resaved = tmp_path / "resaved.gbdraw-session.json"
+    resaved = tmp_path / "resaved.gbdraw"
     first = _replay(source, tmp_path, "replay", "--session_output", str(resaved))
     saved = load_session_document(resaved)
     assert saved.version == CURRENT_SESSION_VERSION
@@ -2462,7 +2489,7 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
     # The Web Worker helper returns the table the upgrade writes (OV-1181).
     from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
 
-    upgraded = upgrade_session_document(document, temporary_directory=tmp_path).document.to_dict()
+    upgraded = _embedded(upgrade_session_document(document, temporary_directory=tmp_path).document)
     with materialize_session(document, output_directory=tmp_path) as materialized:
         helper = json.loads(stored_protein_results_to_search_frame_json(
             json.dumps({"version": version, "renderRequest": document.to_dict()["renderRequest"]}),
@@ -2484,13 +2511,13 @@ def test_early_session_table_with_only_a_header_is_written_as_stored(
     entry = data["resources"]["comparison-resolved-1"]
     header = base64.b64decode(entry["data"]).split(b"\n", 1)[0] + b"\n"
     assert b"subject_feature_svg_id" in header
-    data["resources"]["comparison-resolved-1"] = replace_resource_bytes(entry, header)
+    data["resources"]["comparison-resolved-1"] = _with_bytes(entry, header)
     source = tmp_path / "header-only.v39.gbdraw-session.json"
     source.write_text(json.dumps(data), encoding="utf-8")
     document = load_session_document(source)
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
-        save_session_document(tmp_path / "direct.gbdraw-session.json", request)
+        save_session_document(tmp_path / "direct.gbdraw", request)
         [table] = request.options.linear_comparisons
         assert table.matches.empty and not table.drawn_feature_ids
     assert upgrade_session_document(source).document.version == CURRENT_SESSION_VERSION
@@ -2574,8 +2601,8 @@ def test_a_session_47_result_matching_neither_frame_draws_but_is_not_written(
 
     assert "<svg" in _replay(source, tmp_path, "replay")
     with pytest.raises(SessionConversionError, match="matches neither strand"):
-        _replay(source, tmp_path, "written", "--session_output", str(tmp_path / "out.gbdraw-session.json"))
-    assert not (tmp_path / "out.gbdraw-session.json").exists()
+        _replay(source, tmp_path, "written", "--session_output", str(tmp_path / "out.gbdraw"))
+    assert not (tmp_path / "out.gbdraw").exists()
     with pytest.raises(SessionConversionError):
         upgrade_session_document(source, temporary_directory=tmp_path)
 
@@ -2588,7 +2615,7 @@ def test_the_worker_helper_converts_a_session_47_drawing_like_the_upgrade(tmp_pa
     source = _v47_protein_session("BGC0000708-BGC0000713", tmp_path)
     document = load_session_document(source)
     data = document.to_dict()
-    upgraded = upgrade_session_document(document, temporary_directory=tmp_path).document.to_dict()
+    upgraded = _embedded(upgrade_session_document(document, temporary_directory=tmp_path).document)
     with materialize_session(document, output_directory=tmp_path) as materialized:
         paths = json.dumps({key: str(path) for key, path in materialized.resource_paths.items()})
 
@@ -2628,8 +2655,6 @@ def test_the_worker_helper_converts_a_session_47_drawing_like_the_upgrade(tmp_pa
 def test_an_upgrade_of_a_session_40_refuses_a_result_matching_neither_frame(tmp_path: Path) -> None:
     # Review finding 2: the 31-44 upgrade path writes Session 48 too, so it
     # refuses an unconverted item as the Session 46/47 path does.
-    from gbdraw.api.session_compat import replace_resource_bytes
-
     data = json.loads(_VERSION_40_LEGACY_ALIGNMENT_SESSION.read_text(encoding="utf-8"))
     resource_id = "comparison-canonical-orthogroups-1"
     typed = json.loads(base64.b64decode(data["resources"][resource_id]["data"]))
@@ -2640,7 +2665,7 @@ def test_an_upgrade_of_a_session_40_refuses_a_result_matching_neither_frame(tmp_
     )
     for stored in (member, fields["memberByProteinId"][member["proteinId"]]["fields"]):
         stored["start"] += 1
-    data["resources"][resource_id] = replace_resource_bytes(
+    data["resources"][resource_id] = _with_bytes(
         data["resources"][resource_id], json.dumps(typed, separators=(",", ":")).encode("utf-8"),
     )
     with pytest.raises(SessionConversionError, match="matches neither strand"):
@@ -2654,7 +2679,7 @@ def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> Non
     with gzip.open(_TWO_MODE_V48_SESSION, "rt", encoding="utf-8") as handle:
         source = json.load(handle)
     document, facts = drawings_document_from_mode_scoped(source)
-    SessionDocument(document)
+    load_session_mapping(document)
 
     linear, circular = document["drawings"]
     # Linear was shown at Save; Circular is kept because its genome binding

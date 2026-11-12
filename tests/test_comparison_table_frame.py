@@ -7,6 +7,8 @@ instead of drawn beyond the record (N-07, N-08).
 """
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload
+
 import random
 import re
 from pathlib import Path
@@ -159,9 +161,9 @@ def test_main_cli_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp
     from gbdraw.session_io import load_session
 
     provenance = json.loads((_SESSIONS / "q-frame-main-linear-reverse.provenance.json").read_text(encoding="utf-8"))
-    session = tmp_path / "main.gbdraw-session.json"
+    session = tmp_path / "main.gbdraw"
     session.write_bytes(gzip.decompress((_SESSIONS / "q-frame-main-linear-reverse.v42.gbdraw-session.json.gz").read_bytes()))
-    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    sidecar = tmp_path / "resaved.gbdraw"
     linear_cli.linear_main([
         "--session", str(session), "-o", str(tmp_path / "replayed"), "-f", "svg", "--session_output", str(sidecar),
     ])
@@ -185,11 +187,11 @@ def test_main_web_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp
     from gbdraw.session_io import load_session
 
     provenance = json.loads((_SESSIONS / "q-frame-main-web.provenance.json").read_text(encoding="utf-8"))
-    session = tmp_path / "main.gbdraw-session.json"
+    session = tmp_path / "main.gbdraw"
     session.write_bytes(
         gzip.decompress((_SESSIONS / f"q-frame-main-web-{scenario}.v42.gbdraw-session.json.gz").read_bytes())
     )
-    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    sidecar = tmp_path / "resaved.gbdraw"
     linear_cli.linear_main([
         "--session", str(session), "-o", str(tmp_path / "replayed"), "-f", "svg", "--session_output", str(sidecar),
     ])
@@ -219,19 +221,18 @@ def test_resaved_session_keeps_nucleotide_blast_comparisons(tmp_path: Path, fixt
     import base64
     import gzip
 
-    from gbdraw.session_io import load_session
 
     def comparison(session: Path) -> tuple[dict, bytes]:
-        payload = session_view(load_session(session))
+        payload = session_view(read_session_payload(session))
         item = payload["renderRequest"]["comparisons"][0]
         return item, base64.b64decode(payload["resources"][item["resourceId"]]["data"])
 
     def replay(session: Path, name: str) -> Path:
         linear_cli.linear_main(["--session", str(session), "-o", str(tmp_path / name), "-f", "svg",
-                                "--session_output", str(tmp_path / f"{name}.gbdraw-session.json")])
-        return tmp_path / f"{name}.gbdraw-session.json"
+                                "--session_output", str(tmp_path / f"{name}.gbdraw")])
+        return tmp_path / f"{name}.gbdraw"
 
-    main = tmp_path / "main.gbdraw-session.json"
+    main = tmp_path / "main.gbdraw"
     main.write_bytes(gzip.decompress((_SESSIONS / f"{fixture}.gbdraw-session.json.gz").read_bytes()))
     first = replay(main, "first")
     item, content = comparison(first)
@@ -247,7 +248,6 @@ def test_resaved_session_keeps_nucleotide_blast_comparisons(tmp_path: Path, fixt
 @pytest.mark.linear
 def test_comparison_tables_with_one_basename_in_two_directories_save_and_replay(tmp_path: Path) -> None:
     # FIX-B2-N1: -b a/e.tsv b/e.tsv gave both Session resources the name e.tsv.
-    import json
 
     r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
     r3 = _write_record(tmp_path, "R3", _Y + _Z)
@@ -257,12 +257,12 @@ def test_comparison_tables_with_one_basename_in_two_directories_save_and_replay(
         (tmp_path / directory).mkdir()
         tables.append(tmp_path / directory / "e.tsv")
         tables[-1].write_text(row + "\n", encoding="utf-8")
-    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    sidecar = tmp_path / "fresh.gbdraw"
     linear_cli.linear_main([
         "--gbk", str(r2), str(r3), str(r2), "-b", *map(str, tables),
         "-o", str(tmp_path / "fresh"), "-f", "svg", "--session_output", str(sidecar),
     ])
-    session = session_view(json.loads(sidecar.read_text(encoding="utf-8")))
+    session = session_view(read_session_payload(sidecar))
     names = [session["resources"][item["resourceId"]]["name"] for item in session["renderRequest"]["comparisons"]
              if item["kind"] == "nucleotideBlast"]
     assert names == ["e.tsv", "e.2.tsv"]
@@ -292,17 +292,16 @@ def test_cli_session_output_with_a_reversed_record_replays_the_cli_ribbons(tmp_p
     # The sidecar keeps R3's file with its reverse complement, so the -b rows
     # stay in the search frame of the source record.
     import base64
-    import json
 
     r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
     r3 = _write_record(tmp_path, "R3", _Y + _Z)
-    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    sidecar = tmp_path / "fresh.gbdraw"
     row = "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847"
     fresh = _render(
         tmp_path, "fresh", [r2, r3], row,
         "--reverse_complement", "0", "--reverse_complement", "1", "--session_output", str(sidecar),
     )
-    session = session_view(json.loads(sidecar.read_text(encoding="utf-8")))
+    session = session_view(read_session_payload(sidecar))
     comparison = session["renderRequest"]["comparisons"][0]
     assert comparison["kind"] == "nucleotideBlast"
     assert base64.b64decode(session["resources"][comparison["resourceId"]]["data"]) == (
@@ -353,9 +352,8 @@ def _bound_row_request(directory: Path):
 def _stored_comparison_table(session: Path) -> bytes:
     import base64
 
-    from gbdraw.session_io import load_session
 
-    payload = session_view(load_session(session))
+    payload = session_view(read_session_payload(session))
     (item,) = [item for item in payload["renderRequest"]["comparisons"] if "resourceId" in item]
     return base64.b64decode(payload["resources"][item["resourceId"]]["data"])
 
@@ -374,9 +372,9 @@ def test_cli_session_replay_keeps_feature_bound_rows_of_a_reversed_record_in_the
     # app and the Session contract keep them in the search frame.
     from gbdraw.session import save_session_document
 
-    source = tmp_path / "source.gbdraw-session.json"
+    source = tmp_path / "source.gbdraw"
     save_session_document(source, _bound_row_request(tmp_path))
-    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    sidecar = tmp_path / "resaved.gbdraw"
     replayed = _replay(source, tmp_path / "replayed", "--session_output", str(sidecar))
     stored = _stored_comparison_table(source)
     assert b"_view_feature_svg_id" not in stored
@@ -404,12 +402,12 @@ def test_display_frame_bound_rows_of_a_main_session_draw_once_and_resave_as_stor
     ).options
     (comparison,) = drawn.linear_comparisons
     assert comparison.matches.loc[0, ["sstart", "send"]].tolist() == [141, 170]
-    search = tmp_path / "search.gbdraw-session.json"
-    display = tmp_path / "display.gbdraw-session.json"
+    search = tmp_path / "search.gbdraw"
+    display = tmp_path / "display.gbdraw"
     save_session_document(search, request)
     save_session_document(display, replace(request, options=drawn))
     assert b"subject_view_feature_svg_id" in _stored_comparison_table(display)
-    sidecar = tmp_path / "display-resaved.gbdraw-session.json"
+    sidecar = tmp_path / "display-resaved.gbdraw"
     drawn_svg = _replay(display, tmp_path / "display", "--session_output", str(sidecar))
     assert drawn_svg == _replay(search, tmp_path / "search")
     assert _stored_comparison_table(sidecar) == _stored_comparison_table(display)

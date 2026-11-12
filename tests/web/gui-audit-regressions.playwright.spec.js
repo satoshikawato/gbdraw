@@ -7,10 +7,10 @@ const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
-const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
+const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw') => {
   page.on('dialog', (dialog) => dialog.dismiss());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length > 0);
 };
 // Inspection may already open the presentation panel; open it only when closed.
@@ -118,7 +118,7 @@ test('label search includes live edits and shows no match status before a search
 
 test('similarity group names and descriptions survive temporary mode changes', async ({ page }) => {
   test.setTimeout(180000);
-  await session(page, 'majanivirus_orthogroup.gbdraw-session.json.gz');
+  await session(page, 'majanivirus_orthogroup.gbdraw');
   await page.locator('.drawer-toggle').click();
   const drawer = page.locator('.right-drawer');
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();

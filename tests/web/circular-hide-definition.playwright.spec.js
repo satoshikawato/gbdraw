@@ -3,9 +3,9 @@
 // and is saved with the Session and written to Run info as --hide_definition.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const { join, resolve } = require('node:path');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const {
   CURRENT_SESSION_VERSION,
   answerSessionTitle,
@@ -27,11 +27,6 @@ const inspectResult = async (page) => page.evaluate(() => {
     titles: [...svg.querySelectorAll('g[data-gbdraw-role="plot-title"]')].map((group) => group.textContent.trim())
   };
 });
-
-const readSession = (path) => {
-  const raw = readFileSync(path);
-  return JSON.parse((raw[0] === 0x1f && raw[1] === 0x8b ? gunzipSync(raw) : raw).toString('utf8'));
-};
 
 test('Show Definition off draws no center definition, keeps the plot title, and survives Save and Load', async ({ page }, testInfo) => {
   test.setTimeout(300000);
@@ -71,7 +66,7 @@ test('Show Definition off draws no center definition, keeps the plot title, and 
   const download = await pending;
   const savedPath = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(savedPath);
-  const saved = readSession(savedPath);
+  const saved = await readSessionFile(savedPath);
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   // The shown drawing holds the setting and its request (Session 51: one entry per drawing).
   expect(shownSavedDrawing(saved).config.adv.show_definition).toBe(false);
@@ -79,7 +74,7 @@ test('Show Definition off draws no center definition, keeps the plot title, and 
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await page.evaluate(() => { document.querySelector('[data-setting="titles"] details').open = true; });
   await expect(showDefinition).not.toBeChecked();

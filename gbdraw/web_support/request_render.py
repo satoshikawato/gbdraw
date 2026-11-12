@@ -24,7 +24,7 @@ from gbdraw.api.prepared import (
     PreparedInputRetention,
     PreparedResourceIdentity,
 )
-from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.exceptions import GbdrawError, LabelsDoNotFitError, ValidationError
 from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.legend.row_facts import LegendRowFactsPayload, collect_legend_row_facts
@@ -548,6 +548,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     output_directory = workspace_path / "outputs"
     owns_workspace = False
     render_error: BaseException | None = None
+    source_names: dict[str, str] | None = None
     try:
         marker_path = workspace_path / _STAGED_WORKSPACE_MARKER
         if (
@@ -618,6 +619,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
         )
     except BaseException as exc:
         render_error = exc
+        _name_chosen_inputs(exc, source_names)
         raise
     finally:
         if owns_workspace:
@@ -671,6 +673,21 @@ def prepared_input_lookup(
         publish_inputs=publish_inputs,
     ):
         yield
+
+
+def _name_chosen_inputs(error: BaseException, source_names: Mapping[str, str] | None) -> None:
+    """A refusal that names the file the Worker staged (``inputName``, its token name) names
+    the file the page read instead, as the input summary does (PD-OI-116)."""
+
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while source_names and current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, GbdrawError) and current.diagnostic:
+            staged = current.diagnostic.get("inputName")
+            if isinstance(staged, str) and staged in source_names:
+                current.diagnostic = {**current.diagnostic, "inputName": source_names[staged]}
+        current = current.__cause__ or current.__context__
 
 
 def staged_source_names(

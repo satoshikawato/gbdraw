@@ -29,13 +29,14 @@ for kind in ("sourceRecipe", "exactReplay"):
     command = shlex.split(info[kind]["command"])
     assert command.pop(0) == "gbdraw"
     command = [sys.executable, "-c", "from gbdraw.cli import main; main()", *command,
-               "--overwrite", "--session_output", "replayed.gbdraw-session.json"]
+               "--overwrite", "--session_output", "replayed.gbdraw"]
     result = subprocess.run(command, cwd=work, text=True, capture_output=True)
     (work / "stdout.log").write_text(result.stdout)
     (work / "stderr.log").write_text(result.stderr)
     report = {"kind": kind, "command": command, "exit_code": result.returncode}
     if result.returncode == 0:
-        document = json.loads((work / "replayed.gbdraw-session.json").read_text())
+        with zipfile.ZipFile(work / "replayed.gbdraw") as saved:
+            document = json.loads(saved.read("gbdraw-session.json"))
         # Session 49: the CLI writes one drawing; read the one the file shows.
         drawing = next(entry for entry in document["drawings"]
                        if entry["id"] == document["ui"]["activeDrawingId"])
@@ -52,7 +53,7 @@ for kind in ("sourceRecipe", "exactReplay"):
             options.get("config", {}).get("canvas", {}).get("feature_overlap_tolerance_bp", 0))
         assert tolerance == expected["tolerance"]
         source_record = SeqIO.read(source, "genbank")
-        with materialize_session(load_session_document(work / "replayed.gbdraw-session.json"),
+        with materialize_session(load_session_document(work / "replayed.gbdraw"),
                                  output_directory=work / "semantic-check") as materialized:
             plan = plan_request(session_to_request(materialized, drawing=drawing["id"]))
             assert len(plan.records) == 1

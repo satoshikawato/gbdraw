@@ -171,7 +171,7 @@ test('Circular batch: edits made on Result 2 reach both Results through selectio
   await settle(page);
   expect.soft(await violations(page, 'Generate')).toEqual([]);
 
-  const saved = testInfo.outputPath('batch-matrix.gbdraw-session.json');
+  const saved = testInfo.outputPath('batch-matrix.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   const reloaded = await load(browser, saved);
   try {
@@ -704,7 +704,7 @@ test('Circular batch: an edit is written into the Result text only when read, an
   // Save right after an edit, then Load: the edit is there.
   await recolorTrna(page, '#e76f51');
   await settle(page);
-  const sessionPath = testInfo.outputPath('on-demand.gbdraw-session.json');
+  const sessionPath = testInfo.outputPath('on-demand.gbdraw');
   await download(page, 'Save Session', sessionPath, { title: 'on-demand' });
   const fresh = await load(browser, sessionPath);
   try {

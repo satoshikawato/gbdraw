@@ -24,6 +24,7 @@ from gbdraw.linear import linear_main
 from gbdraw.render import font_embedding
 from gbdraw.web_support import export_fonts
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import read_session_text
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "gbdraw" / "data"
 FONT_FACE = re.compile(r"@font-face\s*\{([^}]*)\}")
@@ -667,7 +668,7 @@ def test_cli_session_keeps_the_family_name_and_a_font_file_draws_it_again(
 ) -> None:
     font = _renamed_font("LiberationSerif-Regular", "Gbdraw Session Serif", tmp_path / "s.ttf")
     gbk = _genbank(tmp_path / "in.gb")
-    session_path = tmp_path / "font.gbdraw-session.json"
+    session_path = tmp_path / "font.gbdraw"
 
     with caplog.at_level(logging.WARNING):
         circular_main([
@@ -675,7 +676,7 @@ def test_cli_session_keeps_the_family_name_and_a_font_file_draws_it_again(
             "--font_file", str(font), "--no_font_embedding",
             "--save_session", "--session_output", str(session_path),
         ])
-    saved = session_path.read_text(encoding="utf-8")
+    saved = read_session_text(session_path)
 
     # D-02: the name only; no font file, its path, or embedded font data.
     assert "The Session stores the font name 'Gbdraw Session Serif' but not the font file" in caplog.text
@@ -707,7 +708,7 @@ def test_cli_session_keeps_the_family_name_and_a_font_file_draws_it_again(
 def test_a_saved_session_keeps_no_embedded_font_in_its_preview(tmp_path: Path) -> None:
     font = _renamed_font("LiberationSerif-Regular", "Gbdraw Preview Serif", tmp_path / "s.ttf")
     gbk = _genbank(tmp_path / "in.gb")
-    session_path = tmp_path / "embedded.gbdraw-session.json"
+    session_path = tmp_path / "embedded.gbdraw"
 
     circular_main([
         "--gbk", str(gbk), "-o", str(tmp_path / "embedded"), "-f", "svg",
@@ -715,7 +716,7 @@ def test_a_saved_session_keeps_no_embedded_font_in_its_preview(tmp_path: Path) -
     ])
 
     assert "@font-face" in (tmp_path / "embedded.svg").read_text(encoding="utf-8")
-    assert "@font-face" not in session_path.read_text(encoding="utf-8")
+    assert "@font-face" not in read_session_text(session_path)
 
 
 def test_ov688_a_session_saved_again_warns_that_it_keeps_only_the_font_name(
@@ -723,7 +724,7 @@ def test_ov688_a_session_saved_again_warns_that_it_keeps_only_the_font_name(
 ) -> None:
     font = _renamed_font("LiberationSerif-Regular", "Gbdraw Resave Serif", tmp_path / "s.ttf")
     gbk = _genbank(tmp_path / "in.gb")
-    first = tmp_path / "first.gbdraw-session.json"
+    first = tmp_path / "first.gbdraw"
     circular_main([
         "--gbk", str(gbk), "-o", str(tmp_path / "first"), "-f", "svg",
         "--font_file", str(font), "--save_session", "--session_output", str(first),
@@ -733,11 +734,11 @@ def test_ov688_a_session_saved_again_warns_that_it_keeps_only_the_font_name(
     with caplog.at_level(logging.WARNING):
         circular_main([
             "--session", str(first), "-o", str(tmp_path / "second"), "-f", "svg", "--font_file", str(font),
-            "--session_output", str(tmp_path / "second.gbdraw-session.json"),
+            "--session_output", str(tmp_path / "second.gbdraw"),
         ])
 
     assert "The Session stores the font name 'Gbdraw Resave Serif' but not the font file" in caplog.text
-    assert "@font-face" not in (tmp_path / "second.gbdraw-session.json").read_text(encoding="utf-8")
+    assert "@font-face" not in read_session_text(tmp_path / "second.gbdraw")
 
 
 @pytest.mark.parametrize("kind, reason", [("svg", "FONT_EMBEDDING"), ("raster", "FONT_RASTER")])
@@ -778,7 +779,7 @@ def test_gbdraw_render_takes_font_files_and_no_font_embedding(tmp_path: Path) ->
     # D-09: `gbdraw render --session` replays a Session that names a custom font.
     font = _renamed_font("LiberationSerif-Regular", "Gbdraw Render Serif", tmp_path / "s.ttf")
     gbk = _genbank(tmp_path / "in.gb")
-    session_path = tmp_path / "font.gbdraw-session.json"
+    session_path = tmp_path / "font.gbdraw"
     circular_main([
         "--gbk", str(gbk), "-o", str(tmp_path / "font"), "-f", "svg",
         "--font_file", str(font), "--no_font_embedding",

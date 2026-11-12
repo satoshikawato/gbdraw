@@ -25,8 +25,23 @@ import {
 } from '../services/drawing/annotation-sets.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { joinSentences, t, tn } from '../utils/i18n.js';
+
+/**
+ * The text of an annotation TSV. A failed read rejects as the panel notice tells it: a refusal the diagnostic model
+ * knows (a gzip file past the expanded cap, PD-OI-116; a file the browser refuses) in its own words, which name the
+ * file (OV-2948); any other error as it is, as the notice tells a table the import refuses (FL-14). A falsy rejection
+ * has no words.
+ * @param {unknown} file
+ * @returns {Promise<string>}
+ */
+const readAnnotationTableText = (file) => readFileText(file).catch((error) => {
+  const shown = normalizeUserFacingError(/** @type {Record<string, unknown> | null} */ (error || null), { stage: 'read' });
+  throw shown?.code === 'UNKNOWN' && error instanceof Error ? error : new Error(errorText(shown?.summaryParts ?? []));
+});
 
 // The editor keeps every id valid: an empty id takes the default and a used
 // one a numbered suffix. The panel notice names the id it stored (FL-14).
@@ -383,7 +398,7 @@ export const createAnnotationEditor = ({
       && resultsBeforeRead.every((result, index) => result === currentResults[index]);
     };
     try {
-      const text = await readFileText(file);
+      const text = await readAnnotationTableText(file);
       if (!isCurrent()) return;
       return await importAnnotationTable(text);
     } catch (error) {

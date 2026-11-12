@@ -63,7 +63,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw",
             "replayThrough": 2,
             "viewport": {
               "width": 1280,
@@ -104,7 +104,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw",
             "replayThrough": 3,
             "viewport": {
               "width": 1600,
@@ -230,7 +230,7 @@
               "left": 16
             },
             "waitForSelector": "[data-capture='multi-record-canvas-controls']",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw",
             "replayThrough": 4,
             "assertAppState": {
               "mode": "circular",
@@ -283,7 +283,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw",
             "replayThrough": 4,
             "viewport": {
               "width": 1600,
@@ -411,7 +411,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw",
             "replayThrough": 5,
             "viewport": {
               "width": 1600,
@@ -563,7 +563,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw",
             "replayThrough": 6,
             "viewport": {
               "width": 1600,
@@ -645,7 +645,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900

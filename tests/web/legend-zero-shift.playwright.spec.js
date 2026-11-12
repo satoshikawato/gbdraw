@@ -27,15 +27,11 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
     const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
     const actions = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
     await actions.prepareLegendLayout();
-    const sessionText = async (base) => {
-      for (const suffix of ['.gbdraw-session.json', '.gbdraw-session.json.gz']) {
-        const response = await fetch(`./gallery/sessions/${base}${suffix}`);
-        if (!response.ok) continue;
-        if (!suffix.endsWith('.gz')) return response.text();
-        const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
-        return new Response(stream).text();
-      }
-      throw new Error(`No Gallery Session ${base}`);
+    const sessionDocument = async (base) => {
+      const response = await fetch(`./gallery/sessions/${base}.gbdraw`);
+      if (!response.ok) throw new Error(`No Gallery Session ${base}`);
+      const { readSessionContainer } = await import('./js/services/session-container.js');
+      return (await readSessionContainer(await response.blob())).document;
     };
     const sessions = new Map();
     const translateOf = (element) => {
@@ -92,7 +88,7 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
     };
     for (const vector of layoutCases) {
       const [base, index] = vector.name.split('#');
-      if (!sessions.has(base)) sessions.set(base, JSON.parse(await sessionText(base)));
+      if (!sessions.has(base)) sessions.set(base, await sessionDocument(base));
       const session = sessions.get(base);
       const content = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).results[Number(index)].content;
       const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;

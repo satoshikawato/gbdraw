@@ -23,7 +23,8 @@ import { GALLERY_TAB_HASHES, galleryExamplePath, galleryTutorialPublished } from
  */
 
 const GALLERY_CATALOG_URL = new URL('../../gallery/examples.json', import.meta.url);
-const SESSION_FILE_NAME = /\.json(?:\.gz)?$/i;
+// The names the Load Session picker takes (`.gbdraw`, `.zip`, `.json`, `.gz`); the content decides how it is read.
+const SESSION_FILE_NAME = /\.(?:gbdraw|zip|json|gz)$/i;
 const MODES = /** @type {const} */ (['Circular', 'Linear']);
 
 /**
@@ -74,7 +75,7 @@ const tutorialUrlOf = (id, entry, catalogUrl) => {
 
 /**
  * The usable entries of a catalog, in catalog order. An entry is usable when it
- * names an id, a title, and a same-origin `.json` or `.json.gz` Session.
+ * names an id, a title, and a same-origin Session file (`.gbdraw`, `.zip`, `.json` or `.gz`).
  * @param {unknown} catalog
  * @param {URL} [catalogUrl]
  * @returns {GalleryExample[]}
@@ -122,14 +123,12 @@ export const readGalleryExamples = async () => {
 };
 
 /**
- * The example's Session as a File named like its URL, so `.gz` is read as gzip.
+ * The example's Session as a File named like its URL; Load reads it by its content, as a chosen file.
  * @param {GalleryExample} example
  * @returns {Promise<File>}
  */
 export const fetchGalleryExampleSession = async (example) => {
   const response = await fetch(example.sessionUrl);
   if (!response.ok) throw new Error(`The example Session could not be read (HTTP ${response.status}).`);
-  return new File([await response.blob()], example.sessionName, {
-    type: example.sessionName.toLowerCase().endsWith('.gz') ? 'application/gzip' : 'application/json'
-  });
+  return new File([await response.blob()], example.sessionName);
 };

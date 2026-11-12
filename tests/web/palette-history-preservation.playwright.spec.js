@@ -4,7 +4,7 @@ const { load, agree, assertNonTargetsPreserved } = require('./helpers/visual-sta
 
 test('B-02 placement History preserves every unrelated feature', async ({ browser }, info) => {
   test.setTimeout(300000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
   try {
     await generate(page);
     const before = await agree(page, info, 'before-placement');

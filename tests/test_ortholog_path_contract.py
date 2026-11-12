@@ -6,6 +6,7 @@ The largest legacy enumeration is R=16 (16,384 paths). R>=24 is compact-only.
 
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload
 from dataclasses import asdict, replace
 import gzip
 import hashlib
@@ -323,8 +324,8 @@ process.stdout.write(JSON.stringify(values));
 def test_existing_catalog_and_popup_accept_exact_decimal_strings(tmp_path):
     from gbdraw.web_support.feature_catalog import select_feature_catalog_item
 
-    source = ROOT / "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
-    session = drawing_view(json.loads(gzip.decompress(source.read_bytes())))
+    source = ROOT / "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw"
+    session = drawing_view(read_session_payload(source))
     catalog = session["editorState"]["featureCatalog"]
     exact = str(2**54+1)
     catalog["items"][0]["orthogroups"][0]["orthologPathCount"] = exact

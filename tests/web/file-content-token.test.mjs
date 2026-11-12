@@ -12,7 +12,7 @@ import { gzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  contentTokenOfBytes, holdReadBytes, readFileBytes, readFileContentFacts
+  contentTokenOfBytes, holdReadBytes, readFileBytes, readFileContentFacts, readFileText
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
 const { setResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
@@ -62,7 +62,8 @@ test('the read that discovers a File gives its token and length, and the page th
   await readFileBytes(file);
   const facts = await readFileContentFacts(file);
   assert.equal(file.reads, 1, 'the token comes from the read the page already did');
-  assert.deepEqual(facts, { token: expectedToken(Buffer.from(bytes)), byteLength: bytes.byteLength });
+  const plainFacts = { token: expectedToken(Buffer.from(bytes)), byteLength: bytes.byteLength };
+  assert.deepEqual(facts, plainFacts);
   await settled(file);
   await readFileBytes(file);
   assert.equal(file.reads, 2, 'the bytes were dropped once the read settled');
@@ -83,21 +84,45 @@ test('reads that one hold covers share one read, and the bytes are dropped when 
   assert.equal(file.reads, 2);
 });
 
-test('a gzip input keeps its expanded bytes, and its token hashes them', async () => {
-  const plain = new TextEncoder().encode('chr\t1\t5\n'.repeat(64));
-  const file = countingFile(new Uint8Array(gzipSync(plain)), 'depth.tsv.gz');
-  assert.deepEqual(await readFileBytes(file), plain);
-  await readFileBytes(file);
-  assert.equal(file.reads, 1, 'expanding again would be slower than keeping');
-  assert.deepEqual(await readFileContentFacts(file), {
-    token: expectedToken(Buffer.from(plain)), byteLength: plain.byteLength
-  });
-});
-
 const fileRequest = { records: [{ source: { kind: 'genbank', resourceId: 'source' } }], diagramOptions: {} };
 const fileResources = (file, size) => ({
   source: setResourcePayloadOwner({ kind: 'genbank', name: file.name, type: 'text/plain', size, lastModified: 1,
     encoding: 'base64', data: null }, file)
+});
+
+// A gzip input is the bytes as chosen everywhere but in the page's plain
+// readers: its facts and its transfer are its gzip bytes' (Python expands it
+// under its own cap), and every plain read expands it again, keeping nothing.
+test('a gzip input\'s facts and transfer are its gzip bytes\', its first read expands nothing, and each plain read expands again', async () => {
+  const plain = new TextEncoder().encode('chr\t1\t5\n'.repeat(64));
+  const gzip = new Uint8Array(gzipSync(plain));
+  const file = countingFile(gzip, 'depth.tsv.gz');
+  const metrics = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => metrics.push(metric) };
+  const expansions = () => metrics.filter(({ name }) => name === 'inputExpansionCount').length;
+  try {
+    const gzipFacts = { token: expectedToken(Buffer.from(gzip)), byteLength: gzip.byteLength };
+    assert.deepEqual(await readFileContentFacts(file), gzipFacts, 'the facts are those of the bytes as chosen');
+    assert.equal(expansions(), 0, 'the first read expands nothing');
+    const release = holdReadBytes();
+    try {
+      assert.deepEqual(await readFileBytes(file), plain);
+      assert.equal(await readFileText(file), new TextDecoder().decode(plain));
+      assert.equal(file.reads, 1, 'the reads a hold covers share the bytes as chosen');
+      assert.equal(expansions(), 2, 'each plain read expands again: nothing expanded is kept');
+    } finally {
+      release();
+    }
+    const prepared = await createDiagramResourceTransport().prepare({
+      request: fileRequest, resources: fileResources(file, gzip.byteLength)
+    });
+    assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), gzip, 'Generate sends the gzip bytes');
+    assert.deepEqual([prepared.resourceManifest[0].cacheToken, prepared.resourceManifest[0].size],
+      [gzipFacts.token, gzip.byteLength]);
+    assert.equal(expansions(), 2, 'staging expands nothing');
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
 });
 
 test('a File the browser refuses after its bytes were dropped fails its next read with INPUT_UNREADABLE', async () => {

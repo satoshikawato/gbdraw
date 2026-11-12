@@ -1,16 +1,16 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { readFileSync, writeFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile, writeGallerySessionFile } = require('./helpers/session-file.cjs');
 const { evaluateWithRetainedPromise, openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { inspectSafeDetails } = require('./helpers/operation-error.cjs');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
-  ? 'lambda_basic_linear.gbdraw-session.json' : 'HmmtDNA_basic_circular.gbdraw-session.json');
+  ? 'lambda_basic_linear.gbdraw' : 'HmmtDNA_basic_circular.gbdraw');
 const load = async (page, file) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   // A phone Load shows the Preview pane; the color rules are in Settings.
   await showPhonePane(page, 'settings');
@@ -238,8 +238,7 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   const downloaded = page.waitForEvent('download');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const sessionPath = await (await downloaded).path();
-  const bytes = readFileSync(sessionPath);
-  const document = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString());
+  const document = await readSessionFile(sessionPath);
   expect(JSON.stringify(document)).not.toContain('PRIVATE_DRAFT_SENTINEL');
   const context = await browser.newContext(); const fresh = await context.newPage();
   fresh.on('dialog', d => d.accept()); await openApp(fresh); await load(fresh, sessionPath);
@@ -404,13 +403,12 @@ test('cold helper cancellation retains its draft and Retry starts the real runti
 // refused; a rule a Session holds without one says why on its row.
 test('a color rule needs a qualifier: Add is disabled with the reason, a cleared row qualifier comes back, and a saved rule without one says why (OV-2435)', async ({ page }, info) => {
   test.setTimeout(180000);
-  const session = JSON.parse(readFileSync(fixture('circular'), 'utf8'));
-  shownSavedDrawing(session).config.rules = [
-    { feat: 'CDS', qual: 'product', val: 'NADH', color: '#f01234', cap: '' },
-    { feat: 'CDS', qual: '', val: 'dehydrogenase', color: '#123456', cap: '' }
-  ];
-  const file = info.outputPath('rule-without-qualifier.gbdraw-session.json');
-  writeFileSync(file, JSON.stringify(session));
+  const file = await writeGallerySessionFile('HmmtDNA_basic_circular', info.outputPath('rule-without-qualifier.gbdraw'), session => {
+    shownSavedDrawing(session).config.rules = [
+      { feat: 'CDS', qual: 'product', val: 'NADH', color: '#f01234', cap: '' },
+      { feat: 'CDS', qual: '', val: 'dehydrogenase', color: '#123456', cap: '' }
+    ];
+  });
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   await load(page, file);

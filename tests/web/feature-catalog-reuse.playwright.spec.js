@@ -7,11 +7,11 @@
 // holds the browser rows of its invalidation table.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { openApp, evaluateWithRetainedPromise, settleLive, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const HMMT = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 const SESSIONS = 'gbdraw/web/gallery/sessions';
@@ -86,7 +86,7 @@ const start = async (browser, { captureReplies = false, crossOriginIsolated = fa
 };
 
 const loadSession = async (page, file) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
 };
@@ -287,7 +287,7 @@ test('a Generate keeps the held catalog only while its build is current', async 
     await keepShown(page, 'c3');
     const rollback = await evaluateWithRetainedPromise(page, async () => {
       const config = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
-      const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).arrayBuffer()], 'replacement.json');
+      const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw')).arrayBuffer()], 'replacement.gbdraw');
       const result = await config.importSession({ target: { files: [file], value: 'selected' } }, {
         beforePreviewMount() { throw new Error('Catalog reuse rollback probe'); }
       });
@@ -305,10 +305,10 @@ test('a Generate keeps the held catalog only while its build is current', async 
     await page.evaluate(async () => {
       (await import('./js/state.js')).state.sessionTitle.value = 'reuse';
     });
-    const bytes = await download(page, 'Save Session', testInfo.outputPath('reuse.gbdraw-session.json.gz'));
-    const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+    await download(page, 'Save Session', testInfo.outputPath('reuse.gbdraw'));
+    const saved = await readSessionFile(testInfo.outputPath('reuse.gbdraw'));
     expect(JSON.stringify(shownSavedDrawing(saved).editorState.featureCatalog)).toBe(await shownJson(page));
-    await loadSession(page, testInfo.outputPath('reuse.gbdraw-session.json.gz'));
+    await loadSession(page, testInfo.outputPath('reuse.gbdraw'));
     const loaded = await observeGenerate(page);
     expect(loaded.transports).toEqual([SENT]);
     expect(loaded.admission).toBe(1);
@@ -322,7 +322,7 @@ test('a rerender of a loaded Session names the catalog under the names its Resul
   test.setTimeout(300_000);
   const page = await start(browser);
   try {
-    await loadSession(page, `${SESSIONS}/HmmtDNA_basic_circular.gbdraw-session.json`);
+    await loadSession(page, `${SESSIONS}/HmmtDNA_basic_circular.gbdraw`);
     const savedName = await page.evaluate(() => window.__GBDRAW_APP__.results[0].name);
     const reflow = async () => {
       const before = await mark(page);
@@ -363,7 +363,7 @@ test('the similarity-group copy feedback clears when a Generate replaces the sho
   test.setTimeout(300_000);
   const page = await start(browser);
   try {
-    await loadSession(page, `${SESSIONS}/majanivirus_orthogroup.gbdraw-session.json.gz`);
+    await loadSession(page, `${SESSIONS}/majanivirus_orthogroup.gbdraw`);
     const first = await observeGenerate(page);
     expect(first.transports).toEqual([SENT]);
     await page.evaluate(() => {
@@ -564,7 +564,7 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     // so the first Generate sends and sanitizes every children text once. The
     // joined sanitized pieces equal DOMPurify of the whole document, with or
     // without its XML declaration.
-    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw`);
     const cold = await generatePieces(page);
     const pieceCount = await contentPieceCount(page);
     expect(pieceCount).toBeGreaterThan(1);
@@ -599,7 +599,7 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     expect(edited.reused).toBeGreaterThan(0);
     expect(edited.sanitized + edited.reused).toBe(await contentPieceCount(page));
     expect(counts(edited)).toEqual(shownOnce);
-    await loadSession(fresh, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    await loadSession(fresh, `${SESSIONS}/tobacco-chloroplast.gbdraw`);
     await livePalette(fresh);
     await setStep(fresh, 200);
     const freshEdited = await generatePieces(fresh);
@@ -713,7 +713,7 @@ test('Cancel during render keeps the warm Worker', async ({ browser }) => {
   const page = await start(browser, { crossOriginIsolated: true, captureInterrupts: true });
   try {
     expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
-    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw`);
     await generate(page);
     await setStep(page, 200);
     await page.evaluate(() => {
@@ -762,7 +762,7 @@ test('a Result keeps its held segments through a live palette edit and its Undo'
   test.setTimeout(400_000);
   const page = await start(browser, { captureReplies: true });
   try {
-    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw`);
     const cold = await generatePieces(page);
     const held = await heldSegmentCount(page);
     expect(held).toBe(await contentPieceCount(page));

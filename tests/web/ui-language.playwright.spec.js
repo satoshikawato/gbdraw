@@ -40,14 +40,13 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { gunzipSync } = require('node:zlib');
 const { generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { offerTab } = require('./helpers/drawing-bar.cjs');
 
 test.use({ actionTimeout: 20_000, locale: 'ja-JP', viewport: { width: 1280, height: 800 } });
 
 const LANGUAGE_KEY = 'gbdraw.ui-language';
-const SESSION = 'HmmtDNA_basic_circular.gbdraw-session.json';
+const SESSION = 'HmmtDNA_basic_circular.gbdraw';
 const CATALOG_ROOT = join(process.cwd(), 'gbdraw/web/js/utils/i18n-catalogs');
 const catalogOf = async (tag) => (await import(pathToFileURL(join(CATALOG_ROOT, `${tag}.js`)).href)).default;
 
@@ -120,7 +119,7 @@ const generatedRecipes = async (page) => {
 };
 
 const loadSession = async (page) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', SESSION));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', SESSION));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
 };
@@ -141,8 +140,8 @@ const savedSession = async (page, testInfo, name) => {
   await page.mouse.move(0, 0);
   const path = testInfo.outputPath(name);
   await download.saveAs(path);
-  const bytes = readFileSync(path);
-  const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+  const { readSavedSession } = await import(pathToFileURL(join(__dirname, 'helpers/session-documents.mjs')).href);
+  const session = await readSavedSession(new Blob([readFileSync(path)]));
   delete session.createdAt;
   // A load makes new random row ids; the zh-Hans save follows a reload.
   return JSON.stringify(session).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<uuid>');
@@ -192,7 +191,7 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
 
   await loadSession(page);
   const english = { figure: await figure(page), history: await history(page), ui: await uiText(page) };
-  const englishSession = await savedSession(page, testInfo, 'en.json');
+  const englishSession = await savedSession(page, testInfo, 'en.gbdraw');
   const englishSvg = await exportedSvg(page, testInfo, 'en.svg');
   expect(englishSvg).toContain('<svg');
 
@@ -214,7 +213,7 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   })).toEqual(['none', 'normal']);
   expect(await history(page)).toEqual(english.history);
   expect(await figure(page)).toEqual(english.figure);
-  expect(await savedSession(page, testInfo, 'ja.json')).toBe(englishSession);
+  expect(await savedSession(page, testInfo, 'ja.gbdraw')).toBe(englishSession);
   expect(await exportedSvg(page, testInfo, 'ja.svg')).toBe(englishSvg);
   expect(await pdfStagingLang(page)).toEqual(['en']);
   expect(await stored(page)).toEqual([[LANGUAGE_KEY, 'ja']]);
@@ -248,7 +247,7 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     expect(await figure(page)).toEqual(english.figure);
     expect(await exportedSvg(page, testInfo, `${tag}.svg`)).toBe(englishSvg);
     if (tag === 'zh-Hans') {
-      expect(withoutLoadView(await savedSession(page, testInfo, `${tag}.json`))).toBe(withoutLoadView(englishSession));
+      expect(withoutLoadView(await savedSession(page, testInfo, `${tag}.gbdraw`))).toBe(withoutLoadView(englishSession));
     }
   }
 
@@ -298,7 +297,7 @@ test('French and Korean show their catalogs and plural forms, and French changes
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
   await loadSession(page);
-  const englishSession = await savedSession(page, testInfo, 'en.json');
+  const englishSession = await savedSession(page, testInfo, 'en.gbdraw');
   expect(await recordCounts(page)).toEqual(['0 records', '1 record', '2 records']);
 
   await menu(page).selectOption('fr');
@@ -309,7 +308,7 @@ test('French and Korean show their catalogs and plural forms, and French changes
   expect(await recordCounts(page)).toEqual([
     fr['{count} record'].replace('{count}', '0'), fr['{count} record'].replace('{count}', '1'), fr['{count} records'].replace('{count}', '2')
   ]);
-  expect(await savedSession(page, testInfo, 'fr.json')).toBe(englishSession);
+  expect(await savedSession(page, testInfo, 'fr.gbdraw')).toBe(englishSession);
   // A Generate in French writes the Source recipe and Exact replay of one in English.
   const frenchRecipes = await generatedRecipes(page);
   expect(frenchRecipes).toContain('gbdraw');

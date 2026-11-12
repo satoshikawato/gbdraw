@@ -255,7 +255,7 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   // RefSeq re-annotates NZ_CP006932.1 in place: the link names the revision the Session uploads.
   await expect(filesPanel.getByRole('link', { name: 'NCBI Nucleotide revision: NZ_CP006932.1' }))
     .toHaveAttribute('href', /id=NZ_CP006932\.1&sat=60&satkey=39275474$/);
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -331,7 +331,7 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   await expect(filesPanel.getByText('GCF_000354175.2_ASM35417v2_genomic.gbff')).toBeVisible();
   const svgLink = filesPanel.getByRole('link', { name: 'Interactive SVG', exact: true });
   await expect(svgLink).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON (gzip)' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
   const sample = readGalleryExamples().find((entry) => entry.id === 'vibrio-harveyi-group-collinear');
   expect(sample?.svgType).toBe('interactive');
   expect(sample?.svg).toBe('./examples/vibrio-harveyi-group-collinear.svg');
@@ -402,7 +402,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('AP027078.gb')).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -530,7 +530,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await expect(filesPanel.getByText('BGC0000708.gbk')).toBeVisible();
   await expect(filesPanel.locator(`a[href="${bgc0708MibigHref}"]`)).toHaveText('MIBiG repository');
   await expect(filesPanel.getByText('BGC0000713.gbk')).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -591,7 +591,7 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('NC_001879.gbk')).toBeVisible();
   await expect(filesPanel.getByText('nicotiana-tabacum-regions-span.tsv')).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -655,7 +655,7 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('HmmtDNA.gbk', { exact: true })).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -728,7 +728,7 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('MjeNMV.gb')).toBeVisible();
   await expect(filesPanel.getByText('MejoMJNV.gb')).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -778,7 +778,7 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('GCF_015097735.1_ASM1509773v1_genomic.gbff')).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session file (.gbdraw)', exact: true })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });

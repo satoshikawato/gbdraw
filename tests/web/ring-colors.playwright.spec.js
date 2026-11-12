@@ -5,12 +5,12 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const path = require('node:path');
 const { generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
 const RING_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
@@ -28,7 +28,7 @@ const cliRingSession = (testInfo, scheme) => {
     writeFileSync(file, ringTable(ring));
     return file;
   });
-  const session = testInfo.outputPath(`rings-${scheme}.gbdraw-session.json`);
+  const session = testInfo.outputPath(`rings-${scheme}.gbdraw`);
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', 'circular', '--gbk', path.resolve(root, RING_FIXTURE), '--conservation_blast', ...tables,
     '--conservation_color_scheme', scheme, '-o', testInfo.outputPath(`rings-${scheme}`), '-f', 'svg', '--session_output', session
@@ -72,11 +72,11 @@ const historyStep = async (page, step) => {
   await settle(page);
 };
 const savedRings = async (page, testInfo, name) => {
-  const file = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
+  const file = testInfo.outputPath(`${name}.gbdraw`);
   // A Session opened from a file has its title, so Save asks for none.
   const titled = await page.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
   await download(page, 'Save Session', file, titled ? {} : { title: name });
-  const saved = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+  const saved = await readSessionFile(file);
   return shownSavedDrawing(saved).config.circularConservation;
 };
 

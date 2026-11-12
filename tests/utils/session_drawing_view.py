@@ -50,30 +50,37 @@ def build_mode_scoped_session_json(*args: Any, **kwargs: Any) -> dict[str, Any]:
     from unittest import mock
 
     from gbdraw import session_drawings
-    from gbdraw.session_io import build_session_json
+    from tests.utils.session_files import build_session_payload
 
     def keep_mode_scoped(data: Mapping[str, Any], *_args: Any, **_kwargs: Any) -> tuple[Mapping[str, Any], None]:
         return data, None
 
     with mock.patch.object(session_drawings, "drawings_document_from_mode_scoped", keep_mode_scoped):
-        return dict(build_session_json(*args, **kwargs))
+        return build_session_payload(*args, **kwargs)
 
 
 def build_mode_scoped_session_document(request: Any) -> dict[str, Any]:
-    """The checked mode-scoped Session 48 of one request (``build_session_document`` before its move to drawings)."""
+    """The checked mode-scoped Session 48 of one request (``build_session_document`` before its move to drawings),
+    its resources' bytes embedded."""
 
     from gbdraw.session import _mode_scoped_document_of_request
+    from tests.utils.session_files import embedded_session
 
-    return _mode_scoped_document_of_request(request, resolved=False, created_at=None).to_dict()
+    document = _mode_scoped_document_of_request(request, resolved=False, created_at=None)
+    return embedded_session(document.to_dict(), document.resources.sources)
 
 
 def upgrade_to_mode_scoped(source: Any, temporary_directory: Any = None) -> dict[str, Any]:
-    """An older Session upgraded to the newest mode-scoped Session (48), before the move to drawings."""
+    """An older Session upgraded to the newest mode-scoped Session (48), before the move to drawings,
+    its resources' bytes embedded."""
 
     from gbdraw.session import _upgrade_to_current, load_session_document
 
+    from tests.utils.session_files import embedded_session
+
     document = source if hasattr(source, "to_dict") else load_session_document(source)
-    return _upgrade_to_current(document, temporary_directory).document.to_dict()
+    upgraded = _upgrade_to_current(document, temporary_directory).document
+    return embedded_session(upgraded.to_dict(), upgraded.resources.sources)
 
 
 def drawings_document_of_view(view: Mapping[str, Any]) -> dict[str, Any]:

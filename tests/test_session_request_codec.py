@@ -3895,21 +3895,19 @@ def test_canonical_table_read_keeps_floats_exact(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "name",
     [
-        "BGC0000708-BGC0000713.gbdraw-session.json",
-        "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-        "majanivirus_orthogroup.gbdraw-session.json.gz",
+        "BGC0000708-BGC0000713.gbdraw",
+        "hepatoplasmataceae_orthogroup.gbdraw",
+        "majanivirus_orthogroup.gbdraw",
     ],
 )
 def test_gallery_comparison_tables_survive_a_read_unchanged(name: str, tmp_path: Path) -> None:
-    import base64
-    import gzip
+    from gbdraw.session import load_session_document
 
     path = Path(__file__).resolve().parents[1] / "gbdraw/web/gallery/sessions" / name
-    raw = path.read_bytes()
-    session = json.loads(gzip.decompress(raw) if name.endswith(".gz") else raw)
+    resources = load_session_document(path).resources
     tables = [
-        base64.b64decode(resource["data"]).decode("utf-8")
-        for resource_id, resource in session["resources"].items()
+        resources.read(resource_id).decode("utf-8")
+        for resource_id in resources.descriptors
         if resource_id.startswith("comparison-protein-")
     ]
     assert tables

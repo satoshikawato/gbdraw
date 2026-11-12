@@ -12,5 +12,6 @@
   "decompressedSha256": "2a7ccaa61edb412a9600ddbd71591846bd738b0facd4cd5c72e5ad20cd1ce567",
   "compression": "gzip -n -9",
   "sessionVersion": 51,
-  "requestSchema": 10
+  "requestSchema": 10,
+  "container": "converted to a Session file container (.gbdraw) from the gzip JSON file described above with the conversion #1760 applied to every Session 51 fixture: each input became its own entry, byte for byte, and the rest of the document is unchanged; decompressedSha256 is that of the JSON file"
 }

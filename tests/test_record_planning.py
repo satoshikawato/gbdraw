@@ -504,7 +504,7 @@ def test_cli_rejects_more_blast_files_than_adjacent_record_pairs(tmp_path: Path)
         table.write_text(f"{query}\t{subject}\t90.0\t100\t0\t0\t1\t100\t1\t100\t1e-20\t180\n", encoding="utf-8")
         tables.append(str(table))
     prefix = tmp_path / "out"
-    session = tmp_path / "out.gbdraw-session.json"
+    session = tmp_path / "out.gbdraw"
 
     with pytest.raises(ValidationError, match=r"Too many -b/--blast files \(expected at most 1\)") as raised:
         linear_main(

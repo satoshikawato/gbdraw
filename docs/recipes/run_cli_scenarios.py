@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import gzip
 import json
 import math
 import re
@@ -12,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import zipfile
 import zlib
 from collections import Counter
 from contextlib import ExitStack
@@ -305,6 +305,18 @@ _OUTPUT_INPUT_FILES = {
 }
 
 
+def _read_session_container(path: Path) -> dict:
+    """The document of a Session file: a ZIP whose first entry is ``gbdraw-session.json``."""
+
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        if not names or names[0] != "gbdraw-session.json":
+            raise RecipeContractError(
+                f"{path.name} is not a Session container (first entry {names[:1]})."
+            )
+        return json.loads(archive.read("gbdraw-session.json").decode("utf-8"))
+
+
 def _active_drawing(session: dict) -> dict:
     """The drawing a Session opens: the ``drawings[]`` entry named by ``ui.activeDrawingId``."""
 
@@ -384,11 +396,11 @@ def _materialize_generated_tables(scenario_id: str, workdir: Path) -> set[str]:
 def _normalized_artifact_payload(scenario_id: str, path: Path) -> bytes:
     payload = path.read_bytes()
     normalized_session_names = {
-        "H-CLI-12": {"cli_session.json", "cli_session.json.gz"},
-        "T-CLI-11": {"interactive_handoff.gbdraw-session.json.gz"},
+        "H-CLI-12": {"cli_session.gbdraw", "cli_session_resaved.gbdraw"},
+        "T-CLI-11": {"interactive_handoff.gbdraw"},
     }
     if path.name in normalized_session_names.get(scenario_id, set()):
-        session = json.loads(gzip.decompress(payload) if path.suffix == ".gz" else payload)
+        session = _read_session_container(path)
 
         def without_file_times(value: object) -> object:
             if isinstance(value, dict):
@@ -2138,7 +2150,7 @@ def _assert_session_overwrite_refused(
     evidence = result.stdout + result.stderr
     if result.returncode == 0 or "already exist" not in evidence or "overwrite" not in evidence:
         raise RecipeContractError("H-CLI-12 did not refuse an existing output.")
-    if svg_path.read_bytes() != before or (workdir / "cli_session.json.gz").exists():
+    if svg_path.read_bytes() != before or (workdir / "cli_session_resaved.gbdraw").exists():
         raise RecipeContractError("H-CLI-12 changed files after overwrite refusal.")
     return before
 
@@ -2150,9 +2162,8 @@ def _assert_session_roundtrip(
     replay_command: list[str],
     environment: dict[str, str],
 ) -> None:
-    plain = json.loads((workdir / "cli_session.json").read_text(encoding="utf-8"))
-    with gzip.open(workdir / "cli_session.json.gz", "rt", encoding="utf-8") as handle:
-        compressed = json.load(handle)
+    plain = _read_session_container(workdir / "cli_session.gbdraw")
+    compressed = _read_session_container(workdir / "cli_session_resaved.gbdraw")
     for payload in (plain, compressed):
         if (
             payload.get("format") != "gbdraw-session"
@@ -2181,7 +2192,7 @@ def _assert_session_roundtrip(
             if normalized_plain.get(key) != normalized_compressed.get(key)
         )
         raise RecipeContractError(
-            f"H-CLI-12 plain and gzip session semantics differ: {changed}."
+            f"H-CLI-12 saved and replayed session semantics differ: {changed}."
         )
     run_metadata = _active_drawing(compressed).get("runMetadata", {})
     geometry = run_metadata.get("trackSlotGeometry", {})
@@ -2196,13 +2207,22 @@ def _assert_session_roundtrip(
     if (workdir / "cli_session_roundtrip.svg").read_bytes() != first_svg:
         raise RecipeContractError("H-CLI-12 replayed SVG differs from the first render.")
 
-    incompatible_path = workdir / "incompatible_session.json"
+    incompatible_path = workdir / "incompatible_session.gbdraw"
     incompatible = dict(plain)
-    incompatible["version"] = 38
-    incompatible_path.write_text(json.dumps(incompatible), encoding="utf-8")
+    incompatible["version"] = 34
+    with zipfile.ZipFile(workdir / "cli_session.gbdraw") as source, zipfile.ZipFile(
+        incompatible_path, "w", zipfile.ZIP_STORED
+    ) as target:
+        for entry in source.infolist():
+            target.writestr(
+                entry.filename,
+                json.dumps(incompatible)
+                if entry.filename == "gbdraw-session.json"
+                else source.read(entry.filename),
+            )
     failure_command = list(replay_command)
     failure_command[failure_command.index("--session") + 1] = incompatible_path.name
-    failure_command[failure_command.index("--session_output") + 1] = "must_not_exist.json.gz"
+    failure_command[failure_command.index("--session_output") + 1] = "must_not_exist.gbdraw"
     failure_command[failure_command.index("-o") + 1] = "must_not_exist"
     result = subprocess.run(
         failure_command,
@@ -2215,7 +2235,7 @@ def _assert_session_roundtrip(
     )
     evidence = result.stdout + result.stderr
     incompatible_path.unlink()
-    if result.returncode == 0 or "Unsupported session version: 38" not in evidence:
+    if result.returncode == 0 or "Unsupported session version: 34" not in evidence:
         raise RecipeContractError("H-CLI-12 accepted an incompatible session version.")
     if any(workdir.glob("must_not_exist*")):
         raise RecipeContractError("H-CLI-12 wrote output for an incompatible session.")
@@ -2376,12 +2396,7 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
             "T-CLI-11 interactive controls or feature metadata changed."
         )
 
-    with gzip.open(
-        workdir / "interactive_handoff.gbdraw-session.json.gz",
-        "rt",
-        encoding="utf-8",
-    ) as handle:
-        session = json.load(handle)
+    session = _read_session_container(workdir / "interactive_handoff.gbdraw")
     resources = session.get("resources", {})
     if (
         session.get("format") != "gbdraw-session"
@@ -2432,22 +2447,22 @@ def run_scenario(
         command_jobs = [(commands[0], tuple(expected_outputs))]
     elif scenario_id == "H-CLI-12":
         if len(commands) != 2 or expected_outputs != [
-            "cli_session.json",
-            "cli_session.json.gz",
+            "cli_session.gbdraw",
+            "cli_session_resaved.gbdraw",
             "cli_session_roundtrip.svg",
         ]:
             raise RecipeContractError(
-                "H-CLI-12 must save plain JSON, replay it to gzip, and replace one SVG."
+                "H-CLI-12 must save a Session file, replay it to a second Session file, and replace one SVG."
             )
         command_jobs = [
-            (commands[0], ("cli_session.json", "cli_session_roundtrip.svg")),
-            (commands[1], ("cli_session.json.gz", "cli_session_roundtrip.svg")),
+            (commands[0], ("cli_session.gbdraw", "cli_session_roundtrip.svg")),
+            (commands[1], ("cli_session_resaved.gbdraw", "cli_session_roundtrip.svg")),
         ]
     elif scenario_id == "T-CLI-11":
         if len(commands) != 2 or expected_outputs != [
             "interactive_human_mitochondrion.svg",
             "interactive_human_mitochondrion.interactive.svg",
-            "interactive_handoff.gbdraw-session.json.gz",
+            "interactive_handoff.gbdraw",
             "restored_interactive_figure.svg",
         ]:
             raise RecipeContractError(

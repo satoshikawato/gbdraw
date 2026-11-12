@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload, write_unchecked_session_file
 from dataclasses import replace
 import inspect
-import json
 import re
 from pathlib import Path
 from xml.etree import ElementTree
@@ -435,14 +435,14 @@ def test_only_a_cut_record_refuses_its_sideways_move(tmp_path: Path) -> None:
 def test_a_stored_session_with_a_cut_record_moved_sideways_is_refused_by_the_cli(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "10kb", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    session_path = tmp_path / "out.gbdraw-session.json"
+    session_path = tmp_path / "out.gbdraw"
     session = _session(session_path)
     request = drawing_view(session, mode="linear")["renderRequest"]
     request["layout"] = {
         "recordGapPx": 24.0, "multiRecordPositions": None, "similarityAlignment": None,
         "recordTranslations": [{"recordKey": request["records"][0]["recordKey"], "x": 40.0, "y": 0.0}],
     }
-    session_path.write_text(json.dumps(session), encoding="utf-8")
+    write_unchecked_session_file(session_path, session)
     replay = run_gbdraw(["linear", "--session", session_path.name, "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode != 0
     assert "moved sideways" in replay.stderr + replay.stdout
@@ -610,7 +610,7 @@ def test_cli_track_order_refused_for_rows_is_refused_when_a_record_is_cut(tmp_pa
 def test_a_track_order_decided_by_the_record_lengths_is_stored_as_drawn(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "10kb", *ORDER_WITH_AXIS, "1", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    replayed = run_gbdraw(["linear", "--session", "out.gbdraw-session.json", "-o", "again"], cwd=tmp_path)
+    replayed = run_gbdraw(["linear", "--session", "out.gbdraw", "-o", "again"], cwd=tmp_path)
     assert replayed.returncode == 0, replayed.stderr
     assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
 
@@ -675,7 +675,7 @@ def test_every_row_of_every_cut_figure_with_a_shown_scale_has_ticks_and_no_lengt
 
 
 def _session(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return read_session_payload(path)
 
 
 def _shown_request(path: Path) -> dict:
@@ -685,12 +685,12 @@ def _shown_request(path: Path) -> dict:
 def test_a_cut_figure_stores_what_it_drew_and_replays_byte_identical(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "10kb", "--gc", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    linear = _shown_request(tmp_path / "out.gbdraw-session.json")["diagramOptions"]
+    linear = _shown_request(tmp_path / "out.gbdraw")["diagramOptions"]
     assert "wrapDefaults" not in linear
     assert linear["config"]["canvas"]["linear"]["track_layout"] == "above"
     assert linear["config"]["canvas"]["linear"]["wrap_length"] == 10_000
     assert linear["config"]["objects"]["scale"]["style"] == "ruler"
-    replay = run_gbdraw(["linear", "--session", "out.gbdraw-session.json", "-o", "replayed", "-f", "svg"], cwd=tmp_path)
+    replay = run_gbdraw(["linear", "--session", "out.gbdraw", "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode == 0, replay.stderr
     assert (tmp_path / "replayed.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
 
@@ -698,11 +698,11 @@ def test_a_cut_figure_stores_what_it_drew_and_replays_byte_identical(tmp_path: P
 def test_a_figure_with_nothing_to_cut_stores_the_plain_leaves_and_replays_byte_identical(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "100kb", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    linear = _shown_request(tmp_path / "out.gbdraw-session.json")["diagramOptions"]
+    linear = _shown_request(tmp_path / "out.gbdraw")["diagramOptions"]
     assert linear["config"]["canvas"]["linear"]["track_layout"] == "middle"
     assert linear["config"]["canvas"]["linear"]["wrap_length"] == 100_000
     assert "data-gbdraw-wrap-row" not in (tmp_path / "out.svg").read_text(encoding="utf-8")
-    replay = run_gbdraw(["linear", "--session", "out.gbdraw-session.json", "-o", "replayed", "-f", "svg"], cwd=tmp_path)
+    replay = run_gbdraw(["linear", "--session", "out.gbdraw", "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode == 0, replay.stderr
     assert (tmp_path / "replayed.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
 
@@ -722,12 +722,12 @@ def _diagram_options(value: object) -> dict | None:
 def test_the_field_the_planner_consumes_is_refused_in_a_stored_request(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "10kb", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    session_path = tmp_path / "out.gbdraw-session.json"
+    session_path = tmp_path / "out.gbdraw"
     session = _session(session_path)
     options = _diagram_options(session)
     assert options is not None and "wrapDefaults" not in options
     options["wrapDefaults"] = {"trackLayout": "above"}
-    session_path.write_text(json.dumps(session), encoding="utf-8")
+    write_unchecked_session_file(session_path, session)
     replay = run_gbdraw(["linear", "--session", session_path.name, "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode != 0
     assert "wrapDefaults" in replay.stderr + replay.stdout

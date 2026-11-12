@@ -9,8 +9,6 @@ each ``.provenance.json``).
 from __future__ import annotations
 
 import copy
-import gzip
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -25,6 +23,7 @@ from gbdraw.session import (
     upgrade_session_document,
 )
 from gbdraw.session_drawings import read_session_drawings, write_session_drawings
+from tests.utils.session_files import read_session_payload
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DRAWINGS_SESSION_MIN_VERSION,
@@ -33,13 +32,12 @@ from gbdraw.session_io import (
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sessions"
-V49 = sorted(FIXTURES.glob("drawings-*.v51.gbdraw-session.json.gz"))
+V49 = sorted(FIXTURES.glob("drawings-*.v51.gbdraw"))
 Document = dict[str, Any]
 
 
 def _load(name: str) -> Document:
-    with gzip.open(FIXTURES / f"{name}.v51.gbdraw-session.json.gz", "rt", encoding="utf-8") as handle:
-        return json.load(handle)
+    return read_session_payload(FIXTURES / f"{name}.v51.gbdraw")
 
 
 def test_python_reads_and_writes_49() -> None:
@@ -49,8 +47,7 @@ def test_python_reads_and_writes_49() -> None:
 
 @pytest.mark.parametrize("path", V49, ids=lambda path: path.name.split(".")[0])
 def test_each_v49_fixture_is_admitted_and_rewritten_unchanged(path: Path) -> None:
-    with gzip.open(path, "rt", encoding="utf-8") as handle:
-        document = json.load(handle)
+    document = read_session_payload(path)
     validate_session(document)
     loaded = load_session_document(path)
     drawings = read_session_drawings(document)
@@ -173,7 +170,7 @@ def test_the_conservation_web_files_are_the_circular_drawings() -> None:
 
 
 def test_saving_a_49_again_drops_the_resources_no_drawing_names() -> None:
-    base = load_session_document(FIXTURES / "drawings-circular-linear.v51.gbdraw-session.json.gz")
+    base = load_session_document(FIXTURES / "drawings-circular-linear.v51.gbdraw")
     linear = base.drawing("linear")
     state = {
         key: value
@@ -185,7 +182,7 @@ def test_saving_a_49_again_drops_the_resources_no_drawing_names() -> None:
     saved = _build_session_document_from_drawings(
         (_DrawingBuild(mode="linear", request=None, state=state, id=linear.id, name=linear.name),),
         base=base,
-        resources=base.to_dict()["resources"],
+        resources=base.resources,
     ).to_dict()
 
     assert saved["version"] == CURRENT_SESSION_VERSION

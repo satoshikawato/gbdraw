@@ -20,6 +20,7 @@ import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionE
 import { SETTING_NOTE_APPLIES, SETTING_NOTE_ONE_CIRCLE_CHANGE, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 import { isInputFileRef } from './services/history-files.js';
+import { showChosenFileRefusal } from './services/file-content-cache.js';
 import { projectPreviewSurface } from './app/ui.js';
 import { settleCommittedField } from './app/committed-value.js';
 import { sessionFilesOfKind } from './services/drawing/inputs.js';
@@ -871,6 +872,8 @@ export const ColorValueControl = {
  * @property {InputFileKind | readonly InputFileKind[]} [fileKind] the kind of file the uploader takes, or the kinds
  *   (an empty list: none): it also offers the files of those kinds in this Session (`sessionFilesOfKind`, PD-OI-090
  *   〔入力ファイル〕), and choosing one is the same selection as an upload of it, by its ref
+ * @property {boolean} [inspectionFailed] the slot's inspection failed; bound only by a parent that shows the
+ *   inspection's message (a record input), unbound otherwise
  * @property {string} [help] help tip text, shown beside the zone (the label is hidden until a file is
  *   chosen) and referenced by the zone through aria-describedby
  * @property {boolean} [replace] a chosen file shows Replace (choose another file for this slot) in
@@ -925,6 +928,28 @@ const useFileDrop = (props, uploadAvailable, select) => {
     return undefined;
   };
   return { dragging, dragOver, dropFiles, dropHintId };
+};
+
+/**
+ * The work a choice of files starts at once, before the selection is written.
+ * A chosen input file makes a Generate likely: the Worker's boot files download
+ * now. The refusal of a chosen file's first read, a gzip file past the expanded
+ * cap (PD-OI-116), shows once the input store holds the file and that read
+ * ends: right after it is chosen, or right after the answer when the field asks
+ * first (another drawing uses the file it replaces, a stack row reaches the
+ * ring it replaces), since it waits for the hold that writing the selection
+ * makes. No other owner reads the file at once and reports its failure: a
+ * record input's inspection shows it in its own place (`inspectionFailed`
+ * bound), and an import step's import (`importStep`, the auxiliary table
+ * cards) reports it as its other import failures, going back to the previous
+ * file with Retry (OV-2946).
+ * @param {FileUploaderProps} props
+ * @param {(File | InputFileRef)[]} chosen
+ */
+const startChosenFileWork = (props, chosen) => {
+  if (chosen.length) prefetchPyodideBootAssets();
+  if (props.inspectionFailed !== undefined || props.importStep) return;
+  chosen.forEach((file) => { void showChosenFileRefusal(state.errorLog, file); });
 };
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -1010,8 +1035,7 @@ export const FileUploader = {
      * @param {number | null} pickTop the zone's viewport top at the pick, held after the selection (`holdZoneAt`)
      */
     const select = (nextFiles, pickTop) => {
-      // A chosen input file makes a Generate likely: download the Worker's boot files now.
-      if (nextFiles.length) prefetchPyodideBootAssets();
+      startChosenFileWork(props, nextFiles);
       const update = () => {
         if (props.multiple) {
           emit('update:modelValue', nextFiles);

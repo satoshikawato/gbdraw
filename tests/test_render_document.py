@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 import io
-import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -36,6 +34,7 @@ from gbdraw.api.diagram import (
     build_linear_diagram,
 )
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 from gbdraw.circular import circular_main
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.exceptions import ExportError
@@ -459,8 +458,7 @@ def test_placed_contents_are_content_pieces_and_other_children_raw() -> None:
 
 def _session_drawings(name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[Drawing]:
     path = SESSIONS / name
-    with (gzip.open(path, "rt", encoding="utf-8") if name.endswith(".gz") else path.open(encoding="utf-8")) as handle:
-        document = drawing_view(json.load(handle))
+    document = drawing_view(read_session_payload(path))
     drawings: list[Drawing] = []
     original = api_render.write_svg_document
 
@@ -481,10 +479,10 @@ def _session_drawings(name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 @pytest.mark.parametrize(
     "session",
     [
-        "tobacco-chloroplast.gbdraw-session.json",
-        pytest.param("Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz", marks=pytest.mark.slow),
-        pytest.param("hepatoplasmataceae_collinear.gbdraw-session.json.gz", marks=pytest.mark.slow),
-        pytest.param("vibrio-harveyi-group-collinear.gbdraw-session.json.gz", marks=pytest.mark.slow),
+        "tobacco-chloroplast.gbdraw",
+        pytest.param("Vnig_TUMSAT-TG-2018.gbdraw", marks=pytest.mark.slow),
+        pytest.param("hepatoplasmataceae_collinear.gbdraw", marks=pytest.mark.slow),
+        pytest.param("vibrio-harveyi-group-collinear.gbdraw", marks=pytest.mark.slow),
     ],
 )
 def test_document_pieces_join_to_the_document_for_gallery_sessions(

@@ -1,13 +1,15 @@
 const { expect, test } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { gunzipSync } = require('node:zlib');
+const { pathToFileURL } = require('node:url');
 const { showDrawing, showPhonePane } = require('./drawing-bar.cjs');
 const { answerSessionTitle, assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./saved-session.cjs');
 
+const sessionDocuments = () => import(pathToFileURL(require('node:path').join(__dirname, 'session-documents.mjs')).href);
+
 const seeds = {
-  circular: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
-  linear: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'
+  circular: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw',
+  linear: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw'
 };
 
 const load = async (browser, file = seeds.circular, viewport = { width: 1600, height: 1000 }) => {
@@ -27,7 +29,7 @@ const load = async (browser, file = seeds.circular, viewport = { width: 1600, he
   });
   page.on('dialog', dialog => dialog.dismiss());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
   // On a phone a Load with a Result shows the Preview pane; the specs start from Settings, as a user taps it.
@@ -106,7 +108,7 @@ const download = async (page, button, path, { title, ...health } = {}) => {
 // the page and generated, which lays the rows out as Python does.
 const loadEditorLegendRows = async (page, rows) => {
   const path = test.info().outputPath(`editor-legend-rows-${rows.map(([caption]) => caption).join('-')
-    .replace(/[^A-Za-z0-9-]+/g, '_').slice(0, 60)}-${Date.now()}.gbdraw-session.json`);
+    .replace(/[^A-Za-z0-9-]+/g, '_').slice(0, 60)}-${Date.now()}.gbdraw`);
   // Saved under a title of its own, so a later Save of the page's title is no
   // second download of one file name (which asks first); loaded with the title.
   const { mode, title } = await page.evaluate(async () => {
@@ -116,7 +118,8 @@ const loadEditorLegendRows = async (page, rows) => {
     return { mode: state.mode.value, title: shown };
   });
   const bytes = await download(page, 'Save Session', path);
-  const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+  const { readSavedSession, sessionFileOf } = await sessionDocuments();
+  const saved = await readSavedSession(new Blob([bytes]));
   saved.title = title;
   const shown = shownSavedDrawing(saved);
   expect(shown.renderRequest.mode, 'the saved Results are the shown drawing\'s').toBe(mode);
@@ -144,8 +147,8 @@ const loadEditorLegendRows = async (page, rows) => {
       return { ...result, content: new XMLSerializer().serializeToString(svg) };
     });
   }, { results: shown.results, added: rows });
-  await fs.writeFile(path, JSON.stringify(saved));
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await fs.writeFile(path, Buffer.from(await (await sessionFileOf(saved)).arrayBuffer()));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expect.poll(() => page.evaluate(captions => {
     const app = window.__GBDRAW_APP__;
     return !app.sessionImportPending && captions.every(caption => app.legendEntries.some(entry => entry.caption === caption));

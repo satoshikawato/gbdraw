@@ -11,7 +11,7 @@ for (const composite of [false, true]) {
   test(`B-05 current CLI ${composite ? 'two-source composite' : 'single'} replay applies a definition edit on Generate`, async ({ browser }, info) => {
     test.setTimeout(300000);
     const sources = ['tests/fixtures/sessions/cli-web-mito.gb', ...(composite ? ['tests/test_inputs/NC_001416.gb'] : [])].map(file => path.resolve(file));
-    let file = info.outputPath('cli.gbdraw-session.json.gz');
+    let file = info.outputPath('cli.gbdraw');
     await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', ...sources,
       '--track_type', 'middle', '--labels', 'out', ...(composite ? ['--multi_record_canvas'] : []),
       '-o', info.outputPath('cli'), '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() } });
@@ -27,7 +27,7 @@ for (const composite of [false, true]) {
       ));
       try {
         await openApp(page);
-        await page.locator('input[accept^=".json,"]').setInputFiles(file);
+        await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
         await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length > 0);
         if (phase === 'web') {
           // PD-OI-059: the definition font applies on Generate. Editing it
@@ -50,7 +50,7 @@ for (const composite of [false, true]) {
         if (phase === 'cli') {
           const pending = page.waitForEvent('download');
           expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
-          file = info.outputPath('web.gbdraw-session.json.gz');
+          file = info.outputPath('web.gbdraw');
           await (await pending).saveAs(file);
         }
       } finally { await page.context().close(); }

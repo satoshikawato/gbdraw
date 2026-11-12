@@ -425,7 +425,7 @@ test('Circular: a Web Save then Load keeps a search set and empties the panel', 
     expect(saved.keepHighlightOverlay).toBe(true);
     expect(saved.annotations.map(({ strand, style }) => [strand, Boolean(style?.gradient)])).toEqual([['+', true], ['-', true]]);
     const drawn = await drawnHits(page, 'Search 1');
-    const path = testInfo.outputPath('search.gbdraw-session.json');
+    const path = testInfo.outputPath('search.gbdraw');
     await download(page, 'Save Session', path);
     await loadSessionFile(page, path);
     await settleLive(page);

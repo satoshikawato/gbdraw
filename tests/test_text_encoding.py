@@ -54,7 +54,11 @@ def _opens_text_without_encoding(call: ast.Call) -> bool:
         return False
     if func.attr in {"read_text", "write_text"}:
         return True
-    module = func.value.id if isinstance(func.value, ast.Name) else None
+    # The module a dotted call starts from: ``zipfile`` for ``zipfile.ZipFile.open(archive, info)``.
+    root = func.value
+    while isinstance(root, ast.Attribute):
+        root = root.value
+    module = root.id if isinstance(root, ast.Name) else None
     if module == "subprocess" and func.attr in _SUBPROCESS_RUNNERS:
         return any(
             keyword.arg in {"text", "universal_newlines"}
@@ -97,6 +101,9 @@ def _offenders(source: str, name: str) -> list[int]:
         ("os.open(path, os.O_RDONLY)", False),
         ("webbrowser.open(url)", False),
         ("tarfile.open(path, 'r:gz')", False),
+        ("zipfile.ZipFile.open(archive, info, 'w')", False),
+        ("archive.open(info, 'w')", True),
+        ("pathlib.Path.open(path)", True),
         ("write_text(handle, text)", False),
         ("subprocess.run(command, capture_output=True, text=True)", True),
         ("subprocess.check_output(command, universal_newlines=True)", True),

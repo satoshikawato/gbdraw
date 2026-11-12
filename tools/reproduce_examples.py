@@ -464,7 +464,9 @@ class Reproducer:
         if dry_run:
             return True
 
-        session = json.loads(session_path.read_text(encoding="utf-8"))
+        from tools.refresh_gallery_sessions import _read_session_file, _write_session_file
+
+        session = _read_session_file(session_path)
         # A Session 51 holds the request in its drawing; the variant edits it in place.
         active_id = session.get("ui", {}).get("activeDrawingId")
         drawings = [d for d in session.get("drawings", []) if d.get("id") == active_id]
@@ -494,12 +496,9 @@ class Reproducer:
         if mode not in {"circular", "linear"}:
             raise RuntimeError(f"Gallery session has an invalid mode: {session_path}")
         variant_session_path = (
-            self.temp_root / f"{figure_id}.gbdraw-session.json"
+            self.temp_root / f"{figure_id}.gbdraw"
         )
-        variant_session_path.write_text(
-            json.dumps(session, separators=(",", ":")),
-            encoding="utf-8",
-        )
+        _write_session_file(variant_session_path, session)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = [
             sys.executable,

@@ -11,6 +11,7 @@ const {
   collectGenerationResultTransferList,
   createReplyBuffer,
   resolveGeneratedFeatureCatalog,
+  nameStagedHelperInput,
   resolveGenerationCleanupOutcome,
   serializeError,
   noteDroppedReply,
@@ -562,4 +563,22 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   noteDroppedReply(outOfMemory);
   assert.deepEqual(cancelDrainReply('c'), { type: 'cancel', id: 'c', ok: true, error: outOfMemory });
   assert.deepEqual(cancelDrainReply('d'), { type: 'cancel', id: 'd', ok: true });
+}
+
+// PD-OI-116: a helper reads a chosen gzip file as chosen, and Python refuses one over the cap by the
+// name of the file it read, which the Worker staged under its role's name; the refusal names the file
+// the user chose instead, with the cap. A name that is not a staged one stays.
+{
+  const refusal = serializeError({ code: 'INPUT_UNREADABLE', operation: 'unknown', stage: 'helper',
+    context: { reason: 'GZIP_EXPANDED_SIZE', limit: 512, inputName: 'source.bin' } });
+  const named = nameStagedHelperInput(refusal, [{ role: 'source', name: 'big genome.fna.gz', bytes: new ArrayBuffer(1) }]);
+  assert.equal(named.context.inputName, 'big genome.fna.gz');
+  assert.match(named.summary, /big genome\.fna\.gz/);
+  assert.match(named.summary, /512 MiB/);
+  assert.doesNotMatch(named.summary, /source\.bin/);
+  const unnamed = nameStagedHelperInput(refusal, [{ role: 'source', bytes: new ArrayBuffer(1) }]);
+  assert.equal(unnamed.context.inputName, undefined, 'a staged name is never shown');
+  const generate = serializeError({ code: 'INPUT_UNREADABLE', stage: 'render',
+    context: { reason: 'GZIP_EXPANDED_SIZE', limit: 512, inputName: 'chosen.gb.gz' } });
+  assert.equal(nameStagedHelperInput(generate, []), generate);
 }

@@ -12,8 +12,8 @@ import { gzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  holdFileCopy, holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts, releaseFileCopy, takeFileBytesForTransfer,
-  useInputCopyStore
+  chosenFileRefusal, contentTokenOfBytes, copyInputStream, holdFileCopy, holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts,
+  releaseFileCopy, storedFileBytes, takeFileBytesForTransfer, useInputCopyStore
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createBrowserInputCopyStore } = await import('../../gbdraw/web/js/services/input-copies.js');
 
@@ -224,26 +224,67 @@ test('a chosen File is copied by its one read, and later readings read the copy 
   assert.equal(file.reads, 1);
 });
 
-test('a gzip input is copied as its expanded content, and the cap still refuses it', async () => {
+test('a gzip input is copied as its gzip bytes with their facts, reads expanded, and the cap refuses it when it is chosen', async () => {
   const fileSystem = createFakeFileSystem();
   useInputCopyStore(copyStoreOn(fileSystem));
   const plain = new TextEncoder().encode('chr\t1\t5\n'.repeat(512));
-  const file = chosenFile(new Uint8Array(gzipSync(plain)), 'depth.tsv.gz');
+  const gzip = new Uint8Array(gzipSync(plain));
+  const file = chosenFile(gzip, 'depth.tsv.gz');
   await choose(file);
-  assert.deepEqual(fileSystem.copyFiles()[0].bytes, plain);
-  assert.equal((await readFileContentFacts(file)).byteLength, plain.byteLength, 'the facts count the expanded bytes');
+  // The copy holds the bytes as chosen, which a Session file stores (receipt session.file-container).
+  assert.deepEqual(fileSystem.copyFiles()[0].bytes, gzip);
+  assert.deepEqual(await readFileContentFacts(file), { token: await contentTokenOfBytes(gzip), byteLength: gzip.byteLength },
+    'the facts are those of the bytes as chosen');
+  assert.deepEqual(await readFileBytes(file), plain);
+  // A later reading reads the copy and expands it again, even after the file changed on disk.
+  file.refused = true;
+  await flush();
   assert.deepEqual(await readFileBytes(file), plain);
   assert.equal(file.reads, 1);
+  file.refused = false;
+  // A plain File of the same content holds other bytes, so it gets its own copy.
+  await choose(chosenFile(plain, 'depth.tsv'));
+  assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes.byteLength), [gzip.byteLength, plain.byteLength]);
 
-  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: 1024 };
+  const metrics = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: 1024, onStructuralMetric: (metric) => metrics.push(metric) };
+  const counted = (name) => metrics.filter((metric) => metric.name === name).length;
   try {
-    const large = chosenFile(new Uint8Array(gzipSync(plain)), 'large.tsv.gz');
+    // PD-OI-116: a gzip file that expands past the cap is refused right after it is chosen, whatever its kind. Its
+    // one read counts the expanded bytes while the copy is written, keeps nothing expanded, and stops at the cap.
+    const large = chosenFile(new Uint8Array(gzipSync(Buffer.concat([plain, plain]))), 'large.tsv.gz');
+    const refused = (error) => (
+      error.code === 'INPUT_UNREADABLE' && error.context.reason === 'GZIP_EXPANDED_SIZE'
+      && error.context.inputName === 'large.tsv.gz' && error.context.limit === 0
+    );
     keepFileCopy(large);
-    await assert.rejects(readFileBytes(large), (error) => (
-      error.code === 'INPUT_UNREADABLE' && error.context.reason === 'GZIP_EXPANDED_SIZE' && error.context.limit === 0
-    ));
+    assert.ok(refused(await within(chosenFileRefusal(large))), 'the uploader shows the refusal of its read');
     await flush();
-    assert.equal(fileSystem.copyFiles().length, 1, 'the refused file leaves no copy');
+    assert.equal(large.reads, 1, 'choosing reads the file once');
+    assert.deepEqual([counted('inputExpansionCheckCount'), counted('inputExpansionCount')], [1, 0],
+      'it counts the expanded bytes once and keeps none');
+    assert.equal(fileSystem.copyFiles().length, 2, 'the refused file keeps no copy');
+    // Every later reading of it, as Generate's, gives the same refusal.
+    await assert.rejects(readFileContentFacts(large), refused);
+    await assert.rejects(readFileBytes(large), refused);
+    // A field that asks before it binds the file (another drawing uses the file it
+    // replaces) asks for the refusal before the input store holds the file: it is
+    // answered once the store holds it and that read ends, right after the answer.
+    const asked = chosenFile(new Uint8Array(gzipSync(Buffer.concat([plain, plain]))), 'asked.tsv.gz');
+    const answer = chosenFileRefusal(asked);
+    await flush();
+    assert.equal(asked.reads, 0, 'asking reads nothing before the store holds the file');
+    keepFileCopy(asked);
+    const refusal = await within(answer);
+    assert.deepEqual([refusal.context.reason, refusal.context.inputName], ['GZIP_EXPANDED_SIZE', 'asked.tsv.gz'],
+      'the refusal comes once the store holds the file');
+    assert.equal(asked.reads, 1, 'the hold reads the file once');
+    // A gzip file within the cap is admitted when it is chosen, and copied as chosen.
+    const small = chosenFile(new Uint8Array(gzipSync(plain.subarray(0, 1000))), 'small.tsv.gz');
+    keepFileCopy(small);
+    assert.equal(await within(chosenFileRefusal(small)), null);
+    await flush();
+    assert.equal(fileSystem.copyFiles().length, 3, 'the admitted file is copied as chosen');
   } finally {
     delete globalThis.__GBDRAW_TEST_HOOKS__;
   }
@@ -393,25 +434,31 @@ test('a first reading and its facts resolve before a slow copy is written, for a
   for (const [file, content] of files) {
     keepFileCopy(file);
     assert.deepEqual(await within(readFileBytes(file)), content, `${file.name}: the bytes wait for no copy`);
-    assert.equal((await within(readFileContentFacts(file))).byteLength, content.byteLength, `${file.name}: nor the facts`);
+    assert.ok((await within(readFileContentFacts(file))).byteLength > 0, `${file.name}: nor the facts`);
   }
   assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes.byteLength), [0, 0], 'the copies are still being written');
   gate.open();
   await until(() => fileSystem.copyFiles().every(({ bytes, open }) => bytes.byteLength && !open));
-  assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes), [plain, expanded]);
+  assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes), [plain, new Uint8Array(gzipSync(expanded))]);
 });
 
-test('a gzip file whose copy could not be written keeps its expanded bytes: no second read and no new expansion', async () => {
+test('a gzip file whose copy could not be written keeps nothing expanded: a later reading reads the File again, checked', async () => {
   const fileSystem = createFakeFileSystem({ writeResult: () => 0 });
   useInputCopyStore(copyStoreOn(fileSystem));
   const plain = new TextEncoder().encode('chr\t1\t9\n'.repeat(64));
-  const file = chosenFile(new Uint8Array(gzipSync(plain)), 'unwritten.tsv.gz');
+  const gzip = new Uint8Array(gzipSync(plain));
+  const file = chosenFile(gzip, 'unwritten.tsv.gz');
   await choose(file);
-  const first = await readFileBytes(file);
+  assert.deepEqual(await readFileBytes(file), plain);
   assert.deepEqual(fileSystem.copyFiles(), []);
   await flush();
-  assert.equal(await readFileBytes(file), first, 'later readings share the expanded bytes');
-  assert.equal(file.reads, 1);
+  assert.equal(file.reads, 2, 'with no copy, a later reading reads the File again');
+  assert.deepEqual(await readFileBytes(file), plain, 'and expands its bytes again');
+  assert.equal(file.reads, 3, 'nothing expanded was kept');
+  // The File changed on disk: its gzip bytes no longer match the facts of its first read.
+  file.change(new Uint8Array(gzipSync(new TextEncoder().encode('other'))));
+  await flush();
+  await assert.rejects(readFileBytes(file), (error) => error.code === 'INPUT_UNREADABLE' && !error.context.reason);
 });
 
 test('a tab whose lock is refused makes no folder and writes no copy', async () => {
@@ -535,4 +582,112 @@ test('a failed Feature Edits TSV import keeps a copy, which its Retry reads afte
   assert.deepEqual(sent, [table, table], 'Retry sends the content first read, from its copy');
   assert.equal(file.reads, 1);
   assert.notEqual(errorLog.value?.code, 'INPUT_UNREADABLE');
+});
+
+/** A stream of `bytes` in chunks of `size` bytes (a ZIP entry inflates in small chunks); `fail` ends it with an error after them. */
+const chunkedStream = (bytes, size, fail = null) => new ReadableStream({
+  start(controller) {
+    for (let start = 0; start < bytes.byteLength; start += size) controller.enqueue(bytes.slice(start, start + size));
+    if (fail) controller.error(fail);
+    else controller.close();
+  }
+});
+
+test('what a Session file stores for a File streams from its copy, not from memory, with the size and token of its first read', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new Uint8Array(PIECE + 17).map((_, index) => (index * 7) % 251);
+  const file = chosenFile(bytes);
+  await choose(file);
+  const stored = await storedFileBytes(file);
+  assert.equal(stored.size, bytes.byteLength);
+  assert.equal(await stored.token(), await contentTokenOfBytes(bytes));
+  const readsBefore = fileSystem.copyReads();
+  assert.ok(Buffer.from(await new Response(await stored.open()).arrayBuffer()).equals(Buffer.from(bytes)));
+  assert.equal(fileSystem.copyReads(), readsBefore + 1, 'the copy is streamed');
+  assert.equal(file.reads, 1, 'the File is not read again');
+});
+
+test('without a copy, what a Session file stores for a File is the File, checked as it streams against its first read', async () => {
+  const bytes = new TextEncoder().encode('LOCUS stored\n//\n');
+  const gzip = new Uint8Array(gzipSync(bytes));
+  /** A real File's shape: it streams and has a size. */
+  const streamingFile = (content, name) => {
+    let current = content;
+    return {
+      name, get size() { return current.byteLength; }, async arrayBuffer() { return current.slice().buffer; },
+      stream() { return new Blob([current]).stream(); }, change(next) { current = next; }
+    };
+  };
+  // Never read (no copy store): its own size, and no token until a stream of it is hashed.
+  const unread = streamingFile(gzip, 'unread.gb.gz');
+  const first = await storedFileBytes(unread);
+  assert.deepEqual([first.size, first.token], [gzip.byteLength, null]);
+  assert.deepEqual(new Uint8Array(await new Response(await first.open()).arrayBuffer()), gzip);
+  // Read before: the gzip bytes as chosen, with the facts of that read; a change on disk since refuses the stream.
+  const read = streamingFile(gzip, 'read.gb.gz');
+  assert.deepEqual(await readFileBytes(read), bytes);
+  const stored = await storedFileBytes(read);
+  assert.deepEqual([stored.size, await stored.token()], [gzip.byteLength, await contentTokenOfBytes(gzip)]);
+  assert.deepEqual(new Uint8Array(await new Response(await stored.open()).arrayBuffer()), gzip);
+  const changed = new Uint8Array(gzip);
+  changed[changed.length - 1] ^= 1;
+  read.change(changed);
+  await assert.rejects(new Response(await stored.open()).arrayBuffer(), (error) => error.code === 'INPUT_UNREADABLE');
+  read.change(new Uint8Array(3));
+  await assert.rejects(stored.open(), (error) => error.code === 'INPUT_UNREADABLE');
+});
+
+test('a stream is copied in 16 MiB pieces through one buffer, under the token its bytes have', async () => {
+  const fileSystem = createFakeFileSystem();
+  const store = copyStoreOn(fileSystem);
+  const written = [];
+  useInputCopyStore({
+    openWriter: async () => {
+      const writer = await store.openWriter();
+      return writer && { ...writer, write: async (buffer) => { written.push(buffer.byteLength); return writer.write(buffer); } };
+    }
+  });
+  for (const length of [2 * PIECE + 1000, PIECE, 0]) {
+    written.length = 0;
+    const bytes = new Uint8Array(length).map((_, index) => (index * 13) % 249);
+    const copied = await within(copyInputStream(chunkedStream(bytes, 65536 + 3)));
+    assert.ok(copied.copy, `copied ${length} bytes`);
+    assert.deepEqual(copied.facts, { token: await contentTokenOfBytes(bytes), byteLength: length });
+    assert.deepEqual(new Uint8Array(await copied.copy.read()), bytes);
+    assert.deepEqual(new Uint8Array(await new Response((await copied.copy.blob()).stream()).arrayBuffer()), bytes);
+    assert.deepEqual(written, length === 0 ? [0] : length === PIECE ? [PIECE] : [PIECE, PIECE, 1000]);
+    copied.copy.release();
+  }
+  assert.equal(fileSystem.copyFiles().length, 0, 'a released copy is deleted');
+});
+
+test('a stream with the content of a chosen File shares its copy', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new Uint8Array(1000).map((_, index) => index % 7);
+  await choose(chosenFile(bytes));
+  const copied = await within(copyInputStream(chunkedStream(bytes, 100)));
+  assert.ok(copied.copy);
+  assert.equal(fileSystem.copyFiles().length, 1);
+});
+
+test('a stream that fails, or a copy write that fails or falls short, leaves no copy; no store cancels the stream', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new Uint8Array(PIECE + 10).map((_, index) => index % 5);
+  const damaged = Object.assign(new Error('damaged'), { code: 'INPUT_INVALID' });
+  await assert.rejects(within(copyInputStream(chunkedStream(bytes, 1 << 20, damaged))), (error) => error === damaged);
+  await until(() => fileSystem.copyFiles().length === 0);
+
+  const full = createFakeFileSystem({ writeResult: (buffer) => Math.max(0, buffer.byteLength - 1) });
+  useInputCopyStore(copyStoreOn(full));
+  assert.deepEqual(await within(copyInputStream(chunkedStream(bytes, 1 << 20))), { copy: null, reason: 'write-failed' });
+  await until(() => full.copyFiles().length === 0);
+
+  useInputCopyStore(null);
+  let cancelled = false;
+  const unread = new ReadableStream({ pull() {}, cancel() { cancelled = true; } });
+  assert.deepEqual(await copyInputStream(unread), { copy: null, reason: 'unavailable' });
+  assert.equal(cancelled, true);
 });

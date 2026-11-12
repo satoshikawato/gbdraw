@@ -1,3 +1,4 @@
+import { gallerySessionDocument } from './helpers/session-documents.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -6129,15 +6130,30 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
 const bridgeSessionView = (session) => Array.isArray(session.drawings)
   ? savedDrawingView(session, session.ui.activeDrawingId) : session;
 
+// A Session file as the bridge reads it: a Session file container's inputs
+// become base64 descriptors of their entry bytes; a JSON Session, plain or gzip, is read as it is.
+const readProjectSession = async (bytes) => {
+  const blob = new Blob([bytes]);
+  const { isSessionContainerFile, openSessionContainerEntry, readSessionContainer } = await import(
+    pathToFileURL(join(tempRoot, 'js/services/session-container.js')));
+  if (!await isSessionContainerFile(blob)) {
+    return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+  }
+  const read = await readSessionContainer(blob);
+  const document = /** @type {Record<string, any>} */ (read.document);
+  for (const [id, entry] of Object.entries(read.resources)) {
+    const data = Buffer.from(await new Response(openSessionContainerEntry(blob, entry)).arrayBuffer());
+    document.resources[id] = { ...document.resources[id], encoding: 'base64', data: data.toString('base64') };
+  }
+  return document;
+};
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
   assert.ok(sessionPath, '--project-session requires a path');
   const sessionBytes = await readFile(sessionPath);
-  const sessionText = sessionBytes[0] === 0x1f && sessionBytes[1] === 0x8b
-    ? gunzipSync(sessionBytes).toString('utf8')
-    : sessionBytes.toString('utf8');
-  const session = bridgeSessionView(JSON.parse(sessionText));
+  const session = bridgeSessionView(await readProjectSession(sessionBytes));
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
@@ -6231,7 +6247,7 @@ const roundTripSessionIndex = process.argv.indexOf('--round-trip-session');
 if (roundTripSessionIndex >= 0) {
   const sessionPath = process.argv[roundTripSessionIndex + 1];
   if (!sessionPath) throw new Error('--round-trip-session requires a JSON path.');
-  const session = bridgeSessionView(JSON.parse(await readFile(sessionPath, 'utf8')));
+  const session = bridgeSessionView(await readProjectSession(await readFile(sessionPath)));
   const sessionProjection = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
@@ -6505,9 +6521,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN, -1, -0.5]) {
 // translations of a Linear Result set kept in `otherModeResult` with the rules
 // the request projection applies to the top-level set.
 {
-  const saved = JSON.parse(await readFile(
-    join(process.cwd(), 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'), 'utf8'
-  ));
+  const saved = await gallerySessionDocument('BGC0000708-BGC0000713');
   const gallery = savedDrawingView(saved, saved.ui.activeDrawingId);
   const request = gallery.renderRequest;
   assert.equal(request.mode, 'linear');
@@ -6559,7 +6573,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN, -1, -0.5]) {
   const vectors = JSON.parse(await readFile(
     join(repoRoot, 'tests', 'fixtures', 'feature-edit-migration-vectors.json'), 'utf8'
   ));
-  const fixture = async (name) => JSON.parse(gunzipSync(await readFile(join(repoRoot, 'tests', 'fixtures', name))));
+  const fixture = async (name) => readProjectSession(await readFile(join(repoRoot, 'tests', 'fixtures', name)));
   const cases = [
     ...vectors.cases.filter((entry) => entry.sourceReads && entry.input.mode === 'linear'),
     ...vectors.sourceReadCases

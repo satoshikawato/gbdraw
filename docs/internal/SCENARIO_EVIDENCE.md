@@ -357,13 +357,13 @@ gbdraw circular \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
   --labels both \
   --track_type middle \
-  --session_output cli_session.json \
+  --session_output cli_session.gbdraw \
   -o cli_session_roundtrip \
   -f svg
 
 gbdraw circular \
-  --session cli_session.json \
-  --session_output cli_session.json.gz \
+  --session cli_session.gbdraw \
+  --session_output cli_session_resaved.gbdraw \
   --overwrite \
   -o cli_session_roundtrip \
   -f svg
@@ -727,7 +727,7 @@ assert result.mode == "circular"
 assert tuple(path.name for path in result.output_paths) == ("typed_request.svg",)
 rendered_svg_bytes = result.output_paths[0].read_bytes()
 
-session_path = Path("typed_request.session.json")
+session_path = Path("typed_request.gbdraw")
 session_document = save_session_document(
     session_path,
     request,
@@ -766,7 +766,10 @@ opened_drawing = next(
 opened_drawing["renderRequest"]["diagramOptions"]["tracks"][
     "linearTrackAxisIndex"
 ] = 0
-wrong_mode_document = load_session_document(wrong_mode_payload)
+# The edited document's input files are those of the loaded Session.
+wrong_mode_document = load_session_document(
+    wrong_mode_payload, resources=loaded_document.resources
+)
 wrong_mode_error = ""
 
 with TemporaryDirectory(prefix="gbdraw-wrong-mode-") as invalid_output_directory:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload
 import base64
 from dataclasses import replace
 import json
@@ -66,7 +67,7 @@ T_CLI_09_STYLE = [
 
 
 def _session(prefix: Path) -> dict:
-    return drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    return drawing_view(read_session_payload(prefix.with_suffix(".gbdraw")))
 
 
 def _diagnostic(excinfo: pytest.ExceptionInfo) -> dict:
@@ -209,7 +210,7 @@ def test_saved_session_replays_without_losat(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
     replay = tmp_path / "replay"
     circular_main([
-        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "--session", str(prefix.with_suffix(".gbdraw")),
         "-o", str(replay), "-f", "svg",
     ])
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
@@ -247,7 +248,7 @@ def test_rings_whose_files_share_a_stem_save_and_replay(
     monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
     replay = tmp_path / "replay"
     circular_main([
-        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "--session", str(prefix.with_suffix(".gbdraw")),
         "-o", str(replay), "-f", "svg",
     ])
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
@@ -288,7 +289,7 @@ def test_ring_files_with_one_basename_in_two_directories_save_and_replay(
     monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
     replay = tmp_path / "replay"
     circular_main([
-        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "--session", str(prefix.with_suffix(".gbdraw")),
         "-o", str(replay), "-f", "svg",
     ])
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
@@ -506,7 +507,7 @@ def test_a_session_without_a_precomputed_ring_label_keeps_the_file_name(
         labelled["cliInvocation"]["args"] = [*args[:index], "--conservation_labels", drawn_label, *args[index:]]
     svgs = {}
     for variant, document in (("stored", session), ("labelled", labelled)):
-        path = tmp_path / f"{variant}.gbdraw-session.json"
+        path = tmp_path / f"{variant}.gbdraw"
         path.write_text(json.dumps(document), encoding="utf-8")
         circular_main(["--session", str(path), "-o", variant, "-f", "svg"])
         svgs[variant] = (tmp_path / f"{variant}.svg").read_bytes()
@@ -981,7 +982,7 @@ def test_cli_session_with_a_crop_and_a_search_frame_ring_table_replays_its_hits(
 
     monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
     replay = tmp_path / "replay"
-    circular_main(["--session", str(prefix.with_suffix(".gbdraw-session.json")), "-o", str(replay), "-f", "svg"])
+    circular_main(["--session", str(prefix.with_suffix(".gbdraw")), "-o", str(replay), "-f", "svg"])
     assert hit.findall(replay.with_suffix(".svg").read_text(encoding="utf-8")) == [saved]
 
 

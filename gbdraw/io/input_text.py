@@ -109,7 +109,13 @@ class _CappedExpansion(io.RawIOBase):
             raise InputFileError(
                 f"{self._path}: this gzip file expands to more than {self._limit / _MIB:g} MiB "
                 f"({self._limit:,} bytes), the most gbdraw reads. Decompress it and give the plain file.",
-                diagnostic={"code": "INPUT_UNREADABLE", "reason": "GZIP_EXPANDED_SIZE", "limit": self._limit // _MIB},
+                diagnostic={
+                    "code": "INPUT_UNREADABLE", "reason": "GZIP_EXPANDED_SIZE", "limit": self._limit // _MIB,
+                    # The file's name, as the Web names it (PD-OI-116); the Worker's render names
+                    # the file the user chose in place of the one it staged (request_render), and
+                    # the Web error context cuts it (error_adapter.INPUT_NAME_CHARACTERS).
+                    "inputName": os.path.basename(self._path),
+                },
             )
         return count
 

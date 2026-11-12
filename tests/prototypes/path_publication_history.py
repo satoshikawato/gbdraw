@@ -108,22 +108,22 @@ def collect():
         text = git("show", f"{tag}:{SOURCE_PATHS[0]}").decode() if tree else ""
         tag_evidence[tag] = {"commit": git("rev-parse", f"{tag}^{{commit}}").decode().strip(),
                              "hasPathClass": "class OrthologPath:" in text}
-    session = "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json"
+    session = "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw"
     historical = {}
     for ref in ("6b89c781", "17e2c9de", "3bca0e8d"):
         full = git("rev-parse", ref).decode().strip()
         assert full in set(git("rev-list", "--first-parent", "origin/main").decode().splitlines())
         historical[f"{full}:{session}"] = artifact(git("show", f"{full}:{session}"))
-    historical["0.13.0:gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json"] = artifact(
-        git("show", "0.13.0:gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json"))
+    historical["0.13.0:gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw"] = artifact(
+        git("show", "0.13.0:gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw"))
     fixtures = {}
     for path in (
         "tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz",
         "tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz",
         "tests/fixtures/sessions/settings-only.v42.json.gz",
         "tests/fixtures/sessions/single.v41-bindings1.json",
-        "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-        "gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+        "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw",
+        "gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw",
     ):
         fixtures[path] = artifact((ROOT / path).read_bytes())
     # Current Gallery bytes are themselves present in first-parent main.

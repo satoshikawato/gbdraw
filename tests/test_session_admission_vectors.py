@@ -11,8 +11,8 @@ finding in ``difference``: it records today's behaviour, not a decision.
 from __future__ import annotations
 
 import copy
-import gzip
 import json
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,9 @@ import pytest
 from gbdraw.contract_shapes import shape_violations
 from gbdraw.exceptions import GbdrawError
 from gbdraw.session_contract import describe_session_admission
-from gbdraw.session_io import FLAT_DRAFT_TOP_LEVEL_FIELDS, load_session
+from gbdraw.session_container import SESSION_DOCUMENT_ENTRY
+from gbdraw.session_io import CURRENT_SESSION_VERSION, FLAT_DRAFT_TOP_LEVEL_FIELDS, load_session
+from tests.utils.session_files import read_session_payload, write_unchecked_session_file
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads(
@@ -34,8 +36,7 @@ def _base(name: str) -> dict[str, Any]:
     base = FIXTURE["bases"][name]
     if "document" in base:
         return copy.deepcopy(base["document"])
-    data = (REPO_ROOT / base["fixture"]).read_bytes()
-    return json.loads(gzip.decompress(data) if data[:2] == b"\x1f\x8b" else data)
+    return read_session_payload(REPO_ROOT / base["fixture"])
 
 
 def _edited(vector: dict[str, Any]) -> dict[str, Any]:
@@ -188,8 +189,14 @@ def test_every_row_of_the_admission_description_has_a_vector() -> None:
 
 @pytest.mark.parametrize("vector", VECTORS, ids=[vector["id"] for vector in VECTORS])
 def test_python_load_gives_the_vector_verdict(vector: dict[str, Any], tmp_path: Path) -> None:
-    path = tmp_path / "session.json"
-    path.write_text(json.dumps(_edited(vector)), encoding="utf-8")
+    document = _edited(vector)
+    path = tmp_path / ("session.gbdraw" if document.get("version") == CURRENT_SESSION_VERSION else "session.json")
+    if path.suffix == ".gbdraw" and "resources" not in document:
+        # The writer needs the document's resources; a file without them is built by hand.
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr(SESSION_DOCUMENT_ENTRY, json.dumps(document))
+    else:
+        write_unchecked_session_file(path, document)
     if vector["python"] == "accept":
         load_session(path)
         return

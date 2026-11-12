@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = { Vue: {
   ref: value => ({ value }), reactive: value => value, toRaw: value => value,
@@ -52,7 +53,7 @@ const KEPT = [
 const memberOf = (key) => (Object.hasOwn(state, key) ? state : state.activeDrawing())[key];
 
 const fillCircularArtifact = async () => {
-  const saved = JSON.parse(await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'));
+  const saved = await readSavedSession(new Blob([await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw')]));
   const canonical = savedDrawingView(saved, saved.ui.activeDrawingId);
   adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, conservationPairs: new Set(['["s","q"]']) });
   const values = {

@@ -1201,12 +1201,6 @@ into the `[Unreleased]` list below.
   key other than `selector`, `start`, `end` and `reverseComplement`, are
   refused at Load instead of drawing, as the command line refuses them; no
   released version wrote either form (OV-3000, OV-3057).
-- Changed: a Session saved with a `.gz` name (CLI, Python, and the Gallery
-  Sessions) is written as "rsyncable" gzip. The compressor restarts at points
-  chosen from the content, so a Session saved again after a small change keeps
-  most of its compressed bytes, and git or rsync store or send only the
-  difference. Such a file is 6-8% larger; it is still plain gzip, and every
-  reader opens it as before.
 - Fixed: GenBank, EMBL, GFF3, and FASTA files are read as UTF-8 on every
   computer, and a file that is not UTF-8 is read in the computer's locale
   encoding as before. On Windows, a UTF-8 file with characters such as `µ` or

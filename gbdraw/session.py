@@ -19,10 +19,17 @@ from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, NamedTuple, S
 
 from gbdraw.core.numeric import JS_WHITESPACE
 from gbdraw.exceptions import ExportError, ValidationError
-from gbdraw.session_contract import SESSION_ID_RE, GbdrawSession51, SessionResult
+from gbdraw.session_contract import (
+    SESSION_ID_RE,
+    GbdrawSession51,
+    SessionContainerResource,
+    SessionResult,
+    keys_of,
+)
 from gbdraw.io.table_text import legacy_table_rows
 from gbdraw.render.export_limits import DEFAULT_PNG_DPI
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
+from gbdraw.session_container import SessionResourceSource
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
@@ -34,23 +41,27 @@ from gbdraw.session_io import (
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
-    SessionResourceDescriptor,
+    SessionResources,
     _read_session_json,
     _attach_current_web_file_bindings,
-    _embedded_resource_bytes,
     _option_all_values,
     CLI_SESSION_ADMISSION,
     WEB_READ_SESSION_ADMISSION,
     SessionAdmission,
-    _write_validated_session_json,
+    _write_validated_session_file,
+    refuse_json_session_output,
     expand_session_feature_catalog,
-    materialize_embedded_file,
+    materialize_resource,
+    missing_resource_bytes_message,
     normalize_current_session_artifacts,
+    retired_json_session_message,
     safe_embedded_filename,
     seal_protein_identity_manifest,
     session_legend_edits_by_row_key,
+    split_resource_bytes,
     thaw_protein_identity_manifest,
-    validate_session,
+    validate_session_resources,
+    EmbeddedResources,
 )
 from gbdraw.session_drawings import (
     DRAWING_NAMES,
@@ -157,10 +168,14 @@ def noting_session_png_dpi(png: SessionPngDpi) -> Iterator[None]:
         ) from exc
 
 
-_RESOURCE_REQUIRED_FIELDS = frozenset(
+# The fields of a resource descriptor in a document: the Session file's.
+_RESOURCE_FIELDS = keys_of(SessionContainerResource)
+# The fields of an embedded resource of a JSON Session 27-50, read once
+# (:func:`_split_document_resources`).
+_EMBEDDED_RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
 )
-_RESOURCE_OPTIONAL_FIELDS = frozenset({"lastModified", "checksum"})
+_EMBEDDED_RESOURCE_OPTIONAL_FIELDS = frozenset({"lastModified", "checksum"})
 class SessionError(ValidationError):
     """Base error for the public session bridge."""
 
@@ -300,51 +315,114 @@ def _select_drawing(
 class SessionDocument:
     """Validated session envelope detached from caller-owned mutable mappings.
 
+    The document is JSON: each resource is a descriptor
+    (``SessionContainerResource``). The bytes of each resource stay beside it,
+    as a source found by resource ID (a Session file's entry, a file, or bytes
+    read from a JSON Session 27-50 once, when it was read). A mapping given
+    to the constructor is read so too: an embedded resource of a JSON Session
+    gives its bytes, and a descriptor without them is refused.
+
     ``render_session_drawings_cli`` without a re-save drops the resources'
-    embedded data (``_release_materialized_resource_data``). After that the
+    bytes (``_release_materialized_resource_data``). After that the
     document, and any drawing artifacts that share its resources, are no
     longer valid for saving or reuse.
     """
 
-    _data: Mapping[str, Any]
+    _data: Mapping[str, object]
     source_path: Path | None = None
     _drawings: tuple[SessionDrawingParts, ...] = field(
         init=False, repr=False, compare=False
     )
+    _resource_sources: dict[str, SessionResourceSource] = field(
+        init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
-        self._adopt(copy.deepcopy(dict(self._data)), CLI_SESSION_ADMISSION)
+        data = copy.deepcopy(dict(self._data))
+        if data.get("version") == CURRENT_SESSION_VERSION and _embeds_resource_bytes(data):
+            # A mapping given here is a JSON Session; that form of the current
+            # version never reached main (PD-OI-127). Its bytes stay beside it:
+            # ``load_session_document(mapping, resources=...)``.
+            raise SessionFormatError(retired_json_session_message("<mapping>"))
+        self._adopt(data, CLI_SESSION_ADMISSION, None)
 
     @classmethod
-    def _from_parsed(cls, data: dict[str, Any], source_path: Path) -> SessionDocument:
+    def _from_parsed(
+        cls,
+        data: dict[str, object],
+        source_path: Path,
+        sources: Mapping[str, SessionResourceSource],
+    ) -> SessionDocument:
         """Keep a payload just parsed from ``source_path``: no caller holds it."""
 
         document = object.__new__(cls)
         object.__setattr__(document, "source_path", source_path)
-        document._adopt(data, CLI_SESSION_ADMISSION)
+        document._adopt(data, CLI_SESSION_ADMISSION, sources)
         return document
 
     @classmethod
-    def _admitted(cls, data: Mapping[str, Any], admission: SessionAdmission) -> SessionDocument:
-        """A copy of ``data`` checked with the checks of ``admission``."""
+    def _admitted(
+        cls,
+        data: Mapping[str, object],
+        admission: SessionAdmission,
+        sources: Mapping[str, SessionResourceSource] | None = None,
+    ) -> SessionDocument:
+        """A copy of ``data`` checked with the checks of ``admission``; its
+        resources' bytes are embedded or in ``sources``."""
 
         document = object.__new__(cls)
         object.__setattr__(document, "source_path", None)
-        document._adopt(copy.deepcopy(dict(data)), admission)
+        document._adopt(copy.deepcopy(dict(data)), admission, sources)
         return document
 
-    def _adopt(self, data: dict[str, Any], admission: SessionAdmission) -> None:
+    @classmethod
+    def _built(
+        cls,
+        data: Mapping[str, object],
+        sources: Mapping[str, SessionResourceSource] | None,
+        source_path: Path | None = None,
+    ) -> SessionDocument:
+        """A checked copy of ``data``, built here, whose resources' bytes are in ``sources``."""
+
+        document = object.__new__(cls)
+        object.__setattr__(document, "source_path", source_path)
+        document._adopt(copy.deepcopy(dict(data)), CLI_SESSION_ADMISSION, sources)
+        return document
+
+    def _adopt(
+        self,
+        data: dict[str, object],
+        admission: SessionAdmission,
+        sources: Mapping[str, SessionResourceSource] | None,
+    ) -> None:
         expanded = expand_session_feature_catalog(data)
         # Checked once here; every later reader of the document trusts the proof.
         seal_protein_identity_manifest(expanded)
-        _validate_document(expanded, admission)
+        # A JSON Session 27-50 is checked as that version wrote it, its bytes
+        # embedded, before they move beside the document; a Session file's
+        # document is checked with its entries.
+        embedded = _validate_session_document(expanded, admission, None) if _embeds_resource_bytes(expanded) else None
+        if embedded is None:
+            _validate_session_document(expanded, admission, sources or {})
+            expanded, resource_sources = _split_document_resources(expanded, sources)
+        else:
+            _check_embedded_resources(expanded)
+            if embedded.refused is not None:
+                raise SessionResourceError(str(embedded.refused)) from embedded.refused
+            expanded, resource_sources = embedded.document, embedded.sources
+        _check_resource_descriptors(expanded, resource_sources)
         object.__setattr__(self, "_data", expanded)
+        object.__setattr__(self, "_resource_sources", resource_sources)
         object.__setattr__(self, "_drawings", read_session_drawings(expanded))
         if self.source_path is not None:
             object.__setattr__(self, "source_path", Path(self.source_path))
 
     @classmethod
-    def _from_checked_move(cls, data: Mapping[str, Any]) -> SessionDocument:
+    def _from_checked_move(
+        cls,
+        data: Mapping[str, object],
+        sources: Mapping[str, SessionResourceSource],
+    ) -> SessionDocument:
         """Keep the Session 51 that a checked Session 46-51 document moved to, unchecked.
 
         Only the CLI re-save keeps one (``_upgraded_session``): the document it
@@ -355,15 +433,29 @@ class SessionDocument:
         object.__setattr__(document, "source_path", None)
         moved = dict(data)
         seal_protein_identity_manifest(moved)
+        resources = moved.get("resources")
         object.__setattr__(document, "_data", moved)
+        object.__setattr__(document, "_resource_sources", {
+            resource_id: sources[resource_id] for resource_id in (resources if isinstance(resources, Mapping) else {})
+        })
         object.__setattr__(document, "_drawings", read_session_drawings(moved))
         return document
+
+    @property
+    def resources(self) -> SessionResources:
+        """The document's resources: each descriptor and the source of its bytes, by ID."""
+
+        descriptors = self._data.get("resources")
+        return SessionResources(descriptors if isinstance(descriptors, Mapping) else {}, self._resource_sources)
 
     @property
     def version(self) -> int:
         """Session envelope version."""
 
-        return int(self._data["version"])
+        version = self._data["version"]
+        # The Session reader checked it as an integer when the document was adopted.
+        assert isinstance(version, int)
+        return version
 
     @property
     def drawings(self) -> tuple[SessionDrawing, ...]:
@@ -420,7 +512,11 @@ class SessionDocument:
         return self._drawing_parts().request is not None
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a detached JSON-compatible copy of the document."""
+        """Return a detached JSON copy of the document, without its resources' bytes.
+
+        :attr:`resources` reads the bytes; :func:`save_session_document`
+        writes both as a Session file.
+        """
 
         data = copy.deepcopy(dict(self._data))
         thaw_protein_identity_manifest(data)
@@ -576,14 +672,23 @@ class _SessionMaterializationContext(AbstractContextManager[MaterializedSession]
 
 
 def load_session_document(
-    source: str | Path | Mapping[str, Any] | SessionDocument,
+    source: str | Path | Mapping[str, object] | SessionDocument,
+    *,
+    resources: SessionResources | None = None,
 ) -> SessionDocument:
-    """Load and validate a session document without materializing resources."""
+    """Load and validate a session document without materializing resources.
+
+    A mapping's resources either embed their bytes (a JSON Session 27-50) or
+    are descriptors whose bytes ``resources`` holds: the ``resources`` of the
+    document the mapping was read from with ``to_dict()``.
+    """
 
     if isinstance(source, SessionDocument):
         return source
     if isinstance(source, Mapping):
         try:
+            if resources is not None:
+                return SessionDocument._built(source, resources.sources)
             return SessionDocument(source)
         except SessionError:
             raise
@@ -592,13 +697,13 @@ def load_session_document(
 
     path = Path(source)
     try:
-        payload = _read_session_json(path)
+        payload, sources = _read_session_json(path)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     if not isinstance(payload, dict):
         raise SessionFormatError("Session JSON must be an object.")
     try:
-        return SessionDocument._from_parsed(payload, path)
+        return SessionDocument._from_parsed(payload, path, sources)
     except SessionError:
         raise
     except ValidationError as exc:
@@ -630,9 +735,8 @@ def _release_materialized_resource_data(materialized: MaterializedSession) -> No
     """
 
     _active_materialization(materialized)
-    resources = materialized.document._data.get("resources", {})
     for resource_id in materialized.resource_paths:
-        resources[resource_id].pop("data", None)
+        materialized.document._resource_sources.pop(resource_id, None)
 
 
 def _active_materialization(materialized: MaterializedSession) -> None:
@@ -1023,8 +1127,8 @@ def _build_session_document_from_drawings(
     title: str | None = None,
     created_at: datetime | None = None,
     active_drawing: str | None = None,
-    web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, SessionResourceDescriptor] | None = None,
+    web_file_inventory: Mapping[str, object] | None = None,
+    resources: SessionResources | None = None,
 ) -> SessionDocument:
     """Build a current (Session 51) document from already-resolved drawings.
 
@@ -1055,7 +1159,7 @@ def _build_session_document_from_drawings(
         return _drawings_session_document(
             base,
             dict(zip(encoded.ids, encoded.views, strict=True)),
-            resources=encoded.resources,
+            encoded,
             title=title,
             created_at=created_at,
             web_file_inventory=web_file_inventory,
@@ -1065,35 +1169,34 @@ def _build_session_document_from_drawings(
         _enveloped(view, DRAWINGS_SESSION_MIN_VERSION, timestamp, encoded.resources)
         for view in encoded.views
     ]
-    _finish_views(views, title=title, web_file_inventory=web_file_inventory)
+    _finish_views(views, encoded.sources, title=title, web_file_inventory=web_file_inventory)
     if resources:
         from gbdraw.session_resources import drawing_resource_ids
 
         referenced = set().union(*(drawing_resource_ids(view) for view in views))
         for view in views:
-            _keep_resources(view, referenced | (set(encoded.resources) - set(resources)))
+            _keep_resources(view, referenced | (set(encoded.resources) - set(resources.descriptors)))
     try:
         fields = write_session_drawings(views, ids=encoded.ids, names=encoded.names, active=active)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
-    return SessionDocument(fields)
+    return SessionDocument._built(fields, encoded.sources)
 
 
 def _mode_scoped_document(
     drawing: _DrawingBuild,
     *,
     created_at: datetime | None = None,
-    web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, SessionResourceDescriptor] | None = None,
+    web_file_inventory: Mapping[str, object] | None = None,
+    resources: SessionResources | None = None,
 ) -> SessionDocument:
     """The checked mode-scoped (Session 48) document of one drawing upgraded
     from a Session 31-45, before its move to drawings."""
 
-    return SessionDocument(
-        _mode_scoped_data(
-            drawing, created_at=created_at, web_file_inventory=web_file_inventory, resources=resources,
-        )
+    data, sources = _mode_scoped_data(
+        drawing, created_at=created_at, web_file_inventory=web_file_inventory, resources=resources,
     )
+    return SessionDocument._built(data, sources)
 
 
 def _mode_scoped_document_of_request(
@@ -1117,12 +1220,12 @@ def _mode_scoped_data(
     drawing: _DrawingBuild,
     *,
     created_at: datetime | None = None,
-    web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, SessionResourceDescriptor] | None = None,
-) -> dict[str, Any]:
+    web_file_inventory: Mapping[str, object] | None = None,
+    resources: SessionResources | None = None,
+) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
     """The mode-scoped (Session 48) data of one drawing of an older Session,
-    not yet checked; the move to drawings
-    (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`)
+    not yet checked, and the sources of its resources' bytes; the move to
+    drawings (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`)
     reads its ``modes`` and ``ui.mode``. ``resources`` are the source's."""
 
     encoded = _encoded_drawings((drawing,), allocate=True, resources=resources)
@@ -1136,11 +1239,11 @@ def _mode_scoped_data(
             mode: mode_slice_of_version(slice_, MODE_SCOPED_SESSION_MAX_VERSION) for mode, slice_ in data["modes"].items()
         }
     if web_file_inventory is not None:
-        _attach_current_web_file_bindings(data, web_file_inventory)
+        _attach_current_web_file_bindings(data, web_file_inventory, encoded.sources)
     if resources:
-        _drop_unreferenced_resources(data, resources)
+        _drop_unreferenced_resources(data, resources.descriptors)
     normalize_current_session_artifacts(data)
-    return data
+    return data, encoded.sources
 
 
 @dataclass(frozen=True)
@@ -1151,13 +1254,15 @@ class _EncodedDrawings:
     ids: list[str]
     names: list[str]
     resources: dict[str, Any]
+    # The source of each resource's bytes; binding Web files adds to it.
+    sources: dict[str, SessionResourceSource]
 
 
 def _encoded_drawings(
     drawings: Sequence[_DrawingBuild],
     *,
     allocate: bool,
-    resources: Mapping[str, SessionResourceDescriptor] | None,
+    resources: SessionResources | None,
 ) -> _EncodedDrawings:
     """The one-drawing view of each drawing, its request encoded through one
     resource table that starts from ``resources``. New drawings (``allocate``)
@@ -1227,10 +1332,10 @@ def _encoded_drawings(
             view["ui"] = {**dict(view.get("ui") or {}), "mode": drawing.mode}
         views.append(view)
     try:
-        descriptors = table.descriptors()
+        held = table.resources()
     except (CanonicalRequestCodecError, ValidationError) as exc:
         raise SessionConversionError(str(exc)) from exc
-    return _EncodedDrawings(views, taken_ids, names, descriptors)
+    return _EncodedDrawings(views, taken_ids, names, dict(held.descriptors), dict(held.sources))
 
 
 def _active_drawing_index(encoded: _EncodedDrawings, active_drawing: str | None) -> int | None:
@@ -1267,16 +1372,18 @@ def _enveloped(
 
 
 def _finish_views(
-    views: Sequence[dict[str, Any]],
+    views: Sequence[dict[str, object]],
+    sources: dict[str, SessionResourceSource],
     *,
     title: str | None,
-    web_file_inventory: Mapping[str, Any] | None,
+    web_file_inventory: Mapping[str, object] | None,
 ) -> None:
-    """Bind each view's Web files, set the Session title and normalize its artifacts."""
+    """Bind each view's Web files (their bytes' sources go to ``sources``),
+    set the Session title and normalize its artifacts."""
 
     for view in views:
         if web_file_inventory is not None:
-            _attach_current_web_file_bindings(view, web_file_inventory)
+            _attach_current_web_file_bindings(view, web_file_inventory, sources)
         if title is not None:
             view["title"] = str(title)
         normalize_current_session_artifacts(view)
@@ -1287,9 +1394,9 @@ def _build_session_document_from_resolved_request(
     *,
     title: str | None = None,
     created_at: datetime | None = None,
-    adjunct: Mapping[str, Any] | None = None,
-    web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, SessionResourceDescriptor] | None = None,
+    adjunct: Mapping[str, object] | None = None,
+    web_file_inventory: Mapping[str, object] | None = None,
+    resources: SessionResources | None = None,
 ) -> SessionDocument:
     """Build a one-drawing current document from an already-resolved request."""
 
@@ -1304,12 +1411,12 @@ def _build_session_document_from_resolved_request(
 
 def _drawings_session_document(
     base: SessionDocument,
-    views: dict[str, dict[str, Any]],
+    views: dict[str, dict[str, object]],
+    encoded: _EncodedDrawings,
     *,
-    resources: Mapping[str, SessionResourceDescriptor],
     title: str | None,
     created_at: datetime | None,
-    web_file_inventory: Mapping[str, Any] | None,
+    web_file_inventory: Mapping[str, object] | None,
 ) -> SessionDocument:
     """A Session 51 saved again: each view replaces the base drawing of its ID.
 
@@ -1319,10 +1426,10 @@ def _drawings_session_document(
 
     from gbdraw.session_resources import drawing_resource_ids
 
-    shared = dict(resources)
+    shared = dict(encoded.resources)
     for view in views.values():
         view["resources"] = shared
-    _finish_views(list(views.values()), title=title, web_file_inventory=web_file_inventory)
+    _finish_views(list(views.values()), encoded.sources, title=title, web_file_inventory=web_file_inventory)
     kept = [drawing.artifacts.fields for drawing in base._drawings if drawing.id not in views]
     referenced = set().union(*(drawing_resource_ids(fields) for fields in (*views.values(), *kept)))
     for view in views.values():
@@ -1331,11 +1438,11 @@ def _drawings_session_document(
         fields = replace_session_drawings(base._data, views)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
-    return SessionDocument({
+    return SessionDocument._built({
         "format": SESSION_FORMAT,
         "createdAt": (created_at or datetime.now(timezone.utc)).isoformat(),
         **fields,
-    })
+    }, encoded.sources)
 
 
 def _drop_unreferenced_resources(
@@ -1474,7 +1581,7 @@ def _write_session_document(
     try:
         _preflight_session_output(path, overwrite=overwrite)
         # The document was validated when it was built.
-        _write_validated_session_json(path, document._data, overwrite=overwrite)
+        _write_validated_session_file(path, document._data, document._resource_sources, overwrite=overwrite)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     return document
@@ -1484,6 +1591,7 @@ def _preflight_session_output(path: str | Path, *, overwrite: bool) -> None:
     """Refuse a Session output path before anything is built or written."""
 
     output_path = Path(path)
+    refuse_json_session_output(output_path)
     preflight_output_paths((output_path,), overwrite=True)
     if (output_path.exists() or output_path.is_symlink()) and not overwrite:
         raise OutputExistsError((output_path,), subject="Session output")
@@ -1574,6 +1682,8 @@ class LegacyDrawings(NamedTuple):
     result_set_sources: LegacyResultSetSources
     repairs: tuple[DraftMigrationRepair, ...]
     moved_annotation_targets: int
+    # The document's resources: its descriptors and their bytes' sources.
+    resources: SessionResources
 
 
 def _set_aside_results(stored_results: StoredResults, drawing_id: str, state: dict[str, Any]) -> None:
@@ -1648,22 +1758,35 @@ def _upgrade_mode_scoped_session(
                     raise
                 except ValidationError as exc:
                     raise SessionConversionError(str(exc)) from exc
-        data["resources"] = _with_resource_bytes(loaded._data["resources"], replaced)
-    return SessionDocument({**data, "version": MODE_SCOPED_SESSION_MAX_VERSION})
+        resources = _with_resource_bytes(loaded.resources, replaced)
+        data["resources"] = dict(resources.descriptors)
+        return SessionDocument._built({**data, "version": MODE_SCOPED_SESSION_MAX_VERSION}, resources.sources)
+    return SessionDocument._built({**data, "version": MODE_SCOPED_SESSION_MAX_VERSION}, loaded._resource_sources)
 
 
-def _with_resource_bytes(
-    resources: Mapping[str, SessionResourceDescriptor],
-    replaced: Mapping[str, bytes],
-) -> dict[str, SessionResourceDescriptor]:
+def _hold_temporary_sources(document: SessionDocument, directory: Path) -> None:
+    """Hold in memory the bytes of ``document``'s resources read from files under ``directory``.
+
+    A document built while its source's resources are materialized may take
+    a new resource from a materialized file, which goes with the directory.
+    """
+
+    from gbdraw.session_container import BytesResourceSource, FileResourceSource
+
+    for resource_id, source in list(document._resource_sources.items()):
+        if isinstance(source, FileResourceSource) and source.path.is_relative_to(directory):
+            document._resource_sources[resource_id] = BytesResourceSource(document.resources.read(resource_id))
+
+
+def _with_resource_bytes(resources: SessionResources, replaced: Mapping[str, bytes]) -> SessionResources:
     """``resources`` with the bytes of ``replaced`` under their stored IDs."""
 
     from gbdraw.api.session_compat import replace_resource_bytes
 
-    return {
-        **resources,
-        **{key: replace_resource_bytes(resources[key], content) for key, content in replaced.items()},
-    }
+    descriptors, sources = dict(resources.descriptors), dict(resources.sources)
+    for key, content in replaced.items():
+        descriptors[key], sources[key] = replace_resource_bytes(descriptors[key], content)
+    return SessionResources(descriptors, sources)
 
 
 def upgrade_session_document(
@@ -1721,7 +1844,9 @@ def _upgraded_session(
     # (``to_dict`` thaws it), and builds a new document that SessionDocument
     # copies: the manifest is not checked again.
     drawings = cast(Mapping[str, Any], _drawings_of_current(upgrade.document._data))
-    moved = SessionDocument(drawings) if checked else SessionDocument._from_checked_move(drawings)
+    sources = upgrade.document._resource_sources
+    moved = (SessionDocument._built(drawings, sources) if checked
+             else SessionDocument._from_checked_move(drawings, sources))
     return SessionUpgrade(moved, upgrade.warnings)
 
 
@@ -1791,16 +1916,16 @@ def drawings_document_from_legacy(
 
     report = DraftMigrationReport()
     stored_results: StoredResults = {}
-    current = (
-        _request_less_data(
+    if loaded._drawing_parts().request is None:
+        current, sources = _request_less_data(
             loaded, temporary_directory, report=report, stored_results=stored_results
         )
-        if loaded._drawing_parts().request is None
-        else _upgrade_to_current(
+    else:
+        upgraded = _upgrade_to_current(
             loaded, temporary_directory, stored_results=stored_results, report=report,
             stored_request_schema=stored_request_schema,
-        ).document.to_dict()
-    )
+        ).document
+        current, sources = upgraded.to_dict(), upgraded._resource_sources
     drawings = _drawings_of_current(current, stored_results=stored_results)
     drawing_ids = {drawing["id"] for drawing in drawings["drawings"]}
     if not stored_results.keys() <= drawing_ids:
@@ -1808,7 +1933,7 @@ def drawings_document_from_legacy(
             "The drawings " + ", ".join(sorted(stored_results.keys() - drawing_ids))
             + " of the stored Results are not in the Session 51."
         )
-    _web_read_document(cast(Mapping[str, Any], drawings))
+    checked = _web_read_document(drawings, sources)
     # The file's one set went to the drawing of its request, or was set aside
     # for the drawing of its Results.
     set_sources: LegacyResultSetSources = {
@@ -1822,16 +1947,21 @@ def drawings_document_from_legacy(
             + ", ".join(sorted(set_sources)) + "."
         )
     return LegacyDrawings(
-        drawings, stored_results, set_sources, tuple(report.repairs), report.moved_annotation_targets
+        drawings, stored_results, set_sources, tuple(report.repairs), report.moved_annotation_targets,
+        checked.resources,
     )
 
 
-def _web_read_document(data: Mapping[str, Any]) -> SessionDocument:
+def _web_read_document(
+    data: Mapping[str, object],
+    sources: Mapping[str, SessionResourceSource] | None = None,
+) -> SessionDocument:
     """``data`` as a document checked as Web Load admits it after its own
-    readers (:data:`WEB_READ_SESSION_ADMISSION`)."""
+    readers (:data:`WEB_READ_SESSION_ADMISSION`); its resources' bytes are
+    embedded (a JSON Session as Web Load sends it) or in ``sources``."""
 
     try:
-        return SessionDocument._admitted(data, WEB_READ_SESSION_ADMISSION)
+        return SessionDocument._admitted(data, WEB_READ_SESSION_ADMISSION, sources)
     except SessionError:
         raise
     except ValidationError as exc:
@@ -1856,8 +1986,10 @@ def _project_adjunct(
     from gbdraw.session_migration import project_session_adjunct_for_current_write
 
     try:
+        resources = loaded.resources if tables is None else tables.resources
         state, inventory = project_session_adjunct_for_current_write(
-            loaded._data if tables is None else {**loaded._data, "resources": tables.resources},
+            {**loaded._data, "resources": dict(resources.descriptors)},
+            resources,
             source_version=loaded.version,
             source_features=source_features,
             report=report,
@@ -1888,7 +2020,8 @@ def _project_adjunct(
         if resource_id is None:
             return card
         return {**card, "file": {**card["file"], "resourceId": resource_id,
-                                 "descriptor": tables.resources[resource_id]}}
+                                 "descriptor": tables.resources.descriptors[resource_id],
+                                 "source": tables.resources.source(resource_id)}}
 
     if isinstance(cards, list):
         inventory["linearComparisons"] = [rebound(card) for card in cards]
@@ -1901,8 +2034,9 @@ def _request_less_data(
     *,
     report: DraftMigrationReport | None = None,
     stored_results: StoredResults | None = None,
-) -> dict[str, Any]:
-    """The current data of a Session 27-44 whose drawing has no request, not yet checked.
+) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
+    """The current data of a Session 27-44 whose drawing has no request, not yet
+    checked, and the sources of its resources' bytes.
 
     A drawing without a request has no Results' catalog (Sessions 48 to 50);
     its Results go to ``stored_results`` when given (Web Load), by the ID of
@@ -1933,7 +2067,7 @@ def _request_less_data(
     return _mode_scoped_data(
         _DrawingBuild(mode=mode, request=None, state=state),
         web_file_inventory=web_file_inventory,
-        resources=loaded._data.get("resources"),
+        resources=loaded.resources,
     )
 
 
@@ -2016,7 +2150,7 @@ def _upgrade_to_current(
 
     repaired = session_with_current_anchor_modes(loaded._data)
     if repaired != loaded._data:
-        loaded = SessionDocument(repaired, source_path=loaded.source_path)
+        loaded = SessionDocument._built(repaired, loaded._resource_sources, loaded.source_path)
     if loaded.version == MODE_SCOPED_SESSION_MAX_VERSION:
         return SessionUpgrade(loaded)
     if loaded.version >= MODE_SCOPED_SESSION_MIN_VERSION:
@@ -2027,7 +2161,7 @@ def _upgrade_to_current(
     drawing = loaded._drawing_parts()
     if drawing.request is None:
         return SessionUpgrade(
-            SessionDocument(_request_less_data(loaded, temporary_directory, report=report))
+            SessionDocument._built(*_request_less_data(loaded, temporary_directory, report=report))
         )
     from gbdraw.api.session_compat import (
         adapt_session_request,
@@ -2049,7 +2183,7 @@ def _upgrade_to_current(
             # search frame; the request item and the Web file card of each
             # record pair read that pair's rows (OV-2080, OV-2097).
             tables = search_frame_nucleotide_resources(
-                drawing.request, request, adapted.request, source["resources"],
+                drawing.request, request, adapted.request, loaded.resources,
             )
         except SessionError:
             raise
@@ -2107,6 +2241,7 @@ def _upgrade_to_current(
             web_file_inventory=web_file_inventory,
             resources=resources,
         )
+        _hold_temporary_sources(upgraded, materialized.temp_directory)
     for warning in warnings:
         logger.warning("%s", warning)
     return SessionUpgrade(upgraded, tuple(warnings))
@@ -2169,12 +2304,112 @@ def with_request_output(
     )
 
 
-def _validate_document(data: Mapping[str, Any], admission: SessionAdmission) -> None:
+def _split_document_resources(
+    data: dict[str, object],
+    sources: Mapping[str, SessionResourceSource] | None,
+) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
+    """``data`` with JSON descriptors, and each resource's bytes' source (:func:`split_resource_bytes`).
+
+    An embedded resource of a JSON Session 27-50 is checked as that version
+    wrote it, then gives its bytes, checked against its size and checksum.
+    """
+
+    if _canonical_resources(data) is None:
+        return data, {}
+    _check_embedded_resources(data)
     try:
-        validate_session(data, admission)
+        return split_resource_bytes(data, sources)
+    except ValidationError as exc:
+        raise SessionResourceError(str(exc)) from exc
+
+
+def _canonical_resources(data: Mapping[str, object]) -> Mapping[object, object] | None:
+    """The ``resources`` object of a checked Session 27 or later, else None.
+
+    The version was checked as an integer before this is asked.
+    """
+
+    version = data.get("version")
+    resources = data.get("resources")
+    if isinstance(version, int) and version >= CANONICAL_SESSION_MIN_VERSION and isinstance(resources, Mapping):
+        return resources
+    return None
+
+
+def _check_embedded_resources(data: Mapping[str, object]) -> None:
+    for resource_id, entry in (_canonical_resources(data) or {}).items():
+        if isinstance(entry, Mapping) and ("encoding" in entry or "data" in entry):
+            _check_embedded_resource(resource_id, entry)
+
+
+def _check_embedded_resource(resource_id: object, entry: Mapping[str, object]) -> None:
+    """The fields of an embedded resource of a JSON Session 27-50."""
+
+    fields = set(entry)
+    missing = _EMBEDDED_RESOURCE_REQUIRED_FIELDS - fields
+    unknown = fields - _EMBEDDED_RESOURCE_REQUIRED_FIELDS - _EMBEDDED_RESOURCE_OPTIONAL_FIELDS
+    if missing:
+        raise SessionResourceError(
+            f"Canonical resource {resource_id!r} is missing field(s): " + ", ".join(sorted(missing)) + "."
+        )
+    if unknown:
+        raise SessionResourceError(
+            f"Canonical resource {resource_id!r} has unknown field(s): " + ", ".join(sorted(unknown)) + "."
+        )
+    encoding = entry.get("encoding")
+    if encoding not in {"base64", DEPTH_FILE_ENCODING}:
+        raise SessionResourceError(
+            f"Canonical resource {resource_id!r} has unsupported encoding {encoding!r}."
+        )
+    if encoding == "base64" and not isinstance(entry.get("data"), str):
+        raise SessionResourceError(
+            f"Canonical resource {resource_id!r} requires base64 string data."
+        )
+    if encoding == DEPTH_FILE_ENCODING and not isinstance(entry.get("data"), Mapping):
+        raise SessionResourceError(
+            f"Canonical depth resource {resource_id!r} requires an object payload."
+        )
+    size = entry.get("size")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+        raise SessionResourceError(
+            f"Canonical resource {resource_id!r} has invalid size metadata."
+        )
+
+
+def _embeds_resource_bytes(data: Mapping[str, object]) -> bool:
+    """Whether ``data`` is checked as it was stored: a JSON Session 27-50 whose
+    resources embed their bytes, or a document without an integer version."""
+
+    version = data.get("version")
+    resources = data.get("resources")
+    return not isinstance(version, int) or isinstance(version, bool) or (
+        isinstance(resources, Mapping)
+        and any(isinstance(entry, Mapping) and ("encoding" in entry or "data" in entry) for entry in resources.values())
+    )
+
+
+def _validate_session_document(
+    data: Mapping[str, object],
+    admission: SessionAdmission,
+    sources: Mapping[str, SessionResourceSource] | None,
+) -> EmbeddedResources | None:
+    """``validate_session_resources``, its refusal classified."""
+
+    try:
+        return validate_session_resources(data, admission, sources)
     except ValidationError as exc:
         raise _classify_validation_error(exc) from exc
-    if int(data.get("version", 0)) < CANONICAL_SESSION_MIN_VERSION:
+
+
+def _check_resource_descriptors(
+    data: Mapping[str, object],
+    sources: Mapping[str, SessionResourceSource],
+) -> None:
+    """Check a checked document's resources: JSON descriptors, their bytes in ``sources``."""
+
+    version = data.get("version")
+    # The document was checked: its version is an integer.
+    if not isinstance(version, int) or version < CANONICAL_SESSION_MIN_VERSION:
         return
     resources = data.get("resources")
     assert isinstance(resources, Mapping)
@@ -2189,8 +2424,8 @@ def _validate_document(data: Mapping[str, Any], admission: SessionAdmission) -> 
                 f"Canonical resource {resource_id!r} must be an object."
             )
         fields = set(entry)
-        missing = _RESOURCE_REQUIRED_FIELDS - fields
-        unknown = fields - _RESOURCE_REQUIRED_FIELDS - _RESOURCE_OPTIONAL_FIELDS
+        missing = _RESOURCE_FIELDS - fields
+        unknown = fields - _RESOURCE_FIELDS
         if missing:
             raise SessionResourceError(
                 f"Canonical resource {resource_id!r} is missing field(s): "
@@ -2217,31 +2452,18 @@ def _validate_document(data: Mapping[str, Any], admission: SessionAdmission) -> 
                 f"Duplicate canonical resource filename after sanitization: {name!r}."
             )
         sanitized_names.add(name)
-        encoding = entry.get("encoding")
-        if encoding not in {"base64", DEPTH_FILE_ENCODING}:
+        if not isinstance(entry.get("type"), str):
             raise SessionResourceError(
-                f"Canonical resource {resource_id!r} has unsupported encoding {encoding!r}."
+                f"Canonical resource {resource_id!r} requires a media type."
             )
-        if encoding == "base64" and not isinstance(entry.get("data"), str):
-            raise SessionResourceError(
-                f"Canonical resource {resource_id!r} requires base64 string data."
-            )
-        if encoding == DEPTH_FILE_ENCODING and not isinstance(entry.get("data"), Mapping):
-            raise SessionResourceError(
-                f"Canonical depth resource {resource_id!r} requires an object payload."
-            )
-        size = entry.get("size")
-        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
-            raise SessionResourceError(
-                f"Canonical resource {resource_id!r} has invalid size metadata."
-            )
-        if "checksum" in entry:
-            try:
-                _embedded_resource_bytes(entry)
-            except ValidationError as exc:
+        for field_name in ("size", "lastModified"):
+            value = entry.get(field_name)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise SessionResourceError(
-                    f"Canonical resource {resource_id!r} is invalid: {exc}"
-                ) from exc
+                    f"Canonical resource {resource_id!r} has invalid {field_name} metadata."
+                )
+        if resource_id not in sources:
+            raise SessionResourceError(missing_resource_bytes_message(resource_id))
     for drawing in read_session_drawings(data):
         unresolved = drawing.resource_ids - set(resources)
         if unresolved:
@@ -2259,18 +2481,12 @@ def _materialize_resources(
 ) -> dict[str, Path]:
     if document.version < CANONICAL_SESSION_MIN_VERSION:
         return {}
-    raw_resources = document._data.get("resources")
-    assert isinstance(raw_resources, Mapping)
+    resources = document.resources
     result: dict[str, Path] = {}
-    for resource_id, entry in raw_resources.items():
-        assert isinstance(resource_id, str)
-        assert isinstance(entry, Mapping)
+    for resource_id, descriptor in resources.descriptors.items():
         try:
-            result[resource_id] = materialize_embedded_file(
-                entry,
-                temp_dir=temp_directory,
-                role=resource_id,
-                prefix_role=False,
+            result[resource_id] = materialize_resource(
+                resources, resource_id, temp_dir=temp_directory,
             )
         except ValidationError as exc:
             raise SessionResourceError(

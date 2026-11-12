@@ -10,14 +10,11 @@ import binascii
 import copy
 import csv
 import hashlib
-import io
 import json
 import math
 import os
 import re
-import tempfile
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +24,7 @@ from typing import (
     Literal,
     Mapping,
     MutableMapping,
+    NamedTuple,
     NoReturn,
     Sequence,
     TypedDict,
@@ -58,13 +56,10 @@ from .core.numeric import (
     ASCII_NONNEGATIVE_INTEGER_PATTERN,
     JS_MAX_SAFE_INTEGER,
     JS_WHITESPACE,
-    ascii_float,
-    parse_ascii_integer,
     parse_ascii_nonnegative_integer,
 )
 from .config.models.root import read_stored_font_size
 from .io.input_text import GZIP_ERRORS, open_input_text
-from .io.rsyncable_gzip import RsyncableGzipWriter
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.cli_tables import COMPARISON_SEQUENCE_SEPARATOR
@@ -72,7 +67,21 @@ from .io.colors import current_palette_name, is_user_color, named_color_hex, pac
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .io.regions import region_text
 from .render.formats import normalize_format_token
-from .render.output_paths import OutputExistsError, commit_staged_output_file
+from .session_container import (
+    SESSION_FILE_UNREADABLE,
+    SESSION_JSON_INVALID,
+    SESSION_RESOURCES_INVALID,
+    BytesResourceSource,
+    FileResourceSource,
+    SessionContainer,
+    SessionContainerError,
+    SessionResourceSource,
+    invalid_session_json_message,
+    is_session_container,
+    parse_session_json,
+    read_session_container,
+    write_session_container,
+)
 from .session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
@@ -80,7 +89,9 @@ from .session_legacy_values import (
     LEGACY_SCALAR_AXIS_LABELS,
 )
 from .session_contract import (
+    CURRENT_SESSION_VERSION,
     FeatureOverrideDraftRow,
+    SessionContainerResource,
     FlatDraftFields,
     GbdrawSession,
     LegacySessionFields,
@@ -112,7 +123,6 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 51
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
 # ``modes`` (PD-OI-090) and keys per-feature edits by source identity;
@@ -320,6 +330,8 @@ class SessionBuildContext:
     # the producer of what a Web Save writes); the Session keeps it as it is,
     # in place of any ``runMetadata`` a source Session held.
     run_metadata: SessionRunMetadata | None = None
+    # The bytes' sources of ``source_session``'s resources.
+    source_resources: Mapping[str, SessionResourceSource] | None = None
 
 
 def _feature_catalog_key(feature: Mapping[str, Any]) -> tuple[int, str] | None:
@@ -706,40 +718,66 @@ def expand_session_feature_catalog(
 
 
 def load_session(path: str | Path) -> dict[str, Any]:
-    """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file.
+    """Load and validate a Session file, or an older JSON Session; return its document.
 
     It validates the document as ``gbdraw.session.load_session_document`` does,
-    canonical resource descriptors included.
+    canonical resource descriptors included. The document is JSON, without
+    its resources' bytes; ``load_session_document`` keeps them.
     """
 
-    from .session import _validate_document
+    from .session import load_session_document
 
-    payload = _read_session_json(path)
-    if not isinstance(payload, dict):
-        raise ValidationError("Session JSON must be an object.")
-    payload = expand_session_feature_catalog(payload)
-    _validate_document(payload, CLI_SESSION_ADMISSION)
-    return payload
+    return load_session_document(path).to_dict()
 
 
-def _read_session_json(path: str | Path) -> object:
-    """Parse a plain or gzip Session file; every unreadable file is a ``ValidationError``.
+def _read_session_json(path: str | Path) -> tuple[object, dict[str, SessionResourceSource]]:
+    """Parse a Session file and give the sources of its resources' bytes; every
+    unreadable file is a ``ValidationError``.
 
-    A truncated or corrupt gzip stream and text that is not UTF-8 are "not a
-    valid JSON session file", as malformed JSON is (OV-1251); a duplicate key
-    raises its own ``ValidationError``.
+    The content decides, never the name: a ZIP is a Session file
+    (``session_container``), whose resources' bytes stay in their entries;
+    anything else is a JSON Session, plain or gzip, of a version before the
+    current one, whose embedded resources give their bytes where the
+    document is read (:func:`split_resource_bytes`). A truncated or corrupt
+    gzip stream and text that is not UTF-8 are "not a valid JSON session
+    file", as malformed JSON is (OV-1251); a duplicate key raises its own
+    ``ValidationError``.
     """
 
     session_path = Path(path)
     try:
-        return json.loads(
-            _read_session_text(session_path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except (json.JSONDecodeError, UnicodeDecodeError, *GZIP_ERRORS) as exc:
-        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
+        with open(session_path, "rb") as session_file:
+            head = session_file.read(4)
+        if is_session_container(head):
+            container = read_session_container(session_path)
+            check_session_file_version(container)
+            return container.document, {
+                resource_id: container.resource(resource_id) for resource_id in container.resource_ids()
+            }
+        payload = parse_session_json(_read_session_text(session_path), session_path)
+    except (UnicodeDecodeError, *GZIP_ERRORS) as exc:
+        raise ValidationError(invalid_session_json_message(session_path), diagnostic=SESSION_JSON_INVALID) from exc
     except OSError as exc:
-        raise ValidationError(f"Could not read session file: {session_path}") from exc
+        raise ValidationError(f"Could not read session file: {session_path}", diagnostic=SESSION_FILE_UNREADABLE) from exc
+    if isinstance(payload, dict) and payload.get("version") == CURRENT_SESSION_VERSION:
+        # The current version is written as a Session file only; its JSON form never reached main.
+        raise ValidationError(retired_json_session_message(session_path), diagnostic=SESSION_RESOURCES_INVALID)
+    return payload, {}
+
+
+def check_session_file_version(container: SessionContainer) -> None:
+    """Refuse a Session file whose document is older than the current version.
+
+    Only the current version was ever written as a Session file, so an older
+    document in one is refused as an unsupported version; a newer one is left
+    to the Session admission, which refuses it as too new. The Web's twin is
+    ``assertSessionFileVersion`` in services/session-authority.js.
+    """
+
+    document = container.document
+    version = document.get("version") if isinstance(document, dict) else None
+    if isinstance(version, int) and not isinstance(version, bool) and version < CURRENT_SESSION_VERSION:
+        raise SessionContainerError("unsupported-version", container.path, version=version)
 
 
 def _read_session_text(path: str | Path) -> str:
@@ -750,11 +788,47 @@ def _read_session_text(path: str | Path) -> str:
 
 
 def validate_session(
-    session: Mapping[str, Any],
+    session: Mapping[str, object],
     admission: SessionAdmission = CLI_SESSION_ADMISSION,
+    *,
+    resource_sources: Mapping[str, SessionResourceSource] | None = None,
 ) -> None:
     """Validate the conservative session envelope used by the CLI, with the
-    checks of ``admission``."""
+    checks of ``admission``.
+
+    ``resource_sources`` hold the bytes of the document's resources; a JSON
+    Session 27-50 as it was read (embedded resources) gives its own
+    (:func:`split_resource_bytes`).
+    """
+
+    embedded = validate_session_resources(session, admission, resource_sources)
+    if embedded is not None and embedded.refused is not None:
+        raise embedded.refused
+
+
+class EmbeddedResources(NamedTuple):
+    """The resources of a checked JSON Session 27-50, decoded once.
+
+    ``document`` holds JSON descriptors and ``sources`` their bytes
+    (:func:`split_resource_bytes`); ``refused`` is the refusal of bytes that do
+    not match their descriptor, which the caller raises after its own checks
+    of the stored fields. ``document`` is a Session 27-50 as it was stored,
+    unvalidated beyond its envelope: a JSON object of that version.
+    """
+
+    document: dict[str, object]
+    sources: dict[str, SessionResourceSource]
+    refused: ValidationError | None
+
+
+def validate_session_resources(
+    session: Mapping[str, object],
+    admission: SessionAdmission,
+    resource_sources: Mapping[str, SessionResourceSource] | None,
+) -> EmbeddedResources | None:
+    """:func:`validate_session`, without raising the refusal of embedded bytes;
+    for a JSON Session 27-50 whose resources embed their bytes, also those
+    resources (:class:`EmbeddedResources`)."""
 
     if not isinstance(session, Mapping):
         raise ValidationError("Session JSON must be an object.")
@@ -770,19 +844,40 @@ def validate_session(
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
+    refused_bytes: ValidationError | None = None
+    split: tuple[dict[str, object], dict[str, SessionResourceSource]] = (dict(session), {})
+    embeds = False
+    declared = session.get("resources")
+    if resource_sources is None and isinstance(declared, Mapping) and any(
+        isinstance(entry, Mapping) and ("encoding" in entry or "data" in entry)
+        for entry in declared.values()
+    ):
+        embeds = True
+        # A JSON Session 27-50 is checked as it was written, its bytes embedded;
+        # bytes that do not match their descriptor are refused after the
+        # document's own checks, which name the field a reader can fix.
+        try:
+            split = split_resource_bytes(session)
+            resource_sources = split[1]
+        except ValidationError as exc:
+            refused_bytes = exc
+            resource_sources = _decodable_resource_sources(declared)
+    sources = resource_sources or {}
     if version >= DRAWINGS_SESSION_MIN_VERSION:
         from .session_drawings import checked_drawing_views
 
         for view in checked_drawing_views(session):
-            _validate_document_body(view, version, admission)
-        return
-    _validate_document_body(session, version, admission)
+            _validate_document_body(view, version, admission, sources)
+    else:
+        _validate_document_body(session, version, admission, sources)
+    return EmbeddedResources(split[0], split[1], refused_bytes) if embeds else None
 
 
 def _validate_document_body(
-    session: Mapping[str, Any],
+    session: Mapping[str, object],
     version: int,
     admission: SessionAdmission,
+    sources: Mapping[str, SessionResourceSource],
 ) -> None:
     """Validate a Session 27-50, or one Session 51 drawing seen as one."""
 
@@ -837,8 +932,8 @@ def _validate_document_body(
         _validate_current_feature_payloads(session, version)
         if admission.feature_catalog:
             _validate_current_feature_catalog_authority(session, version)
-        _validate_alignment_reset_receipt(session)
-        _validate_other_mode_result(session, version)
+        _validate_alignment_reset_receipt(session, sources)
+        _validate_other_mode_result(session, version, sources)
     if version >= MODE_SCOPED_SESSION_MIN_VERSION:
         _validate_mode_slices(session, version)
     elif version >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION:
@@ -987,9 +1082,6 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
             metadata(value)
             descriptor = resources[resource_id]
             if (not isinstance(descriptor, Mapping)
-                    or descriptor.get("encoding") not in ("base64", DEPTH_FILE_ENCODING)
-                    or (descriptor.get("encoding") == "base64" and not isinstance(descriptor.get("data"), str))
-                    or (descriptor.get("encoding") == DEPTH_FILE_ENCODING and not isinstance(descriptor.get("data"), Mapping))
                     or isinstance(descriptor.get("size"), bool)
                     or not isinstance(descriptor.get("size"), int) or descriptor["size"] < 0):
                 raise ValidationError("Invalid Web file binding resource payload.")
@@ -1011,8 +1103,6 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
                 raise ValidationError("A composite binding requires at least two components.")
             for component in components:
                 leaf(component)
-                if resources[component["resourceId"]]["encoding"] != "base64":
-                    raise ValidationError("Composite components require base64 resources.")
         else:
             leaf(binding)
 
@@ -1618,7 +1708,10 @@ def _validate_current_comparison_authority(
             )
 
 
-def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
+def _validate_alignment_reset_receipt(
+    session: Mapping[str, object],
+    sources: Mapping[str, SessionResourceSource],
+) -> None:
     """Admit optional artifact restoration history without interpreting render policy."""
     editor = session.get("editorState")
     request = session.get("renderRequest")
@@ -1667,15 +1760,13 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
                 identity[key] = value
             else:
                 if value not in fingerprints:
-                    resource = session.get("resources", {}).get(value)
-                    if not isinstance(resource, Mapping) or resource.get("encoding") != "base64":
+                    descriptors = session.get("resources")
+                    if not isinstance(descriptors, Mapping) or not isinstance(descriptors.get(value), Mapping):
                         invalid()
                     try:
-                        content = base64.b64decode(resource["data"], validate=True)
-                    except (ValueError, TypeError, KeyError) as exc:
+                        content = read_resource_bytes(SessionResources(descriptors, sources), value)
+                    except (ValidationError, TypeError, KeyError) as exc:
                         raise ValidationError("Alignment reset receipt resource is invalid.") from exc
-                    if len(content) != resource.get("size"):
-                        invalid()
                     fingerprints[value] = hashlib.sha256(content).hexdigest()
                 identity[key] = fingerprints[value]
         return identity
@@ -1722,7 +1813,11 @@ def other_mode_result_view(session: Mapping[str, Any]) -> dict[str, Any]:
     return {**session, **other}
 
 
-def _validate_other_mode_result(session: Mapping[str, Any], version: int) -> None:
+def _validate_other_mode_result(
+    session: Mapping[str, object],
+    version: int,
+    sources: Mapping[str, SessionResourceSource],
+) -> None:
     """Admit the other diagram mode's committed Result set (Session 46)."""
     if "otherModeResult" not in session:
         return
@@ -1744,10 +1839,11 @@ def _validate_other_mode_result(session: Mapping[str, Any], version: int) -> Non
     _validate_current_feature_catalog_authority(view, version)
     if not other.get("results"):
         raise ValidationError("Session otherModeResult requires a Result.", diagnostic=_OTHER_MODE_RESULT_INVALID)
-    _validate_alignment_reset_receipt(view)
+    _validate_alignment_reset_receipt(view, sources)
     from .session_resources import canonical_resource_ids
 
-    missing = sorted(canonical_resource_ids(request) - set(session.get("resources") or {}))
+    declared = session.get("resources")
+    missing = sorted(canonical_resource_ids(request) - set(declared if isinstance(declared, Mapping) else ()))
     if missing:
         raise ValidationError(
             "Session otherModeResult names missing resource(s): " + ", ".join(missing) + ".",
@@ -4890,74 +4986,6 @@ def session_mode(session: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """Reject duplicate JSON object keys before the decoder can discard them."""
-
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValidationError(f"Session JSON contains a duplicate object key: {key!r}.")
-        result[key] = value
-    return result
-
-
-def encode_depth_text(text: str) -> dict[str, Any] | None:
-    """Encode samtools depth text using the browser session depth codec schema."""
-
-    if not isinstance(text, str) or not text:
-        return None
-    crlf_count = text.count("\r\n")
-    lf_count = text.count("\n")
-    if crlf_count > 0 and crlf_count != lf_count:
-        return None
-    line_ending = "\r\n" if "\r\n" in text else "\n"
-    normalized = text.replace("\r\n", "\n")
-    if "\r" in normalized:
-        return None
-    final_newline = normalized.endswith("\n")
-    lines = normalized.split("\n")
-    if final_newline:
-        lines.pop()
-    if not lines or any(line == "" for line in lines):
-        return None
-
-    first_fields = lines[0].split("\t")
-    if len(first_fields) != len(_DEPTH_COLUMNS):
-        return None
-    line_index = 0
-    header: list[str] | None = None
-    if _has_depth_header(first_fields):
-        header = first_fields
-        line_index = 1
-    if line_index >= len(lines):
-        return None
-
-    records: list[dict[str, Any]] = []
-    row_count = 0
-    for line in lines[line_index:]:
-        fields = line.split("\t")
-        if len(fields) != len(_DEPTH_COLUMNS):
-            return None
-        position = _parse_positive_safe_integer(fields[1])
-        depth_value = str(fields[2] or "").strip()
-        if position is None or not _is_depth_text(depth_value):
-            return None
-        _append_depth_row(records, str(fields[0] or ""), position, depth_value)
-        row_count += 1
-    if row_count == 0:
-        return None
-
-    return {
-        "schema": DEPTH_FILE_SCHEMA,
-        "columns": list(_DEPTH_COLUMNS),
-        "lineEnding": line_ending,
-        "finalNewline": final_newline,
-        "rowCount": row_count,
-        "header": header,
-        "records": records,
-    }
-
-
 def decode_depth_payload(payload: Mapping[str, Any]) -> str:
     """Decode a browser depth-file codec payload into TSV text."""
 
@@ -4988,34 +5016,36 @@ def decode_depth_payload(payload: Mapping[str, Any]) -> str:
     return body if payload.get("finalNewline") is False else f"{body}{line_ending}"
 
 
-def serialize_file_entry(path: str | Path, *, depth: bool = False) -> dict[str, Any]:
-    """Serialize a local file into the GUI session embedded-file shape, with an input file's metadata
-    (:func:`written_file_metadata`)."""
+def file_resource_entry(path: str | Path) -> SessionResourceFile:
+    """A local input file as a Web inventory file whose bytes stay in the file.
+
+    The Session file's entry is written from the file, as it is on disk, when
+    the Session is saved; nothing is read into memory here. Its ``type`` and
+    ``lastModified`` are an input file's (:func:`written_file_metadata`).
+    """
 
     file_path = Path(path)
     try:
-        data = file_path.read_bytes()
+        stat = file_path.stat()
     except OSError as exc:
-        raise ValidationError(f"Could not read file for session embedding: {file_path}") from exc
+        raise ValidationError(f"Could not read file for the Session: {file_path}") from exc
+    name = file_path.name or "file"
     metadata = written_file_metadata()
-    entry: dict[str, Any] = {
-        "name": file_path.name or "file",
+    descriptor: SessionContainerResource = {
+        "kind": "web-file",
+        "name": name,
         "type": metadata["type"],
-        "size": len(data),
+        "size": stat.st_size,
         "lastModified": metadata["lastModified"],
     }
-    if depth:
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            text = ""
-        encoded_depth = encode_depth_text(text)
-        if encoded_depth is not None:
-            entry["encoding"] = DEPTH_FILE_ENCODING
-            entry["data"] = encoded_depth
-            return entry
-    entry["data"] = base64.b64encode(data).decode("ascii")
-    return entry
+    return {
+        "resourceId": "",
+        "descriptor": descriptor,
+        "source": FileResourceSource(file_path),
+        "name": name,
+        "type": descriptor["type"],
+        "lastModified": descriptor["lastModified"],
+    }
 
 
 def materialize_embedded_file(
@@ -5067,6 +5097,34 @@ def materialize_embedded_file(
         output_path.write_bytes(payload_bytes)
     except OSError as exc:
         raise ValidationError(f"Could not materialize embedded file for {role}.") from exc
+    return output_path
+
+
+def materialize_resource(resources: SessionResources, resource_id: str, *, temp_dir: Path) -> Path:
+    """Write one Session resource's bytes, streamed from its source, to its file name in ``temp_dir``.
+
+    A Session file's entry is checked by its size and CRC-32 as it is read;
+    every source by the size its descriptor declares.
+    """
+
+    descriptor = resources.descriptors[resource_id]
+    source = resources.source(resource_id)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    filename = safe_embedded_filename(descriptor.get("name"), fallback=f"{resource_id}.dat")
+    output_path = _assert_under_directory(temp_dir / filename, temp_dir)
+    written = 0
+    try:
+        with source.open_bytes() as stream, open(output_path, "wb") as output:
+            while chunk := stream.read(1 << 20):
+                output.write(chunk)
+                written += len(chunk)
+    except OSError as exc:
+        raise ValidationError(f"Could not materialize embedded file for {resource_id}.") from exc
+    if written != descriptor["size"]:
+        raise ValidationError(
+            f"Embedded file size mismatch for {resource_id}: expected {descriptor['size']}, decoded {written}.",
+            diagnostic=SESSION_RESOURCES_INVALID,
+        )
     return output_path
 
 
@@ -5500,7 +5558,12 @@ class _SessionResourceDescriptorRequired(TypedDict):
 
 
 class SessionResourceDescriptor(_SessionResourceDescriptorRequired, total=False):
-    """One entry of a Session's ``resources``: embedded bytes and their file metadata."""
+    """An embedded file: a resource of a JSON Session 27-50, or an inline Web file.
+
+    Its bytes are in the JSON. They leave it once, where the document is read
+    (:func:`split_resource_bytes`); a Session document in memory and in a
+    Session file holds :class:`SessionContainerResource` descriptors only.
+    """
 
     kind: str
     name: str
@@ -5543,7 +5606,7 @@ def written_file_metadata(kind: str | None = None) -> WrittenFileMetadata:
 
 
 def is_session_resource_descriptor(value: Mapping[str, object]) -> TypeGuard[SessionResourceDescriptor]:
-    """Whether ``value`` has the required fields of a resource descriptor.
+    """Whether ``value`` has the required fields of an embedded file.
 
     Its bytes are checked against them where they are read
     (:func:`_embedded_resource_bytes`).
@@ -5552,10 +5615,161 @@ def is_session_resource_descriptor(value: Mapping[str, object]) -> TypeGuard[Ses
     return isinstance(value.get("size"), int) and isinstance(value.get("data"), (str, Mapping))
 
 
+def missing_resource_bytes_message(resource_id: str) -> str:
+    """The refusal of a resource whose bytes were not given: what a mapping from
+    ``to_dict()`` needs, since the document holds no input bytes."""
+
+    return (
+        f"Canonical resource {resource_id!r} has no bytes: pass resources=document.resources with a "
+        "document's to_dict(), or save and load the .gbdraw file."
+    )
+
+
+def retired_json_session_message(source: object) -> str:
+    """The refusal of a JSON Session of the current version, whose JSON form never reached main;
+    ``source`` is the file's path, or ``<mapping>`` for a mapping."""
+
+    return f"A Session version {CURRENT_SESSION_VERSION} file must be a .gbdraw file, not JSON: {source}"
+
+
+@dataclass(frozen=True)
+class SessionResources:
+    """The resources of one Session: the document's descriptors and their bytes' sources, by ID.
+
+    The descriptors are JSON (``SessionContainerResource``); the sources stay
+    beside the document, never in it. :func:`read_resource_bytes` is the one
+    reader of a resource's bytes.
+    """
+
+    descriptors: Mapping[str, SessionContainerResource]
+    sources: Mapping[str, SessionResourceSource]
+
+    def source(self, resource_id: str) -> SessionResourceSource:
+        source = self.sources.get(resource_id)
+        if source is None or resource_id not in self.descriptors:
+            raise ValidationError(missing_resource_bytes_message(resource_id), diagnostic=SESSION_RESOURCES_INVALID)
+        return source
+
+    def read(self, resource_id: str) -> bytes:
+        """The bytes of resource ``resource_id`` (:func:`read_resource_bytes`)."""
+
+        return read_resource_bytes(self, resource_id)
+
+
+class SessionResourceFile(TypedDict):
+    """A Web inventory file whose bytes stay at their source until the Session file is written.
+
+    A binding of a read document (:func:`_project_web_file_binding`) or a CLI
+    input file (:func:`file_resource_entry`); :func:`_attach_current_web_file_bindings`
+    binds it by its descriptor and source. ``resourceId`` is the preferred ID
+    (empty for a new file).
+    """
+
+    resourceId: str
+    descriptor: SessionContainerResource
+    source: SessionResourceSource
+    name: str
+    type: str
+    lastModified: int | float
+
+
+class BoundWebFile(TypedDict):
+    """A Web inventory file bound to a resource of the document it is written into
+    (``webFiles.bindings``): the resource ID and the file's metadata as the inventory gave it."""
+
+    resourceId: str
+    name: str
+    type: str
+    # As the inventory holds it; the Session reader checks it.
+    lastModified: object
+
+
+def read_resource_bytes(resources: SessionResources, resource_id: str) -> bytes:
+    """The bytes of one Session resource, found by its ID and checked against its size."""
+
+    return read_source_bytes(resources.source(resource_id), resources.descriptors[resource_id]["size"])
+
+
+def read_source_bytes(source: SessionResourceSource, size: int) -> bytes:
+    """The bytes of ``source``, refused unless there are exactly ``size`` of them.
+
+    A Session file's entry also checks its CRC-32 (``session_container``).
+    """
+
+    try:
+        with source.open_bytes() as stream:
+            data = stream.read(size + 1)
+    except OSError as exc:
+        raise ValidationError("Invalid embedded resource bytes or byte size.", diagnostic=SESSION_RESOURCES_INVALID) from exc
+    if len(data) != size:
+        raise ValidationError("Invalid embedded resource bytes or byte size.", diagnostic=SESSION_RESOURCES_INVALID)
+    return data
+
+
+def split_resource_bytes(
+    session: Mapping[str, object],
+    sources: Mapping[str, SessionResourceSource] | None = None,
+) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
+    """``session`` with JSON descriptors only, and the source of each resource's bytes.
+
+    The one place a document's resources take their in-memory form. A
+    descriptor of a JSON Session 27-50 (``encoding`` and ``data``) gives its
+    bytes, checked against its size and any ``checksum``, and keeps its file
+    metadata; any other descriptor must be a ``SessionContainerResource``
+    whose bytes ``sources`` holds (a Session file's entries, or the sources
+    of the document it was built from). The descriptors are not checked
+    here: the Session reader checks each as a ``SessionContainerResource``
+    afterwards, so they stay unchecked JSON values.
+    """
+
+    resources = session.get("resources")
+    if not isinstance(resources, Mapping):
+        return dict(session), {}
+    descriptors: dict[str, object] = {}
+    split: dict[str, SessionResourceSource] = {}
+    for resource_id, entry in resources.items():
+        if isinstance(entry, Mapping) and ("encoding" in entry or "data" in entry):
+            try:
+                content = _embedded_resource_bytes(entry)
+            except ValidationError as exc:
+                raise ValidationError(f"Canonical resource {resource_id!r} is invalid: {exc}", diagnostic=SESSION_RESOURCES_INVALID) from exc
+            modified = entry.get("lastModified", 0)
+            descriptors[resource_id] = {
+                "kind": entry.get("kind"),
+                "name": entry.get("name"),
+                "type": entry.get("type"),
+                "size": entry.get("size"),
+                # A JSON Session may store a fraction of a millisecond; a time
+                # it cannot hold is read as 0, as the Web recomputes it.
+                "lastModified": (int(modified) if isinstance(modified, (int, float))
+                                 and not isinstance(modified, bool) and math.isfinite(modified)
+                                 and modified >= 0 else 0),
+            }
+            split[resource_id] = BytesResourceSource(content)
+            continue
+        descriptors[resource_id] = entry
+        source = (sources or {}).get(resource_id)
+        if source is None:
+            raise ValidationError(missing_resource_bytes_message(resource_id), diagnostic=SESSION_RESOURCES_INVALID)
+        split[resource_id] = source
+    return {**session, "resources": descriptors}, split
+
+
+def _decodable_resource_sources(resources: Mapping[str, object]) -> dict[str, SessionResourceSource]:
+    """The sources of the embedded resources whose bytes decode, unchecked against their descriptors."""
+
+    sources: dict[str, SessionResourceSource] = {}
+    for resource_id, entry in resources.items():
+        content = _embedded_entry_bytes(entry) if isinstance(entry, Mapping) else None
+        if content is not None:
+            sources[resource_id] = BytesResourceSource(content)
+    return sources
+
+
 def _embedded_entry_bytes(entry: Mapping[str, object]) -> bytes | None:
     encoding = entry.get("encoding")
     data = entry.get("data")
-    if encoding != DEPTH_FILE_ENCODING and isinstance(data, str):
+    if encoding in (None, "base64") and isinstance(data, str):
         try:
             return base64.b64decode(data, validate=True)
         except (binascii.Error, ValueError):
@@ -5578,7 +5792,7 @@ def _embedded_resource_bytes(entry: Mapping[str, object]) -> bytes:
 
     data = _embedded_entry_bytes(entry)
     if data is None or len(data) != entry.get("size"):
-        raise ValidationError("Invalid embedded resource bytes or byte size.")
+        raise ValidationError("Invalid embedded resource bytes or byte size.", diagnostic=SESSION_RESOURCES_INVALID)
     checksum = entry.get("checksum")
     if checksum not in (None, "") and (
         not isinstance(checksum, str)
@@ -5589,7 +5803,7 @@ def _embedded_resource_bytes(entry: Mapping[str, object]) -> bytes:
 
 
 def _project_web_file_binding(
-    resources: Mapping[str, Any],
+    resources: SessionResources,
     binding: Any,
     *,
     schema: int | None,
@@ -5597,7 +5811,8 @@ def _project_web_file_binding(
     """Transport an admitted binding without choosing destination identities.
 
     Schema None is the existing direct-source metadata-default context.
-    Source descriptors remain alive, unmodified and encoded until assembly.
+    Each leaf carries its resource's descriptor and bytes' source, unmodified,
+    until assembly (:func:`_attach_current_web_file_bindings`).
     """
     if binding is None:
         return None
@@ -5612,18 +5827,21 @@ def _project_web_file_binding(
             ],
         }
     resource_id = binding["resourceId"]
-    resource = resources.get(resource_id)
+    resource = resources.descriptors.get(resource_id)
     if not isinstance(resource, Mapping):
         raise ValidationError(f"Web file binding references a missing resource: {resource_id}.")
-    metadata = (
-        {key: binding[key] for key in ("name", "type", "lastModified")}
-        if schema == 2 else {
-            "name": str(binding.get("name") or resource.get("name") or "file"),
-            "type": str(binding.get("type") or resource.get("type") or ""),
-            "lastModified": int(binding.get("lastModified") or resource.get("lastModified") or 0),
-        }
-    )
-    return {"resourceId": resource_id, "descriptor": resource, **metadata}
+    leaf: SessionResourceFile = {
+        "resourceId": resource_id,
+        "descriptor": resource,
+        "source": resources.source(resource_id),
+        "name": binding["name"] if schema == 2 else str(binding.get("name") or resource.get("name") or "file"),
+        "type": binding["type"] if schema == 2 else str(binding.get("type") or resource.get("type") or ""),
+        "lastModified": (
+            binding["lastModified"] if schema == 2
+            else int(binding.get("lastModified") or resource.get("lastModified") or 0)
+        ),
+    }
+    return leaf
 
 
 def _web_card_binding(
@@ -5696,9 +5914,16 @@ def _circular_input_bindings(
 
 
 def _attach_current_web_file_bindings(
-    payload: dict[str, Any],
-    files: Mapping[str, Any],
+    payload: dict[str, object],
+    files: Mapping[str, object],
+    sources: dict[str, SessionResourceSource],
 ) -> None:
+    """Bind the Web files ``files`` to resources of ``payload``.
+
+    ``sources`` holds the bytes' source of each resource of ``payload``; the
+    sources of the resources the bindings add go to it.
+    """
+
     from .session_resources import SessionResourceTable
 
     resources_value = payload.get("resources")
@@ -5708,32 +5933,41 @@ def _attach_current_web_file_bindings(
     for resource_id in resources:
         if not isinstance(resource_id, str) or resource_id != resource_id.strip() or not resource_id:
             raise ValidationError("Canonical resource IDs must be unique non-empty strings.")
-    table = SessionResourceTable(resources)
+    table = SessionResourceTable(SessionResources(resources, sources))
 
-    def allocate_file(entry: Mapping[str, object], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
-        if not is_session_resource_descriptor(entry):
-            raise ValidationError("Invalid embedded resource bytes or byte size.")
+    def metadata_of(resource_id: str, metadata: Mapping[str, object]) -> BoundWebFile:
         return {
-            "resourceId": table.bind(entry, preferred_id=preferred_id),
+            "resourceId": resource_id,
             "name": str(metadata.get("name", "file")),
             "type": str(metadata.get("type") or ""),
             "lastModified": metadata.get("lastModified", 0),
         }
 
-    def add_file(value: Any) -> dict[str, Any] | None:
+    def allocate_file(entry: Mapping[str, object], preferred_id: str, metadata: Mapping[str, object]) -> BoundWebFile:
+        if not is_session_resource_descriptor(entry):
+            raise ValidationError("Invalid embedded resource bytes or byte size.", diagnostic=SESSION_RESOURCES_INVALID)
+        return metadata_of(table.bind(entry, preferred_id=preferred_id), metadata)
+
+    def add_file(value: object) -> BoundWebFile | None:
         if value is None:
             return None
         if not isinstance(value, Mapping) or "components" in value or value.get("kind") == "composite":
             raise ValidationError("Expected an ordinary Web inventory file.")
         if "descriptor" in value:
-            if set(value) != {"descriptor", "resourceId", "name", "type", "lastModified"} or not isinstance(value["descriptor"], Mapping):
+            if (set(value) != {"descriptor", "source", "resourceId", "name", "type", "lastModified"}
+                    or not isinstance(value["descriptor"], Mapping)):
                 raise ValidationError("Invalid resource-backed Web inventory file.")
-            return allocate_file(value["descriptor"], value["resourceId"], value)
+            # The descriptor of a checked document (:func:`_project_web_file_binding`).
+            descriptor = cast(SessionContainerResource, value["descriptor"])
+            return metadata_of(
+                table.bind_resource(descriptor, value["source"], preferred_id=value["resourceId"]),
+                value,
+            )
         if "resourceId" in value:
             raise ValidationError("Web inventory source references require a descriptor.")
         return allocate_file(value, "", value)
 
-    def add_value(value: Any, *, composite_allowed: bool = False) -> Any:
+    def add_value(value: object, *, composite_allowed: bool = False) -> object:
         if isinstance(value, list):
             return [add_value(item) for item in value]
         if isinstance(value, Mapping) and value.get("kind") == "composite":
@@ -5791,8 +6025,22 @@ def _attach_current_web_file_bindings(
         "linearSeqs": sequence_bindings,
         "linearComparisons": comparison_bindings,
     }
-    resources.update(table.descriptors())
-    web_files_value = payload.get("webFiles")
+    bound = table.resources()
+    resources.update(bound.descriptors)
+    sources.update(bound.sources)
+    payload["webFiles"] = _rebound_web_files(payload.get("webFiles"), bindings, files, resources)
+
+
+def _rebound_web_files(
+    web_files_value: object,
+    bindings: dict[str, object],
+    files: Mapping[str, object],
+    resources: Mapping[str, object],
+) -> dict[str, object]:
+    """The ``webFiles`` of a payload whose Web files ``files`` were bound to its
+    resources as ``bindings``: its source references and original names follow
+    the resource IDs the binding gave."""
+
     web_files = (
         _json_clone(dict(web_files_value))
         if isinstance(web_files_value, Mapping)
@@ -5814,11 +6062,14 @@ def _attach_current_web_file_bindings(
     resource_aliases: dict[str, str] = {}
     explicit_names: dict[str, str] = {}
 
-    def reference_value(value: Any, source: Any) -> Any:
+    def reference_value(value: object, source: object) -> object:
         if isinstance(value, list):
-            return [reference_value(item, source[index]) for index, item in enumerate(value)]
+            parts = source if isinstance(source, list) else []
+            return [reference_value(item, parts[index]) for index, item in enumerate(value)]
         if value is None:
             return None
+        # A binding that add_file made (BoundWebFile).
+        assert isinstance(value, Mapping)
         if isinstance(source, Mapping) and "resourceId" in source:
             resource_aliases[source["resourceId"]] = value["resourceId"]
         explicit_names.setdefault(value["resourceId"], value["name"])
@@ -5847,29 +6098,42 @@ def _attach_current_web_file_bindings(
             **explicit_names,
         }
     web_files["bindings"] = bindings
-    payload["webFiles"] = web_files
+    return web_files
+
+
+
+def _canonical_session_document(
+    canonical_request: DiagramRequest, *, resolved: bool, created_at: datetime
+) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
+    """The mode-scoped Session document of a CLI run's canonical request, and the sources of its resources' bytes."""
+    from .session import _mode_scoped_document_of_request
+
+    document = _mode_scoped_document_of_request(
+        canonical_request, resolved=resolved, created_at=created_at
+    )
+    return document.to_dict(), dict(document.resources.sources)
 
 
 def build_session_json(
     context: SessionBuildContext,
     *,
     svg_results: Sequence[tuple[str, str]],
-    embedded_files: Mapping[str, Any],
+    embedded_files: Mapping[str, object],
     generated_at: datetime,
-    feature_catalog: Mapping[str, Any] | None = None,
-    losat_cache_entries: Sequence[Mapping[str, Any]] | None = None,
-    losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
-    protein_identity_manifest: Mapping[str, Any] | None = None,
-    legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
-    legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
+    feature_catalog: Mapping[str, object] | None = None,
+    losat_cache_entries: Sequence[Mapping[str, object]] | None = None,
+    losat_derived_cache_entries: Sequence[Mapping[str, object]] | None = None,
+    protein_identity_manifest: Mapping[str, object] | None = None,
+    legacy_protein_raw_candidates: Sequence[Mapping[str, object]] | None = None,
+    legacy_protein_derived_evidence: Sequence[Mapping[str, object]] | None = None,
     canonical_request: DiagramRequest | None = None,
     _canonical_request_is_resolved: bool = False,
-) -> dict[str, Any]:
-    """Build a GUI-loadable session JSON payload from a CLI run."""
+) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
+    """Build a GUI-loadable Session document from a CLI run, and the sources of its resources' bytes."""
 
     source_version: int | None = None
     if context.source_session is not None:
-        validate_session(context.source_session)
+        validate_session(context.source_session, resource_sources=dict(context.source_resources or {}))
         source_version = int(context.source_session["version"])
         payload: dict[str, Any] = _json_clone(context.source_session)
     else:
@@ -5963,20 +6227,15 @@ def build_session_json(
         "fileBindings": [_binding_to_json(binding) for binding in context.file_bindings],
         "generatedBy": "gbdraw",
     }
-    if canonical_request is not None:
-        from .session import _mode_scoped_document_of_request
-
-        canonical = _mode_scoped_document_of_request(
-            canonical_request,
-            resolved=_canonical_request_is_resolved,
-            created_at=generated_at,
-        ).to_dict()
-        payload["renderRequest"] = canonical["renderRequest"]
-        payload["resources"] = canonical["resources"]
-    else:
+    if canonical_request is None:
         raise ValidationError(
             f"A canonical typed request is required to write a version {CURRENT_SESSION_VERSION} session."
         )
+    canonical, sources = _canonical_session_document(
+        canonical_request, resolved=_canonical_request_is_resolved, created_at=generated_at
+    )
+    payload["renderRequest"] = canonical["renderRequest"]
+    payload["resources"] = canonical["resources"]
     files_value = payload.get("files")
     files_for_web = files_value if isinstance(files_value, Mapping) else {}
     if source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
@@ -6001,7 +6260,7 @@ def build_session_json(
         )
     if source_version is not None and source_version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
         payload, _outcomes = session_legend_edits_by_row_key(payload)
-    _attach_current_web_file_bindings(payload, files_for_web)
+    _attach_current_web_file_bindings(payload, files_for_web, sources)
     payload.pop("files", None)
     normalize_current_session_artifacts(
         payload,
@@ -6016,122 +6275,50 @@ def build_session_json(
     from .session_drawings import drawings_document_from_mode_scoped
 
     drawings, _source_facts = drawings_document_from_mode_scoped(payload)
-    validate_session(drawings)
-    return dict(drawings)
+    sources = {resource_id: sources[resource_id] for resource_id in drawings["resources"]}
+    validate_session(drawings, resource_sources=sources)
+    return dict(drawings), sources
 
 
-def write_session_json(
+JSON_SESSION_OUTPUT_SUFFIXES = (".json", ".json.gz")
+
+
+def refuse_json_session_output(path: str | Path) -> None:
+    """Refuse a Session output name that says JSON: a Session is written as a Session file only."""
+
+    if str(path).lower().endswith(JSON_SESSION_OUTPUT_SUFFIXES):
+        raise ValidationError(
+            "A Session is saved as a .gbdraw file. Use a name that ends with .gbdraw, "
+            f"not .json or .json.gz: {path}"
+        )
+
+
+def _write_validated_session_file(
     path: str | Path,
-    payload: Mapping[str, Any],
-    *,
-    overwrite: bool = True,
-) -> None:
-    """Write plain or ``.gz`` session JSON through a same-directory stage."""
-
-    expanded_payload = expand_session_feature_catalog(payload)
-    validate_session(expanded_payload)
-    _write_validated_session_json(path, expanded_payload, overwrite=overwrite)
-
-
-def _write_validated_session_json(
-    path: str | Path,
-    expanded_payload: Mapping[str, Any],
+    expanded_payload: Mapping[str, object],
+    sources: Mapping[str, SessionResourceSource],
     *,
     overwrite: bool,
 ) -> None:
-    """Write a session that ``validate_session`` already accepted.
+    """Write a Session 51 that ``validate_session`` already accepted as the Session file ``path``.
 
     Only writers whose payload cannot have changed since its validation call
-    this: ``write_session_json`` after validating, a ``SessionDocument`` (validated
-    when it was built), and the CLI sidecar, which writes what
-    ``build_session_json`` returned.
+    this: a ``SessionDocument`` (validated when it was built) and the CLI
+    sidecar, which writes what ``build_session_json`` returned. Each
+    resource's bytes go to its entry, read from its source in ``sources``.
     """
 
+    refuse_json_session_output(path)
     serialized_payload = compact_session_feature_catalog(expanded_payload)
-    with _staged_session_file(path, overwrite=overwrite) as output:
-        if isinstance(output, RsyncableGzipWriter):
-            # Streamed, so the JSON text is never held whole; the gzip bytes do
-            # not depend on the write chunks.
-            with io.TextIOWrapper(output, encoding="utf-8") as text_file:
-                json.dump(
-                    serialized_payload,
-                    text_file,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-        else:
-            # json.dumps encodes in C at once; json.dump encodes in Python.
-            output.write(
-                json.dumps(
-                    serialized_payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ).encode("utf-8")
-            )
-
-
-def write_serialized_session(path: str | Path, data: bytes, *, overwrite: bool = True) -> None:
-    """Write Session JSON text that is serialized already, unchanged, as ``path``.
-
-    It is not validated. The Gallery tools write the Sessions they edit and the
-    Web publication serializes through it, so they are compressed as the CLI's.
-    """
-
-    with _staged_session_file(path, overwrite=overwrite) as output:
-        output.write(data)
-
-
-@contextmanager
-def _staged_session_file(path: str | Path, *, overwrite: bool) -> Iterator[io.BufferedIOBase]:
-    """The one stream every Session file is written to.
-
-    A name that ends in ``.gz`` gets rsyncable gzip (``gbdraw.io.rsyncable_gzip``),
-    so a regenerated Session shares most compressed bytes with its previous
-    version; any other name gets the bytes as written. The file is staged in the
-    same directory and becomes ``path`` only when the block ends without an error.
-    """
-
-    output_path = Path(path)
-    temp_path: Path | None = None
-    temp_fd: int | None = None
-    try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_fd, temp_name = tempfile.mkstemp(
-            prefix=f".{output_path.name}.",
-            suffix=".tmp",
-            dir=output_path.parent,
-        )
-        temp_path = Path(temp_name)
-        raw_file = os.fdopen(temp_fd, "wb")
-        temp_fd = None
-        with raw_file:
-            if output_path.suffix.lower() == ".gz":
-                with RsyncableGzipWriter(raw_file) as compressed_file:
-                    yield compressed_file
-            else:
-                yield raw_file
-            raw_file.flush()
-            os.fsync(raw_file.fileno())
-        commit_staged_output_file(
-            temp_path,
-            output_path,
-            overwrite=overwrite,
-        )
-    except FileExistsError as exc:
-        raise OutputExistsError((output_path,), subject="Session output") from exc
-    except OSError as exc:
-        raise ValidationError(f"Could not write session sidecar: {output_path}") from exc
-    finally:
-        if temp_fd is not None:
-            try:
-                os.close(temp_fd)
-            except OSError:
-                pass
-        try:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+    if serialized_payload.get("version") != CURRENT_SESSION_VERSION:
+        raise ValidationError(f"A Session file holds a Session version {CURRENT_SESSION_VERSION}.", diagnostic=SESSION_RESOURCES_INVALID)
+    resources = serialized_payload.get("resources", {})
+    write_session_container(
+        serialized_payload,
+        {resource_id: SessionResources(resources, sources).source(resource_id) for resource_id in resources},
+        path,
+        overwrite=overwrite,
+    )
 
 
 def get_session_slot(session: Mapping[str, Any], slot: str) -> Any:
@@ -6676,15 +6863,25 @@ def _relative_path_for_table(path: Path, table_dir: Path) -> str:
         return str(path)
 
 
+def _read_restored_tsv_rows(table_path: Path, what: str) -> list[list[str]]:
+    """The rows of a restored CLI table, read through the gzip-aware input reader.
+
+    A gzip table reads as the plain one, under ``MAX_EXPANDED_INPUT_BYTES``, whose
+    refusal names the file; the rewrite after it writes the plain table.
+    """
+
+    try:
+        with open_input_text(table_path, encoding="utf-8-sig", newline="") as handle:
+            return list(csv.reader(handle, delimiter="\t"))
+    except (OSError, UnicodeError, *GZIP_ERRORS) as exc:
+        raise ValidationError(f"Could not read restored {what}: {table_path}") from exc
+
+
 def _rewrite_tsv_path_cells(
     table_path: Path,
     replacements: Mapping[tuple[int, str], Sequence[str]],
 ) -> None:
-    try:
-        with table_path.open("r", encoding="utf-8-sig", newline="") as handle:
-            rows = list(csv.reader(handle, delimiter="\t"))
-    except OSError as exc:
-        raise ValidationError(f"Could not read restored TSV table: {table_path}") from exc
+    rows = _read_restored_tsv_rows(table_path, "TSV table")
 
     header: list[str] | None = None
     output_rows: list[list[str]] = []
@@ -6719,13 +6916,7 @@ def _rewrite_tsv_path_cells(
 def _migrate_legacy_circular_track_table(table_path: Path) -> None:
     """Move a persisted Circular table's spacing column to reader-only params."""
 
-    try:
-        with table_path.open("r", encoding="utf-8-sig", newline="") as handle:
-            rows = list(csv.reader(handle, delimiter="\t"))
-    except OSError as exc:
-        raise ValidationError(
-            f"Could not read restored Circular track table: {table_path}"
-        ) from exc
+    rows = _read_restored_tsv_rows(table_path, "Circular track table")
     if not rows:
         return
 
@@ -7665,61 +7856,6 @@ def _decode_depth_run(reference_name: str, run: Any, lines: list[str]) -> int:
     return count
 
 
-def _parse_positive_safe_integer(value: object) -> int | None:
-    parsed = parse_ascii_integer(str(value or "").strip())
-    if parsed is None or parsed <= 0 or parsed > JS_MAX_SAFE_INTEGER:
-        return None
-    return parsed
-
-
-def _is_depth_text(value: object) -> bool:
-    text = str(value or "").strip()
-    if not text:
-        return False
-    try:
-        parsed = ascii_float(text)
-    except ValueError:
-        return False
-    return math.isfinite(parsed) and parsed >= 0
-
-
-def _has_depth_header(fields: Sequence[str]) -> bool:
-    return (
-        len(fields) >= 3
-        and (_parse_positive_safe_integer(fields[1]) is None or not _is_depth_text(fields[2]))
-    )
-
-
-def _append_depth_row(
-    records: list[dict[str, Any]],
-    reference_name: str,
-    position: int,
-    depth_value: str,
-) -> None:
-    if not records or records[-1]["id"] != reference_name:
-        records.append({"id": reference_name, "runs": []})
-    runs = records[-1]["runs"]
-    if not runs:
-        runs.append([position, 1, 1, [depth_value]])
-        return
-    run = runs[-1]
-    start, step, count, depths = run
-    if count == 1:
-        next_step = position - start
-        if next_step > 0:
-            run[1] = next_step
-            run[2] = 2
-            depths.append(depth_value)
-            return
-        runs.append([position, 1, 1, [depth_value]])
-        return
-    if position == start + step * count:
-        run[2] = count + 1
-        depths.append(depth_value)
-        return
-    runs.append([position, 1, 1, [depth_value]])
-
-
 def _json_clone(value: Any) -> Any:
     try:
         return json.loads(json.dumps(value))
@@ -7822,6 +7958,7 @@ __all__ = [
     "AnnotationTargetMigration",
     "HashRuleMigration",
     "CURRENT_SESSION_VERSION",
+    "check_session_file_version",
     "RETIRED_RENDERED_ID_FEATURE_FIELDS",
     "CANONICAL_SESSION_MIN_VERSION",
     "DEPTH_FILE_ENCODING",
@@ -7849,7 +7986,6 @@ __all__ = [
     "classify_raw_losat_cache_entry",
     "compact_session_feature_catalog",
     "decode_depth_payload",
-    "encode_depth_text",
     "empty_protein_identity_manifest",
     "expand_session_feature_catalog",
     "get_session_slot",
@@ -7869,7 +8005,7 @@ __all__ = [
     "legend_edits_by_row_key",
     "safe_embedded_filename",
     "session_legend_edits_by_row_key",
-    "serialize_file_entry",
+    "file_resource_entry",
     "session_depth_source_widths",
     "session_mode",
     "session_to_cli_args",
@@ -7880,6 +8016,4 @@ __all__ = [
     "validate_session",
     "validate_current_session_artifacts",
     "validate_current_web_state_field_names",
-    "write_serialized_session",
-    "write_session_json",
 ]

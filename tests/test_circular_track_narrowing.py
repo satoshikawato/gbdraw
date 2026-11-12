@@ -9,8 +9,6 @@ narrower than the floor and a pinned radius are kept. An explicit ``center_reser
 
 from __future__ import annotations
 
-import gzip
-import json
 from pathlib import Path
 
 import pytest
@@ -36,6 +34,7 @@ from gbdraw.layout.circular import CircularRadialLayout, CircularResolvedSlot
 from gbdraw.tracks import parse_circular_track_slots
 
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 pytestmark = pytest.mark.circular
@@ -412,7 +411,7 @@ def test_an_explicit_gc_content_radius_is_kept_under_rule_l(tmp_path: Path, monk
 
 def test_the_cli_writes_the_narrowing_settings_into_the_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    session = tmp_path / "narrowing.gbdraw-session.json.gz"
+    session = tmp_path / "narrowing.gbdraw"
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -421,7 +420,7 @@ def test_the_cli_writes_the_narrowing_settings_into_the_config(tmp_path: Path, m
         ],
     )
     gbdraw_main()
-    view = drawing_view(json.loads(gzip.decompress(session.read_bytes())))
+    view = drawing_view(read_session_payload(session))
     circular = view["renderRequest"]["diagramOptions"]["config"]["canvas"]["circular"]
     assert circular["track_narrowing"] is False
     assert circular["track_narrowing_min_px"] == 44.0

@@ -3,11 +3,11 @@
 // new drawing from the shown one in Python and adds it as one project step.
 // The cases find the new drawing by its drawing ID, never by its tab text.
 const { execFileSync } = require('node:child_process');
-const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { expectSessionLoadedWithoutWarnings, openApp } = require('./helpers/app-lifecycle.cjs');
 const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
 
@@ -152,7 +152,7 @@ test('Coordinates across the origin of a circular record make one window across 
 // 16,000-100 as an error), Generate draws the 670 bp window across the origin, and Save writes the window back.
 test('A Circular Session whose record has one window across the origin loads it, Generate draws it, and Save keeps it', async ({ page }, testInfo) => {
   test.setTimeout(420_000);
-  const sessionPath = testInfo.outputPath('circular-origin-window.gbdraw-session.json');
+  const sessionPath = testInfo.outputPath('circular-origin-window.gbdraw');
   execFileSync('python', ['-c', [
     'import sys',
     'from gbdraw.api import save_session_document',
@@ -164,7 +164,7 @@ test('A Circular Session whose record has one window across the origin loads it,
   ].join('\n'), sessionPath], { cwd: process.cwd(), stdio: 'inherit' });
   // The Session holds no Result: Load ends with its notice, without the features a Result lists.
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   expect(await shownDrawing(page)).toMatchObject({ kind: 'circular' });
   // Generate draws the window across the origin of the 16,569 bp record: 16,000 to the end, then 1 to 100.
@@ -188,8 +188,9 @@ test('A Circular Session whose record has one window across the origin loads it,
   await page.locator('main svg').last().screenshot({ path: testInfo.outputPath('circular-origin-window.png') });
   await page.screenshot({ path: testInfo.outputPath('circular-origin-window-page.png') });
   // Save writes the window back unchanged.
-  const bytes = await download(page, 'Save Session', testInfo.outputPath('saved.gbdraw-session.json'));
-  const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+  const savedPath = testInfo.outputPath('saved.gbdraw');
+  await download(page, 'Save Session', savedPath);
+  const saved = await readSessionFile(savedPath);
   expect(shownSavedDrawing(saved).renderRequest.records[0].windows).toEqual([originWindow]);
 
   // Review X1 of #1750: the listed window holds the record's orientation. The record popup's Reverse complement

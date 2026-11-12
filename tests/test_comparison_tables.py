@@ -305,6 +305,45 @@ def test_web_generate_reports_a_malformed_blast_table_line_as_a_comparison_diagn
     assert not workspace.exists()
 
 
+def test_an_uploaded_gzip_blast_table_decodes_as_the_plain_one(tmp_path: Path) -> None:
+    """The page sends a chosen BLAST table as chosen, so a gzip one reaches the
+    Worker's Generate (and a Session's entry) as gzip bytes: the request decoder
+    expands it as the CLI reads the file."""
+
+    import gzip as gzip_module
+
+    from gbdraw.api import InMemoryRecordSource, LinearDiagramRequest, RecordInput
+    from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
+
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(record)) for record in _pair_records("SA", "SB")
+        ),
+        options=LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, _hits("SA", "SB")),)),
+    )
+    encoded = encode_canonical_request(request)
+    table = _table_text([[str(cell) for cell in _hits("SA", "SB").iloc[0]]]).encode("utf-8")
+    decoded = []
+    for name, content in (("plain", table), ("gzip", gzip_module.compress(table))):
+        resources = tmp_path / name
+        resources.mkdir()
+        resource_paths = {}
+        for index, resource in enumerate(encoded.resources, start=1):
+            target = resources / f"{index:04d}.bin"
+            target.write_bytes(resource.content)
+            resource_paths[resource.resource_id] = str(target)
+        payload = json.loads(json.dumps(encoded.payload))
+        comparison = payload["comparisons"][0]
+        comparison["kind"] = "nucleotideBlast"
+        comparison.pop("encoding")
+        Path(resource_paths[comparison["resourceId"]]).write_bytes(content)
+        decoded.append(decode_canonical_request(
+            payload, resource_paths=resource_paths, output_directory=str(tmp_path / f"{name}-out")
+        ).options.linear_comparisons[0])
+    assert decoded[1].matches.equals(decoded[0].matches)
+    assert decoded[1].search_frame_text == decoded[0].search_frame_text == table.decode("utf-8")
+
+
 # read_csv names, or a column assignment onto an already read frame.
 _COLUMN_MAPPING = re.compile(
     r"(?:names\s*=\s*|\.columns\s*=\s*|set_axis\()(?:list\(|tuple\()?\s*COMPARISON_COLUMNS"

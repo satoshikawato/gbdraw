@@ -4,7 +4,6 @@ Run: python tests/web/layout-affordance.playwright.py --evidence-dir /tmp/issue5
 """
 import argparse
 import functools
-import gzip
 import hashlib
 import http.server
 import importlib.util
@@ -104,7 +103,7 @@ def main():
             url=f'http://127.0.0.1:{server.server_port}/gbdraw/web/index.html'
             page.goto(url); page.wait_for_function('() => window.__GBDRAW_APP__ && Object.keys(window.__GBDRAW_APP__.paletteDefinitions||{}).length')
             for mode,fixture in [('circular','HmmtDNA_basic_circular'),('linear','lambda_basic_linear')]:
-                continuity.load_session(page,ROOT/f'gbdraw/web/gallery/sessions/{fixture}.gbdraw-session.json')
+                continuity.load_session(page,ROOT/f'gbdraw/web/gallery/sessions/{fixture}.gbdraw')
                 generated=page.evaluate("""async () => { const a=window.__GBDRAW_APP__;
                   a.form.plot_title='Preview layout editing'; a.adv.plot_title_position='top';
                   return await a.runAnalysis(); }"""); assert generated['status']=='ok',generated
@@ -202,8 +201,8 @@ def main():
                 with page.expect_download() as pending:
                     # One title per mode: a second Save under one file name asks "Download the Session again?" and waits (OV-607).
                     page.evaluate("async title => { const a=window.__GBDRAW_APP__; a.sessionTitle=title; await a.saveSessionWithTitle(); }",f'S02 affordance {mode}')
-                path=args.evidence_dir/f'{mode}.gbdraw-session.json'; pending.value.save_as(path)
-                clean(gzip.decompress(path.read_bytes()).decode())
+                path=args.evidence_dir/f'{mode}.gbdraw'; pending.value.save_as(path)
+                clean(zipfile.ZipFile(path).read('gbdraw-session.json').decode())
                 continuity.load_session(page,path); bound(page,len(selectors))
                 restored=status(page); assert restored['deltas']==after['deltas']
                 page.evaluate('() => window.__s02Metrics={}')
@@ -225,7 +224,7 @@ def main():
             touch=browser.new_context(viewport={'width':390,'height':844},has_touch=True,is_mobile=True,accept_downloads=True)
             tp=touch.new_page(); tp.on('dialog',lambda d:d.accept()); tp.goto(url)
             tp.wait_for_function('() => window.__GBDRAW_APP__ && Object.keys(window.__GBDRAW_APP__.paletteDefinitions||{}).length')
-            continuity.load_session(tp,ROOT/'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')
+            continuity.load_session(tp,ROOT/'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw')
             # The explanation is screen-reader text (sr-only) that the Layout edit
             # button describes; the button's title says it in short for hover.
             help_text=tp.locator('#preview-layout-help'); assert help_text.count()==1

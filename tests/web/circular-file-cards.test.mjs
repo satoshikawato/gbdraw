@@ -18,6 +18,7 @@ import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { readSessionFile } from './helpers/written-resources.mjs';
 
 globalThis.window = {
   Vue: {
@@ -78,21 +79,22 @@ const nextGenerateRecords = async () => {
   return buildCanonicalRenderRequest({ state, drawing, filesData }).renderRequest.records;
 };
 
+// The CLI's Session file (a .gbdraw container) and its document.
 const cliSession = async (directory, args) => {
   const output = path.join(directory, 'cli');
-  const file = `${output}.gbdraw-session.json.gz`;
+  const file = `${output}.gbdraw`;
   execFileSync('python', ['-m', 'gbdraw.cli', 'circular', ...args, '-o', output, '--session_output', file], {
     cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
   });
-  return gunzipSync(await readFile(file));
+  const bytes = await readFile(file);
+  return { bytes, session: (await readSessionFile(new Blob([bytes]))).document };
 };
 
 // Failing-first test 1 and 4 of DESIGN section 7; OV-2838.
 await test('a CLI Session of two --gbk files loads as two File cards and the Web request is the CLI request', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-cards-'));
   try {
-    const bytes = await cliSession(directory, ['--gbk', twoRecords, mito, '--multi_record_canvas']);
-    const session = JSON.parse(bytes);
+    const { bytes, session } = await cliSession(directory, ['--gbk', twoRecords, mito, '--multi_record_canvas']);
     const view = savedDrawingView(session, session.ui.activeDrawingId);
     const cliRecords = view.renderRequest.records;
     // The CLI commits the records it resolved from one ALL input per file:
@@ -133,8 +135,7 @@ await test('a CLI Session of two --gbk files loads as two File cards and the Web
 await test('Generate right after loading a CLI Session in batch grouping writes the CLI records', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-cards-batch-'));
   try {
-    const bytes = await cliSession(directory, ['--gbk', twoRecords, mito]);
-    const session = JSON.parse(bytes);
+    const { bytes, session } = await cliSession(directory, ['--gbk', twoRecords, mito]);
     const cliRequest = savedDrawingView(session, session.ui.activeDrawingId).renderRequest;
     assert.equal(cliRequest.grouping, 'batch');
     assert.equal((await load(bytes)).status, 'ok');
@@ -163,8 +164,7 @@ for (const grouping of ['grid', 'batch']) {
       const table = path.join(directory, 'records.tsv');
       await writeFile(table, 'gbk\trecord_id\tregion\n'
         + `${twoRecords}\tTESTA\t101-500:rc\n${twoRecords}\tTESTB\t\n${mito}\t\t1001-3000\n`);
-      const bytes = await cliSession(directory, ['--records_table', table, ...(grouping === 'grid' ? ['--multi_record_canvas'] : [])]);
-      const session = JSON.parse(bytes);
+      const { bytes, session } = await cliSession(directory, ['--records_table', table, ...(grouping === 'grid' ? ['--multi_record_canvas'] : [])]);
       const cliRequest = savedDrawingView(session, session.ui.activeDrawingId).renderRequest;
       assert.equal(cliRequest.grouping, grouping);
       const windowsOf = ({ windows }) => windows.map(({ start, end, reverseComplement }) => ({ start, end, reverseComplement }));
@@ -418,9 +418,9 @@ await test('a Session 51 that holds a kept flat #N keeps its cards as loaded', a
   assert.ok(drawing.files.c_legacy_record_cards);
   const result = await sessionConfig.exportSession('flat-selectors', { shownDrawing: state.activeDrawing, askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result));
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const { document: saved } = await readSessionFile(result.blob);
   assert.deepEqual(saved.drawings.find(({ id }) => id === 'circular').config.recordsOff, ['#2']);
-  assert.equal((await load(Buffer.from(JSON.stringify(saved)))).status, 'ok');
+  assert.equal((await load(result.blob)).status, 'ok');
   const reloaded = modeDrawing(state, 'circular');
   assert.equal(reloaded.form.circular_record_selector, '#3');
   assert.deepEqual(reloaded.files.c_legacy_record_cards?.map(({ uid }) => uid), reloaded.circularSources.map(({ uid }) => uid));

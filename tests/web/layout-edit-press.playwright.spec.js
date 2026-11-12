@@ -11,7 +11,7 @@ const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
 
-const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
+const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw';
 const DRAG = { x: 24, y: 12 };
 
 // A point where the pointer hits the first drawn element of `selector`.

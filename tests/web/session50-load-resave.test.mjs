@@ -12,6 +12,7 @@ import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -35,17 +36,15 @@ const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifa
 const { createPaletteLoader } = await import('../../gbdraw/web/js/app/palettes.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
-const v49Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
-  '../fixtures/sessions/drawings-circular-linear.v51.gbdraw-session.json.gz', import.meta.url
-))));
+const v51Fixture = async (name) => readSavedSession(new Blob([readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))]));
+const V49_SESSION = await v51Fixture('drawings-circular-linear.v51.gbdraw');
+const v49Session = () => structuredClone(V49_SESSION);
 // The Load hands its caller the artifact slot of each drawing it does not
 // show (app-setup keeps them; Save writes each drawing's request metadata from
 // its slot's committed request).
 const loadKeepingSlots = async (session) => {
   const stashed = [];
-  const loaded = await importSession({
-    target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
-  }, { confirmLoadRepairs: async () => true, installLoadedArtifactSlots: (slots) => { stashed.push(...slots.stashed); } });
+  const loaded = await importSession(await sessionLoadEvent(session), { confirmLoadRepairs: async () => true, installLoadedArtifactSlots: (slots) => { stashed.push(...slots.stashed); } });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   return stashed;
 };
@@ -59,7 +58,7 @@ const savedDocument = async (title, readKeptArtifacts) => {
   // A second Save of the same title downloads again.
   const result = await exportSession(title, { readKeptArtifacts, askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result));
-  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return await readSavedSession(result.blob);
 };
 
 // OV-1902: a drawing switch keeps the drawing left in its artifact slot, empty
@@ -130,9 +129,7 @@ for (const opened of ['linear', 'circular']) {
 // (`withStoredResultSet`); only a newer version refuses (〔拒否〕).
 const loadRows = async (session) => {
   let asked = false;
-  const loaded = await importSession({
-    target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
-  }, { confirmLoadRepairs: async () => { asked = true; return true; } });
+  const loaded = await importSession(await sessionLoadEvent(session), { confirmLoadRepairs: async () => { asked = true; return true; } });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error ?? loaded.status));
   assert.equal(asked, true, 'the Load lists its rows before it changes anything');
   return loaded.repairs.map(({ code, path }) => `${code} ${path}`);
@@ -416,9 +413,7 @@ test('a v0.14.5 Web Session whose rings moved after the CLI drew them opens with
 
 test('a Session 50 that lists drawings (never released) is refused with a message', async () => {
   const saved = await savedDocument('combined-50', () => []);
-  const loaded = await importSession({
-    target: { files: [new File([JSON.stringify({ ...saved, version: 50 })], 'session.json', { type: 'application/json' })], value: 'selected' }
-  }, { confirmLoadRepairs: async () => true, installLoadedArtifactSlots: () => {} });
+  const loaded = await importSession(await sessionLoadEvent({ ...saved, version: 50 }), { confirmLoadRepairs: async () => true, installLoadedArtifactSlots: () => {} });
   assert.notEqual(loaded.status, 'ok');
   console.log('old combined 50:', JSON.stringify(loaded.error));
   assert.equal(loaded.error?.context?.reason, 'FIELDS');
@@ -445,9 +440,7 @@ test('each drawing of a Session 51 Load takes its request\'s layout, a Linear on
     delete absent.drawings.find((entry) => entry.id === 'linear').renderRequest.diagramOptions.output;
     assert.deepEqual(await linearLayout(absent), ABSENT_LINEAR_OUTPUT, `opened ${opened}, no output`);
   }
-  const python = JSON.parse(gunzipSync(readFileSync(new URL(
-    '../fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz', import.meta.url
-  ))));
+  const python = await v51Fixture('python-linear-absent-output.v51.gbdraw');
   assert.equal(Object.hasOwn(python.drawings[0].renderRequest.diagramOptions, 'output'), false);
   assert.deepEqual(await linearLayout(python), ABSENT_LINEAR_OUTPUT);
 });
@@ -463,9 +456,7 @@ test('a stored Linear legend outside its mode reads bottom, not the absent outpu
     delete entry.renderRequest.diagramOptions.output;
     entry.ui.layoutPreferences = { legend: 'upper_left', plotTitlePosition: 'bottom' };
     let dialog = null;
-    const loaded = await importSession({
-      target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
-    }, { confirmLoadRepairs: async (asked) => { dialog = asked; return true; }, installLoadedArtifactSlots: () => {} });
+    const loaded = await importSession(await sessionLoadEvent(session), { confirmLoadRepairs: async (asked) => { dialog = asked; return true; }, installLoadedArtifactSlots: () => {} });
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
     assert.deepEqual({ ...state.drawingOf('linear').layoutPreferences.linear }, { legend: 'bottom', plotTitlePosition: 'bottom' }, `opened ${opened}`);
     assert.deepEqual(dialog?.items, [

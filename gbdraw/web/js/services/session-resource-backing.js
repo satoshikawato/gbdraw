@@ -2,6 +2,9 @@
 import {
   base64ToBytesInTasks,
   bytesToText,
+  checkGzipExpandedSize,
+  expandGzipBytes,
+  isGzipBytes,
   sha256Hex,
   textToBytes
 } from './byte-utils.js';
@@ -10,8 +13,9 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 import { CIRCULAR_SOURCE_FILE_SLOTS, SESSION_DRAWINGS_LAYOUT } from '../contracts/schema.generated.js';
-import { recordStructuralMetric } from './runtime-test-hooks.js';
+import { recordStructuralMetric, testByteCap } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { MAX_EXPANDED_INPUT_BYTES } from '../contracts/schema.generated.js';
 
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 
@@ -61,8 +65,9 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {string} type
  * @property {number} size
  * @property {number} lastModified
- * @property {Promise<Uint8Array> | null} bytesPromise
- * @property {Promise<string> | null} textPromise
+ * @property {Promise<Uint8Array> | null} bytesPromise The stored bytes (the size the descriptor counts).
+ * @property {Promise<Uint8Array> | null} [plainPromise] The plain bytes, kept unless the resource is a gzip input (`materializePlainBytes`).
+ * @property {Promise<string> | null} textPromise The text, kept unless the resource is a gzip input (`materializeText`).
  * @property {null} filePromise
  * @property {boolean} dirty
  */
@@ -81,23 +86,48 @@ const fileViewBackings = new WeakMap();
  * The reader of each file-backed descriptor: a descriptor of the page, never
  * of a Session file, whose bytes a File (or a Session resource view) holds. It
  * has no `encoding` and no `data`; a Session writer encodes it
- * (`encodeSessionResources`), so Generate keeps no base64 text of an input
+ * (`writeSessionDocumentFile`), so Generate keeps no base64 text of an input
  * (OV-2612). One reader per File: it is also the payload's key.
  * @typedef {() => Promise<Uint8Array>} FileBackedReader
  * @type {WeakMap<object, FileBackedReader>}
  */
 const fileBackedReaders = new WeakMap();
+/**
+ * The opener of a stream of the bytes a Session file stores for a resource.
+ * @typedef {() => Promise<ReadableStream<Uint8Array>>} FileBackedStreamOpener
+ */
+/**
+ * What a Session file stores for a resource (its entry `resources/<id>`):
+ * the size of the stored bytes, a stream of them, and their content token
+ * (`contentTokenOfBytes` in file-content-cache.js) when it is known without a
+ * read, else null. A gzip input is stored as it is (receipt
+ * session.file-container), so a File chosen as gzip stores its gzip bytes,
+ * which the reader of its file-backed descriptor reads too and Generate sends.
+ * @typedef {{ size: number, open: FileBackedStreamOpener, token: (() => Promise<string>) | null }} StoredResourceBytes
+ */
+/**
+ * The stored bytes of the resources a file-backed reader reads, where they
+ * can be streamed (an input's copy, PD-OI-121, or an entry of the Session file
+ * a Load read): a Session Save streams them and never holds them whole. Keyed
+ * by the reader, so every descriptor that shares the reader shares them.
+ * @type {WeakMap<FileBackedReader, StoredResourceBytes>}
+ */
+const fileBackedStored = new WeakMap();
 
 /**
- * A file-backed descriptor of these fields, whose bytes `readBytes` reads.
+ * A file-backed descriptor of these fields, whose bytes (the `size` it
+ * counts) `readBytes` reads, and which a Session file stores as `stored`
+ * says; with no `stored`, it stores the bytes `readBytes` reads.
  * @template {{ kind?: unknown, name: string, type: string, size: number, lastModified: number }} F
  * @param {F} fields
  * @param {FileBackedReader} readBytes
+ * @param {StoredResourceBytes | null} [stored]
  * @returns {F}
  */
-export const fileBackedDescriptor = (fields, readBytes) => {
+export const fileBackedDescriptor = (fields, readBytes, stored = null) => {
   const descriptor = { ...fields };
   fileBackedReaders.set(descriptor, readBytes);
+  if (stored) fileBackedStored.set(readBytes, stored);
   return descriptor;
 };
 
@@ -109,6 +139,37 @@ export const fileBackedDescriptor = (fields, readBytes) => {
 export const fileBackedReaderOf = (descriptor) => (
   descriptor && typeof descriptor === 'object' ? fileBackedReaders.get(descriptor) ?? null : null
 );
+
+/**
+ * What a Session file stores for a checked Session resource descriptor, the
+ * one owner of a saved entry's bytes and size: a file-backed descriptor's
+ * stored bytes (`fileBackedDescriptor`), else the bytes its reader reads; an
+ * encoded depth table's text; a base64 text's bytes (a resource of an older
+ * JSON Session, decoded when the entry is written).
+ * @param {RawSessionResourceDescriptor} descriptor
+ * @returns {StoredResourceBytes}
+ */
+export const storedResourceBytes = (descriptor) => {
+  const readFile = fileBackedReaderOf(descriptor);
+  const stored = readFile ? fileBackedStored.get(readFile) : undefined;
+  if (stored) return stored;
+  /** @param {() => Promise<Uint8Array>} read */
+  const whole = (read) => async () => new Blob([/** @type {Uint8Array<ArrayBuffer>} */ (await read())]).stream();
+  /** @type {() => Promise<Uint8Array>} */
+  let read;
+  if (readFile) read = readFile;
+  else if (isEncodedDepthFileEntry(/** @type {DepthEntryProbe} */ (descriptor))) {
+    read = async () => textToBytes(decodeDepthText(/** @type {DepthFilePayload} */ (descriptor.data)));
+  } else read = () => base64ToBytesInTasks(/** @type {string} */ (descriptor.data));
+  return { size: /** @type {number} */ (descriptor.size), open: whole(read), token: null };
+};
+
+/**
+ * A stream of the bytes a Session file stores for a checked descriptor (`storedResourceBytes`).
+ * @param {RawSessionResourceDescriptor} descriptor
+ * @returns {Promise<ReadableStream<Uint8Array>>}
+ */
+export const sessionResourceStream = (descriptor) => storedResourceBytes(descriptor).open();
 
 /**
  * What names a descriptor's payload until its bytes change: the reader of a
@@ -557,19 +618,107 @@ const materializeBytes = (backing) => {
   return backing.bytesPromise;
 };
 
+const MIB = 1024 * 1024;
 /**
+ * The plain bytes of an input's bytes, the one expansion of an input in the
+ * page (a File's, `readFileBytes` in file-content-cache.js, and a Session
+ * resource's), which only the page's readers of plain bytes or text call and
+ * whose result nothing keeps: a gzip input streams through the browser's
+ * gzip decoder to at most Python's `MAX_EXPANDED_INPUT_BYTES`, and past it
+ * rejects with `INPUT_UNREADABLE` (`GZIP_EXPANDED_SIZE`), naming the file and
+ * the cap in MiB (PD-OI-116), as Python refuses it at Generate; any other
+ * bytes are given as they are.
+ * @param {string} name The input's name.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<Uint8Array>}
+ */
+export const expandInputBytes = (name, bytes) => {
+  if (!isGzipBytes(bytes)) return Promise.resolve(bytes);
+  recordStructuralMetric('inputExpansionCount', 1, { resourceName: name });
+  const { maxBytes, overCap } = inputExpansionCap(name);
+  return expandGzipBytes(/** @type {Uint8Array<ArrayBuffer>} */ (bytes), maxBytes, overCap);
+};
+
+/**
+ * The cap of a gzip input's expanded size and its refusal, which names the
+ * file and the cap in MiB (PD-OI-116); the one owner of both for the page.
+ * @param {string} name The input's name.
+ * @returns {{ maxBytes: number, overCap: () => Error }}
+ */
+const inputExpansionCap = (name) => {
+  const maxBytes = testByteCap('maxExpandedInputBytes') ?? MAX_EXPANDED_INPUT_BYTES;
+  return {
+    maxBytes,
+    overCap: () => diagnosticError('INPUT_UNREADABLE',
+      { reason: 'GZIP_EXPANDED_SIZE', inputName: name, limit: Math.floor(maxBytes / MIB) }, { stage: 'read' })
+  };
+};
+
+/**
+ * Checks a chosen input against the cap of `expandInputBytes`, keeping nothing
+ * expanded: a gzip input whose expanded size passes it rejects with the same
+ * refusal, so a chosen file is refused right after it is chosen, whatever its
+ * kind (PD-OI-116); any other bytes pass.
+ * @param {string} name The input's name.
+ * @param {Uint8Array} bytes Its bytes as chosen.
+ * @returns {Promise<void>}
+ */
+export const checkInputExpansion = (name, bytes) => {
+  if (!isGzipBytes(bytes)) return Promise.resolve();
+  recordStructuralMetric('inputExpansionCheckCount', 1, { resourceName: name });
+  const { maxBytes, overCap } = inputExpansionCap(name);
+  return checkGzipExpandedSize(/** @type {Uint8Array<ArrayBuffer>} */ (bytes), maxBytes, overCap);
+};
+
+/**
+ * Whether an error is the cap refusal of `expandInputBytes`: the answer Python gives the same input too, so a
+ * browser fast path gives it instead of declining to the Worker (R4).
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export const isInputExpansionRefusal = (error) => {
+  const { code, context } = /** @type {{ code?: unknown, context?: { reason?: unknown } }} */ (error ?? {});
+  return code === 'INPUT_UNREADABLE' && context?.reason === 'GZIP_EXPANDED_SIZE';
+};
+
+/**
+ * The plain bytes of a leaf resource: its stored bytes, a gzip input's
+ * expanded (`expandInputBytes`). Those of a plain resource are kept until its
+ * content is released, and the reads that run meanwhile share them; a gzip
+ * input's expanded bytes are not kept once its read ends, so its next read
+ * expands again.
+ * @param {LeafBacking} backing
+ * @returns {Promise<Uint8Array>}
+ */
+const materializePlainBytes = (backing) => {
+  if (backing.plainPromise) return backing.plainPromise;
+  const plain = materializeBytes(backing).then((bytes) => {
+    if (!isGzipBytes(bytes)) return bytes;
+    if (backing.plainPromise === plain) backing.plainPromise = null;
+    return expandInputBytes(backing.name, bytes);
+  });
+  backing.plainPromise = plain;
+  return plain;
+};
+
+/**
+ * The text of a leaf resource's plain bytes (`materializePlainBytes`), kept as
+ * they are: a gzip input's text is not.
  * @param {LeafBacking} backing
  * @returns {Promise<string>}
  */
 const materializeText = (backing) => {
-  if (!backing.textPromise) {
-    recordStructuralMetric('resourceTextReadCount', 1, {
-      resourceId: backing.resourceId,
-      resourceName: backing.name
-    });
-    backing.textPromise = materializeBytes(backing).then((bytes) => bytesToText(bytes));
-  }
-  return backing.textPromise;
+  if (backing.textPromise) return backing.textPromise;
+  recordStructuralMetric('resourceTextReadCount', 1, {
+    resourceId: backing.resourceId,
+    resourceName: backing.name
+  });
+  const text = materializeBytes(backing).then(async (bytes) => {
+    if (isGzipBytes(bytes) && backing.textPromise === text) backing.textPromise = null;
+    return bytesToText(await materializePlainBytes(backing));
+  });
+  backing.textPromise = text;
+  return text;
 };
 
 /**
@@ -679,10 +828,27 @@ export const sessionResourceSource = (file) => {
 export const sessionResourceReadOwner = (file) => fileViewBackings.get(file) ?? file;
 
 /**
+ * The plain bytes of a Session resource view, which the page's readers read:
+ * its stored bytes, a gzip input's expanded at every read
+ * (`expandInputBytes`).
  * @param {FileLike | null | undefined} file
  * @returns {Promise<Uint8Array> | null}
  */
 export const readSessionResourceBytes = (file) => {
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
+  if (!backing) return null;
+  return materializePlainBytes(backing);
+};
+
+/**
+ * The stored bytes of a Session resource view, the size its descriptor
+ * counts (a gzip input as stored): what Generate transfers for a view and
+ * what its content token hashes.
+ * @param {FileLike | null | undefined} file
+ * @returns {Promise<Uint8Array> | null}
+ */
+export const readSessionResourceStoredBytes = (file) => {
   // A missing file is no key: `get` returns undefined for it.
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
@@ -704,11 +870,17 @@ export const sessionResourceViewReader = (file) => {
   const backing = fileViewBackings.get(view);
   if (!backing || backing.dirty) return null;
   let reader = viewReaders.get(view);
-  if (!reader) viewReaders.set(view, reader = () => /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(view)));
+  if (!reader) {
+    viewReaders.set(view, reader = () => /** @type {Promise<Uint8Array>} */ (readSessionResourceStoredBytes(view)));
+    // A view stores what its resource stores (an entry a Load copied streams), so a Save after a Generate does too.
+    if (fileBackedReaderOf(backing.descriptor)) fileBackedStored.set(reader, storedResourceBytes(backing.descriptor));
+  }
   return reader;
 };
 
 /**
+ * The text of a Session resource view: its plain bytes (a gzip input
+ * expanded, `materializeText`).
  * @param {FileLike | null | undefined} file
  * @returns {Promise<string> | null}
  */
@@ -725,6 +897,7 @@ export const releaseSessionResourceContent = (file) => {
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return false;
   backing.bytesPromise = null;
+  backing.plainPromise = null;
   backing.textPromise = null;
   backing.filePromise = null;
   return true;

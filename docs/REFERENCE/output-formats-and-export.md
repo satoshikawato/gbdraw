@@ -14,8 +14,8 @@
 ## Names, dependencies, and overwrite
 
 SVG is the base render. Static SVG uses `<prefix>.svg`; Interactive SVG uses
-`<prefix>.interactive.svg`. A session uses `.gbdraw-session.json` or
-`.gbdraw-session.json.gz`. The command line writes the raw LOSAT rows of a run inside the
+`<prefix>.interactive.svg`. A Session is a `.gbdraw` file; older
+`.gbdraw-session.json` and `.gbdraw-session.json.gz` files are still read. The command line writes the raw LOSAT rows of a run inside the
 directory supplied to `--losat_output_dir`: `losatp.raw.tsv` for LOSATP; for Linear
 LOSATN and TLOSATX, one TSV per record pair and `comparisons.tsv`; for Circular
 rings, one TSV per ring and `conservation.tsv`.

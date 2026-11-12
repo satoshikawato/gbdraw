@@ -179,7 +179,7 @@ def test_api_session_save_preserves_display(mode, tmp_path):
     request_type = CircularDiagramRequest if mode == 'circular' else LinearDiagramRequest
     request = request_type(records=(RecordInput(InMemoryRecordSource(record()),
                                                display=RecordDisplayOptions(None, 1)),))
-    path = tmp_path / 'session.json'
+    path = tmp_path / 'session.gbdraw'
     save_session_document(path, request)
     assert drawing_view(load_session(path))['renderRequest']['records'][0]['display']['startCoordinate'] == 1
 
@@ -190,7 +190,7 @@ def test_cli_session_save_preserves_display(mode, tmp_path):
     cli = importlib.import_module(f'gbdraw.{mode}')
     path = tmp_path / 'source.gbk'
     SeqIO.write(record(), path, 'genbank')
-    session = tmp_path / 'session.json'
+    session = tmp_path / 'session.gbdraw'
     getattr(cli, f'{mode}_main')(['--gbk', str(path), '--display_start_coordinate', '25',
                                     '-o', str(tmp_path / 'diagram'), '--session_output', str(session)])
     assert drawing_view(load_session(session))['renderRequest']['records'][0]['display']['startCoordinate'] == 25

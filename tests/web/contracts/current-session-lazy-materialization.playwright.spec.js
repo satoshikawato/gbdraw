@@ -2,7 +2,6 @@ const { test, expect } = require('@playwright/test');
 const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 // The version the Web records with each search: the shipped LOSAT Wasm build.
 const { version: LOSAT_WASM_VERSION } = require('../../../gbdraw/web/wasm/losat/losat-build.json');
@@ -16,14 +15,11 @@ const {
   openApp
 } = require('../helpers/app-lifecycle.cjs');
 const { ringSessionText } = require('../helpers/ring-session.cjs');
+const { readSessionFile } = require('../helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, '../helpers/session-documents.mjs')).href);
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const webSessionRoot = join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions');
-const syntheticSourceName = 'HmmtDNA_basic_circular.gbdraw-session.json';
-const syntheticSource = JSON.parse(readFileSync(
-  join(webSessionRoot, syntheticSourceName),
-  'utf8'
-));
+const syntheticSourceId = 'HmmtDNA_basic_circular';
 const frozenV39Session = join(
   repoRoot,
   'tests',
@@ -206,34 +202,51 @@ const probeSnapshot = (page) => page.evaluate(() => ({
   resultCount: window.__GBDRAW_APP__?.results?.length || 0
 }));
 
-const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedPromise(page,
-  async ({ filename, requestedVariant, tooNewVersion }) => {
-    const response = await fetch(`/gbdraw/web/gallery/sessions/${filename}`);
-    if (!response.ok) throw new Error(`Could not load ${filename}: ${response.status}`);
-    const session = await response.json();
-    session.title = `lazy-${requestedVariant}`;
-    session.resources['unused-lazy-contract'] = {
-      kind: 'web-file',
-      name: 'unused-lazy-contract.txt',
-      type: 'text/plain',
-      size: 7,
-      lastModified: 0,
-      encoding: 'base64',
-      data: btoa('unused\n')
-    };
-    const shown = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
-    const recordResourceId = shown.renderRequest.records[0].source.resourceId;
-    if (requestedVariant === 'newer-version') {
-      // A Session version newer than any the app reads is refused (receipt 〔拒否〕);
-      // a resource that nothing names is dropped, so its size no longer refuses a Load.
-      session.version = tooNewVersion;
-    } else if (requestedVariant === 'invalid-base64') {
-      session.resources[recordResourceId].data = '%%%';
-    }
+// A Session file container checks each input's size and CRC-32 before Load
+// commits, so input bytes that cannot be read never reach a lazy reader: Load
+// refuses the file. One byte of the GenBank entry's data is changed.
+const damagedEntryBytes = (bytes, resourceId) => {
+  const name = Buffer.from(`resources/${resourceId}`);
+  const at = bytes.indexOf(name);
+  const header = at - 30;
+  if (at < 30 || bytes.readUInt32LE(header) !== 0x04034b50) throw new Error(`no local entry for ${resourceId}`);
+  const data = at + bytes.readUInt16LE(header + 26) + bytes.readUInt16LE(header + 28);
+  const damaged = Buffer.from(bytes);
+  damaged[data + 16] ^= 0xff;
+  return damaged;
+};
+
+const syntheticSessionBytes = async (requestedVariant, tooNewVersion) => {
+  const { gallerySessionDocument, sessionFileOf } = await sessionDocuments();
+  const session = await gallerySessionDocument(syntheticSourceId);
+  session.title = `lazy-${requestedVariant}`;
+  session.resources['unused-lazy-contract'] = {
+    kind: 'web-file',
+    name: 'unused-lazy-contract.txt',
+    type: 'text/plain',
+    size: 7,
+    lastModified: 0,
+    encoding: 'base64',
+    data: Buffer.from('unused\n').toString('base64')
+  };
+  if (requestedVariant === 'newer-version') {
+    // A Session version newer than any the app reads is refused (receipt 〔拒否〕);
+    // a resource that nothing names is dropped, so its size no longer refuses a Load.
+    session.version = tooNewVersion;
+  }
+  const bytes = Buffer.from(await (await sessionFileOf(session)).arrayBuffer());
+  return requestedVariant === 'damaged-entry'
+    ? damagedEntryBytes(bytes, session.drawings.find((entry) => entry.id === session.ui.activeDrawingId)
+      .renderRequest.records[0].source.resourceId)
+    : bytes;
+};
+
+const loadSyntheticSession = async (page, variant = 'normal') => evaluateWithRetainedPromise(page,
+  async ({ base64, requestedVariant }) => {
     const file = new File(
-      [JSON.stringify(session)],
-      `lazy-${requestedVariant}.gbdraw-session.json`,
-      { type: 'application/json' }
+      [Uint8Array.from(atob(base64), (character) => character.charCodeAt(0))],
+      `lazy-${requestedVariant}.gbdraw`,
+      { type: 'application/octet-stream' }
     );
     const probe = window.__GBDRAW_LAZY_SESSION_PROBE__;
     probe.ignoreFile(file);
@@ -247,7 +260,7 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
       message: String(result?.error?.summary || '')
     };
   },
-  { filename: syntheticSourceName, requestedVariant: variant, tooNewVersion: NEWEST_READ_SESSION_VERSION + 1 }
+  { base64: (await syntheticSessionBytes(variant, NEWEST_READ_SESSION_VERSION + 1)).toString('base64'), requestedVariant: variant }
 );
 
 const openInstrumentedApp = async (page) => {
@@ -313,7 +326,9 @@ test('synthetic current session restores and exports without materializing resou
   const saved = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   expect(saved.status).toBe('saved');
   const download = await downloadPromise;
-  const exported = JSON.parse(gunzipSync(readFileSync(await download.path())).toString('utf8'));
+  const { gallerySessionDocument, readSavedSession } = await sessionDocuments();
+  const syntheticSource = await gallerySessionDocument(syntheticSourceId);
+  const exported = await readSavedSession(new Blob([readFileSync(await download.path())]));
   const afterExport = await probeSnapshot(page);
 
   expect(afterExport.structural.base64DecodeCount).toBe(0);
@@ -584,18 +599,15 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
     });
     expect(saved.result.status, JSON.stringify(saved.errorLog)).toBe('saved');
     const savedBytes = readFileSync(await (await downloadPromise).path());
-    const savedText = savedBytes[0] === 0x1f
-      ? gunzipSync(savedBytes).toString('utf8')
-      : savedBytes.toString('utf8');
-    const savedPath = testInfo.outputPath('shared-ring-cache.gbdraw-session.json');
-    writeFileSync(savedPath, savedText, 'utf8');
+    const savedPath = testInfo.outputPath('shared-ring-cache.gbdraw');
+    writeFileSync(savedPath, savedBytes);
     const savedRows = generated.cacheInfo.slice(0, 3);
-    expect(shownSavedDrawing(JSON.parse(savedText)).losatCache.entries.map(({ key, filename }) => ({ key, filename })))
+    expect(shownSavedDrawing(await readSessionFile(savedPath)).losatCache.entries.map(({ key, filename }) => ({ key, filename })))
       .toEqual(savedRows);
 
-    const restored = await evaluateWithRetainedPromise(page, async (sessionText) => {
-      const file = new File([sessionText], 'shared-ring-cache.gbdraw-session.json', {
-        type: 'application/json', lastModified: 0
+    const restored = await evaluateWithRetainedPromise(page, async (sessionBase64) => {
+      const file = new File([Uint8Array.from(atob(sessionBase64), (character) => character.charCodeAt(0))], 'shared-ring-cache.gbdraw', {
+        type: 'application/octet-stream', lastModified: 0
       });
       window.__GBDRAW_LAZY_SESSION_PROBE__.ignoreFile(file);
       const app = window.__GBDRAW_APP__;
@@ -608,7 +620,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
         result,
         ...(await window.__GBDRAW_SHARED_RING_PROBE__.read())
       };
-    }, savedText);
+    }, savedBytes.toString('base64'));
     expect(restored.imported, JSON.stringify(restored.afterImport.errorLog)).toBe('ok');
     expect(restored.afterImport.comparisonNames).toEqual(generated.comparisonNames);
     expect(restored.afterImport.cacheKeys).toEqual(generated.cacheKeys);
@@ -952,7 +964,6 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
     expect(saved.result.status, JSON.stringify(saved.errorLog)).toBe('saved');
     const savedPath = await (await downloadPromise).path();
     const savedBytes = readFileSync(savedPath);
-    const savedText = savedBytes[0] === 0x1f ? gunzipSync(savedBytes).toString('utf8') : savedBytes.toString('utf8');
     const findLabels = (value) => {
       if (!value || typeof value !== 'object') return null;
       if (Array.isArray(value.conservationLabels)) return value.conservationLabels;
@@ -962,10 +973,10 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
       }
       return null;
     };
-    expect(findLabels(JSON.parse(savedText))).toEqual(savedLabels);
-    const restored = await evaluateWithRetainedPromise(page, async (sessionText) => {
-      const file = new File([sessionText], 'ring-default-labels.gbdraw-session.json', {
-        type: 'application/json', lastModified: 0
+    expect(findLabels(await readSessionFile(savedPath))).toEqual(savedLabels);
+    const restored = await evaluateWithRetainedPromise(page, async (sessionBase64) => {
+      const file = new File([Uint8Array.from(atob(sessionBase64), (character) => character.charCodeAt(0))], 'ring-default-labels.gbdraw', {
+        type: 'application/octet-stream', lastModified: 0
       });
       window.__GBDRAW_LAZY_SESSION_PROBE__.ignoreFile(file);
       const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
@@ -976,7 +987,7 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
         errorLog: window.__GBDRAW_APP__.errorLog,
         labels: state.activeDrawing().circularConservation.series.map(({ label }) => label)
       };
-    }, savedText);
+    }, savedBytes.toString('base64'));
     expect(restored.status, `${restored.message} ${JSON.stringify(restored.errorLog)}`).toBe('ok');
     expect(restored.labels).toEqual(savedLabels);
   } finally {
@@ -1202,10 +1213,10 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect([...materializedIds].every((resourceId) => (
     ['record-1-genbank', 'colors-default-colors'].includes(resourceId)
   ))).toBe(true);
-  expect(snapshot.structural.base64DecodeCount).toBe(
-    snapshot.structural.resourceByteReadCount
-  );
-  expect(snapshot.structural.base64DecodeCount).toBeGreaterThanOrEqual(
+  // A loaded Session file's inputs are entries the Load copied: Generate reads
+  // each required one once and decodes no base64 (receipt session.file-container).
+  expect(snapshot.structural.base64DecodeCount).toBe(0);
+  expect(snapshot.structural.resourceByteReadCount).toBeGreaterThanOrEqual(
     materializedIds.size
   );
 
@@ -1536,7 +1547,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
   expect(afterRetryWorker.instances[1].terminated).toBe(false);
 });
 
-test('preflight and lazy-access failures preserve the committed preview', async ({ page }) => {
+test('a newer or damaged Session file is refused and keeps the committed preview', async ({ page }) => {
   test.setTimeout(180_000);
   await openInstrumentedApp(page);
   expect(await loadSyntheticSession(page)).toMatchObject({ status: 'ok' });
@@ -1577,67 +1588,29 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     previewVisible: true
   });
 
-  const corrupt = await loadSyntheticSession(page, 'invalid-base64');
-  expect(corrupt).toEqual({ status: 'ok', degradedRecovery: false, message: '' });
-  const beforeAccess = await probeSnapshot(page);
-  expect(beforeAccess.structural).toEqual(ZERO_PREVIEW_METRICS);
-  const access = await page.evaluate(async () => {
+  const damaged = await loadSyntheticSession(page, 'damaged-entry');
+  expect(damaged.status).toBe('error');
+  expect(damaged.message).toContain('This file is not a gbdraw Session: it is incomplete or damaged.');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'INPUT_INVALID', context: { field: 'schema', reason: 'CONTAINER_DAMAGED' }
+  });
+  expect(await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    const content = app.currentResults()[app.selectedResultIndex].content;
-    const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
     const { state } = await import('/gbdraw/web/js/state.js');
-    let first = '';
-    let second = '';
-    try {
-      await readFileText(state.inputFiles.fileOf(state.activeDrawing().circularSources[0].gb));
-    } catch (error) {
-      first = String(error?.message || error);
-    }
-    try {
-      await readFileText(state.inputFiles.fileOf(state.activeDrawing().circularSources[0].gb));
-    } catch (error) {
-      second = String(error?.message || error);
-    }
+    const baseline = window.__GBDRAW_LAZY_ROLLBACK_BASELINE__;
     return {
-      first,
-      second,
-      sameContent: app.currentResults()[app.selectedResultIndex].content === content,
+      sameFile: state.activeDrawing().circularSources[0].gb === baseline.file,
+      sameContent: app.currentResults()[app.selectedResultIndex].content === baseline.content,
+      selectedResultIndex: app.selectedResultIndex,
+      undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
       previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg'))
     };
-  });
-  expect(access.first).toMatch(
-    /record-1-genbank \(record-1-genbank-HmmtDNA\.gbk\) contains invalid encoded data/
-  );
-  expect(access.second).toBe(access.first);
-  expect(access.sameContent).toBe(true);
-  expect(access.previewVisible).toBe(true);
-  const afterAccess = await probeSnapshot(page);
-  expect(afterAccess.structural.base64DecodeCount).toBe(1);
-  expect(afterAccess.structural.resourceByteReadCount).toBe(1);
-  expect(afterAccess.structural.workerConstructionCount).toBe(0);
-  expect(afterAccess.structural.workerInitializationCount).toBe(0);
-
-  const failedGenerate = await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    const history = window.__GBDRAW_HISTORY__;
-    const loadedContent = app.currentResults()[app.selectedResultIndex]?.content || '';
-    const result = await app.runAnalysis();
-    return {
-      status: result?.status,
-      previewCommitted: app.currentResults()[app.selectedResultIndex]?.content === loadedContent,
-      previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
-      undoCount: history.getUndoCount(),
-      redoCount: history.getRedoCount(),
-      currentCheckpointAbsent: history.getCurrentCheckpoint() === null
-    };
-  });
-  expect(failedGenerate).toEqual({
-    status: 'error',
-    previewCommitted: true,
-    previewVisible: true,
+  })).toEqual({
+    sameFile: true,
+    sameContent: true,
+    selectedResultIndex: 0,
     undoCount: 0,
-    redoCount: 0,
-    currentCheckpointAbsent: true
+    previewVisible: true
   });
 });
 
@@ -1646,7 +1619,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   await openInstrumentedApp(page);
   await armHistoryCompletion(page);
   const input = page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   );
   await input.setInputFiles(frozenV39Session);
   await expectNoLoadRepairDialog(page);
@@ -1675,7 +1648,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   });
   expect(saveOutcome.result.status, JSON.stringify(saveOutcome.errorLog)).toBe('saved');
   const roundTripPath = await (await downloadPromise).path();
-  const roundTrip = JSON.parse(gunzipSync(readFileSync(roundTripPath)).toString('utf8'));
+  const roundTrip = await readSessionFile(roundTripPath);
   expect(roundTrip.version).toBe(CURRENT_SESSION_VERSION);
   expect(shownSavedDrawing(roundTrip).results).toHaveLength(1);
   expect(shownSavedDrawing(roundTrip).editorState.featureCatalog).toBeTruthy();
@@ -1687,7 +1660,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   await page.evaluate(() => window.__GBDRAW_LAZY_SESSION_PROBE__.reset());
   await armHistoryCompletion(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(roundTripPath);
   await page.waitForFunction(
     () => window.__GBDRAW_LAZY_SESSION_PROBE__?.historyLoaded === true,

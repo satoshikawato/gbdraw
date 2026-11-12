@@ -1,14 +1,14 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
-const sessionInputSelector = 'input[accept^=".json,"]';
+const sessionInputSelector = 'input[accept*=".gbdraw"]';
 
 const runDiagram = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
@@ -209,7 +209,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   expect(separate.text).toContain('16,569 bp');
 
   const savedPath = await saveSession(page, 'linear-label-visibility');
-  const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
+  const saved = await readSessionFile(savedPath);
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(savedDrawing(saved, 'linear').config.adv.linear_accession_visibility).toBe('auto');
   expect(savedDrawing(saved, 'linear').config.adv.linear_length_visibility).toBe('show');

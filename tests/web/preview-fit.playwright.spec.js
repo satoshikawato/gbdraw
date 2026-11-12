@@ -8,7 +8,7 @@ const { openApp, generateAndWaitForResult, waitForSessionLoadAtRest } = require(
 // preview frame, centred. Generate keeps its first view.
 const repoRoot = process.cwd();
 const hmmt = readFileSync(join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk'), 'utf8');
-const linearSession = join(repoRoot, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+const linearSession = join(repoRoot, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
 
 const fitButton = (page) => page.getByRole('button', { name: 'Fit to preview', exact: true });
 
@@ -160,7 +160,7 @@ const openLinearSession = async (page) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+  await page.locator('input[type=file][accept*=".gbdraw"]')
     .setInputFiles(linearSession);
   await waitForSessionLoadAtRest(page, { timeout: 60_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
@@ -230,7 +230,7 @@ const expectFittedFromFirstFrame = async (page, label) => {
 
 // R17-25 (OV-1809): a Session file Load with a Result fits the figure to the
 // shown Preview at every width; Generate keeps 100 %.
-const circularSession = join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+const circularSession = join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw');
 for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   test(`a Session file Load fits the figure to the Preview at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     test.setTimeout(180000);
@@ -238,7 +238,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await openApp(page);
     page.on('dialog', (dialog) => dialog.dismiss());
     await sampleLoadFrames(page);
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    await page.locator('input[type=file][accept*=".gbdraw"]')
       .setInputFiles(circularSession);
     await waitForSessionLoadAtRest(page, { timeout: 60_000 });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
@@ -261,7 +261,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
 const pendingTapCases = [
   { session: 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json', viewport: { width: 1280, height: 800 } },
   { session: 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json', viewport: { width: 390, height: 844 }, tap: true },
-  { session: 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json', viewport: { width: 390, height: 844 }, tap: true }
+  { session: 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw', viewport: { width: 390, height: 844 }, tap: true }
 ];
 for (const { session, viewport, tap } of pendingTapCases) {
   const older = session.includes('.v40-');
@@ -273,7 +273,7 @@ for (const { session, viewport, tap } of pendingTapCases) {
     await openApp(page);
     page.on('dialog', (dialog) => dialog.dismiss());
     await sampleLoadFrames(page);
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    await page.locator('input[type=file][accept*=".gbdraw"]')
       .setInputFiles(join(repoRoot, session));
     if (tap) {
       // The tap comes while the Load is pending: once the stored figure is drawn, else at once.
@@ -311,7 +311,7 @@ test('a legacy configuration Load keeps the zoom of the figure already shown', a
   const zoomIn = page.getByRole('button', { name: 'Zoom in', exact: true });
   for (let step = 0; step < 3; step += 1) await zoomIn.click();
   const zoomed = await appZoom(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles({
     name: 'legacy-config.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ form: {} }))
   });
   await expect(page.getByText('Configuration loaded from an older gbdraw.', { exact: false }).first()).toBeVisible();

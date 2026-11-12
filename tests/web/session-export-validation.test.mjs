@@ -5,6 +5,7 @@ import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 if (!globalThis.crypto?.subtle) {
   Object.defineProperty(globalThis, 'crypto', {
@@ -186,10 +187,14 @@ circularFiles.c_conservation_blasts_source = null;
 let downloadedBlobs = 0;
 let downloadedBlob = null;
 let compressionAttempts = 0;
+// A Save compresses each entry of its container; a refused Save compresses none, so the count a Save
+// left is the count at its download.
+let compressionAtDownload = 0;
 const originalCreateObjectUrl = URL.createObjectURL;
 const OriginalCompressionStream = globalThis.CompressionStream;
 URL.createObjectURL = (blob) => {
   downloadedBlobs += 1;
+  compressionAtDownload = compressionAttempts;
   downloadedBlob = blob;
   return 'blob:active-draft-session';
 };
@@ -200,9 +205,7 @@ globalThis.CompressionStream = function CountingCompressionStream(...args) {
 try {
   const saved = await exportSession('divergent-active-draft');
   assert.equal(saved.status, 'saved');
-  const session = JSON.parse(gunzipSync(
-    Buffer.from(await saved.blob.arrayBuffer())
-  ).toString('utf8'));
+  const session = await readSavedSession(saved.blob);
   const circular = savedDrawingView(session, 'circular');
   assert.equal(circular.modes.circular.config.adv.circular_track_slots[0].width, '16px');
   assert.equal(
@@ -257,9 +260,7 @@ try {
     JSON.stringify = originalJsonStringify;
   }
   assert.equal(rawTextCloneAttempts, 0, 'fresh raw LOSAT text must not be deep-cloned');
-  const replacementSession = savedDrawingView(JSON.parse(gunzipSync(
-    Buffer.from(await regenerated.blob.arrayBuffer())
-  ).toString('utf8')), 'circular');
+  const replacementSession = savedDrawingView(await readSavedSession(regenerated.blob), 'circular');
   assert.deepEqual(replacementSession.losatCache.entries.map(entry => entry.key),
     ['current', 'valid-dormant', 'nucleotide']);
   // An entry without a Raw LOSAT row is cache only: hidden, without a name, as
@@ -288,7 +289,7 @@ try {
       assert.equal(state.proteinIdentityManifest.value, invalidManifest);
       assert.deepEqual([...state.losatCache.value], rawEntries);
       assert.equal(downloadedBlobs, 2);
-      assert.equal(compressionAttempts, 2);
+      assert.equal(compressionAttempts, compressionAtDownload);
     }
   }
   for (const rawEntries of [[], [entries.at(-1)]]) {
@@ -296,7 +297,7 @@ try {
     state.proteinIdentityManifest.value = structuredClone(circular.proteinIdentityManifest);
     const valid = await exportSession(`valid-empty-manifest-${rawEntries.length}`);
     const document = savedDrawingView(
-      JSON.parse(gunzipSync(Buffer.from(await valid.blob.arrayBuffer())).toString('utf8')), 'circular'
+      await readSavedSession(valid.blob), 'circular'
     );
     assert.equal(valid.status, 'saved');
     assert.deepEqual(document.proteinIdentityManifest, circular.proteinIdentityManifest);
@@ -316,9 +317,7 @@ try {
     { key: 'ring-c', filename: 'comparison-c-copy.tsv', display: true }
   ];
   const sharedRing = await exportSession('shared-ring-cache');
-  const sharedRingDocument = savedDrawingView(JSON.parse(
-    gunzipSync(Buffer.from(await sharedRing.blob.arrayBuffer())).toString('utf8')
-  ), 'circular');
+  const sharedRingDocument = savedDrawingView(await readSavedSession(sharedRing.blob), 'circular');
   assert.deepEqual(
     sharedRingDocument.losatCache.entries.map(({ key, filename, text }) => [key, filename, text]),
     [['ring-b', 'comparison-b.tsv', 'b\n'], ['ring-c', 'comparison-c.tsv', 'c\n']]
@@ -332,7 +331,7 @@ try {
   globalThis.CompressionStream = OriginalCompressionStream;
 }
 assert.ok(inputReads > 0, 'saving must bind the active input file');
-assert.equal(compressionAttempts, 5);
+assert.equal(compressionAttempts, compressionAtDownload);
 assert.equal(downloadedBlobs, 5);
 assert.ok(downloadedBlob instanceof Blob);
 
@@ -355,7 +354,7 @@ assert.ok(downloadedBlob instanceof Blob);
   try {
     const saved = await exportSession('ov325-cli-circular', { recordDisplayRows: { value: rows } });
     assert.equal(saved.status, 'saved');
-    const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    const session = await readSavedSession(saved.blob);
     assert.deepEqual(
       savedDrawingView(session, 'circular').modes.circular.config.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
       [['#1', 'NC_004603.1', 1000], ['#2', 'NC_004605.1', 2000]],
@@ -386,15 +385,32 @@ assert.ok(downloadedBlob instanceof Blob);
 // PD-OI-121 (the PD-OI-120 outcome for a file without a copy): an input with no
 // copy that the browser refuses to read again (it changed on disk after it was
 // chosen) ends Save with INPUT_UNREADABLE and its text, and no download starts.
+// The input differs from the committed request's, so Save needs its bytes (a
+// Save writes an input the committed request already holds from that copy).
 {
-  const file = state.inputFiles.fileOf(modeDrawing(state, 'circular').circularSources[0].gb);
-  const { arrayBuffer } = file;
+  const { readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  const ref = bindCircularSourceFile(state.inputFiles, modeDrawing(state, 'circular').slices.inputs, 'record-1', 'gb', {
+    name: 'changed.gbk',
+    type: 'application/genbank',
+    size: 13,
+    lastModified: 2,
+    async arrayBuffer() {
+      return new TextEncoder().encode('LOCUS changed').buffer;
+    }
+  });
+  const file = state.inputFiles.fileOf(ref);
+  await readFileBytes(file);
+  const { arrayBuffer, stream } = file;
   let downloads = 0;
   URL.createObjectURL = () => {
     downloads += 1;
     return 'blob:refused-session';
   };
   file.arrayBuffer = async () => { throw new DOMException('changed on disk', 'NotReadableError'); };
+  // Save streams the input into its entry; a changed file's stream fails as its read does.
+  file.stream = () => new ReadableStream({
+    pull(controller) { controller.error(new DOMException('changed on disk', 'NotReadableError')); }
+  });
   /** @type {unknown[]} */
   const shown = [];
   try {
@@ -407,6 +423,7 @@ assert.ok(downloadedBlob instanceof Blob);
     assert.equal(downloads, 0, 'a refused Save starts no download');
   } finally {
     file.arrayBuffer = arrayBuffer;
+    file.stream = stream;
     URL.createObjectURL = originalCreateObjectUrl;
   }
 }

@@ -3,6 +3,7 @@
 # Session and request compatibility
 
 Current writers emit session version 51 and canonical `renderRequest` schema 10.
+A Session is one `.gbdraw` file (see [The Session file](#the-session-file)).
 Session 51 lists the drawings of a project in `drawings`. The Web app and Python
 read a Session 46–50 into drawings themselves; a Session 27–44 is converted by
 Python, once, at Load (the Web app waits for it); a Session 45 is not read.
@@ -12,6 +13,59 @@ Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 | gbdraw session | 51 | 27–33, 39–42, 44, and 46–51 |
 | Canonical `renderRequest` | 10 | 1, 2, 5, 6, 7, 8, 9, and 10 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–51 |
+
+## The Session file
+
+A Session is one ZIP file named `<title>.gbdraw`. Its first entry,
+`gbdraw-session.json`, holds the settings and results (a Session version 51
+document without input bytes). Each input file is one entry,
+`resources/<id>`: a gzip input is stored as it is, any other input is
+compressed. `unzip -l file.gbdraw` lists the contents. To edit the settings by
+hand, unzip the file, edit `gbdraw-session.json`, and zip it again.
+
+- **Writing.** The Web app's **Save Session**, the Python function
+  `save_session_document`, and the command line's `--session_output` and
+  `--save_session` write only this file. The command-line default name is
+  `<prefix>.gbdraw` (with `-o prefix`), otherwise `<svg stem>.gbdraw`, otherwise
+  `gbdraw.gbdraw`. An output name that ends with `.json` or `.json.gz` (in any
+  case) is refused before anything is written: "A Session is saved as a
+  .gbdraw file. Use a name that ends with .gbdraw, not .json or .json.gz:
+  {path}". Another name, such as `.zip` or none, is written as given.
+- **Reading.** The web app (Load), `gbdraw render --session`,
+  `gbdraw circular --session`, `gbdraw linear --session`,
+  `load_session_document`, and `materialize_session` decide by content, not by
+  name. They open a container file of any name and the older JSON Sessions 27–33,
+  39–42, 44, and 46–50, plain or gzip. A JSON Session of version 51 never
+  shipped and is not opened: Python says "A Session version 51 file must be a
+  .gbdraw file, not JSON: {path}", and the web app says "Load a Session file
+  that this version of gbdraw supports.".
+- **Damaged files.** A container that is incomplete or damaged is refused with
+  "This file is not a gbdraw Session: it is incomplete or damaged."; a ZIP file
+  without `gbdraw-session.json` with "This file is not a gbdraw Session: it has
+  no gbdraw-session.json.". A container whose `gbdraw-session.json` is a Session
+  older than version 51 was never written by gbdraw and is refused: Python says
+  "Unsupported session version: {version}.", and the web app says "Load a
+  Session file that this version of gbdraw supports.".
+- **Python API: input bytes stay beside the document.** A `SessionDocument`
+  keeps its input bytes in `document.resources`, not in `document.to_dict()`.
+  To load an edited mapping again, pass the resources too:
+  `load_session_document(mapping, resources=document.resources)`, or save and
+  load the `.gbdraw` file. Without them, gbdraw refuses the mapping with
+  "Canonical resource '{id}' has no bytes: pass resources=document.resources
+  with a document's to_dict(), or save and load the .gbdraw file.". A mapping of
+  version 51 whose resources hold base64 data is a JSON Session 51 and is
+  refused with "A Session version 51 file must be a .gbdraw file, not JSON:
+  <mapping>".
+- **Older gbdraw.** gbdraw 0.14.5 and older cannot open the file: Python says
+  "Not a valid JSON session file: {path}", and the web app says "This file is
+  not a gbdraw Session: it is not valid JSON.". Version 51 Sessions open in
+  v0.15.0 and later.
+- **Converting an older Session.** `gbdraw render --session old.json.gz
+  --session_output new.gbdraw` writes the older Session as a container file.
+- **Size.** The inputs of a container Session have no size limit on the command
+  line and in Python. The web app limits only `gbdraw-session.json` to 512 MiB.
+  Older JSON Sessions keep the limits of 200 MB for the file and 512 MB after
+  decompression.
 
 [Session and request structure](#session-and-request-structure) has the JSON
 Schema files and diagrams of both formats.
@@ -512,8 +566,8 @@ feature information. Only the cases below stop a Load.
 
 The Web app refuses these files and shows an error instead:
 
-- A file that is not JSON, including a broken gzip file and text that is not
-  UTF-8.
+- A file that is not a container Session and not JSON, including a broken gzip
+  file and text that is not UTF-8.
 - A file that is neither a gbdraw Session nor a configuration file, including
   a Session without its `format` or `version` and request schemas 3 and 4.
 - A Session of version 26 or older (gbdraw 0.11.0 or older, or gbdraw.app
@@ -523,7 +577,9 @@ The Web app refuses these files and shows an error instead:
   the versions this gbdraw reads.
 - A Session version or request schema newer than this reader. For a Session,
   the error names its version and the newest version this gbdraw reads.
-- A file larger than 200 MB, or larger than 512 MB after decompression.
+- A JSON Session larger than 200 MB, or larger than 512 MB after decompression,
+  and a container Session whose `gbdraw-session.json` is larger than 512 MiB
+  after decompression (see [The Session file](#the-session-file)).
 - A gzip file opened in a browser without gzip decompression, or any file in
   a browser without module Workers. A browser feature or Worker that fails
   during the Load also stops it with an error.
@@ -573,10 +629,10 @@ A saved table with more than 12 columns replays from its first 12 columns. A
 malformed saved table, or one whose IDs name the wrong Linear records, stops
 replay with an error.
 
-Both `.gbdraw-session.json` and lossless `.gbdraw-session.json.gz` are
-accepted. The web app writes compressed sessions by default. The command line
-writes `<output>.gbdraw-session.json` by default. `--session_output` selects an
-explicit path and implies saving; a `.gz` suffix selects compression.
+The web app and the command line write a `.gbdraw` container file (see
+[The Session file](#the-session-file)); `--session_output` selects an explicit
+path and implies saving. Older `.gbdraw-session.json` and
+`.gbdraw-session.json.gz` files are still read.
 
 The web app keeps one Result for each diagram mode. **Save Session** writes
 every Result and the editable state: the shown mode's Result at the top level

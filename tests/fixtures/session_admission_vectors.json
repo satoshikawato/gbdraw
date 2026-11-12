@@ -899,7 +899,7 @@
    "fixture": "tests/fixtures/sessions/se08-main-linear-cli.v42.gbdraw-session.json.gz"
   },
   "web-50": {
-   "fixture": "tests/fixtures/sessions/drawings-circular-only.v51.gbdraw-session.json.gz"
+   "fixture": "tests/fixtures/sessions/drawings-circular-only.v51.gbdraw"
   }
  },
  "vectors": [

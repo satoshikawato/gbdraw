@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
@@ -24,7 +24,7 @@ for (const mode of ['circular', 'linear']) {
       page = await context.newPage();
       page.on('dialog', (dialog) => dialog.dismiss());
       await openApp(page);
-      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
       await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
         && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
     };
@@ -86,7 +86,7 @@ for (const mode of ['circular', 'linear']) {
     };
     try {
       const seed = mode === 'circular' ? 'HmmtDNA_basic_circular' : 'lambda_basic_linear';
-      await load(`gbdraw/web/gallery/sessions/${seed}.gbdraw-session.json`);
+      await load(`gbdraw/web/gallery/sessions/${seed}.gbdraw`);
       await assertControl(false);
       await generate();
       const baseline = await artifact();
@@ -158,7 +158,7 @@ for (const mode of ['circular', 'linear']) {
 // RC-4: Feature placement rows are keyed by mode-specific record keys, so each
 // mode keeps its own rows (R2) and the request carries only its own (OV-08).
 // An unsupported lane is a classified failure that names the feature (OV-09).
-const HMMT_SESSION = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
+const HMMT_SESSION = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw';
 const placeLane = (page, side) => page.evaluate(async (lane) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
@@ -203,12 +203,12 @@ test('a Circular lane placement waits in Circular while Linear generates (OV-08)
     // A Session saved in Linear keeps the Circular row for a later return.
     await switchMode(page, 'linear');
     await generate(page);
-    const saved = testInfo.outputPath('linear-with-circular-placement.gbdraw-session.json');
+    const saved = testInfo.outputPath('linear-with-circular-placement.gbdraw');
     await download(page, 'Save Session', saved);
     await page.context().close();
     page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
     await openApp(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
     const loaded = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       const app = window.__GBDRAW_APP__;
@@ -296,7 +296,7 @@ test('a Track Preset change that drops a lane placement asks first (OV-09)', asy
 
 test('Separate Strands on with an Above lane placement asks first (OV-09)', async ({ browser }) => {
   test.setTimeout(240000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw');
   try {
     const strands = await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }));
     await strands.click();
@@ -330,11 +330,12 @@ test('an unsupported lane from a loaded Session names the feature on Generate (O
   let page = await load(browser, HMMT_SESSION);
   try {
     const { product } = await placeOutward(page);
-    const saved = testInfo.outputPath('outward.gbdraw-session.json');
-    const session = JSON.parse(gunzipSync(await download(page, 'Save Session', saved)));
+    const saved = testInfo.outputPath('outward.gbdraw');
+    const { readSavedSession, sessionFileOf } = await sessionDocuments();
+    const session = await readSavedSession(new Blob([await download(page, 'Save Session', saved)]));
     savedDrawing(session, 'circular').config.form.track_type = 'spreadout';
-    const edited = testInfo.outputPath('outward-spreadout.gbdraw-session.json');
-    await fs.writeFile(edited, JSON.stringify(session));
+    const edited = testInfo.outputPath('outward-spreadout.gbdraw');
+    await fs.writeFile(edited, Buffer.from(await (await sessionFileOf(session)).arrayBuffer()));
     await page.context().close();
     page = await load(browser, edited);
     await expect(await reveal(page.locator('#circular-track-preset'))).toHaveValue('spreadout');

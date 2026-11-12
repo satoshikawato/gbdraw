@@ -6,6 +6,7 @@ import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services
 import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle, OUT_OF_MEMORY_CODE } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { MODE_PROFILE_DATA } from '../../gbdraw/web/js/mode-profiles.generated.js';
+import { INPUT_NAME_CHARACTERS } from '../../gbdraw/web/js/contracts/schema.generated.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 
@@ -45,26 +46,32 @@ assert.match(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVers
 assert.doesNotMatch(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 99, latestSessionVersion: 48 }), /Check the required fields/);
 // A context word list that is not a version list is dropped, not shown.
 assert.doesNotMatch(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '<b>27</b>' }), /<b>/);
-// OV-2240: a Save over the Load cap names its size, the cap, and the largest
-// inputs, and offers no Retry (it would fail the same way). The same code on
-// Load keeps its own text.
-const saveTooLarge = normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {
-  sessionBytes: 600 * 1024 * 1024, sessionByteLimit: 512 * 1024 * 1024, largestInputs: 'depth-a.tsv, depth\u0007b.tsv, ' + 'x'.repeat(400)
-}, { stage: 'write', operation: 'session-save' }), { operation: 'session-save' });
+// Receipt session.file-container: the settings and results over the browser's cap,
+// on Save and on Load, and browser storage too short for the inputs, on Load and on
+// Save with and without an estimate: the receipt's texts, exactly, and no Retry (it
+// would fail the same way). The same code on a JSON Session's Load keeps its own text.
+const sessionLimit = (context, operation) => normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', context,
+  { stage: operation === 'session-save' ? 'write' : 'read', operation }), { operation });
+const saveTooLarge = sessionLimit({ sessionBytes: 600 * 1024 * 1024, sessionByteLimit: 512 * 1024 * 1024 }, 'session-save');
 assert.equal(saveTooLarge.stage, 'write');
-assert.match(saveTooLarge.summary, /^The Session was not saved: it is 600\.0 MB expanded, and the browser loads at most 512 MB\. Largest inputs: depth-a\.tsv, depth b\.tsv, x{1,200}\. /);
-assert.doesNotMatch(saveTooLarge.summary, /smaller Session file|\u0007|x{201}/);
+assert.equal(saveTooLarge.summary, 'The Session was not saved: its settings and results are 600.0 MB, and the browser loads at most 512 MB. '
+  + 'Draw a smaller region, or turn off tracks or labels you do not need, then save again.');
 assert.deepEqual(saveTooLarge.actions, ['select-input']);
-// OV-2245: a Save over the file cap says "file", not "expanded".
-const saveFileTooLarge = normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {
-  sessionBytes: 213 * 1024 * 1024, sessionByteLimit: 200 * 1024 * 1024, sessionSizeKind: 'file', largestInputs: 'depth-a.tsv'
-}, { stage: 'write', operation: 'session-save' }), { operation: 'session-save' });
-assert.match(saveFileTooLarge.summary, /^The Session was not saved: its file would be 213\.0 MB, and the browser loads files of at most 200 MB\. Largest inputs: depth-a\.tsv\. /);
-assert.doesNotMatch(saveFileTooLarge.summary, /expanded/);
-assert.deepEqual(saveFileTooLarge.actions, ['select-input']);
-// The kind is dropped without the sizes it describes.
-assert.equal(normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', { sessionSizeKind: 'file' },
-  { stage: 'write', operation: 'session-save' }), { operation: 'session-save' }).context.sessionSizeKind, undefined);
+assert.equal(sessionLimit({ sessionBytes: 600 * 1024 * 1024, sessionByteLimit: 512 * 1024 * 1024 }, 'session-load').summary,
+  'The Session was not loaded: its settings and results are 600.0 MB, and the browser loads at most 512 MB. '
+  + 'The gbdraw command line can draw this Session.');
+assert.equal(sessionLimit({ storageNeedBytes: 3 * 1024 * 1024 * 1024, storageFreeBytes: 1536 * 1024 * 1024 }, 'session-load').summary,
+  'The Session was not loaded: its inputs need 3072.0 MB of browser storage and 1536.0 MB is free. '
+  + 'Free up disk space, then load it again. The gbdraw command line can draw this Session.');
+const saveStorage = sessionLimit({ storageNeedBytes: 700 * 1024 * 1024, storageFreeBytes: 100 * 1024 * 1024,
+  largestInputs: 'depth-a.tsv, depth\u0007b.tsv, ' + 'x'.repeat(400) }, 'session-save');
+assert.match(saveStorage.summary, /^The Session was not saved: it needs up to 700\.0 MB of browser storage and 100\.0 MB is free\. Largest inputs: depth-a\.tsv, depth b\.tsv, x{1,200}\. Free up disk space, or close private windows, then save again\.$/);
+assert.deepEqual(saveStorage.actions, ['select-input']);
+assert.equal(sessionLimit({ storageNeedBytes: 700 * 1024 * 1024, largestInputs: 'genome.gbk' }, 'session-save').summary,
+  'The Session was not saved: the browser has no room for it (up to 700.0 MB). Largest inputs: genome.gbk. '
+  + 'Free up disk space, or close private windows, then save again.');
+// What is free is dropped without what is needed.
+assert.equal(sessionLimit({ storageFreeBytes: 1 }, 'session-save').context.storageFreeBytes, undefined);
 assert.match(normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' }), { operation: 'session-load' }).summary,
   /^The Session exceeds the browser size limit\. Use a smaller Session file\.$/);
 // A gzip input over the expanded cap (gbdraw/io/input_text.py, services/file-content-cache.js) names the file and
@@ -75,6 +82,11 @@ const gzipTooLarge = normalizeUserFacingError(diagnosticError('INPUT_UNREADABLE'
 assert.equal(gzipTooLarge.summary, 'An input could not be read. Replace or reselect it. File: big genome.gbff.gz. '
   + 'gbdraw reads gzip files that expand to at most 512 MiB. Decompress the gzip file and choose the plain file.');
 assert.deepEqual(gzipTooLarge.actions, ['select-input']);
+// The page names as many characters of the file as Python's Generate refusal does: one bound, generated (OV-2911).
+const longName = `${'n'.repeat(INPUT_NAME_CHARACTERS + 20)}.gz`;
+assert.equal(normalizeUserFacingError(diagnosticError('INPUT_UNREADABLE',
+  { reason: 'GZIP_EXPANDED_SIZE', inputName: longName, limit: 512 }, { stage: 'read' })).context.inputName,
+'n'.repeat(INPUT_NAME_CHARACTERS));
 assert.equal(normalizeUserFacingError({ code: 'INPUT_UNREADABLE', stage: 'render', context: { reason: 'GZIP_EXPANDED_SIZE', limit: 512 } }).summary,
   'An input could not be read. Replace or reselect it. gbdraw reads gzip files that expand to at most 512 MiB. '
   + 'Decompress the gzip file and choose the plain file.');

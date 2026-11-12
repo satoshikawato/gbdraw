@@ -2,6 +2,7 @@
 // The queries of the Sequence search panel (PD-OI-117): the query text, read by Python into queries (name, length,
 // colour), their removal and colours, and the queries Use as search query adds. They are the panel's own, transient
 // values: not in the Session and no History step.
+import { readFileText } from '../../services/file-content-cache.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { t } from '../../utils/i18n.js';
 import { panelQueries, readSearchQueriesReply } from '../../services/sequence-search.js';
@@ -79,12 +80,21 @@ export const createSearchQueries = (panel, runHelper, operation) => {
   const unread = () => panel.queryText !== readFor || panel.reading;
   /** The query box as typed, before its change event reads it. @param {string} text */
   const editQueryText = (text) => { panel.queryText = text; };
-  /** @param {{ target?: HTMLInputElement | null } | null | undefined} event */
+  /**
+   * Reads a chosen query FASTA file through the page's reader of input files (`readFileText`): a gzip file reads as
+   * its plain text, and one past the expanded cap (PD-OI-116) is refused here, right after it is chosen, with its name
+   * and the cap; the query text stays (OV-2947).
+   * @param {{ target?: HTMLInputElement | null } | null | undefined} event
+   */
   const chooseQueryFile = async (event) => {
     const file = event?.target?.files?.[0];
     if (!file) return;
     try {
-      await readQueries(await file.text());
+      const text = await readFileText(file).catch((error) => {
+        panel.queryError = normalizeUserFacingError(/** @type {Record<string, unknown>} */ (error), { stage: 'read' });
+        return null;
+      });
+      if (text !== null) await readQueries(text);
     } finally {
       if (event?.target) event.target.value = '';
     }

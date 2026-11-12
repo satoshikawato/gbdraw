@@ -343,7 +343,7 @@ def _run_node_adapter(node: str, cli: str) -> int:
 
 
 def _import_session(page: Any, path: Path, checks: AcceptanceChecks) -> None:
-    page.locator('input[accept^=".json,"]').first.set_input_files(str(path))
+    page.locator('input[accept*=".gbdraw"]').first.set_input_files(str(path))
     # The fixture loads without a repair: a Load repair dialog (BA-D25) is a
     # failure, reported with its lines, not a wait that times out.
     loaded = page.locator("[data-app-notice]").filter(has_text="Session loaded")

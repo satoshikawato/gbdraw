@@ -2,15 +2,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 import { createFeatureRecordRotationAction } from '../../gbdraw/web/js/app/record-display/feature-record-rotation.js';
 import { projectCommittedRecordTransform } from '../../gbdraw/web/js/services/session-request.js';
 import { validateAnchorIntent } from '../../gbdraw/web/js/services/record-display-model.js';
 
-const saved = JSON.parse(await readFile(
-  'docs/images/h-cli-12/cli_session.json',
-  'utf8'
-));
+const saved = await readSavedSession(new Blob([await readFile(
+  'docs/images/h-cli-12/cli_session.gbdraw'
+)]));
 const committed = savedDrawingView(saved, saved.ui.activeDrawingId);
 const canonicalRecord = committed.renderRequest.records[0];
 const catalogFeatures = committed.editorState.featureCatalog.items[0].biologicalFeatures;

@@ -7,7 +7,7 @@ const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generat
 const { openBatch } = require('./helpers/audit-browser.cjs');
 const { appAction, addColorRule, history } = require('./helpers/live-generate-parity-steps.cjs');
 
-const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
 
 const visibleRuleColor = (page, color = '#ff0000') => page.evaluate(color => {
   const svg = (window.__GBDRAW_APP__.currentResults()[0]?.content || '').toLowerCase();
@@ -40,7 +40,7 @@ test('History prepares cold rules once, skips warm config preparation, and reche
   test.setTimeout(180_000);
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(fixture);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(fixture);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   const context = page.context();
   const cdp = await context.newCDPSession(page);
@@ -123,7 +123,7 @@ test('Redo of a rule predicate change shows what Generate draws', async ({ page 
   test.setTimeout(240_000);
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(fixture);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(fixture);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   await appAction(page, 'setSpecificRuleField', 0, 'color', '#ff0000');
   await appAction(page, 'setSpecificRuleField', 0, 'val', 'psaA_NO_MATCH');
@@ -193,7 +193,7 @@ test('A visibility rule added after a Generate that migrates legacy protein cach
   writeFileSync(pairwiseDraft, JSON.stringify(session));
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(pairwiseDraft);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(pairwiseDraft);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.mode = 'orthogroup'; });
   await generateAndWaitForResult(page, { timeout: 300_000 });

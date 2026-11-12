@@ -11,7 +11,7 @@ const { resolve } = require('node:path');
 
 test.describe.configure({ retries: 0 });
 
-const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
+const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw';
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 const popup = (page) => page.locator('.preview-item-popup[role="dialog"]');
 const legendRow = (page, key) => page.locator(`.gbdraw-preview-surface g[data-legend-key="${key}"]`).first();

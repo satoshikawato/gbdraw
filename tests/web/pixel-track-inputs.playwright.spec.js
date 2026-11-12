@@ -1,10 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { gunzipSync } = require('node:zlib');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { reveal, getDiagramWorkerActivity, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
@@ -38,7 +38,7 @@ for (const width of [1440, 390]) {
       test.setTimeout(900000);
       const seed = mode === 'circular' ? 'tobacco-chloroplast' : 'BGC0000708-BGC0000713';
       console.log(`pixel ${mode}/${width}: load`);
-      const page = await load(browser, `gbdraw/web/gallery/sessions/${seed}.gbdraw-session.json`, { width, height: 1000 });
+      const page = await load(browser, `gbdraw/web/gallery/sessions/${seed}.gbdraw`, { width, height: 1000 });
       await page.evaluate(() => {
         window.__PIXEL_REQUESTS__ = [];
         const native = Worker.prototype.postMessage;
@@ -177,9 +177,9 @@ for (const width of [1440, 390]) {
       const hidden = await inspect(page, mode);
       expect(hidden.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id)).toEqual(
         control.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id).filter(id => id !== 'gc_content' && !linked.includes(id)));
-      const sessionPath = testInfo.outputPath('pixel.gbdraw-session.json.gz');
-      const savedBytes = await download(page, 'Save Session', sessionPath);
-      const saved = JSON.parse(gunzipSync(savedBytes));
+      const sessionPath = testInfo.outputPath('pixel.gbdraw');
+      await download(page, 'Save Session', sessionPath);
+      const saved = await readSessionFile(sessionPath);
       const savedSlot = savedDrawing(saved, mode).config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content');
       expect(savedSlot.enabled).toBe(false);
       if (mode === 'linear') { expect(savedSlot.height).toBe('10px'); expect(savedSlot.spacing).toBe('10px'); }

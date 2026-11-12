@@ -11,6 +11,7 @@ import {
 } from '../services/drawing/inputs.js';
 import { readComparisonSequence } from '../services/record-discovery.js';
 import { losatRowsOfOtherDrawings } from '../services/losat-cache.js';
+import { showChosenFileRefusal, showReadRefusal } from '../services/file-content-cache.js';
 import {
   applyComparisonSequenceRecordLabel,
   circularRingSources,
@@ -552,6 +553,32 @@ export const createCircularConservationSeriesPanel = ({
 };
 
 /**
+ * The end of a comparison sequence's failed record label read (D12): its row keeps the file-name default, and
+ * Generate reports the failure; a gzip file past the expanded cap (PD-OI-116) is refused now, in the error panel, as
+ * the other file fields refuse it. This read is the one owner of that refusal for Add Seq, with or without a copy
+ * store.
+ * @param {{ value: unknown }} errorLog The page's error panel (`state.errorLog`).
+ * @returns {(error: unknown) => false}
+ */
+const keepRecordLabelDefault = (errorLog) => (error) => {
+  showReadRefusal(errorLog, error);
+  return false;
+};
+
+/**
+ * A comparison file chosen with a ring row's Add file, held by the input store. Its read refusal, a gzip file past the
+ * expanded cap (PD-OI-116), shows once the store's copy counts its expanded size; with no copy store, its first read
+ * refuses it.
+ * @param {WebState} state
+ * @param {File} file
+ */
+const registerChosenComparisonFile = (state, file) => {
+  const ref = state.inputFiles.registerFile(file);
+  void showChosenFileRefusal(state.errorLog, file);
+  return ref;
+};
+
+/**
  * @typedef {object} CircularConservationComparisonFilesPorts
  * @property {WebState} state
  * @property {ShownAction} shownAction
@@ -600,7 +627,7 @@ const createRingRowFileEdits = ({ state, shownAction, setRingGenomeLists }) => {
     const picked = Array.from(event?.target?.files || []).filter(Boolean);
     if (event?.target) event.target.value = '';
     if (picked.length === 0) return;
-    const added = picked.map((file) => /** @type {InputFileRef} */ (state.inputFiles.registerFile(file)));
+    const added = picked.map((file) => /** @type {InputFileRef} */ (registerChosenComparisonFile(state, file)));
     setRingRowFiles(drawing, Number(rowIndex), [...(ringRowFiles(drawing)[Number(rowIndex)] || []), ...added], RING_FILE_REPLACED);
   });
   /**
@@ -640,8 +667,7 @@ export const createCircularConservationComparisonFiles = ({
     if (!selectedFile) return;
     const selectedRef = /** @type {InputFileRef} */ (state.inputFiles.registerFile(selectedFile));
     // D12: the Python ring reader names a GenBank or DDBJ row after it is added
-    // (a read failure keeps the file-name default; Generate reports it).
-    // Generate waits for these reads before it reads the row labels.
+    // (`keepRecordLabelDefault` ends a failed read). Generate waits for these reads before it reads the row labels.
     const pending = readComparisonSequence({ files: [selectedFile] })
       .then(({ recordLabel }) => {
         const applied = applyComparisonSequenceRecordLabel({
@@ -653,7 +679,7 @@ export const createCircularConservationComparisonFiles = ({
         refreshCircularConservationSlots(drawing);
         return applied;
       })
-      .catch(() => false)
+      .catch(keepRecordLabelDefault(state.errorLog))
       .finally(() => pendingComparisonRecordLabels.delete(pending));
     pendingComparisonRecordLabels.add(pending);
     // B22 (R11): the input is data-history-managed. This one Add Seq step

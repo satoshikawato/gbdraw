@@ -5,12 +5,12 @@
 // figure kept.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { HMMT, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { FL1_OFF, addVisibilityRule, open: openParityFixture } = require('./helpers/live-generate-parity-steps.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -104,9 +104,10 @@ test('a Circular 180 x 180 mm figure: Undo, size line, SVG export units, Legend 
   expect(renamed.line).toBe('Figure: 180 × 180 mm (680 × 680 px)');
 
   // Save and Load keep the size in the field (the Session is the positive fixture
-  // tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz).
-  const saved = testInfo.outputPath('figure-size.gbdraw-session.json.gz');
-  const session = JSON.parse(gunzipSync(await download(page, 'Save Session', saved, { title: '' })).toString('utf8'));
+  // tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw).
+  const saved = testInfo.outputPath('figure-size.gbdraw');
+  await download(page, 'Save Session', saved, { title: '' });
+  const session = await readSessionFile(saved);
   expect(session.drawings[0].config.form).toMatchObject({ figure_width: '180mm', figure_height: '180mm' });
   expect(session.drawings[0].renderRequest.diagramOptions.configOverrides)
     .toMatchObject({ 'canvas.figure_width': '180mm', 'canvas.figure_height': '180mm' });

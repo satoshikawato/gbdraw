@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import os
 import subprocess
 import sys
@@ -25,6 +24,7 @@ from gbdraw.api import (
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
 from gbdraw.session import session_drawing_artifacts
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from tests.utils.session_files import read_session_payload
 from tests.utils.session_drawing_view import drawing_view, session_view
 from tools.prepare_interactive_gallery_assets import (
     EXAMPLES,
@@ -506,7 +506,7 @@ def test_session_config_flags_set_the_configuration_key_they_are_read_from(mode:
     the same configuration key, as the CLI records it in its own Session."""
 
     values = {flag: f"#1234{index:02d}" for index, (_, flag) in enumerate(SESSION_CONFIG_FLAGS)}
-    session_path = tmp_path / "cli.gbdraw-session.json"
+    session_path = tmp_path / "cli.gbdraw"
     args = [mode, "--gbk", str(Path("tests/test_inputs/NC_001416.gb").resolve()), "-o", "cli", "-f", "svg",
             "--session_output", str(session_path)]
     for flag, value in values.items():
@@ -514,7 +514,7 @@ def test_session_config_flags_set_the_configuration_key_they_are_read_from(mode:
     subprocess.run([sys.executable, "-m", "gbdraw.cli", *args], cwd=tmp_path, check=True, capture_output=True,
                    env={**os.environ, "PYTHONPATH": str(Path.cwd())}, timeout=600)
     # The CLI writes one drawing (Session 49).
-    config = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))["renderRequest"]["diagramOptions"]["config"]
+    config = drawing_view(read_session_payload(session_path))["renderRequest"]["diagramOptions"]["config"]
     for key_template, flag in SESSION_CONFIG_FLAGS:
         node: Any = config
         for part in key_template.format(mode=mode).split("."):

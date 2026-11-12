@@ -1,6 +1,5 @@
 const { test, expect } = require('@playwright/test');
 const { createHash } = require('node:crypto');
-const { gunzipSync } = require('node:zlib');
 const { readFileSync } = require('node:fs');
 const { semantics } = require('./helpers/visual-state.cjs');
 const { seeds, load, generate, switchMode, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
@@ -8,6 +7,13 @@ const { shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
 const { settleLive } = require('./helpers/live-generate-parity.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+
+// Save Session into `path`, then the Session document the file holds.
+const downloadSession = async (page, path) => {
+  await download(page, 'Save Session', path);
+  return readSessionFile(path);
+};
 
 // PD-OI-037 revision 2: there is no derived application status. Draft edits stay
 // free of Worker, byte, digest, and SVG-clone work, and never replace the
@@ -97,8 +103,8 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     await expect(labels).toHaveValue('none');
     await page.screenshot({ path: testInfo.outputPath('undo.png') });
 
-    const path = testInfo.outputPath('undo.gbdraw-session.json.gz');
-    const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', path))));
+    const path = testInfo.outputPath('undo.gbdraw');
+    const saved = shownSavedDrawing(await downloadSession(page, path));
     expect.soft(saved.renderRequest).toEqual(a.request);
     expect(saved.config.form.labels_mode).toBe('none');
     const fresh = await load(browser, path);
@@ -269,7 +275,7 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     await expect(page.locator('[data-applies-on-generate="species-strain"]')).toBeVisible();
     await page.locator('summary[aria-label="Titles and Record Labels"]').press('Enter');
     await expect(page.locator('[data-applies-on-generate="titles"]')).toBeVisible();
-    const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz')))));
+    const saved = shownSavedDrawing(await downloadSession(page, testInfo.outputPath('draft.gbdraw')));
     expect(hash(saved.results[0].content)).toBe(hash(committed));
     expect(saved.config.form.strain).toBe('Y2');
     expect(saved.config.adv.keep_full_definition_with_plot_title).toBe(true);
@@ -466,8 +472,8 @@ for (const mode of ['circular', 'linear']) {
         await expect(page.getByRole('button',{name:'Generate Diagram',exact:true})).not.toHaveAccessibleDescription(/recalculates placement/);
         await expect(page.getByRole('button',{name:'Save Session',exact:true})).toHaveAccessibleDescription(/current Result.*draft.*does not Generate/);
         await expect(page.getByRole('button',{name:'SVG',exact:true})).toHaveAccessibleDescription(/PNG, and PDF buttons download the current Result.*Neither applies pending/);
-        const file=info.outputPath(`${mode}-pending.gbdraw-session.json.gz`);
-        const saved=shownSavedDrawing(JSON.parse(gunzipSync(await download(page,'Save Session',file))));
+        const file=info.outputPath(`${mode}-pending.gbdraw`);
+        const saved=shownSavedDrawing(await downloadSession(page,file));
         expectArtifact(await inspect(page,info,`${mode}-after-save`),edited);
         fresh=await load(browser,file);
         const loaded=await inspect(fresh,info,`${mode}-loaded`);
@@ -532,8 +538,8 @@ for (const mode of ['linear', 'circular']) {
       await expect(page.locator(blocks).first()).toHaveAttribute('stroke-width', /^2(\.0)?$/);
       await noDerivedStatus(page);
       const before = await snapshot(page);
-      const savedPath = info.outputPath(`${mode}-live-width.json.gz`);
-      const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', savedPath))));
+      const savedPath = info.outputPath(`${mode}-live-width.gbdraw`);
+      const saved = shownSavedDrawing(await downloadSession(page, savedPath));
       expect(saved.editorState.originalSvgStroke.width).toBe(2);
       expect(saved.renderRequest).toEqual(before.request);
       fresh = await load(browser, savedPath);
@@ -563,7 +569,7 @@ for (const mode of ['linear', 'circular']) {
         const catalog = window.Vue.toRaw(state.featureCatalog.value);
         const draft = config.buildConfigData(state.activeDrawing());
         const counts = [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
-        const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).arrayBuffer()], 'replacement.json');
+        const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw')).arrayBuffer()], 'replacement.gbdraw');
         const result = await config.importSession({ target: { files: [file], value: 'selected' } }, {
           beforePreviewMount() { throw new Error('Status round-trip rollback probe'); }
         });
@@ -732,7 +738,7 @@ test('A label rerender keeps the loaded Result name through Undo and Redo (OV-13
       expect(await names(), step).toEqual({ ...expected, rerendered: step === 'colored' });
       expect(await exportName(), step).toBe(`${kept}.svg`);
     }
-    const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', info.outputPath('ov136.gbdraw-session.json.gz')))));
+    const saved = shownSavedDrawing(await downloadSession(page, info.outputPath('ov136.gbdraw')));
     expect(saved.results.map(result => result.name)).toEqual([kept]);
     expect(saved.editorState.featureCatalog.items.map(item => item.resultName)).toEqual([kept]);
   } finally { await page.context().close(); }

@@ -10,13 +10,13 @@ replaces only the rendered drawings of a document validated before any render.
 from __future__ import annotations
 
 import base64
-import gzip
 import json
 import os
 import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Any, Hashable, Iterator
 
@@ -51,10 +51,15 @@ from gbdraw.session import (
     render_session_drawings,
     session_drawing_artifacts,
 )
+from tests.utils.session_files import (
+    read_session_payload,
+    read_session_text,
+    write_session_file,
+    write_unchecked_session_file,
+)
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DRAWINGS_SESSION_MIN_VERSION,
-    write_session_json,
 )
 from gbdraw.web_support.request_render import render_canonical_web_request
 from tests.utils.png_chunks import png_phys, png_size
@@ -70,8 +75,8 @@ SESSION_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "sessions"
 def two_drawings(tmp_path: Path) -> Path:
     """A Session 46 with a Circular and a Linear drawing (``otherModeResult``)."""
 
-    path = tmp_path / "two.gbdraw-session.json"
-    write_session_json(path, two_mode_session())
+    path = tmp_path / "two.gbdraw"
+    write_session_file(path, two_mode_session())
     return path
 
 
@@ -141,7 +146,7 @@ def test_every_output_is_checked_before_the_first_write(two_drawings: Path, tmp_
     assert _svgs(tmp_path) == ["fig_linear.svg"]
     assert occupied.read_text(encoding="utf-8") == "keep"
 
-    sidecar = tmp_path / "fig.gbdraw-session.json"
+    sidecar = tmp_path / "fig.gbdraw"
     sidecar.write_text("keep", encoding="utf-8")
     occupied.unlink()
     with pytest.raises(ValidationError, match="Session output already exists"):
@@ -161,14 +166,14 @@ def test_save_session_replaces_the_rendered_drawings(two_drawings: Path, tmp_pat
         )
 
     render_main(["--session", str(two_drawings), "-o", str(tmp_path / "fig"), "--save_session"])
-    resaved = load_session_document(tmp_path / "fig.gbdraw-session.json")
+    resaved = load_session_document(tmp_path / "fig.gbdraw")
     assert [drawing.id for drawing in resaved.drawings] == ["circular", "linear"]
     assert resaved.to_dict()["ui"]["activeDrawingId"] == source["ui"]["mode"]
     for drawing_id, name in (("circular", "fig_circular"), ("linear", "fig_linear")):
         assert [result["name"] for result in session_drawing_artifacts(resaved, drawing_id).fields["results"]] == [name]
 
     # Only the named drawing is replaced; the other keeps its saved set.
-    output = tmp_path / "linear-only.gbdraw-session.json.gz"
+    output = tmp_path / "linear-only.gbdraw"
     render_main(
         ["--session", str(two_drawings), "--drawing", "linear", "-o", str(tmp_path / "lin"),
          "--session_output", str(output)]
@@ -212,8 +217,8 @@ def test_a_circular_batch_drawing_still_numbers_its_diagrams(tmp_path: Path) -> 
             ),
         ]
     )
-    path = tmp_path / "batch.gbdraw-session.json"
-    write_session_json(path, document.to_dict())
+    path = tmp_path / "batch.gbdraw"
+    write_session_file(path, document.to_dict(), document.resources.sources)
 
     render_main(["--session", str(path), "-o", str(tmp_path / "out" / "fig")])
 
@@ -235,7 +240,7 @@ def test_a_moved_canvas_record_saves_its_session_under_its_own_record(tmp_path: 
         SeqIO.write(record, tmp_path / f"{record_id}.gb", "genbank")
     table = tmp_path / "regions.tsv"
     table.write_text("set_id\tid\tmark\trecord\tstart\tend\nregions\tspan\thighlight\tmoved\t2000\t2600\n")
-    session = tmp_path / "moved.gbdraw-session.json"
+    session = tmp_path / "moved.gbdraw"
     circular_main(
         ["--gbk", str(tmp_path / "moved.gb"), str(tmp_path / "first.gb"), "-k", "CDS,repeat_region",
          "--annotation_table", str(table),
@@ -259,7 +264,7 @@ def test_a_moved_canvas_record_saves_its_session_under_its_own_record(tmp_path: 
             return [found for value in node for found in drawn_rows(value)]
         return []
 
-    saved = drawn_rows(json.loads(session.read_text(encoding="utf-8")))
+    saved = drawn_rows(json.loads(read_session_text(session)))
     assert saved and {(row["record_id"], row["record_index"]) for row in saved} == {("moved", 0)}
 
 
@@ -286,7 +291,7 @@ def test_a_saved_session_keeps_to_slot_and_draws_the_same_span(tmp_path: Path, m
         slots = ["features:features@side=overlay", "gc_content:dinucleotide_content@side=below", span]
         slot_args = ["--linear_track_axis_index", "0"]
         slot_args += [arg for slot in slots for arg in ("--linear_track_slot", slot)]
-    session = tmp_path / "span.gbdraw-session.json"
+    session = tmp_path / "span.gbdraw"
     main(
         ["--gbk", str(source), "--annotation_table", str(table), *slot_args,
          "-o", str(tmp_path / "first"), "--session_output", str(session)]
@@ -300,7 +305,7 @@ def test_a_saved_session_keeps_to_slot_and_draws_the_same_span(tmp_path: Path, m
             return [found for value in node for found in span_params(value)]
         return []
 
-    saved = span_params(json.loads(session.read_text(encoding="utf-8")))
+    saved = span_params(read_session_payload(session))
     assert saved and all(params["to_slot"] == "gc_content" for params in saved)
 
     render_main(["--session", str(session), "-o", str(tmp_path / "again")])
@@ -346,8 +351,8 @@ def _legacy_session_27_30(tmp_path: Path, *extra_args: str) -> Path:
             "generatedBy": "gbdraw",
         },
     }
-    path = tmp_path / "legacy.gbdraw-session.json"
-    path.write_text(json.dumps(session), encoding="utf-8")
+    path = tmp_path / "legacy.gbdraw"
+    write_unchecked_session_file(path, session)
     return path
 
 
@@ -384,9 +389,7 @@ def test_a_session_that_cannot_be_saved_again_writes_no_diagram(
 ) -> None:
     import gbdraw.session_migration as session_migration
 
-    session = json.loads(
-        gzip.decompress((SESSION_FIXTURES / "feature-edits-crop-rc.v44.gbdraw-session.json.gz").read_bytes())
-    )
+    session = read_session_payload(SESSION_FIXTURES / "feature-edits-crop-rc.v44.gbdraw-session.json.gz")
     vector = json.loads((REPO_ROOT / "tests" / "fixtures" / "feature-placement-migration.json").read_text(encoding="utf-8"))
     session["config"]["featurePlacementOverrides"] = {
         key: row
@@ -394,7 +397,7 @@ def test_a_session_that_cannot_be_saved_again_writes_no_diagram(
         if row["placement"]["kind"] == "main" or row["placement"]["side"] in {"above", "below"}
     }
     path = tmp_path / "placements.v44.json"
-    path.write_text(json.dumps(session), encoding="utf-8")
+    write_unchecked_session_file(path, session)
     split = session_migration.split_draft_into_modes
 
     def split_without_scopes(draft: Any, **context: Any) -> dict[str, Any]:
@@ -413,13 +416,13 @@ def test_a_session_that_cannot_be_saved_again_writes_no_diagram(
     with pytest.raises(ValidationError, match="unsupported in circular mode"):
         render_main(["--session", str(path), "-o", str(tmp_path / "out"), "--save_session"])
     assert _svgs(tmp_path) == []
-    assert not (tmp_path / "out.gbdraw-session.json").exists()
+    assert not (tmp_path / "out.gbdraw").exists()
 
 
 def _embedded_data(document: Any) -> set[bool]:
     """Whether each resource of ``document`` keeps its embedded data, as a set."""
 
-    return {"data" in entry for entry in document._data["resources"].values()}
+    return {resource_id in document._resource_sources for resource_id in document._data["resources"]}
 
 
 def test_only_a_cli_render_without_a_resave_drops_the_embedded_resource_data(
@@ -444,12 +447,12 @@ def test_only_a_cli_render_without_a_resave_drops_the_embedded_resource_data(
     resaved = load_session_document(two_drawings)
     cli_render(resaved, "resaved", save_session=True)
     assert _embedded_data(resaved) == {True}
-    assert (tmp_path / "resaved" / "fig.gbdraw-session.json").read_bytes() != b""
+    assert (tmp_path / "resaved" / "fig.gbdraw").read_bytes() != b""
 
     sidecar = load_session_document(two_drawings)
     render_session_drawings_cli(
         sidecar, drawings=None, output_override=str(tmp_path / "sidecar" / "fig"), format_override="svg",
-        save_session=False, session_output=str(tmp_path / "sidecar" / "out.gbdraw-session.json"),
+        save_session=False, session_output=str(tmp_path / "sidecar" / "out.gbdraw"),
     )
     assert _embedded_data(sidecar) == {True}
 
@@ -469,7 +472,7 @@ def test_the_resaved_session_is_current(two_drawings: Path, tmp_path: Path) -> N
          "-o", str(tmp_path / "frame"), "--save_session"]
     )
 
-    assert load_session_document(tmp_path / "frame.gbdraw-session.json").version == CURRENT_SESSION_VERSION
+    assert load_session_document(tmp_path / "frame.gbdraw").version == CURRENT_SESSION_VERSION
 
 
 @pytest.mark.parametrize(
@@ -482,10 +485,10 @@ def test_a_cli_resave_of_a_two_mode_project_writes_its_drawings(
     path = two_drawings if source == "two-mode-session-46" else SESSION_FIXTURES / source
     render_main(["--session", str(path), "-o", str(tmp_path / "fig"), "--save_session"])
 
-    written = json.loads((tmp_path / "fig.gbdraw-session.json").read_text(encoding="utf-8"))
+    written = read_session_payload(tmp_path / "fig.gbdraw")
     assert written["version"] == DRAWINGS_SESSION_MIN_VERSION == CURRENT_SESSION_VERSION
     assert "modes" not in written and "otherModeResult" not in written
-    resaved = load_session_document(tmp_path / "fig.gbdraw-session.json")
+    resaved = load_session_document(tmp_path / "fig.gbdraw")
     assert sorted(drawing.mode for drawing in resaved.drawings) == ["circular", "linear"]
 
 
@@ -501,14 +504,14 @@ def test_a_fresh_cli_save_and_a_python_api_save_write_drawings(tmp_path: Path) -
         records=(RecordInput(source=GenBankInputSource(source)),),
         output=RenderOutputRequest(output_prefix="api"),
     )
-    save_session_document(tmp_path / "api.gbdraw-session.json", request)
+    save_session_document(tmp_path / "api.gbdraw", request)
 
     for name, mode in (("cli", "circular"), ("api", "linear")):
-        written = json.loads((tmp_path / f"{name}.gbdraw-session.json").read_text(encoding="utf-8"))
+        written = read_session_payload(tmp_path / f"{name}.gbdraw")
         assert written["version"] == DRAWINGS_SESSION_MIN_VERSION == CURRENT_SESSION_VERSION
         assert [drawing["id"] for drawing in written["drawings"]] == [mode]
         assert "renderRequest" not in written and "modes" not in written
-        document = load_session_document(tmp_path / f"{name}.gbdraw-session.json")
+        document = load_session_document(tmp_path / f"{name}.gbdraw")
         assert [drawing.mode for drawing in document.drawings] == [mode]
 
 
@@ -534,7 +537,7 @@ def test_a_resave_prints_the_results_the_upgrade_drops(tmp_path: Path) -> None:
         "1 Result(s) 'out.svg': Session 33 saved no feature catalog for them. "
         "Render the drawing and save the Session to write new Results."
     ) in result.stderr.splitlines()
-    resaved = drawing_view(load_session_document(tmp_path / "crop.gbdraw-session.json").to_dict(), mode="linear")
+    resaved = drawing_view(load_session_document(tmp_path / "crop.gbdraw").to_dict(), mode="linear")
     assert [entry["name"] for entry in resaved["results"]] == ["crop"]
 
 
@@ -550,13 +553,13 @@ def test_a_resave_reads_session_39_table_rows_as_the_current_writer_writes_them(
     assert _svgs(tmp_path) == ["fig.svg"]
     assert "cytochrome c oxidase" in (tmp_path / "fig.svg").read_text(encoding="utf-8")
     assert "line(s) 1 had extra cells, joined into the last column with one space" in caplog.text
-    resaved = load_session_document(tmp_path / "fig.gbdraw-session.json").to_dict()
-    assert resaved["version"] == CURRENT_SESSION_VERSION
-    assert base64.b64decode(resaved["resources"]["label-whitelist-table"]["data"]).decode() == (
+    resaved_document = load_session_document(tmp_path / "fig.gbdraw")
+    assert resaved_document.version == CURRENT_SESSION_VERSION
+    assert resaved_document.resources.read("label-whitelist-table").decode() == (
         "feature_type\tqualifier\tkeyword\nCDS\tproduct\tcytochrome c oxidase\n"
     )
     caplog.clear()
-    render_main(["--session", str(tmp_path / "fig.gbdraw-session.json"), "-o", str(tmp_path / "again"), "-f", "svg"])
+    render_main(["--session", str(tmp_path / "fig.gbdraw"), "-o", str(tmp_path / "again"), "-f", "svg"])
     assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "fig.svg").read_bytes()
     assert "had extra cells" not in caplog.text
 
@@ -565,15 +568,13 @@ def test_a_schema_2_linear_record_without_selector_draws_every_record(tmp_path: 
     # OV-149: feature-edits-linear-crop-rc.v33 (request schema 2) with a
     # two-record GenBank file as its second card. As Web Load promotes it, the
     # card without selector or region draws both records, keyed <recordKey>:<n>.
-    session = json.loads(
-        gzip.decompress((SESSION_FIXTURES / "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz").read_bytes())
-    )
+    session = read_session_payload(SESSION_FIXTURES / "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz")
     two_records = (REPO_ROOT / "tests" / "fixtures" / "web_batch_two_records.gb").read_bytes()
     session["resources"]["record-2-genbank"].update(
         data=base64.b64encode(two_records).decode("ascii"), size=len(two_records)
     )
     path = tmp_path / "two-records.v33.json"
-    path.write_text(json.dumps(session), encoding="utf-8")
+    write_unchecked_session_file(path, session)
 
     linear_main(["--session", str(path), "-o", str(tmp_path / "two"), "-f", "svg"])
 
@@ -602,7 +603,7 @@ def _fresh_protein_session(
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
     request, _identities = _request(mode, tmp_path)
-    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    sidecar = tmp_path / "fresh.gbdraw"
     _cli(
         monkeypatch,
         "linear", "--gbk", *(str(record.source.path) for record in request.records), "--losat", "losatp",
@@ -646,19 +647,19 @@ def test_a_cli_protein_session_stores_the_results_the_web_stores(
     from tests.test_render_stage_protein_analysis import _no_search
 
     sidecar = _fresh_protein_session(tmp_path, monkeypatch, mode)
-    session = drawing_view(json.loads(sidecar.read_text(encoding="utf-8")), mode="linear")
+    session = drawing_view(read_session_payload(sidecar), mode="linear")
     assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS[mode]
     assert session["losatCache"]["entries"]
     assert session["losatDerivedCache"] == {"entries": []}
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
-    resaved = tmp_path / "replayed.gbdraw-session.json"
+    resaved = tmp_path / "replayed.gbdraw"
     _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"),
          "-f", "svg", "--session_output", str(resaved))
     assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == (
         tmp_path / "fresh.svg"
     ).read_text(encoding="utf-8")
-    replayed = drawing_view(json.loads(resaved.read_text(encoding="utf-8")), mode="linear")
+    replayed = drawing_view(read_session_payload(resaved), mode="linear")
     assert _protein_comparison_kinds(replayed) == _STORED_PROTEIN_FORMS[mode]
 
 
@@ -685,17 +686,17 @@ def test_a_cli_similarity_groups_session_on_a_row_layout_replays_its_links(
             if comparison["kind"] == "precomputedProteinComparison"
         ]
 
-    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    session = read_session_payload(sidecar)
     assert stored_pairs(session) == [(0, 2), (1, 2)]
     fresh = (tmp_path / "fresh.svg").read_text(encoding="utf-8")
     assert fresh.count("data-query-record-index=") > 0
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
-    resaved = tmp_path / "replayed.gbdraw-session.json"
+    resaved = tmp_path / "replayed.gbdraw"
     _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"),
          "-f", "svg", "--session_output", str(resaved))
     assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == fresh
-    assert stored_pairs(json.loads(resaved.read_text(encoding="utf-8"))) == [(0, 2), (1, 2)]
+    assert stored_pairs(read_session_payload(resaved)) == [(0, 2), (1, 2)]
 
 
 def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
@@ -715,7 +716,7 @@ def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
         "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0",
     )
     # The Gallery tool reads the mode-scoped layout: the saved drawing's view.
-    session = drawing_view(json.loads(sidecar.read_text(encoding="utf-8")), mode="linear")
+    session = drawing_view(read_session_payload(sidecar), mode="linear")
     assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS["similarity_groups"]
     rebuild = json.loads(json.dumps(session))
     assert _reopen_stored_protein_comparisons(rebuild, "orthogroup") == 1
@@ -748,7 +749,7 @@ def test_a_fresh_cli_render_builds_no_derived_protein_entries(
         raise AssertionError("the CLI built derived entries nobody reads")
 
     monkeypatch.setattr(request_render_module, "derived_losatp_identity", not_built)
-    session = drawing_view(json.loads(_fresh_protein_session(tmp_path, monkeypatch).read_text(encoding="utf-8")), mode="linear")
+    session = drawing_view(read_session_payload(_fresh_protein_session(tmp_path, monkeypatch)), mode="linear")
     assert session["losatCache"]["entries"]
     assert session["losatDerivedCache"] == {"entries": []}
 
@@ -778,7 +779,7 @@ def test_a_session_call_keys_its_decoded_collinearity_by_its_resource(
     sidecar = _fresh_protein_session(tmp_path, monkeypatch, "collinear")
     (resource_id,) = [
         comparison["resourceId"]
-        for comparison in session_view(json.loads(sidecar.read_text(encoding="utf-8")))["renderRequest"]["comparisons"]
+        for comparison in session_view(read_session_payload(sidecar))["renderRequest"]["comparisons"]
         if comparison["kind"] == "collinearityResult"
     ]
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
@@ -826,11 +827,11 @@ def _session_with_derived_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     built = [dict(entry) for entry in api.losat_derived_cache_entries]
     pairs = [pair for entry in built for pair in entry["payload"]["pairs"]]
     assert pairs and all(isinstance(pair["canonicalTsv"], str) for pair in pairs)
-    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    session = read_session_payload(sidecar)
     (linear,) = (drawing for drawing in session["drawings"] if drawing["mode"] == "linear")
     linear["losatDerivedCache"] = {"entries": built}
-    source = tmp_path / "with-derived.gbdraw-session.json"
-    source.write_text(json.dumps(session), encoding="utf-8")
+    source = tmp_path / "with-derived.gbdraw"
+    write_unchecked_session_file(source, session)
     return source, built
 
 
@@ -842,12 +843,12 @@ def test_a_python_api_replay_that_builds_derived_entries_drops_the_legacy_eviden
     from gbdraw.session import render_session_drawings
 
     sidecar = _fresh_protein_session(tmp_path, monkeypatch)
-    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    session = read_session_payload(sidecar)
     assert drawing_view(session, mode="linear")["losatDerivedCache"] == {"entries": []}
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
     session["legacyArtifacts"] = {"proteinDerivedEvidence": {"schema": 1, "entries": [legacy_derived]}}
-    source = tmp_path / "with-evidence.gbdraw-session.json"
-    source.write_text(json.dumps(session), encoding="utf-8")
+    source = tmp_path / "with-evidence.gbdraw"
+    write_unchecked_session_file(source, session)
     monkeypatch.chdir(tmp_path)
     with materialize_session(load_session_document(source), output_directory=tmp_path / "api") as materialized:
         (api,) = render_session_drawings(materialized, output_prefix="api", overwrite=True).values()
@@ -866,7 +867,7 @@ def test_a_cli_replay_keeps_the_derived_entries_of_its_session(
 
     source, built = _session_with_derived_entries(tmp_path, monkeypatch)
     assert _derived(source) == built
-    replayed = tmp_path / "replayed.gbdraw-session.json"
+    replayed = tmp_path / "replayed.gbdraw"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "replayed"),
          "-f", "svg", "--session_output", str(replayed))
     assert _derived(replayed) == built
@@ -885,7 +886,7 @@ def _circular_batch_session_with_protein_artifacts(
     """
 
     linear_source, _built = _session_with_derived_entries(tmp_path, monkeypatch)
-    linear = drawing_view(json.loads(linear_source.read_text(encoding="utf-8")), mode="linear")
+    linear = drawing_view(read_session_payload(linear_source), mode="linear")
     records = tuple(
         RecordInput(source=GenBankInputSource(tmp_path / f"rec{index}.gbk"))
         for index in range(3)
@@ -895,14 +896,15 @@ def _circular_batch_session_with_protein_artifacts(
         if batch
         else CircularDiagramRequest(records=records[:1])
     )
-    session = build_session_document(request).to_dict()
+    built = build_session_document(request)
+    session = built.to_dict()
     (circular,) = session["drawings"]
     for key in _PROTEIN_ARTIFACTS:
         circular[key] = linear[key]
     if not raw_entries:
         circular["losatCache"] = {"entries": []}
-    source = tmp_path / "batch-protein.gbdraw-session.json"
-    write_session_json(source, session)
+    source = tmp_path / "batch-protein.gbdraw"
+    write_session_file(source, session, built.resources.sources)
     return source
 
 
@@ -921,7 +923,7 @@ def test_a_circular_batch_replay_keeps_the_protein_artifacts_of_its_session(
     saved = _protein_artifacts(source)
     assert json.loads(saved["losatDerivedCache"])["entries"]
     assert bool(json.loads(saved["losatCache"])["entries"]) is raw_entries
-    replayed = tmp_path / "replayed.gbdraw-session.json"
+    replayed = tmp_path / "replayed.gbdraw"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "out" / "replayed"),
          "-f", "svg", "--session_output", str(replayed))
     assert _svgs(tmp_path / "out") == [f"replayed_{index}.svg" for index in (1, 2, 3)]
@@ -955,7 +957,7 @@ def test_a_circular_replay_keeps_the_legacy_protein_evidence_of_its_session(
     legacy_raw = {"schema": 2, "kind": "raw-losat", "key": "legacy-key", "text": "p_r_old\tp_r_other\n", "program": "blastp"}
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
     # The writer quarantines both legacy entries into legacyArtifacts.
-    saved_path = tmp_path / "legacy.gbdraw-session.json"
+    saved_path = tmp_path / "legacy.gbdraw"
     save_session_document(
         saved_path,
         drawings=[
@@ -968,7 +970,7 @@ def test_a_circular_replay_keeps_the_legacy_protein_evidence_of_its_session(
     saved = load_session_document(saved_path).to_dict()["legacyArtifacts"]
     assert set(saved) == {"proteinRawCandidates", "proteinDerivedEvidence"}
 
-    replayed = tmp_path / "replayed.gbdraw-session.json"
+    replayed = tmp_path / "replayed.gbdraw"
     _cli(monkeypatch, "render", "--session", str(saved_path), "-o", str(tmp_path / "out" / "replayed"),
          "-f", "svg", "--session_output", str(replayed))
     assert _svgs(tmp_path / "out") == (["replayed_1.svg", "replayed_2.svg"] if batch else ["replayed.svg"])
@@ -989,14 +991,14 @@ def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_en
             tmp_path, monkeypatch, raw_entries=True, batch=shape == "batch"
         )
     )
-    session = json.loads(source.read_text(encoding="utf-8"))
+    session = read_session_payload(source)
     mode = "linear" if shape == "linear" else "circular"
     derived_entries = drawing_view(session, mode=mode)["losatDerivedCache"]["entries"]
     assert derived_entries
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
     legacy_raw = {"schema": 2, "kind": "raw-losat", "key": "legacy-key", "text": "p_r_old\tp_r_other\n", "program": "blastp"}
     # A writer that quarantined both kinds; read them back in the on-disk shape.
-    legacy_path = tmp_path / "legacy.gbdraw-session.json"
+    legacy_path = tmp_path / "legacy.gbdraw"
     legacy_genome = tmp_path / "legacy-genome.gb"
     SeqIO.write(
         [SeqRecord(Seq("ATGCGCAT" * 50), id="legacy1", annotations={"molecule_type": "DNA"})],
@@ -1016,8 +1018,8 @@ def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_en
     )
     legacy = load_session_document(legacy_path).to_dict()["legacyArtifacts"]
     session["legacyArtifacts"] = legacy
-    write_session_json(source, session)
-    replayed = tmp_path / "replayed.gbdraw-session.json"
+    write_session_file(source, session)
+    replayed = tmp_path / "replayed.gbdraw"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "out" / "replayed"),
          "-f", "svg", "--session_output", str(replayed))
     resaved_session = load_session_document(replayed).to_dict()
@@ -1033,7 +1035,7 @@ _LEGACY_PROTEIN_SESSION = SESSION_FIXTURES / "BGC0000708-BGC0000713.schema-v2.gb
 def _legacy_protein_session() -> dict[str, Any]:
     """The BGC Session 33: 34 legacy protein raw entries, 8 legacy derived entries, draft Similarity groups."""
 
-    return json.loads(gzip.decompress(_LEGACY_PROTEIN_SESSION.read_bytes()))
+    return read_session_payload(_LEGACY_PROTEIN_SESSION)
 
 
 def _resaved_legacy_artifacts(
@@ -1041,9 +1043,9 @@ def _resaved_legacy_artifacts(
 ) -> tuple[list[str], int]:
     """The candidate states and the evidence count of a CLI re-save of ``session``."""
 
-    source = tmp_path / f"{name}.gbdraw-session.json"
-    source.write_text(json.dumps(session), encoding="utf-8")
-    resaved = tmp_path / f"{name}-resaved.gbdraw-session.json"
+    source = tmp_path / f"{name}.gbdraw"
+    write_unchecked_session_file(source, session)
+    resaved = tmp_path / f"{name}-resaved.gbdraw"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / name / "out"),
          "-f", "svg", "--session_output", str(resaved))
     legacy = load_session_document(resaved).to_dict().get("legacyArtifacts") or {}
@@ -1115,7 +1117,7 @@ DRAWINGS_V49 = SESSION_FIXTURES
 def _linear_pair() -> Path:
     """Drawings ``linear`` (one LOSATN entry) and ``linear-2``, the same request."""
 
-    return DRAWINGS_V49 / "drawings-linear-pair-losat.v51.gbdraw-session.json.gz"
+    return DRAWINGS_V49 / "drawings-linear-pair-losat.v51.gbdraw"
 
 
 def _circular_pair(tmp_path: Path) -> Path:
@@ -1124,10 +1126,10 @@ def _circular_pair(tmp_path: Path) -> Path:
 
     from gbdraw.session_drawings import write_session_drawings
 
-    only = load_session_document(DRAWINGS_V49 / "drawings-circular-only.v51.gbdraw-session.json.gz")
+    only = load_session_document(DRAWINGS_V49 / "drawings-circular-only.v51.gbdraw")
     view = dict(session_drawing_artifacts(only, "circular").fields)
-    path = tmp_path / "circular-pair.v49.gbdraw-session.json"
-    write_session_json(path, write_session_drawings([view, view]))
+    path = tmp_path / "circular-pair.v49.gbdraw"
+    write_session_file(path, write_session_drawings([view, view]), only.resources.sources)
     return path
 
 
@@ -1180,19 +1182,19 @@ def _losat_entries(document: Any) -> dict[str, list[str]]:
 def test_a_resave_keeps_the_losat_entries_of_every_drawing(tmp_path: Path) -> None:
     """B3 / OV-139: each drawing keeps the LOSAT entries it carries, rendered or not."""
 
-    data = json.loads(gzip.decompress(_linear_pair().read_bytes()))
+    data = read_session_payload(_linear_pair())
     linear, second = data["drawings"]
     (entry,) = linear["losatCache"]["entries"]
     # linear-2 holds an entry of its own that linear does not hold.
     own = {**entry, "key": "f" * len(entry["key"]), "text": entry["text"].replace("1847", "1846")}
     second["losatCache"] = {"entries": [own]}
-    session = tmp_path / "pair.v49.gbdraw-session.json"
-    write_session_json(session, data)
+    session = tmp_path / "pair.v49.gbdraw"
+    write_session_file(session, data)
     expected = {"linear": [entry["key"]], "linear-2": [own["key"]]}
     assert _losat_entries(load_session_document(session)) == expected
 
     for selected in ("linear", "linear-2"):
-        output = tmp_path / f"{selected}.gbdraw-session.json"
+        output = tmp_path / f"{selected}.gbdraw"
         linear_main(
             ["--session", str(session), "--drawing", selected, "-o", str(tmp_path / selected),
              "-f", "svg", "--session_output", str(output)]
@@ -1202,14 +1204,14 @@ def test_a_resave_keeps_the_losat_entries_of_every_drawing(tmp_path: Path) -> No
         assert _losat_entries(resaved) == expected, selected
 
     render_main(["--session", str(session), "-o", str(tmp_path / "all"), "-f", "svg", "--save_session"])
-    assert _losat_entries(load_session_document(tmp_path / "all.gbdraw-session.json")) == expected
+    assert _losat_entries(load_session_document(tmp_path / "all.gbdraw")) == expected
 
 
 def test_a_cli_resave_of_a_session_48_keeps_its_shared_losat_entry_in_every_drawing(tmp_path: Path) -> None:
     """OV-139, 46-48 form: the one entry of a two-mode Session 48 stays in both drawings of the Session 49 re-save."""
 
     session = SESSION_FIXTURES / "two-mode-linear-shown.v48.gbdraw-session.json.gz"
-    (key,) = [entry["key"] for entry in json.loads(gzip.decompress(session.read_bytes()))["losatCache"]["entries"]]
+    (key,) = [entry["key"] for entry in read_session_payload(session)["losatCache"]["entries"]]
     expected = {"linear": [key], "circular": [key]}
     for name, run in (
         ("all", lambda out: render_main(["--session", str(session), "-o", str(tmp_path / "all"), "-f", "svg",
@@ -1217,7 +1219,7 @@ def test_a_cli_resave_of_a_session_48_keeps_its_shared_losat_entry_in_every_draw
         ("linear", lambda out: linear_main(["--session", str(session), "-o", str(tmp_path / "linear"), "-f", "svg",
                                              "--session_output", str(out)])),
     ):
-        output = tmp_path / f"{name}.gbdraw-session.json"
+        output = tmp_path / f"{name}.gbdraw"
         run(output)
         resaved = load_session_document(output)
         assert resaved.version == CURRENT_SESSION_VERSION
@@ -1296,13 +1298,13 @@ def test_a_cli_session_records_no_dpi_and_a_replay_ignores_a_stored_one(tmp_path
     """The DPI is the caller's export choice, like ``--font_file``: the Session holds none."""
 
     pytest.importorskip("cairosvg")
-    saved = tmp_path / "saved.gbdraw-session.json"
+    saved = tmp_path / "saved.gbdraw"
     circular_main(
         ["--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"), "-o", str(tmp_path / "fresh"),
          "-f", "png", "--dpi", "150", "--save_session", "--session_output", str(saved)]
     )
     assert png_phys((tmp_path / "fresh.png").read_bytes()) == (5906, 5906, 1)
-    document = saved.read_text(encoding="utf-8")
+    document = read_session_text(saved)
     assert '"-f","png"' in document.replace(" ", "")  # the arguments are recorded; --dpi is not
     assert "--dpi" not in document
     # A Session 27-30 whose stored arguments hold --dpi (no released one does) draws at the default: its
@@ -1317,8 +1319,8 @@ def _session_with_png_dpi(tmp_path: Path, stored: object) -> Path:
 
     session = two_mode_session()
     session["ui"] = {**session["ui"], "downloadDpi": stored}
-    path = tmp_path / "dpi.gbdraw-session.json"
-    write_session_json(path, session)
+    path = tmp_path / "dpi.gbdraw"
+    write_session_file(path, session)
     return path
 
 
@@ -1418,9 +1420,9 @@ def test_a_session_png_dpi_without_a_png_is_not_noted(tmp_path: Path, caplog: py
     path = _session_with_png_dpi(tmp_path, "300")
     render_main(["--session", str(path), "--drawing", "circular", "-o", str(tmp_path / "out"), "-f", "svg"])
     legacy = _legacy_session_27_30(tmp_path)
-    session = json.loads(legacy.read_text(encoding="utf-8"))
+    session = read_session_payload(legacy)
     session["ui"]["downloadDpi"] = "300"
-    legacy.write_text(json.dumps(session), encoding="utf-8")
+    write_unchecked_session_file(legacy, session)
     render_main(["--session", str(legacy), "-o", str(tmp_path / "legacy"), "-f", "svg"])
 
     assert "--dpi" not in caplog.text
@@ -1430,9 +1432,9 @@ def test_a_session_png_dpi_without_a_png_is_not_noted(tmp_path: Path, caplog: py
 def test_a_session_27_30_replay_draws_its_png_at_the_dpi_the_web_saved(tmp_path: Path) -> None:
     pytest.importorskip("cairosvg")
     path = _legacy_session_27_30(tmp_path)
-    session = json.loads(path.read_text(encoding="utf-8"))
+    session = read_session_payload(path)
     session["ui"]["downloadDpi"] = "72"
-    path.write_text(json.dumps(session), encoding="utf-8")
+    write_unchecked_session_file(path, session)
 
     render_main(["--session", str(path), "-o", str(tmp_path / "saved"), "-f", "png"])
     render_main(["--session", str(path), "-o", str(tmp_path / "given"), "-f", "png", "--dpi", "120"])
@@ -1466,7 +1468,7 @@ def test_a_resave_keeps_the_session_png_dpi_and_records_no_dpi(tmp_path: Path) -
     pytest.importorskip("cairosvg")
     path = _session_with_png_dpi(tmp_path, "150")
 
-    output = tmp_path / "resaved.gbdraw-session.json"
+    output = tmp_path / "resaved.gbdraw"
     render_main(
         ["--session", str(path), "--drawing", "circular", "-o", str(tmp_path / "fig"), "-f", "png",
          "--dpi", "300", "--session_output", str(output)]
@@ -1474,7 +1476,7 @@ def test_a_resave_keeps_the_session_png_dpi_and_records_no_dpi(tmp_path: Path) -
 
     resaved = load_session_document(output).to_dict()
     assert resaved["ui"]["downloadDpi"] == "150"
-    text = output.read_text(encoding="utf-8")
+    text = read_session_text(output)
     assert "--dpi" not in text
     assert '"dpi"' not in text
 
@@ -1484,15 +1486,15 @@ def test_a_png_too_large_at_the_session_dpi_names_that_dpi_and_its_override(tmp_
 
     pytest.importorskip("cairosvg")
     legacy = _legacy_session_27_30(tmp_path)
-    canonical = tmp_path / "canonical.gbdraw-session.json"
+    canonical = tmp_path / "canonical.gbdraw"
     linear_main(
         ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "-o", str(tmp_path / "fresh"),
          "--session_output", str(canonical)]
     )
     for path in (legacy, canonical):
-        session = json.loads(path.read_text(encoding="utf-8"))
+        session = read_session_payload(path)
         session["ui"]["downloadDpi"] = "150"
-        path.write_text(json.dumps(session), encoding="utf-8")
+        write_unchecked_session_file(path, session)
 
     for path in (legacy, canonical):
         with pytest.raises(Exception, match=r"A DPI of \d+ or lower would fit\. .*The DPI \(150\) is the PNG DPI the "
@@ -1512,13 +1514,13 @@ def test_a_png_too_large_at_the_default_dpi_names_the_default_and_a_lower_dpi(tm
     """The 8 bp figure is 25,000 px wide: a Session without ui.downloadDpi draws its PNG at 300 dpi, over the limit."""
 
     pytest.importorskip("cairosvg")
-    canonical = tmp_path / "canonical.gbdraw-session.json"
+    canonical = tmp_path / "canonical.gbdraw"
     _legacy_session_27_30(tmp_path)
     linear_main(
         ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "-o", str(tmp_path / "fresh"),
          "--session_output", str(canonical)]
     )
-    assert "downloadDpi" not in canonical.read_text(encoding="utf-8")
+    assert "downloadDpi" not in read_session_text(canonical)
 
     with pytest.raises(Exception) as refused:
         render_main(["--session", str(canonical), "-o", str(tmp_path / "too-large"), "-f", "png"])
@@ -1529,3 +1531,23 @@ def test_a_png_too_large_at_the_default_dpi_names_the_default_and_a_lower_dpi(tm
     # --dpi 96 keeps the size a PNG had before 300 became the default: one pixel per SVG pixel.
     render_main(["--session", str(canonical), "-o", str(tmp_path / "old-size"), "-f", "png", "--dpi", "96"])
     assert png_phys((tmp_path / "old-size.png").read_bytes()) == (3780, 3780, 1)
+
+
+def test_a_session_file_with_a_composite_input_replays_the_figure_of_its_source(tmp_path: Path) -> None:
+    """A Session file written from a JSON Session whose composite input became
+    one File card per file holds each card's file as an entry and replays the
+    figure its JSON source draws (W-15)."""
+
+    source = SESSION_FIXTURES / "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz"
+    container = tmp_path / "out.gbdraw"
+    render_main(["--session", str(source), "-o", str(tmp_path / "source"), "-f", "svg",
+                 "--session_output", str(container)])
+    render_main(["--session", str(container), "-o", str(tmp_path / "replay"), "-f", "svg"])
+
+    document = load_session_document(container)
+    cards = drawing_view(document.to_dict())["webFiles"]["bindings"]["circularSources"]
+    assert len(cards) == 3 and all(card["gb"] for card in cards)
+    with zipfile.ZipFile(container) as archive:
+        entries = set(archive.namelist())
+    assert {f"resources/{card['gb']['resourceId']}" for card in cards} <= entries
+    assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "source.svg").read_bytes()

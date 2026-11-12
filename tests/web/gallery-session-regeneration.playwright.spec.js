@@ -40,10 +40,10 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
   }))).toEqual({ mainLoaderPresent: false, mainRuntimeStatePresent: false });
 
   const imported = await evaluateWithRetainedPromise(page, async () => {
-    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
     const file = new File(
-      [await response.text()],
-      'BGC0000708-BGC0000713.gbdraw-session.json',
+      [await response.arrayBuffer()],
+      'BGC0000708-BGC0000713.gbdraw',
       { type: 'application/json' }
     );
     return window.__GBDRAW_APP__.importSession({
@@ -147,9 +147,9 @@ test('Gallery session colors, record labels, and feature labels survive regenera
         feat, qual, val, color, cap
       }))
     });
-    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
-    const text = await response.text();
-    const file = new File([text], 'BGC0000708-BGC0000713.gbdraw-session.json', {
+    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
+    const bytes = await response.arrayBuffer();
+    const file = new File([bytes], 'BGC0000708-BGC0000713.gbdraw', {
       type: 'application/json'
     });
     const result = await window.__GBDRAW_APP__.importSession({
@@ -217,8 +217,8 @@ test('the Generate after a fresh protein analysis rebuilds only what its own cha
   });
   await openApp(page, { waitForPalette: false });
   const imported = await evaluateWithRetainedPromise(page, async () => {
-    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
-    const file = new File([await response.text()], 'BGC0000708-BGC0000713.gbdraw-session.json', {
+    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
+    const file = new File([await response.arrayBuffer()], 'BGC0000708-BGC0000713.gbdraw', {
       type: 'application/json'
     });
     return (await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } }))?.status;

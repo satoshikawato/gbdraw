@@ -9,16 +9,16 @@ the one table under new IDs and names, as the Web writer allocates them.
 from __future__ import annotations
 
 import copy
-import json
 from pathlib import Path
 from typing import Any
 
 from tests.utils.session_drawing_view import drawing_view, view_at
+from tests.utils.session_files import read_session_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
-CIRCULAR_SESSION = GALLERY_SESSIONS / "HmmtDNA_basic_circular.gbdraw-session.json"
-LINEAR_SESSION = GALLERY_SESSIONS / "lambda_basic_linear.gbdraw-session.json"
+CIRCULAR_SESSION = GALLERY_SESSIONS / "HmmtDNA_basic_circular.gbdraw"
+LINEAR_SESSION = GALLERY_SESSIONS / "lambda_basic_linear.gbdraw"
 REFERENCE_FIELDS = ("resourceId", "gffResourceId", "fastaResourceId")
 
 
@@ -37,8 +37,8 @@ def _rename_references(value: Any, aliases: dict[str, str]) -> Any:
 def two_mode_session(linear: dict[str, Any] | None = None) -> dict[str, Any]:
     """The Session; ``linear`` (a one-drawing view) replaces the Linear Gallery Session as the other set."""
 
-    circular = drawing_view(json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8")))
-    linear = drawing_view(json.loads(LINEAR_SESSION.read_text(encoding="utf-8"))) if linear is None else linear
+    circular = drawing_view(read_session_payload(CIRCULAR_SESSION))
+    linear = drawing_view(read_session_payload(LINEAR_SESSION)) if linear is None else linear
     aliases = {resource_id: f"linear-{resource_id}" for resource_id in linear["resources"]}
     resources = dict(circular["resources"])
     for resource_id, descriptor in linear["resources"].items():

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+from tests.utils.session_files import read_session_payload
 from pathlib import Path
 import shutil
 import subprocess
@@ -53,7 +54,6 @@ from gbdraw.analysis.protein_colinearity import (
     select_best_hits_per_query,
     select_reciprocal_best_hit_edges,
     select_rbh_orthogroup_edges_from_directional_hits,
-    select_top_hits_per_query,
     validate_protein_identity_manifest,
     validate_protein_raw_entry_references,
 )
@@ -2839,7 +2839,7 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
         ]
     )
 
-    payload = session_view(json.loads(output_prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    payload = session_view(read_session_payload(output_prefix.with_suffix(".gbdraw")))
     entries = payload["losatCache"]["entries"]
     assert len(entries) == 1
     assert entries[0]["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA

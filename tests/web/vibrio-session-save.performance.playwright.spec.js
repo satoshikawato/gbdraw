@@ -20,7 +20,7 @@ const fixturePath = join(
   'web',
   'gallery',
   'sessions',
-  'vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
+  'vibrio-harveyi-group-collinear.gbdraw'
 );
 const fixtureSha = createHash('sha256').update(readFileSync(fixturePath)).digest('hex');
 const OPERATION_TIMEOUT_MS = 900_000;
@@ -97,13 +97,12 @@ const installSaveAcceptanceProbe = (page) => page.addInitScript(() => {
 const sessionSummaryScript = String.raw`
 const { createHash } = require('node:crypto');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { pathToFileURL } = require('node:url');
+const readSaved = async (file) => (await import(pathToFileURL(require('node:path').join(process.cwd(), 'tests/web/helpers/session-documents.mjs')).href))
+  .readSavedSession(new Blob([readFileSync(file)]));
+(async () => {
 const path = process.argv[1];
-const bytes = readFileSync(path);
-const text = bytes[0] === 0x1f && bytes[1] === 0x8b
-  ? gunzipSync(bytes).toString('utf8')
-  : bytes.toString('utf8');
-const document = JSON.parse(text);
+const document = await readSaved(path);
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 // The Gallery source is a 48 (the document is the drawing); a Save writes a 49.
 const drawing = document.drawings
@@ -182,17 +181,17 @@ process.stdout.write(JSON.stringify({
     proteinIdentityManifest: digest(drawing.proteinIdentityManifest)
   }
 }));
+})().catch((error) => { console.error(error); process.exit(1); });
 `;
 
 const extractResultSvgScript = String.raw`
 const { readFileSync, writeFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { pathToFileURL } = require('node:url');
+const readSaved = async (file) => (await import(pathToFileURL(require('node:path').join(process.cwd(), 'tests/web/helpers/session-documents.mjs')).href))
+  .readSavedSession(new Blob([readFileSync(file)]));
+(async () => {
 const [sessionPath, outputPath] = process.argv.slice(1);
-const bytes = readFileSync(sessionPath);
-const text = bytes[0] === 0x1f && bytes[1] === 0x8b
-  ? gunzipSync(bytes).toString('utf8')
-  : bytes.toString('utf8');
-const document = JSON.parse(text);
+const document = await readSaved(sessionPath);
 const drawing = document.drawings
   ? document.drawings.find((entry) => entry.id === document.ui.activeDrawingId) : document;
 const content = drawing.results?.[0]?.content;
@@ -200,6 +199,7 @@ if (typeof content !== 'string' || !/<svg[\s>]/.test(content)) {
   throw new Error('Session does not contain an SVG result.');
 }
 writeFileSync(outputPath, content, 'utf8');
+})().catch((error) => { console.error(error); process.exit(1); });
 `;
 
 const inspectSession = (path) => {
@@ -361,7 +361,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await installSaveAcceptanceProbe(page);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(fixturePath);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionImportPending === false
@@ -395,7 +395,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   const saveWallMs = Date.now() - startedAt;
   expect(outcome.status).toBe('saved');
   const download = await downloadPromise;
-  const savedPath = testInfo.outputPath('issue-544-vibrio-save.gbdraw-session.json.gz');
+  const savedPath = testInfo.outputPath('issue-544-vibrio-save.gbdraw');
   await download.saveAs(savedPath);
   const after = await page.evaluate(() => window.__GBDRAW_SAVE_ACCEPTANCE__.snapshot());
 
@@ -544,7 +544,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   freshPage.on('dialog', (dialog) => dialog.accept());
   await openApp(freshPage);
   await freshPage.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(savedPath);
   await freshPage.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionImportPending === false

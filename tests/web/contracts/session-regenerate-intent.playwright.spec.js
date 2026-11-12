@@ -1,10 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { mkdtempSync, readFileSync, writeFileSync } = require('node:fs');
+const { mkdtempSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const {
   CURRENT_REQUEST_SCHEMA,
   CURRENT_SESSION_VERSION,
@@ -13,6 +12,7 @@ const {
   openApp
 } = require('../helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
+const { readSessionFile, readSessionFileEntries } = require('../helpers/session-file.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const svgComparisonRoot = mkdtempSync(join(tmpdir(), 'gbdraw-svg-compare-'));
@@ -23,11 +23,12 @@ const sourceSessionPath = join(
   'web',
   'gallery',
   'sessions',
-  'HmmtDNA_basic_circular.gbdraw-session.json'
+  'HmmtDNA_basic_circular.gbdraw'
 );
-const sourceSession = JSON.parse(readFileSync(sourceSessionPath, 'utf8'));
+let sourceSession;
+test.beforeAll(async () => { sourceSession = await readSessionFile(sourceSessionPath); });
 const sessionInputSelector =
-  'input[type="file"][accept*="application/json"][accept*="application/gzip"]';
+  'input[type="file"][accept*=".gbdraw"]';
 const DIRECT_FILL = '#c026d3';
 const DIRECT_STROKE = '#059669';
 const DIRECT_STROKE_WIDTH = 5;
@@ -247,7 +248,7 @@ const saveCurrentSession = async (page, title) => {
   const download = await downloadPromise;
   const path = await download.path();
   expect(path).toBeTruthy();
-  const session = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
+  const session = await readSessionFile(path);
   expect(session).toMatchObject({
     format: 'gbdraw-session',
     version: CURRENT_SESSION_VERSION
@@ -2239,8 +2240,7 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
   const colors = shownSavedDrawing(saved.session).renderRequest.diagramOptions.colors;
   const defaultColorRef = colors.defaultColorsFile || colors.defaultColors;
   expect(defaultColorRef?.resourceId).toBeTruthy();
-  const defaultColorResource = saved.session.resources[defaultColorRef.resourceId];
-  const defaultColorText = Buffer.from(defaultColorResource.data, 'base64').toString('utf8');
+  const defaultColorText = (await readSessionFileEntries(saved.path)).resources[defaultColorRef.resourceId].bytes.toString('utf8');
   expect(defaultColorText).toContain('CDS\t#0b4f6c');
   expect(defaultColorText).toContain('tRNA\t#f59e0b');
 });
