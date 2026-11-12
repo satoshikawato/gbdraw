@@ -125,9 +125,9 @@ test('explicit no-fill survives TSV while omitted fill keeps the Web default', (
 test('download reads the current rows without mutating state or resolving a catalog', async () => {
   const draftState = {
     annotationSets: [],
-    results: [{ content: '<svg/>', annotations: 'committed, older data' }],
+    results: { value: [{ content: '<svg/>', annotations: 'committed, older data' }] },
     selectedResultIndex: 0, selectedAnnotation: { setId: 'review', id: 'coords' },
-    selectedFeatures: [{ id: 'feature' }], zoom: 2, canvasPan: { x: 5, y: 8 },
+    selectedFeatures: { value: [{ id: 'feature' }] }, zoom: 2, canvasPan: { x: 5, y: 8 },
     history: ['before', 'after']
   };
   const draftEditor = createAnnotationEditor({
@@ -236,7 +236,7 @@ test('selected annotations name each feature by its source identity', () => {
   // The panel notice says why, not a native alert.
   const notices = [];
   const legacy = createAnnotationEditor({
-    state: withDrawings({ annotationSets: [], selectedFeatures: [{ locus_tag: 'A_1' }] }),
+    state: withDrawings({ annotationSets: [], selectedFeatures: { value: [{ locus_tag: 'A_1' }] } }),
     onImportNotice: (notice) => notices.push(notice)
   });
   const set = legacy.addAnnotationSet();
@@ -678,7 +678,7 @@ test('quotes in a label are part of the value through Web write and Web read', (
 test('file import commits once, separates notices, and preserves draft/Result on failure or stale completion', async () => {
   const state = { annotationSets: [createAnnotationSet({ id: 'before', annotations: [
     { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
-  ] })], results: [{ content: '<svg/>', warnings: ['resolved warning'] }] };
+  ] })], results: { value: [{ content: '<svg/>', warnings: ['resolved warning'] }] } };
   const notices = [];
   const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
   const alerts = [];
@@ -725,13 +725,13 @@ test('file import commits once, separates notices, and preserves draft/Result on
     let finishResultRead;
     input.files = [{ text: () => new Promise((resolve) => { finishResultRead = resolve; }) }];
     const staleResult = editor.importAnnotationTableFile({ target: input });
-    state.results.splice(0, 1, { content: '<svg>new result</svg>', warnings: [] });
+    state.results.value.splice(0, 1, { content: '<svg>new result</svg>', warnings: [] });
     const replacedResult = JSON.stringify(state);
     finishResultRead(good.table);
     await staleResult;
     assert.equal(JSON.stringify(state), replacedResult);
     assert.equal(commits, 1);
-    state.results.splice(0, 1, ...result);
+    state.results.value.splice(0, 1, ...result.value);
     let finishOld;
     input.files = [{ text: () => new Promise((resolve) => { finishOld = resolve; }) }];
     const obsolete = editor.importAnnotationTableFile({ target: input });
@@ -754,7 +754,7 @@ test('file import commits once, separates notices, and preserves draft/Result on
 // panel notice names the file and the cap in the read refusal's words, not its diagnostic code.
 test('a gzip annotation TSV past the expanded cap is refused with its name and the cap', async () => {
   const { gzipSync } = await import('node:zlib');
-  const state = { annotationSets: [createAnnotationSet({ id: 'before' })], results: [] };
+  const state = { annotationSets: [createAnnotationSet({ id: 'before' })], results: { value: [] } };
   const notices = [];
   const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
   const before = JSON.stringify(state);

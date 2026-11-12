@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { compareCountBaseline, reportLowerable, typescriptApi } from './helpers/count-baseline.mjs';
 
 const EXPLICIT_ANY_BASELINE = {
-  'app/annotations.js': 6,
+  'app/annotations.js': 3,
   'app/annotations/record-catalog.js': 2,
   'app/app-setup.js': 7,
   'app/candidate-render.js': 1,
