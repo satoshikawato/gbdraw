@@ -19,7 +19,7 @@ import { joinSentences, t, tn } from '../../utils/i18n.js';
 /** @import { FeatureRequestRecord } from '../../services/feature-placement.js' */
 /** @import { FeatureEditsSlice } from '../../services/drawing/feature-edits.js' */
 /** @import { CanonicalFeatureOverride } from '../../contracts/request.generated.js' */
-/** @import { LabelTableInput } from './label-actions.js' */
+/** @import { LabelTableInput } from './label-table.js' */
 
 // Export and Load Feature Edits TSV (design Q4 6.4, Owner Q2 = A): the
 // per-feature edits of the committed records as a --feature_override_table, so

@@ -853,7 +853,7 @@ test('every `one` text of a tn() call is a catalog key', () => {
 test('OV-1415: the words a declined label table names as changed are a key, shown in the UI language', async () => {
   const { RULE_INPUT_CHANGE_WORDS } = await import('../../gbdraw/web/js/utils/error-normalization.js');
   assert.ok(new Set(sourceCalls().map((call) => call.key)).has(RULE_INPUT_CHANGE_WORDS));
-  const source = readFileSync(join(jsRoot, 'app', 'feature-editor', 'label-actions.js'), 'utf8');
+  const source = readFileSync(join(jsRoot, 'services', 'label-import-plan.js'), 'utf8');
   assert.match(source, /\{ inputs: tm\(RULE_INPUT_CHANGE_WORDS\) \}/);
 });
 
