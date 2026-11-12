@@ -684,7 +684,7 @@ def test_circular_label_peer_pruning_keeps_every_count(seed: int, monkeypatch: p
             step_deg=module.LEADER_LABEL_SHIFT_STEP_DEG,
             max_shift_deg=module.LEADER_LABEL_MAX_SHIFT_DEG,
             max_passes=module.LEADER_LABEL_MAX_PASSES,
-            min_order_gap_deg=module.LEADER_LABEL_MIN_ORDER_GAP_DEG,
+            min_order_gap_deg=module.LABEL_MIN_ORDER_GAP_DEG,
         )
         improved = improved_label_placement_fc(
             copy.deepcopy(labels), 0.0, 0.0, radius, radius, radius * 0.8, total_length, 0, 360, spacing_px=spacing_px
@@ -3380,7 +3380,7 @@ def test_resolve_label_leader_line_collisions_reduces_fixture_collisions() -> No
         step_deg=circular_labels_module.LEADER_LABEL_SHIFT_STEP_DEG,
         max_shift_deg=circular_labels_module.LEADER_LABEL_MAX_SHIFT_DEG,
         max_passes=circular_labels_module.LEADER_LABEL_MAX_PASSES,
-        min_order_gap_deg=circular_labels_module.LEADER_LABEL_MIN_ORDER_GAP_DEG,
+        min_order_gap_deg=circular_labels_module.LABEL_MIN_ORDER_GAP_DEG,
     )
 
     after_collisions = circular_labels_module._count_label_leader_line_collisions(
@@ -3494,7 +3494,7 @@ def test_nc001454_tuckin_wraparound_guard_prevents_first_label_overtake() -> Non
     unwrapped_angles = circular_labels_module._derive_monotonic_unwrapped_angles(labels, total_length)
     assert all(unwrapped_angles[idx] < unwrapped_angles[idx + 1] for idx in range(len(unwrapped_angles) - 1))
 
-    max_allowed_span = 360.0 - circular_labels_module.LEADER_LABEL_MIN_ORDER_GAP_DEG
+    max_allowed_span = 360.0 - circular_labels_module.LABEL_MIN_ORDER_GAP_DEG
     span = unwrapped_angles[-1] - unwrapped_angles[0]
     assert span <= max_allowed_span + 1e-6
 

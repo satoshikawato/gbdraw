@@ -87,6 +87,10 @@ class CircularLabelProbeStopped(Exception):
 DENSE_INNER_RELAX_MIN_LABELS = 40
 HEMISPHERE_AXIS_NEUTRAL_DEG = 8.0
 HEMISPHERE_AXIS_EPS_PX = 1.0
+LABEL_MIN_ORDER_GAP_DEG = 0.05
+"""The smallest angle every label placement stage keeps between labels in feature order, in degrees."""
+LABEL_ANGLE_STEP_DEG = 0.25
+"""The angle step of the searches that place labels on their arc (first placement, arc search, leader polish), in degrees."""
 HEMISPHERE_REFINE_MAX_SHIFT_DEG = 90.0
 HEMISPHERE_REFINE_STEP_DEG = 0.25
 DENSE_DISTANCE_COMPACTION_MIN_LABELS = 30
@@ -101,7 +105,6 @@ LEADER_LABEL_COLLISION_MARGIN_PX = 0.8
 LEADER_LABEL_SHIFT_STEP_DEG = 0.25
 LEADER_LABEL_MAX_SHIFT_DEG = 45.0
 LEADER_LABEL_MAX_PASSES = 6
-LEADER_LABEL_MIN_ORDER_GAP_DEG = 0.05
 # OV-1823: an outer label that no angular shift clears of a leader may step outward, 1 px at a time,
 # by up to twice its own height (enough to clear the elbow of a neighbour's leader one row up).
 LEADER_LABEL_RADIAL_STEP_PX = 1.0
@@ -2534,7 +2537,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
     pair_gaps = _PairGaps(labels)
     max_pair_margin = pair_gaps.largest
 
-    min_order_gap_deg = 0.05
+    min_order_gap_deg = LABEL_MIN_ORDER_GAP_DEG
     max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
 
     prev_target_angle: float | None = None
@@ -2957,10 +2960,10 @@ def place_labels_on_arc_fc(
 
     rearranged_labels: list[CircularLabel] = []
     labels = sort_labels(labels)
-    angle_step = 0.25
+    angle_step = LABEL_ANGLE_STEP_DEG
     max_shift = 25.0
     max_steps = int(max_shift / angle_step)
-    min_order_gap = 0.05
+    min_order_gap = LABEL_MIN_ORDER_GAP_DEG
     prev_angle_unwrapped = -float("inf")
     # Peer pruning (output-preserving): a candidate is tested only against the placed labels whose
     # reach boxes meet its own; the margins of `check_overlap` are pair gaps at the 0.1 px base.
@@ -3305,12 +3308,6 @@ def _legacy_improved_label_placement_fc(
     return labels
 
 
-_ARC_ANGLE_STEP_DEG = 0.25
-"""The angle step of the arc label search, in degrees."""
-_ARC_MIN_ORDER_GAP_DEG = 0.05
-"""The smallest angle the arc label search keeps between labels in feature order, in degrees."""
-
-
 class _ArcGeometry(NamedTuple):
     """The ellipse that the labels of one arc sit on, and the genome length that places their features."""
 
@@ -3466,7 +3463,7 @@ class _ArcLabelField:
     def enforce_order(self) -> bool:
         """Keep the labels in feature order around the circle (`_keep_cyclic_order`); return whether any label moved."""
         angles = [float(label["angle_unwrapped"]) for label in self.labels]
-        if not _keep_cyclic_order(angles, _ARC_MIN_ORDER_GAP_DEG):
+        if not _keep_cyclic_order(angles, LABEL_MIN_ORDER_GAP_DEG):
             return False
         for label, angle in zip(self.labels, angles):
             if angle != label["angle_unwrapped"]:
@@ -3604,7 +3601,7 @@ class _ClusterRelaxPlan(NamedTuple):
     def at(cls, shift_limit_deg: float, *, dense_inner: bool) -> _ClusterRelaxPlan:
         # Inner dense sets are the primary hot path; a coarser search grid keeps
         # near-identical placements while avoiding runaway overlap evaluations.
-        limit_steps = int(shift_limit_deg / _ARC_ANGLE_STEP_DEG)
+        limit_steps = int(shift_limit_deg / LABEL_ANGLE_STEP_DEG)
         cluster_step_limit = min(limit_steps, 10 if dense_inner else 40)
         center_shift_limit_steps = min(limit_steps, 16 if dense_inner else 48)
         return cls(
@@ -3683,7 +3680,7 @@ def _relax_cluster(field: _ArcLabelField, component: list[int], plan: _ClusterRe
         center_candidates.append(component[-1])
     for center_idx in sorted(set(center_candidates)):
         for step in range(0, plan.cluster_step_limit + 1):
-            spread = step * _ARC_ANGLE_STEP_DEG
+            spread = step * LABEL_ANGLE_STEP_DEG
             for shift_step in plan.center_shift_steps:
                 candidate = _cluster_candidate_angles(field, plan, window, center_idx, spread, shift_step)
                 if candidate is None:
@@ -3726,7 +3723,7 @@ def _cluster_candidate_angles(
     """
     labels = field.labels
     shift_limit_deg = plan.shift_limit_deg
-    center_shift = shift_step * _ARC_ANGLE_STEP_DEG
+    center_shift = shift_step * LABEL_ANGLE_STEP_DEG
     ordered = list(window.current_angles)
     for idx in window.indices:
         rel = idx - center_idx
@@ -3742,7 +3739,7 @@ def _cluster_candidate_angles(
         ordered[idx] = candidate
 
     # Keep global ordering constraints valid.
-    _keep_cyclic_order(ordered, _ARC_MIN_ORDER_GAP_DEG)
+    _keep_cyclic_order(ordered, LABEL_MIN_ORDER_GAP_DEG)
 
     # Respect per-label shift budget.
     for idx in range(len(labels)):
@@ -3793,7 +3790,7 @@ def _optimize_with_shift_limit(
 ) -> None:
     """Move single labels toward their targets and out of overlaps within `shift_limit_deg`, then relax clusters."""
     labels = field.labels
-    max_steps = int(shift_limit_deg / _ARC_ANGLE_STEP_DEG)
+    max_steps = int(shift_limit_deg / LABEL_ANGLE_STEP_DEG)
     # A label's evaluation reads only the labels of its overlap window (`overlap_indices`, which
     # holds its order neighbours): their positions and angles.
     skips = _SettledEvaluations(
@@ -3885,7 +3882,7 @@ def _sweep_positions(
 
     Empty when no angle keeps the label between its neighbours.
     """
-    order_lower, order_upper = _cyclic_order_bounds(sweep.angles, label_idx, _ARC_MIN_ORDER_GAP_DEG)
+    order_lower, order_upper = _cyclic_order_bounds(sweep.angles, label_idx, LABEL_MIN_ORDER_GAP_DEG)
     lower_bound = max(target_angle - sweep.shift_limit_deg, order_lower)
     upper_bound = min(target_angle + sweep.shift_limit_deg, order_upper)
     if lower_bound > upper_bound:
@@ -3897,7 +3894,7 @@ def _sweep_positions(
         if step == 0:
             offsets = [0.0]
         else:
-            offset = step * _ARC_ANGLE_STEP_DEG
+            offset = step * LABEL_ANGLE_STEP_DEG
             offsets = [offset, -offset]
         positions: list[tuple[float, float, float]] = []
         for offset in offsets:
@@ -3971,7 +3968,7 @@ def _separate_remaining_adjacent_overlaps(field: _ArcLabelField, shift_limit_deg
     n_labels = len(labels)
     if n_labels < 2:
         return False
-    angle_step = _ARC_ANGLE_STEP_DEG
+    angle_step = LABEL_ANGLE_STEP_DEG
 
     for _ in range(160):
         pass_changed = False
@@ -4136,8 +4133,8 @@ def improved_label_placement_fc(
         center_y,
         x_radius,
         y_radius,
-        min_order_gap=_ARC_MIN_ORDER_GAP_DEG,
-        angle_step_deg=_ARC_ANGLE_STEP_DEG,
+        min_order_gap=LABEL_MIN_ORDER_GAP_DEG,
+        angle_step_deg=LABEL_ANGLE_STEP_DEG,
         max_passes=8,
     )
     labels.sort(key=lambda x: x["_opt_original_idx"])
@@ -4222,11 +4219,33 @@ def _neighbor_min_gap_overlap_count(
     return overlap_count
 
 
+class _InnerLabelQuality(NamedTuple):
+    """The quality of a set of inner labels that the strict-order rebalance compares; fewer is better."""
+
+    plain_overlap: int
+    min_gap_overlap: int
+    mismatch_count: int
+    mismatch_weighted: float
+    leader_bbox_collisions: int
+    line_intersections: int
+
+    def is_settled(self) -> bool:
+        """At most a few labels sit on the wrong side and no two leaders cross."""
+        return self.mismatch_count <= _INNER_REBALANCE_MISMATCHES_KEPT and self.line_intersections == 0
+
+    def regresses_leaders(self, baseline: _InnerLabelQuality) -> bool:
+        """These labels have more leader/label collisions or more leader crossings than `baseline`."""
+        return (
+            self.leader_bbox_collisions > baseline.leader_bbox_collisions
+            or self.line_intersections > baseline.line_intersections
+        )
+
+
 def _inner_rebalance_metrics(
     labels: list[CircularLabel],
     total_length: int,
     plain_overlap: int | None = None,
-) -> tuple[int, int, int, float, int, int]:
+) -> _InnerLabelQuality:
     """Return baseline/candidate quality metrics for strict-order inner rebalance.
 
     `plain_overlap`, when given, is the plain overlap count of these labels.
@@ -4242,7 +4261,7 @@ def _inner_rebalance_metrics(
         margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
     )
     leader_line_intersections = _count_leader_line_intersections(labels_with_leaders)
-    return (
+    return _InnerLabelQuality(
         plain_overlap,
         min_gap_overlap,
         mismatch_count,
@@ -4250,6 +4269,351 @@ def _inner_rebalance_metrics(
         leader_bbox_collisions,
         leader_line_intersections,
     )
+
+
+_INNER_REBALANCE_MAX_PASSES = 6
+"""The most block shifts the strict-order inner rebalance makes."""
+_INNER_REBALANCE_MISMATCHES_KEPT = 3
+"""The number of inner labels on the wrong side of the vertical axis that the rebalance leaves alone."""
+_INNER_REBALANCE_SHIFTS_DEG = (
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.5,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+    6.0,
+    8.0,
+    10.0,
+    12.0,
+    14.0,
+    16.0,
+    18.0,
+    20.0,
+    22.0,
+    24.0,
+    26.0,
+    28.0,
+    30.0,
+)
+"""The block shifts the strict-order inner rebalance tries for each block and direction, smallest first, in degrees."""
+_INNER_REBALANCE_FALLBACK_SHIFT_CAPS_DEG = (22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 30.0)
+"""The largest angle shifts the fixed-radius fallback of the inner rebalance tries, in degrees."""
+
+_InnerLabelKey: TypeAlias = tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...]
+_InnerShiftScore: TypeAlias = tuple[int, int, float, int, int, int, int, float]
+_InnerFallbackScore: TypeAlias = tuple[int, float, int, int, int, float]
+
+
+class _InnerRebalanceMetrics:
+    """The quality metrics of inner label sets, each computed once per set of label fields it reads."""
+
+    __slots__ = ("total_length", "_quality", "_plain_overlap", "_mismatch")
+
+    def __init__(self, total_length: int) -> None:
+        self.total_length = total_length
+        self._quality: dict[_InnerLabelKey, _InnerLabelQuality] = {}
+        self._plain_overlap: dict[_InnerLabelKey, int] = {}
+        self._mismatch: dict[_InnerLabelKey, tuple[int, float]] = {}
+
+    @staticmethod
+    def key(label_list: list[CircularLabel]) -> _InnerLabelKey:
+        """The label fields the metrics read, in label order."""
+        return tuple(
+            (
+                float(label.get("middle", 0.0)),
+                float(label.get("start_x", 0.0)),
+                float(label.get("start_y", 0.0)),
+                float(label.get("middle_x", 0.0)),
+                float(label.get("middle_y", 0.0)),
+                float(label.get("width_px", 0.0)),
+                float(label.get("height_px", 0.0)),
+                float(label.get("feature_anchor_x", label.get("feature_middle_x", 0.0))),
+                float(label.get("feature_anchor_y", label.get("feature_middle_y", 0.0))),
+                bool(label.get("is_inner", False)),
+                ("min_outer_start_radius_px" in label),
+            )
+            for label in label_list
+        )
+
+    def quality(self, label_list: list[CircularLabel]) -> _InnerLabelQuality:
+        cache_key = self.key(label_list)
+        cached = self._quality.get(cache_key)
+        if cached is None:
+            cached = _inner_rebalance_metrics(label_list, self.total_length, self._plain_overlap.get(cache_key))
+            self._quality[cache_key] = cached
+        return cached
+
+    def plain_overlap(self, label_list: list[CircularLabel]) -> int:
+        cache_key = self.key(label_list)
+        cached = self._plain_overlap.get(cache_key)
+        if cached is None:
+            cached = _count_label_overlaps(label_list, self.total_length, use_min_gap=False)
+            self._plain_overlap[cache_key] = cached
+        return cached
+
+    def mismatch(self, label_list: list[CircularLabel]) -> tuple[int, float]:
+        cache_key = self.key(label_list)
+        cached = self._mismatch.get(cache_key)
+        if cached is None:
+            cached = _hemisphere_mismatch_metrics(label_list, self.total_length)
+            self._mismatch[cache_key] = cached
+        return cached
+
+
+class _InnerPlacement(NamedTuple):
+    """Inner labels in feature order and their unwrapped angles, index for index."""
+
+    labels: list[CircularLabel]
+    angles: list[float]
+
+
+class _InnerFocus(NamedTuple):
+    """The label a rebalance pass moves first, whether it sits on the wrong side, and the shift directions to try."""
+
+    label_idx: int
+    half_bad: int
+    directions: tuple[float, float]
+
+
+def _wrong_half(preferred_half: int, label: CircularLabel) -> int:
+    """1 when the label has a preferred side of the vertical axis and sits on the other side, else 0."""
+    if preferred_half == 0:
+        return 0
+    current_half = _current_half_from_x(float(label["start_x"]), axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
+    return int(current_half not in (0, preferred_half))
+
+
+def _inner_mismatch_priority(label: CircularLabel, total_length: int) -> tuple[float, float]:
+    """Labels on the wrong side are moved first when their feature lies far from a vertical axis and far out."""
+    target_angle_unwrapped = float(
+        label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
+    )
+    return _vertical_axis_distance_deg(target_angle_unwrapped % 360.0), abs(float(label["start_x"]))
+
+
+def _inner_focus_index(labels: list[CircularLabel], total_length: int) -> int | None:
+    """The label on the wrong side nearest a vertical axis, else the one whose leader crosses most others.
+
+    None when no label is on the wrong side and no leaders cross.
+    """
+    mismatch_indices = [
+        idx for idx, label in enumerate(labels) if _wrong_half(_preferred_half_for_label(label, total_length), label)
+    ]
+    if mismatch_indices:
+        return max(mismatch_indices, key=lambda idx: _inner_mismatch_priority(labels[idx], total_length))
+    labels_with_leaders = _assign_leader_start_points([label.copy() for label in labels], total_length)
+    local_line_scores = [
+        (_count_local_leader_line_intersections(labels_with_leaders, idx), idx) for idx in range(len(labels_with_leaders))
+    ]
+    if not local_line_scores:
+        return None
+    crossings, label_idx = max(local_line_scores)
+    return label_idx if crossings > 0 else None
+
+
+def _inner_focus(placement: _InnerPlacement, total_length: int) -> _InnerFocus | None:
+    """The focus of the next rebalance pass; the direction toward the label's own feature is tried first."""
+    label_idx = _inner_focus_index(placement.labels, total_length)
+    if label_idx is None:
+        return None
+    focus_label = placement.labels[label_idx]
+    current_angle = placement.angles[label_idx]
+    preferred_half = _preferred_half_for_label(focus_label, total_length)
+    target_angle_unwrapped = float(
+        focus_label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(focus_label["middle"]), total_length))
+    )
+    delta_to_target = normalize_angle_near_reference(target_angle_unwrapped, current_angle) - current_angle
+    if abs(delta_to_target) <= 1e-9:
+        primary_direction = -1.0 if preferred_half < 0 else 1.0
+    else:
+        primary_direction = 1.0 if delta_to_target > 0.0 else -1.0
+    return _InnerFocus(label_idx, _wrong_half(preferred_half, focus_label), (primary_direction, -primary_direction))
+
+
+def _shift_inner_block(
+    placement: _InnerPlacement,
+    radii: list[float],
+    block_start: int,
+    block_end: int,
+    shift_deg: float,
+) -> _InnerPlacement:
+    """Copies of the labels with labels `block_start`..`block_end` turned by `shift_deg` on their own radii."""
+    candidate_labels = [item.copy() for item in placement.labels]
+    candidate_angles = placement.angles.copy()
+    for move_idx in range(block_start, block_end + 1):
+        moved_angle = candidate_angles[move_idx] + shift_deg
+        candidate_angles[move_idx] = moved_angle
+        candidate_labels[move_idx]["angle_unwrapped"] = moved_angle
+        radius = radii[move_idx]
+        candidate_labels[move_idx]["start_x"] = radius * math.cos(math.radians(moved_angle))
+        candidate_labels[move_idx]["start_y"] = radius * math.sin(math.radians(moved_angle))
+    return _InnerPlacement(candidate_labels, candidate_angles)
+
+
+def _half_progress_non_worsening(
+    before_labels: list[CircularLabel],
+    after_labels: list[CircularLabel],
+    block_start: int,
+    block_end: int,
+    total_length: int,
+) -> bool:
+    """No moved label with a preferred side moves away from that side."""
+    for move_idx in range(block_start, block_end + 1):
+        preferred_half = _preferred_half_for_label(before_labels[move_idx], total_length)
+        if preferred_half == 0:
+            continue
+        before_x = float(before_labels[move_idx]["start_x"])
+        after_x = float(after_labels[move_idx]["start_x"])
+        if (preferred_half * after_x) < ((preferred_half * before_x) - 1e-6):
+            return False
+    return True
+
+
+@dataclass(frozen=True, slots=True)
+class _InnerBlockShiftSearch:
+    """The search of one rebalance pass: shift the focus label and the labels after it as one block.
+
+    It tries every block end, both directions and every shift of `_INNER_REBALANCE_SHIFTS_DEG`, keeps
+    feature order, and accepts a candidate only when it regresses no overlap, side or leader count
+    and improves one of them.
+    """
+
+    placement: _InnerPlacement
+    radii: list[float]
+    focus: _InnerFocus
+    baseline: _InnerLabelQuality
+    metrics: _InnerRebalanceMetrics
+
+    def best(self) -> _InnerPlacement | None:
+        """The best candidate, or None. A candidate with no wrong side and no crossing ends the search."""
+        best: tuple[_InnerShiftScore, _InnerPlacement] | None = None
+        for block_end in range(self.focus.label_idx, len(self.placement.labels)):
+            for direction in self.focus.directions:
+                best = self._best_shift(block_end, direction, best)
+                if best is not None and best[0][0] == 0 and best[0][1] == 0 and best[0][3] == 0:
+                    return best[1]
+        return None if best is None else best[1]
+
+    def _best_shift(
+        self,
+        block_end: int,
+        direction: float,
+        best: tuple[_InnerShiftScore, _InnerPlacement] | None,
+    ) -> tuple[_InnerShiftScore, _InnerPlacement] | None:
+        """`best`, or a better candidate among the shifts of one block in one direction."""
+        label_idx = self.focus.label_idx
+        angles = self.placement.angles
+        last_idx = len(self.placement.labels) - 1
+        for shift_abs in _INNER_REBALANCE_SHIFTS_DEG:
+            shift_deg = direction * shift_abs
+            moved_start = angles[label_idx] + shift_deg
+            moved_end = angles[block_end] + shift_deg
+            if label_idx > 0 and moved_start <= (angles[label_idx - 1] + LABEL_MIN_ORDER_GAP_DEG):
+                continue
+            if block_end < last_idx and moved_end >= (angles[block_end + 1] - LABEL_MIN_ORDER_GAP_DEG):
+                continue
+            candidate = _shift_inner_block(self.placement, self.radii, label_idx, block_end, shift_deg)
+            score = self._score(candidate.labels, block_end, shift_abs)
+            if score is not None and (best is None or score < best[0]):
+                best = (score, candidate)
+        return best
+
+    def _score(self, candidate_labels: list[CircularLabel], block_end: int, shift_abs: float) -> _InnerShiftScore | None:
+        """The candidate's score, lower is better, or None when it regresses or improves nothing."""
+        label_idx = self.focus.label_idx
+        baseline = self.baseline
+        total_length = self.metrics.total_length
+        if not _half_progress_non_worsening(self.placement.labels, candidate_labels, label_idx, block_end, total_length):
+            return None
+        candidate_focus = candidate_labels[label_idx]
+        candidate_half_bad = _wrong_half(_preferred_half_for_label(candidate_focus, total_length), candidate_focus)
+        if candidate_half_bad > self.focus.half_bad:
+            return None
+        if self.metrics.plain_overlap(candidate_labels) > baseline.plain_overlap:
+            return None
+        if candidate_half_bad >= self.focus.half_bad and baseline.line_intersections == 0:
+            candidate_mismatch_count_cheap, _ = self.metrics.mismatch(candidate_labels)
+            if candidate_mismatch_count_cheap >= baseline.mismatch_count:
+                return None
+        quality = self.metrics.quality(candidate_labels)
+        if quality.regresses_leaders(baseline):
+            return None
+        if not (
+            quality.mismatch_count < baseline.mismatch_count
+            or quality.line_intersections < baseline.line_intersections
+            or candidate_half_bad < self.focus.half_bad
+        ):
+            return None
+        return (
+            quality.mismatch_count,
+            candidate_half_bad,
+            quality.mismatch_weighted,
+            quality.line_intersections,
+            quality.min_gap_overlap,
+            quality.leader_bbox_collisions,
+            block_end - label_idx,
+            shift_abs,
+        )
+
+
+def _labels_keep_strict_order(label_list: list[CircularLabel], total_length: int) -> bool:
+    """The labels' angles, unwrapped near their features, increase strictly in feature order."""
+    ordered = sort_labels(label_list)
+    prev_unwrapped: float | None = None
+    for label in ordered:
+        angle = math.atan2(float(label["start_y"]), float(label["start_x"]))
+        target = (2.0 * math.pi * (float(label["middle"]) / float(total_length))) - (0.5 * math.pi)
+        angle_unwrapped = angle + (2.0 * math.pi) * round((target - angle) / (2.0 * math.pi))
+        if prev_unwrapped is not None and angle_unwrapped <= prev_unwrapped:
+            return False
+        prev_unwrapped = angle_unwrapped
+    return True
+
+
+def _inner_fixed_radii_fallback(
+    ordered_labels: list[CircularLabel],
+    baseline: _InnerLabelQuality,
+    metrics: _InnerRebalanceMetrics,
+) -> list[CircularLabel] | None:
+    """The best fixed-radius overlap resolution of the labels that keeps strict order and regresses nothing, or None."""
+    total_length = metrics.total_length
+    fallback_best_labels: list[CircularLabel] | None = None
+    fallback_best_score: _InnerFallbackScore | None = None
+    for max_shift_cap in _INNER_REBALANCE_FALLBACK_SHIFT_CAPS_DEG:
+        candidate_labels = _resolve_outer_label_overlaps_with_fixed_radii(
+            [label.copy() for label in ordered_labels],
+            total_length,
+            max_angle_shift_deg=max_shift_cap,
+        )
+        if not _labels_keep_strict_order(candidate_labels, total_length):
+            continue
+        if metrics.plain_overlap(candidate_labels) > baseline.plain_overlap:
+            continue
+        quality = metrics.quality(candidate_labels)
+        if quality.regresses_leaders(baseline):
+            continue
+        if not (
+            quality.mismatch_count < baseline.mismatch_count
+            or quality.line_intersections < baseline.line_intersections
+            or quality.min_gap_overlap < baseline.min_gap_overlap
+        ):
+            continue
+        fallback_candidate_score = (
+            quality.mismatch_count,
+            quality.mismatch_weighted,
+            quality.line_intersections,
+            quality.min_gap_overlap,
+            quality.leader_bbox_collisions,
+            max_shift_cap,
+        )
+        if fallback_best_score is None or fallback_candidate_score < fallback_best_score:
+            fallback_best_score = fallback_candidate_score
+            fallback_best_labels = candidate_labels
+    return fallback_best_labels
 
 
 def _rebalance_inner_labels_strict_order(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
@@ -4271,361 +4635,25 @@ def _rebalance_inner_labels_strict_order(labels: list[CircularLabel], total_leng
         label["angle_unwrapped"] = current_angles[idx]
         radii.append(math.hypot(float(label["start_x"]), float(label["start_y"])))
 
-    min_order_gap = 0.05
-    max_passes = 6
-    metrics_cache: dict[
-        tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...],
-        tuple[int, int, int, float, int, int],
-    ] = {}
-    plain_overlap_cache: dict[
-        tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...],
-        int,
-    ] = {}
-    mismatch_cache: dict[
-        tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...],
-        tuple[int, float],
-    ] = {}
-    delta_schedule = (
-        0.25,
-        0.5,
-        0.75,
-        1.0,
-        1.5,
-        2.0,
-        3.0,
-        4.0,
-        5.0,
-        6.0,
-        8.0,
-        10.0,
-        12.0,
-        14.0,
-        16.0,
-        18.0,
-        20.0,
-        22.0,
-        24.0,
-        26.0,
-        28.0,
-        30.0,
-    )
-
-    def _metrics_cache_key(
-        label_list: list[CircularLabel],
-    ) -> tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...]:
-        return tuple(
-            (
-                float(label.get("middle", 0.0)),
-                float(label.get("start_x", 0.0)),
-                float(label.get("start_y", 0.0)),
-                float(label.get("middle_x", 0.0)),
-                float(label.get("middle_y", 0.0)),
-                float(label.get("width_px", 0.0)),
-                float(label.get("height_px", 0.0)),
-                float(label.get("feature_anchor_x", label.get("feature_middle_x", 0.0))),
-                float(label.get("feature_anchor_y", label.get("feature_middle_y", 0.0))),
-                bool(label.get("is_inner", False)),
-                ("min_outer_start_radius_px" in label),
-            )
-            for label in label_list
-        )
-
-    def _inner_rebalance_metrics_cached(label_list: list[CircularLabel]) -> tuple[int, int, int, float, int, int]:
-        cache_key = _metrics_cache_key(label_list)
-        cached = metrics_cache.get(cache_key)
-        if cached is None:
-            cached = _inner_rebalance_metrics(label_list, total_length, plain_overlap_cache.get(cache_key))
-            metrics_cache[cache_key] = cached
-        return cached
-
-    def _plain_overlap_cached(label_list: list[CircularLabel]) -> int:
-        cache_key = _metrics_cache_key(label_list)
-        cached = plain_overlap_cache.get(cache_key)
-        if cached is None:
-            cached = _count_label_overlaps(label_list, total_length, use_min_gap=False)
-            plain_overlap_cache[cache_key] = cached
-        return cached
-
-    def _mismatch_metrics_cached(label_list: list[CircularLabel]) -> tuple[int, float]:
-        cache_key = _metrics_cache_key(label_list)
-        cached = mismatch_cache.get(cache_key)
-        if cached is None:
-            cached = _hemisphere_mismatch_metrics(label_list, total_length)
-            mismatch_cache[cache_key] = cached
-        return cached
-
-    def _mismatch_indices(label_list: list[CircularLabel]) -> list[int]:
-        mismatch_indices: list[int] = []
-        for idx, label in enumerate(label_list):
-            preferred_half = _preferred_half_for_label(label, total_length)
-            if preferred_half == 0:
-                continue
-            current_half = _current_half_from_x(float(label["start_x"]), axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
-            if current_half not in (0, preferred_half):
-                mismatch_indices.append(idx)
-        return mismatch_indices
-
-    def _mismatch_priority(label: CircularLabel) -> tuple[float, float]:
-        target_angle_unwrapped = float(
-            label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-        )
-        axis_distance = _vertical_axis_distance_deg(target_angle_unwrapped % 360.0)
-        return axis_distance, abs(float(label["start_x"]))
-
-    def _apply_block_shift(
-        block_start: int,
-        block_end: int,
-        shift_deg: float,
-    ) -> tuple[list[CircularLabel], list[float]]:
-        candidate_labels = [item.copy() for item in ordered_labels]
-        candidate_angles = current_angles.copy()
-        for move_idx in range(block_start, block_end + 1):
-            moved_angle = candidate_angles[move_idx] + shift_deg
-            candidate_angles[move_idx] = moved_angle
-            candidate_labels[move_idx]["angle_unwrapped"] = moved_angle
-            radius = radii[move_idx]
-            candidate_labels[move_idx]["start_x"] = radius * math.cos(math.radians(moved_angle))
-            candidate_labels[move_idx]["start_y"] = radius * math.sin(math.radians(moved_angle))
-        return candidate_labels, candidate_angles
-
-    def _half_progress_non_worsening(
-        before_labels: list[CircularLabel],
-        after_labels: list[CircularLabel],
-        block_start: int,
-        block_end: int,
-    ) -> bool:
-        for move_idx in range(block_start, block_end + 1):
-            preferred_half = _preferred_half_for_label(before_labels[move_idx], total_length)
-            if preferred_half == 0:
-                continue
-            before_x = float(before_labels[move_idx]["start_x"])
-            after_x = float(after_labels[move_idx]["start_x"])
-            if (preferred_half * after_x) < ((preferred_half * before_x) - 1e-6):
-                return False
-        return True
-
-    def _is_strict_no_overtake(label_list: list[CircularLabel]) -> bool:
-        ordered = sort_labels(label_list)
-        prev_unwrapped: float | None = None
-        for label in ordered:
-            angle = math.atan2(float(label["start_y"]), float(label["start_x"]))
-            target = (2.0 * math.pi * (float(label["middle"]) / float(total_length))) - (0.5 * math.pi)
-            angle_unwrapped = angle + (2.0 * math.pi) * round((target - angle) / (2.0 * math.pi))
-            if prev_unwrapped is not None and angle_unwrapped <= prev_unwrapped:
-                return False
-            prev_unwrapped = angle_unwrapped
-        return True
-
-    for _ in range(max_passes):
-        (
-            baseline_plain_overlap,
-            _baseline_min_gap_overlap,
-            baseline_mismatch_count,
-            _baseline_mismatch_weighted,
-            baseline_leader_bbox_collisions,
-            baseline_line_intersections,
-        ) = _inner_rebalance_metrics_cached(ordered_labels)
-
-        if baseline_mismatch_count <= 3 and baseline_line_intersections == 0:
+    placement = _InnerPlacement(ordered_labels, current_angles)
+    metrics = _InnerRebalanceMetrics(total_length)
+    for _ in range(_INNER_REBALANCE_MAX_PASSES):
+        baseline = metrics.quality(placement.labels)
+        if baseline.is_settled():
             break
-
-        mismatch_indices = _mismatch_indices(ordered_labels)
-        if mismatch_indices:
-            label_idx = max(mismatch_indices, key=lambda idx: _mismatch_priority(ordered_labels[idx]))
-        else:
-            labels_with_leaders = _assign_leader_start_points([label.copy() for label in ordered_labels], total_length)
-            local_line_scores = [
-                (_count_local_leader_line_intersections(labels_with_leaders, idx), idx)
-                for idx in range(len(labels_with_leaders))
-            ]
-            local_line_scores.sort(reverse=True)
-            if not local_line_scores or local_line_scores[0][0] <= 0:
-                break
-            label_idx = local_line_scores[0][1]
-
-        focus_label = ordered_labels[label_idx]
-        preferred_half = _preferred_half_for_label(focus_label, total_length)
-        current_half = _current_half_from_x(float(focus_label["start_x"]), axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
-        current_half_bad = int(preferred_half != 0 and current_half not in (0, preferred_half))
-        target_angle_unwrapped = float(
-            focus_label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(focus_label["middle"]), total_length))
-        )
-        target_angle_unwrapped = normalize_angle_near_reference(target_angle_unwrapped, current_angles[label_idx])
-        delta_to_target = target_angle_unwrapped - current_angles[label_idx]
-        if abs(delta_to_target) <= 1e-9:
-            if preferred_half < 0:
-                primary_direction = -1.0
-            elif preferred_half > 0:
-                primary_direction = 1.0
-            else:
-                primary_direction = 1.0
-        else:
-            primary_direction = 1.0 if delta_to_target > 0.0 else -1.0
-        directions = [primary_direction]
-        if -primary_direction != primary_direction:
-            directions.append(-primary_direction)
-
-        best_candidate_labels: list[CircularLabel] | None = None
-        best_candidate_angles: list[float] | None = None
-        best_candidate_score: tuple[int, int, float, int, int, int, int, float] | None = None
-
-        for block_end in range(label_idx, len(ordered_labels)):
-            block_width = block_end - label_idx
-            for direction in directions:
-                for shift_abs in delta_schedule:
-                    shift_deg = direction * shift_abs
-                    moved_start = current_angles[label_idx] + shift_deg
-                    moved_end = current_angles[block_end] + shift_deg
-                    if label_idx > 0 and moved_start <= (current_angles[label_idx - 1] + min_order_gap):
-                        continue
-                    if block_end < (len(ordered_labels) - 1) and moved_end >= (
-                        current_angles[block_end + 1] - min_order_gap
-                    ):
-                        continue
-
-                    candidate_labels, candidate_angles = _apply_block_shift(label_idx, block_end, shift_deg)
-                    if not _half_progress_non_worsening(ordered_labels, candidate_labels, label_idx, block_end):
-                        continue
-
-                    candidate_focus_preferred_half = _preferred_half_for_label(candidate_labels[label_idx], total_length)
-                    candidate_focus_half = _current_half_from_x(
-                        float(candidate_labels[label_idx]["start_x"]),
-                        axis_eps_px=HEMISPHERE_AXIS_EPS_PX,
-                    )
-                    candidate_half_bad = int(
-                        candidate_focus_preferred_half != 0 and candidate_focus_half not in (0, candidate_focus_preferred_half)
-                    )
-                    if candidate_half_bad > current_half_bad:
-                        continue
-                    candidate_plain_overlap = _plain_overlap_cached(candidate_labels)
-                    if candidate_plain_overlap > baseline_plain_overlap:
-                        continue
-                    if candidate_half_bad >= current_half_bad and baseline_line_intersections == 0:
-                        candidate_mismatch_count_cheap, _ = _mismatch_metrics_cached(candidate_labels)
-                        if candidate_mismatch_count_cheap >= baseline_mismatch_count:
-                            continue
-
-                    (
-                        _candidate_plain_overlap,
-                        candidate_min_gap_overlap,
-                        candidate_mismatch_count,
-                        candidate_mismatch_weighted,
-                        candidate_leader_bbox_collisions,
-                        candidate_line_intersections,
-                    ) = _inner_rebalance_metrics_cached(candidate_labels)
-
-                    if candidate_plain_overlap > baseline_plain_overlap:
-                        continue
-                    if candidate_leader_bbox_collisions > baseline_leader_bbox_collisions:
-                        continue
-                    if candidate_line_intersections > baseline_line_intersections:
-                        continue
-
-                    if not (
-                        candidate_mismatch_count < baseline_mismatch_count
-                        or candidate_line_intersections < baseline_line_intersections
-                        or candidate_half_bad < current_half_bad
-                    ):
-                        continue
-
-                    candidate_score = (
-                        candidate_mismatch_count,
-                        candidate_half_bad,
-                        candidate_mismatch_weighted,
-                        candidate_line_intersections,
-                        candidate_min_gap_overlap,
-                        candidate_leader_bbox_collisions,
-                        block_width,
-                        shift_abs,
-                    )
-                    if best_candidate_score is None or candidate_score < best_candidate_score:
-                        best_candidate_score = candidate_score
-                        best_candidate_labels = candidate_labels
-                        best_candidate_angles = candidate_angles
-
-                if (
-                    best_candidate_score is not None
-                    and best_candidate_score[0] == 0
-                    and best_candidate_score[1] == 0
-                    and best_candidate_score[3] == 0
-                ):
-                    break
-            if (
-                best_candidate_score is not None
-                and best_candidate_score[0] == 0
-                and best_candidate_score[1] == 0
-                and best_candidate_score[3] == 0
-            ):
-                break
-
-        if best_candidate_labels is None or best_candidate_angles is None:
+        focus = _inner_focus(placement, total_length)
+        if focus is None:
             break
-        ordered_labels = best_candidate_labels
-        current_angles = best_candidate_angles
+        shifted = _InnerBlockShiftSearch(placement, radii, focus, baseline, metrics).best()
+        if shifted is None:
+            break
+        placement = shifted
 
-    (
-        baseline_plain_overlap,
-        baseline_min_gap_overlap,
-        baseline_mismatch_count,
-        baseline_mismatch_weighted,
-        baseline_leader_bbox_collisions,
-        baseline_line_intersections,
-    ) = _inner_rebalance_metrics_cached(ordered_labels)
-    if baseline_plain_overlap == 0 and baseline_mismatch_count <= 3 and baseline_line_intersections == 0:
-        return ordered_labels
-
-    fallback_best_labels: list[CircularLabel] | None = None
-    fallback_best_score: tuple[int, float, int, int, int, float] | None = None
-    for max_shift_cap in (22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 30.0):
-        candidate_labels = _resolve_outer_label_overlaps_with_fixed_radii(
-            [label.copy() for label in ordered_labels],
-            total_length,
-            max_angle_shift_deg=max_shift_cap,
-        )
-        if not _is_strict_no_overtake(candidate_labels):
-            continue
-        candidate_plain_overlap = _plain_overlap_cached(candidate_labels)
-        if candidate_plain_overlap > baseline_plain_overlap:
-            continue
-
-        (
-            _candidate_plain_overlap,
-            candidate_min_gap_overlap,
-            candidate_mismatch_count,
-            candidate_mismatch_weighted,
-            candidate_leader_bbox_collisions,
-            candidate_line_intersections,
-        ) = _inner_rebalance_metrics_cached(candidate_labels)
-
-        if candidate_plain_overlap > baseline_plain_overlap:
-            continue
-        if candidate_leader_bbox_collisions > baseline_leader_bbox_collisions:
-            continue
-        if candidate_line_intersections > baseline_line_intersections:
-            continue
-        if not (
-            candidate_mismatch_count < baseline_mismatch_count
-            or candidate_line_intersections < baseline_line_intersections
-            or candidate_min_gap_overlap < baseline_min_gap_overlap
-        ):
-            continue
-
-        fallback_candidate_score = (
-            candidate_mismatch_count,
-            candidate_mismatch_weighted,
-            candidate_line_intersections,
-            candidate_min_gap_overlap,
-            candidate_leader_bbox_collisions,
-            max_shift_cap,
-        )
-        if fallback_best_score is None or fallback_candidate_score < fallback_best_score:
-            fallback_best_score = fallback_candidate_score
-            fallback_best_labels = candidate_labels
-
-    if fallback_best_labels is not None:
-        return fallback_best_labels
-
-    return ordered_labels
+    baseline = metrics.quality(placement.labels)
+    if baseline.plain_overlap == 0 and baseline.is_settled():
+        return placement.labels
+    fallback_labels = _inner_fixed_radii_fallback(placement.labels, baseline, metrics)
+    return placement.labels if fallback_labels is None else fallback_labels
 
 
 def _refine_labels_to_preferred_hemisphere(
@@ -4650,7 +4678,7 @@ def _refine_labels_to_preferred_hemisphere(
     if not labels:
         return labels
 
-    min_order_gap = 0.05
+    min_order_gap = LABEL_MIN_ORDER_GAP_DEG
     max_steps = int(max_shift_deg / angle_step_deg)
     block_max_steps = int(min(max_shift_deg, 6.0) / angle_step_deg)
     base_plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
@@ -4924,8 +4952,8 @@ def _polish_total_leader_distance(
     x_radius: float,
     y_radius: float,
     *,
-    min_order_gap: float = 0.05,
-    angle_step_deg: float = 0.25,
+    min_order_gap: float = LABEL_MIN_ORDER_GAP_DEG,
+    angle_step_deg: float = LABEL_ANGLE_STEP_DEG,
     max_passes: int = 8,
 ) -> list[CircularLabel]:
     """
@@ -5887,7 +5915,7 @@ def prepare_label_list(
                 step_deg=LEADER_LABEL_SHIFT_STEP_DEG,
                 max_shift_deg=LEADER_LABEL_MAX_SHIFT_DEG,
                 max_passes=LEADER_LABEL_MAX_PASSES,
-                min_order_gap_deg=LEADER_LABEL_MIN_ORDER_GAP_DEG,
+                min_order_gap_deg=LABEL_MIN_ORDER_GAP_DEG,
             )
             reanchor_required = False
             if feature_outer_radius_intervals is not None and outer_labels_rearranged:
