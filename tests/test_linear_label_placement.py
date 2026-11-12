@@ -724,6 +724,39 @@ def test_linear_above_feature_negative_strand_is_below_and_rotates_opposite(
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize("label_rotation", (30.0, 0.0), ids=["turned", "horizontal"])
+def test_linear_above_feature_label_of_a_feature_on_both_strands_follows_its_lane(label_rotation: float) -> None:
+    """A label over its feature, strands apart, sits on the far side of the lane its feature is drawn
+    in, also when the feature has parts on both strands: the trans-spliced plastid rps12 of tobacco
+    (first part on the minus strand, later parts on the plus strand) is drawn below the axis, so its
+    label goes below it. Before, the label took the last part's strand and sat above the feature,
+    across the axis."""
+
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=label_rotation,
+        separate_strands=True,
+        input_filename="NC_001879.gbk",
+    )
+    for label in labels:
+        assert label["above_feature_place_above"] is (float(label["feature_bottom_y"]) <= 0.0), label["label_text"]
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "NC_001879.gbk"), "genbank")
+    both_strands = {
+        index for index, feature in enumerate(record.features)
+        if feature.type == "CDS" and {part.strand for part in feature.location.parts} == {-1, 1}
+    }
+    (rps12,) = [label for label in labels if label["source_feature_index"] in both_strands]
+    assert float(rps12["feature_top_y"]) > 0.0
+    if label_rotation:
+        y_min_offset, _ = _rotated_y_bounds_from_anchor(rps12)
+        label_top_y = float(rps12["middle_y"]) + y_min_offset
+    else:
+        label_top_y = float(rps12["middle_y"]) - float(rps12["height_px"]) / 2.0
+    assert label_top_y > float(rps12["feature_bottom_y"])
+
+
+@pytest.mark.linear
 def test_linear_label_drawer_applies_rotation_transform(mg1655_rotated_split_labels: list[dict]) -> None:
     labels = mg1655_rotated_split_labels
     assert labels
