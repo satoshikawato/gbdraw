@@ -39,6 +39,8 @@ jobs:
       - name: Install locked CI test dependencies
         run: npm ci
 
+      # The token's 1,000 API requests an hour are shared by every workflow of the
+      # repository; the tool leaves them 500 (RATE_RESERVE in tools/ci-inventory.mjs).
       - name: Report the last 7 days
         env:
           GITHUB_TOKEN: ${{ github.token }}
