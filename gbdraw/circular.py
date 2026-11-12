@@ -11,7 +11,6 @@ from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
 from typing import Any, Literal, Mapping, Optional, Sequence, TypedDict, cast
-from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .io.cli_tables import (
     ConservationTableEntry,
     conservation_table_text,
@@ -22,7 +21,6 @@ from .config.models.objects import CONSERVATION_COLOR_SCHEME_NAMES
 from .config.toml import load_config_toml
 from .render.export import parse_formats
 from .api.options import (
-    LOSATN_TASKS,
     AnnotationOptions,
     CircularDiagramOptions,
     LosatRuntimeOptions,
@@ -63,7 +61,7 @@ from .api.input_summary import InputWarningKey, log_input_summary
 from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
-from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds, resolve_mode_profile_overrides
+from .mode_profiles import CIRCULAR_MODE_PROFILE, resolve_mode_profile_overrides
 from .tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -72,11 +70,16 @@ from .tracks import (
     parse_circular_track_slots,
 )
 
-from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
+from .cli_utils.losat_output import (
+    add_losat_runtime_args,
+    add_losatn_task_arg,
+    parse_positive_int,
+    write_losat_output_files,
+)
 from .comparisons.identity_scale import CIRCULAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import unique_losat_filenames
 from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, LOSAT_GENETIC_CODE_TEXT
-from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
+from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     add_feature_density_args,
@@ -87,6 +90,7 @@ from .cli_utils.common import (
     _add_block_stroke_args,
     _add_comparison_filter_args,
     _add_depth_axis_args,
+    _add_depth_color_arg,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_figure_size_args,
@@ -97,6 +101,7 @@ from .cli_utils.common import (
     _add_gc_content_axis_args,
     _add_font_args,
     cli_font_family,
+    _add_label_rendering_args,
     _add_legend_size_args,
     add_analysis_args,
     add_color_args,
@@ -104,10 +109,15 @@ from .cli_utils.common import (
     add_input_args,
     apply_record_display_cli_options,
     add_label_args,
+    require_positive_args,
     setup_logging,
+    validate_comparison_threshold_args,
+    validate_depth_axis_args,
+    validate_gc_content_axis_args,
     validate_input_args,
     validate_label_args,
     validate_output_choice_args,
+    validate_scale_interval_arg,
     figure_size_overrides,
     legend_row_overrides,
     handle_output_formats,
@@ -359,32 +369,9 @@ def _shown_skew(args: argparse.Namespace) -> bool:
     return bool(_profile_values(args)["canvas.show_skew"])
 
 
-def _get_args(
-    args,
-    *,
-    _allow_legacy_track_transport: bool = False,
-) -> argparse.Namespace:
-    """
-    Parses command-line arguments for generating circular genome diagrams.
+def _add_circular_input_output_args(parser: argparse.ArgumentParser) -> None:
+    """The record inputs, the circular records table, and the output prefix."""
 
-    Args:
-        args (list of str): Command-line arguments.
-
-    Returns:
-        argparse.Namespace: An object containing the parsed command-line arguments.
-
-    This function defines and parses the command-line arguments required for
-    generating genome diagrams in a circular layout. It includes options for input
-    GenBank files, color customization, output formats, and various Configurator for
-    visualizing GC content, GC skew, and specific genomic features.
-    """
-    parser = argparse.ArgumentParser(
-        description=(
-            "Generate genome diagrams in PNG/PDF/SVG/PS/EPS. "
-            "By default, diagrams for multiple entries are saved separately. "
-            "Use --multi_record_canvas to place multiple records on one grid canvas."
-        )
-    )
     add_input_args(parser)
     parser.add_argument(
         "--records_table",
@@ -397,8 +384,11 @@ def _get_args(
         help='output file prefix (default: accession number of the sequence)',
         type=str)
     _add_overwrite_arg(parser)
-    add_color_args(parser)
-    add_analysis_args(parser)
+
+
+def _add_species_strain_args(parser: argparse.ArgumentParser) -> None:
+    """The species and strain of the center definition."""
+
     parser.add_argument(
         '--species',
         help='Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")',
@@ -407,10 +397,11 @@ def _get_args(
         '--strain',
         help='Strain/isolate name (optional; e.g. "K-12", "Av")',
         type=str)
-    add_feature_args(parser)
-    _add_feature_shape_arg(parser)
-    _add_arrow_geometry_args(parser)
-    _add_block_stroke_args(parser)
+
+
+def _add_circular_stroke_args(parser: argparse.ArgumentParser) -> None:
+    """The axis and line strokes."""
+
     parser.add_argument(
         '--axis_stroke_color',
         help='Axis stroke color (str; default: "gray")',
@@ -427,6 +418,11 @@ def _get_args(
         '--line_stroke_width',
         help='Line stroke width (optional; float; default: 5 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
         type=argparse_float)
+
+
+def _add_circular_title_args(parser: argparse.ArgumentParser) -> None:
+    """The center definition and the plot title."""
+
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; default: 18)',
@@ -450,6 +446,11 @@ def _get_args(
         '--keep_full_definition_with_plot_title',
         help='Keep the full species/strain center label when a circular plot title is shown (default: False).',
         action='store_true')
+
+
+def _add_circular_center_args(parser: argparse.ArgumentParser) -> None:
+    """The display start (``--origin_feature``) and the room the center definition keeps inside the tracks."""
+
     parser.add_argument(
         '--origin_feature',
         metavar='KEY=VALUE',
@@ -484,23 +485,11 @@ def _get_args(
             'the center definition (default: 30). A narrower track, or a typed width, is not narrowed.'
         ),
         type=argparse_float)
-    parser.add_argument(
-        '--label_font_size',
-        help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
-        type=argparse_float)
-    _add_format_arg(parser)
-    _add_figure_size_args(parser)
-    _add_gc_skew_toggle_args(
-        parser,
-        show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
-        show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
-        typed_dests=frozenset({"show_skew"}),  # One circle draws no skew unless asked (``_shown_skew``).
-    )
-    _add_depth_track_source_args(parser, mode="circular")
-    _add_depth_track_tick_args(parser)
-    add_feature_density_args(parser)
-    _add_conservation_input_args(parser)
-    _add_retired_option_args(parser, mode="circular")
+
+
+def _add_conservation_ring_args(parser: argparse.ArgumentParser) -> None:
+    """The similarity rings: the reference side of the BLAST tables, the ring labels, colors, width and gap."""
+
     parser.add_argument(
         '--conservation_reference',
         help='BLAST side containing displayed circular reference coordinates.',
@@ -539,6 +528,11 @@ def _get_args(
         '--conservation_ring_gap',
         help='Similarity ring gap for circular mode (in px; must be > 0).',
         type=argparse_float)
+
+
+def _add_ring_losat_args(parser: argparse.ArgumentParser) -> None:
+    """The LOSAT search that builds the similarity rings: the program, the task, the genetic codes, the runtime and the output folder."""
+
     parser.add_argument(
         '--losat',
         choices=COMPARISON_LOSAT_PROGRAMS,
@@ -552,15 +546,7 @@ def _get_args(
             'Cannot be combined with --conservation_blast (default: no LOSAT search).'
         ),
     )
-    parser.add_argument(
-        '--losatn_task',
-        choices=LOSATN_TASKS,
-        default=None,
-        help=(
-            'LOSATN search task with --losat losatn. A native runtime that does not '
-            'support the task stops before searching (default: megablast).'
-        ),
-    )
+    add_losatn_task_arg(parser)
     parser.add_argument(
         '--losat_gencode',
         metavar='CODE',
@@ -584,29 +570,7 @@ def _get_args(
             f'the NCBI tables {LOSAT_GENETIC_CODE_TEXT} (default: 1).'
         ),
     )
-    runtime_group = parser.add_mutually_exclusive_group()
-    runtime_group.add_argument(
-        '--losat_bin',
-        metavar='PATH',
-        default=None,
-        help='Native LOSAT executable for --losat (default: automatic runtime resolution).',
-    )
-    runtime_group.add_argument(
-        '--ncbi_blast_bin',
-        metavar='PATH',
-        default=None,
-        help=(
-            'NCBI BLAST+ executable of the selected --losat program (blastn or tblastx) '
-            '(default: automatic runtime resolution).'
-        ),
-    )
-    parser.add_argument(
-        '--losat_threads',
-        metavar='N',
-        type=parse_positive_int,
-        default=None,
-        help='Threads passed to each LOSAT or NCBI BLAST+ job (default: runtime default).',
-    )
+    add_losat_runtime_args(parser, blast_programs='blastn or tblastx')
     parser.add_argument(
         '--losat_output_dir',
         metavar='DIR',
@@ -617,23 +581,11 @@ def _get_args(
             '--conservation_table accepts unchanged.'
         ),
     )
-    _add_comparison_filter_args(parser)
-    parser.add_argument(
-        '--depth_color',
-        help='Depth track fill color (optional; default: #4A90E2).',
-        type=str)
-    parser.add_argument(
-        '--depth_width',
-        help='Depth track width for circular mode (in px; must be > 0).',
-        type=argparse_float)
-    _add_depth_axis_args(parser)
-    parser.add_argument(
-        '-l',
-        '--legend',
-        help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
-        type=str,
-        default="right")
-    _add_record_layout_args(parser)
+
+
+def _add_multi_record_canvas_args(parser: argparse.ArgumentParser) -> None:
+    """The grid canvas of several records: sizes, gaps, and placement."""
+
     parser.add_argument(
         '--multi_record_size_mode',
         help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; default: "auto").',
@@ -661,6 +613,11 @@ def _get_args(
         type=_parse_multi_record_position_arg,
         action='append',
         default=[])
+
+
+def _add_circular_track_args(parser: argparse.ArgumentParser) -> None:
+    """The plot title position, the strands, the track preset, and the overlap rule."""
+
     parser.add_argument(
         '--plot_title_position',
         help='Plot title position in circular mode ("none", "top", "bottom"; default: "none").',
@@ -681,6 +638,11 @@ def _get_args(
         '--resolve_overlaps',
         help='Resolve overlapping features by placing them on separate tracks (default: False). Useful for plasmid visualization.',
         action='store_true')
+
+
+def _add_circular_label_mode_args(parser: argparse.ArgumentParser) -> None:
+    """Which labels are drawn and how: ``--labels``, the rendering policy and label style, and the placement."""
+
     parser.add_argument(
         '--labels',
         help='Label placement mode: no argument or "out" (outside), "both" (outside+inside), or "none" (hidden). Default: "none".',
@@ -689,25 +651,7 @@ def _get_args(
         default='none',
         choices=['none', 'out', 'both'],
         type=str)
-    parser.add_argument(
-        '--label_rendering',
-        help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Default: "auto".',
-        choices=['auto', 'embedded_only', 'external_only'],
-        default='auto',
-        type=str)
-    parser.add_argument(
-        '--label_line',
-        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
-        '(a turned label gets none); "none" draws none. '
-        f'Default: "{DEFAULT_LABEL_LINE["circular"]}".',
-        choices=LABEL_LINES,
-        type=str)
-    parser.add_argument(
-        '--label_protection',
-        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
-        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION["circular"]}".',
-        choices=LABEL_PROTECTIONS,
-        type=str)
+    _add_label_rendering_args(parser, mode="circular")
     parser.add_argument(
         '--label_placement',
         help='External circular label placement: "horizontal" or "radial". Default: "horizontal".',
@@ -715,7 +659,9 @@ def _get_args(
         default='horizontal',
         type=str)
 
-    add_label_args(parser)
+
+def _add_label_ellipse_args(parser: argparse.ArgumentParser) -> None:
+    """The offsets of the outer and inner label ellipses."""
 
     parser.add_argument(
         '--outer_label_x_radius_offset',
@@ -733,6 +679,11 @@ def _get_args(
         '--inner_label_y_radius_offset',
         help='Inner label y-radius offset factor (float; default from config)',
         type=argparse_float)
+
+
+def _add_circular_scale_args(parser: argparse.ArgumentParser) -> None:
+    """The scale ticks and their labels, the label spacing, and the feature track width."""
+
     parser.add_argument(
         '--scale_interval',
         help='Manual scale interval for circular mode (a length in bp with an optional unit, for example 5000 or 5kb; must be > 0). Overrides automatic calculation.',
@@ -753,6 +704,11 @@ def _get_args(
         '--feature_width',
         help='Feature track width for circular mode (in px; must be > 0).',
         type=argparse_float)
+
+
+def _add_circular_track_slot_args(parser: argparse.ArgumentParser) -> None:
+    """The custom track slots: an order, slot specs, or a table, and the axis index."""
+
     parser.add_argument(
         '--circular_track_order',
         help='Comma-separated circular slot order. Omitted built-in slot geometry inherits --track_type.',
@@ -772,6 +728,11 @@ def _get_args(
         type=argparse_integer,
         default=None,
         help='Axis boundary index for --circular_track_slot order. Slots before this index render outside; slots at or after it render inside.')
+
+
+def _add_gc_track_size_args(parser: argparse.ArgumentParser) -> None:
+    """The GC content and GC skew track sizes, and the GC content axis."""
+
     parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
@@ -789,17 +750,88 @@ def _get_args(
         '--gc_skew_radius',
         help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
         type=argparse_float)
+
+
+def _circular_parser() -> argparse.ArgumentParser:
+    """The ``gbdraw circular`` parser, with its options in the order ``--help`` lists them."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate genome diagrams in PNG/PDF/SVG/PS/EPS. "
+            "By default, diagrams for multiple entries are saved separately. "
+            "Use --multi_record_canvas to place multiple records on one grid canvas."
+        )
+    )
+    _add_circular_input_output_args(parser)
+    add_color_args(parser)
+    add_analysis_args(parser)
+    _add_species_strain_args(parser)
+    add_feature_args(parser)
+    _add_feature_shape_arg(parser)
+    _add_arrow_geometry_args(parser)
+    _add_block_stroke_args(parser)
+    _add_circular_stroke_args(parser)
+    _add_circular_title_args(parser)
+    _add_circular_center_args(parser)
+    parser.add_argument(
+        '--label_font_size',
+        help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
+        type=argparse_float)
+    _add_format_arg(parser)
+    _add_figure_size_args(parser)
+    _add_gc_skew_toggle_args(
+        parser,
+        show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
+        show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
+        typed_dests=frozenset({"show_skew"}),  # One circle draws no skew unless asked (``_shown_skew``).
+    )
+    _add_depth_track_source_args(parser, mode="circular")
+    _add_depth_track_tick_args(parser)
+    add_feature_density_args(parser)
+    _add_conservation_input_args(parser)
+    _add_retired_option_args(parser, mode="circular")
+    _add_conservation_ring_args(parser)
+    _add_ring_losat_args(parser)
+    _add_comparison_filter_args(parser)
+    _add_depth_color_arg(parser)
+    parser.add_argument(
+        '--depth_width',
+        help='Depth track width for circular mode (in px; must be > 0).',
+        type=argparse_float)
+    _add_depth_axis_args(parser)
+    parser.add_argument(
+        '-l',
+        '--legend',
+        help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
+        type=str,
+        default="right")
+    _add_record_layout_args(parser)
+    _add_multi_record_canvas_args(parser)
+    _add_circular_track_args(parser)
+    _add_circular_label_mode_args(parser)
+    add_label_args(parser)
+    _add_label_ellipse_args(parser)
+    _add_circular_scale_args(parser)
+    _add_circular_track_slot_args(parser)
+    _add_gc_track_size_args(parser)
     _add_legend_size_args(parser)
     _add_font_args(parser)
-
     add_session_args(parser)
+    return parser
 
-    args = parser.parse_args(args)
-    if _allow_legacy_track_transport:
+
+def _validate_circular_args(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, legacy_session: bool
+) -> None:
+    """Refuse option values and combinations the circular command cannot draw, in this order, and normalize
+    ``--scale_interval`` and ``--circular_track_slot`` in place. ``legacy_session``: the replay of a released
+    legacy Session, which reads its stored font sizes and keeps the fallbacks it was drawn with."""
+
+    if legacy_session:
         read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
-    if not _allow_legacy_track_transport:
+    if not legacy_session:
         validate_output_choice_args(args)
     if args.records_table and args.multi_record_position:
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
@@ -810,51 +842,39 @@ def _get_args(
         parser.error("--circular_track_table cannot be combined with --circular_track_slot")
     if args.circular_track_table and args.circular_track_axis_index is not None:
         parser.error("--circular_track_table cannot be combined with --circular_track_axis_index")
-    if args.feature_width is not None and args.feature_width <= 0:
-        parser.error("--feature_width must be > 0")
-    if args.gc_content_width is not None and args.gc_content_width <= 0:
-        parser.error("--gc_content_width must be > 0")
-    if args.gc_content_radius is not None and args.gc_content_radius <= 0:
-        parser.error("--gc_content_radius must be > 0")
-    if (
-        args.gc_content_min_percent is not None
-        and args.gc_content_max_percent is not None
-        and args.gc_content_min_percent > args.gc_content_max_percent
-    ):
-        parser.error("--gc_content_min_percent must be <= --gc_content_max_percent")
-    if args.gc_content_tick_interval is not None and args.gc_content_tick_interval <= 0:
-        parser.error("--gc_content_tick_interval must be > 0")
-    if args.gc_content_large_tick_interval is not None and args.gc_content_large_tick_interval <= 0:
-        parser.error("--gc_content_large_tick_interval must be > 0")
-    if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
-        parser.error("--gc_content_small_tick_interval must be > 0")
-    if args.scale_interval is not None and args.scale_interval <= 0:
-        if not _allow_legacy_track_transport:
-            parser.error("--scale_interval must be > 0")
-        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
-    if args.gc_skew_width is not None and args.gc_skew_width <= 0:
-        parser.error("--gc_skew_width must be > 0")
-    if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
-        parser.error("--gc_skew_radius must be > 0")
-    if args.depth_width is not None and args.depth_width <= 0:
-        parser.error("--depth_width must be > 0")
-    if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
-        parser.error("--conservation_ring_width must be > 0")
-    if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
-        parser.error("--conservation_ring_gap must be > 0")
+    require_positive_args(parser, args, "feature_width", "gc_content_width", "gc_content_radius")
+    validate_gc_content_axis_args(parser, args)
+    validate_scale_interval_arg(parser, args, legacy_session=legacy_session)
+    require_positive_args(
+        parser,
+        args,
+        "gc_skew_width",
+        "gc_skew_radius",
+        "depth_width",
+        "conservation_ring_width",
+        "conservation_ring_gap",
+    )
     if args.center_reserved_radius is not None and args.center_reserved_radius < 0:
         parser.error("--center_reserved_radius must be a finite number >= 0")
     if args.track_narrowing_min_px is not None and args.track_narrowing_min_px < 0:
         parser.error("--track_narrowing_min_px must be a finite number >= 0")
-    try:
-        ComparisonThresholds(
-            evalue=args.evalue,
-            bitscore=args.bitscore,
-            identity=args.identity,
-            alignment_length=args.alignment_length,
-        )
-    except ValidationError as exc:
-        parser.error(str(exc))
+    validate_comparison_threshold_args(parser, args)
+    _validate_ring_sources(parser, args)
+    validate_depth_axis_args(parser, args)
+    require_positive_args(parser, args, "circular_label_spacing")
+    _normalize_circular_track_slots(parser, args, legacy_session=legacy_session)
+    if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
+        parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
+    if args.multi_record_column_gap_ratio < 0:
+        parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
+    if args.multi_record_row_gap_ratio < 0:
+        parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
+
+
+def _validate_ring_sources(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse a ring LOSAT program or output folder that cannot run, and ring labels, colors or genomes without
+    the ring sources they align with."""
+
     if args.losat == "losatp":
         raise ValidationError(
             "Circular similarity rings run --losat losatn or --losat tlosatx; "
@@ -885,32 +905,14 @@ def _get_args(
                 if args.conservation_genome
                 else "--conservation_sequence must provide one source per --conservation_blast"
             )
-    if args.depth_min is not None and args.depth_min < 0:
-        parser.error("--depth_min must be >= 0")
-    if args.depth_max is not None and args.depth_max < 0:
-        parser.error("--depth_max must be >= 0")
-    if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
-        parser.error("--depth_min must be <= --depth_max")
-    if args.depth_large_tick_interval is not None and args.depth_large_tick_interval <= 0:
-        parser.error("--depth_large_tick_interval must be > 0")
-    if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
-        parser.error("--depth_small_tick_interval must be > 0")
-    for option_name in (
-        "depth_track_large_tick_interval",
-        "depth_track_small_tick_interval",
-        "depth_track_tick_font_size",
-    ):
-        for option_value in getattr(args, option_name) or []:
-            option_text = str(option_value).strip().lower()
-            if option_text in {"", "auto", "none", "null", "-"}:
-                continue
-            numeric_option_value = parse_ascii_finite_float(str(option_value))
-            if numeric_option_value is None:
-                parser.error(f"--{option_name} values must be numbers or auto")
-            if numeric_option_value <= 0:
-                parser.error(f"--{option_name} values must be > 0")
-    if args.circular_label_spacing is not None and args.circular_label_spacing <= 0:
-        parser.error("--circular_label_spacing must be > 0")
+
+
+def _normalize_circular_track_slots(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, legacy_session: bool
+) -> None:
+    """Refuse a track order with slot specs, or an axis index without either; parse ``--circular_track_slot``
+    into slots in place, and check the axis index against the slots."""
+
     if args.circular_track_order and args.circular_track_slot:
         parser.error("--circular_track_order cannot be combined with --circular_track_slot")
     if args.circular_track_axis_index is not None and not (args.circular_track_order or args.circular_track_slot):
@@ -925,7 +927,7 @@ def _get_args(
         try:
             circular_track_slots_for_validation = parse_circular_track_slots(
                 args.circular_track_slot,
-                _allow_legacy_transport=_allow_legacy_track_transport,
+                _allow_legacy_transport=legacy_session,
             )
         except Exception as exc:
             parser.error(str(exc))
@@ -938,16 +940,33 @@ def _get_args(
             )
         except Exception as exc:
             parser.error(str(exc))
-    if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
-        parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
-    if args.multi_record_column_gap_ratio < 0:
-        parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
-    if args.multi_record_row_gap_ratio < 0:
-        parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
-    return args
 
 
+def _get_args(
+    args: Sequence[str] | None,
+    *,
+    _allow_legacy_track_transport: bool = False,
+) -> argparse.Namespace:
+    """
+    Parses command-line arguments for generating circular genome diagrams.
 
+    Args:
+        args (list of str): Command-line arguments.
+
+    Returns:
+        argparse.Namespace: An object containing the parsed command-line arguments.
+
+    This function defines and parses the command-line arguments required for
+    generating genome diagrams in a circular layout. It includes options for input
+    GenBank files, color customization, output formats, and various Configurator for
+    visualizing GC content, GC skew, and specific genomic features.
+    """
+    parser = _circular_parser()
+    namespace = parser.parse_args(args)
+    _validate_circular_args(
+        parser, namespace, legacy_session=_allow_legacy_track_transport
+    )
+    return namespace
 
 
 def replay_legacy_session(

@@ -11,7 +11,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal, Optional, Sequence, cast
 from .config.toml import load_config_toml
-from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
@@ -38,7 +37,6 @@ from .api.options import (
     LinearWrapDefaults,
     LinearWrapTrackOrder,
     LINEAR_DEFAULT_PLOT_TITLE_POSITION,
-    LOSATN_TASKS,
     LosatRuntimeOptions,
     LosatSearchOptions,
 )
@@ -76,7 +74,6 @@ from .config.models.canvas import LINEAR_WRAP_LENGTH_PATH, linear_axis_ruler_app
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import (
-    ComparisonThresholds,
     LINEAR_MODE_PROFILE,
     LINEAR_WRAP_DEFAULT_TRACK_LAYOUT,
     effective_linear_track_leaves,
@@ -96,11 +93,13 @@ from .cli_utils.common import (
     depth_track_inputs_from_args,
     _add_depth_track_source_args,
     feature_density_tracks_from_args,
-    COLOR_TABLE_HELP,
     add_identity_scale_arg,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
+    _add_color_table_arg,
+    _add_default_colors_arg,
     _add_depth_axis_args,
+    _add_depth_color_arg,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_figure_size_args,
@@ -111,16 +110,23 @@ from .cli_utils.common import (
     _add_gc_content_axis_args,
     _add_font_args,
     cli_font_family,
+    _add_label_rendering_args,
     _add_legend_size_args,
-    _add_window_step_args,
+    _add_palette_arg,
+    add_analysis_args,
     add_feature_args,
     add_input_args,
     apply_record_display_cli_options,
     add_label_args,
+    require_positive_args,
     setup_logging,
+    validate_comparison_threshold_args,
+    validate_depth_axis_args,
+    validate_gc_content_axis_args,
     validate_input_args,
     validate_label_args,
     validate_output_choice_args,
+    validate_scale_interval_arg,
     figure_size_overrides,
     legend_row_overrides,
     handle_output_formats,
@@ -151,6 +157,8 @@ from .session import (
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
 from .cli_utils.losat_output import (
+    add_losat_runtime_args,
+    add_losatn_task_arg,
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
 )
@@ -297,26 +305,9 @@ def _parse_linear_multi_record_position(value: str) -> str:
     return str(value).strip()
 
 
-def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
-    """
-    Parses command-line arguments for generating linear genome diagrams.
+def _add_linear_input_args(parser: argparse.ArgumentParser) -> None:
+    """The record inputs, the linear records table, and the rows of the records."""
 
-    This internal function defines and parses command-line arguments using argparse.
-    It sets up the necessary parameters required for the linear genome diagram creation,
-    including input files, output configurations, and various visualization options.
-
-    Args:
-        args (list of str): The command-line arguments passed to the script.
-
-    Returns:
-        argparse.Namespace: An object containing the parsed command-line arguments.
-
-    The function supports a variety of arguments for input files (GenBank and BLAST),
-    output Configurator (file format and naming), and visualization preferences (color
-    tables, window size, and feature selection).
-    """
-    parser = argparse.ArgumentParser(
-        description='Generate  plot in PNG/PDF/SVG/PS/EPS.')
     add_input_args(parser)
     parser.add_argument(
         "--records_table",
@@ -338,6 +329,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         default=24.0,
         help="Gap in pixels between records in the same Linear row (default: 24).",
     )
+
+
+def _add_comparison_input_args(parser: argparse.ArgumentParser) -> None:
+    """The comparisons of the records: a comparisons table or BLAST files, and the orientation they set."""
+
     parser.add_argument(
         "--comparisons_table",
         metavar="TSV",
@@ -361,6 +357,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             '--reverse_complement 1 keeps its record reversed (default: off).'
         ),
     )
+
+
+def _add_linear_losat_args(parser: argparse.ArgumentParser) -> None:
+    """The LOSAT comparison between the records: the program and LOSATP display, the task, the genetic codes, the runtime, the protein hit caps, the output folder, and the Similarity group alignment."""
+
     parser.add_argument(
         '--losat',
         choices=COMPARISON_LOSAT_PROGRAMS,
@@ -384,15 +385,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             'rows of --comparisons_table list) (default: pairwise with --comparisons_table, else similarity_groups).'
         ),
     )
-    parser.add_argument(
-        '--losatn_task',
-        choices=LOSATN_TASKS,
-        default=None,
-        help=(
-            'LOSATN search task with --losat losatn. A native runtime that does not '
-            'support the task stops before searching (default: megablast).'
-        ),
-    )
+    add_losatn_task_arg(parser)
     parser.add_argument(
         '--losat_gencode',
         metavar='CODE',
@@ -406,30 +399,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             '(default: the runtime default, 1).'
         ),
     )
-    runtime_group = parser.add_mutually_exclusive_group()
-    runtime_group.add_argument(
-        '--losat_bin',
-        metavar='PATH',
-        default=None,
-        help='Native LOSAT executable for --losat (default: automatic runtime resolution).',
-    )
-    runtime_group.add_argument(
-        '--ncbi_blast_bin',
-        metavar='PATH',
-        default=None,
-        help=(
-            'NCBI BLAST+ executable of the selected --losat program (blastn, tblastx, '
-            'or blastp) '
-            '(default: automatic runtime resolution).'
-        ),
-    )
-    parser.add_argument(
-        '--losat_threads',
-        metavar='N',
-        type=_parse_positive_int,
-        default=None,
-        help='Threads passed to each LOSAT or NCBI BLAST+ job (default: runtime default).',
-    )
+    add_losat_runtime_args(parser, blast_programs='blastn, tblastx, or blastp')
     parser.add_argument(
         '--losatp_max_hits',
         metavar='N',
@@ -479,7 +449,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             '--losatp_mode similarity_groups.'
         ),
     )
-    _add_retired_option_args(parser, mode="linear")
+
+
+def _add_collinear_args(parser: argparse.ArgumentParser) -> None:
+    """The Collinear blocks of LOSATP: units, search scope, Similarity groups, anchors, merge rules, and colors."""
+
     parser.add_argument(
         '--collinear_unit_mode',
         dest='collinear_unit_mode',
@@ -589,49 +563,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=_parse_collinear_color_mode,
         choices=["average_identity", "orientation", "orientation_identity"],
         default=_LINEAR_OPTION_DEFAULTS.collinearity_color_mode)
-    parser.add_argument(
-        '-t',
-        '--table',
-        help=COLOR_TABLE_HELP,
-        type=str,
-        default="")
-    parser.add_argument(
-        "-p", "--palette",
-        metavar="PALETTE",
-        default="default",
-        help="Palette name (default: default)",
-        type=str
-    )
-    parser.add_argument(
-        '-d',
-        '--default_colors',
-        help='TSV file that overrides the color palette (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '-o',
-        '--output',
-        help='output file prefix (default: out)',
-        type=str,
-        default="out")
-    _add_overwrite_arg(parser)
-    parser.add_argument(
-        '-n',
-        '--nt',
-        help='dinucleotide skew: two letters from A, C, G, T, and U; case-insensitive, U counts as T (default: GC).',
-        type=str,
-        default="GC")
-    _add_window_step_args(parser)
-    parser.add_argument(
-        '--separate_strands',
-        help='separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand.',
-        action='store_true')
-    _add_gc_skew_toggle_args(
-        parser,
-        show_gc_default=LINEAR_MODE_PROFILE.show_gc,
-        show_skew_default=LINEAR_MODE_PROFILE.show_skew,
-    )
-    _add_gc_content_axis_args(parser)
+
+
+def _add_linear_depth_args(parser: argparse.ArgumentParser) -> None:
+    """The depth tracks: sources, heights, ticks, feature density tracks, color, and the depth axis."""
+
     _add_depth_track_source_args(parser, mode="linear")
     parser.add_argument(
         '--depth_track_height',
@@ -641,15 +577,17 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         nargs='+')
     _add_depth_track_tick_args(parser)
     add_feature_density_args(parser)
-    parser.add_argument(
-        '--depth_color',
-        help='Depth track fill color (optional; default: #4A90E2).',
-        type=str)
+    _add_depth_color_arg(parser)
     parser.add_argument(
         '--depth_height',
         help='Depth track height for linear mode (in px; must be > 0).',
         type=argparse_float)
     _add_depth_axis_args(parser)
+
+
+def _add_record_alignment_args(parser: argparse.ArgumentParser) -> None:
+    """How the records line up: centered, at a feature, and where their definitions sit."""
+
     parser.add_argument(
         '--align_center',
         help='Align genomes to the center (default: False). ',
@@ -681,6 +619,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             '(default: False).'
         ),
         action='store_true')
+
+
+def _add_pairwise_match_args(parser: argparse.ArgumentParser) -> None:
+    """The pairwise matches: the thresholds, the identity scale, and the link style."""
+
     parser.add_argument(
         '--evalue',
         help='evalue threshold (default=1e-2)',
@@ -712,10 +655,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=_parse_pairwise_match_style,
         choices=["ribbon", "curve"],
         default="ribbon")
-    add_feature_args(parser)
-    _add_feature_shape_arg(parser)
-    _add_arrow_geometry_args(parser)
-    _add_block_stroke_args(parser)
+
+
+def _add_linear_stroke_args(parser: argparse.ArgumentParser) -> None:
+    """The axis and line strokes."""
+
     parser.add_argument(
         '--axis_stroke_color',
         help='Axis stroke color (str; default: auto: "lightgray", or "dimgray" with --ruler_on_axis)',
@@ -733,6 +677,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         '--line_stroke_width',
         help='Line stroke width (optional; float; default: 5 pt for genomes < 100 kb, 1 pt for genomes >= 100 kb)',
         type=argparse_float)
+
+
+def _add_linear_definition_args(parser: argparse.ArgumentParser) -> None:
+    """The record definitions and the shared plot title."""
+
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; float; default: 24 pt for genomes < 100 kb, 10 pt for genomes >= 100 kb)',
@@ -794,6 +743,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         '--hide_length',
         help='Hide length/coordinate labels in linear record-label blocks (default: False).',
         action='store_true')
+
+
+def _add_linear_label_style_args(parser: argparse.ArgumentParser) -> None:
+    """The feature label size, placement, rendering policy and style, rotation, and spacing."""
+
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 24 pt for genomes < 100 kb, 5 pt for genomes >= 100 kb)',
@@ -804,25 +758,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=_parse_linear_label_placement,
         metavar="{auto,above_feature}",
     )
-    parser.add_argument(
-        '--label_rendering',
-        help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Cannot be combined with --label_placement above_feature except as "auto". Default: "auto".',
-        choices=['auto', 'embedded_only', 'external_only'],
-        default='auto',
-        type=str)
-    parser.add_argument(
-        '--label_line',
-        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
-        '(a turned label gets none); "none" draws none. '
-        f'Default: "{DEFAULT_LABEL_LINE["linear"]}".',
-        choices=LABEL_LINES,
-        type=str)
-    parser.add_argument(
-        '--label_protection',
-        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
-        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION["linear"]}".',
-        choices=LABEL_PROTECTIONS,
-        type=str)
+    _add_label_rendering_args(parser, mode="linear")
     parser.add_argument(
         '--label_rotation',
         help='Linear label rotation in degrees (optional; float; default: 0). In above_feature mode, rotated labels start from the feature midpoint.',
@@ -833,6 +769,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Linear label-to-label vertical spacing in px (optional; float; must be > 0).',
         type=argparse_float,
     )
+
+
+def _add_linear_track_layout_args(parser: argparse.ArgumentParser) -> None:
+    """The track layout: above, middle or below the axis, row wrapping, custom track slots, and the ruler on the axis."""
+
     parser.add_argument(
         '--track_layout',
         help='Linear track layout mode ("above", "middle", or "below"; default: "middle", or "above" when --wrap_length cuts a record).',
@@ -887,8 +828,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         ),
         action='store_true',
     )
-    _add_format_arg(parser)
-    _add_figure_size_args(parser)
+
+
+def _add_linear_legend_label_args(parser: argparse.ArgumentParser) -> None:
+    """The legend position, which records show labels, overlap resolution, and the label lists and tables."""
+
     parser.add_argument(
         '-l',
         '--legend',
@@ -909,18 +853,28 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Resolve overlaps (experimental; default: False). ',
         action='store_true')
     add_label_args(parser)
+
+
+def _add_linear_track_height_args(parser: argparse.ArgumentParser) -> None:
+    """The feature, GC, and comparison heights."""
+
     parser.add_argument(
         '--feature_height',
         help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes < 100 kb, 20 for genomes >= 100 kb)',
-        type=argparse_float),
+        type=argparse_float)
     parser.add_argument(
         '--gc_height',
         help='GC content/skew vertical width (optional; float; default: 20 (pixels, 96 dpi))',
-        type=argparse_float),
+        type=argparse_float)
     parser.add_argument(
         '--comparison_height',
         help='Comparison block height (optional; float; optional; default: 60 (pixels, 96 dpi))',
         type=argparse_float)
+
+
+def _add_linear_scale_args(parser: argparse.ArgumentParser) -> None:
+    """The length scale: bar or ruler, its strokes, labels, and interval."""
+
     parser.add_argument(
         '--hide_scale',
         help='Hide the coordinate scale while retaining each record axis (default: False).',
@@ -954,8 +908,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         '--scale_interval',
         help='Manual tick interval for "ruler" scale style (a length in bp with an optional unit, for example 5000 or 5kb; must be > 0). Overrides automatic calculation; optional',
         type=argparse_scale_interval)
-    _add_legend_size_args(parser)
-    _add_font_args(parser)
+
+
+def _add_record_selection_args(parser: argparse.ArgumentParser) -> None:
+    """Length normalization, and the regions, records, and orientation drawn of each input."""
+
     parser.add_argument(
         '--normalize_length',
         help='Normalize record length (experimental; default: False). ',
@@ -988,16 +945,97 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=str,
         action='append',
         default=[])
-    add_session_args(parser)
 
-    args_list = [str(token) for token in (args or [])]
-    args = parser.parse_args(args)
-    if _legacy_session:
+
+def _linear_parser() -> argparse.ArgumentParser:
+    """The ``gbdraw linear`` parser, with its options in the order ``--help`` lists them."""
+
+    parser = argparse.ArgumentParser(
+        description='Generate  plot in PNG/PDF/SVG/PS/EPS.')
+    _add_linear_input_args(parser)
+    _add_comparison_input_args(parser)
+    _add_linear_losat_args(parser)
+    _add_retired_option_args(parser, mode="linear")
+    _add_collinear_args(parser)
+    _add_color_table_arg(parser)
+    _add_palette_arg(parser)
+    _add_default_colors_arg(parser)
+    parser.add_argument(
+        '-o',
+        '--output',
+        help='output file prefix (default: out)',
+        type=str,
+        default="out")
+    _add_overwrite_arg(parser)
+    add_analysis_args(parser, nt_subject="dinucleotide skew")
+    parser.add_argument(
+        '--separate_strands',
+        help='separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand.',
+        action='store_true')
+    _add_gc_skew_toggle_args(
+        parser,
+        show_gc_default=LINEAR_MODE_PROFILE.show_gc,
+        show_skew_default=LINEAR_MODE_PROFILE.show_skew,
+    )
+    _add_gc_content_axis_args(parser)
+    _add_linear_depth_args(parser)
+    _add_record_alignment_args(parser)
+    _add_pairwise_match_args(parser)
+    add_feature_args(parser)
+    _add_feature_shape_arg(parser)
+    _add_arrow_geometry_args(parser)
+    _add_block_stroke_args(parser)
+    _add_linear_stroke_args(parser)
+    _add_linear_definition_args(parser)
+    _add_linear_label_style_args(parser)
+    _add_linear_track_layout_args(parser)
+    _add_format_arg(parser)
+    _add_figure_size_args(parser)
+    _add_linear_legend_label_args(parser)
+    _add_linear_track_height_args(parser)
+    _add_linear_scale_args(parser)
+    _add_legend_size_args(parser)
+    _add_font_args(parser)
+    _add_record_selection_args(parser)
+    add_session_args(parser)
+    return parser
+
+
+def _validate_linear_args(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    argv_tokens: Sequence[str],
+    *,
+    legacy_session: bool,
+) -> None:
+    """Refuse option values and combinations the linear command cannot draw, in this order, and set the values
+    that follow from them (the LOSATP display, the effective track layout and scale style, the track slots).
+    ``argv_tokens``: the arguments as typed; ``legacy_session``: the replay of a released legacy Session, which
+    reads its stored font sizes and keeps the fallbacks it was drawn with."""
+
+    if legacy_session:
         read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
-    if not _legacy_session:
+    if not legacy_session:
         validate_output_choice_args(args)
+    _validate_linear_inputs(parser, args)
+    _validate_linear_losat(parser, args, argv_tokens)
+    require_positive_args(parser, args, "depth_height")
+    validate_depth_axis_args(parser, args, track_heights=True)
+    validate_gc_content_axis_args(parser, args)
+    validate_scale_interval_arg(parser, args, legacy_session=legacy_session)
+    _resolve_linear_track_slots(parser, args)
+    if args.label_placement == "above_feature" and args.label_rendering != "auto":
+        parser.error("--label_rendering embedded_only|external_only cannot be used with --label_placement above_feature")
+    _validate_collinear_args(parser, args)
+    validate_comparison_threshold_args(parser, args)
+
+
+def _validate_linear_inputs(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse per-record options beside a records table, and comparison inputs, record gaps, and comparison
+    heights that cannot be drawn."""
+
     if args.records_table:
         for option_name in (
             "record_label",
@@ -1022,6 +1060,13 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         parser.error("--linear_record_gap must be a finite non-negative number")
     if args.comparison_height is not None and args.comparison_height <= 0:
         parser.error("--comparison_height must be a positive finite number")
+
+
+def _validate_linear_losat(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, argv_tokens: Sequence[str]
+) -> None:
+    """Refuse LOSAT options that do not fit the program or each other, and set the default LOSATP display."""
+
     if args.losat and args.blast:
         parser.error("--losat cannot be used with -b/--blast")
     if args.losatp_mode is not None and not args.losat:
@@ -1030,7 +1075,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         collinear_flags = sorted(
             {
                 str(token).split("=", 1)[0]
-                for token in args_list
+                for token in argv_tokens
                 if str(token).startswith("--collinear_")
             }
         )
@@ -1058,49 +1103,26 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             "--similarity_alignment_feature requires --losat losatp with "
             "--losatp_mode similarity_groups"
         )
-    if args.depth_height is not None and args.depth_height <= 0:
-        parser.error("--depth_height must be > 0")
-    if args.depth_min is not None and args.depth_min < 0:
-        parser.error("--depth_min must be >= 0")
-    if args.depth_max is not None and args.depth_max < 0:
-        parser.error("--depth_max must be >= 0")
-    if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
-        parser.error("--depth_min must be <= --depth_max")
-    if args.depth_large_tick_interval is not None and args.depth_large_tick_interval <= 0:
-        parser.error("--depth_large_tick_interval must be > 0")
-    if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
-        parser.error("--depth_small_tick_interval must be > 0")
-    for option_name in (
-        "depth_track_height",
-        "depth_track_large_tick_interval",
-        "depth_track_small_tick_interval",
-        "depth_track_tick_font_size",
-    ):
-        for option_value in getattr(args, option_name) or []:
-            option_text = str(option_value).strip().lower()
-            if option_text in {"", "auto", "none", "null", "-"}:
-                continue
-            numeric_option_value = parse_ascii_finite_float(str(option_value))
-            if numeric_option_value is None:
-                parser.error(f"--{option_name} values must be numbers or auto")
-            if numeric_option_value <= 0:
-                parser.error(f"--{option_name} values must be > 0")
-    if (
-        args.gc_content_min_percent is not None
-        and args.gc_content_max_percent is not None
-        and args.gc_content_min_percent > args.gc_content_max_percent
-    ):
-        parser.error("--gc_content_min_percent must be <= --gc_content_max_percent")
-    if args.gc_content_tick_interval is not None and args.gc_content_tick_interval <= 0:
-        parser.error("--gc_content_tick_interval must be > 0")
-    if args.gc_content_large_tick_interval is not None and args.gc_content_large_tick_interval <= 0:
-        parser.error("--gc_content_large_tick_interval must be > 0")
-    if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
-        parser.error("--gc_content_small_tick_interval must be > 0")
-    if args.scale_interval is not None and args.scale_interval <= 0:
-        if not _legacy_session:
-            parser.error("--scale_interval must be > 0")
-        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
+
+
+def _linear_track_slots_from_order(args: argparse.Namespace, track_layout: str) -> list[LinearTrackSlot]:
+    """The track slots of ``--linear_track_order`` in one track layout."""
+
+    return linear_track_slots_from_order(
+        args.linear_track_order,
+        show_depth=bool(args.depth_track),
+        depth_track_count=max(1, len(args.depth_track or [])),
+        show_gc=bool(args.show_gc),
+        show_skew=bool(args.show_skew),
+        dinucleotide=str(args.nt or "GC").upper(),
+        track_layout=track_layout,
+    )
+
+
+def _resolve_linear_track_slots(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Set the effective track layout and scale style, and the track slots of ``--linear_track_order`` or
+    ``--linear_track_slot`` (or, when the record lengths decide the layout, both orders for the planner)."""
+
     args.effective_track_layout, args.effective_scale_style = effective_linear_track_leaves(
         {
             path: value
@@ -1116,28 +1138,17 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):
         parser.error("--linear_track_axis_index requires --linear_track_order or --linear_track_slot")
     try:
-        def track_slots_from_order(track_layout: str) -> list[LinearTrackSlot]:
-            return linear_track_slots_from_order(
-                args.linear_track_order,
-                show_depth=bool(args.depth_track),
-                depth_track_count=max(1, len(args.depth_track or [])),
-                show_gc=bool(args.show_gc),
-                show_skew=bool(args.show_skew),
-                dinucleotide=str(args.nt or "GC").upper(),
-                track_layout=track_layout,
-            )
-
         linear_track_slot_specs = None
         args.wrap_track_order = None
         if args.linear_track_order and args.wrap_length is not None and args.track_layout is None:
             # The order follows the layout, which the record lengths decide: the planner chooses and checks the slots.
             args.wrap_track_order = LinearWrapTrackOrder(
-                track_slots_from_order(LINEAR_WRAP_DEFAULT_TRACK_LAYOUT),
-                track_slots_from_order(args.effective_track_layout),
+                _linear_track_slots_from_order(args, LINEAR_WRAP_DEFAULT_TRACK_LAYOUT),
+                _linear_track_slots_from_order(args, args.effective_track_layout),
                 args.linear_track_axis_index,
             )
         elif args.linear_track_order:
-            linear_track_slot_specs = track_slots_from_order(args.effective_track_layout)
+            linear_track_slot_specs = _linear_track_slots_from_order(args, args.effective_track_layout)
         elif args.linear_track_slot:
             linear_track_slot_specs = parse_linear_track_slots(args.linear_track_slot)
         if linear_track_slot_specs is not None and args.linear_track_axis_index is not None:
@@ -1145,8 +1156,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         args.linear_track_slot_specs = linear_track_slot_specs
     except Exception as exc:
         parser.error(str(exc))
-    if args.label_placement == "above_feature" and args.label_rendering != "auto":
-        parser.error("--label_rendering embedded_only|external_only cannot be used with --label_placement above_feature")
+
+
+def _validate_collinear_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse Collinear block counts out of range."""
+
     if args.collinear_min_anchors <= 0:
         parser.error("--collinear_min_anchors must be > 0")
     if args.collinear_max_unit_gap < 0:
@@ -1157,16 +1171,31 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         parser.error("--collinear_max_conflicts_in_merge_gap must be >= 0")
     if args.collinear_max_paralog_links_per_orthogroup <= 0:
         parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
-    try:
-        ComparisonThresholds(
-            evalue=args.evalue,
-            bitscore=args.bitscore,
-            identity=args.identity,
-            alignment_length=args.alignment_length,
-        )
-    except ValidationError as exc:
-        parser.error(str(exc))
-    return args
+
+
+def _get_args(args: Sequence[str] | None, *, _legacy_session: bool = False) -> argparse.Namespace:
+    """
+    Parses command-line arguments for generating linear genome diagrams.
+
+    This internal function defines and parses command-line arguments using argparse.
+    It sets up the necessary parameters required for the linear genome diagram creation,
+    including input files, output configurations, and various visualization options.
+
+    Args:
+        args (list of str): The command-line arguments passed to the script.
+
+    Returns:
+        argparse.Namespace: An object containing the parsed command-line arguments.
+
+    The function supports a variety of arguments for input files (GenBank and BLAST),
+    output Configurator (file format and naming), and visualization preferences (color
+    tables, window size, and feature selection).
+    """
+    parser = _linear_parser()
+    args_list = [str(token) for token in (args or [])]
+    namespace = parser.parse_args(args)
+    _validate_linear_args(parser, namespace, args_list, legacy_session=_legacy_session)
+    return namespace
 
 
 def replay_legacy_session(
