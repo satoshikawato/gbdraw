@@ -2,6 +2,8 @@
 
 Updated: <date time, timezone>  ·  Session: <session name>
 
+次の一手: <one Japanese sentence: what the next session does first; keep it current at each handoff>
+
 ## Goal and done criteria
 
 - Goal:

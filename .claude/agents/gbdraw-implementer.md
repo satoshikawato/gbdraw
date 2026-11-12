@@ -42,6 +42,10 @@ You implement exactly the step in your brief, in a worktree created with the
 - **Decisions.** Do not ask the Owner. Return open decisions to the caller with
   your recommendation. Never post an approval, and never merge a PR that
   expands authority.
+- **CI is not yours to watch.** Your job ends when the PR is open (or updated)
+  and you have reported. Do not wait for CI. The orchestrator hands re-pushes
+  and CI fixes whose log names the cause to `gbdraw-mechanic`, and resumes you
+  only for a fix that bears on the design.
 - **Context.** When the step is done, or your context passes about 300k
   tokens, write a step handoff (what is done, branch and head SHA, PR, what
   remains) to the path in the brief and finish.

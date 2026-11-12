@@ -26,6 +26,9 @@ You do one mechanical task from your brief.
 - Run long commands through `.claude/scripts/run_quiet.py` and quote only the
   lines that matter.
 - Push each verified commit at once.
+- You take the work an implementer leaves after it opens a PR: rebases,
+  re-pushes, and CI fixes whose log names the cause. A fix that bears on the
+  design goes back to the caller, who resumes the implementer.
 
 Return a short report the caller can act on without opening your logs: what you did, branch and head SHA, the commands you
 ran with their results, and anything you stopped on.
