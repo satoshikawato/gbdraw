@@ -134,7 +134,7 @@ export const createShownDrawingMembers = ({ state, linearComparisonGlobalAction,
   const defaultColorGroups = computed(() => {
     const drawing = state.activeDrawing();
     /** @type {Record<string, string>} */
-    const colors = drawing.currentColors.value || {};
+    const colors = drawing.currentColors.value;
     const keys = Object.keys(colors);
     const drawn = new Set(state.extractedFeatures.value
       .map((/** @type {{ type?: string }} */ feature) => String(feature?.type || '')));

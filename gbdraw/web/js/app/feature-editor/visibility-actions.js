@@ -248,11 +248,7 @@ export const createFeatureVisibilityActions = ({
 
   // The visibility table holds rules only; per-feature edits are identity rows.
   /** @param {DrawingState} drawing */
-  const visibilityRuleRows = (drawing) => (
-    Array.isArray(drawing.featureVisibilityRules?.value)
-      ? drawing.featureVisibilityRules.value
-      : drawing.featureVisibilityManualRules.map((rule) => normalizeFeatureVisibilityRule(rule))
-  );
+  const visibilityRuleRows = (drawing) => drawing.featureVisibilityRules.value;
 
   /** @param {VisibilityTarget | null | undefined} left @param {VisibilityTarget | null | undefined} right */
   const sameFeature = (left, right) => {

@@ -74,7 +74,7 @@ export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeL
     const drawing = state.activeDrawing();
     if (
       mode.value !== 'linear' ||
-      drawing.linearComparisonResolution.value?.hasComparisonIntent !== true
+      drawing.linearComparisonResolution.value.hasComparisonIntent !== true
     ) return '';
     return classifyOptionalPositiveNumber(drawing.adv.comparison_height).status === 'invalid'
       // A diagnostic error object is truthy, so it always normalizes to a model.

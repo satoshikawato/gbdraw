@@ -143,7 +143,7 @@ export const createLosatSettings = ({ state, ...unitPlanPorts }) => {
 
   // `state.js` always provides the computed plan.
   /** @param {LosatSettingsDrawing} drawing */
-  const readResolution = (drawing) => drawing.linearComparisonResolution.value || {};
+  const readResolution = (drawing) => drawing.linearComparisonResolution.value;
 
   const losatHardwareThreads = ref(getLosatHardwareThreads());
   onMounted(() => {

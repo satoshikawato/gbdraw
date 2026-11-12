@@ -20,14 +20,14 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   const applyLegendEntryOrder = (drawing, ordered) => {
     const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    const entries = drawing.legendEntries.value || [];
+    const entries = drawing.legendEntries.value;
     if (ordered.every((entry, index) => entry === entries[index])) return;
     replaceLegendRows(drawing.slices.paint, ordered);
     showLegendStructure();
   };
 
   /** @param {DrawingState} drawing @returns {LegendRow[]} */
-  const listedRows = (drawing) => (drawing.legendEntries.value || []).filter((entry) => entry.caption);
+  const listedRows = (drawing) => drawing.legendEntries.value.filter((entry) => entry.caption);
 
   // Moves the row at `from` to `to` (the Legend panel's drag handle and the
   // handle's arrow keys).

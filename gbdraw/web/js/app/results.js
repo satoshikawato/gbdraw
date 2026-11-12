@@ -71,7 +71,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     return normalizePaletteColors(cloneColors(allPalettes[paletteName] || {}));
   };
   /** @param {ResultsManagerDrawing} drawing */
-  const paletteNameOf = (drawing) => String(drawing.selectedPalette.value || '').trim() || 'default';
+  const paletteNameOf = (drawing) => drawing.selectedPalette.value.trim() || 'default';
   // D-15: a user default color is a value that differs from the selected
   // palette's color for its key, by the comparator of the `-d` table; Auto
   // (empty) is none.
@@ -89,7 +89,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @returns {string | null}
    */
   const readUserDefaultColor = (drawing, key) => (
-    userDefaultColorRows(drawing, { [key]: drawing.currentColors.value?.[key] })[0]?.[1] ?? null
+    userDefaultColorRows(drawing, { [key]: drawing.currentColors.value[key] })[0]?.[1] ?? null
   );
   /**
    * @param {ResultsManagerDrawing} drawing
@@ -106,7 +106,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {Record<string, string>} [colors]
    */
   const setPendingPaletteState = (drawing, paletteName, colors = drawing.currentColors.value) => {
-    queuePalette(drawing.slices.palette, String(paletteName || drawing.selectedPalette.value || ''), colors);
+    queuePalette(drawing.slices.palette, String(paletteName || drawing.selectedPalette.value), colors);
   };
   /** @param {ResultsManagerDrawing} drawing */
   const clearPendingPaletteDraft = (drawing) => clearQueuedPalette(drawing.slices.palette);
@@ -125,7 +125,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     if (!enabled) return;
     const shown = state.activeDrawing();
     state.drawingList().forEach((drawing) => {
-      if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
+      if (drawing.pendingPaletteName.value.trim() === '') return;
       if (drawing === shown) {
         applyPaletteDraftToPreview();
         return;
@@ -144,7 +144,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
       return;
     }
 
-    if (String(drawing.pendingPaletteName.value || '').trim() !== '') {
+    if (drawing.pendingPaletteName.value.trim() !== '') {
       setPendingPaletteState(drawing, drawing.selectedPalette.value, drawing.currentColors.value);
       return;
     }
@@ -160,7 +160,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    */
   const openPaletteColorsDialog = (kind, drawing, rows, toPalette) => {
     // Switching back to the applied palette drops the queued one (Q5 A, D-24).
-    const queued = String(drawing.pendingPaletteName.value || '').trim();
+    const queued = drawing.pendingPaletteName.value.trim();
     Object.assign(paletteColorsDialog, {
       show: true, kind, fromPalette: paletteNameOf(drawing), toPalette,
       droppedPalette: kind === 'switch' && queued && toPalette === appliedPalette() ? queued : '',
@@ -275,7 +275,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   const setDefaultColor = (drawing, key, color) => {
     editDefaultColors(drawing, { [key]: color });
     if (drawing !== state.activeDrawing()) return;
-    if (String(drawing.pendingPaletteName.value || '').trim() !== '') {
+    if (drawing.pendingPaletteName.value.trim() !== '') {
       appliedPaletteColors.value = { ...appliedPaletteColors.value, [key]: color };
     }
   };
