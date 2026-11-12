@@ -247,7 +247,8 @@ const create = ({
   return { actions, state: controllerState, helperCalls, generationCalls, currentGroup, history,
     enrichCalls: () => enrichCalls,
     // A Session load or a Generate of the same files commits a Session with its own resources.
-    replaceCommittedResources: () => { canonical = { ...canonical, resources: structuredClone(canonical.resources) }; } };
+    replaceCommittedResources: () => { canonical = { ...canonical, resources: structuredClone(canonical.resources) }; },
+    showResultSvg: (value) => { svg = value; } };
 };
 const startReview = (fixture, selected = reference) => fixture.actions.startFromPopup({
   groupId: 'og-1', reference: selected, mode: 'review'
@@ -721,6 +722,19 @@ test('active schema-2 plan validates on regeneration and supports Reset and stab
     ['c', 'a', 'b']);
   assert.deepEqual((await fixture.actions.resetAlignment()).status, 'ok');
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+});
+
+// The check before Generate asks Python for decisions only, so it reads no record placement off the shown Result: a
+// Result an older gbdraw drew (a Session 27 to 44) has no record keys to read placements by.
+test('the check before Generate reads nothing from the shown Result', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.showResultSvg(new Proxy({}, { get: () => { throw new Error('The check read the shown Result.'); } }));
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  const { payload: check } = fixture.helperCalls.at(-1);
+  assert.equal(check.projection.geometry, false);
+  assert.equal(check.projection.canonicalRequest.layout.similarityAlignment, null);
 });
 
 test('Python recommendation remains a hint while direct-RBH resolved selection is preserved', async () => {

@@ -1345,15 +1345,16 @@ export const createSimilarityAlignmentActions = ({
     return svg ? materializeRecordTranslations(svg, base, recordKeys, plan) : base;
   };
 
-  // `drafted`: the translations a draft's baseline materialized, kept as they are.
-  /** @param {{ materializePlan?: boolean, drafted?: unknown }} [options] */
-  const baseline = ({ materializePlan = false, drafted = null } = {}) => {
+  // `drafted`: the translations a draft's baseline materialized, kept as they are. `fromResult`: read the translations
+  // off the shown Result; false keeps the committed ones (a reply without geometry reads none).
+  /** @param {{ materializePlan?: boolean, drafted?: unknown, fromResult?: boolean }} [options] */
+  const baseline = ({ materializePlan = false, drafted = null, fromResult = materializePlan } = {}) => {
     const canonical = getCommittedSession();
     const request = cloneJson(canonical?.renderRequest);
     if (!request) throw new Error('Generate a Linear diagram before aligning.');
     const recordKeys = request.records.map((/** @type {CommittedRecord} */ { recordKey }) => recordKey);
     const translations = drafted ? cloneJson(drafted)
-      : materializePlan
+      : fromResult
         ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
         : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
     const orientations = request.records.map((/** @type {CommittedRecord} */ record) => ({ recordKey: record.recordKey,
@@ -1988,8 +1989,9 @@ export const createSimilarityAlignmentActions = ({
       return prepareStaleTargetRepair(plan, request, goneRecordKeys, expectedActionId);
     }
     try {
-      // Python places the plan's anchors on the committed request (D5-13); the check plans and builds no layout.
-      const committed = baseline({ materializePlan: true });
+      // Python places the plan's anchors on the committed request (D5-13); the check plans and builds no layout, so it
+      // reads no placement off the shown Result (one an older gbdraw drew has no record keys to read it by).
+      const committed = baseline({ materializePlan: true, fromResult: false });
       const helper = await runHelperOperation(resolveOperation, { request,
         projection: decisionsOnlyProjection(committed.request), resources: committed.canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
