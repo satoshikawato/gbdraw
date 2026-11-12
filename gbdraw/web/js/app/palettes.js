@@ -55,14 +55,14 @@ export const createPaletteLoader = ({ state }) => {
    * @param {Record<string, Record<string, string>>} normalizedPalettes
    */
   const initializeDrawingPalette = (drawing, normalizedPalettes) => {
-    const requestedPalette = String(drawing.selectedPalette.value || 'default').trim() || 'default';
+    const requestedPalette = drawing.selectedPalette.value.trim() || 'default';
     const resolvedPalette = Object.hasOwn(normalizedPalettes, requestedPalette) && normalizedPalettes[requestedPalette]
       ? requestedPalette : 'default';
     const resolvedColors = normalizePaletteColors(
       normalizedPalettes[resolvedPalette] || normalizedPalettes.default || {}
     );
     selectPalette(drawing.slices.palette, resolvedPalette, hasPaletteColorEntries(drawing.currentColors.value) ? undefined : resolvedColors);
-    if (String(drawing.pendingPaletteName.value || '').trim() && !hasPaletteColorEntries(drawing.pendingPaletteColors.value)) {
+    if (drawing.pendingPaletteName.value.trim() && !hasPaletteColorEntries(drawing.pendingPaletteColors.value)) {
       queuePalette(drawing.slices.palette, drawing.pendingPaletteName.value, drawing.currentColors.value);
     }
   };

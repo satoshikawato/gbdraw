@@ -324,7 +324,7 @@ export const createDepartedResultIntent = ({ state, originalLegendOrder, resultP
   const displayedIntentSignature = (drawing) => JSON.stringify([
     currentEditorProjectionState(drawing),
     drawing.deletedLegendEntries.value.map((/** @type {KeptLegendRow} */ entry) => entry.originalCaption || entry.caption),
-    [...(drawing.addedLegendCaptions.value || [])],
+    [...drawing.addedLegendCaptions.value],
     drawing.legendEntries.value.filter((/** @type {LegendRow} */ entry) => /** @type {string} */ (entry.caption) !== entry.originalCaption)
       .map((/** @type {LegendRow} */ entry) => [entry.originalCaption, entry.caption]),
     // The direct additions, which no Result's inventory lists.

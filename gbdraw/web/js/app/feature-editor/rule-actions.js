@@ -234,7 +234,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     };
     const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows).map(shownRow);
     /** @type {readonly LegendRow[]} */
-    const listed = drawing.legendEntries.value || [];
+    const listed = drawing.legendEntries.value;
     // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
     const shown = readLegendRowColors(drawing);
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
@@ -313,7 +313,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // The Legend rows a History restore returned, shown or deleted in the editor.
   /** @param {DrawingState} drawing @param {string} caption */
   const legendHoldsRow = (drawing, caption) => [
-    ...(drawing.legendEntries.value || []), ...(drawing.deletedLegendEntries.value || [])
+    ...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value
   ].some((entry) => captionMatches(entry?.caption, caption) || captionMatches(entry?.originalCaption, caption));
   // Undo and Redo of a rule edit restore the rules and, for a step that changed
   // Legend rows, the Result the step left; the composition root passes the
@@ -541,7 +541,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const commitKey = createRuleLegendCaptions(candidate.rules, rendererRows);
     const order = !legendOrder || placement ? null : legendOrder.map((row) => (
       typeof row === 'number' ? commitKey(candidate.rules[row]) : /** @type {PythonLegendKey} */ (row)));
-    const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
+    const legend = await prepareFileLegendEntries(intents.filter(intent => !drawing.deletedLegendEntries.value
       .some((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
