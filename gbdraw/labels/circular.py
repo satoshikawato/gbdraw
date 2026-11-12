@@ -2688,93 +2688,150 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
     if len(labels) < 2:
         return labels
 
-    labels = sort_labels(labels)
-    if len(labels) > 2:
-        # Move the optimization seam into the sparsest angular gap so labels that
-        # are adjacent around 0/360 are optimized as neighbors.
-        raw_targets = [angle_from_middle_unwrapped(float(label["middle"]), total_length) for label in labels]
-        gap_values = [raw_targets[idx + 1] - raw_targets[idx] for idx in range(len(raw_targets) - 1)]
-        gap_values.append(raw_targets[0] + 360.0 - raw_targets[-1])
-        largest_gap_idx = max(range(len(gap_values)), key=gap_values.__getitem__)
-        if largest_gap_idx < len(labels) - 1:
-            rotate_by = largest_gap_idx + 1
-            labels = labels[rotate_by:] + labels[:rotate_by]
-    pair_gaps = _PairGaps(labels)
-    max_pair_margin = pair_gaps.largest
+    labels, targets = _seam_ordered_targets(sort_labels(labels), total_length)
+    _FixedRadiiRun(labels, targets, total_length, max_shift_deg=max_angle_shift_deg, step_deg=step_deg).separate()
+    return sort_labels(labels)
 
-    min_order_gap_deg = LABEL_MIN_ORDER_GAP_DEG
-    max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
 
-    prev_target_angle: float | None = None
-    for label in labels:
-        current_x = float(label.get("start_x", 0.0))
-        current_y = float(label.get("start_y", 0.0))
-        raw_target_angle = angle_from_middle_unwrapped(float(label["middle"]), total_length)
-        if prev_target_angle is None:
-            target_angle = raw_target_angle
-        else:
-            target_angle = normalize_angle_near_reference(raw_target_angle, prev_target_angle)
-            while target_angle <= prev_target_angle:
-                target_angle += 360.0
-        current_angle = math.degrees(math.atan2(current_y, current_x))
-        current_unwrapped = normalize_angle_near_reference(current_angle, target_angle)
-        label["_fixed_radius_px"] = math.hypot(current_x, current_y)
-        label["_target_angle_unwrapped_fixed"] = target_angle
-        label["_angle_unwrapped_fixed"] = current_unwrapped
-        prev_target_angle = target_angle
+class _FixedRadiiRun:
+    """One fixed-radius overlap pass over labels in arc order, changed in place.
 
-    prev_angle: float | None = None
-    for label in labels:
-        target_angle = float(label["_target_angle_unwrapped_fixed"])
-        low_bound = target_angle - max_angle_shift_deg
-        high_bound = target_angle + max_angle_shift_deg
-        candidate = float(label["_angle_unwrapped_fixed"])
-        if prev_angle is not None:
-            candidate = max(candidate, prev_angle + min_order_gap_deg)
-        candidate = min(max(candidate, low_bound), high_bound)
-        if prev_angle is not None and candidate <= prev_angle + min_order_gap_deg:
-            candidate = prev_angle + min_order_gap_deg
-        label["_angle_unwrapped_fixed"] = candidate
-        prev_angle = candidate
+    Each label keeps the radius of its start point (`radii`) and moves only in angle: within
+    `max_shift` degrees of its target (`targets`) and in strict order with its neighbours, at least
+    `LABEL_MIN_ORDER_GAP_DEG` apart. `angles` holds the current angles, unwrapped near the targets;
+    `_apply` writes a label's start point from its angle.
+    """
 
-    def _apply_angle(label: CircularLabel) -> None:
-        radius = float(label["_fixed_radius_px"])
-        angle_unwrapped = float(label["_angle_unwrapped_fixed"])
-        label["start_x"] = radius * math.cos(math.radians(angle_unwrapped))
-        label["start_y"] = radius * math.sin(math.radians(angle_unwrapped))
+    __slots__ = ("labels", "total_length", "targets", "gaps", "padding", "max_shift", "half_step", "max_steps", "radii", "angles")
 
-    def _pair_overlaps(left: CircularLabel, right: CircularLabel, idx: int, jdx: int) -> bool:
-        return _labels_overlap_at(left, right, total_length, _min_gap_margins(pair_gaps.gap(idx, jdx)))
+    def __init__(
+        self,
+        labels: list[CircularLabel],
+        targets: list[float],
+        total_length: int,
+        *,
+        max_shift_deg: float,
+        step_deg: float,
+    ) -> None:
+        self.labels = labels
+        self.total_length = total_length
+        self.targets = targets
+        self.gaps = _PairGaps(labels)
+        self.padding = self.gaps.largest
+        self.max_shift = max_shift_deg
+        self.half_step = 0.5 * step_deg
+        self.max_steps = max(1, int(max_shift_deg / max(step_deg, 1e-6)))
+        self.radii = [math.hypot(float(label.get("start_x", 0.0)), float(label.get("start_y", 0.0))) for label in labels]
+        self.angles = [_start_angle_near(label, target) for label, target in zip(labels, targets)]
 
-    def _pair_angle_bounds(label_idx: int) -> tuple[float, float]:
-        target_angle = float(labels[label_idx]["_target_angle_unwrapped_fixed"])
-        low_bound = target_angle - max_angle_shift_deg
-        high_bound = target_angle + max_angle_shift_deg
-        if label_idx > 0:
-            low_bound = max(low_bound, float(labels[label_idx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
-        if label_idx + 1 < len(labels):
-            high_bound = min(high_bound, float(labels[label_idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
-        return low_bound, high_bound
-
-    def _separate_pair(idx: int, jdx: int) -> bool:
-        left = labels[idx]
-        right = labels[jdx]
-        pair_changed = False
-
-        for _ in range(max_pair_steps):
-            if not _pair_overlaps(left, right, idx, jdx):
+    def separate(self) -> None:
+        """Order the angles, then separate overlapping neighbours and other overlapping pairs, up to 120 passes."""
+        self._order_angles()
+        for idx in range(len(self.labels)):
+            self._apply(idx)
+        for _ in range(120):
+            changed = False
+            for idx in range(len(self.labels) - 1):
+                if self._overlaps(idx, idx + 1) and self._separate_neighbours(idx):
+                    changed = True
+            # Adjacent passes can still miss sparse non-adjacent bbox collisions.
+            for idx, jdx in _candidate_label_pairs(self.labels, self.total_length, padding=self.padding):
+                if jdx > idx + 1 and self._overlaps(idx, jdx) and self._separate_pair(idx, jdx):
+                    changed = True
+            if not changed:
                 break
 
-            left_low, left_high = _pair_angle_bounds(idx)
-            right_low, right_high = _pair_angle_bounds(jdx)
-            new_left = max(left_low, float(left["_angle_unwrapped_fixed"]) - (0.5 * step_deg))
-            new_right = min(right_high, float(right["_angle_unwrapped_fixed"]) + (0.5 * step_deg))
+    def _order_angles(self) -> None:
+        """Clamp each angle, first to last, into its target's reach and past its predecessor by the order gap."""
+        angles = self.angles
+        gap = LABEL_MIN_ORDER_GAP_DEG
+        for idx, target in enumerate(self.targets):
+            candidate = angles[idx]
+            if idx > 0:
+                candidate = max(candidate, angles[idx - 1] + gap)
+            candidate = min(max(candidate, target - self.max_shift), target + self.max_shift)
+            if idx > 0 and candidate <= angles[idx - 1] + gap:
+                candidate = angles[idx - 1] + gap
+            angles[idx] = candidate
 
+    def _apply(self, idx: int) -> None:
+        """Write label `idx`'s start point at its radius and current angle."""
+        label = self.labels[idx]
+        radius = self.radii[idx]
+        angle_rad = math.radians(self.angles[idx])
+        label["start_x"] = radius * math.cos(angle_rad)
+        label["start_y"] = radius * math.sin(angle_rad)
+
+    def _overlaps(self, idx: int, jdx: int) -> bool:
+        """Whether labels `idx` and `jdx` overlap at their pair's minimum gap."""
+        return _labels_overlap_at(
+            self.labels[idx], self.labels[jdx], self.total_length, _min_gap_margins(self.gaps.gap(idx, jdx))
+        )
+
+    def _separate_neighbours(self, idx: int) -> bool:
+        """Move overlapping neighbours `idx` and `idx + 1` apart by half a step each until they clear; whether any moved.
+
+        The left label stays above its target's reach and its predecessor, the right one below its
+        target's reach and its successor.
+        """
+        angles = self.angles
+        gap = LABEL_MIN_ORDER_GAP_DEG
+        jdx = idx + 1
+        left_low = self.targets[idx] - self.max_shift
+        right_high = self.targets[jdx] + self.max_shift
+        moved = False
+        for _ in range(self.max_steps):
+            new_left = max(left_low, angles[idx] - self.half_step)
+            new_right = min(right_high, angles[jdx] + self.half_step)
+            if idx > 0:
+                new_left = max(new_left, angles[idx - 1] + gap)
+            if jdx + 1 < len(angles):
+                new_right = min(new_right, angles[jdx + 1] - gap)
+            if new_right <= new_left + gap:
+                break
+            if abs(new_left - angles[idx]) <= 1e-9 and abs(new_right - angles[jdx]) <= 1e-9:
+                break
+            angles[idx] = new_left
+            angles[jdx] = new_right
+            self._apply(idx)
+            self._apply(jdx)
+            moved = True
+            if not self._overlaps(idx, jdx):
+                break
+        return moved
+
+    def _angle_bounds(self, idx: int) -> tuple[float, float]:
+        """The angles label `idx` may take: its target's reach, inside its neighbours by the order gap."""
+        target = self.targets[idx]
+        low_bound = target - self.max_shift
+        high_bound = target + self.max_shift
+        if idx > 0:
+            low_bound = max(low_bound, self.angles[idx - 1] + LABEL_MIN_ORDER_GAP_DEG)
+        if idx + 1 < len(self.angles):
+            high_bound = min(high_bound, self.angles[idx + 1] - LABEL_MIN_ORDER_GAP_DEG)
+        return low_bound, high_bound
+
+    def _separate_pair(self, idx: int, jdx: int) -> bool:
+        """Move overlapping labels `idx` < `jdx` (not neighbours) apart by half a step each while they overlap.
+
+        A step stays inside both labels' bounds (`_angle_bounds`) and keeps the labels between them in
+        order; whether any moved. The labels stay in strict order, so the step always leaves the two
+        more than the order gap apart: the left one at most at its successor's angle less the gap, the
+        right one at least at its predecessor's plus the gap.
+        """
+        angles = self.angles
+        gap = LABEL_MIN_ORDER_GAP_DEG
+        moved = False
+        for _ in range(self.max_steps):
+            if not self._overlaps(idx, jdx):
+                break
+            left_low, left_high = self._angle_bounds(idx)
+            right_low, right_high = self._angle_bounds(jdx)
+            new_left = max(left_low, angles[idx] - self.half_step)
+            new_right = min(right_high, angles[jdx] + self.half_step)
             # Preserve strict ordering with labels between idx and jdx.
-            if idx + 1 < jdx:
-                new_left = min(new_left, float(labels[idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
-                new_right = max(new_right, float(labels[jdx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
-
+            new_left = min(new_left, angles[idx + 1] - gap)
+            new_right = max(new_right, angles[jdx - 1] + gap)
             if (
                 new_left < (left_low - 1e-9)
                 or new_left > (left_high + 1e-9)
@@ -2782,83 +2839,14 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
                 or new_right > (right_high + 1e-9)
             ):
                 break
-            if new_right <= new_left + min_order_gap_deg:
+            if abs(new_left - angles[idx]) <= 1e-9 and abs(new_right - angles[jdx]) <= 1e-9:
                 break
-            if (
-                abs(new_left - float(left["_angle_unwrapped_fixed"])) <= 1e-9
-                and abs(new_right - float(right["_angle_unwrapped_fixed"])) <= 1e-9
-            ):
-                break
-
-            left["_angle_unwrapped_fixed"] = new_left
-            right["_angle_unwrapped_fixed"] = new_right
-            _apply_angle(left)
-            _apply_angle(right)
-            pair_changed = True
-
-        return pair_changed
-
-    for label in labels:
-        _apply_angle(label)
-
-    for _ in range(120):
-        changed = False
-        for idx in range(len(labels) - 1):
-            left = labels[idx]
-            right = labels[idx + 1]
-            if not _pair_overlaps(left, right, idx, idx + 1):
-                continue
-
-            for _ in range(max_pair_steps):
-                left_target = float(left["_target_angle_unwrapped_fixed"])
-                right_target = float(right["_target_angle_unwrapped_fixed"])
-                left_low = left_target - max_angle_shift_deg
-                right_high = right_target + max_angle_shift_deg
-
-                new_left = max(left_low, float(left["_angle_unwrapped_fixed"]) - (0.5 * step_deg))
-                new_right = min(right_high, float(right["_angle_unwrapped_fixed"]) + (0.5 * step_deg))
-
-                if idx > 0:
-                    new_left = max(new_left, float(labels[idx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
-                if idx + 2 < len(labels):
-                    new_right = min(new_right, float(labels[idx + 2]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
-
-                if new_right <= new_left + min_order_gap_deg:
-                    break
-
-                if (
-                    abs(new_left - float(left["_angle_unwrapped_fixed"])) <= 1e-9
-                    and abs(new_right - float(right["_angle_unwrapped_fixed"])) <= 1e-9
-                ):
-                    break
-
-                left["_angle_unwrapped_fixed"] = new_left
-                right["_angle_unwrapped_fixed"] = new_right
-                _apply_angle(left)
-                _apply_angle(right)
-                changed = True
-
-                if not _pair_overlaps(left, right, idx, idx + 1):
-                    break
-
-        # Adjacent passes can still miss sparse non-adjacent bbox collisions.
-        for idx, jdx in _candidate_label_pairs(labels, total_length, padding=max_pair_margin):
-            if jdx <= idx + 1:
-                continue
-            if not _pair_overlaps(labels[idx], labels[jdx], idx, jdx):
-                continue
-            if _separate_pair(idx, jdx):
-                changed = True
-
-        if not changed:
-            break
-
-    for label in labels:
-        label.pop("_fixed_radius_px", None)
-        label.pop("_target_angle_unwrapped_fixed", None)
-        label.pop("_angle_unwrapped_fixed", None)
-
-    return sort_labels(labels)
+            angles[idx] = new_left
+            angles[jdx] = new_right
+            self._apply(idx)
+            self._apply(jdx)
+            moved = True
+        return moved
 
 
 def _angle_deviation_score(labels: list[CircularLabel], total_length: int) -> tuple[float, float]:
@@ -3005,11 +2993,15 @@ def _label_target_angle_unwrapped(label: CircularLabel, total_length: int) -> fl
 
 
 def _angle_unwrapped_from_start(label: CircularLabel, total_length: int) -> float:
-    """The angle of a label's start point (the origin when unset), on the 360-degree branch nearest its target angle."""
+    """The angle of a label's start point near its target angle (`_start_angle_near`, `_label_target_angle_unwrapped`)."""
+    return _start_angle_near(label, _label_target_angle_unwrapped(label, total_length))
+
+
+def _start_angle_near(label: CircularLabel, reference_unwrapped: float) -> float:
+    """The angle of a label's start point (the origin when unset), on the 360-degree branch nearest `reference_unwrapped`."""
     start_x = float(label.get("start_x", 0.0))
     start_y = float(label.get("start_y", 0.0))
-    angle_raw = math.degrees(math.atan2(start_y, start_x))
-    return normalize_angle_near_reference(angle_raw, _label_target_angle_unwrapped(label, total_length))
+    return normalize_angle_near_reference(math.degrees(math.atan2(start_y, start_x)), reference_unwrapped)
 
 
 def angle_delta_deg(a: float, b: float) -> float:
@@ -3694,27 +3686,37 @@ def _order_labels_for_arc(labels: list[CircularLabel], total_length: int, spacin
     for idx, label in enumerate(labels):
         label["_opt_original_idx"] = idx
 
+    labels, targets = _seam_ordered_targets(labels, total_length)
+    for label, target in zip(labels, targets):
+        label["target_angle_unwrapped"] = target
+    return labels
+
+
+def _seam_ordered_targets(labels: list[CircularLabel], total_length: int) -> tuple[list[CircularLabel], list[float]]:
+    """Sorted labels in arc order, and the target angle of each along that order.
+
+    The order starts after the largest gap between the labels' feature angles, so a dense cluster
+    is not cut at the 0/360-degree seam (the list itself when it already starts there). Each target
+    is the feature angle on the first 360-degree branch above the previous target.
+    """
+    raw_targets = [angle_from_middle_unwrapped(float(label["middle"]), total_length) for label in labels]
     if len(labels) > 2:
-        raw_targets = [angle_from_middle_unwrapped(label["middle"], total_length) for label in labels]
-        gap_values = [raw_targets[i + 1] - raw_targets[i] for i in range(len(labels) - 1)]
+        gap_values = [raw_targets[idx + 1] - raw_targets[idx] for idx in range(len(labels) - 1)]
         gap_values.append(raw_targets[0] + 360.0 - raw_targets[-1])
         largest_gap_idx = max(range(len(gap_values)), key=gap_values.__getitem__)
         if largest_gap_idx < len(labels) - 1:
             rotate_by = largest_gap_idx + 1
             labels = labels[rotate_by:] + labels[:rotate_by]
-
-    prev_target_unwrapped: float | None = None
-    for label in labels:
-        raw_target = angle_from_middle_unwrapped(label["middle"], total_length)
-        if prev_target_unwrapped is None:
-            target_angle_unwrapped = raw_target
-        else:
-            target_angle_unwrapped = normalize_angle_near_reference(raw_target, prev_target_unwrapped)
-            while target_angle_unwrapped <= prev_target_unwrapped:
-                target_angle_unwrapped += 360.0
-        label["target_angle_unwrapped"] = target_angle_unwrapped
-        prev_target_unwrapped = target_angle_unwrapped
-    return labels
+            raw_targets = raw_targets[rotate_by:] + raw_targets[:rotate_by]
+    targets: list[float] = []
+    for raw_target in raw_targets:
+        target = raw_target
+        if targets:
+            target = normalize_angle_near_reference(raw_target, targets[-1])
+            while target <= targets[-1]:
+                target += 360.0
+        targets.append(target)
+    return labels, targets
 
 
 def _overlap_components(pairs: Iterable[tuple[int, int]], n_labels: int) -> list[list[int]]:

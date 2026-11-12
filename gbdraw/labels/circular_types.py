@@ -109,8 +109,7 @@ class CircularLabel(_CircularLabelRequired, total=False):
     - placed text: ``start_x``, ``start_y``, ``angle_unwrapped``,
       ``target_angle_unwrapped``;
     - placement stage only: ``_spacing_px``, ``_enforce_spacing_px``,
-      ``_fixed_radius_px``, ``_target_angle_unwrapped_fixed``,
-      ``_angle_unwrapped_fixed``, ``_opt_original_idx``;
+      ``_opt_original_idx``;
     - leader: ``leader_start_x``, ``leader_start_y``, ``leader_contact`` (a
       contact as fractions of the ink box);
     - radial placement: ``placement``, ``placed_angle_deg``, ``text_x``,
@@ -131,9 +130,6 @@ class CircularLabel(_CircularLabelRequired, total=False):
     target_angle_unwrapped: float
     _spacing_px: float
     _enforce_spacing_px: bool
-    _fixed_radius_px: float
-    _target_angle_unwrapped_fixed: float
-    _angle_unwrapped_fixed: float
     _opt_original_idx: int
     leader_start_x: float
     leader_start_y: float
