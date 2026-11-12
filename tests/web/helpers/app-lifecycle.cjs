@@ -65,6 +65,12 @@ const installDiagramWorkerTracking = async (page) => {
 
     const NativeWorker = window.Worker;
     const nativePostMessage = NativeWorker.prototype.postMessage;
+    // The bytes of the inputs a message gives the Worker: each staged resource
+    // and helper file is a Blob, which postMessage passes as a handle.
+    const blobBytes = (items) => (Array.isArray(items) ? items : []).reduce(
+      (total, item) => total + Number(item?.blob?.size || 0),
+      0
+    );
     NativeWorker.prototype.postMessage = function lifecycleTrackedPostMessage(message, transfer) {
       const instance = this.__gbdrawLifecycleActivity;
       if (instance) {
@@ -76,6 +82,7 @@ const installDiagramWorkerTracking = async (page) => {
           instance.helpers.push({
             requestId: String(message.requestId ?? ''),
             operation: String(message.operation || ''),
+            stagedBytes: blobBytes(message.payload?.files) + blobBytes(message.payload?.stagedResources),
             transferCount: transferList.length,
             transferredBytes: transferList.reduce(
               (total, item) => total + Number(item?.byteLength || 0),
@@ -98,10 +105,7 @@ const installDiagramWorkerTracking = async (page) => {
               0
             ),
             stagedResourceCount: stagedResources.length,
-            stagedResourceBytes: stagedResources.reduce(
-              (total, resource) => total + Number(resource?.bytes?.byteLength || 0),
-              0
-            ),
+            stagedResourceBytes: blobBytes(stagedResources),
             transferCount: transferList.length,
             transferredBytes: transferList.reduce(
               (total, item) => total + Number(item?.byteLength || 0),

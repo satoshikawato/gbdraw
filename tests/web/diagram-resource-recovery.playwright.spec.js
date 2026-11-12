@@ -152,8 +152,8 @@ test('OV-2749: Generate stages inputs whose bytes no message to the Worker may c
   });
   await openApp(page);
   await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles(gffPath);
-  await page.getByLabel('FASTA File', { exact: true }).and(page.locator('input[type="file"]')).setInputFiles(fastaPath);
+  await circularFileInput(page, 'gff').setInputFiles(gffPath);
+  await circularFileInput(page, 'fasta').setInputFiles(fastaPath);
   const result = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   expect(result.status, JSON.stringify(await page.evaluate(() => window.__GBDRAW_APP__.errorLog))).toBe('ok');
   const staged = await page.evaluate(() => window.__OV2749_STAGED__);

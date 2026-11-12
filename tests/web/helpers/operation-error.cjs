@@ -15,7 +15,7 @@ const failNextNativeRender = (page) => page.evaluate(() => {
           cacheToken: '9'.repeat(64), name: 'PRIVATE_FILE_SENTINEL.tsv', kind: 'canonical-tsv',
           type: 'text/tab-separated-values', size: bytes.byteLength, lastModified: 0 }],
         stagedResources: [...message.payload.stagedResources, { resourceId: 's03-error-colors',
-          cacheToken: '9'.repeat(64), bytes: bytes.buffer }] } };
+          cacheToken: '9'.repeat(64), blob: new Blob([bytes]) }] } };
     }
     return send.call(this, message, ...args);
   };
