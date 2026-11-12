@@ -26,7 +26,7 @@ from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.layout.common import calculate_cds_ratio
-from gbdraw.layout.spatial import Aabb, touching_aabb_indices
+from gbdraw.layout.spatial import Aabb, TouchingAabbIndex, touching_aabb_indices
 from gbdraw.labels.circular import (
     angle_from_middle,
     improved_label_placement_fc,
@@ -220,6 +220,15 @@ def _touching_everything(bboxes, query, *, skip=None, candidates=None) -> list[i
 
 def _all_index_pairs(bboxes) -> list[tuple[int, int]]:
     return [(idx, jdx) for idx in range(len(bboxes)) for jdx in range(idx + 1, len(bboxes))]
+
+
+def _every_later_partner(bboxes, padding=0.0, bucket_size=128.0) -> Iterator[set[int]]:
+    count = len(bboxes)
+    return iter([set(range(idx + 1, count)) for idx in range(count)])
+
+
+def _every_kept_index(index: TouchingAabbIndex, query, *, skip=None) -> list[int]:
+    return [idx for idx in range(len(index.boxes)) if idx != skip]
 
 
 @pytest.mark.circular
@@ -669,10 +678,18 @@ def test_circular_moved_label_overlap_count_equals_the_full_recount() -> None:
 
 
 @pytest.mark.circular
-@pytest.mark.parametrize("seed", [0, 1, 2, 9])
-def test_circular_label_peer_pruning_keeps_every_count(seed: int, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The reach-box peer pruning must not change a count: same placements as scanning every label."""
-    labels, total_length, radius = _random_label_set(seed)
+@pytest.mark.parametrize(("seed", "max_labels"), [(0, 12), (1, 12), (2, 12), (9, 12), (5, 24)])
+def test_circular_label_peer_pruning_keeps_every_count(
+    seed: int, max_labels: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reach-box peer pruning must not change a count: same placements as scanning every label.
+
+    The unpruned run replaces every grid lookup of these stages with all labels: the module's box
+    scans and pair broad phase, and the kept grids (`TouchingAabbIndex.touching`) that the leader
+    collision pass and the hemisphere refinement update as labels move, so a stale grid shows
+    (seed 5 with 24 labels moves a label whose old leader grid boxes miss a peer).
+    """
+    labels, total_length, radius = _random_label_set(seed, max_labels=max_labels)
     spacing_px = random.Random(seed).choice([None, 0.0, 1.5, 4.0])
     module = circular_labels_module
 
@@ -698,6 +715,8 @@ def test_circular_label_peer_pruning_keeps_every_count(seed: int, monkeypatch: p
     pruned = place()
     monkeypatch.setattr(module, "touching_aabb_indices", _touching_everything)
     monkeypatch.setattr(module, "touching_aabb_pairs", _all_index_pairs)
+    monkeypatch.setattr(module, "candidate_aabb_partners", _every_later_partner)
+    monkeypatch.setattr(TouchingAabbIndex, "touching", _every_kept_index)
     assert place() == pruned
 
 
