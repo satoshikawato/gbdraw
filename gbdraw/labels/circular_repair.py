@@ -56,6 +56,7 @@ from ..layout.spatial import (
 from .circular import (
     HEMISPHERE_AXIS_EPS_PX,
     LABEL_MIN_ORDER_GAP_DEG,
+    _angle_unwrapped_from_start,
     _current_half_from_x,
     _label_bbox_max_radius,
     _label_bbox_min_radius,
@@ -64,11 +65,9 @@ from .circular import (
     _leader_start_point,
     _segment_intersects_rect_interior,
     _segments_through_rect_interior,
-    angle_from_middle_unwrapped,
     assign_leader_start_points,
     circular_label_defects,
     circular_label_shape,
-    normalize_angle_near_reference,
 )
 from .circular_leaders import arrival_contact, contact_end, label_ink_box
 from .circular_types import CircularLabel
@@ -497,13 +496,7 @@ class _Repair:
         label = self.labels[index].copy()
         label["start_x"] = float(x)
         label["start_y"] = float(y)
-        target = float(
-            label.get(
-                "target_angle_unwrapped",
-                angle_from_middle_unwrapped(float(label["middle"]), self.total_length),
-            )
-        )
-        label["angle_unwrapped"] = normalize_angle_near_reference(_angle(x, y), target)
+        label["angle_unwrapped"] = _angle_unwrapped_from_start(label, self.total_length)
         return label
 
     def _arc(self, run: Sequence[int], deltas: Sequence[float]) -> Moved:
