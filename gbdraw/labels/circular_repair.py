@@ -55,6 +55,7 @@ from ..layout.spatial import (
 )
 from .circular import (
     HEMISPHERE_AXIS_EPS_PX,
+    LABEL_MIN_ORDER_GAP_DEG,
     _current_half_from_x,
     _label_bbox_max_radius,
     _label_bbox_min_radius,
@@ -79,9 +80,6 @@ MAX_EVALUATIONS = 60_000
 # LP-D57 Q3: how far a text and an elbow may move from where the engine put them.
 MAX_TEXT_SHIFT_PX = 24.0
 MAX_ELBOW_SHIFT_PX = 12.0
-# Neighbours keep their order with at least this angular gap (or today's, if smaller).
-MIN_ORDER_GAP_DEG = 0.05
-
 ARC_STEPS_DEG = (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0)
 RADIAL_STEPS_PX = (1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0)
 RUN_RADIAL_STEPS_PX = (2.0, 4.0, 6.0, 8.0, 10.0, 12.0)
@@ -457,7 +455,7 @@ class _Repair:
                     if abs(gap - today) > 1e-6:
                         return False
                     continue
-                if gap > 180.0 or gap < min(MIN_ORDER_GAP_DEG, today) - _EPS:
+                if gap > 180.0 or gap < min(LABEL_MIN_ORDER_GAP_DEG, today) - _EPS:
                     return False
         return True
 

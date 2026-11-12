@@ -1510,6 +1510,493 @@ class _MovedLabelOverlaps:
         return total
 
 
+_LeaderSegment: TypeAlias = tuple[tuple[float, float], tuple[float, float]]
+"""A leader segment: (from, to) points."""
+_LeaderRect: TypeAlias = tuple[float, float, float, float]
+"""A label's text rectangle at the collision margin: (min_x, min_y, max_x, max_y)."""
+_LeaderMoveKind: TypeAlias = tuple[int, float]
+"""How a candidate moves a label: (0, angle offset in degrees) or (1, outward shift in px).
+
+Any angular shift ranks before a radial one."""
+_LeaderPosition: TypeAlias = tuple[_LeaderMoveKind, float, float, float]
+"""A candidate place of a label: its move, unwrapped angle, start_x and start_y."""
+_LeaderScore: TypeAlias = tuple[int, int, int, _LeaderMoveKind, float]
+"""How a label place ranks, smallest first: crossings, collisions, min-gap overlaps, move, leader length."""
+
+
+class _LeaderCollisionGeometry(NamedTuple):
+    """The collision geometry of a label set, by label index: text rectangles at the margin, both leader segments, and
+    the primary leader segment."""
+
+    rects: list[_LeaderRect]
+    segments: list[list[_LeaderSegment]]
+    primary_segments: list[_LeaderSegment]
+
+    @classmethod
+    def of(cls, labels: list[CircularLabel], total_length: int, margin_px: float) -> _LeaderCollisionGeometry:
+        rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
+        return cls(rects, segments, _build_primary_leader_segments(labels))
+
+    def is_clear(self, labels: list[CircularLabel], total_length: int, margin_px: float) -> bool:
+        """No leader passes through another label's text and no two primary leaders cross."""
+        return (
+            _count_label_leader_line_collisions(
+                labels, total_length, margin_px=margin_px, rects=self.rects, segments=self.segments
+            )
+            == 0
+            and _count_leader_line_intersections(labels, primary_segments=self.primary_segments) == 0
+        )
+
+
+class _LeaderReachIndexes:
+    """The reach boxes of a label set at `pad` (see `_reach_pad`) in three grids, kept as labels move.
+
+    `text` holds the text boxes (bbox overlaps), `crossing` the primary leaders (leader crossings), and
+    `collision` the text with both leaders (leader collisions). Each predicate of the leader collision pass
+    is false for two labels whose boxes of its grid do not touch, so a count over the touching labels
+    equals the count over every label (output-preserving peer pruning).
+    """
+
+    __slots__ = ("_labels", "_geometry", "pad", "text", "crossing", "collision")
+
+    def __init__(self, labels: list[CircularLabel], geometry: _LeaderCollisionGeometry, pad: float) -> None:
+        self._labels = labels
+        self._geometry = geometry
+        self.pad = pad
+        boxes = [self._boxes(idx) for idx in range(len(labels))]
+        # The peer lookups look only at the boxes in grid buckets near the query.
+        self.text, self.crossing, self.collision = (
+            TouchingAabbIndex.of([label_boxes[family] for label_boxes in boxes]) for family in range(3)
+        )
+
+    def _boxes(self, idx: int) -> tuple[Aabb | None, Aabb | None, Aabb | None]:
+        """Reach boxes of the text, the primary leader, and the text with both leaders of label `idx`."""
+        label = self._labels[idx]
+        rect = self._geometry.rects[idx]
+        pad = self.pad
+        return (
+            _label_reach_box(label, pad),
+            bounding_aabb(self._geometry.primary_segments[idx], pad),
+            _label_reach_box(
+                label,
+                pad,
+                points=[
+                    (rect[0], rect[1]),
+                    (rect[2], rect[3]),
+                    *(point for segment in self._geometry.segments[idx] for point in segment),
+                    *self._geometry.primary_segments[idx],
+                ],
+            ),
+        )
+
+    def moved(self, idx: int) -> None:
+        """Label `idx` and its geometry moved."""
+        for index, box in zip((self.text, self.crossing, self.collision), self._boxes(idx)):
+            index.replace(idx, box)
+
+    @staticmethod
+    def peers(index: TouchingAabbIndex, idx: int) -> list[int]:
+        """The other labels whose boxes in `index` touch the box of label `idx`."""
+        return index.touching(index.boxes[idx], skip=idx)
+
+    def sweep_peers(
+        self, label: CircularLabel, idx: int, sweep_points: list[tuple[float, float]]
+    ) -> tuple[list[int], list[int], list[int]]:
+        """The other labels that `label` (index `idx`) can touch at any of `sweep_points`: by text, crossing, collision.
+
+        The leaders run from the label to its middle point and on to its feature anchor, which do not move.
+        """
+        middle_point, feature_anchor_point = _leader_segments(label)[1]
+        pad = self.pad
+        return (
+            self.text.touching(_label_reach_box(label, pad, anchors=sweep_points), skip=idx),
+            self.crossing.touching(
+                _label_reach_box(label, pad, anchors=sweep_points, points=[middle_point]), skip=idx
+            ),
+            self.collision.touching(
+                _label_reach_box(label, pad, anchors=sweep_points, points=[middle_point, feature_anchor_point]),
+                skip=idx,
+            ),
+        )
+
+
+class _LeaderMove(NamedTuple):
+    """The best place found for a label, its geometry, and the overlap totals of the label set once it moves there."""
+
+    score: _LeaderScore
+    candidate: CircularLabel
+    rect: _LeaderRect
+    segments: list[_LeaderSegment]
+    primary_segment: _LeaderSegment
+    angle: float
+    plain_total: int
+    min_gap_total: int
+
+
+@dataclass(frozen=True, slots=True)
+class _LeaderShiftSettings:
+    """The settings of the leader collision repair, normalized: collision margin, angle step, steps, order gap."""
+
+    margin_px: float
+    step_deg: float
+    max_steps: int
+    min_order_gap_deg: float
+
+
+def _leader_shift_positions(
+    current_angle: float,
+    bounds: tuple[float, float],
+    radius: float,
+    start_x: float,
+    settings: _LeaderShiftSettings,
+) -> list[list[_LeaderPosition]]:
+    """The angular candidate places of a label, per step and in search order (+ then -), within its order bounds.
+
+    A label on one side of the vertical axis stays on that side.
+    """
+    lower_bound, upper_bound = bounds
+    current_half = _current_half_from_x(start_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
+    step_deg = settings.step_deg
+    step_positions: list[list[_LeaderPosition]] = []
+    for step_idx in range(1, settings.max_steps + 1):
+        angle_offset = step_idx * step_deg
+        positions: list[_LeaderPosition] = []
+        for direction in (1.0, -1.0):
+            candidate_angle = current_angle + (direction * angle_offset)
+            if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
+                continue
+
+            candidate_x = radius * math.cos(math.radians(candidate_angle))
+            candidate_y = radius * math.sin(math.radians(candidate_angle))
+            if current_half != 0 and _current_half_from_x(
+                candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
+            ) != current_half:
+                continue
+            positions.append(((0, angle_offset), candidate_angle, candidate_x, candidate_y))
+        step_positions.append(positions)
+    return step_positions
+
+
+def _leader_radial_positions(
+    label: CircularLabel, current_angle: float, start_x: float, start_y: float, radius: float
+) -> list[_LeaderPosition]:
+    """The radial candidate places of an outer label: the same angle, further out (OV-1823).
+
+    An angular shift cannot clear a label that sits across a neighbour's radial leader between the
+    neighbour's feature and text. An inner label has none.
+    """
+    if label.get("is_inner", False) is not False:
+        return []
+    max_shift_px = LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS * float(label["height_px"])
+    radial_steps = int(max_shift_px / LEADER_LABEL_RADIAL_STEP_PX)
+    radial_positions: list[_LeaderPosition] = []
+    for step_idx in range(1, radial_steps + 1):
+        shift_px = step_idx * LEADER_LABEL_RADIAL_STEP_PX
+        scale = (radius + shift_px) / radius
+        radial_positions.append(((1, shift_px), current_angle, start_x * scale, start_y * scale))
+    return radial_positions
+
+
+@dataclass(frozen=True, slots=True)
+class _LeaderCandidateSearch:
+    """The candidate places of one label, judged against where it is: the accept/reject chain and the score.
+
+    `line_count` and `collision_count` are the label's crossings and collisions where it is; the overlap
+    counts are its own (`*_for_label`) and the label set's (`*_total`); the peers come from
+    `_LeaderReachIndexes.sweep_peers`.
+    """
+
+    labels: list[CircularLabel]
+    total_length: int
+    margin_px: float
+    geometry: _LeaderCollisionGeometry
+    label_idx: int
+    line_count: int
+    collision_count: int
+    plain_for_label: int
+    min_gap_for_label: int
+    plain_total: int
+    min_gap_total: int
+    text_peers: list[int]
+    crossing_peers: list[int]
+    collision_peers: list[int]
+
+    def best(
+        self,
+        step_positions: list[list[_LeaderPosition]],
+        radial_positions: list[_LeaderPosition],
+        current_score: _LeaderScore,
+    ) -> _LeaderMove | None:
+        """The candidate that ranks below `current_score` and every other candidate, or None."""
+        best_score = current_score
+        best: _LeaderMove | None = None
+        for positions in (*step_positions, radial_positions):
+            if positions is radial_positions and best_score[1] == 0:
+                break  # an angular shift (or none) clears every leader collision of this label
+            for position in positions:
+                found = self._judge(position, best_score)
+                if found is not None:
+                    best_score = found.score
+                    best = found
+
+            if best_score[0] == 0 and best_score[1] == 0 and best_score[2] == 0:
+                break
+        return best
+
+    def _judge(self, position: _LeaderPosition, best_score: _LeaderScore) -> _LeaderMove | None:
+        """The label at `position`, if it adds no overlap and ranks below `best_score`; otherwise None."""
+        move, candidate_angle, candidate_x, candidate_y = position
+        labels = self.labels
+        total_length = self.total_length
+        label_idx = self.label_idx
+        margin_px = self.margin_px
+        geometry = self.geometry
+        candidate = labels[label_idx].copy()
+        candidate["start_x"] = float(candidate_x)
+        candidate["start_y"] = float(candidate_y)
+        candidate["angle_unwrapped"] = float(candidate_angle)
+        leader_start_x, leader_start_y = _leader_start_point(candidate, total_length)
+        candidate["leader_start_x"] = float(leader_start_x)
+        candidate["leader_start_y"] = float(leader_start_y)
+        candidate_rect = _label_bbox_rect(candidate, total_length, margin_px=margin_px)
+        candidate_segments = _leader_segments(candidate)
+        candidate_primary_segment = _primary_leader_segment(candidate)
+
+        # Same rejections as counting everything first: a count only has to be exact
+        # while it stays within the bound that would reject the candidate.
+        line_cap = min(self.line_count, best_score[0])
+        line_count = _count_local_leader_line_intersections(
+            labels,
+            label_idx,
+            candidate=candidate,
+            primary_segments=geometry.primary_segments,
+            candidate_segment=candidate_primary_segment,
+            peers=self.crossing_peers,
+            cap=line_cap,
+        )
+        if line_count > line_cap:
+            return None
+        collision_cap = (
+            min(self.collision_count, best_score[1]) if line_count == best_score[0] else self.collision_count
+        )
+        collision_count = _count_local_leader_line_collisions(
+            labels,
+            total_length,
+            label_idx,
+            margin_px=margin_px,
+            candidate=candidate,
+            rects=geometry.rects,
+            segments=geometry.segments,
+            candidate_rect=candidate_rect,
+            candidate_segments=candidate_segments,
+            peers=self.collision_peers,
+            cap=collision_cap,
+        )
+        if collision_count > collision_cap:
+            return None
+
+        plain_for_label = _count_local_label_overlaps(
+            labels,
+            total_length,
+            label_idx,
+            candidate,
+            use_min_gap=False,
+            peers=self.text_peers,
+            cap=self.plain_for_label,
+        )
+        plain_total = self.plain_total - self.plain_for_label + plain_for_label
+        if plain_total > self.plain_total:
+            return None
+
+        min_gap_for_label = _count_local_label_overlaps(
+            labels,
+            total_length,
+            label_idx,
+            candidate,
+            use_min_gap=True,
+            peers=self.text_peers,
+            cap=self.min_gap_for_label,
+        )
+        min_gap_total = self.min_gap_total - self.min_gap_for_label + min_gap_for_label
+        if min_gap_total > self.min_gap_total:
+            return None
+
+        score = (line_count, collision_count, min_gap_for_label, move, _leader_length_px(candidate, total_length))
+        if not score < best_score:
+            return None
+        return _LeaderMove(
+            score,
+            candidate,
+            candidate_rect,
+            candidate_segments,
+            candidate_primary_segment,
+            candidate_angle,
+            plain_total,
+            min_gap_total,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _LeaderCollisionPass:
+    """One pass of the leader collision repair: each label with leader crossings or collisions, worst first, moves
+    to its best candidate place, kept in feature order and adding no label overlap."""
+
+    labels: list[CircularLabel]
+    total_length: int
+    settings: _LeaderShiftSettings
+    geometry: _LeaderCollisionGeometry
+    reach: _LeaderReachIndexes
+
+    def run(self) -> bool:
+        """Move the labels of this pass; return whether any moved."""
+        labels = self.labels
+        total_length = self.total_length
+        plain_total = _count_label_overlaps(labels, total_length, use_min_gap=False)
+        min_gap_total = _count_label_overlaps(labels, total_length, use_min_gap=True)
+        changed = False
+        unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
+        for line_count, collision_count, label_idx in self._local_scores():
+            if line_count <= 0 and collision_count <= 0:
+                break
+            move = self._best_move(
+                label_idx, line_count, collision_count, unwrapped_angles, plain_total, min_gap_total
+            )
+            if move is None:
+                continue
+            self._apply(label_idx, move)
+            unwrapped_angles[label_idx] = float(move.angle)
+            plain_total = move.plain_total
+            min_gap_total = move.min_gap_total
+            changed = True
+        return changed
+
+    def _local_scores(self) -> list[tuple[int, int, int]]:
+        """(crossings, collisions, index) of every label where it is, most crossings, then most collisions, first."""
+        labels = self.labels
+        geometry = self.geometry
+        reach = self.reach
+        local_scores = []
+        for idx in range(len(labels)):
+            crossing_peers = reach.peers(reach.crossing, idx)
+            collision_peers = reach.peers(reach.collision, idx)
+            local_scores.append(
+                (
+                    _count_local_leader_line_intersections(
+                        labels,
+                        idx,
+                        primary_segments=geometry.primary_segments,
+                        peers=crossing_peers,
+                    ),
+                    _count_local_leader_line_collisions(
+                        labels,
+                        self.total_length,
+                        idx,
+                        margin_px=self.settings.margin_px,
+                        rects=geometry.rects,
+                        segments=geometry.segments,
+                        peers=collision_peers,
+                    ),
+                    idx,
+                )
+            )
+        local_scores.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return local_scores
+
+    def _best_move(
+        self,
+        label_idx: int,
+        line_count: int,
+        collision_count: int,
+        unwrapped_angles: list[float],
+        plain_total: int,
+        min_gap_total: int,
+    ) -> _LeaderMove | None:
+        """The place label `label_idx` moves to, or None when no candidate lowers its crossings or collisions.
+
+        `plain_total` and `min_gap_total` are the label set's plain and min-gap overlap counts.
+        """
+        labels = self.labels
+        total_length = self.total_length
+        label = labels[label_idx]
+        start_x = float(label.get("start_x", 0.0))
+        start_y = float(label.get("start_y", 0.0))
+        radius = math.hypot(start_x, start_y)
+        if radius <= 1e-9:
+            return None
+
+        current_angle = float(unwrapped_angles[label_idx])
+        bounds = _cyclic_order_bounds(unwrapped_angles, label_idx, self.settings.min_order_gap_deg)
+        if bounds[0] >= bounds[1]:
+            return None
+
+        step_positions = _leader_shift_positions(current_angle, bounds, radius, start_x, self.settings)
+        radial_positions = _leader_radial_positions(label, current_angle, start_x, start_y, radius)
+        sweep_points = [(item[2], item[3]) for positions in (*step_positions, radial_positions) for item in positions]
+        if not sweep_points:
+            return None
+        current_peers = self.reach.peers(self.reach.text, label_idx)
+        plain_for_label = _count_local_label_overlaps(
+            labels, total_length, label_idx, label, use_min_gap=False, peers=current_peers
+        )
+        min_gap_for_label = _count_local_label_overlaps(
+            labels, total_length, label_idx, label, use_min_gap=True, peers=current_peers
+        )
+        current_score: _LeaderScore = (
+            line_count,
+            collision_count,
+            min_gap_for_label,
+            (0, 0.0),
+            _leader_length_px(label, total_length),
+        )
+        text_peers, crossing_peers, collision_peers = self.reach.sweep_peers(label, label_idx, sweep_points)
+        search = _LeaderCandidateSearch(
+            labels=labels,
+            total_length=total_length,
+            margin_px=self.settings.margin_px,
+            geometry=self.geometry,
+            label_idx=label_idx,
+            line_count=line_count,
+            collision_count=collision_count,
+            plain_for_label=plain_for_label,
+            min_gap_for_label=min_gap_for_label,
+            plain_total=plain_total,
+            min_gap_total=min_gap_total,
+            text_peers=text_peers,
+            crossing_peers=crossing_peers,
+            collision_peers=collision_peers,
+        )
+        best = search.best(step_positions, radial_positions, current_score)
+        if best is None or (best.score[0] >= line_count and best.score[1] >= collision_count):
+            return None
+        return best
+
+    def _apply(self, label_idx: int, move: _LeaderMove) -> None:
+        """Move label `label_idx` to `move`, with its geometry and reach boxes."""
+        label = self.labels[label_idx]
+        candidate = move.candidate
+        label["start_x"] = float(candidate["start_x"])
+        label["start_y"] = float(candidate["start_y"])
+        label["angle_unwrapped"] = float(move.angle)
+        label["leader_start_x"] = float(candidate["leader_start_x"])
+        label["leader_start_y"] = float(candidate["leader_start_y"])
+        self.geometry.rects[label_idx] = move.rect
+        self.geometry.segments[label_idx] = move.segments
+        self.geometry.primary_segments[label_idx] = move.primary_segment
+        self.reach.moved(label_idx)
+
+
+def _set_angles_from_start(labels: list[CircularLabel], total_length: int) -> None:
+    """Set each label's `angle_unwrapped` to the angle of its start point, unwrapped near its target angle."""
+    for label in labels:
+        start_x = float(label.get("start_x", 0.0))
+        start_y = float(label.get("start_y", 0.0))
+        angle_raw = math.degrees(math.atan2(start_y, start_x))
+        target_angle = float(
+            label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
+        )
+        label["angle_unwrapped"] = normalize_angle_near_reference(angle_raw, target_angle)
+
+
 def _resolve_label_leader_line_collisions(
     labels: list[CircularLabel],
     total_length: int,
@@ -1526,344 +2013,28 @@ def _resolve_label_leader_line_collisions(
 
     step_deg = max(float(step_deg), 1e-6)
     max_shift_deg = max(float(max_shift_deg), step_deg)
-    max_steps = max(1, int(max_shift_deg / step_deg))
-    max_passes = max(1, int(max_passes))
-    min_order_gap_deg = max(float(min_order_gap_deg), 1e-6)
-    rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
-    primary_segments = _build_primary_leader_segments(labels)
-
-    if (
-        _count_label_leader_line_collisions(
-            labels,
-            total_length,
-            margin_px=margin_px,
-            rects=rects,
-            segments=segments,
-        )
-        == 0
-        and _count_leader_line_intersections(labels, primary_segments=primary_segments) == 0
-    ):
+    settings = _LeaderShiftSettings(
+        margin_px=margin_px,
+        step_deg=step_deg,
+        max_steps=max(1, int(max_shift_deg / step_deg)),
+        min_order_gap_deg=max(float(min_order_gap_deg), 1e-6),
+    )
+    passes = max(1, int(max_passes))
+    geometry = _LeaderCollisionGeometry.of(labels, total_length, margin_px)
+    if geometry.is_clear(labels, total_length, margin_px):
         return labels
 
-    # Peer pruning (output-preserving): every predicate below is false for two labels whose reach
-    # boxes are disjoint, so the counts only visit labels whose reach box meets the label's sweep.
     reach_pad = _label_reach_pad(labels, extra_margin_px=margin_px)
-
-    def _label_reach_boxes(idx: int) -> tuple[Aabb | None, Aabb | None, Aabb | None]:
-        """Reach boxes of the text (bbox overlaps), the primary leader (crossings), and all (collisions)."""
-        label = labels[idx]
-        rect = rects[idx]
-        return (
-            _label_reach_box(label, reach_pad),
-            bounding_aabb(primary_segments[idx], reach_pad),
-            _label_reach_box(
-                label,
-                reach_pad,
-                points=[
-                    (rect[0], rect[1]),
-                    (rect[2], rect[3]),
-                    *(point for segment in segments[idx] for point in segment),
-                    *primary_segments[idx],
-                ],
-            ),
-        )
-
-    def _set_reach_boxes(idx: int) -> None:
-        for index, box in zip((text_index, primary_index, reach_index), _label_reach_boxes(idx)):
-            index.replace(idx, box)
-
-    for _ in range(max_passes):
-        current_total_bbox_collisions = _count_label_leader_line_collisions(
-            labels,
-            total_length,
-            margin_px=margin_px,
-            rects=rects,
-            segments=segments,
-        )
-        current_total_line_intersections = _count_leader_line_intersections(
-            labels,
-            primary_segments=primary_segments,
-        )
-        if current_total_bbox_collisions == 0 and current_total_line_intersections == 0:
-            break
-
-        current_plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
-        current_min_gap_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=True)
-        pass_changed = False
-        unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
-        label_boxes = [_label_reach_boxes(idx) for idx in range(len(labels))]
-        # The peer lookups look only at the boxes in grid buckets near the query.
-        text_index, primary_index, reach_index = (
-            TouchingAabbIndex.of([boxes[family] for boxes in label_boxes]) for family in range(3)
-        )
-        text_boxes, primary_boxes, reach_boxes = text_index.boxes, primary_index.boxes, reach_index.boxes
-        local_scores = []
-        for idx in range(len(labels)):
-            crossing_peers = primary_index.touching(primary_boxes[idx], skip=idx)
-            near_peers = reach_index.touching(reach_boxes[idx], skip=idx)
-            local_scores.append(
-                (
-                    _count_local_leader_line_intersections(
-                        labels,
-                        idx,
-                        primary_segments=primary_segments,
-                        peers=crossing_peers,
-                    ),
-                    _count_local_leader_line_collisions(
-                        labels,
-                        total_length,
-                        idx,
-                        margin_px=margin_px,
-                        rects=rects,
-                        segments=segments,
-                        peers=near_peers,
-                    ),
-                    idx,
-                )
-            )
-        local_scores.sort(key=lambda item: (item[0], item[1]), reverse=True)
-
-        for local_line_intersection_count, local_collision_count, label_idx in local_scores:
-            if local_line_intersection_count <= 0 and local_collision_count <= 0:
-                break
-
-            label = labels[label_idx]
-            start_x = float(label.get("start_x", 0.0))
-            start_y = float(label.get("start_y", 0.0))
-            radius = math.hypot(start_x, start_y)
-            if radius <= 1e-9:
-                continue
-
-            current_angle = float(unwrapped_angles[label_idx])
-            lower_bound, upper_bound = _cyclic_order_bounds(unwrapped_angles, label_idx, min_order_gap_deg)
-            if lower_bound >= upper_bound:
-                continue
-
-            current_half = _current_half_from_x(start_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
-            current_peers = text_index.touching(text_boxes[label_idx], skip=label_idx)
-            current_plain_for_label = _count_local_label_overlaps(
-                labels, total_length, label_idx, label, use_min_gap=False, peers=current_peers
-            )
-            current_min_gap_for_label = _count_local_label_overlaps(
-                labels, total_length, label_idx, label, use_min_gap=True, peers=current_peers
-            )
-            current_score: tuple[int, int, int, tuple[int, float], float] = (
-                local_line_intersection_count,
-                local_collision_count,
-                current_min_gap_for_label,
-                (0, 0.0),
-                _leader_length_px(label, total_length),
-            )
-            best_score = current_score
-            best_candidate: CircularLabel | None = None
-            best_candidate_rect: tuple[float, float, float, float] | None = None
-            best_candidate_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None
-            best_candidate_primary_segment: tuple[tuple[float, float], tuple[float, float]] | None = None
-            best_angle: float | None = None
-            best_plain_total = current_plain_overlaps
-            best_min_gap_total = current_min_gap_overlaps
-
-            # Candidate anchors per step, in the search order; their sweep box selects the peers. Each
-            # carries its move (0, angle offset) or (1, outward shift px): any angular shift ranks first.
-            step_positions: list[list[tuple[tuple[int, float], float, float, float]]] = []
-            for step_idx in range(1, max_steps + 1):
-                angle_offset = step_idx * step_deg
-                positions: list[tuple[tuple[int, float], float, float, float]] = []
-                for direction in (1.0, -1.0):
-                    candidate_angle = current_angle + (direction * angle_offset)
-                    if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
-                        continue
-
-                    candidate_x = radius * math.cos(math.radians(candidate_angle))
-                    candidate_y = radius * math.sin(math.radians(candidate_angle))
-                    if current_half != 0 and _current_half_from_x(
-                        candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
-                    ) != current_half:
-                        continue
-                    positions.append(((0, angle_offset), candidate_angle, candidate_x, candidate_y))
-                step_positions.append(positions)
-            # OV-1823: the same angle, further out (an outer label only). An angular shift cannot clear
-            # a label that sits across a neighbour's radial leader between the neighbour's feature and text.
-            radial_positions: list[tuple[tuple[int, float], float, float, float]] = []
-            if label.get("is_inner", False) is False:
-                max_shift_px = LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS * float(label["height_px"])
-                radial_steps = int(max_shift_px / LEADER_LABEL_RADIAL_STEP_PX)
-                for step_idx in range(1, radial_steps + 1):
-                    shift_px = step_idx * LEADER_LABEL_RADIAL_STEP_PX
-                    scale = (radius + shift_px) / radius
-                    radial_positions.append(((1, shift_px), current_angle, start_x * scale, start_y * scale))
-            sweep_points = [
-                (item[2], item[3]) for positions in (*step_positions, radial_positions) for item in positions
-            ]
-            if not sweep_points:
-                continue
-            middle_point, feature_anchor_point = _leader_segments(label)[1]
-            text_peers = text_index.touching(
-                _label_reach_box(label, reach_pad, anchors=sweep_points), skip=label_idx
-            )
-            crossing_peers = primary_index.touching(
-                _label_reach_box(label, reach_pad, anchors=sweep_points, points=[middle_point]),
-                skip=label_idx,
-            )
-            collision_peers = reach_index.touching(
-                _label_reach_box(
-                    label, reach_pad, anchors=sweep_points, points=[middle_point, feature_anchor_point]
-                ),
-                skip=label_idx,
-            )
-
-            for positions in (*step_positions, radial_positions):
-                if positions is radial_positions and best_score[1] == 0:
-                    break  # an angular shift (or none) clears every leader collision of this label
-                for move, candidate_angle, candidate_x, candidate_y in positions:
-                    candidate = label.copy()
-                    candidate["start_x"] = float(candidate_x)
-                    candidate["start_y"] = float(candidate_y)
-                    candidate["angle_unwrapped"] = float(candidate_angle)
-                    leader_start_x, leader_start_y = _leader_start_point(candidate, total_length)
-                    candidate["leader_start_x"] = float(leader_start_x)
-                    candidate["leader_start_y"] = float(leader_start_y)
-                    candidate_rect = _label_bbox_rect(candidate, total_length, margin_px=margin_px)
-                    candidate_segments = _leader_segments(candidate)
-                    candidate_primary_segment = _primary_leader_segment(candidate)
-
-                    # Same rejections as counting everything first: a count only has to be exact
-                    # while it stays within the bound that would reject the candidate.
-                    line_cap = min(local_line_intersection_count, best_score[0])
-                    candidate_local_line_intersection_count = _count_local_leader_line_intersections(
-                        labels,
-                        label_idx,
-                        candidate=candidate,
-                        primary_segments=primary_segments,
-                        candidate_segment=candidate_primary_segment,
-                        peers=crossing_peers,
-                        cap=line_cap,
-                    )
-                    if candidate_local_line_intersection_count > line_cap:
-                        continue
-                    collision_cap = (
-                        min(local_collision_count, best_score[1])
-                        if candidate_local_line_intersection_count == best_score[0]
-                        else local_collision_count
-                    )
-                    candidate_local_collision_count = _count_local_leader_line_collisions(
-                        labels,
-                        total_length,
-                        label_idx,
-                        margin_px=margin_px,
-                        candidate=candidate,
-                        rects=rects,
-                        segments=segments,
-                        candidate_rect=candidate_rect,
-                        candidate_segments=candidate_segments,
-                        peers=collision_peers,
-                        cap=collision_cap,
-                    )
-                    if candidate_local_collision_count > collision_cap:
-                        continue
-
-                    candidate_plain_for_label = _count_local_label_overlaps(
-                        labels,
-                        total_length,
-                        label_idx,
-                        candidate,
-                        use_min_gap=False,
-                        peers=text_peers,
-                        cap=current_plain_for_label,
-                    )
-                    candidate_plain_total = (
-                        current_plain_overlaps - current_plain_for_label + candidate_plain_for_label
-                    )
-                    if candidate_plain_total > current_plain_overlaps:
-                        continue
-
-                    candidate_min_gap_for_label = _count_local_label_overlaps(
-                        labels,
-                        total_length,
-                        label_idx,
-                        candidate,
-                        use_min_gap=True,
-                        peers=text_peers,
-                        cap=current_min_gap_for_label,
-                    )
-                    candidate_min_gap_total = (
-                        current_min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
-                    )
-                    if candidate_min_gap_total > current_min_gap_overlaps:
-                        continue
-
-                    candidate_score = (
-                        candidate_local_line_intersection_count,
-                        candidate_local_collision_count,
-                        candidate_min_gap_for_label,
-                        move,
-                        _leader_length_px(candidate, total_length),
-                    )
-                    if candidate_score < best_score:
-                        best_score = candidate_score
-                        best_candidate = candidate
-                        best_candidate_rect = candidate_rect
-                        best_candidate_segments = candidate_segments
-                        best_candidate_primary_segment = candidate_primary_segment
-                        best_angle = candidate_angle
-                        best_plain_total = candidate_plain_total
-                        best_min_gap_total = candidate_min_gap_total
-
-                if best_score[0] == 0 and best_score[1] == 0 and best_score[2] == 0:
-                    break
-
-            if best_candidate is None:
-                continue
-            if (
-                best_score[0] >= local_line_intersection_count
-                and best_score[1] >= local_collision_count
-            ):
-                continue
-
-            label["start_x"] = float(best_candidate["start_x"])
-            label["start_y"] = float(best_candidate["start_y"])
-            label["angle_unwrapped"] = float(best_angle if best_angle is not None else current_angle)
-            label["leader_start_x"] = float(best_candidate["leader_start_x"])
-            label["leader_start_y"] = float(best_candidate["leader_start_y"])
-            unwrapped_angles[label_idx] = float(best_angle if best_angle is not None else current_angle)
-            if best_candidate_rect is not None:
-                rects[label_idx] = best_candidate_rect
-            if best_candidate_segments is not None:
-                segments[label_idx] = best_candidate_segments
-            if best_candidate_primary_segment is not None:
-                primary_segments[label_idx] = best_candidate_primary_segment
-            _set_reach_boxes(label_idx)
-            current_plain_overlaps = best_plain_total
-            current_min_gap_overlaps = best_min_gap_total
-            pass_changed = True
-
+    for _ in range(passes):
+        reach = _LeaderReachIndexes(labels, geometry, reach_pad)
+        changed = _LeaderCollisionPass(labels, total_length, settings, geometry, reach).run()
         labels = assign_leader_start_points(labels, total_length)
-        rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
-        primary_segments = _build_primary_leader_segments(labels)
-        if (
-            _count_label_leader_line_collisions(
-                labels,
-                total_length,
-                margin_px=margin_px,
-                rects=rects,
-                segments=segments,
-            )
-            == 0
-            and _count_leader_line_intersections(labels, primary_segments=primary_segments) == 0
-        ):
-            break
-        if not pass_changed:
+        geometry = _LeaderCollisionGeometry.of(labels, total_length, margin_px)
+        # A pass that moved nothing would move nothing again; the geometry is checked again only after a move.
+        if not changed or geometry.is_clear(labels, total_length, margin_px):
             break
 
-    for label in labels:
-        start_x = float(label.get("start_x", 0.0))
-        start_y = float(label.get("start_y", 0.0))
-        angle_raw = math.degrees(math.atan2(start_y, start_x))
-        target_angle = float(
-            label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-        )
-        label["angle_unwrapped"] = normalize_angle_near_reference(angle_raw, target_angle)
-
+    _set_angles_from_start(labels, total_length)
     return labels
 
 
