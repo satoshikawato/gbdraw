@@ -5,6 +5,7 @@ import math
 import pytest
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
+from gbdraw import LinearOptions, draw_linear, read_genbank
 from gbdraw.config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -142,3 +143,20 @@ def test_linear_label_rendering_policy_rejects_above_feature_conflict() -> None:
                 "external_only",
             ]
         )
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("label_rendering", ["embedded_only", "external_only"])
+def test_linear_python_api_rejects_above_feature_with_a_rendering_policy(label_rendering: str) -> None:
+    # The Python API (and a Session) set the placement and the rendering without the CLI parser, so the
+    # label code refuses the pair itself.
+    records = read_genbank("examples/MjeNMV.gb")
+    options = LinearOptions(
+        config_overrides={
+            "labels.rendering": label_rendering,
+            "labels.linear.placement": "above_feature",
+            "labels.linear.scope": "all",
+        }
+    )
+    with pytest.raises(ValueError, match="cannot be used with label_placement above_feature"):
+        draw_linear(records, options=options)
