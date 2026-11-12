@@ -43,7 +43,7 @@ import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
  */
 /** @typedef {(options?: { forceReflow?: boolean }) => unknown} LabelApply */
 /** @typedef {{ textEl: SVGTextElement, referencePoint: LabelPoint, candidates: FeatureCentroid[], candidateById: Map<string, FeatureCentroid>, kind: string }} LabelMeta */
-/** @import { LabelImportEdit } from '../../services/label-import-plan.js' */
+/** @import { LabelImportEdit, LabelImportTarget } from '../../services/label-import-plan.js' */
 
 // The groups whose text is never a feature label. A Linear Result draws a
 // feature label with the central baseline, and so does it draw a region label
@@ -305,7 +305,7 @@ const getElementCenter = (svg, element) => {
 };
 
 /** @param {Element} textEl */
-export const getLabelText = (textEl) => {
+const getLabelText = (textEl) => {
   const textPath = textEl.querySelector('textPath');
   if (textPath) return textPath.textContent || '';
   return textEl.textContent || '';
@@ -378,7 +378,7 @@ const getLabelReferencePoint = (svg, textEl, mode) => {
 };
 
 /** @param {SVGSVGElement} svg @param {DiagramMode} mode @returns {SVGTextElement[]} */
-export const collectEditableLabelElements = (svg, mode) => {
+const collectEditableLabelElements = (svg, mode) => {
   /** @type {Set<SVGTextElement>} */
   const labels = new Set();
   // Every selector below names `text` elements (`text > textPath` takes the
@@ -465,7 +465,7 @@ const createLabelBindingMarker = () => {
 };
 
 /** @param {SVGSVGElement} svg @returns {FeatureGeometry} */
-export const collectFeatureGeometry = (svg) => {
+const collectFeatureGeometry = (svg) => {
   /** @type {Map<string, { id: string, x: number, y: number, n: number, groupId: string }>} */
   const grouped = new Map();
   // FEATURE_SELECTOR names path, polygon, and rect elements, which are SVGGraphicsElement.
@@ -540,7 +540,7 @@ const computeCandidateDistance = (referencePoint, candidate, mode) => {
  * @param {FeatureGeometry | null | undefined} featureGeometry
  * @param {DiagramMode} mode
  */
-export const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => {
+const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => {
   /** @type {Map<SVGTextElement, string>} */
   const assignments = new Map();
   if (!featureGeometry || featureGeometry.all.length === 0) return assignments;
@@ -598,6 +598,36 @@ export const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mo
 
   return assignments;
 };
+
+// The parts a label is drawn with: every element bound to its feature, when
+// the label carries the current binding schema.
+/** @param {Element | null | undefined} svg @param {Element | null | undefined} textEl */
+const resolveCompleteLabelVisualUnit = (svg, textEl) => {
+  if (!svg || !textEl) return null;
+  const featureId = String(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
+  if (!featureId) return null;
+  if (textEl.getAttribute(LABEL_BINDING_SCHEMA_ATTRIBUTE) !== LABEL_BINDING_SCHEMA) {
+    return null;
+  }
+  const parts = Array.from(svg.querySelectorAll(`[${LABEL_FEATURE_ID_ATTRIBUTE}]`))
+    .filter((element) => (
+      String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim() === featureId
+    ));
+  if (!parts.includes(textEl)) return null;
+  return { featureId, parts };
+};
+
+// The feature each editable label names: the binder's assignment of the
+// labels to the drawn features' geometry.
+/** @param {SVGSVGElement} svg @param {SVGTextElement[]} labelElements @param {DiagramMode} mode */
+const labelFeatureAssignments = (svg, labelElements, mode) => assignFeatureIdsToLabels(
+  svg, labelElements, collectFeatureGeometry(svg), mode
+);
+// A label's source text: its feature row's recorded source text, else the
+// text the binder recorded on the label, else the text it shows.
+/** @param {{ labelSourceText?: string | null } | null | undefined} row @param {Element} element */
+const labelSourceTextOf = (row, element) => row?.labelSourceText
+  ?? element.getAttribute('data-label-source-text') ?? getLabelText(element);
 
 /**
  * The preview owner's identity of a Result: its committed identity, which a
@@ -814,8 +844,7 @@ export const createFeatureLabelActions = ({
     const displayed = displayedFeatures(drawing);
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const row = labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
-      const sourceText = row?.labelSourceText
-        ?? textEl.getAttribute('data-label-source-text') ?? getLabelText(textEl);
+      const sourceText = labelSourceTextOf(row, textEl);
       textEl.setAttribute('data-label-source-text', sourceText);
       // The source text is free text, so the bulk table is read by own key.
       const bulkText = ownEntry(drawing.labelTextBulkOverrides, sourceText);
@@ -825,22 +854,6 @@ export const createFeatureLabelActions = ({
       changed = true;
     });
     return changed;
-  };
-
-  /** @param {Element | null | undefined} svg @param {Element | null | undefined} textEl */
-  const resolveCompleteLabelVisualUnit = (svg, textEl) => {
-    if (!svg || !textEl) return null;
-    const featureId = String(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
-    if (!featureId) return null;
-    if (textEl.getAttribute(LABEL_BINDING_SCHEMA_ATTRIBUTE) !== LABEL_BINDING_SCHEMA) {
-      return null;
-    }
-    const parts = Array.from(svg.querySelectorAll(`[${LABEL_FEATURE_ID_ATTRIBUTE}]`))
-      .filter((element) => (
-        String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim() === featureId
-      ));
-    if (!parts.includes(textEl)) return null;
-    return { featureId, parts };
   };
 
   /** @param {Element | null | undefined} svg @param {Element | null | undefined} textEl @param {unknown} modeRaw */
@@ -1065,7 +1078,6 @@ export const createFeatureLabelActions = ({
     // Label intent is keyed by feature identity, not by the mounted view: a
     // Result switch, record selection, hide, or reflow changes which labels
     // this SVG shows, never which overrides exist (FE-01, R2).
-    const featureGeometry = collectFeatureGeometry(svg);
     const labelElements = collectEditableLabelElements(svg, mode.value);
     const features = extractedFeatures.value;
     requireUniqueEditableLabelBindings(
@@ -1073,7 +1085,7 @@ export const createFeatureLabelActions = ({
       [...requiredFeatureIds, ...optionalFeatureIds],
       { allowMissing: true, features }
     );
-    const featureAssignments = assignFeatureIdsToLabels(svg, labelElements, featureGeometry, mode.value);
+    const featureAssignments = labelFeatureAssignments(svg, labelElements, mode.value);
     labelElements.forEach((textEl, index) => {
       textEl.style.cursor = 'text';
       textEl.setAttribute('data-label-editable', 'true');
@@ -1648,6 +1660,23 @@ export const createFeatureLabelActions = ({
   // it is displayed (B6, R3). The label table owner (`label-table.js`) plans
   // them; a global `label` row is a bulk label edit and records the source text
   // of a tracked label, any other row is its feature's label edit (design Q4).
+  // The labels a Label TSV row selects on the displayed Result: each editable
+  // label, the feature the binder assigns it, and its source text, as the
+  // editor binds and projects them; the label table owner reads them (R13).
+  /** @param {DrawingState} drawing @param {SVGSVGElement} svg @returns {LabelImportTarget[]} */
+  const labelTargetsOf = (drawing, svg) => {
+    const elements = collectEditableLabelElements(svg, mode.value);
+    const assignments = labelFeatureAssignments(svg, elements, mode.value);
+    const displayed = displayedFeatures(drawing);
+    return elements.map((element) => {
+      const featureId = assignments.get(element) || '';
+      const feature = featureId ? labelFeature(drawing, featureId, displayed) : null;
+      return { featureId, feature, sourceText: labelSourceText(drawing, element, feature) };
+    });
+  };
+  /** @param {DrawingState} drawing @param {Element} element @param {LabelFeature | null} feature */
+  const labelSourceText = (drawing, element, feature) => labelSourceTextOf(rowOf(drawing, feature), element);
+
   /** @param {DrawingState} drawing @param {readonly LabelImportEdit[]} applicable */
   const applyLabelTable = (drawing, applicable) => {
     clearOverrides(drawing, Object.fromEntries(applicable
@@ -1679,7 +1708,7 @@ export const createFeatureLabelActions = ({
     hiddenLabelTextMessage,
     moveDrawnLabelVisibility,
     // R13: the label table owner's ports (`label-table.js`).
-    displayedFeatures, labelFeature, rowOf, applyLabelTable, rememberLabelImportNotice,
+    labelTargetsOf, labelSourceText, applyLabelTable, rememberLabelImportNotice,
     getEditableLabelByFeatureId,
     handleHiddenLabelTextChoice,
     handleLabelOnChoice,

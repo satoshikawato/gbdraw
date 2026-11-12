@@ -208,7 +208,7 @@ export const createFeatureEditor = ({
   // Load and Export Label TSV; the label owner writes the label edits a load makes.
   const labelTableActions = createLabelTableActions({
     state, ref, computed, isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot, evaluateLabelRules, showNotice,
-    displayedFeatures: labelActions.displayedFeatures, labelFeature: labelActions.labelFeature, rowOf: labelActions.rowOf,
+    labelTargetsOf: labelActions.labelTargetsOf, labelSourceText: labelActions.labelSourceText,
     applyLabelTable: labelActions.applyLabelTable, rememberLabelImportNotice: labelActions.rememberLabelImportNotice
   });
   editorPorts.prepareDrawnFeatureMatches = visibilityActions.prepareDrawnFeatureMatches;
