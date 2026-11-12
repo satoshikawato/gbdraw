@@ -664,16 +664,16 @@ malformed field is ignored. The workflow's token is the first in this
 repository with `issues: write`. Its 1,000 API requests an hour belong to the
 whole repository, so every workflow shares them, `CI impact plan`, `PR / gate`
 and the `Fail fast (...)` jobs among them. The tool therefore reads job lists
-only for `Tests` and `Gallery publication` runs, `Tests` first, and stops
+only for `Tests` and `Gallery publication` runs, the cancelled pull request `Tests` runs first (so the four pull request numbers use job lists), then the other `Tests` runs, and stops
 reading them while 500 requests of the hour are left (`RATE_RESERVE`); after
 its other reads (about 150), a scheduled run reads the job lists of at most
 about 350 runs, fewer when other workflows use the hour, against about 750
 before the reserve rose from 100; a busy week has about 1,200 `Tests` runs. Other runs, and the runs left when the job
 lists stop, count by their own duration in rows marked "(run duration)".
-Three figures come from the job lists read and cover only those runs: the
+Three figures come from the job lists read: the
 runner-minutes by job (and the job-level split of runner-minutes by
 workflow), the `Tests` wall and queue time, and the decision for a cancelled
-pull request run (above). When the API refuses the run
+pull request run (above). The runner-minutes by job are a sample of the budget left after the cancelled pull request runs; the decision covers all of them (about 190 a week fit in the 350). When the API refuses the run
 listing (HTTP 403 or 429), the report covers the runs read so far and says it
 is partial. A filtered run listing returns at most 1,000 runs, so the tool
 reads the window a day at a time and a busier day in halves. Every read,

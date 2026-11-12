@@ -402,6 +402,19 @@ test('job lists stop while 500 requests of the shared hourly budget are left', a
   assert.equal(client.requests(), 8);
 });
 
+test('job lists of cancelled pull request runs are read first, so a late one is decided by its jobs', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('{"jobs":[]}', {
+    status: 200, headers: { 'x-ratelimit-remaining': '400' }
+  }));
+  const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
+  // Only the first batch of 8 is read. The cancelled pull request run is the last of 25.
+  const early = Array.from({ length: 24 }, (_, index) => tests(index + 1, 'push', 'dev'));
+  const late = { ...tests(99, 'pull_request', 'fix/q'), conclusion: 'cancelled' };
+  const jobsByRun = await listJobs(client, [...early, late]);
+  assert.equal(jobsByRun.size, 8);
+  assert.ok(jobsByRun.has(99));
+});
+
 test('an artifact download is tried again on a server error or a cut-off body', async (t) => {
   const answers = [];
   const urls = [];
@@ -419,14 +432,17 @@ test('an artifact download is tried again on a server error or a cut-off body', 
     }
   }), { status: 200 });
   const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
+  // A cut-off body is tried again, and the third try returns the bytes.
+  answers.push(redirect(), cutOff(), redirect(), cutOff(), redirect(), new Response(new Uint8Array([80, 75]), { status: 200 }));
+  assert.deepEqual([...await client.download(archive)], [80, 75]);
+  assert.deepEqual(urls, [archive, signed, archive, signed, archive, signed]);
+  // Three tries at most, whatever the server answers.
+  urls.length = 0;
   answers.push(new Response('x', { status: 502 }), redirect(), new Response('x', { status: 503 }),
     redirect(), cutOff());
   await assert.rejects(client.download(archive), /terminated/);
   assert.equal(answers.length, 0);
-  answers.push(new Response('x', { status: 502 }), redirect(), new Response('x', { status: 503 }),
-    redirect(), new Response(new Uint8Array([80, 75]), { status: 200 }));
-  assert.deepEqual([...await client.download(archive)], [80, 75]);
-  assert.deepEqual(urls.slice(5), [archive, archive, signed, archive, signed]);
+  assert.deepEqual(urls, [archive, archive, signed, archive, signed]);
   // A refusal is not repeated.
   answers.push(new Response('x', { status: 403 }));
   await assert.rejects(client.download(archive), { status: 403 });

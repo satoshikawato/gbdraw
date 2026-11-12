@@ -679,12 +679,19 @@ export const listRuns = async (client, since, until) => {
   return { runs: [...new Map(runs.map((run) => [run.id, run])).values()], partial };
 };
 
-// Job lists of every attempt of `Tests` and `Gallery publication` runs, `Tests` first,
+// The order job lists are read in: cancelled pull request `Tests` runs (their job lists
+// decide whether they failed), then the other `Tests` runs, then the rest.
+const jobListRank = (/** @type {WorkflowRun} */ run) => {
+  if (run.path !== TESTS_WORKFLOW) return 2;
+  return run.event === 'pull_request' && run.conclusion === 'cancelled' ? 0 : 1;
+};
+
+// Job lists of every attempt of `Tests` and `Gallery publication` runs in that order,
 // while the request budget lasts.
 export const listJobs = async (client, runs) => {
   const jobsByRun = new Map();
   const ordered = runs.filter((run) => JOB_LIST_WORKFLOWS.has(run.path))
-    .sort((a, b) => Number(b.path === TESTS_WORKFLOW) - Number(a.path === TESTS_WORKFLOW));
+    .sort((a, b) => jobListRank(a) - jobListRank(b));
   for (let start = 0; start < ordered.length && client.remaining() > RATE_RESERVE; start += PARALLEL_REQUESTS) {
     const batch = ordered.slice(start, start + PARALLEL_REQUESTS);
     let lists;
