@@ -291,7 +291,7 @@ test('a group color edit sends the synthesis only the qualifiers it reads and ge
     qualifiers: { locus_tag: [`L${i}`], ...qualifiers, translation: [`MK${'V'.repeat(30)}${i}`] } });
   const features = [cds(0, { product: ['kinase'], note: ['first'] }), cds(1, { product: ['kinase'], note: ['second'] }),
     cds(2, { product: ['ligase'], note: ['first'] })];
-  const state = { extractedFeatures: { value: features }, files: { t_color: null }, circularSources: [], manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
+  const state = { extractedFeatures: { value: features }, biologicalFeatures: { value: [] }, files: { t_color: null }, circularSources: [], manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
   const sent = [];
   const preparation = createRulePreparation({ state: withDrawings(state), evaluate: evaluatePythonRules,
     synthesize: (request) => { sent.push(request); return synthesizePythonColorRules(request); },
