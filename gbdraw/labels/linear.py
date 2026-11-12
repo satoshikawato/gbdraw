@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, NamedTuple, TypeAlias, cast
+from typing import Any, NamedTuple, TypeAlias, TypedDict, cast
 from .coordinates import display_label_segment
 
 from .filtering import feature_label, label_filter_maps
@@ -22,7 +22,7 @@ from ..features.ids import compute_feature_object_hash
 from ..features.objects import FeatureObject
 from ..core.record_metadata import _source_feature_index
 from ..core.text import drawn_text_box
-from ..auto_sizes import determine_length_parameter
+from ..auto_sizes import linear_label_font_size
 from ..layout.linear_coords import normalize_position_to_linear_track
 from ..layout.linear import (
     LinearFeatureLaneGeometry,
@@ -672,12 +672,8 @@ def _linear_label_context(
     label_font_size: float | None,
 ) -> _LinearLabelContext:
     cfg = profile.config
-    length_param = determine_length_parameter(genome_length, cfg.labels.length_threshold.linear)
-    font_size = (
-        float(label_font_size)
-        if label_font_size is not None
-        else cfg.labels.font_size.linear.for_length_param(length_param)
-    )
+    # Both production callers pass the diagram's label size; a direct caller gets the size of this record.
+    font_size = float(label_font_size) if label_font_size is not None else linear_label_font_size((genome_length,), cfg)
     above_feature = profile.label_placement == "above_feature"
     if above_feature and profile.label_rendering != "auto":
         raise ValueError(
@@ -727,9 +723,14 @@ def _feature_track_positions(
     return positions
 
 
-# The stretch of a feature that its label is centred on: its start and end x in the record's drawn
-# width, its strand, and its wrap row in a wrapped record (else None).
-_LabelSegment: TypeAlias = tuple[float, float, str | None, int | None]
+class _LabelSegment(NamedTuple):
+    """The stretch of a feature that its label is centred on: its start and end x in the record's drawn
+    width, its strand, and its wrap row in a wrapped record (else None)."""
+
+    start_x: float
+    end_x: float
+    strand: str | None
+    wrap_row: int | None
 
 
 def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) -> _LabelSegment | None:
@@ -738,7 +739,7 @@ def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) 
 
     genome_length = context.genome_length
     wrap_row: int | None = None
-    if getattr(feature_object, "display_parts", None) is not None:
+    if feature_object.display_parts is not None:
         record_transform = context.record_transform
         projected_segment = display_label_segment(feature_object, genome_length, record_transform=record_transform)
         if projected_segment is None:
@@ -762,7 +763,7 @@ def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) 
         # The strand of the last part, not of the longest one (OV-3430).
         coordinate_strand = get_strand(feature_object.coordinates[-1].strand)
     alignment_width = context.alignment_width
-    return (
+    return _LabelSegment(
         normalize_position_to_linear_track(longest_segment_start, genome_length, alignment_width),
         normalize_position_to_linear_track(longest_segment_end, genome_length, alignment_width),
         coordinate_strand,
@@ -777,9 +778,29 @@ def _above_feature_gap_px(height_px: float) -> float:
     return max(1.0, height_px * 0.05)
 
 
-# Where an ``above_feature`` label touches its feature: over it (True) or under it, the x and y offset of
-# its contact point from its text anchor, and the y where its leader leaves the feature.
-_AboveFeatureContact: TypeAlias = tuple[bool, float, float, float]
+class _AboveFeatureLabelKeys(TypedDict):
+    """The keys only an ``above_feature`` label has, in their order in its label dict: its row on its
+    feature, whether it sits over its feature or under it, the offset of its contact point from its text
+    anchor, and its leader (not drawn) from the feature's edge to the contact point."""
+
+    track_id: str
+    above_feature_place_above: bool
+    label_contact_x_offset: float
+    label_contact_y_offset: float
+    leader_line: bool
+    leader_start_x: float
+    leader_start_y: float
+    leader_end_x: float
+    leader_end_y: float
+
+
+class _AboveFeaturePose(NamedTuple):
+    """An ``above_feature`` label's turn, text anchor and the y of its middle, and its own keys."""
+
+    rotation_deg: float
+    text_anchor: str
+    middle_y: float
+    label_keys: _AboveFeatureLabelKeys
 
 
 def _above_feature_pose(
@@ -788,9 +809,10 @@ def _above_feature_pose(
     position: _TrackPosition,
     base_rotation_deg: float,
     below_feature: bool,
-) -> tuple[float, str, float, _AboveFeatureContact]:
-    """An ``above_feature`` label beside its feature, its box edge one gap off the feature's edge: its
-    turn, text anchor, the y of its middle, and its contact with the feature."""
+    feature_anchor_x: float,
+) -> _AboveFeaturePose:
+    """An ``above_feature`` label beside its feature at ``feature_anchor_x``, its box edge one gap off the
+    feature's edge."""
 
     # Above-feature mode tilts labels in the opposite direction of the user-provided angle.
     # In separate-strands mode, negative strand labels are mirrored and placed below features.
@@ -819,7 +841,20 @@ def _above_feature_pose(
         # Keep rotated label bottom edge above the feature top.
         middle_y = feature_top_y - gap - y_max_offset
         leader_start_y = feature_top_y
-    return rotation_deg, text_anchor, middle_y, (place_above, contact_x, contact_y, leader_start_y)
+    # A horizontal label moves to the first row off its feature when its row is placed
+    # (``place_linear_label_row``, LP-D120); the row's tallest label sets the row pitch.
+    label_keys: _AboveFeatureLabelKeys = {
+        "track_id": "track_0",
+        "above_feature_place_above": place_above,
+        "label_contact_x_offset": contact_x,
+        "label_contact_y_offset": contact_y,
+        "leader_line": False,
+        "leader_start_x": feature_anchor_x,
+        "leader_start_y": leader_start_y,
+        "leader_end_x": feature_anchor_x,
+        "leader_end_y": middle_y + contact_y,
+    }
+    return _AboveFeaturePose(rotation_deg, text_anchor, middle_y, label_keys)
 
 
 def _linear_label_entry(
@@ -840,21 +875,20 @@ def _linear_label_entry(
     segment = _label_segment(feature_object, context)
     if segment is None:
         return None
-    feature_start_x, feature_end_x, strand, wrap_row = segment
-    assignment = getattr(feature_object, "placement", None)
+    feature_start_x, feature_end_x = segment.start_x, segment.end_x
+    assignment = feature_object.placement
     secondary_below = (
         assignment is not None and assignment.side == "below"
         and assignment.level > 0 and assignment.strand_pool == "combined"
     )
     feature_anchor_x = (feature_start_x + feature_end_x) / 2.0
     feature_top_y, feature_y, feature_bottom_y = position
-    contact: _AboveFeatureContact | None = None
+    pose: _AboveFeaturePose | None = None
     if context.above_feature:
-        below_feature = secondary_below or (context.strandedness and strand != "positive")
-        rotation_deg, text_anchor, label_y, contact = _above_feature_pose(
-            width_px, height_px, position, context.rotation_deg, below_feature
-        )
-        label_anchor_x = feature_anchor_x - contact[1]
+        below_feature = secondary_below or (context.strandedness and segment.strand != "positive")
+        pose = _above_feature_pose(width_px, height_px, position, context.rotation_deg, below_feature, feature_anchor_x)
+        rotation_deg, text_anchor, label_y = pose.rotation_deg, pose.text_anchor, pose.middle_y
+        label_anchor_x = feature_anchor_x - pose.label_keys["label_contact_x_offset"]
         is_embedded = True
     else:
         rotation_deg, text_anchor, label_anchor_x = 0.0, "middle", feature_anchor_x
@@ -877,7 +911,7 @@ def _linear_label_entry(
         "middle_x": label_anchor_x,
         "width_px": width_px,
         "height_px": height_px,
-        "strand": strand,
+        "strand": segment.strand,
         "secondary_below": secondary_below,
         "feature_middle_y": feature_y,
         "feature_top_y": feature_top_y,
@@ -893,25 +927,10 @@ def _linear_label_entry(
         "middle_y": label_y,
         "is_embedded": is_embedded,
     }
-    if wrap_row is not None:
-        label_entry["wrap_row"] = wrap_row
-    if contact is not None:
-        place_above, contact_x, contact_y, leader_start_y = contact
-        # A horizontal label moves to the first row off its feature when its row is placed
-        # (``place_linear_label_row``, LP-D120); the row's tallest label sets the row pitch.
-        label_entry.update(
-            {
-                "track_id": "track_0",
-                "above_feature_place_above": place_above,
-                "label_contact_x_offset": contact_x,
-                "label_contact_y_offset": contact_y,
-                "leader_line": False,
-                "leader_start_x": feature_anchor_x,
-                "leader_start_y": leader_start_y,
-                "leader_end_x": feature_anchor_x,
-                "leader_end_y": label_y + contact_y,
-            }
-        )
+    if segment.wrap_row is not None:
+        label_entry["wrap_row"] = segment.wrap_row
+    if pose is not None:
+        label_entry.update(pose.label_keys)
     elif is_embedded:
         label_entry["track_id"] = "track_0"
     return label_entry
@@ -972,7 +991,7 @@ def linear_record_labels(
             continue
         choice = feature_label(
             feature_object, label_filtering, overrides_only=overrides_only,
-            feature_override=getattr(feature_object, "feature_override", None),
+            feature_override=feature_object.feature_override,
         )
         label_text = choice.text
         position = positions.get(feature_id)
