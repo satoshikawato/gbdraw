@@ -922,6 +922,7 @@ under "Cited ids without a record".
   - `tests/test_gzip_inputs.py`
 
 - [PD-OI-128](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-128-feature-sequences-read-from-python-on-demand): Feature sequences read from Python on demand. ACCEPTED, concern `web.feature-sequence.on-demand`, scenario revision 1.
+  - `tests/web/export-lazy-loading.playwright.spec.js`
 
 ### Cited ids without a record
 
