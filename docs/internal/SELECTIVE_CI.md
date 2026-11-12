@@ -621,8 +621,35 @@ item names its own window:
   every shard report: test-minutes per shard, the slowest shard against the
   mean, the case count, the 15 spec files with the most test-minutes, and the
   plan that measurements refreshed from that run would give;
+- pull request CI, from the pull requests merged into `dev` in the window and
+  the pull request `Tests` runs created in it (below);
 - changes since the previous week in functional cases, functional
-  test-minutes, runner-minutes, and jobs in `test.yml`.
+  test-minutes, runner-minutes, jobs in `test.yml`, and the four pull request
+  CI numbers.
+
+Pull request CI has four numbers:
+
+- **Merged pull requests that passed on one run**: the share of the pull
+  requests merged into `dev` in the window, among those with a `Tests` run,
+  that had exactly one, and that run passed at its first attempt. A pull
+  request's runs are the pull request `Tests` runs on its head branch (of its
+  head repository) created between its opening and its merge, give or take
+  five minutes, including runs before the window.
+- **`Tests` runs per merged pull request**: the mean number of those runs.
+- **Pull request runs stopped by a newer push**: the share of the pull request
+  `Tests` runs created in the window that a newer push to the same branch
+  cancelled.
+- **Pull request runs that failed**: the share of those runs that failed,
+  timed out, or did not start, together with the runs that a `Fail fast (...)`
+  job cancelled after a failed job.
+
+GitHub reports both kinds of cancelled run as `cancelled`. A cancelled run
+counts as stopped by a newer push when the next run on its branch was created
+at most 120 seconds after it ended, and as failed when the gap is longer. A
+cancelled run with no later run on its branch is failed when its job list
+shows a failed job other than `PR / gate`, and stopped by a newer push
+otherwise, including when the request budget left it without a job list. The
+other conclusions (such as `skipped`) count in the total but in neither share.
 
 The report goes to the job summary and to one comment a week on the open issue
 labelled `ci-inventory`; the workflow creates the label and the issue when they
@@ -635,7 +662,9 @@ hour, the tool reads job lists only for `Tests` and `Gallery publication` runs;
 other runs, and any run left when the request budget runs low, count by their
 own duration in rows marked "(run duration)". When the API refuses the run
 listing (HTTP 403 or 429), the report covers the runs read so far and says it
-is partial.
+is partial. A filtered run listing returns at most 1,000 runs, so the tool
+reads the window a day at a time and a busier day in halves. A read that GitHub answers with a server error (HTTP 500 and up)
+or with a body cut short is tried up to three times before the run fails.
 
 CI plans the shards from the recorded seconds per case and the current case
 counts, so new spec files and new cases never unbalance them. A report asks for

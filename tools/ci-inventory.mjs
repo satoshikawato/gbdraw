@@ -7,7 +7,9 @@
 // and by job, the wall and queue time of `Tests` runs, the pull request feedback time
 // against its targets, and the functional Playwright shards of the latest green dev
 // `Tests` run with the plan that tools/balance-functional-shards.mjs would compute from
-// that run's measurements. It prints Markdown; with --post it
+// that run's measurements, and the CI of pull requests: how many merged ones passed on one
+// run, runs per merged one, and how many of their runs failed or were stopped by a newer
+// push. It prints Markdown; with --post it
 // also adds the report as this week's comment on the open issue labelled
 // `ci-inventory` (creating the label and issue when missing). Week-over-week changes
 // come from the data block of the workflow's own previous comment. Job lists are read
@@ -45,6 +47,8 @@ const PARALLEL_REQUESTS = 8;
 const DATA_BLOCK = /<!-- ci-inventory-data (\{.*?\}) -->/s;
 const WEEK = /^\d{4}-W\d{2}$/;
 const DATA_NUMBERS = ['cases', 'functionalTestMinutes', 'runnerMinutes', 'testJobs'];
+// Pull request CI shares: null for a week without them, and for reports from before them.
+const DATA_SHARES = ['onePassPercent', 'runsPerPullRequest', 'supersededPercent', 'failedPercent'];
 // Pull request feedback targets (docs/internal/SELECTIVE_CI.md, "Validation tiers"): the
 // median wall time, in minutes, of the head `Tests` runs of the last PR_WINDOW pull
 // requests merged into dev, by whether a functional Playwright shard ran.
@@ -160,6 +164,135 @@ export const summarizePullRequests = (jobLists) => {
   };
 };
 
+/**
+ * A workflow run as the REST API lists it; only these fields are read.
+ * @typedef {object} WorkflowRun
+ * @property {number} id
+ * @property {string} path The workflow file, such as `.github/workflows/test.yml`.
+ * @property {string} event
+ * @property {string} head_branch
+ * @property {{ full_name: string } | null} head_repository Null when the head repository was deleted.
+ * @property {string} created_at
+ * @property {string} updated_at The end of a completed run.
+ * @property {number} run_attempt
+ * @property {string | null} conclusion
+ */
+/**
+ * A job of one attempt of a run.
+ * @typedef {object} WorkflowJob
+ * @property {string} name
+ * @property {number} run_attempt
+ * @property {string | null} conclusion
+ */
+/**
+ * A pull request merged into dev in the window.
+ * @typedef {object} MergedPullRequest
+ * @property {string} created_at
+ * @property {string} merged_at
+ * @property {{ ref: string, repo: { full_name: string } | null }} head
+ */
+/**
+ * Pull request CI of the window (docs/internal/SELECTIVE_CI.md, "Weekly CI inventory").
+ * The four shares are rounded to one decimal, or null when nothing was counted.
+ * @typedef {object} PullRequestCi
+ * @property {number} mergedPullRequests Pull requests merged into dev in the window.
+ * @property {number} withRuns Those with at least one pull request `Tests` run.
+ * @property {number} singlePass Those whose only run passed at its first attempt.
+ * @property {number} pullRequestRuns Pull request `Tests` runs created in the window.
+ * @property {Record<RunOutcome, number>} runs Those runs by outcome.
+ * @property {number} failFast Failed runs that GitHub reports as cancelled (fail-fast).
+ * @property {number | null} onePassPercent
+ * @property {number | null} runsPerPullRequest
+ * @property {number | null} supersededPercent
+ * @property {number | null} failedPercent
+ */
+/** @typedef {'passed' | 'failed' | 'superseded' | 'other'} RunOutcome */
+
+// A run joins a pull request when it ran on its head branch between its opening and its
+// merge, give or take this slack: a merged pull request's runs list no pull requests.
+const JOIN_SLACK_MS = 5 * 60 * 1000;
+// A cancelled run followed by the next run on its branch within this time was stopped by
+// that push; a longer gap means a `Fail fast (...)` job cancelled it after a failed job.
+export const SUPERSEDED_GAP_SECONDS = 120;
+const FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
+const GATE_JOB = 'PR / gate';
+const branchOf = (/** @type {WorkflowRun} */ run) => `${run.head_repository?.full_name ?? ''}:${run.head_branch}`;
+/** @type {(count: number, total: number) => number | null} */
+const share = (count, total) => (total ? round1((100 * count) / total) : null);
+
+/**
+ * The outcome of a pull request run. A cancelled run with no later run on its branch
+ * failed when its job list shows a failed job other than `PR / gate`; without one, or
+ * without a job list, it counts as stopped by a newer push.
+ * @param {WorkflowRun} run
+ * @param {WorkflowRun | undefined} next The next run on the same branch.
+ * @param {WorkflowJob[] | undefined} jobs
+ * @returns {RunOutcome}
+ */
+const runOutcome = (run, next, jobs) => {
+  if (run.conclusion === 'success') return 'passed';
+  if (FAILED.has(run.conclusion ?? '')) return 'failed';
+  if (run.conclusion !== 'cancelled') return 'other';
+  if (next) {
+    return (Date.parse(next.created_at) - Date.parse(run.updated_at)) / 1000 > SUPERSEDED_GAP_SECONDS
+      ? 'failed' : 'superseded';
+  }
+  return (jobs || []).some((job) => job.run_attempt === run.run_attempt && job.name !== GATE_JOB
+    && job.conclusion === 'failure') ? 'failed' : 'superseded';
+};
+
+/**
+ * Pull request CI of the window. `runs` are the completed runs created in the window,
+ * `earlierRuns` the pull request `Tests` runs before it of pull requests opened before it,
+ * and `pulls` the pull requests merged into dev in the window.
+ * @param {{ runs: WorkflowRun[], earlierRuns: WorkflowRun[], jobsByRun: Map<number, WorkflowJob[]>,
+ *   pulls: MergedPullRequest[] }} input
+ * @returns {PullRequestCi}
+ */
+export const summarizePullRequestCi = ({ runs, earlierRuns, jobsByRun, pulls }) => {
+  const isPullRequestRun = (/** @type {WorkflowRun} */ run) => run.path === TESTS_WORKFLOW && run.event === 'pull_request';
+  const windowRuns = runs.filter(isPullRequestRun);
+  /** @type {Map<string, WorkflowRun[]>} */
+  const byBranch = new Map();
+  for (const run of [...earlierRuns.filter(isPullRequestRun), ...windowRuns]) {
+    const list = byBranch.get(branchOf(run)) || [];
+    if (!list.some((other) => other.id === run.id)) list.push(run);
+    byBranch.set(branchOf(run), list);
+  }
+  for (const list of byBranch.values()) list.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+
+  /** @type {Record<RunOutcome, number>} */
+  const outcomes = { passed: 0, failed: 0, superseded: 0, other: 0 };
+  let failFast = 0;
+  for (const run of windowRuns) {
+    const list = byBranch.get(branchOf(run)) || [];
+    const outcome = runOutcome(run, list[list.findIndex((other) => other.id === run.id) + 1], jobsByRun.get(run.id));
+    outcomes[outcome] += 1;
+    if (outcome === 'failed' && run.conclusion === 'cancelled') failFast += 1;
+  }
+
+  const runsPerPull = pulls.map((pull) => {
+    const from = Date.parse(pull.created_at) - JOIN_SLACK_MS;
+    const to = Date.parse(pull.merged_at) + JOIN_SLACK_MS;
+    return (byBranch.get(`${pull.head.repo?.full_name ?? ''}:${pull.head.ref}`) || [])
+      .filter((run) => Date.parse(run.created_at) >= from && Date.parse(run.created_at) <= to);
+  }).filter((list) => list.length);
+  const singlePass = runsPerPull.filter((list) => list.length === 1
+    && list[0].conclusion === 'success' && list[0].run_attempt === 1).length;
+  return {
+    mergedPullRequests: pulls.length,
+    withRuns: runsPerPull.length,
+    singlePass,
+    pullRequestRuns: windowRuns.length,
+    runs: outcomes,
+    failFast,
+    onePassPercent: share(singlePass, runsPerPull.length),
+    runsPerPullRequest: runsPerPull.length ? round1(sum(runsPerPull.map((list) => list.length)) / runsPerPull.length) : null,
+    supersededPercent: share(outcomes.superseded, windowRuns.length),
+    failedPercent: share(outcomes.failed, windowRuns.length)
+  };
+};
+
 const SHARD_ARTIFACT = /^playwright-functional-shard-(\d+)-traces-\d+-(\d+)$/;
 
 // The shard artifacts of a run, one per shard: a re-run keeps the earlier attempt's
@@ -224,7 +357,8 @@ export const countWorkflowJobs = (yaml) => {
   return body.split('\n').filter((line) => /^ {2}[A-Za-z0-9_-]+:\s*$/.test(line)).length;
 };
 
-// The numbers of a report's data block, or null unless every field has its type.
+// The numbers of a report's data block, or null unless every field has its type; a missing
+// share reads as null.
 export const readData = (body) => {
   const match = typeof body === 'string' ? body.match(DATA_BLOCK) : null;
   if (!match) return null;
@@ -240,6 +374,11 @@ export const readData = (body) => {
     if (typeof raw[field] !== 'number' || !Number.isFinite(raw[field])) return null;
     data[field] = raw[field];
   }
+  for (const field of DATA_SHARES) {
+    const value = raw[field] ?? null;
+    if (value !== null && (typeof value !== 'number' || !Number.isFinite(value))) return null;
+    data[field] = value;
+  }
   return data;
 };
 
@@ -254,6 +393,13 @@ export const priorReports = (comments, week) => {
   return { thisWeek, previous: (thisWeek ? reports.at(-2) : reports.at(-1))?.data ?? null };
 };
 
+const SHARE_ROWS = [
+  ['onePassPercent', 'Merged pull requests that passed on one run (%)'],
+  ['runsPerPullRequest', '`Tests` runs per merged pull request'],
+  ['supersededPercent', 'Pull request runs stopped by a newer push (%)'],
+  ['failedPercent', 'Pull request runs that failed (%)']
+];
+const RUN_OUTCOMES = { passed: 'passed', failed: 'failed', superseded: 'stopped by a newer push', other: 'other' };
 const fmt = (value) => (value === null || value === undefined ? '-' : String(round1(value)));
 const delta = (now, before) => {
   if (before === null || before === undefined) return '-';
@@ -268,15 +414,16 @@ const table = (header, rows) => [
 
 // The weekly report as Markdown, ending with its data block.
 export const renderReport = ({
-  week, since, until, runs, partial = null, pullRequests, functional, functionalRun, testJobs, previous, serverUrl,
-  repository
+  week, since, until, runs, partial = null, pullRequests, pullRequestCi, functional, functionalRun, testJobs, previous,
+  serverUrl, repository
 }) => {
   const data = {
     week,
     cases: functional.cases,
     functionalTestMinutes: functional.testMinutes,
     runnerMinutes: runs.runnerMinutes,
-    testJobs
+    testJobs,
+    ...Object.fromEntries(DATA_SHARES.map((field) => [field, pullRequestCi[field]]))
   };
   const reasons = [
     functional.slowestToMean > REFRESH_RATIO
@@ -311,9 +458,25 @@ export const renderReport = ({
         delta(data.functionalTestMinutes, previous?.functionalTestMinutes)],
       ['Runner-minutes, all workflows', fmt(data.runnerMinutes), fmt(previous?.runnerMinutes),
         delta(data.runnerMinutes, previous?.runnerMinutes)],
-      ['Jobs in `test.yml`', data.testJobs, previous?.testJobs ?? '-', delta(data.testJobs, previous?.testJobs)]
+      ['Jobs in `test.yml`', data.testJobs, previous?.testJobs ?? '-', delta(data.testJobs, previous?.testJobs)],
+      ...SHARE_ROWS.map(([field, measure]) => [
+        measure, fmt(data[field]), fmt(previous?.[field]),
+        data[field] === null ? '-' : delta(data[field], previous?.[field])
+      ])
     ]),
     previous ? `\nPrevious: ${previous.week}.` : '\nNo previous report.',
+    '',
+    '### Pull request CI',
+    '',
+    `${pullRequestCi.mergedPullRequests} pull requests merged into \`dev\` in the window,`
+      + ` ${pullRequestCi.withRuns} with a \`Tests\` run; ${pullRequestCi.singlePass} passed on their only run at its first attempt.`
+      + ` ${pullRequestCi.pullRequestRuns} pull request \`Tests\` runs were created in the window; ${pullRequestCi.failFast}`
+      + ' of the failed ones GitHub reports as cancelled, because a `Fail fast (...)` job stopped them after a failed job.'
+      + ' Definitions: docs/internal/SELECTIVE_CI.md, "Weekly CI inventory".',
+    '',
+    table(['Pull request runs', 'Count', 'Share (%)'], Object.entries(RUN_OUTCOMES).map(([outcome, caption]) => [
+      caption, pullRequestCi.runs[outcome], fmt(share(pullRequestCi.runs[outcome], pullRequestCi.pullRequestRuns))
+    ])),
     '',
     '### Runner-minutes by workflow and event',
     '',
@@ -374,7 +537,12 @@ export const renderReport = ({
 
 // --- GitHub REST -------------------------------------------------------------------
 
-const createClient = ({ token, apiUrl, repository }) => {
+// GitHub answers some reads with a server error or a body cut short; one such answer would
+// end the whole report, so a GET is tried up to READ_TRIES times. Writes are never repeated.
+const READ_TRIES = 3;
+const RETRY_WAIT_MS = 2000;
+
+export const createClient = ({ token, apiUrl, repository, retryWaitMs = RETRY_WAIT_MS }) => {
   let remaining = Infinity;
   let requests = 0;
   const request = async (path, { method = 'GET', body } = {}) => {
@@ -395,15 +563,28 @@ const createClient = ({ token, apiUrl, repository }) => {
     return response;
   };
   const json = async (path, options) => {
-    const response = await request(path, options);
-    if (response.status === 404 && (!options || options.method === undefined)) return null;
-    if (!response.ok) {
-      throw Object.assign(
-        new Error(`${options?.method || 'GET'} ${path}: ${response.status} ${await response.text()}`),
-        { status: response.status }
-      );
+    const read = !options || options.method === undefined;
+    for (let attempt = 1; ; attempt += 1) {
+      const retry = read && attempt < READ_TRIES;
+      const response = await request(path, options);
+      if (response.status === 404 && read) return null;
+      if (!response.ok && !(retry && response.status >= 500)) {
+        throw Object.assign(
+          new Error(`${options?.method || 'GET'} ${path}: ${response.status} ${await response.text()}`),
+          { status: response.status }
+        );
+      }
+      if (response.ok) {
+        try {
+          return JSON.parse(await response.text());
+        } catch (error) {
+          if (!retry) throw error;
+        }
+      } else {
+        await response.text();
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryWaitMs * attempt));
     }
-    return response.json();
   };
   // Pages until a short page; `key` names the list in each page, or null for a bare list.
   const pages = async (path, key) => {
@@ -421,16 +602,30 @@ const createClient = ({ token, apiUrl, repository }) => {
 // A rate-limit or permission refusal ends a listing early; the report says so.
 const refused = (error) => [403, 429].includes(error.status);
 
-// The completed runs created in the window, and why the listing stopped early, if it did.
-// A filtered run listing returns at most 1,000 runs, so the window is read a day at a time.
-const listRuns = async (client, since, until) => {
+// A filtered run listing returns at most this many runs.
+const RUN_LISTING_LIMIT = 1000;
+
+// The completed runs created from `start` to `end` (milliseconds, end excluded). A part
+// with more runs than one listing returns is read in halves.
+const listRunsCreated = async (client, start, end) => {
+  const created = `${new Date(start).toISOString()}..${new Date(end - 1000).toISOString()}`;
+  const path = `/actions/runs?status=completed&created=${encodeURIComponent(created)}`;
+  const { total_count: total } = await client.json(`${path}&per_page=1`);
+  if (total > RUN_LISTING_LIMIT && end - start > 2000) {
+    const middle = start + Math.floor((end - start) / 2000) * 1000;
+    return [...await listRunsCreated(client, start, middle), ...await listRunsCreated(client, middle, end)];
+  }
+  return total ? client.pages(path, 'workflow_runs') : [];
+};
+
+// The completed runs created in the window, a day at a time, and why the listing stopped
+// early, if it did.
+export const listRuns = async (client, since, until) => {
   const runs = [];
   let partial = null;
   for (let start = since.getTime(); start < until.getTime() && !partial; start += DAY_MS) {
-    const end = Math.min(start + DAY_MS, until.getTime());
-    const created = `${new Date(start).toISOString()}..${new Date(end - 1000).toISOString()}`;
     try {
-      runs.push(...await client.pages(`/actions/runs?status=completed&created=${encodeURIComponent(created)}`, 'workflow_runs'));
+      runs.push(...await listRunsCreated(client, start, Math.min(start + DAY_MS, until.getTime())));
     } catch (error) {
       if (!refused(error)) throw error;
       partial = `runs created from ${new Date(start).toISOString().slice(0, 16)}Z on are missing (HTTP ${error.status}).`;
@@ -459,16 +654,36 @@ const listJobs = async (client, runs) => {
   return jobsByRun;
 };
 
+// The pull requests merged into dev, last merged first: every one merged since `since`,
+// and at least those among the 100 closed ones updated last. A merge updates a pull
+// request, so the listing stops at a page that ends before `since`.
+const listMergedPulls = async (client, since) => {
+  const closed = [];
+  for (let page = 1; ; page += 1) {
+    const list = await client.json(`/pulls?state=closed&base=dev&sort=updated&direction=desc&per_page=100&page=${page}`);
+    closed.push(...list);
+    if (list.length < 100 || Date.parse(list.at(-1).updated_at) < since.getTime()) break;
+  }
+  return closed.filter((pull) => pull.merged_at).sort((a, b) => (a.merged_at < b.merged_at ? 1 : -1));
+};
+
+// The pull request `Tests` runs created before `since` of the pull requests opened before it.
+const listEarlierRuns = async (client, pulls, since) => {
+  const runs = [];
+  for (const pull of pulls.filter((pull) => Date.parse(pull.created_at) < since.getTime())) {
+    const from = new Date(Date.parse(pull.created_at) - JOIN_SLACK_MS).toISOString();
+    const created = `${from}..${new Date(since.getTime() - 1000).toISOString()}`;
+    runs.push(...await client.pages(`/actions/workflows/test.yml/runs?event=pull_request&status=completed`
+      + `&branch=${encodeURIComponent(pull.head.ref)}&created=${encodeURIComponent(created)}`, 'workflow_runs'));
+  }
+  return runs;
+};
+
 // The jobs of the latest green head `Tests` run of each of the last PR_WINDOW pull
-// requests merged into dev, or null for a pull request without one. A merge updates a
-// pull request, so the 100 closed ones updated last hold the ones merged last.
-const listPullRequestRuns = async (client) => {
-  const closed = await client.json('/pulls?state=closed&base=dev&sort=updated&direction=desc&per_page=100');
-  const merged = closed.filter((pull) => pull.merged_at)
-    .sort((a, b) => (a.merged_at < b.merged_at ? 1 : -1))
-    .slice(0, PR_WINDOW);
+// requests merged into dev, or null for a pull request without one.
+const listPullRequestRuns = async (client, mergedPulls) => {
   const jobLists = [];
-  for (const pull of merged) {
+  for (const pull of mergedPulls.slice(0, PR_WINDOW)) {
     const { workflow_runs: [run] } = await client.json(
       `/actions/workflows/test.yml/runs?event=pull_request&status=success&head_sha=${pull.head.sha}&per_page=1`
     );
@@ -547,9 +762,15 @@ const main = async (argv) => {
     reports: await readShardReports(client, shards), measurements, casesPerFile, testDir
   });
   // Before the job lists, which use the request budget until RATE_RESERVE is left.
-  const pullRequests = summarizePullRequests(await listPullRequestRuns(client));
+  const mergedPulls = await listMergedPulls(client, since);
+  const pullRequests = summarizePullRequests(await listPullRequestRuns(client, mergedPulls));
+  const windowPulls = mergedPulls.filter((pull) => Date.parse(pull.merged_at) >= since.getTime()
+    && Date.parse(pull.merged_at) < until.getTime());
+  const earlierRuns = await listEarlierRuns(client, windowPulls, since);
   const { runs, partial } = await listRuns(client, since, until);
-  const summary = summarizeRuns({ runs, jobsByRun: await listJobs(client, runs) });
+  const jobsByRun = await listJobs(client, runs);
+  const summary = summarizeRuns({ runs, jobsByRun });
+  const pullRequestCi = summarizePullRequestCi({ runs, earlierRuns, jobsByRun, pulls: windowPulls });
 
   const issue = await findIssue(client);
   const { thisWeek, previous } = priorReports(
@@ -557,7 +778,7 @@ const main = async (argv) => {
   );
 
   const markdown = renderReport({
-    week, since, until, runs: summary, partial, pullRequests, functional, functionalRun,
+    week, since, until, runs: summary, partial, pullRequests, pullRequestCi, functional, functionalRun,
     testJobs: countWorkflowJobs(readFileSync(TESTS_WORKFLOW, 'utf8')),
     previous, serverUrl: process.env.GITHUB_SERVER_URL || 'https://github.com', repository
   });
