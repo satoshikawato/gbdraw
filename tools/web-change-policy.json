@@ -279,7 +279,8 @@
   "persistedContractCoChange": {
     "exemptGeneratedExports": [
       "EXPECTED_WEB_RUNTIME_CAPABILITIES",
-      "ORGANISM_NAME_RULE"
+      "ORGANISM_NAME_RULE",
+      "MAX_EXPANDED_INPUT_BYTES"
     ],
     "sessionVersionUnit": "main"
   }
