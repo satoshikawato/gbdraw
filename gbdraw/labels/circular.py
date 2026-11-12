@@ -1666,8 +1666,7 @@ def _leader_shift_positions(
             if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
                 continue
 
-            candidate_x = radius * math.cos(math.radians(candidate_angle))
-            candidate_y = radius * math.sin(math.radians(candidate_angle))
+            candidate_x, candidate_y = _point_on_circle(radius, candidate_angle)
             if current_half != 0 and _current_half_from_x(
                 candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
             ) != current_half:
@@ -2757,10 +2756,7 @@ class _FixedRadiiRun:
     def _apply(self, idx: int) -> None:
         """Write label `idx`'s start point at its radius and current angle."""
         label = self.labels[idx]
-        radius = self.radii[idx]
-        angle_rad = math.radians(self.angles[idx])
-        label["start_x"] = radius * math.cos(angle_rad)
-        label["start_y"] = radius * math.sin(angle_rad)
+        label["start_x"], label["start_y"] = _point_on_circle(self.radii[idx], self.angles[idx])
 
     def _overlaps(self, idx: int, jdx: int) -> bool:
         """Whether labels `idx` and `jdx` overlap at their pair's minimum gap."""
@@ -2995,6 +2991,12 @@ def _label_target_angle_unwrapped(label: CircularLabel, total_length: int) -> fl
 def _angle_unwrapped_from_start(label: CircularLabel, total_length: int) -> float:
     """The angle of a label's start point near its target angle (`_start_angle_near`, `_label_target_angle_unwrapped`)."""
     return _start_angle_near(label, _label_target_angle_unwrapped(label, total_length))
+
+
+def _point_on_circle(radius: float, angle_deg: float) -> tuple[float, float]:
+    """The point at `radius` from the center and `angle_deg` degrees: a start point on the label's own circle."""
+    angle_rad = math.radians(angle_deg)
+    return radius * math.cos(angle_rad), radius * math.sin(angle_rad)
 
 
 def _start_angle_near(label: CircularLabel, reference_unwrapped: float) -> float:
@@ -3710,13 +3712,16 @@ def _seam_ordered_targets(labels: list[CircularLabel], total_length: int) -> tup
             raw_targets = raw_targets[rotate_by:] + raw_targets[:rotate_by]
     targets: list[float] = []
     for raw_target in raw_targets:
-        target = raw_target
-        if targets:
-            target = normalize_angle_near_reference(raw_target, targets[-1])
-            while target <= targets[-1]:
-                target += 360.0
-        targets.append(target)
+        targets.append(_unwrap_above(raw_target, targets[-1]) if targets else raw_target)
     return labels, targets
+
+
+def _unwrap_above(angle_deg: float, previous_unwrapped: float) -> float:
+    """`angle_deg` on the first 360-degree branch above `previous_unwrapped`, starting from the branch nearest it."""
+    unwrapped = normalize_angle_near_reference(angle_deg, previous_unwrapped)
+    while unwrapped <= previous_unwrapped:
+        unwrapped += 360.0
+    return unwrapped
 
 
 def _overlap_components(pairs: Iterable[tuple[int, int]], n_labels: int) -> list[list[int]]:
@@ -4362,11 +4367,10 @@ def _derive_monotonic_unwrapped_angles(labels: list[CircularLabel], total_length
             angle_raw = math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"])))
 
         target_unwrapped = _label_target_angle_unwrapped(label, total_length)
-        reference = target_unwrapped if prev_unwrapped is None else prev_unwrapped
-        angle_unwrapped = normalize_angle_near_reference(angle_raw, reference)
-        if prev_unwrapped is not None:
-            while angle_unwrapped <= prev_unwrapped:
-                angle_unwrapped += 360.0
+        if prev_unwrapped is None:
+            angle_unwrapped = normalize_angle_near_reference(angle_raw, target_unwrapped)
+        else:
+            angle_unwrapped = _unwrap_above(angle_raw, prev_unwrapped)
         unwrapped_angles.append(angle_unwrapped)
         prev_unwrapped = angle_unwrapped
 
@@ -4613,10 +4617,9 @@ def _shift_inner_block(
     for move_idx in range(block_start, block_end + 1):
         moved_angle = candidate_angles[move_idx] + shift_deg
         candidate_angles[move_idx] = moved_angle
-        candidate_labels[move_idx]["angle_unwrapped"] = moved_angle
-        radius = radii[move_idx]
-        candidate_labels[move_idx]["start_x"] = radius * math.cos(math.radians(moved_angle))
-        candidate_labels[move_idx]["start_y"] = radius * math.sin(math.radians(moved_angle))
+        moved_label = candidate_labels[move_idx]
+        moved_label["angle_unwrapped"] = moved_angle
+        moved_label["start_x"], moved_label["start_y"] = _point_on_circle(radii[move_idx], moved_angle)
     return _InnerPlacement(candidate_labels, candidate_angles)
 
 
