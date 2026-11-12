@@ -853,14 +853,18 @@ under "Cited ids without a record".
   - `tests/test_gui_server.py`
   - `tests/web/auxiliary-file-import-retry.test.mjs`
   - `tests/web/circular-ring-evalue-scale.playwright.spec.js`
+  - `tests/web/diagram-resource-recovery.test.mjs`
+  - `tests/web/diagram-resource-staging.test.mjs`
   - `tests/web/feature-label-visual-unit.test.mjs`
   - `tests/web/file-content-token.test.mjs`
+  - `tests/web/history-file-budget.test.mjs`
   - `tests/web/input-copies.playwright.spec.js`
   - `tests/web/input-copies.test.mjs`
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/run-analysis-simple-path.test.mjs`
   - `tests/web/session-editor-table-texts.test.mjs`
   - `tests/web/session-export-validation.test.mjs`
+  - `tests/web/session-input-work-once.test.mjs`
   - `tests/web/session-resource-backing.test.mjs`
 
 - [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row): Windows in a Linear row. ACCEPTED, concern `diagram-generation.linear-row-windows`, scenario revision 2, supersedes scenario revision 1.

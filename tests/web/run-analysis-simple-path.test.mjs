@@ -1653,7 +1653,7 @@ test('a ring comparison genome of two files is one read of both, kept for those 
   const second = new File(['>chr2\nttgg\n'], 'chr2.fasta', { type: 'text/plain' });
   const sent = [];
   const runHelperOperation = async (operation, payload) => {
-    sent.push([operation, payload.files.map(({ role, bytes }) => [role, new TextDecoder().decode(bytes)])]);
+    sent.push([operation, await Promise.all(payload.files.map(async ({ role, blob }) => [role, await blob.text()]))]);
     return { result: {
       fasta: `>read${sent.length}\nACGT\n`, recordLabel: null, recordIds: [`read${sent.length}`],
       genomeFiles: payload.files.map(() => ({ length: 4, recordLengths: [4] }))
@@ -4240,6 +4240,7 @@ test('a gzip Circular reference stages for the LOSAT ring plan as Generate names
   assert.deepEqual(prepared.resourceManifest.map(({ resourceId, size }) => [resourceId, size]),
     [['record-1-genbank', chosen.length]]);
   const [staged] = prepared.stagedResources;
-  assert.deepEqual(Buffer.from(staged.bytes), chosen);
-  assert.equal(gunzipSync(Buffer.from(staged.bytes)).toString('utf8'), text);
+  const stagedBytes = Buffer.from(await staged.blob.arrayBuffer());
+  assert.deepEqual(stagedBytes, chosen);
+  assert.equal(gunzipSync(stagedBytes).toString('utf8'), text);
 });
