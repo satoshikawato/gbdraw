@@ -9,15 +9,17 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple, TypeAlias, cast
 from .coordinates import display_label_segment
 
 from .filtering import feature_label, label_filter_maps
-from .label_style import LINEAR_LABEL_HEIGHT_MARGIN_EM, ROW_LABEL_GAP_EM
+from .label_style import LINEAR_LABEL_HEIGHT_MARGIN_EM, ROW_LABEL_GAP_EM, LabelFontStyle
 from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label, is_level_rotation
+from .policy import LabelRenderingPolicy
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
+from ..features.objects import FeatureObject
 from ..core.record_metadata import _source_feature_index
 from ..core.text import drawn_text_box
 from ..auto_sizes import determine_length_parameter
@@ -644,6 +646,277 @@ class LinearRecordLabels(NamedTuple):
     keep_clear: tuple[Aabb, ...] = ()
 
 
+class _LinearLabelContext(NamedTuple):
+    """What every feature label of one record reads: its font, whether a label goes inside its feature
+    or beside it (``label_rendering``), whether labels sit over their features (``above_feature``) and
+    the turn of such a label, and the record's length, drawn width, strand separation and display
+    transform."""
+
+    font_family: str
+    font_size: float
+    label_rendering: LabelRenderingPolicy
+    above_feature: bool
+    rotation_deg: float
+    genome_length: int
+    alignment_width: float
+    strandedness: bool
+    record_transform: RecordDisplayTransform | None
+
+
+def _linear_label_context(
+    profile: LinearRenderProfile,
+    genome_length: int,
+    alignment_width: float,
+    strandedness: bool,
+    record_transform: RecordDisplayTransform | None,
+    label_font_size: float | None,
+) -> _LinearLabelContext:
+    cfg = profile.config
+    length_param = determine_length_parameter(genome_length, cfg.labels.length_threshold.linear)
+    font_size = (
+        float(label_font_size)
+        if label_font_size is not None
+        else cfg.labels.font_size.linear.for_length_param(length_param)
+    )
+    above_feature = profile.label_placement == "above_feature"
+    if above_feature and profile.label_rendering != "auto":
+        raise ValueError(
+            "label_rendering embedded_only|external_only cannot be used with label_placement above_feature"
+        )
+    return _LinearLabelContext(
+        cfg.objects.text.font_family, font_size, profile.label_rendering, above_feature, profile.label_rotation,
+        genome_length, alignment_width, strandedness, record_transform,
+    )
+
+
+# The y of a feature's top, middle and bottom in the record (``LinearFeatureLane.positions``).
+_TrackPosition: TypeAlias = tuple[float, float, float]
+
+
+def _feature_track_positions(
+    feature_dict: Mapping[str, FeatureObject],
+    cds_height: float,
+    strandedness: bool,
+    track_layout: str,
+    axis_gap_factor: float | None,
+    feature_lane_geometry: LinearFeatureLaneGeometry | None,
+) -> dict[str, _TrackPosition]:
+    """The track position of every feature with coordinates, from its lane (strand and track)."""
+
+    positions: dict[str, _TrackPosition] = {}
+    for feature_id, feature_object in feature_dict.items():
+        if len(feature_object.coordinates) == 0:
+            continue
+        strand = get_strand(feature_object.coordinates[0].strand)
+        if feature_lane_geometry is not None:
+            positions[feature_id] = feature_lane_geometry.lane_for(
+                strand=strand,
+                track_id=feature_object.feature_track_id,
+                separate_strands=strandedness,
+            ).positions
+        else:
+            # Compatibility fallback for direct callers that have not measured lanes.
+            factors = calculate_feature_position_factors_linear(
+                strand,
+                feature_object.feature_track_id,
+                strandedness,
+                track_layout=track_layout,
+                axis_gap_factor=axis_gap_factor,
+            )
+            positions[feature_id] = (cds_height * factors[0], cds_height * factors[1], cds_height * factors[2])
+    return positions
+
+
+# The stretch of a feature that its label is centred on: its start and end x in the record's drawn
+# width, its strand, and its wrap row in a wrapped record (else None).
+_LabelSegment: TypeAlias = tuple[float, float, str | None, int | None]
+
+
+def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) -> _LabelSegment | None:
+    """The drawn part that ``display_label_segment`` chooses when the feature has drawn parts (None when
+    none of them is shown), else its longest segment."""
+
+    genome_length = context.genome_length
+    wrap_row: int | None = None
+    if getattr(feature_object, "display_parts", None) is not None:
+        record_transform = context.record_transform
+        projected_segment = display_label_segment(feature_object, genome_length, record_transform=record_transform)
+        if projected_segment is None:
+            return None
+        longest_segment_start: float = projected_segment.start
+        longest_segment_end: float = projected_segment.end
+        coordinate_strand: str | None = projected_segment.strand
+        if record_transform is not None and record_transform.wrap_length is not None:
+            wrap_row = projected_segment.row
+    else:
+        longest_segment_length = 0
+        longest_segment_start = longest_segment_end = 0
+        for coordinate in feature_object.coordinates:
+            start = int(coordinate.start)
+            end = int(coordinate.end)
+            segment_length = abs(end - start + 1)
+            if segment_length > longest_segment_length:
+                longest_segment_start = start
+                longest_segment_end = end
+                longest_segment_length = segment_length
+        # The strand of the last part, not of the longest one (OV-3430).
+        coordinate_strand = get_strand(feature_object.coordinates[-1].strand)
+    alignment_width = context.alignment_width
+    return (
+        normalize_position_to_linear_track(longest_segment_start, genome_length, alignment_width),
+        normalize_position_to_linear_track(longest_segment_end, genome_length, alignment_width),
+        coordinate_strand,
+        wrap_row,
+    )
+
+
+def _above_feature_gap_px(height_px: float) -> float:
+    """The gap of an ``above_feature`` label ``height_px`` tall: 5 % of its height, at least 1 px. A label
+    keeps it off its feature's edge, and labels keep the gap of the row's tallest label between them."""
+
+    return max(1.0, height_px * 0.05)
+
+
+# Where an ``above_feature`` label touches its feature: over it (True) or under it, the x and y offset of
+# its contact point from its text anchor, and the y where its leader leaves the feature.
+_AboveFeatureContact: TypeAlias = tuple[bool, float, float, float]
+
+
+def _above_feature_pose(
+    width_px: float,
+    height_px: float,
+    position: _TrackPosition,
+    base_rotation_deg: float,
+    below_feature: bool,
+) -> tuple[float, str, float, _AboveFeatureContact]:
+    """An ``above_feature`` label beside its feature, its box edge one gap off the feature's edge: its
+    turn, text anchor, the y of its middle, and its contact with the feature."""
+
+    # Above-feature mode tilts labels in the opposite direction of the user-provided angle.
+    # In separate-strands mode, negative strand labels are mirrored and placed below features.
+    rotation_deg = base_rotation_deg if below_feature else -base_rotation_deg
+    # A whole turn reads level: the label is horizontal and drawn without a turn (OV-1438).
+    level = is_level_rotation(rotation_deg)
+    if level:
+        rotation_deg = 0.0
+    text_anchor = "middle" if level else "start"
+    place_above = not below_feature
+    y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(width_px, height_px, rotation_deg, text_anchor)
+    if level:
+        contact_x = 0.0
+        contact_y = y_max_offset if place_above else y_min_offset
+    else:
+        contact_x, contact_y = _rotated_extreme_y_point_from_anchor(
+            width_px, height_px, rotation_deg, text_anchor, choose_max=place_above
+        )
+    gap = _above_feature_gap_px(height_px)
+    feature_top_y, _feature_y, feature_bottom_y = position
+    if below_feature:
+        # Keep rotated label top edge below the feature bottom.
+        middle_y = feature_bottom_y + gap - y_min_offset
+        leader_start_y = feature_bottom_y
+    else:
+        # Keep rotated label bottom edge above the feature top.
+        middle_y = feature_top_y - gap - y_max_offset
+        leader_start_y = feature_top_y
+    return rotation_deg, text_anchor, middle_y, (place_above, contact_x, contact_y, leader_start_y)
+
+
+def _linear_label_entry(
+    feature_object: FeatureObject,
+    label_text: str,
+    font_style: LabelFontStyle,
+    width_px: float,
+    height_px: float,
+    position: _TrackPosition,
+    context: _LinearLabelContext,
+) -> LinearLabel | None:
+    """A feature's measured label put on or beside its feature, or None when it is not drawn: its feature
+    has no part shown, or ``label_rendering`` allows it neither inside nor beside its feature. An
+    ``above_feature`` label sits beside its feature; otherwise a level label (auto mode keeps labels level
+    whatever the configured turn) goes inside its feature when it fits there with its margin, else
+    external, in a row placed later."""
+
+    segment = _label_segment(feature_object, context)
+    if segment is None:
+        return None
+    feature_start_x, feature_end_x, strand, wrap_row = segment
+    assignment = getattr(feature_object, "placement", None)
+    secondary_below = (
+        assignment is not None and assignment.side == "below"
+        and assignment.level > 0 and assignment.strand_pool == "combined"
+    )
+    feature_anchor_x = (feature_start_x + feature_end_x) / 2.0
+    feature_top_y, feature_y, feature_bottom_y = position
+    contact: _AboveFeatureContact | None = None
+    if context.above_feature:
+        below_feature = secondary_below or (context.strandedness and strand != "positive")
+        rotation_deg, text_anchor, label_y, contact = _above_feature_pose(
+            width_px, height_px, position, context.rotation_deg, below_feature
+        )
+        label_anchor_x = feature_anchor_x - contact[1]
+        is_embedded = True
+    else:
+        rotation_deg, text_anchor, label_anchor_x = 0.0, "middle", feature_anchor_x
+        label_rendering = context.label_rendering
+        if (
+            label_rendering != "external_only"
+            and width_px + _EMBEDDED_LABEL_MARGIN_EM * context.font_size < abs(feature_end_x - feature_start_x) + 1
+        ):
+            label_y, is_embedded = feature_y, True
+        elif label_rendering != "embedded_only":
+            label_y, is_embedded = 0, False
+        else:
+            return None
+    label_entry: LinearLabel = {
+        "label_text": label_text,
+        "source_feature_index": feature_object.source_feature_index,
+        "middle": label_anchor_x,
+        "start": label_anchor_x - (width_px / 2),
+        "end": label_anchor_x + (width_px / 2),
+        "middle_x": label_anchor_x,
+        "width_px": width_px,
+        "height_px": height_px,
+        "strand": strand,
+        "secondary_below": secondary_below,
+        "feature_middle_y": feature_y,
+        "feature_top_y": feature_top_y,
+        "feature_bottom_y": feature_bottom_y,
+        "feature_start_x": feature_start_x,
+        "feature_end_x": feature_end_x,
+        "feature_anchor_x": feature_anchor_x,
+        "font_size": context.font_size,
+        "font_family": context.font_family,
+        "font_style": font_style,
+        "rotation_deg": rotation_deg,
+        "text_anchor": text_anchor,
+        "middle_y": label_y,
+        "is_embedded": is_embedded,
+    }
+    if wrap_row is not None:
+        label_entry["wrap_row"] = wrap_row
+    if contact is not None:
+        place_above, contact_x, contact_y, leader_start_y = contact
+        # A horizontal label moves to the first row off its feature when its row is placed
+        # (``place_linear_label_row``, LP-D120); the row's tallest label sets the row pitch.
+        label_entry.update(
+            {
+                "track_id": "track_0",
+                "above_feature_place_above": place_above,
+                "label_contact_x_offset": contact_x,
+                "label_contact_y_offset": contact_y,
+                "leader_line": False,
+                "leader_start_x": feature_anchor_x,
+                "leader_start_y": leader_start_y,
+                "leader_end_x": feature_anchor_x,
+                "leader_end_y": label_y + contact_y,
+            }
+        )
+    elif is_embedded:
+        label_entry["track_id"] = "track_0"
+    return label_entry
+
+
 def linear_record_labels(
     feature_dict,
     genome_length,
@@ -669,269 +942,55 @@ def linear_record_labels(
     A label is as wide as its text's advance in SVG px, the box the renderer
     anchors the text on (OV-1294).
     """
-    cfg = profile.config
-    labels: list[LinearLabel] = []
-    feature_track_positions = {}  # Store feature track positions
     axis_gap_factor = (
         (float(track_axis_gap) / float(cds_height))
         if (track_axis_gap is not None and float(cds_height) > 0.0)
         else None
     )
-
-    # Get configuration values
-    length_threshold = cfg.labels.length_threshold.linear
-    length_param = determine_length_parameter(genome_length, length_threshold)
-    font_family = cfg.objects.text.font_family
-    font_size = (
-        float(label_font_size)
-        if label_font_size is not None
-        else cfg.labels.font_size.linear.for_length_param(length_param)
+    context = _linear_label_context(
+        profile, genome_length, alignment_width, strandedness, record_transform, label_font_size
     )
-    label_rendering = profile.label_rendering
-    force_above_feature = profile.label_placement == "above_feature"
-    if force_above_feature and label_rendering != "auto":
-        raise ValueError(
-            "label_rendering embedded_only|external_only cannot be used with label_placement above_feature"
-        )
-    base_rotation_deg = profile.label_rotation
     if label_filtering is None:
-        label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
-    # First pass: Calculate feature track positions
-    for feature_id, feature_object in feature_dict.items():
-        if len(feature_object.coordinates) == 0:
-            continue
-
-        # Get feature track info
-        coordinate = feature_object.coordinates[0]  # Use first coordinate for strand
-        strand = get_strand(coordinate.strand)
-        feature_track_id = feature_object.feature_track_id
-
-        if feature_lane_geometry is not None:
-            lane = feature_lane_geometry.lane_for(
-                strand=strand,
-                track_id=feature_track_id,
-                separate_strands=strandedness,
-            )
-            track_top_y, track_y_position, track_bottom_y = lane.positions
-        else:
-            # Compatibility fallback for direct callers that have not measured lanes.
-            factors = calculate_feature_position_factors_linear(
-                strand,
-                feature_track_id,
-                strandedness,
-                track_layout=track_layout,
-                axis_gap_factor=axis_gap_factor,
-            )
-            track_top_y, track_y_position, track_bottom_y = (
-                cds_height * factors[0],
-                cds_height * factors[1],
-                cds_height * factors[2],
-            )
-
-        # Store track position for this feature
-        feature_track_positions[feature_id] = {
-            "middle_y": track_y_position,
-            "top_y": track_top_y,
-            "bottom_y": track_bottom_y,
-        }
-
-    if feature_track_positions:
-        top_feature_y_limit = min(pos["top_y"] for pos in feature_track_positions.values())
-        bottom_feature_y_limit = max(pos["bottom_y"] for pos in feature_track_positions.values())
-    else:
-        top_feature_y_limit = 0.0
-        bottom_feature_y_limit = 0.0
-
-    # Second pass: Process labels
+        label_filtering = label_filter_maps(profile.config.labels.filtering.as_dict())
+    positions = _feature_track_positions(
+        feature_dict, cds_height, strandedness, track_layout, axis_gap_factor, feature_lane_geometry
+    )
+    font_family, font_size = context.font_family, context.font_size
+    height_margin_px = LINEAR_LABEL_HEIGHT_MARGIN_EM * float(font_size)
+    font_style_of = profile.label_style.font_style
+    labels: list[LinearLabel] = []
     max_bbox_height = 0.0
     for feature_id, feature_object in reversed(list(feature_dict.items())):
-        overrides_only = labels_overrides_only or not _passes_orthogroup_label_eligibility(
-            feature_object,
-            orthogroup_label_member_ids,
-            orthogroup_label_top_member_ids,
+        # Orthogroup eligibility passes every feature when there are no member ids.
+        overrides_only = labels_overrides_only or (
+            orthogroup_label_member_ids is not None
+            and not _passes_orthogroup_label_eligibility(
+                feature_object, orthogroup_label_member_ids, orthogroup_label_top_member_ids
+            )
         )
         if overrides_only and not profile.forced_labels:
             continue
-        feature_label_choice = feature_label(
+        choice = feature_label(
             feature_object, label_filtering, overrides_only=overrides_only,
             feature_override=getattr(feature_object, "feature_override", None),
         )
-        feature_label_text = feature_label_choice.text
-        if not feature_label_text:
+        label_text = choice.text
+        position = positions.get(feature_id)
+        if not label_text or position is None:
             continue
-        if feature_id not in feature_track_positions:
-            continue
-        font_style = profile.label_style.font_style(feature_label_choice.source_qualifier)
+        font_style = font_style_of(choice.source_qualifier)
+        width_px, height_px = drawn_text_box(label_text, font_family, font_size, "normal", font_style)
+        height_px += height_margin_px
+        # The row pitch counts every measured label, also one that is not drawn after all.
+        if height_px > max_bbox_height:
+            max_bbox_height = height_px
+        label_entry = _linear_label_entry(feature_object, label_text, font_style, width_px, height_px, position, context)
+        if label_entry is not None:
+            labels.append(label_entry)
 
-        # Calculate label dimensions and positions
-        bbox_width_px, bbox_height_px = drawn_text_box(feature_label_text, font_family, font_size, "normal", font_style)
-        bbox_height_px += LINEAR_LABEL_HEIGHT_MARGIN_EM * float(font_size)
-        if bbox_height_px > max_bbox_height:
-            max_bbox_height = bbox_height_px
-        # Find the longest segment and its middle point
-        longest_segment_length = 0
-        coordinate_strand: str | None = None
-        longest_segment_start: float = 0
-        longest_segment_end: float = 0
-
-        for coordinate in feature_object.coordinates:
-            coordinate_strand = get_strand(coordinate.strand)
-            start = int(coordinate.start)
-            end = int(coordinate.end)
-            segment_length = abs(end - start + 1)
-            if segment_length > longest_segment_length:
-                longest_segment_start = start
-                longest_segment_end = end
-                longest_segment_length = segment_length
-
-        projected_segment = None
-        if getattr(feature_object, "display_parts", None) is not None:
-            projected_segment = display_label_segment(feature_object, genome_length, record_transform=record_transform)
-            if projected_segment is None:
-                continue
-            longest_segment_start = projected_segment.start
-            longest_segment_end = projected_segment.end
-            coordinate_strand = projected_segment.strand
-
-        # Calculate normalized positions
-        # `position` is only used in arithmetic but is declared int in layout/linear_coords.py,
-        # while display fragments are floats (F-s5-1).
-        normalized_start = normalize_position_to_linear_track(
-            cast(int, longest_segment_start), genome_length, alignment_width
-        )
-        normalized_end = normalize_position_to_linear_track(
-            cast(int, longest_segment_end), genome_length, alignment_width
-        )
-        longest_segment_length_in_pixels = abs(normalized_end - normalized_start) + 1
-
-        assignment = getattr(feature_object, "placement", None)
-        secondary_below = (
-            assignment is not None and assignment.side == "below"
-            and assignment.level > 0 and assignment.strand_pool == "combined"
-        )
-        label_below_feature = secondary_below or (
-            strandedness and coordinate_strand != "positive"
-        )
-        if force_above_feature:
-            # Above-feature mode tilts labels in the opposite direction of the user-provided angle.
-            # In separate-strands mode, negative strand labels are mirrored and placed below features.
-            is_negative_separate = label_below_feature
-            label_rotation_deg = base_rotation_deg if is_negative_separate else -base_rotation_deg
-        else:
-            # Keep auto mode horizontal regardless of configured rotation.
-            label_rotation_deg = 0.0
-        # A whole turn reads level: the label is horizontal and drawn without a turn (OV-1438).
-        level = is_level_rotation(label_rotation_deg)
-        if level:
-            label_rotation_deg = 0.0
-        label_text_anchor = "middle" if level else "start"
-
-        feature_anchor_x = (normalized_start + normalized_end) / 2.0
-        label_anchor_x = feature_anchor_x
-        label_contact_x_offset = 0.0
-        label_contact_y_offset = 0.0
-        label_leader_start_y = 0.0
-        if force_above_feature:
-            place_above_feature = not label_below_feature
-            if level:
-                y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
-                    bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
-                )
-                label_contact_y_offset = y_max_offset if place_above_feature else y_min_offset
-            else:
-                label_contact_x_offset, label_contact_y_offset = _rotated_extreme_y_point_from_anchor(
-                    bbox_width_px,
-                    bbox_height_px,
-                    label_rotation_deg,
-                    label_text_anchor,
-                    choose_max=place_above_feature,
-                )
-            label_anchor_x = feature_anchor_x - label_contact_x_offset
-        bbox_start = label_anchor_x - (bbox_width_px / 2)
-        bbox_end = label_anchor_x + (bbox_width_px / 2)
-
-        # Get actual feature track position
-        feature_position = feature_track_positions[feature_id]
-        feature_y = feature_position["middle_y"]
-        feature_top_y = feature_position["top_y"]
-        feature_bottom_y = feature_position["bottom_y"]
-
-        # Where the label is drawn: beside its feature (``above_feature``), inside it, or in a row
-        # placed later (external).
-        if force_above_feature:
-            y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
-                bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
-            )
-            label_vertical_gap = max(1.0, bbox_height_px * 0.05)
-            if is_negative_separate:
-                # Keep rotated label top edge below the feature bottom.
-                label_y = feature_bottom_y + label_vertical_gap - y_min_offset
-                label_leader_start_y = feature_bottom_y
-            else:
-                # Keep rotated label bottom edge above the feature top.
-                label_y = feature_top_y - label_vertical_gap - y_max_offset
-                label_leader_start_y = feature_top_y
-            is_embedded = True
-        elif (
-            label_rendering != "external_only"
-            and bbox_width_px + _EMBEDDED_LABEL_MARGIN_EM * font_size < longest_segment_length_in_pixels
-        ):
-            label_y, is_embedded = feature_y, True
-        elif label_rendering != "embedded_only":
-            label_y, is_embedded = 0, False
-        else:
-            continue
-
-        label_entry: LinearLabel = {
-            "label_text": feature_label_text,
-            "source_feature_index": feature_object.source_feature_index,
-            "middle": label_anchor_x,
-            "start": bbox_start,
-            "end": bbox_end,
-            "middle_x": label_anchor_x,
-            "width_px": bbox_width_px,
-            "height_px": bbox_height_px,
-            "strand": coordinate_strand,
-            "secondary_below": secondary_below,
-            "feature_middle_y": feature_y,  # Use actual feature position
-            "feature_top_y": feature_top_y,
-            "feature_bottom_y": feature_bottom_y,
-            "feature_start_x": normalized_start,
-            "feature_end_x": normalized_end,
-            "feature_anchor_x": feature_anchor_x,
-            "font_size": font_size,
-            "font_family": font_family,
-            "font_style": font_style,
-            "rotation_deg": label_rotation_deg,
-            "text_anchor": label_text_anchor,
-            "middle_y": label_y,
-            "is_embedded": is_embedded,
-        }
-        if projected_segment is not None and record_transform is not None and record_transform.wrap_length is not None:
-            label_entry["wrap_row"] = projected_segment.row
-        if force_above_feature:
-            # A horizontal label moves to the first row off its feature when its row is placed
-            # (``place_linear_label_row``, LP-D120); the row's tallest label sets the row pitch.
-            label_entry.update(
-                {
-                    "track_id": "track_0",
-                    "above_feature_place_above": not is_negative_separate,
-                    "label_contact_x_offset": label_contact_x_offset,
-                    "label_contact_y_offset": label_contact_y_offset,
-                    "leader_line": False,
-                    "leader_start_x": feature_anchor_x,
-                    "leader_start_y": label_leader_start_y,
-                    "leader_end_x": feature_anchor_x,
-                    "leader_end_y": label_y + label_contact_y_offset,
-                }
-            )
-        elif is_embedded:
-            label_entry["track_id"] = "track_0"
-        labels.append(label_entry)
-
-    return LinearRecordLabels(
-        labels, top_feature_y_limit, bottom_feature_y_limit, max_bbox_height, float(alignment_width)
-    )
+    top_feature_y = min((position[0] for position in positions.values()), default=0.0)
+    bottom_feature_y = max((position[2] for position in positions.values()), default=0.0)
+    return LinearRecordLabels(labels, top_feature_y, bottom_feature_y, max_bbox_height, float(alignment_width))
 
 
 def place_linear_label_row(
@@ -1024,7 +1083,7 @@ def place_linear_label_row(
             for label, x, _unit in on_features
         ]
         _resolve_above_feature_label_overlaps(
-            framed_labels, max(1.0, max_height * 0.05), track_height, keep_clear,
+            framed_labels, _above_feature_gap_px(max_height), track_height, keep_clear,
             units=[unit for _label, _x, unit in on_features],
         )
         for (label, _x, _unit), framed in zip(on_features, framed_labels):
