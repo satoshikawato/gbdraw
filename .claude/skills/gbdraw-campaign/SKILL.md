@@ -27,6 +27,13 @@ Templates are in `templates/`.
    `STATE.md` after a compaction or a resume:
    `python3 .claude/skills/gbdraw-campaign/scripts/bind_session.py "$TASK_DIR"`.
 3. Read `STATE.md` and `DECISIONS.md`. Search `LOG.md` only for what you need.
+4. When the work rewrites files heavily, register a lane in the machine's lane
+   table (command in the local instructions), attach the PR when it opens, and
+   mark it done at the end. Write the lane id into `STATE.md` next to the ID
+   blocks. Structural work (typing, function splits, check hardening) leaves
+   files a feature lane holds until that lane is done, when the tool prints
+   TIMING. A push the admission command holds for a long-open PR on the same
+   files is left running (at most 2 hours).
 
 ## While working
 
@@ -48,9 +55,21 @@ End the session and continue in a new one when any of these holds:
 - the session's goal is done;
 - the session sat idle for more than an hour, so the prompt cache is gone.
 
-Before ending, update `STATE.md` and write `NEXT-SESSION-PROMPT.md` from the
-template: under 10 KB, pointing to the files above instead of copying them.
-Give the Owner its path.
+Before ending, hand off in this order: update `STATE.md` (and its
+`次の一手:` line), write `NEXT-SESSION-PROMPT.md` from the template (under 10 KB,
+pointing to the files above instead of copying them), then write the report,
+whose セッション line names the prompt's absolute path. The next session may be
+started from that prompt without the Owner, so the prompt stands on its own:
+what to read first, the binding command, the first checks, and the goal. A
+campaign with lanes in one folder writes one prompt per lane
+(`NEXT-SESSION-PROMPT-<lane>.md`), and each lane's report names its own.
+Write 「Owner へ：なし」 only when nothing waits for the Owner, and 「閉じて大丈夫です」
+only when none of your background jobs still runs; if either is false, the
+session does not continue automatically.
+
+A delegated decision is final once a report has listed it. Carry no "to
+confirm" list across sessions. Only a decision that changes how a figure or
+screen looks goes to 「Owner へ」, with images.
 
 ## Finish
 

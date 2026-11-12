@@ -50,6 +50,13 @@ this skill, they win.
 - In a bundled PR, list the bug IDs and the former PRs it contains.
 - Run `node tools/check-pr-language.mjs --title "<title>" --body-file <file>`
   once, then `gh pr create --base dev`.
+- Where the machine defines a CI admission command, run every push, update, and
+  `gh pr create` through it. Its pre-check runs CI's fast checks on the head
+  merged with dev and refuses the push when one fails or the head conflicts
+  with dev: fix the failure or rebase onto `origin/dev`, then run it again.
+  Skip the pre-check only with a stated reason (a `dev-red-fix`, a check that is
+  broken on dev). A push that stops a running `Tests` run states its reason
+  (`CI_WAIT_WHY=conflict|failed-check|review|other`).
 
 ## Merge
 
@@ -77,11 +84,15 @@ this skill, they win.
 
 ## Watch CI
 
-- Run one watcher per session, not one per agent:
-  `python3 .claude/skills/gbdraw-ship-pr/scripts/watch_prs.py --prs <n> ...`
-  under Monitor or in the background, and act on its event lines (merged,
-  closed, conflict, failed, cancelled, green). It polls every five minutes, as
-  `AGENTS.md` requires.
+- Wait with the machine's PR wait command (see the local instructions), as one
+  background command per session; it exits with one line per PR that needs its
+  owner. Never write a watcher script per task. On a machine without that
+  command, `python3 .claude/skills/gbdraw-ship-pr/scripts/watch_prs.py --prs <n> ...`
+  is the fallback; it polls every five minutes, as `AGENTS.md` requires.
+- Act on its event lines (merged, closed, conflict, failed, cancelled, green).
+- Re-pushes, rebases, and CI fixes whose log names the cause go to
+  `gbdraw-mechanic`; resume the implementer only for a fix that bears on the
+  design.
 - Before you act on an event line (rebase, update-branch, merge, or report the
   PR done), re-read the PR with
   `gh pr view <n> --json state,mergeStateStatus,statusCheckRollup`. The Owner
