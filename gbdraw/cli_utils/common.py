@@ -12,7 +12,7 @@ import csv
 import logging
 import sys
 from dataclasses import dataclass, replace
-from typing import Sequence
+from typing import Sequence, get_args
 
 from gbdraw.analysis.feature_density import (
     FeatureDensityTrack,
@@ -44,7 +44,15 @@ from gbdraw.api.options import DepthTrackInput
 from gbdraw.api.record_planning import RecordInputManifest, depth_track_inputs_from_cli
 from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
 from gbdraw.features.shapes import parse_feature_shape_assignment
-from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
+from gbdraw.labels.label_style import (
+    DEFAULT_LABEL_LINE,
+    DEFAULT_LABEL_PROTECTION,
+    LABEL_LINES,
+    LABEL_PROTECTIONS,
+    LabelStyleMode,
+)
+from gbdraw.labels.policy import LabelRenderingPolicy
+from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES, ComparisonThresholds
 from gbdraw.render.export import require_cairosvg
 from gbdraw.io.colors import BUILTIN_COLOR_TABLE_PREFIX, BUILTIN_COLOR_TABLES, require_palette_name
 from gbdraw.render.formats import (
@@ -75,6 +83,17 @@ _DEPTH_TRACK_HELP_BY_MODE = {
         "or one file per input record."
     ),
 }
+# The rule ``--label_rendering`` meets in one mode, said in its help before the default.
+_LABEL_RENDERING_RULE_BY_MODE: dict[LabelStyleMode, str] = {
+    "circular": "",
+    "linear": 'Cannot be combined with --label_placement above_feature except as "auto". ',
+}
+# The per-track depth options whose values are numbers, ``auto``, or empty.
+_DEPTH_TRACK_NUMBER_OPTIONS = (
+    "depth_track_large_tick_interval",
+    "depth_track_small_tick_interval",
+    "depth_track_tick_font_size",
+)
 
 
 CLI_LOG_FORMAT = "%(levelname)s: %(message)s"
@@ -588,6 +607,49 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
         type=argparse_float)
 
 
+def _add_depth_color_arg(parser: argparse.ArgumentParser) -> None:
+    """``--depth_color`` of either mode."""
+    parser.add_argument(
+        '--depth_color',
+        help='Depth track fill color (optional; default: #4A90E2).',
+        type=str)
+
+
+def require_positive_args(parser: argparse.ArgumentParser, args: argparse.Namespace, *dests: str) -> None:
+    """Refuse a value <= 0 of each option ``--<dest>`` that was given, in this order."""
+
+    for dest in dests:
+        value = getattr(args, dest)
+        if value is not None and value <= 0:
+            parser.error(f"--{dest} must be > 0")
+
+
+def validate_depth_axis_args(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, track_heights: bool = False
+) -> None:
+    """Refuse a depth range or tick interval out of bounds, and a per-track depth number that is not a number
+    > 0 or ``auto`` (``track_heights``: also Linear's ``--depth_track_height``)."""
+
+    if args.depth_min is not None and args.depth_min < 0:
+        parser.error("--depth_min must be >= 0")
+    if args.depth_max is not None and args.depth_max < 0:
+        parser.error("--depth_max must be >= 0")
+    if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
+        parser.error("--depth_min must be <= --depth_max")
+    require_positive_args(parser, args, "depth_large_tick_interval", "depth_small_tick_interval")
+    per_track = (("depth_track_height",) if track_heights else ()) + _DEPTH_TRACK_NUMBER_OPTIONS
+    for option_name in per_track:
+        for option_value in getattr(args, option_name) or []:
+            option_text = str(option_value).strip().lower()
+            if option_text in {"", "auto", "none", "null", "-"}:
+                continue
+            numeric_option_value = parse_ascii_finite_float(str(option_value))
+            if numeric_option_value is None:
+                parser.error(f"--{option_name} values must be numbers or auto")
+            if numeric_option_value <= 0:
+                parser.error(f"--{option_name} values must be > 0")
+
+
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
     thresholds = CIRCULAR_MODE_PROFILE.comparison
     parser.add_argument(
@@ -611,6 +673,20 @@ def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
         type=argparse_integer,
         default=thresholds.alignment_length)
     add_identity_scale_arg(parser, "similarity rings")
+
+
+def validate_comparison_threshold_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse match thresholds that ``ComparisonThresholds`` refuses, in either mode."""
+
+    try:
+        ComparisonThresholds(
+            evalue=args.evalue,
+            bitscore=args.bitscore,
+            identity=args.identity,
+            alignment_length=args.alignment_length,
+        )
+    except ValidationError as exc:
+        parser.error(str(exc))
 
 
 class _IdentityScaleAction(argparse.Action):
@@ -705,6 +781,35 @@ def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
         choices=SCALAR_AXIS_LABEL_STYLES)
 
 
+def validate_gc_content_axis_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse a GC content percent range whose minimum is above its maximum, and a tick interval <= 0."""
+
+    if (
+        args.gc_content_min_percent is not None
+        and args.gc_content_max_percent is not None
+        and args.gc_content_min_percent > args.gc_content_max_percent
+    ):
+        parser.error("--gc_content_min_percent must be <= --gc_content_max_percent")
+    require_positive_args(
+        parser,
+        args,
+        "gc_content_tick_interval",
+        "gc_content_large_tick_interval",
+        "gc_content_small_tick_interval",
+    )
+
+
+def validate_scale_interval_arg(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, legacy_session: bool
+) -> None:
+    """Refuse ``--scale_interval`` <= 0; the replay of a released legacy Session reads it as automatic."""
+
+    if args.scale_interval is not None and args.scale_interval <= 0:
+        if not legacy_session:
+            parser.error("--scale_interval must be > 0")
+        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
+
+
 def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--legend_rows',
@@ -797,18 +902,33 @@ COLOR_TABLE_HELP = (
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Add color-related arguments (-p, -t, -d)."""
+    _add_palette_arg(parser)
+    _add_color_table_arg(parser)
+    _add_default_colors_arg(parser)
+
+
+def _add_palette_arg(parser: argparse.ArgumentParser) -> None:
+    """``-p/--palette`` of either mode."""
     parser.add_argument(
         "-p", "--palette",
         metavar="PALETTE",
         default="default",
         help="Palette name (default: default)",
         type=str)
+
+
+def _add_color_table_arg(parser: argparse.ArgumentParser) -> None:
+    """``-t/--table`` of either mode."""
     parser.add_argument(
         '-t',
         '--table',
         help=COLOR_TABLE_HELP,
         type=str,
         default="")
+
+
+def _add_default_colors_arg(parser: argparse.ArgumentParser) -> None:
+    """``-d/--default_colors`` of either mode."""
     parser.add_argument(
         '-d',
         '--default_colors',
@@ -817,12 +937,12 @@ def add_color_args(parser: argparse.ArgumentParser) -> None:
         default="")
 
 
-def add_analysis_args(parser: argparse.ArgumentParser) -> None:
-    """Add GC/skew analysis arguments (-n, -w, -s)."""
+def add_analysis_args(parser: argparse.ArgumentParser, *, nt_subject: str = "dinucleotide") -> None:
+    """Add GC/skew analysis arguments (-n, -w, -s); ``nt_subject`` begins the help of ``-n``."""
     parser.add_argument(
         '-n',
         '--nt',
-        help='dinucleotide: two letters from A, C, G, T, and U; case-insensitive, U counts as T (default: GC).',
+        help=f'{nt_subject}: two letters from A, C, G, T, and U; case-insensitive, U counts as T (default: GC).',
         type=str,
         default="GC")
     _add_window_step_args(parser)
@@ -879,6 +999,32 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         help='Path to a TSV file defining region annotation sets and marks (optional)',
         type=str,
         default='')
+
+
+def _add_label_rendering_args(parser: argparse.ArgumentParser, *, mode: LabelStyleMode) -> None:
+    """``--label_rendering``, ``--label_line`` and ``--label_protection``; the help names the mode's rule and
+    defaults."""
+    parser.add_argument(
+        '--label_rendering',
+        help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" '
+        'drops external labels; "external_only" forces labels outside feature bodies. '
+        f'{_LABEL_RENDERING_RULE_BY_MODE[mode]}Default: "auto".',
+        choices=list(get_args(LabelRenderingPolicy)),
+        default='auto',
+        type=str)
+    parser.add_argument(
+        '--label_line',
+        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
+        '(a turned label gets none); "none" draws none. '
+        f'Default: "{DEFAULT_LABEL_LINE[mode]}".',
+        choices=LABEL_LINES,
+        type=str)
+    parser.add_argument(
+        '--label_protection',
+        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
+        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION[mode]}".',
+        choices=LABEL_PROTECTIONS,
+        type=str)
 
 
 def _cli_list(values: Sequence[str] | None) -> list[str] | None:
