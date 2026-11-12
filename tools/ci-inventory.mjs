@@ -8,12 +8,13 @@
 // against its targets, and the functional Playwright shards of the latest green dev
 // `Tests` run with the plan that tools/balance-functional-shards.mjs would compute from
 // that run's measurements, and the CI of pull requests: how many merged ones passed on one
-// run, runs per merged one, and how many of their runs failed or were stopped by a newer
-// push. It prints Markdown; with --post it
+// run, runs per merged one, and how many of their runs failed or were replaced by a newer
+// run. It prints Markdown; with --post it
 // also adds the report as this week's comment on the open issue labelled
 // `ci-inventory` (creating the label and issue when missing). Week-over-week changes
 // come from the data block of the workflow's own previous comment. Job lists are read
-// only for `Tests` and `Gallery publication`; other runs count by run duration.
+// only for `Tests` and `Gallery publication`, and only while RATE_RESERVE requests of the
+// hourly budget are left; other runs count by run duration.
 //
 // Reads GITHUB_TOKEN (or GH_TOKEN), GITHUB_REPOSITORY, GITHUB_API_URL, and
 // GITHUB_SERVER_URL. Run it from the repository root: it lists the functional cases
@@ -34,15 +35,18 @@ const LABEL = 'ci-inventory';
 // Only comments of the workflow's own token are reports; anyone can comment on the issue.
 const REPORT_AUTHOR = 'github-actions[bot]';
 const TESTS_WORKFLOW = '.github/workflows/test.yml';
-// Workflows whose job lists are read. The others count by run duration, which keeps a
-// normal week within the 1,000 requests an hour of a GITHUB_TOKEN.
+// Workflows whose job lists are read. The others count by run duration: one job list per
+// run would need several times the hourly budget of a GITHUB_TOKEN.
 const JOB_LIST_WORKFLOWS = new Set([TESTS_WORKFLOW, '.github/workflows/gallery-publication.yml']);
 const RUN_DURATION = ' (run duration)';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_RATIO = 1.2;
 const TOP = 15;
-// Requests kept for the artifact, issue, and comment calls once the job lists stop.
-const RATE_RESERVE = 100;
+// The job lists stop while this many requests of the hourly budget are left. A
+// GITHUB_TOKEN has 1,000 requests an hour for the whole repository, shared by every
+// workflow (`CI impact plan`, `PR / gate`, and the `Fail fast` jobs among them), so the
+// inventory leaves them half; its own issue and comment calls after the job lists use a few.
+export const RATE_RESERVE = 500;
 const PARALLEL_REQUESTS = 8;
 const DATA_BLOCK = /<!-- ci-inventory-data (\{.*?\}) -->/s;
 const WEEK = /^\d{4}-W\d{2}$/;
@@ -211,8 +215,9 @@ export const summarizePullRequests = (jobLists) => {
 // A run joins a pull request when it ran on its head branch between its opening and its
 // merge, give or take this slack: a merged pull request's runs list no pull requests.
 const JOIN_SLACK_MS = 5 * 60 * 1000;
-// A cancelled run followed by the next run on its branch within this time was stopped by
-// that push; a longer gap means a `Fail fast (...)` job cancelled it after a failed job.
+// Without a job list, a cancelled run followed by the next run on its branch within this
+// time was replaced by it (a push, or a label change); a longer gap means a
+// `Fail fast (...)` job cancelled it after a failed job.
 export const SUPERSEDED_GAP_SECONDS = 120;
 const FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
 const GATE_JOB = 'PR / gate';
@@ -221,9 +226,10 @@ const branchOf = (/** @type {WorkflowRun} */ run) => `${run.head_repository?.ful
 const share = (count, total) => (total ? round1((100 * count) / total) : null);
 
 /**
- * The outcome of a pull request run. A cancelled run with no later run on its branch
- * failed when its job list shows a failed job other than `PR / gate`; without one, or
- * without a job list, it counts as stopped by a newer push.
+ * The outcome of a pull request run. A cancelled run with a job list failed when a job of
+ * its attempt other than `PR / gate` failed; otherwise a newer run replaced it or someone
+ * cancelled it ('superseded'). Without a job list, the gap to the next run on its branch
+ * decides (SUPERSEDED_GAP_SECONDS), and a run with no later run counts as replaced.
  * @param {WorkflowRun} run
  * @param {WorkflowRun | undefined} next The next run on the same branch.
  * @param {WorkflowJob[] | undefined} jobs
@@ -233,12 +239,12 @@ const runOutcome = (run, next, jobs) => {
   if (run.conclusion === 'success') return 'passed';
   if (FAILED.has(run.conclusion ?? '')) return 'failed';
   if (run.conclusion !== 'cancelled') return 'other';
-  if (next) {
-    return (Date.parse(next.created_at) - Date.parse(run.updated_at)) / 1000 > SUPERSEDED_GAP_SECONDS
-      ? 'failed' : 'superseded';
+  if (jobs) {
+    return jobs.some((job) => job.run_attempt === run.run_attempt && job.name !== GATE_JOB
+      && FAILED.has(job.conclusion ?? '')) ? 'failed' : 'superseded';
   }
-  return (jobs || []).some((job) => job.run_attempt === run.run_attempt && job.name !== GATE_JOB
-    && job.conclusion === 'failure') ? 'failed' : 'superseded';
+  return next && (Date.parse(next.created_at) - Date.parse(run.updated_at)) / 1000 > SUPERSEDED_GAP_SECONDS
+    ? 'failed' : 'superseded';
 };
 
 /**
@@ -396,10 +402,10 @@ export const priorReports = (comments, week) => {
 const SHARE_ROWS = [
   ['onePassPercent', 'Merged pull requests that passed on one run (%)'],
   ['runsPerPullRequest', '`Tests` runs per merged pull request'],
-  ['supersededPercent', 'Pull request runs stopped by a newer push (%)'],
+  ['supersededPercent', 'Pull request runs replaced by a newer run or cancelled by hand (%)'],
   ['failedPercent', 'Pull request runs that failed (%)']
 ];
-const RUN_OUTCOMES = { passed: 'passed', failed: 'failed', superseded: 'stopped by a newer push', other: 'other' };
+const RUN_OUTCOMES = { passed: 'passed', failed: 'failed', superseded: 'replaced by a newer run or cancelled by hand', other: 'other' };
 const fmt = (value) => (value === null || value === undefined ? '-' : String(round1(value)));
 const delta = (now, before) => {
   if (before === null || before === undefined) return '-';
@@ -542,6 +548,16 @@ export const renderReport = ({
 const READ_TRIES = 3;
 const RETRY_WAIT_MS = 2000;
 
+/**
+ * A failed request. `transient` marks one that a later try of the same read may not
+ * repeat: a server error or a body cut short.
+ * @typedef {Error & { status?: number, transient?: boolean }} RequestError
+ */
+/** @type {(error: unknown) => RequestError} */
+const transient = (error) => Object.assign(/** @type {Error} */ (error), { transient: true });
+/** @type {(message: string, status: number) => RequestError} */
+const httpError = (message, status) => Object.assign(new Error(message), { status, transient: status >= 500 });
+
 export const createClient = ({ token, apiUrl, repository, retryWaitMs = RETRY_WAIT_MS }) => {
   let remaining = Infinity;
   let requests = 0;
@@ -562,30 +578,59 @@ export const createClient = ({ token, apiUrl, repository, retryWaitMs = RETRY_WA
     if (Number.isFinite(left)) remaining = left;
     return response;
   };
-  const json = async (path, options) => {
-    const read = !options || options.method === undefined;
+  /**
+   * Every read goes through here: `once` is tried again after a transient error.
+   * @template T
+   * @param {() => Promise<T>} once
+   * @returns {Promise<T>}
+   */
+  const retried = async (once) => {
     for (let attempt = 1; ; attempt += 1) {
-      const retry = read && attempt < READ_TRIES;
-      const response = await request(path, options);
-      if (response.status === 404 && read) return null;
-      if (!response.ok && !(retry && response.status >= 500)) {
-        throw Object.assign(
-          new Error(`${options?.method || 'GET'} ${path}: ${response.status} ${await response.text()}`),
-          { status: response.status }
-        );
-      }
-      if (response.ok) {
-        try {
-          return JSON.parse(await response.text());
-        } catch (error) {
-          if (!retry) throw error;
-        }
-      } else {
-        await response.text();
+      try {
+        return await once();
+      } catch (error) {
+        if (!(/** @type {RequestError} */ (error)).transient || attempt >= READ_TRIES) throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, retryWaitMs * attempt));
     }
   };
+  const json = async (path, options) => {
+    const read = !options || options.method === undefined;
+    const once = async () => {
+      const response = await request(path, options);
+      if (response.status === 404 && read) return null;
+      if (!response.ok) {
+        throw httpError(`${options?.method || 'GET'} ${path}: ${response.status} ${await response.text()}`, response.status);
+      }
+      try {
+        return JSON.parse(await response.text());
+      } catch (error) {
+        throw transient(error);
+      }
+    };
+    return read ? retried(once) : once();
+  };
+  /**
+   * An artifact archive: the API answers with a redirect to a signed URL, read without the token.
+   * @param {string} url
+   * @returns {Promise<Buffer>}
+   */
+  const download = (url) => retried(async () => {
+    const redirect = await request(url);
+    await redirect.text();
+    const location = redirect.headers.get('location');
+    if (!location) throw httpError(`GET ${url}: ${redirect.status}`, redirect.status);
+    const response = await fetch(location);
+    if (!response.ok) {
+      await response.text();
+      throw httpError(`GET ${url} (redirected): ${response.status}`, response.status);
+    }
+    try {
+      return Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      throw transient(error);
+    }
+  });
   // Pages until a short page; `key` names the list in each page, or null for a bare list.
   const pages = async (path, key) => {
     const items = [];
@@ -596,7 +641,7 @@ export const createClient = ({ token, apiUrl, repository, retryWaitMs = RETRY_WA
       if (list.length < 100) return items;
     }
   };
-  return { request, json, pages, remaining: () => remaining, requests: () => requests };
+  return { json, download, pages, remaining: () => remaining, requests: () => requests };
 };
 
 // A rate-limit or permission refusal ends a listing early; the report says so.
@@ -634,12 +679,19 @@ export const listRuns = async (client, since, until) => {
   return { runs: [...new Map(runs.map((run) => [run.id, run])).values()], partial };
 };
 
-// Job lists of every attempt of `Tests` and `Gallery publication` runs, `Tests` first,
+// The order job lists are read in: cancelled pull request `Tests` runs (their job lists
+// decide whether they failed), then the other `Tests` runs, then the rest.
+const jobListRank = (/** @type {WorkflowRun} */ run) => {
+  if (run.path !== TESTS_WORKFLOW) return 2;
+  return run.event === 'pull_request' && run.conclusion === 'cancelled' ? 0 : 1;
+};
+
+// Job lists of every attempt of `Tests` and `Gallery publication` runs in that order,
 // while the request budget lasts.
-const listJobs = async (client, runs) => {
+export const listJobs = async (client, runs) => {
   const jobsByRun = new Map();
   const ordered = runs.filter((run) => JOB_LIST_WORKFLOWS.has(run.path))
-    .sort((a, b) => Number(b.path === TESTS_WORKFLOW) - Number(a.path === TESTS_WORKFLOW));
+    .sort((a, b) => jobListRank(a) - jobListRank(b));
   for (let start = 0; start < ordered.length && client.remaining() > RATE_RESERVE; start += PARALLEL_REQUESTS) {
     const batch = ordered.slice(start, start + PARALLEL_REQUESTS);
     let lists;
@@ -711,11 +763,8 @@ const readShardReports = async (client, shards) => {
   try {
     const reports = [];
     for (const { shard, artifact } of shards) {
-      const redirect = await client.request(artifact.archive_download_url);
-      const location = redirect.headers.get('location');
-      if (!location) throw new Error(`artifact ${artifact.name}: ${redirect.status}`);
       const archive = join(dir, `${artifact.id}.zip`);
-      writeFileSync(archive, Buffer.from(await (await fetch(location)).arrayBuffer()));
+      writeFileSync(archive, await client.download(artifact.archive_download_url));
       const unzip = spawnSync('unzip', ['-p', archive, 'functional-report.json'], {
         encoding: 'utf8', maxBuffer: 256 * 1024 * 1024
       });

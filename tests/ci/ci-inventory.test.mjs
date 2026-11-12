@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
-  PR_TARGETS, PR_WINDOW, SUPERSEDED_GAP_SECONDS, countWorkflowJobs, createClient, listRuns, isoWeek, latestShardArtifacts, percentile, priorReports, readData,
+  PR_TARGETS, PR_WINDOW, RATE_RESERVE, SUPERSEDED_GAP_SECONDS, countWorkflowJobs, createClient, listJobs, listRuns, isoWeek, latestShardArtifacts, percentile, priorReports, readData,
   renderReport, summarizeFunctional, summarizePullRequestCi, summarizePullRequests, summarizeRuns
 } from '../../tools/ci-inventory.mjs';
 
@@ -231,7 +231,7 @@ test('pull request feedback time splits by functional Playwright, takes the medi
   assert.match(report(edge), /Pull request feedback is within target \(median 20 of 20 minutes without functional Playwright; median - of 35 minutes with functional Playwright\)\./);
 });
 
-test('the targets, window, and cancelled-run gap the inventory uses are the ones SELECTIVE_CI.md states', () => {
+test('the targets, window, cancelled-run gap, and request reserve the inventory uses are the ones SELECTIVE_CI.md states', () => {
   const doc = readFileSync('docs/internal/SELECTIVE_CI.md', 'utf8').replace(/\s+/g, ' ');
   const [without, withFunctional] = PR_TARGETS;
   assert.equal(without.functional, false);
@@ -240,6 +240,7 @@ test('the targets, window, and cancelled-run gap the inventory uses are the ones
     + ` and ${withFunctional.minutes} minutes with it`));
   assert.ok(doc.includes(`last ${PR_WINDOW} pull requests merged into \`dev\``));
   assert.ok(doc.includes(`created at most ${SUPERSEDED_GAP_SECONDS} seconds after it ended`));
+  assert.ok(doc.includes(`stops reading them while ${RATE_RESERVE} requests of the hour are left`));
 });
 
 const block = (data) => `<!-- ci-inventory-data ${JSON.stringify(data)} -->`;
@@ -362,6 +363,92 @@ test('pull request CI counts single-run passes, runs per pull request, and split
     [null, null, null, null]);
 });
 
+test('a cancelled run with a job list is decided by its jobs, and without one by the 120-second gap', () => {
+  const second = (seconds) => new Date(Date.parse(at(10)) + seconds * 1000).toISOString();
+  // Each branch: a cancelled run ending at minute 10, then the next run `gap` seconds later.
+  const pair = (id, branch, gapSeconds) => [
+    prRun(id, branch, 0, 10, 'cancelled'),
+    { ...prRun(id + 1, branch, 11, 40, 'success'), created_at: second(gapSeconds) }
+  ];
+  const outcomeOf = (id, runs, jobsByRun = new Map()) => {
+    const ci = summarizePullRequestCi({ runs, earlierRuns: [], jobsByRun, pulls: [] });
+    return Object.keys(ci.runs).find((key) => key !== 'passed' && ci.runs[key] === 1);
+  };
+  // Without a job list: up to 120 seconds (or a next run created before the end) is a
+  // replacement, a longer gap a fail-fast cancel.
+  assert.equal(outcomeOf(1, pair(1, 'fix/a', SUPERSEDED_GAP_SECONDS - 1)), 'superseded');
+  assert.equal(outcomeOf(1, pair(1, 'fix/a', SUPERSEDED_GAP_SECONDS + 1)), 'failed');
+  assert.equal(outcomeOf(1, pair(1, 'fix/a', -5)), 'superseded');
+  // A queued run cancelled by hand, the next push 20 minutes later: no job failed.
+  assert.equal(outcomeOf(1, pair(1, 'fix/q', 20 * 60), new Map([
+    [1, [job('Core PR (Python 3.11)', 0, 0, 10, { conclusion: 'cancelled', started_at: null })]]
+  ])), 'superseded');
+  // A failed job decides even when the next run follows at once.
+  assert.equal(outcomeOf(1, pair(1, 'fix/f', 30), new Map([
+    [1, [job('Lint', 0, 1, 2, { conclusion: 'failure' }), job('Fail fast (Lint)', 2, 2, 3)]]
+  ])), 'failed');
+});
+
+test('job lists stop while 500 requests of the shared hourly budget are left', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('{"jobs":[]}', {
+    // 400 left: the old reserve of 100 read on until 100, starving the other workflows.
+    status: 200, headers: { 'x-ratelimit-remaining': '400' }
+  }));
+  const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
+  assert.equal(RATE_RESERVE, 500);
+  // The first batch of 8 learns the budget; nothing after it is read.
+  const jobsByRun = await listJobs(client, Array.from({ length: 24 }, (_, index) => tests(index + 1, 'push', 'dev')));
+  assert.equal(jobsByRun.size, 8);
+  assert.equal(client.requests(), 8);
+});
+
+test('job lists of cancelled pull request runs are read first, so a late one is decided by its jobs', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('{"jobs":[]}', {
+    status: 200, headers: { 'x-ratelimit-remaining': '400' }
+  }));
+  const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
+  // Only the first batch of 8 is read. The cancelled pull request run is the last of 25.
+  const early = Array.from({ length: 24 }, (_, index) => tests(index + 1, 'push', 'dev'));
+  const late = { ...tests(99, 'pull_request', 'fix/q'), conclusion: 'cancelled' };
+  const jobsByRun = await listJobs(client, [...early, late]);
+  assert.equal(jobsByRun.size, 8);
+  assert.ok(jobsByRun.has(99));
+});
+
+test('an artifact download is tried again on a server error or a cut-off body', async (t) => {
+  const answers = [];
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    return answers.shift();
+  });
+  const archive = 'https://api.github.com/repos/o/r/actions/artifacts/7/zip';
+  const signed = 'https://storage.example/7.zip';
+  const redirect = () => new Response(null, { status: 302, headers: { location: signed } });
+  const cutOff = () => new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1]));
+      controller.error(new TypeError('terminated'));
+    }
+  }), { status: 200 });
+  const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
+  // A cut-off body is tried again, and the third try returns the bytes.
+  answers.push(redirect(), cutOff(), redirect(), cutOff(), redirect(), new Response(new Uint8Array([80, 75]), { status: 200 }));
+  assert.deepEqual([...await client.download(archive)], [80, 75]);
+  assert.deepEqual(urls, [archive, signed, archive, signed, archive, signed]);
+  // Three tries at most, whatever the server answers.
+  urls.length = 0;
+  answers.push(new Response('x', { status: 502 }), redirect(), new Response('x', { status: 503 }),
+    redirect(), cutOff());
+  await assert.rejects(client.download(archive), /terminated/);
+  assert.equal(answers.length, 0);
+  assert.deepEqual(urls, [archive, archive, signed, archive, signed]);
+  // A refusal is not repeated.
+  answers.push(new Response('x', { status: 403 }));
+  await assert.rejects(client.download(archive), { status: 403 });
+  assert.equal(answers.length, 0);
+});
+
 test('the report shows pull request CI next to the previous week and carries it in the data block', () => {
   const functional = summarizeFunctional({
     reports: [], measurements: measured({}, 0), casesPerFile: new Map(), testDir: 'tests/web'
@@ -381,7 +468,9 @@ test('the report shows pull request CI next to the previous week and carries it 
   });
   assert.match(markdown, /\| Merged pull requests that passed on one run \(%\) \| 100 \| 49 \| \+51 \|/);
   assert.match(markdown, /\| `Tests` runs per merged pull request \| 1 \| 2\.2 \| -1\.2 \|/);
-  assert.match(markdown, /\| Pull request runs stopped by a newer push \(%\) \| 0 \| 29 \| -29 \|/);
+  assert.match(markdown, /\| Pull request runs replaced by a newer run or cancelled by hand \(%\) \| 0 \| 29 \| -29 \|/);
+  assert.match(markdown, /\| replaced by a newer run or cancelled by hand \| 0 \| 0 \|/);
+  assert.doesNotMatch(markdown, /newer push/);
   assert.match(markdown, /\| Pull request runs that failed \(%\) \| 50 \| 20 \| \+30 \|/);
   assert.match(markdown, /1 pull requests merged into `dev` in the window, 1 with a `Tests` run/);
   assert.match(markdown, /\| failed \| 1 \| 50 \|/);
