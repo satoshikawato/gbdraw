@@ -50,13 +50,16 @@ this skill, they win.
 - In a bundled PR, list the bug IDs and the former PRs it contains.
 - Run `node tools/check-pr-language.mjs --title "<title>" --body-file <file>`
   once, then `gh pr create --base dev`.
-- Where the machine defines a CI admission command, run every push, update, and
-  `gh pr create` through it. Its pre-check runs CI's fast checks on the head
-  merged with dev and refuses the push when one fails or the head conflicts
-  with dev: fix the failure or rebase onto `origin/dev`, then run it again.
-  Skip the pre-check only with a stated reason (a `dev-red-fix`, a check that is
-  broken on dev). A push that stops a running `Tests` run states its reason
-  (`CI_WAIT_WHY=conflict|failed-check|review|other`).
+- Where the machine defines a CI admission command, run every command that
+  starts a pull request `Tests` run (a push to a branch with an open PR,
+  `gh pr create`, `gh pr update-branch`, `gh run rerun`) through it, as one
+  background command, and end your turn until it exits. Its pre-check runs CI's
+  fast checks on the head merged with dev and refuses the push when one fails
+  on the branch or the head conflicts with dev: fix the failure or rebase onto
+  `origin/dev`, then run it again. A failure that dev also has does not stop the
+  push. Skip the pre-check only with `CI_WAIT_SKIP_PRECHECK=<reason>` (a
+  `dev-red-fix`, a check that is broken on dev). A push that stops a running
+  `Tests` run states its reason (`CI_WAIT_WHY=conflict|failed-check|review|other`).
 
 ## Merge
 
@@ -85,11 +88,12 @@ this skill, they win.
 ## Watch CI
 
 - Wait with the machine's PR wait command (see the local instructions), as one
-  background command per session; it exits with one line per PR that needs its
-  owner. Never write a watcher script per task. On a machine without that
-  command, `python3 .claude/skills/gbdraw-ship-pr/scripts/watch_prs.py --prs <n> ...`
+  background command per session. It exits at the first watched PR that needs
+  its owner and prints one line per watched PR, `WAITING` for those still
+  waiting; start it again for those. Never write a watcher script per task. On
+  a machine without that command, `python3 .claude/skills/gbdraw-ship-pr/scripts/watch_prs.py --prs <n> ...`
   is the fallback; it polls every five minutes, as `AGENTS.md` requires.
-- Act on its event lines (merged, closed, conflict, failed, cancelled, green).
+- Act on each line's state.
 - Re-pushes, rebases, and CI fixes whose log names the cause go to
   `gbdraw-mechanic`; resume the implementer only for a fix that bears on the
   design.
@@ -99,7 +103,7 @@ this skill, they win.
   may have merged it already, and a green line covers only the checks that
   existed at that poll, not those of a workflow that starts later.
 - A run whose jobs all passed but which ended `cancelled` is recovered with
-  `gh run rerun <id> --failed`.
+  `gh run rerun <id> --failed`, run through the admission command.
 - When a local check predicts a CI failure, settle it now with CI's own
   comparison, then fix it or state that nothing is needed. "Web change budget"
   and "Web base policy (trusted base)" measure the PR's own change, from the

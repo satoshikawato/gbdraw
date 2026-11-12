@@ -28,12 +28,13 @@ Templates are in `templates/`.
    `python3 .claude/skills/gbdraw-campaign/scripts/bind_session.py "$TASK_DIR"`.
 3. Read `STATE.md` and `DECISIONS.md`. Search `LOG.md` only for what you need.
 4. When the work rewrites files heavily, register a lane in the machine's lane
-   table (command in the local instructions), attach the PR when it opens, and
-   mark it done at the end. Write the lane id into `STATE.md` next to the ID
-   blocks. Structural work (typing, function splits, check hardening) leaves
-   files a feature lane holds until that lane is done, when the tool prints
-   TIMING. A push the admission command holds for a long-open PR on the same
-   files is left running (at most 2 hours).
+   table (command in the local instructions) and attach the PR when it opens.
+   A merged or closed PR ends the lane by itself; mark it done only when the
+   work ends without a PR. Write the lane id into `STATE.md` under "ID blocks".
+   When the tool prints TIMING, structural work (typing, function splits, check
+   hardening) leaves the files a feature lane holds until that lane is done,
+   and tells that lane's owner. A push the admission command holds for a
+   long-open PR on the same files is left running (at most 2 hours).
 
 ## While working
 
@@ -58,18 +59,21 @@ End the session and continue in a new one when any of these holds:
 Before ending, hand off in this order: update `STATE.md` (and its
 `次の一手:` line), write `NEXT-SESSION-PROMPT.md` from the template (under 10 KB,
 pointing to the files above instead of copying them), then write the report,
-whose セッション line names the prompt's absolute path. The next session may be
-started from that prompt without the Owner, so the prompt stands on its own:
+whose session line (in the local report format) names the prompt's absolute
+path. The next session may be started from that prompt without the Owner, so
+the prompt stands on its own:
 what to read first, the binding command, the first checks, and the goal. A
 campaign with lanes in one folder writes one prompt per lane
 (`NEXT-SESSION-PROMPT-<lane>.md`), and each lane's report names its own.
 Write 「Owner へ：なし」 only when nothing waits for the Owner, and 「閉じて大丈夫です」
-only when none of your background jobs still runs; if either is false, the
-session does not continue automatically.
+only when none of your background jobs still runs. Where the machine starts the
+next session itself (see the local instructions), it does so only when both
+hold.
 
 A delegated decision is final once a report has listed it. Carry no "to
-confirm" list across sessions. Only a decision that changes how a figure or
-screen looks goes to 「Owner へ」, with images.
+confirm" list across sessions. Of the delegated decisions, only one that changes
+how a figure or screen looks goes to 「Owner へ」, with images. Decisions reserved
+for the Owner still go there.
 
 ## Finish
 
