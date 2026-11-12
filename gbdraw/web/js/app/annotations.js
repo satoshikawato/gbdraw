@@ -72,13 +72,12 @@ const nextAnnotationId = (annotations, prefix) => {
 };
 
 /**
- * The Web state the editor reads; the selected-feature and result members are refs
- * or plain lists, read only as the Results hold them.
- * @typedef {{
- *   extractedFeatures: WebState['extractedFeatures'], biologicalFeatures: WebState['biologicalFeatures'],
- *   selectedFeatures: any, results: any,
- *   activeDrawing: () => AnnotationEditorDrawing, sessionOperationAvailability?: () => any
- * }} AnnotationEditorState `sessionOperationAvailability` returns a busy outcome while a Session operation runs.
+ * The Web state the editor reads. `sessionOperationAvailability` returns a busy outcome while a Session operation
+ * runs.
+ * @typedef {Pick<WebState, 'extractedFeatures' | 'biologicalFeatures' | 'selectedFeatures' | 'results'
+ *   | 'sessionOperationAvailability'> & {
+ *   activeDrawing: () => AnnotationEditorDrawing
+ * }} AnnotationEditorState
  * @typedef {AnnotationSetsDrawing & {
  *   adv: { circular_track_slots?: any[], linear_track_slots?: any[] }
  * }} AnnotationEditorDrawing The members of a drawing (`DrawingState` of state.js) the editor reads, and the
@@ -110,7 +109,7 @@ export const createAnnotationEditor = ({
    * @param {{ drawnOnly?: boolean }} [options]
    */
   const catalogFeature = (target, { drawnOnly = false } = {}) => {
-    const lists = [state.extractedFeatures?.value, drawnOnly ? null : state.biologicalFeatures?.value];
+    const lists = [state.extractedFeatures.value, drawnOnly ? null : state.biologicalFeatures.value];
     for (const list of lists.map(toRaw)) {
       const feature = (Array.isArray(list) ? list : []).find((item) => item?.record_key === target?.recordKey && item?.biological_feature_id === target?.biologicalFeatureId);
       if (feature) return feature;
@@ -143,7 +142,7 @@ export const createAnnotationEditor = ({
   };
   const addAnnotationSet = (base = 'annotations') => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const set = createAnnotationSet({ id: uniqueAnnotationSetId(drawing.annotationSets, base) });
     return addSetToDrawing(drawing.slices.annotationSets, set);
@@ -154,7 +153,7 @@ export const createAnnotationEditor = ({
    */
   const renameAnnotationSet = (set, id) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const oldId = String(set?.id || '');
     const nextId = uniqueAnnotationSetId(drawing.annotationSets.filter((item) => item !== set), id);
@@ -175,7 +174,7 @@ export const createAnnotationEditor = ({
    */
   const setAnnotationSetLegendLabel = (set, value) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!set) return;
     retireLegendStylesOfUnnamedCaptions(() => writeSetLegendLabel(drawing.slices.annotationSets, set, String(value ?? '').trim()));
@@ -183,7 +182,7 @@ export const createAnnotationEditor = ({
   /** @param {AnnotationSetRow} set */
   const duplicateAnnotationSet = (set) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const copy = createAnnotationSet(JSON.parse(JSON.stringify(set)));
     copy.id = nextCopyId(set.id, drawing.annotationSets);
@@ -192,7 +191,7 @@ export const createAnnotationEditor = ({
   /** @param {AnnotationSetRow} set */
   const removeAnnotationSet = (set) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (drawing.annotationSets.includes(set)) {
       retireLegendStylesOfUnnamedCaptions(() => removeSetFromDrawing(drawing.slices.annotationSets, set));
@@ -204,7 +203,7 @@ export const createAnnotationEditor = ({
    */
   const addCoordinateAnnotation = (set, options = {}) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!set) return null;
     const id = nextAnnotationId(set.annotations, 'region');
@@ -220,7 +219,7 @@ export const createAnnotationEditor = ({
    */
   const addRegionAnnotation = ({ record, start, end }) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const set = drawing.annotationSets[0]
       ?? addSetToDrawing(drawing.slices.annotationSets, createAnnotationSet({ id: uniqueAnnotationSetId(drawing.annotationSets, 'annotations') }));
@@ -233,10 +232,10 @@ export const createAnnotationEditor = ({
   /** @param {AnnotationSetRow | null | undefined} set */
   const addSelectedFeatures = (set) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!set) return [];
-    const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
+    const targets = featureTargetsFromSelection(state.selectedFeatures.value);
     if (!targets) {
       onImportNotice?.(t('Generate the diagram again to annotate the selected features.'));
       return [];
@@ -255,7 +254,7 @@ export const createAnnotationEditor = ({
    */
   const removeAnnotation = (set, item) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (set?.annotations?.includes(item)) {
       retireLegendStylesOfUnnamedCaptions(() => removeAnnotationRow(drawing.slices.annotationSets, set, item));
@@ -268,7 +267,7 @@ export const createAnnotationEditor = ({
    */
   const renameAnnotation = (set, item, value) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const base = String(value || '').trim() || 'region';
     const used = new Set(set.annotations.filter((entry) => entry !== item).map((entry) => entry.id));
@@ -286,7 +285,7 @@ export const createAnnotationEditor = ({
    */
   const setAnnotationStyle = (set, item, field, value) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const defaults = createDefaultAnnotationStyle(set.defaultStyle);
     setAnnotationStyleField(drawing.slices.annotationSets, set, item, field, value, defaults);
@@ -298,7 +297,7 @@ export const createAnnotationEditor = ({
    */
   const setAnnotationTargetKind = (set, item, kind) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!set || !item) return;
     const record = item.target?.record ?? null;
@@ -347,7 +346,7 @@ export const createAnnotationEditor = ({
   });
   /** @param {string} text */
   const importAnnotationTable = async (text) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     onImportNotice?.('');
     const { sets, notice } = parseAnnotationTableWithNotice(text);
@@ -378,7 +377,7 @@ export const createAnnotationEditor = ({
   /** @param {{ target?: HTMLInputElement | null } | null | undefined} event The change event of the file input. */
   const importAnnotationTableFile = async (event) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const input = event?.target;
     const file = input?.files?.[0];
@@ -387,9 +386,9 @@ export const createAnnotationEditor = ({
     onImportNotice?.('');
     const setsBeforeRead = [...drawing.annotationSets];
     const draftBeforeRead = JSON.stringify(drawing.annotationSets);
-    const resultsBeforeRead = [...(state.results?.value ?? state.results ?? [])];
+    const resultsBeforeRead = [...state.results.value];
     const isCurrent = () => {
-      const currentResults = state.results?.value ?? state.results ?? [];
+      const currentResults = state.results.value;
       return sequence === importSequence && input.files?.[0] === file
       && setsBeforeRead.length === drawing.annotationSets.length
       && setsBeforeRead.every((set, index) => set === drawing.annotationSets[index])
@@ -419,7 +418,7 @@ export const createAnnotationEditor = ({
      * @param {AnnotationRow | null | undefined} annotation
      * @param {unknown} value
      */
-    setRecordValue: (annotation, value) => state.sessionOperationAvailability?.()
+    setRecordValue: (annotation, value) => state.sessionOperationAvailability()
       || recordSelector.setValue(state.activeDrawing().slices.annotationSets, annotation, value),
     recordIsRequired: recordSelector.isRequired,
     recordIsMissing: recordSelector.isMissing,

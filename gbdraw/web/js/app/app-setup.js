@@ -1441,7 +1441,7 @@ export const createAppSetup = () => {
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
     committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf,
     unitPlacesOf: linearDrawingUnitPlaces, planCardWindows,
-    cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => recordDisplayControls.allRows.value || []
+    cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => recordDisplayControls.allRows.value
   });
   const losatSettings = createLosatSettings({ state, planLinearUnits, shownPlacesOf: () => linearUnitPlacesOf(state.activeDrawing()) });
   // Auto values follow the records the next Generate draws; until they are
@@ -2176,7 +2176,7 @@ export const createAppSetup = () => {
         resultIndex,
         artifactIdentity: token,
         generationToken: token,
-        catalogState: state.featureCatalog?.value || null,
+        catalogState: state.featureCatalog.value,
         phase: 'session-load',
         bindingOptions: { isIncrementalEdit: true },
         isCurrent: () => (
@@ -3321,7 +3321,7 @@ export const createAppSetup = () => {
     if (error) throw error;
     return projectDraftRequest(state, drawing, {
       linearRecordCatalog: catalog, planLinearUnits,
-      recordDisplayRows: recordDisplayControls.allRows.value || [],
+      recordDisplayRows: recordDisplayControls.allRows.value,
       omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
     });
   };

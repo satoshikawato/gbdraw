@@ -313,7 +313,8 @@ const renderedFeatureSvgId = (feature) => {
     ''
   ).trim();
 };
-const featuresBySvgId = computed(() => {
+const featuresBySvgId = typedComputed(() => {
+  /** @type {Map<string, ExtractedFeature>} */
   const indexed = new Map();
   const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
   for (const feat of features) {
@@ -337,13 +338,14 @@ const featureSelectionDrag = reactive({
   additive: false
 });
 const selectedFeatureCount = computed(() => selectedFeatureIds.value.size);
-const selectedFeatures = computed(() => {
+const selectedFeatures = typedComputed(() => {
   const ids = Array.from(selectedFeatureIds.value || [])
     .map((id) => String(id || '').trim())
     .filter(Boolean);
   if (ids.length === 0) return [];
 
-  const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
+  const bySvgId = featuresBySvgId.value;
+  /** @type {Map<string, ExtractedFeature>} */
   const fallback = new Map();
   (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
     const svgId = renderedFeatureSvgId(feature);
@@ -352,7 +354,7 @@ const selectedFeatures = computed(() => {
 
   return ids
     .map((id) => bySvgId.get(id) || fallback.get(id) || null)
-    .filter(Boolean);
+    .filter((feature) => feature !== null);
 });
 const hasFeatureSelection = computed(() => selectedFeatureCount.value > 0);
 // The shown drawing's feature-editor status: a field of its artifact slot, so a drawing switch swaps it
