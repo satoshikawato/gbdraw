@@ -256,7 +256,7 @@ const mockLegendEntry = (caption, color, x) => {
       dirtyMarks += 1;
       return true;
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
+    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
   });
   // The layout owner lays the Legend out after a restore (zero shift).
   actions.setLegendGeometryChangedHandler(() => { layoutRefreshes += 1; });
@@ -867,7 +867,7 @@ const mockLegendEntry = (caption, color, x) => {
   let commits = 0;
   const actions = createLegendEntryActions({
     state: withDrawings(state), commitActiveResultEdit: () => { commits += 1; return true; }, readActiveResultIdentity: () => 'result-1',
-    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
+    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
   });
   const listed = () => state.legendEntries.value.map(({ caption, color }) => [caption, color]);
   const drawnRows = shownRows();
@@ -988,7 +988,7 @@ const mockLegendEntry = (caption, color, x) => {
     featureLegend.children.splice(0);
     order.listed.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, colors[caption], index * 70)));
     const actions = createLegendEntryActions({
-      state: withDrawings(state), readActiveResultIdentity: () => 'result-1', readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
+      state: withDrawings(state), readActiveResultIdentity: () => 'result-1', readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
     });
     return {
       state, actions,
@@ -1094,7 +1094,7 @@ const mockLegendEntry = (caption, color, x) => {
   const actions = createLegendEntryActions({
     state: withDrawings(state),
     commitActiveResultEdit: () => true,
-    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
+    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
   });
   await actions.restoreDeletedLegendEntries();
   const colors = Object.fromEntries(state.legendEntries.value.map((entry) => [entry.caption, entry.color]));
@@ -1187,7 +1187,7 @@ const mockLegendEntry = (caption, color, x) => {
     extractedFeatures: ref([]),
     skipCaptureBaseConfig: ref(false)
   };
-  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
+  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
   const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
   assert.equal(actions.updateLegendEntryColor(0, '#ff0000'), true);
   assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000' }, 'the color reaches both keys');
@@ -1238,7 +1238,7 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]), originalLegendOrder: ref(['Alpha', 'Beta']), originalLegendColors: ref({}),
     legendStrokeOverrides: {}, legendColorOverrides: {}, manualSpecificRules: [], skipCaptureBaseConfig: ref(false)
   };
-  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
+  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
   const keepBoth = () => {
     actions.readLegendRowNames();
     return actions.keepBothNamesOf({ name: 'Beta', renamedKey: 'Alpha', targetKey: null, color: '#112233', deletedKey: 'Beta' });

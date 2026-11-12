@@ -103,7 +103,7 @@ const setup = () => {
       { caption: 'CDS', originalCaption: 'CDS', color: '#111111', featureIds: [] },
       { caption: 'Rule A', originalCaption: 'Rule A', color: '#222222', featureIds: [] }
     ]), dormantLegendEntries: ref([]), deletedLegendEntries: ref([]),
-    legendColorOverrides: {}, legendStrokeOverrides: {}
+    legendColorOverrides: {}, legendStrokeOverrides: {}, svgContent: ref(null)
   });
   const work = { commits: 0, layouts: 0 };
   const commitActiveResultEdit = () => { work.commits += 1; return true; };

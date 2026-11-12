@@ -4,7 +4,7 @@
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack, TrackLegendRows } from '../services/track-legend-rows.js' */
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, WebState } from '../state.js' */
 /** @import { LegendCaption, RecordedLegendColor } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
@@ -374,14 +374,14 @@ export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows
 // palette edit writes a row's recorded color; only a Legend extraction
 // records the swatch the Result shows (`RecordedLegendColor`).
 /**
- * @param {DisplayedLegendState & Parameters<typeof appliedFeatureColors>[0] & { svgContent?: { value?: unknown } }} state
+ * @param {DisplayedLegendState & Parameters<typeof appliedFeatureColors>[0] & Pick<WebState, 'svgContent'>} state
  * @param {Parameters<typeof displayedLegendRowContext>[1] & Pick<DrawingState,
  *   'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'legendColorOverrides'>} drawing
  * @param {readonly DrawnTrack[]} drawnTracks The tracks of the request that drew the displayed Result.
  * @returns {LegendRowColors}
  */
 export const displayedLegendRowColors = (state, drawing, drawnTracks) => {
-  const context = state.svgContent?.value ? displayedLegendRowContext(state, drawing) : null;
+  const context = state.svgContent.value ? displayedLegendRowContext(state, drawing) : null;
   const colors = context ? draftLegendPanelColors({
     ...context, originalLegendOrder: [...context.originalLegendOrder],
     legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,

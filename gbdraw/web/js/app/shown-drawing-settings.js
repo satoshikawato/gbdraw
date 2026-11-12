@@ -79,7 +79,7 @@ export const createFeatureChoiceReaders = ({ state, shownLegendName }) => {
 
   const featureVisibilityFeatureSuggestions = computed(() => {
     const values = new Set(['*', ...featureKeys]);
-    for (const feat of Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []) {
+    for (const feat of extractedFeatures.value) {
       const type = String(feat?.type || '').trim();
       if (type) values.add(type);
     }
@@ -136,7 +136,7 @@ export const createShownDrawingMembers = ({ state, linearComparisonGlobalAction,
     /** @type {Record<string, string>} */
     const colors = drawing.currentColors.value || {};
     const keys = Object.keys(colors);
-    const drawn = new Set((state.extractedFeatures.value || [])
+    const drawn = new Set(state.extractedFeatures.value
       .map((/** @type {{ type?: string }} */ feature) => String(feature?.type || '')));
     if (!drawn.size) return { primary: keys, more: /** @type {string[]} */ ([]) };
     const circular = mode.value === 'circular';

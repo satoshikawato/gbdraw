@@ -151,9 +151,9 @@ export const createLinearRecordSelector = ({
   const refreshGenerations = new Map();
   /** @type {Map<DrawingId, { fingerprint: unknown[], promise: Promise<RefreshOutcome> | null }>} */
   const activeRefreshes = new Map();
-  const recordDiscoverySuppressed = () => Boolean(
-    state.semanticFileWatchersSuppressed?.value ||
-    state.sessionImportRollbackInProgress?.value
+  const recordDiscoverySuppressed = () => (
+    state.semanticFileWatchersSuppressed.value ||
+    state.sessionImportRollbackInProgress.value
   );
 
   /** @param {LinearSeqLike} seq */
@@ -325,7 +325,7 @@ export const createLinearRecordSelector = ({
           temporaryPathPrefix: `/record-selector-${sanitizePathSegment(uid)}-${generation}`
         });
         if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
-        const busy = state.sessionOperationAvailability?.();
+        const busy = state.sessionOperationAvailability();
         if (busy) {
           replaceState(drawing.id, uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
           return busy;
@@ -336,7 +336,7 @@ export const createLinearRecordSelector = ({
         if (onRecordsDiscovered?.({ drawingId: drawing.id, uid, records }) === true) return true;
       } catch (error) {
         if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
-        const busy = state.sessionOperationAvailability?.();
+        const busy = state.sessionOperationAvailability();
         if (busy) {
           replaceState(drawing.id, uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
           return busy;
@@ -363,7 +363,7 @@ export const createLinearRecordSelector = ({
    * @returns {SessionBusy | Promise<RefreshOutcome>}
    */
   const refresh = (drawing, options = {}) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const fingerprint = refreshFingerprint(drawing, options);
     const activeRefresh = activeRefreshes.get(drawing.id);

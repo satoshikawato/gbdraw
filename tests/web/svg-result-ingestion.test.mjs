@@ -805,7 +805,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []),
+    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []),
     legendRowNames
   });
   reconcileMountedResult(mounted, two);
@@ -843,7 +843,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []),
+    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []),
     legendRowNames: { value: new Map() }
   });
   reconcileMountedResult(mounted, two);
@@ -885,7 +885,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
     activeDrawing: () => drawing,
     sessionOperationAvailability: () => null
   };
-  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
+  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
   const strokes = createLegendStrokeActions({ state });
   assert.equal(owner.updateLegendEntryColor(1, '#ff0000'), true);
   assert.equal(owner.updateLegendEntryColor(0, '#0000ff'), true);

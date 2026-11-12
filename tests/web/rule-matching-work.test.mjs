@@ -58,7 +58,7 @@ const setup = (count, count_) => {
     extractedFeatures: ref(features), biologicalFeatures: ref(features), manualSpecificRules: rules,
     svgResultIdentity: ref('one'), legendEntries: ref([{ caption: 'CDS', color: '#111111' }]), deletedLegendEntries: ref([]),
     featureColorOverrides: {}, legendColorOverrides: {}, legendStrokeOverrides: {}, featureStrokeOverrides: {},
-    addedLegendCaptions: ref(new Set())
+    addedLegendCaptions: ref(new Set()), mode: ref('circular'), results: ref([]), selectedResultIndex: ref(0)
   });
   return { features, rules, state };
 };
@@ -107,7 +107,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
       show: true, feat: features[0], color: '#abcdef', legendName: 'CDS', defaultColorType: null
     };
     Object.assign(state, {
-      results: ref([]), selectedResultIndex: ref(0), svgContainer: ref(null), clickedFeature: ref(null),
+      results: ref([]), selectedResultIndex: ref(0), svgContainer: ref(null), svgContent: ref(null), clickedFeature: ref(null),
       displayedResultMetadata: () => null,
       featureStyleScopeDialog, resetColorDialog: {}, legendRenameDialog: {}, originalLegendOrder: ref([]),
       originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }), appliedPaletteColors: ref({}),
@@ -183,7 +183,7 @@ test('the rule preparation builds the feature union once per pair of array ident
     extractedFeatures: ref(counted('catalog', rows)), biologicalFeatures: ref(counted('biology', rows.slice(0, 2))),
     manualSpecificRules: rules, svgResultIdentity: ref('one'), legendEntries: ref([]), deletedLegendEntries: ref([]),
     featureColorOverrides: {}, legendColorOverrides: {}, legendStrokeOverrides: {}, featureStrokeOverrides: {},
-    addedLegendCaptions: ref(new Set())
+    addedLegendCaptions: ref(new Set()), mode: ref('circular'), results: ref([]), selectedResultIndex: ref(0)
   });
   /** @type {string[][]} */
   const evaluated = [];
