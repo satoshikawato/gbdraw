@@ -82,7 +82,7 @@ const fullCatalog = async (drawing) => {
 
 const stagedFiles = async (request, resources) => {
   const { resourceManifest, stagedResources } = await createDiagramResourceTransport().prepare({ request, resources });
-  const bytesByToken = new Map(stagedResources.map(({ cacheToken, bytes }) => [cacheToken, Buffer.from(bytes).toString('base64')]));
+  const bytesByToken = new Map(await Promise.all(stagedResources.map(async ({ cacheToken, blob }) => [cacheToken, Buffer.from(await blob.arrayBuffer()).toString('base64')])));
   return Object.fromEntries(resourceManifest.map(({ resourceId, cacheToken, name }) => [resourceId, { name, base64: bytesByToken.get(cacheToken) }]));
 };
 /** 'drawn' when the real Python codec reads `renderRequest` as a Linear request, else its refusal. */

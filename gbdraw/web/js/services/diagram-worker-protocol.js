@@ -15,6 +15,19 @@
  */
 
 /**
+ * A file a helper request or a feature extraction gives the Worker by its
+ * `role` or its `path` (an input before a request names it, or a table the
+ * page wrote): its content as a Blob, which postMessage passes as a handle,
+ * so no input's bytes cross it (OV-2749). The Worker reads it into its
+ * request workspace.
+ * @typedef {object} WorkerInputFile
+ * @property {string} [role]
+ * @property {string} [path]
+ * @property {string} [name]
+ * @property {Blob} blob
+ */
+
+/**
  * The page's first message to a new diagram Worker: its boot manifest, the
  * page's fonts, and, on a cross-origin-isolated page, the interrupt buffer
  * through which a Cancel stops Python (D7); `null` elsewhere, where a Cancel

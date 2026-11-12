@@ -265,11 +265,11 @@ const diagramWorkerResourceBytes = (activity) => (
   (activity.instances || []).reduce((total, instance) => (
     total
     + (instance.helpers || []).reduce(
-      (helperTotal, helper) => helperTotal + Number(helper.transferredBytes || 0),
+      (helperTotal, helper) => helperTotal + Number(helper.stagedBytes || 0),
       0
     )
     + (instance.runs || []).reduce(
-      (runTotal, run) => runTotal + Number(run.transferredBytes || 0),
+      (runTotal, run) => runTotal + Number(run.stagedResourceBytes || 0),
       0
     )
   ), 0)
@@ -281,7 +281,7 @@ const expectRulePreparationWorker = (activity, runs = 0, helpers = null) => {
   if (helpers === null) expect(activity.helpers).toBeGreaterThan(0);
   else expect(activity.helpers).toBe(helpers);
   for (const helper of activity.instances.flatMap(instance => instance.helpers || [])) {
-    expect(helper).toMatchObject({ operation: 'evaluateRules', transferredBytes: 0 });
+    expect(helper).toMatchObject({ operation: 'evaluateRules', stagedBytes: 0 });
   }
 };
 
@@ -2093,9 +2093,7 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   expect(worker.instances[0].runs[1].stagedResourceBytes).toBeLessThan(
     worker.instances[0].runs[1].referencedDeclaredBytes
   );
-  expect(worker.instances[0].runs[1].transferredBytes).toBe(
-    worker.instances[0].runs[1].stagedResourceBytes
-  );
+  expect(worker.instances[0].runs[1].transferredBytes).toBe(0);
 
   const repeatedSave = await saveCurrentSession(freshPage, 'intent-repeated-b');
   const activeBeforeRepeatedLoad = await capturePageEvidence(freshPage);

@@ -222,6 +222,10 @@ const REASONS = Object.freeze({
   GENBANK_PARSE: 'The GenBank/DDBJ file could not be parsed: it may be cut off or damaged. Download or export it again.',
   // A gzip input that expands past its cap (gbdraw/io/input_text.py MAX_EXPANDED_INPUT_BYTES); the cap is PHRASES.gzipLimit.
   GZIP_EXPANDED_SIZE: 'Decompress the gzip file and choose the plain file.',
+  // A staging of the inputs for the diagram Worker that found no memory for their bytes (a RangeError in the page,
+  // a failed read of a readable input in the Worker; OV-2749). It states the whole failure, so the code's message,
+  // which asks to reselect the input, is not shown.
+  INPUT_MEMORY: 'There was not enough memory to prepare the inputs for drawing. Close other tabs and retry, or save a Session and reload the page before retrying.',
   // A drawn diagram whose Worker reply the page cannot receive (a `messageerror` of the run in
   // services/diagram-generation.js, PD-OI-118). It states the whole failure, so the code's message is not shown.
   REPLY_TOO_LARGE: 'The diagram was drawn, but it is too large for this browser page to receive. Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).',
@@ -243,7 +247,10 @@ const REASONS = Object.freeze({
 // The actions of a reason in place of its code's, where Retry would fail the same way: a refused gzip file is
 // replaced by its plain file, and a reply too large for the page is drawn from a saved Session (PD-OI-118).
 /** @type {Readonly<Record<string, readonly string[]>>} */
-const REASON_ACTIONS = Object.freeze({ GZIP_EXPANDED_SIZE: ['select-input'], REPLY_TOO_LARGE: ['save-session'] });
+const REASON_ACTIONS = Object.freeze({ GZIP_EXPANDED_SIZE: ['select-input'], REPLY_TOO_LARGE: ['save-session'],
+  INPUT_MEMORY: ['retry', 'save-session', 'reload'] });
+// The reasons that state the whole failure: the code's message is not shown with them.
+const WHOLE_FAILURE_REASONS = new Set(['REPLY_TOO_LARGE', 'INPUT_MEMORY']);
 // What a decline names as changed under an evaluation of rule inputs (OV-447,
 // OV-449): the label table import and the Specific rules import read it here.
 // A key of its own (OV-1415): the label table's notice shows it with `tm`.
@@ -1166,7 +1173,7 @@ export const normalizeUserFacingError = (value, {
   // One part per sentence, in the order the summary shows them.
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
-    reason !== 'REPLY_TOO_LARGE' && { text: lead.text },
+    !WHOLE_FAILURE_REASONS.has(/** @type {string} */ (reason)) && { text: lead.text },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
     sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
     inputOrdinal !== undefined && { text: (!CARD_ORDINAL_FIELDS.has(field ?? '') && ORDINAL_LABELS[result.code]) || PHRASES.sequence, params: { n: inputOrdinal } },

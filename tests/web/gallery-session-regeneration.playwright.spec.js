@@ -119,9 +119,7 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
   expect(activity.instances[0].helpers.some(({ operation }) => (
     operation === 'hydrateProteinLosatTsv'
   ))).toBe(true);
-  expect(activity.instances[0].helpers.some((helper) => (
-    helper.transferCount > 0 && helper.transferredBytes > 0
-  ))).toBe(true);
+  expect(activity.instances[0].helpers.some((helper) => helper.stagedBytes > 0)).toBe(true);
   expect(activity.instances[0].terminated).toBe(false);
   expect(await page.evaluate(() => ({
     mainLoaderPresent: typeof window.loadPyodide === 'function',

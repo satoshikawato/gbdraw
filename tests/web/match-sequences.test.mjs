@@ -23,12 +23,12 @@ import { EXPECTED_WEB_RUNTIME_CAPABILITIES } from '../../gbdraw/web/js/services/
 // first record. Biopython names a FASTA entry without an ID '' (the browser reader record_N).
 // A file whose text contains 'malformed reply' gets a reply without its record IDs.
 const helperCalls = [];
-const bytesOf = (payload) => new Uint8Array(payload.files[0].bytes);
+const bytesOf = async (payload) => new Uint8Array(await payload.files[0].blob.arrayBuffer());
 const formatOf = (text) => (text.trimStart().startsWith('LOCUS') ? 'genbank' : 'fasta');
 const pythonId = ({ id, aliases }) => (aliases.length === 1 && /^record_\d+$/.test(id) ? '' : id);
 const pythonReplies = {
-  readComparisonSequence: (payload) => {
-    const text = new TextDecoder().decode(bytesOf(payload));
+  readComparisonSequence: async (payload) => {
+    const text = new TextDecoder().decode(await bytesOf(payload));
     const records = parseSequenceRecordsFast(text, formatOf(text));
     if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
     const fasta = records.map((record) => `>${pythonId(record)}\n${record.sequence}\n`).join('');
@@ -40,8 +40,8 @@ const pythonReplies = {
       genomeFiles: [{ length: recordLengths.reduce((sum, length) => sum + length, 0), recordLengths }]
     };
   },
-  readAllSequenceRecords: (payload) => {
-    const records = parseSequenceRecordsFast(new TextDecoder().decode(bytesOf(payload)), payload.format);
+  readAllSequenceRecords: async (payload) => {
+    const records = parseSequenceRecordsFast(new TextDecoder().decode(await bytesOf(payload)), payload.format);
     if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
     return { records: records.map((record) => ({
       id: pythonId(record), aliases: [...record.aliases], sequence: record.sequence
@@ -60,8 +60,8 @@ class PythonReadersWorker {
         capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
     } else if (message.type === 'helper') {
       helperCalls.push(message.operation);
-      const result = pythonReplies[message.operation](message.payload);
-      queueMicrotask(() => this.emit({ type: 'helper', requestId: message.requestId, ok: true, result }));
+      Promise.resolve(pythonReplies[message.operation](message.payload))
+        .then((result) => this.emit({ type: 'helper', requestId: message.requestId, ok: true, result }));
     }
   }
 }

@@ -3,8 +3,9 @@ import { base64ToBytesInTasks } from './byte-utils.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
 import {
-  contentTokenOfBytes, holdReadBytes, readFileContentFacts, releaseFileContentCache, takeFileBytesForTransfer
+  contentTokenOfBytes, holdReadBytes, inputContentBlob, readFileContentFacts, releaseFileContentCache
 } from './file-content-cache.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
 import { fileBackedReaderOf } from './session-resource-backing.js';
 export { recordSourceOwnedBy, recordSourceResourceIds } from './resource-payload-owner.js';
@@ -28,6 +29,12 @@ import {
  * }} ResourceDescriptor
  * @typedef {{ encoding?: unknown, data?: DepthFilePayload | null }} DepthResourceView
  *   A descriptor as the depth codec reads it; base64 `data` is a string, which never matches the codec's `schema`.
+ */
+/**
+ * A resource the Worker receives with a request: its content as a Blob, which
+ * postMessage passes as a handle (no input's bytes cross it, OV-2749); the
+ * Worker reads it into its resource cache under `cacheToken`.
+ * @typedef {{ resourceId: string, cacheToken: ResourceContentToken, blob: Blob }} StagedResource
  */
 
 // The base64 text of a resource is decoded by the one decoder a Session
@@ -72,28 +79,59 @@ const validateResourceDescriptor = (resourceId, descriptor) => {
 };
 
 /**
+ * The bytes of a resource whose owner is not a File the user chose.
  * @param {string} resourceId
  * @param {ResourceDescriptor} descriptor
- * @param {ResourcePayloadOwner | ResourceDescriptor | null} owner
+ * @returns {Promise<Uint8Array<ArrayBuffer>>}
  */
-const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
-  if (owner && owner !== descriptor) {
-    // An owner other than the descriptor is the File the user chose.
-    return takeFileBytesForTransfer(/** @type {FileLike} */ (owner));
-  }
+const descriptorBytes = async (resourceId, descriptor) => {
   const readFile = fileBackedReaderOf(descriptor);
-  // A file-backed descriptor without its File as owner: a copy, as the File keeps its bytes.
-  if (readFile) return (await readFile()).slice().buffer;
+  if (readFile) return /** @type {Uint8Array<ArrayBuffer>} */ (await readFile());
   if (isEncodedDepthFileEntry(/** @type {DepthResourceView} */ (descriptor))) {
     // The depth entry check above holds only for a `data` object.
     const bytes = new TextEncoder().encode(decodeDepthText(/** @type {DepthFilePayload} */ (descriptor.data)));
     recordStructuralMetric('decodedByteCount', bytes.byteLength, { resourceId });
-    return bytes.buffer;
+    return bytes;
   }
   recordStructuralMetric('base64DecodeCount', 1, { resourceId });
   const buffer = await decodeBase64ForTransfer(descriptor.data, resourceId);
   recordStructuralMetric('decodedByteCount', buffer.byteLength, { resourceId });
-  return buffer;
+  return new Uint8Array(buffer);
+};
+
+/**
+ * Rethrows a staging failure: one that runs out of memory (a RangeError: no
+ * buffer of that size, or a value too large) says so, not that the input is
+ * wrong (OV-2749).
+ * @param {unknown} error
+ * @returns {never}
+ */
+const throwStagingFailure = (error) => {
+  throw error instanceof RangeError
+    ? diagnosticError('RESOURCE_INVALID', { reason: 'INPUT_MEMORY' }, { stage: 'resource-staging' }) : error;
+};
+
+/**
+ * The content the Worker reads for a resource, the bytes its descriptor counts
+ * and its token hashes (a gzip input's gzip bytes, which Python expands): a
+ * File the user chose, or a Session resource view, gives its content Blob
+ * (`inputContentBlob`: a File's copy file, PD-OI-121), and then the page lets
+ * go of any bytes it read of it, which the Worker now holds; other resources
+ * give the bytes their token was hashed from.
+ * @param {ResourceDescriptor} descriptor
+ * @param {ResourcePayloadOwner | ResourceDescriptor | null} owner
+ * @param {Uint8Array<ArrayBuffer> | null} bytes
+ * @param {string} resourceId
+ * @returns {Promise<Blob>}
+ */
+const transferBlob = async (descriptor, owner, bytes, resourceId) => {
+  if (owner && owner !== descriptor) {
+    // An owner other than the descriptor is the File the user chose, or a Session resource view.
+    const blob = await inputContentBlob(/** @type {FileLike} */ (owner));
+    releaseFileContentCache(/** @type {FileLike} */ (owner));
+    return blob;
+  }
+  return new Blob([bytes ?? await descriptorBytes(resourceId, descriptor)]);
 };
 
 
@@ -196,7 +234,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
     for (const token of drawingHeldTokens) retained.add(token);
     const referencedIds = Array.from(collectCanonicalResourceIds(request));
     const resourceManifest = [];
-    /** @type {{ resourceId: string, cacheToken: ResourceContentToken, bytes: ArrayBuffer }[]} */
+    /** @type {StagedResource[]} */
     const stagedResources = [];
     /** @type {Set<ResourceContentToken>} */
     const manifestTokens = new Set();
@@ -211,16 +249,16 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       const descriptor = validateResourceDescriptor(resourceId, resources?.[resourceId]);
       const owner = getResourcePayloadOwner(descriptor);
       const identity = stagingKeyOf(descriptor);
-      /** @type {ArrayBufferLike | null} */
+      /** @type {Uint8Array<ArrayBuffer> | null} */
       let bytes = null;
       let cacheToken = knownTokens.get(identity);
       let hashedFile = false;
       if (!cacheToken) {
         // A File's token is known from its first read, or comes from a read the transfer below shares.
         hashedFile = Boolean(owner && owner !== descriptor);
-        if (!hashedFile) bytes = await descriptorTransferBuffer(resourceId, descriptor, owner);
+        if (!hashedFile) bytes = await descriptorBytes(resourceId, descriptor);
         cacheToken = hashedFile ? (await readFileContentFacts(/** @type {FileLike} */ (owner))).token
-          : await contentTokenOfBytes(new Uint8Array(/** @type {ArrayBuffer} */ (bytes)));
+          : await contentTokenOfBytes(/** @type {Uint8Array<ArrayBuffer>} */ (bytes));
         knownTokens.set(identity, cacheToken);
       }
       referencedDeclaredBytes += descriptor.size;
@@ -245,15 +283,15 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
         continue;
       }
 
-      bytes ??= await descriptorTransferBuffer(resourceId, descriptor, owner);
-      if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== descriptor.size) {
+      const blob = await transferBlob(descriptor, owner, bytes, resourceId);
+      if (blob.size !== descriptor.size) {
         throw new Error(`Canonical render resource ${resourceId} byte size does not match.`);
       }
       materializationCount += 1;
-      bytesTransferred += bytes.byteLength;
+      bytesTransferred += blob.size;
       recordStructuralMetric('resourceMaterializationCount', 1, { resourceId });
-      recordStructuralMetric('transferredResourceBytes', bytes.byteLength, { resourceId });
-      stagedResources.push({ resourceId, cacheToken, bytes });
+      recordStructuralMetric('transferredResourceBytes', blob.size, { resourceId });
+      stagedResources.push({ resourceId, cacheToken, blob });
     }
     recordSessionLifecycleEvent('resource-stage-end', { referencedResourceCount: referencedIds.length,
       referencedDeclaredBytes, bytesTransferred, materializationCount });
@@ -283,7 +321,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
   /** @param {Parameters<typeof stage>[0]} [payload] */
   const prepare = (payload) => {
     const releaseReads = holdReadBytes();
-    return stage(payload).finally(releaseReads);
+    return stage(payload).catch(throwStagingFailure).finally(releaseReads);
   };
 
   return { prepare, reset };

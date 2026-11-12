@@ -48,7 +48,9 @@ const savedSession = async (...args) => {
   return { ...built, resources: await encodeSessionResources(built.resources) };
 };
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
-const { holdReadBytes, takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { holdReadBytes, inputContentBlob, readFileText, releaseFileContentCache, residentBytesOf, useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+const { discoverSequenceRecords, readOncePerFile, readParsedSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -67,7 +69,8 @@ test('Save binds a File Generate described with no hash or decode and reads it o
   const sourceState = boundState({ files: {}, circularSources: [card(file)], linearSeqs: [] });
   const releaseReads = holdReadBytes();
   const described = (await serializeActiveRenderFiles(sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files, circularSources: sourceState.circularSources })).circularSources[0].gb;
-  await takeFileBytesForTransfer(file);
+  await inputContentBlob(file);
+  releaseFileContentCache(file);
   releaseReads();
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {
@@ -155,4 +158,88 @@ test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', a
   const retried = await exportSession('retried', { askChoice: async () => 'download' });
   assert.equal(retried?.status, 'saved');
   assert.equal(checks.length, 2);
+});
+
+// OV-2753, OV-2754: a Session file's input rests in the copy its Load wrote (PD-OI-121), as a chosen File's does.
+// Generate stages the copy file itself, under the token the Load hashed while it wrote the copy, so the page reads
+// and hashes nothing; the page keeps no bytes once a read of the input ends, so History counts none.
+/**
+ * Loads the Linear lambda Gallery Session file with a copy store that counts the reads of each copy it wrote.
+ * @returns {Promise<{ view: object, copy: { token: string, blob: Blob, reads: number } }>}
+ */
+const loadWithCountedCopies = async () => {
+  /** @type {{ token: string, blob: Blob, reads: number }[]} */
+  const copies = [];
+  useInputCopyStore({
+    openWriter: async () => {
+      const pieces = [];
+      return {
+        write: async (buffer) => { pieces.push(new Uint8Array(buffer).slice()); return buffer; },
+        finish: async (token) => {
+          const copy = { token, blob: new Blob(pieces), reads: 0 };
+          copies.push(copy);
+          return { read: async () => { copy.reads += 1; return new Uint8Array(await copy.blob.arrayBuffer()); },
+            blob: async () => copy.blob, release: () => {} };
+        },
+        abort: () => {}
+      };
+    }
+  });
+  const sessionFile = await gallerySessionFile('lambda_basic_linear');
+  const input = { target: { files: [new File([sessionFile], 'session.gbdraw')], value: 'selected' } };
+  const loaded = await importSession(input, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const view = state.inputFiles.fileOf(modeDrawing(state, 'linear').linearSeqs[0].gb);
+  const copy = copies.find((entry) => entry.blob.size === view.size);
+  assert.ok(copy, 'the Load wrote the GenBank input to a copy');
+  return { view, copy };
+};
+
+test('Generate after a Load stages each input as its copy file, reading and hashing nothing; History counts none (OV-2753, OV-2754)', async () => {
+  try {
+    const { view, copy } = await loadWithCountedCopies();
+    assert.equal(residentBytesOf(view), 0, 'History keeps no bytes alive for an input that rests in its copy');
+    const text = await readFileText(view);
+    const readsBefore = copy.reads;
+    assert.equal(await readFileText(view), text);
+    assert.equal(copy.reads, readsBefore + 1, 'a read that ended keeps nothing: the next one reads the copy again');
+
+    const readsBeforeGenerate = copy.reads;
+    metrics.length = 0;
+    const linear = modeDrawing(state, 'linear');
+    const described = (await serializeActiveRenderFiles({ inputFiles: state.inputFiles, files: linear.files,
+      linearSeqs: linear.linearSeqs, circularSources: [] }, linear)).linearSeqs[0].gb;
+    const prepared = await createDiagramResourceTransport().prepare({ request: {
+      schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear',
+      records: [{ recordKey: 'r1', source: { kind: 'genbank', resourceId: 'src' }, presentation: { label: 'x' } }],
+      diagramOptions: { trackSlots: [], annotations: { sets: [] } }, layout: {}, comparisons: [],
+      output: { prefix: 'x', formats: ['svg'], overwrite: false }
+    }, resources: { src: described } });
+    assert.equal(prepared.stagedResources[0].blob, copy.blob, 'the staged content is the copy file itself');
+    assert.equal(prepared.resourceManifest[0].cacheToken, copy.token, 'under the token the Load hashed');
+    assert.deepEqual({ copyReads: copy.reads - readsBeforeGenerate, byteReads: count('resourceByteReadCount') },
+      { copyReads: 0, byteReads: 0 }, 'Generate reads no input bytes in the page');
+  } finally {
+    useInputCopyStore(null);
+  }
+});
+
+// OV-2756: the readers of one reading (a once-per-File read) share the read of a loaded input's copy, as they share
+// a chosen File's, and the page keeps it no longer than the reading.
+test('One reading of a loaded Session input reads its copy once and keeps nothing after it (OV-2756)', async () => {
+  try {
+    const { view, copy } = await loadWithCountedCopies();
+    const readsBefore = copy.reads;
+    const records = await readOncePerFile([view], 'ov2756', async () => {
+      const { records: parsed } = await readParsedSequenceRecords(view, 'genbank');
+      return { parsed, listed: await discoverSequenceRecords({ file: view, format: 'genbank' }) };
+    });
+    assert.ok(records.parsed.length > 0 && records.listed.length > 0);
+    assert.equal(copy.reads - readsBefore, 1, 'the parsed records and the record list take one read of the copy');
+    const readsAfter = copy.reads;
+    await readFileText(view);
+    assert.equal(copy.reads, readsAfter + 1, 'the read ended with its reading: the next one reads the copy again');
+  } finally {
+    useInputCopyStore(null);
+  }
 });

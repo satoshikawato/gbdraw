@@ -40,7 +40,7 @@ const { writtenResourcesWith } = await import('./helpers/written-resources.mjs')
 // What Save writes for each resource, read as base64 descriptors.
 const encodeSessionResources = writtenResourcesWith(await import('../../gbdraw/web/js/services/session-resource-backing.js'));
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
-const { readFileBytes, readFileText, takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { inputContentBlob, readFileBytes, readFileText, releaseFileContentCache } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
 const backing = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
@@ -86,7 +86,7 @@ test('The Worker receives the bytes of a file-backed descriptor', async () => {
   const { descriptor } = await generateDescriptor(file);
   const prepared = await createDiagramResourceTransport().prepare({ request: request('src'), resources: { src: descriptor } });
   assert.equal(prepared.stagedResources.length, 1);
-  assert.equal(Buffer.from(prepared.stagedResources[0].bytes).toString('utf8'), '>x\nACGTACGT\n');
+  assert.equal(await prepared.stagedResources[0].blob.text(), '>x\nACGTACGT\n');
 });
 
 test('A second Generate describes a view of a file-backed resource under its shown name with its bytes', async () => {
@@ -102,14 +102,16 @@ test('A second Generate describes a view of a file-backed resource under its sho
   assert.ok(backing.fileBackedReaderOf(descriptor), 'the renamed descriptor keeps its reader');
   const adopted = adoptRuntimeCanonicalSession({ renderRequest: request('src'), resources: { src: descriptor }, webFiles: {} });
   const prepared = await createDiagramResourceTransport().prepare({ request: request('src'), resources: adopted.resources });
-  assert.equal(Buffer.from(prepared.stagedResources[0].bytes).toString('utf8'), '>s\nACGT\n');
+  assert.equal(await prepared.stagedResources[0].blob.text(), '>s\nACGT\n');
 });
 
 test('Save encodes a File Generate described, once, under the committed ID', async () => {
   const text = '>x\nACGTTGCA\n';
   const file = new File([text], 'g.fa', { type: '' });
   const { sourceState, descriptor } = await generateDescriptor(file);
-  await takeFileBytesForTransfer(file);
+  // Generate stages the File and lets go of its bytes (diagram-resource-staging.js).
+  await inputContentBlob(file);
+  releaseFileContentCache(file);
   const committed = adoptRuntimeCanonicalSession({ renderRequest: request('src'), resources: { src: descriptor }, webFiles: {} });
   for (const save of [1, 2]) {
     metrics.length = 0;
@@ -173,7 +175,7 @@ test('A gzip File is described, sent and saved as its gzip bytes; after Load it 
   const { descriptor } = await generateDescriptor(file);
   assert.equal(descriptor.size, gzip.byteLength, 'Generate counts the bytes as chosen');
   const sent = await createDiagramResourceTransport().prepare({ request: request('src'), resources: { src: descriptor } });
-  assert.deepEqual(new Uint8Array(sent.stagedResources[0].bytes), gzip, 'and sends them: Python expands a gzip input');
+  assert.deepEqual(new Uint8Array(await sent.stagedResources[0].blob.arrayBuffer()), gzip, 'and sends them: Python expands a gzip input');
   assert.equal(count('inputExpansionCount'), 0, 'describing and sending a gzip File expand nothing');
   const { blob } = await sessionConfig.writeSessionDocumentFile({ format: 'gbdraw-session', resources: { src: descriptor } });
   const container = await readSessionContainer(blob);
@@ -195,7 +197,7 @@ test('A gzip File is described, sent and saved as its gzip bytes; after Load it 
   const { descriptor: viewDescriptor } = await generateDescriptor(view);
   assert.equal(viewDescriptor.size, gzip.byteLength);
   const prepared = await createDiagramResourceTransport().prepare({ request: request('src'), resources: { src: viewDescriptor } });
-  assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), gzip);
+  assert.deepEqual(new Uint8Array(await prepared.stagedResources[0].blob.arrayBuffer()), gzip);
   // Saved again, the entry is the same gzip bytes.
   const again = await sessionConfig.writeSessionDocumentFile({ format: 'gbdraw-session', resources: { src: viewDescriptor } });
   const reread = await readSessionContainer(again.blob);

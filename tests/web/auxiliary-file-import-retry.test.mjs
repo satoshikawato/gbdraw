@@ -258,7 +258,7 @@ test('Retry reads the copy of a rules file that changed on disk after the store 
       const pieces = [];
       return {
         write: async (buffer) => { pieces.push(new Uint8Array(buffer)); },
-        finish: async (token) => ({ read: async () => pieces[0], release: () => released.push(token) }),
+        finish: async (token) => ({ read: async () => pieces[0], blob: async () => new Blob([pieces[0]]), release: () => released.push(token) }),
         abort: () => {}
       };
     }
@@ -303,7 +303,7 @@ test('a Load or History restore that replaces the drawings ends their card failu
   useInputCopyStore({
     openWriter: async () => ({
       write: async (buffer) => buffer,
-      finish: async (token) => ({ read: async () => new Uint8Array(0), release: () => released.push(token) }),
+      finish: async (token) => ({ read: async () => new Uint8Array(0), blob: async () => new Blob([]), release: () => released.push(token) }),
       abort: () => {}
     })
   });
@@ -341,7 +341,7 @@ test('a failed table import\'s Retry copy ends once its error is cleared or repl
       write: async (buffer) => buffer,
       finish: async (token) => {
         copies += 1;
-        return { read: async () => new Uint8Array(0), release: () => released.push(token) };
+        return { read: async () => new Uint8Array(0), blob: async () => new Blob([]), release: () => released.push(token) };
       },
       abort: () => {}
     })

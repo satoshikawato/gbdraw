@@ -12,8 +12,8 @@ import { gzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  chosenFileRefusal, contentTokenOfBytes, copyInputStream, holdFileCopy, holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts,
-  releaseFileCopy, storedFileBytes, takeFileBytesForTransfer, useInputCopyStore
+  chosenFileRefusal, contentTokenOfBytes, copyInputStream, holdFileCopy, holdReadBytes, inputContentBlob, keepFileCopy, readFileBytes,
+  readFileContentFacts, releaseFileCopy, storedFileBytes, useInputCopyStore
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createBrowserInputCopyStore } = await import('../../gbdraw/web/js/services/input-copies.js');
 
@@ -505,7 +505,7 @@ test('a copy that another state still uses outlives the input store\'s release',
   assert.deepEqual(fileSystem.copyFiles(), []);
 });
 
-test('a reading that starts while the copy is written takes the first read\'s bytes, and a transfer then reads no copy', async () => {
+test('a reading that starts while the copy is written takes the first read\'s bytes, and Generate then sends the copy\'s File', async () => {
   const gate = createGate();
   const fileSystem = createFakeFileSystem({ writeGate: gate.wait });
   useInputCopyStore(copyStoreOn(fileSystem));
@@ -515,11 +515,12 @@ test('a reading that starts while the copy is written takes the first read\'s by
   const release = holdReadBytes();
   try {
     assert.equal(await readFileBytes(file), first, 'a Generate reading shares the bytes the page holds');
-    const taken = takeFileBytesForTransfer(file);
-    assert.equal(await settledSoon(taken), TIMED_OUT, 'a transfer waits for the copy to close');
+    const staged = inputContentBlob(file);
+    assert.equal(await settledSoon(staged), TIMED_OUT, 'a staging waits for the copy to close');
     gate.open();
-    assert.equal(await taken, first.buffer, 'it transfers the bytes the page holds');
-    assert.equal(fileSystem.copyReads(), 0, 'and reads no copy');
+    // OV-2749: the Worker reads the copy's File itself; postMessage passes it as a handle.
+    assert.deepEqual(new Uint8Array(await (await staged).arrayBuffer()), first, 'it sends the copy\'s File');
+    assert.equal(fileSystem.copyReads(), 1, 'which the page opens but does not read');
   } finally {
     release();
   }
@@ -569,7 +570,7 @@ test('a failed Feature Edits TSV import keeps a copy, which its Retry reads afte
     readResourceRecordCount: async () => 1,
     // The helper fails each time: the test reads what each attempt sent.
     readFeatureOverrideTable: async ({ files }) => {
-      sent.push(new Uint8Array(files[0].bytes));
+      sent.push(new Uint8Array(await files[0].blob.arrayBuffer()));
       throw new Error('helper failed');
     },
     projectFeatureEdits: async () => {}

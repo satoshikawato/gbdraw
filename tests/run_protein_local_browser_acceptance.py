@@ -136,8 +136,8 @@ def main():
                         const response = await api.runDiagramHelperOperation(
                           api.DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD,
                           {...input.parameters, files: [
-                            {role: 'pairs', bytes: encoder.encode(input.pairsText).buffer},
-                            {role: 'rawTsv', bytes: encoder.encode(input.rawText).buffer}]});
+                            {role: 'pairs', blob: new Blob([input.pairsText])},
+                            {role: 'rawTsv', blob: new Blob([input.rawText])}]});
                         values.push(response.result);
                       }
                       return values;

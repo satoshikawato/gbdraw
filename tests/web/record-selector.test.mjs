@@ -139,7 +139,7 @@ const discovered = await discoverSequenceRecords({
 });
 assert.equal(discovered[0].recordId, 'FastaRec');
 assert.equal(sequenceHelperPayload.files[0].role, 'source');
-assert.equal(sequenceHelperPayload.files[0].bytes instanceof ArrayBuffer, true);
+assert.equal(sequenceHelperPayload.files[0].blob instanceof Blob, true);
 
 let pairedHelperPayload = null;
 const paired = await discoverGffFastaRecords({

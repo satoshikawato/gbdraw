@@ -388,9 +388,7 @@ test('source recipe counts survive transfer and follow same-name source replacem
           assert.ok(sourceTransfer);
           assert.notEqual(sourceTransfer.cacheToken, previousToken);
           previousToken = sourceTransfer.cacheToken;
-          const transferred = structuredClone(sourceTransfer.bytes, { transfer: [sourceTransfer.bytes] });
-          assert.equal(sourceTransfer.bytes.byteLength, 0);
-          assert.equal(new TextDecoder().decode(transferred), text);
+          assert.equal(await sourceTransfer.blob.text(), text);
           first.commit();
           releaseReads();
           for (let run = 0; run < 2; run += 1) {

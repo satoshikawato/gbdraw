@@ -260,6 +260,7 @@ import {
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile, RecordPlacePlanner } from './run-info.js' */
+/** @import { WorkerInputFile } from '../services/diagram-worker-protocol.js' */
 /** @import { DepthSlotRow } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
@@ -4020,7 +4021,7 @@ export const createRunAnalysis = ({
                 ),
                 inputSpec.sourceKind, sourceFile, pairedFastaFile ?? null
               );
-              /** @type {{ role: string, name?: string, bytes: ArrayBuffer }[]} */
+              /** @type {WorkerInputFile[]} */
               const helperFiles = [];
               if (!committed) {
                 helperFiles.push(await helperInputFile('source', sourceFile));
@@ -4031,7 +4032,7 @@ export const createRunAnalysis = ({
               if (featureVisibilityCacheKey) {
                 helperFiles.push({
                   role: 'visibility',
-                  bytes: textEncoder.encode(featureVisibilityCacheKey).buffer
+                  blob: new Blob([featureVisibilityCacheKey])
                 });
               }
               const response = await runDiagramHelperOperation(
@@ -4815,18 +4816,18 @@ export const createRunAnalysis = ({
                 records: recordPayloads,
                 pairs: pairPayloads
               }));
-              const rawTsvBuffer = await new Blob(rawTsvParts, {
+              const rawTsvBlob = new Blob(rawTsvParts, {
                 type: 'text/tab-separated-values'
-              }).arrayBuffer();
+              });
               losatTiming.helperRequestMetadataBytes = pairManifestBytes.byteLength;
-              losatTiming.helperRequestRawTransferBytes = rawTsvBuffer.byteLength;
+              losatTiming.helperRequestRawTransferBytes = rawTsvBlob.size;
               losatTiming.helperRequestFileCount = 2;
               const response = await runDiagramHelperOperation(
                 DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD,
                 {
                   files: [
-                    { role: 'pairs', bytes: pairManifestBytes.buffer },
-                    { role: 'rawTsv', bytes: rawTsvBuffer }
+                    { role: 'pairs', blob: new Blob([pairManifestBytes]) },
+                    { role: 'rawTsv', blob: rawTsvBlob }
                   ],
                   ...derivedSettings
                 }

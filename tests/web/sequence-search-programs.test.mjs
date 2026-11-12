@@ -190,7 +190,7 @@ test('a gzip query FASTA file reads as its plain text, and one past the expanded
   const { createSearchQueries } = await import('../../gbdraw/web/js/app/sequence-search/queries.js');
   const sent = [];
   const runHelper = async (operation, { files }) => {
-    sent.push(new TextDecoder().decode(files[0].bytes));
+    sent.push(await files[0].blob.text());
     return { result: { queries: [{ name: 'q1', length: 4, program: 'blastn', reach: 4, fasta: '>q1\nACGT\n' }] } };
   };
   const gzipQuery = (name, bytes) => {

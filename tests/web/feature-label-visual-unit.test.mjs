@@ -1160,7 +1160,7 @@ test('Retry of a failed Label TSV import reads the copy of a file that changed o
         write: async (buffer) => { pieces.push(new Uint8Array(buffer.slice(0))); return buffer; },
         finish: async (token) => {
           copies += 1;
-          return { read: async () => pieces[0], release: () => released.push(token) };
+          return { read: async () => pieces[0], blob: async () => new Blob([pieces[0]]), release: () => released.push(token) };
         },
         abort: () => {}
       };

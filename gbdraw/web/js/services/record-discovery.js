@@ -94,13 +94,13 @@ import { isInputExpansionRefusal } from './session-resource-backing.js';
  * }} SequenceRecord
  */
 
-/** @typedef {{ role: string, name?: string, bytes: ArrayBuffer }} HelperFile A file a Worker helper reads, by role; `name` is the chosen file's (`helperInputFile`). */
+/** @import { WorkerInputFile } from './diagram-worker-protocol.js' */
 
 /**
  * The Worker helper call: `runDiagramHelperOperation` answers it.
  * @template Result
  * @typedef {(
- *   operation: string, payload: { format?: string, files: HelperFile[] }
+ *   operation: string, payload: { format?: string, files: WorkerInputFile[] }
  * ) => Promise<{ result?: Result }>} HelperOperationRunner
  */
 

@@ -7,11 +7,10 @@ const {
   base64ToBytes,
   bytesToBase64,
   bytesToText,
-  cloneFileBytesForTransfer,
-  holdReadBytes,
+  inputContentBlob,
   readFileBytes,
   readFileText,
-  takeFileBytesForTransfer,
+  releaseFileContentCache,
   textToBase64,
   textToBytes
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
@@ -36,12 +35,12 @@ const file = makeCountingFile('cached bytes');
 const [bytes, text, transfer] = await Promise.all([
   readFileBytes(file),
   readFileText(file),
-  cloneFileBytesForTransfer(file)
+  inputContentBlob(file)
 ]);
 assert.equal(file.reads, 1);
 assert.equal(new TextDecoder().decode(bytes), 'cached bytes');
 assert.equal(text, 'cached bytes');
-assert.equal(new TextDecoder().decode(transfer), 'cached bytes');
+assert.equal(await transfer.text(), 'cached bytes');
 assert.equal(bytesToBase64(bytes), 'Y2FjaGVkIGJ5dGVz');
 assert.equal(textToBase64('雪'), '6Zuq');
 assert.equal(bytesToText(base64ToBytes('6Zuq')), '雪');
@@ -58,9 +57,9 @@ assert.equal(separate.reads, 1);
 assert.equal(file.reads, 1);
 
 // A one-file two-record Linear Session fills two rows with File views of the
-// same resource; the views share one backing. Transferring the bytes to the
-// worker through one view detaches the shared buffer, and the other view reads
-// the resource again instead of the detached array (OV-304).
+// same resource; the views share one backing. Staging the bytes through one
+// view releases them for both, and the other view reads the resource again
+// (OV-304).
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
   '../../gbdraw/web/js/services/session-resource-backing.js'
 );
@@ -74,42 +73,18 @@ const rowA = createSessionResourceFileView(sharedTable, 'record-1-genbank');
 const rowB = createSessionResourceFileView(sharedTable, 'record-1-genbank');
 assert.equal(bytesToText(await readFileBytes(rowA)), 'LOCUS shared');
 assert.equal(bytesToText(await readFileBytes(rowB)), 'LOCUS shared');
-const transferred = await takeFileBytesForTransfer(rowB);
-structuredClone(transferred, { transfer: [transferred] });
-assert.equal(transferred.byteLength, 0);
+assert.equal(await (await inputContentBlob(rowB)).text(), 'LOCUS shared');
+releaseFileContentCache(rowB);
 assert.equal(bytesToText(await readFileBytes(rowA)), 'LOCUS shared');
 assert.equal(bytesToText(await readFileBytes(rowB)), 'LOCUS shared');
 
-// Each take is its caller's buffer to transfer: two helper requests that stage
-// the same input at once (the region dialog derives on every input change,
-// OV-2490) start their takes before either releases the cached bytes, and the
-// second still receives bytes the first transfer leaves attached.
+// Two helper requests that stage the same input at once (the region dialog
+// derives on every input change, OV-2490) each get the whole content: a Blob
+// is passed as a handle, so no staging detaches what another holds (OV-2749).
 for (const owner of [rowA, makeCountingFile('LOCUS concurrent')]) {
-  const [first, second] = await Promise.all([takeFileBytesForTransfer(owner), takeFileBytesForTransfer(owner)]);
-  assert.notEqual(first, second, 'two takes never share one buffer');
-  structuredClone(first, { transfer: [first] });
-  assert.equal(first.byteLength, 0);
-  assert.ok(second.byteLength > 0, 'the second take is not detached by the first transfer');
-  structuredClone(second, { transfer: [second] });
-}
-
-// A single take hands out the bytes a read under the same hold cached, with no copy.
-{
-  const single = makeCountingFile('LOCUS single');
-  const releaseReads = holdReadBytes();
-  const cached = await readFileBytes(single);
-  assert.equal(await takeFileBytesForTransfer(single), cached.buffer, 'the common take copies nothing');
-  releaseReads();
-}
-// The retake is bounded: a FileLike that returns one stored buffer on every
-// read gives the second take a copy instead of reading forever.
-{
-  const stored = encoder.encode('LOCUS stored').buffer;
-  const sameBuffer = { name: 'same.txt', arrayBuffer: async () => stored };
-  const [first, second] = await Promise.all([takeFileBytesForTransfer(sameBuffer), takeFileBytesForTransfer(sameBuffer)]);
-  assert.equal(first, stored);
-  assert.notEqual(second, stored, 'the second take is a copy');
-  assert.equal(bytesToText(new Uint8Array(second)), 'LOCUS stored');
+  const [first, second] = await Promise.all([inputContentBlob(owner), inputContentBlob(owner)]);
+  assert.equal(await first.text(), await second.text());
+  assert.ok(second.size > 0);
 }
 
 // A gzip input file (NCBI's .gbff.gz, .fna.gz, .gff.gz) reads as the plain

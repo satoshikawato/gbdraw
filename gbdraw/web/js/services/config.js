@@ -7525,11 +7525,12 @@ const copyContainerInputs = async (file, { resources: entries, inputBytes }, par
           copy.release();
         });
         parsed.resources[resourceId] = fileBackedDescriptor(fields, readBytes,
-          { size: fields.size, open: async () => (await copy.blob()).stream(), token: async () => facts.token });
+          { size: fields.size, open: async () => (await copy.blob()).stream(), token: async () => facts.token, blob: () => copy.blob() });
       } else {
         await openEntry().pipeTo(new WritableStream());
         parsed.resources[resourceId] = fileBackedDescriptor(fields,
-          async () => new Uint8Array(await new Response(openEntry()).arrayBuffer()), { size: fields.size, open: async () => openEntry(), token: null });
+          async () => new Uint8Array(await new Response(openEntry()).arrayBuffer()),
+          { size: fields.size, open: async () => openEntry(), token: null, blob: null });
       }
     }
   } catch (error) {

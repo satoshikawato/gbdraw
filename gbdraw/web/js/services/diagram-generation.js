@@ -24,12 +24,12 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
-/** @import { ReadCommittedResourceSets, ReadDraftHeldFiles, ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { ReadCommittedResourceSets, ReadDraftHeldFiles, ResourceDescriptor, StagedResource } from './diagram-resource-staging.js' */
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
-/** @import { FeatureCatalogRevision, WorkerHeldSegment } from './diagram-worker-protocol.js' */
+/** @import { FeatureCatalogRevision, WorkerHeldSegment, WorkerInputFile } from './diagram-worker-protocol.js' */
 /** @import { DiagramWorkerCancelMessage, DiagramWorkerCancelReply, DiagramWorkerInitMessage, DiagramWorkerReplyError } from './diagram-worker-protocol.js' */
 /** @import { DecodedContentPiece, DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 
@@ -82,13 +82,8 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 /**
- * A staged file the Worker receives by transfer.
- * @typedef {{ bytes?: unknown, [key: string]: unknown } | null | undefined} TransferFile
- */
-
-/**
  * The payload of a feature-extraction or helper request.
- * @typedef {{ files?: TransferFile[], stagedResources?: TransferFile[], [key: string]: unknown }} AuxiliaryPayload
+ * @typedef {{ files?: WorkerInputFile[], stagedResources?: StagedResource[], [key: string]: unknown }} AuxiliaryPayload
  */
 
 /**
@@ -508,7 +503,7 @@ let activeRequest = null;
  * @typedef {object} PreparedResources What `resourceTransport.prepare` stages
  *   for the Worker.
  * @property {unknown[]} resourceManifest
- * @property {TransferFile[]} stagedResources
+ * @property {StagedResource[]} stagedResources
  * @property {readonly string[]} retainedResourceTokens The tokens the Worker keeps besides the manifest's.
  * @property {readonly string[]} heldResourceTokens Those of them that the rendered drawing's draft holds while
  *   the request omits them.
@@ -877,21 +872,6 @@ const ensureWorkerInitialized = (onStep = null) => {
 
 export const getDiagramGenerationWorkerCapabilities = () => workerCapabilities;
 
-/** @param {{ files?: TransferFile[], stagedResources?: TransferFile[] } | null | undefined} payload */
-const collectTransferList = (payload) => {
-  /** @type {Set<ArrayBuffer>} */
-  const buffers = new Set();
-  [
-    ...(payload?.files || []),
-    ...(payload?.stagedResources || [])
-  ].forEach((file) => {
-    if (file?.bytes instanceof ArrayBuffer) {
-      buffers.add(file.bytes);
-    }
-  });
-  return Array.from(buffers);
-};
-
 /**
  * @param {GenerateRequest | null | undefined} request
  * @param {() => void} callback
@@ -1060,15 +1040,13 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
       currentWorker.addEventListener('error', handleError);
       currentWorker.addEventListener('messageerror', handleMessageError);
       recordSessionLifecycleEvent('worker-post-start', { requestId });
-      currentWorker.postMessage(
-        {
-          type: 'run',
-          requestId,
-          payload: workerPayload,
-          testLifecycleEnabled: runtimeTestHooksEnabled()
-        },
-        collectTransferList(workerPayload)
-      );
+      // The inputs travel as Blobs, which postMessage passes as handles (OV-2749).
+      currentWorker.postMessage({
+        type: 'run',
+        requestId,
+        payload: workerPayload,
+        testLifecycleEnabled: runtimeTestHooksEnabled()
+      });
       recordSessionLifecycleEvent('worker-post-end', { requestId });
     } catch (error) {
       if (request.settled || activeRequest !== request) return;
@@ -1210,15 +1188,12 @@ const runAuxiliaryWorkerRequest = ({
       currentWorker.addEventListener('message', handleMessage);
       currentWorker.addEventListener('error', handleError);
       currentWorker.addEventListener('messageerror', handleMessageError);
-      currentWorker.postMessage(
-        {
-          type,
-          requestId,
-          ...(operation ? { operation } : {}),
-          payload: workerPayload
-        },
-        collectTransferList(workerPayload)
-      );
+      currentWorker.postMessage({
+        type,
+        requestId,
+        ...(operation ? { operation } : {}),
+        payload: workerPayload
+      });
     } catch (error) {
       request?.cleanup?.();
       rejectRequest(isDiagramGenerationCanceled(error) ? error : deserializeWorkerError(error, { operation, stage: failureStage,

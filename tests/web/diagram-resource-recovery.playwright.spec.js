@@ -58,7 +58,7 @@ const installEvidence = async page => {
           requestId: message.requestId, request: message.payload.request,
           manifest: structuredClone(message.payload.resourceManifest),
           staged: message.payload.stagedResources.map(r => ({
-            resourceId: r.resourceId, cacheToken: r.cacheToken, bytes: r.bytes.byteLength
+            resourceId: r.resourceId, cacheToken: r.cacheToken, bytes: r.blob.size
           }))
         });
         return transfer === undefined ? post(message) : post(message, transfer);
@@ -120,6 +120,48 @@ for (const mode of ['linear', 'circular']) {
     expect(await reads()).toBe(2);
   });
 }
+
+// OV-2749: Chromium's postMessage refuses one ArrayBuffer of 2,047 MiB or more, so an input's bytes never travel in
+// a message to the diagram Worker: each input is a Blob (its copy's File), passed as a handle. The page here
+// refuses, as Chromium does at that size, any message that carries more than 16 KiB of bytes; Generate still draws.
+test('OV-2749: Generate stages inputs whose bytes no message to the Worker may carry', async ({ page }) => {
+  test.setTimeout(300_000);
+  page.setDefaultTimeout(180_000);
+  await page.addInitScript(() => {
+    const LIMIT = 16 * 1024;
+    const largest = (value, seen = new Set()) => {
+      if (value instanceof ArrayBuffer) return value.byteLength;
+      if (ArrayBuffer.isView(value)) return value.byteLength;
+      if (!value || typeof value !== 'object' || value instanceof Blob || seen.has(value)) return 0;
+      seen.add(value);
+      return Math.max(0, ...Object.values(value).map((item) => largest(item, seen)));
+    };
+    const post = Worker.prototype.postMessage;
+    window.__OV2749_STAGED__ = [];
+    Worker.prototype.postMessage = function postWithLimit(message, ...rest) {
+      if (['run', 'helper', 'feature-extraction'].includes(message?.type)) {
+        if (largest(message.payload) > LIMIT) {
+          throw new RangeError("Failed to execute 'postMessage' on 'Worker': The ArrayBuffer/ArrayBufferView size exceeds the supported range.");
+        }
+        for (const { blob } of [...(message.payload?.stagedResources || []), ...(message.payload?.files || [])]) {
+          window.__OV2749_STAGED__.push({ type: message.type, blob: blob instanceof Blob, size: blob?.size ?? null });
+        }
+      }
+      return post.call(this, message, ...rest);
+    };
+  });
+  await openApp(page);
+  await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
+  await circularFileInput(page, 'gff').setInputFiles(gffPath);
+  await circularFileInput(page, 'fasta').setInputFiles(fastaPath);
+  const result = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(result.status, JSON.stringify(await page.evaluate(() => window.__GBDRAW_APP__.errorLog))).toBe('ok');
+  const staged = await page.evaluate(() => window.__OV2749_STAGED__);
+  const { size: fastaSize } = await fs.stat(fastaPath);
+  expect(staged.filter(({ type }) => type === 'run').map(({ size }) => size).sort((a, b) => a - b))
+    .toContain(fastaSize);
+  expect(staged.every(({ blob }) => blob)).toBe(true);
+});
 
 test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership survives admission and cancellation', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);

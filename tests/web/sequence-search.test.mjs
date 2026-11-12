@@ -309,7 +309,7 @@ test('Use as search query adds a span as a query once; a removed query stays rem
     readRecordSpans: async () => { throw new Error('no search here'); },
     runLosatJobs: async () => ({ status: 'canceled' }),
     runHelper: async (_operation, { files }) => {
-      const text = new TextDecoder().decode(files[0].bytes);
+      const text = await files[0].blob.text();
       reads.push(text);
       return { result: { queries: readFasta(text) } };
     },

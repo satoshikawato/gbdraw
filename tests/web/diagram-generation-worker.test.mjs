@@ -571,12 +571,12 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
 {
   const refusal = serializeError({ code: 'INPUT_UNREADABLE', operation: 'unknown', stage: 'helper',
     context: { reason: 'GZIP_EXPANDED_SIZE', limit: 512, inputName: 'source.bin' } });
-  const named = nameStagedHelperInput(refusal, [{ role: 'source', name: 'big genome.fna.gz', bytes: new ArrayBuffer(1) }]);
+  const named = nameStagedHelperInput(refusal, [{ role: 'source', name: 'big genome.fna.gz', blob: new Blob(['x']) }]);
   assert.equal(named.context.inputName, 'big genome.fna.gz');
   assert.match(named.summary, /big genome\.fna\.gz/);
   assert.match(named.summary, /512 MiB/);
   assert.doesNotMatch(named.summary, /source\.bin/);
-  const unnamed = nameStagedHelperInput(refusal, [{ role: 'source', bytes: new ArrayBuffer(1) }]);
+  const unnamed = nameStagedHelperInput(refusal, [{ role: 'source', blob: new Blob(['x']) }]);
   assert.equal(unnamed.context.inputName, undefined, 'a staged name is never shown');
   const generate = serializeError({ code: 'INPUT_UNREADABLE', stage: 'render',
     context: { reason: 'GZIP_EXPANDED_SIZE', limit: 512, inputName: 'chosen.gb.gz' } });

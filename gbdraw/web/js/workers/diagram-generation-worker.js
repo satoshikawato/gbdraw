@@ -606,13 +606,34 @@ const withRequestWorkspace = async (pyodide, requestId, kind, callback) => {
   }
 };
 
+/**
+ * The bytes of an input the page sent as a Blob (OV-2749): an input's copy, its
+ * File, or bytes the page read. The Worker reads it whole, once, into memory it
+ * then gives MEMFS: Python reads MEMFS line by line about 14 times faster than
+ * a WORKERFS mount of the Blob, which reads the Blob anew on every call.
+ * A read the browser refuses (the file was deleted, moved, or changed) and one
+ * that finds no memory for the bytes both reject; a one-byte read tells them apart.
+ * @param {Blob} blob
+ * @returns {Promise<Uint8Array>}
+ */
+const readInputBlob = async (blob) => {
+  try {
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    const readable = await blob.slice(0, 1).arrayBuffer().then(() => true, () => false);
+    throw readable
+      ? { code: 'RESOURCE_INVALID', stage: 'resource-staging', context: { reason: 'INPUT_MEMORY' } }
+      : { code: 'INPUT_UNREADABLE', stage: 'resource-staging' };
+  }
+};
+
 // A role named `<role>[]` takes several files in order (the files of one
 // comparison genome); its paths are a list under `<role>`.
-const stageHelperFiles = (pyodide, workspace, files, allowedRoles) => {
+const stageHelperFiles = async (pyodide, workspace, files, allowedRoles) => {
   const allowed = new Set(allowedRoles);
   const paths = new Map();
   const entries = Array.isArray(files) ? files : [];
-  entries.forEach((file) => {
+  for (const file of entries) {
     const role = String(file?.role || '').trim();
     const listed = allowed.has(`${role}[]`);
     if (!allowed.has(role) && !listed) {
@@ -621,16 +642,17 @@ const stageHelperFiles = (pyodide, workspace, files, allowedRoles) => {
     if (!listed && paths.has(role)) {
       throw new TypeError(`Duplicate diagram helper file role '${role}'.`);
     }
-    if (!(file?.bytes instanceof ArrayBuffer)) {
-      throw new TypeError(`Diagram helper file '${role}' requires an ArrayBuffer.`);
+    if (!(file?.blob instanceof Blob)) {
+      throw new TypeError(`Diagram helper file '${role}' requires a Blob.`);
     }
     const placed = listed ? (paths.get(role) || []) : null;
     const path = placed
       ? `${workspace}/${placed.length + 1}-${HELPER_FILE_NAMES[role]}`
       : `${workspace}/${HELPER_FILE_NAMES[role]}`;
-    pyodide.FS.writeFile(path, new Uint8Array(file.bytes));
     paths.set(role, placed ? [...placed, path] : path);
-  });
+    // MEMFS keeps the bytes it is given: the Worker read them for this file alone.
+    pyodide.FS.writeFile(path, await readInputBlob(file.blob), { canOwn: true });
+  }
   return paths;
 };
 
@@ -682,8 +704,8 @@ const stageRenderResources = async (
     if (!RENDER_RESOURCE_TOKEN_RE.test(cacheToken) || stagedByToken.has(cacheToken)) {
       throw new TypeError(`Invalid or duplicate cache token for staged render resource '${String(entry?.resourceId || '')}'.`);
     }
-    if (!(entry?.bytes instanceof ArrayBuffer)) {
-      throw new TypeError(`Staged render resource '${String(entry?.resourceId || '')}' requires an ArrayBuffer.`);
+    if (!(entry?.blob instanceof Blob)) {
+      throw new TypeError(`Staged render resource '${String(entry?.resourceId || '')}' requires a Blob.`);
     }
     stagedByToken.set(cacheToken, entry);
   });
@@ -714,7 +736,7 @@ const stageRenderResources = async (
     let cached = cachedRenderResources.get(cacheToken);
     const staged = stagedByToken.get(cacheToken);
     if (staged) {
-      if (staged.bytes.byteLength !== size) {
+      if (staged.blob.size !== size) {
         throw new TypeError(`Staged render resource '${resourceId}' does not match its manifest.`);
       }
       emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-stage-start', {
@@ -725,14 +747,17 @@ const stageRenderResources = async (
       // stays: records read from it keep reading it, and Python refuses a file replaced under them.
       if (!cached || cached.size !== size || !pyodide.FS.analyzePath(cached.path).exists) {
         const cachePath = `${RENDER_RESOURCE_CACHE}/${cacheToken}.bin`;
-        if (pyodide.FS.analyzePath(cachePath).exists) pyodide.FS.unlink(cachePath);
         if (typeof pyodide.FS.createDataFile !== 'function') {
           throw new Error('Pyodide render resource ownership transfer is unavailable.');
         }
+        // The cache owns the bytes it read (canOwn): it holds them, not the Blob, so a copy
+        // deleted later (PD-OI-121) leaves the resources a later Generate reuses intact.
+        const bytes = await readInputBlob(staged.blob);
+        if (pyodide.FS.analyzePath(cachePath).exists) pyodide.FS.unlink(cachePath);
         pyodide.FS.createDataFile(
           RENDER_RESOURCE_CACHE,
           `${cacheToken}.bin`,
-          new Uint8Array(staged.bytes),
+          bytes,
           true,
           true,
           true
@@ -740,7 +765,7 @@ const stageRenderResources = async (
         cached = { path: cachePath, size };
         cachedRenderResources.set(cacheToken, cached);
       }
-      staged.bytes = null;
+      staged.blob = null;
       stagedByToken.delete(cacheToken);
       emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-stage-end', {
         resourceId,
@@ -1401,7 +1426,7 @@ const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
       requestId,
       'helper',
       async (workspace) => {
-        const paths = stageHelperFiles(
+        const paths = await stageHelperFiles(
           runtime.pyodide,
           workspace,
           normalizedPayload.files,
@@ -1470,7 +1495,7 @@ const runGeneration = async ({
     const newlyStagedResourceBytes = (
       Array.isArray(stagedResources) ? stagedResources : []
     ).reduce(
-      (total, entry) => total + Number(entry?.bytes?.byteLength || 0),
+      (total, entry) => total + Number(entry?.blob?.size || 0),
       0
     );
     emitTestLifecycle(
@@ -1694,15 +1719,15 @@ const runFeatureExtraction = async ({
     ? normalizedFiles.find((file) => String(file?.path || '').trim() === normalizedVisibilityPath)
     : null;
   const workspaceFiles = [
-    { role: 'source', name: sourceFile?.name, bytes: sourceFile?.bytes },
-    ...(fastaFile ? [{ role: 'fasta', name: fastaFile.name, bytes: fastaFile.bytes }] : []),
-    ...(visibilityFile ? [{ role: 'visibility', name: visibilityFile.name, bytes: visibilityFile.bytes }] : [])
+    { role: 'source', name: sourceFile?.name, blob: sourceFile?.blob },
+    ...(fastaFile ? [{ role: 'fasta', name: fastaFile.name, blob: fastaFile.blob }] : []),
+    ...(visibilityFile ? [{ role: 'visibility', name: visibilityFile.name, blob: visibilityFile.blob }] : [])
   ];
 
   let failureStage = 'resource-staging';
   try {
     return await withRequestWorkspace(pyodide, requestId, 'feature', async (workspace) => {
-      const paths = stageHelperFiles(
+      const paths = await stageHelperFiles(
         pyodide,
         workspace,
         workspaceFiles,
