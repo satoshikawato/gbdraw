@@ -507,8 +507,7 @@ const normalizeColorMap = (colors) => {
 const paletteColorsFromDefinitions = (paletteName) => {
   const name = String(paletteName || '').trim();
   if (!name) return null;
-  /** @type {Record<string, Record<string, string>>} */
-  const definitions = state.paletteDefinitions?.value || {};
+  const definitions = state.paletteDefinitions.value;
   const colors = definitions[name];
   return hasColorEntries(colors) ? normalizePaletteColors(cloneColors(colors)) : null;
 };
@@ -1091,11 +1090,11 @@ const editorArtifactData = () => ({
     originalColors: cloneStringMap(state.originalLegendColors.value)
   },
   originalSvgStroke: {
-    color: state.originalSvgStroke.value?.color ?? null,
-    width: state.originalSvgStroke.value?.width ?? null
+    color: state.originalSvgStroke.value.color ?? null,
+    width: state.originalSvgStroke.value.width ?? null
   },
-  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
-  featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
+  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt.value, null),
+  featureCatalog: admittedFeatureCatalog(state.featureCatalog.value)
 });
 
 /** @param {DrawingState} drawing */
@@ -1502,14 +1501,10 @@ export const applyEditorStateData = (
 // installed the Results.
 /** @param {Record<string, any>} normalized The result of `normalizeEditorStateData`. */
 const applyEditorArtifactData = (normalized) => {
-  if (state.similarityAlignmentResetReceipt) {
-    state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
-  }
+  state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
   installShownSetLegend(state, normalized.legend);
   state.originalSvgStroke.value = normalized.originalSvgStroke;
-  if (state.featureCatalog) {
-    state.featureCatalog.value = admittedFeatureCatalog(normalized.featureCatalog);
-  }
+  state.featureCatalog.value = admittedFeatureCatalog(normalized.featureCatalog);
 };
 
 // The Legend and stroke edits of a drawing, already normalized.
@@ -3475,9 +3470,9 @@ const buildLoadedArtifactSlot = (set, {
       proteinIdentityManifest: loadedProteinIdentityManifest(set.proteinIdentityManifest, { adoptCurrent: true })
     },
     legendInventory: keptLegend.originalOrder,
-    matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
+    matchSequenceOwner: state.matchSequenceRegistry.buildSourceOwner([
       ...(features.sequenceSources || []), ...restoredSequenceSources
-    ]) || null,
+    ]),
     // The artifact's committed request, as `canonicalRenderArtifactOwner` restores it.
     runtimeState: { canonical: /** @satisfies {CanonicalArtifactState} */ ({
       committedCanonicalSession: adoptRuntimeCanonicalSession({
@@ -3598,10 +3593,8 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
   const ownsAlignment = applyAlignment && mode === 'linear';
-  if (state.linearRecordTranslations && ownsAlignment) {
+  if (ownsAlignment) {
     state.linearRecordTranslations.value = readRecordTranslations(linearLayout.recordTranslations).value;
-  }
-  if (state.similarityAlignmentPlan && ownsAlignment) {
     state.similarityAlignmentPlan.value = readSimilarityAlignment(linearLayout.similarityAlignment).value;
   }
   drawing.importedComparisonIntent.action = readImportedComparisonAction(readPlainObject(data.importedComparisonResolution).value.action).value;
@@ -3685,7 +3678,7 @@ export const applyCapturedConfigData = (drawing, data, options = {}) => {
 const restorePaletteStateAfterConfigImport = (drawing) => {
   const draftPaletteName = String(drawing.selectedPalette.value || state.appliedPaletteName.value || 'default');
   const draftColors = normalizePaletteColors(cloneColors(drawing.currentColors.value));
-  const hasPreviewResults = Array.isArray(state.results.value) && state.results.value.length > 0;
+  const hasPreviewResults = state.results.value.length > 0;
 
   if (
     !hasPreviewResults ||
@@ -3931,7 +3924,7 @@ export const setPreviewRuntime = (ports) => {
  */
 export const writeLosatCacheInfo = (next) => {
   const current = state.losatCacheInfo.value;
-  if (Array.isArray(current) && current.length === next.length && next.every((entry, index) => entry === current[index])) return;
+  if (current.length === next.length && next.every((entry, index) => entry === current[index])) return;
   state.losatCacheInfo.value = next;
 };
 /**
@@ -4024,12 +4017,12 @@ const restoredLosatCacheInfoIdentity = (drawing, entry, places) => {
  * @returns {{ entries: Record<string, unknown>[], validatedWith: WeakMap<object, ReadonlySet<unknown>> }}
  */
 const serializeLosatCache = () => {
-  const cacheMap = state.losatCache?.value;
+  const cacheMap = state.losatCache.value;
   /** @type {WeakMap<object, ReadonlySet<unknown>>} */
   const validatedWith = new WeakMap();
-  if (!cacheMap || cacheMap.size === 0) return { entries: [], validatedWith };
+  if (cacheMap.size === 0) return { entries: [], validatedWith };
   /** @type {LosatCacheInfoEntry[]} */
-  const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
+  const info = state.losatCacheInfo.value;
   /** @type {Record<string, unknown>[]} */
   const entries = [];
   const seen = new Set();
@@ -4371,12 +4364,10 @@ const applyOrthogroupArtifactData = (orthogroupState, { catalogFeatureState = nu
       state.extractedFeatures.value,
       index
     );
-    if (state.biologicalFeatures) {
-      state.biologicalFeatures.value = enrichFeaturesWithOrthogroups(
-        state.biologicalFeatures.value,
-        index
-      );
-    }
+    state.biologicalFeatures.value = enrichFeaturesWithOrthogroups(
+      state.biologicalFeatures.value,
+      index
+    );
   }
   const selectedId = String(orthogroupState.selectedOrthogroupId || '').trim();
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
@@ -4832,7 +4823,7 @@ export const getCommittedCanonicalRenderRequest = () => {
 export const committedSettingNotePredicate = (item = null) => {
   const request = getCommittedCanonicalRenderRequest();
   if (!request) {
-    const applies = !(Array.isArray(state.results.value) && state.results.value.length > 0);
+    const applies = state.results.value.length === 0;
     return () => applies;
   }
   const drawing = state.drawingOf(state.generatedDrawingId.value);
@@ -5622,7 +5613,7 @@ const captureSessionImportTransientState = () => ({
   newFeatureToAdd: state.newFeatureToAdd.value,
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
-  selectedFeatureIds: Array.from(state.selectedFeatureIds.value || []),
+  selectedFeatureIds: Array.from(state.selectedFeatureIds.value),
   selectedFeatureAnchorId: state.selectedFeatureAnchorId.value,
   featureSelectionStatus: state.featureSelectionStatus.value,
   featureSelectionSuppressNextClick: Boolean(
@@ -5634,7 +5625,7 @@ const captureSessionImportTransientState = () => ({
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   settingsPopup: state.settingsPopup.value && { ...state.settingsPopup.value },
   featureExtractionPending: Boolean(state.featureExtractionPending.value),
-  matchSequenceSources: cloneJsonData(state.matchSequenceRegistry?.values?.() || []),
+  matchSequenceSources: cloneJsonData(state.matchSequenceRegistry.values()),
   diagramElements: [...state.diagramElements.value],
   diagramElementIds: [...state.diagramElementIds.value],
   diagramElementOriginalTransforms: new Map(
@@ -5691,7 +5682,7 @@ const restoreSessionImportTransientState = (snapshot) => {
   if (snapshot.settingsPopup) floatSettingsSection(state, snapshot.settingsPopup.section, snapshot.settingsPopup);
   else returnSettingsSection(state);
   state.featureExtractionPending.value = snapshot.featureExtractionPending;
-  state.matchSequenceRegistry?.reset?.(cloneJsonData(snapshot.matchSequenceSources));
+  state.matchSequenceRegistry.reset(cloneJsonData(snapshot.matchSequenceSources));
   state.diagramElements.value = [...snapshot.diagramElements];
   state.diagramElementIds.value = [...snapshot.diagramElementIds];
   state.diagramElementOriginalTransforms.value = new Map(
@@ -6100,7 +6091,7 @@ const resetSessionProject = () => {
   state.comparisonWarnings.value = [];
   state.labelFitReports.value = [];
   state.inputSummaries.value = [];
-  state.matchSequenceRegistry?.reset?.();
+  state.matchSequenceRegistry.reset();
   state.linearReorderNotice.value = '';
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -6114,7 +6105,7 @@ const resetSessionProject = () => {
   state.selectedOrthogroupId.value = '';
   state.selectedOrthogroupAlignmentFeature.value = '';
   state.extractedFeatures.value = [];
-  if (state.biologicalFeatures) state.biologicalFeatures.value = [];
+  state.biologicalFeatures.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
   state.generatedLegendPosition.value = 'left';
@@ -6143,7 +6134,7 @@ const previewViewportToPersist = () => {
 // The `ui` values no drawing owns (the Session's, the shown Result's): the
 // project part of `buildUiStateData`, which the Load rollback restores.
 const buildProjectUiData = () => ({
-  title: String(state.sessionTitle.value || ''),
+  title: state.sessionTitle.value,
   mode: state.mode.value,
   selectedResultIndex: state.selectedResultIndex.value,
   generatedLegendPosition: state.generatedLegendPosition.value,
@@ -6352,7 +6343,7 @@ export const buildFeatureStateData = (drawing) => ({
 // them: the project part of `buildFeatureStateData`.
 const featureArtifactData = () => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.extractedFeatures.value)),
-  biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures?.value)),
+  biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures.value)),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value)
 });
 
@@ -6375,11 +6366,9 @@ const applyFeatureArtifactData = (features = {}) => {
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
     ? /** @type {ExtractedFeature[]} */ (features.extractedFeatures)
     : [];
-  if (state.biologicalFeatures) {
-    state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
-      ? /** @type {ExtractedFeature[]} */ (features.biologicalFeatures)
-      : [];
-  }
+  state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
+    ? /** @type {ExtractedFeature[]} */ (features.biologicalFeatures)
+    : [];
   state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
     ? /** @type {unknown[]} */ (features.featureRecordIds)
     : [];
@@ -6430,8 +6419,8 @@ export const buildOrthogroupStateData = (drawing) => ({
 // The shown Result's groups and selection as `applyOrthogroupArtifactData`
 // reads them: the project part of `buildOrthogroupStateData`.
 const orthogroupArtifactData = () => ({
-  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(toRaw(state.orthogroups.value)) : [],
-  selectedOrthogroupId: String(state.selectedOrthogroupId.value || '')
+  groups: cloneJsonData(toRaw(state.orthogroups.value)),
+  selectedOrthogroupId: state.selectedOrthogroupId.value
 });
 
 export const buildRunStateData = () => ({
@@ -6769,9 +6758,7 @@ const exportSessionDocument = async (
   const resolvedTitle =
     typeof titleOverride === 'string'
       ? titleOverride.trim()
-      : typeof state.sessionTitle?.value === 'string'
-        ? state.sessionTitle.value.trim()
-        : '';
+      : state.sessionTitle.value.trim();
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const choice = await askChoice({
@@ -6898,7 +6885,7 @@ const exportSessionDocument = async (
         // (`buildLayout`, as Generate writes it); a legacy target beside it is
         // not written, since Python reads none in a Session 44+ (D-15-149; OV-2047).
         ...(shown ? {
-          orthogroupState: { selectedOrthogroupId: String(state.selectedOrthogroupId.value || '') }
+          orthogroupState: { selectedOrthogroupId: state.selectedOrthogroupId.value }
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
@@ -8695,7 +8682,7 @@ const importSessionDocument = async (e, options = {}) => {
       }) });
     }
 
-    state.matchSequenceRegistry?.reset?.();
+    state.matchSequenceRegistry.reset();
     /** @type {Map<LoadedFiles, { inputs: LiveFileState, bound: ReturnType<typeof bindLoadedInputs> }>} One state per set of files, so each binds once. */
     const liveFileStates = new Map();
     /** @param {LoadedFiles} loaded */
@@ -8783,7 +8770,7 @@ const importSessionDocument = async (e, options = {}) => {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
     }
     synchronizeRestoredFeatureSummaryStatus();
-    state.matchSequenceRegistry?.reset?.([
+    state.matchSequenceRegistry.reset([
       ...catalogSequenceSources,
       ...restoredFileSequenceSources
     ]);
