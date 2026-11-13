@@ -5,7 +5,7 @@
 // direction rows. Pure; the figure geometry is measured by the preview's owner
 // (`app/feature-editor/svg-actions.js`), and the choices, the direction projection and the Reset
 // receipt come from the alignment owner (`app/similarity-alignment.js`).
-import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
+import { joinSentences, listText, msg, numberText, t, tm, tn, tx } from '../utils/i18n.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 /** @import { CanonicalRecordOrientation } from './record-display-model.js' */
 /** @import { AlignmentResetReceipt } from './session-active-config-contract.js' */
@@ -436,8 +436,8 @@ const referenceShiftText = (name, deltaX) => {
   const shift = Math.round(deltaX);
   if (!shift) return '';
   return shift > 0
-    ? t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the right.', { name, px: Math.abs(shift).toLocaleString('en-US') })
-    : t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the left.', { name, px: Math.abs(shift).toLocaleString('en-US') });
+    ? t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the right.', { name, px: numberText(Math.abs(shift)) })
+    : t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the left.', { name, px: numberText(Math.abs(shift)) });
 };
 
 /**

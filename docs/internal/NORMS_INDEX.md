@@ -728,6 +728,8 @@ under "Cited ids without a record".
 
 - [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 7, supersedes scenario revision 6.
   - `tests/web/browser-preferences.test.mjs`
+  - `tests/web/i18n-catalogs.test.mjs`
+  - `tests/web/sequence-search.playwright.spec.js`
   - `tests/web/ui-language.playwright.spec.js`
 
 - [PD-OI-107](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-107-organism-name-lines-from-record-metadata): Organism name lines from record metadata. ACCEPTED, concern `diagram-generation.organism-name-lines`, scenario revision 1.

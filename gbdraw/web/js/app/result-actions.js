@@ -6,7 +6,7 @@
 // owners' functions they use as ports.
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { SOURCE_LOCALE, msg, t, tm, uiLocale } from '../utils/i18n.js';
+import { SOURCE_LOCALE, msg, numberText, t, tm, uiLocale } from '../utils/i18n.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { exportLinearWrap } from '../services/linear-wrap-form.js';
 import { requestedFigureSize } from '../services/figure-size-form.js';
@@ -272,7 +272,7 @@ export const createClickedFeatureCopy = ({ clickedFeature }) => {
   const clickedFeatureSummary = computed(() => {
     const cf = clickedFeature.value;
     const location = String(cf?.location || '').replaceAll(', ', '; ')
-      .replace(/\d{4,}/g, (digits) => Number(digits).toLocaleString('en-US'));
+      .replace(/\d{4,}/g, (digits) => numberText(Number(digits)));
     return [cf?.recordId, location].filter(Boolean).join(' · ');
   });
 

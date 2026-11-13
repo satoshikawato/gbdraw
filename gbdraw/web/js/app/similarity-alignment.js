@@ -6,7 +6,7 @@
  */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
-import { msg, t, tm, tn } from '../utils/i18n.js';
+import { msg, numberText, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
@@ -311,7 +311,7 @@ export const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const start = locationPartBound(feature.start == null ? facts : feature, 'start');
   const end = locationPartBound(feature.end == null ? facts : feature, 'end');
   const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
-    ? `${(start + 1).toLocaleString('en-US')}..${end.toLocaleString('en-US')} bp` : '';
+    ? `${numberText(start + 1)}..${numberText(end)} bp` : '';
   const typeName = [displayText(feature.type, facts.type) || t('Feature'), coordinates].filter(Boolean).join(' ');
   return { name: typeName, ids: [], label: typeName };
 };
@@ -390,7 +390,7 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
   const key = anchorKey(candidate.anchor);
   const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
   if (!member) throw new Error('Alignment candidate has no current member facts.');
-  const coordinates = `${(candidate.sourceStart + 1).toLocaleString('en-US')}..${candidate.sourceEnd.toLocaleString('en-US')} bp`;
+  const coordinates = `${numberText(candidate.sourceStart + 1)}..${numberText(candidate.sourceEnd)} bp`;
   const feature = featureView(candidate.anchor, displayFacts, candidate.displayName);
   return {
     key,
@@ -431,8 +431,8 @@ const referenceView = (response, request, displayFacts, recordLabels) => {
     recordDetail: record?.detail,
     recordKey: response.reference.recordKey,
     // Python's source coordinates of the reference, read from the committed request.
-    coordinates: (response.referenceSourceStart + 1).toLocaleString('en-US') + '..'
-      + response.referenceSourceEnd.toLocaleString('en-US') + ' bp',
+    coordinates: numberText(response.referenceSourceStart + 1) + '..'
+      + numberText(response.referenceSourceEnd) + ' bp',
     displayedStrand: strandLabel(response.referenceDisplayedStrand)
   };
 };
@@ -1707,8 +1707,8 @@ export const createSimilarityAlignmentActions = ({
           canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
           key: anchorKey(anchor),
           label: `${record} · ${featureNameParts(anchor, factsOf(anchor) || member).name}`,
-          location: `${Number.isSafeInteger(start) ? (start + 1).toLocaleString('en-US') : ''}..`
-            + `${Number.isSafeInteger(end) ? end.toLocaleString('en-US') : ''} `
+          location: `${Number.isSafeInteger(start) ? numberText(start + 1) : ''}..`
+            + `${Number.isSafeInteger(end) ? numberText(end) : ''} `
             + `(${strandLabel(strandValue(member?.strand, 'Drawer reference strand'))})`
         };
       } catch (_error) {

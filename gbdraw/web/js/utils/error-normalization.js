@@ -1,13 +1,12 @@
 // @ts-check
-// This module imports only generated leaves (the mode profiles and the
-// persisted contracts), and declares the identity of utils/i18n.js `msg`
-// instead of importing it, so a test that copies it needs only those beside it.
+// This module imports only leaves without imports of their own (the mode
+// profiles, the persisted contracts and utils/i18n.js), so a test that copies
+// it needs only those beside it.
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import {
   INPUT_NAME_CHARACTERS, SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
 } from '../contracts/schema.generated.js';
-/** @param {string} text */
-const msg = (text) => text;
+import { msg, numberText } from './i18n.js';
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
@@ -516,8 +515,6 @@ const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
  * @param {string} message
  */
 const shownLosatMessage = (message) => message.replace(/(^|[\s'"(<[])(-+)/g, (_whole, before, hyphens) => before + '\u2011'.repeat(hyphens.length));
-/** A count as Python's export message writes it (`32,767`). @param {number} value */
-const grouped = (value) => value.toLocaleString('en-US');
 
 /**
  * The correction text of a diagnostic reason: the catalog key a hint translates, the same text a refusal
@@ -1183,7 +1180,7 @@ export const normalizeUserFacingError = (value, {
   const { limit, width, height, rowLength, dpi, geneticCodes } = result.context;
   const exportSize = (reason === 'PNG_SIZE' || reason === 'PDF_SIZE') && limit !== undefined && width !== undefined
     && height !== undefined && { text: reason === 'PNG_SIZE' ? PHRASES.exportSizePx : PHRASES.exportSizePt,
-    params: { limit: grouped(limit), width: grouped(width), height: grouped(height) } };
+    params: { limit: numberText(limit), width: numberText(width), height: numberText(height) } };
   // A Save or Load over the browser's limits: the refusal's own sentences (receipt session.file-container).
   const sessionLimit = sessionLimitParts(result);
   // A refused figure size names its control (Figure width, Figure height) in its own sentence, so it shows no
@@ -1215,7 +1212,7 @@ export const normalizeUserFacingError = (value, {
     /** @type {number} */ (featureCount) > 1 && { text: PHRASES.featuresAffected, params: { count: /** @type {number} */ (featureCount) } },
     field && field !== 'schema' && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
     exportSize,
-    exportSize && rowLength !== undefined && { text: PHRASES.exportRowLength, params: { length: grouped(rowLength) } },
+    exportSize && rowLength !== undefined && { text: PHRASES.exportRowLength, params: { length: numberText(rowLength) } },
     exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
     ...figureSizeSentences,
     !lead.coversReason && (sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null

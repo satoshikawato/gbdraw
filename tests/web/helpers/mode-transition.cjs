@@ -12,8 +12,9 @@ const seeds = {
   linear: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw'
 };
 
-const load = async (browser, file = seeds.circular, viewport = { width: 1600, height: 1000 }) => {
-  const context = await browser.newContext({ viewport });
+// `locale` is the browser's language (navigator.language, Intl's default); the UI language stays English.
+const load = async (browser, file = seeds.circular, viewport = { width: 1600, height: 1000 }, { locale } = {}) => {
+  const context = await browser.newContext({ viewport, ...(locale ? { locale } : {}) });
   const page = await context.newPage();
   page.externalRequests = [];
   await context.route('**/*', route => {

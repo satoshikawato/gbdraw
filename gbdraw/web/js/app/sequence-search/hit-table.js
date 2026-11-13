@@ -4,7 +4,7 @@
 // (`hit-outline.js`; no History step, not saved, not exported, and the figure keeps every hit), the no-hit message, and
 // Save Raw LOSAT TSV.
 import { computed } from '../../utils/reactivity.js';
-import { t, tn } from '../../utils/i18n.js';
+import { numberText, t, tn } from '../../utils/i18n.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { outlinedHitIds, searchPrograms } from '../../services/sequence-search.js';
 import { createSearchHitOutline } from './hit-outline.js';
@@ -63,9 +63,9 @@ export const createSearchHitTable = (panel, { activeDrawing, shownRoot }) => {
     const outcome = shownOutcome.value;
     if (!outcome || outcome.setId !== null) return '';
     const names = outcome.queries.map(({ name, length, program }) => (program === 'tblastn'
-      ? t('No hits for {query} ({length} aa)', { query: name, length })
-      : t('No hits for {query} ({length} bp)', { query: name, length })));
-    return [...names, tn(outcome.rowsLeftOut, 'The thresholds removed {count} alignment.', 'The thresholds removed {count} alignments.', { count: outcome.rowsLeftOut })].join(' ');
+      ? t('No hits for {query} ({length} aa)', { query: name, length: numberText(length) })
+      : t('No hits for {query} ({length} bp)', { query: name, length: numberText(length) })));
+    return [...names, tn(outcome.rowsLeftOut, 'The thresholds removed {count} alignment.', 'The thresholds removed {count} alignments.', { count: numberText(outcome.rowsLeftOut) })].join(' ');
   });
   // The hits the drawing outlines, by the shown set's id and the hits' annotation ids.
   const outline = computed(() => {

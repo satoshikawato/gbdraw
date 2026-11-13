@@ -4356,7 +4356,7 @@
                                         <tbody>
                                             <tr v-for="hit in sequenceSearch.hitRows" :key="hit.annotationId" data-sequence-search-hit :aria-selected="sequenceSearch.panel.selectedHit === hit.annotationId" tabindex="0" class="cursor-pointer align-top hover:bg-slate-100 aria-selected:bg-blue-50" @click="sequenceSearch.selectHit(hit)" @keydown.enter.prevent="sequenceSearch.selectHit(hit)">
                                                 <td class="w-full max-w-0 pr-0.5"><span class="block font-mono truncate" :title="hit.query">{{ hit.query }}</span><span class="block text-slate-500 truncate" :title="sequenceSearch.recordOf(hit)">{{ sequenceSearch.recordOf(hit) }}</span></td>
-                                                <td class="pr-0.5">{{ hit.start.toLocaleString() }}–{{ hit.end.toLocaleString() }}</td>
+                                                <td class="pr-0.5">{{ numberText(hit.start) }}–{{ numberText(hit.end) }}</td>
                                                 <td class="pr-0.5 text-center">{{ hit.strand }}</td>
                                                 <td class="pr-0.5 text-right" :title="String(hit.identity)">{{ hit.identity.toFixed(1) }}</td>
                                                 <td class="pr-0.5 text-right whitespace-nowrap">{{ sequenceSearch.hitLengthText(hit) }}</td>
@@ -8106,7 +8106,7 @@
                                                 <div class="text-xs font-semibold text-slate-700">{{ t('{role} span', { role: entry.span.displayRole }) }}</div>
                                                 <!-- OV-1264: a long record ID may break; a span or length stays whole. -->
                                                 <div class="text-[10px] font-mono text-slate-500 break-words" data-match-span-line>
-                                                    {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available && entry.sequenceLength"> · <span class="whitespace-nowrap">{{ entry.sequenceLength.toLocaleString() }} bp</span></template>
+                                                    {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available && entry.sequenceLength"> · <span class="whitespace-nowrap">{{ numberText(entry.sequenceLength) }} bp</span></template>
                                                 </div>
                                             </div>
                                             <button type="button"
@@ -9420,7 +9420,7 @@
                                             <div class="min-w-0 space-y-1">
                                                 <div class="font-semibold text-slate-700 break-words">{{ member.recordId || recordGroup.recordLabel }}</div>
                                                 <div class="break-words">
-                                                    <span class="font-mono">{{ orthogroupMemberRangeText(member, 'en-US') }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
+                                                    <span class="font-mono">{{ orthogroupMemberRangeText(member, true) }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
                                                 </div>
                                             </div>
                                             <action-menu class="shrink-0" label="FASTA" :title="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })" :aria-label="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })"
@@ -10381,7 +10381,7 @@
   <div class="rounded border border-slate-200 bg-white/70 p-2 text-xs space-y-1.5" :data-record-rotation="row.key">
     <div class="flex min-w-0 items-baseline justify-between gap-2">
       <span class="min-w-0 truncate font-semibold text-slate-700" :title="row.recordId">{{ row.recordId }}</span>
-      <span class="text-[10px] text-slate-500" :class="place ? 'min-w-0 truncate' : 'shrink-0'" :title="place || null">{{ place || row.selector }} · {{ Number(row.recordLength).toLocaleString('en-US') }} bp</span>
+      <span class="text-[10px] text-slate-500" :class="place ? 'min-w-0 truncate' : 'shrink-0'" :title="place || null">{{ place || row.selector }} · {{ numberText(Number(row.recordLength)) }} bp</span>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <label class="flex items-center gap-1.5"><input ref="topology" data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="t('Circular record {record} {selector}', { record: row.recordId, selector: row.selector })"> {{ t('Circular record') }}</label>

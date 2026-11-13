@@ -10,6 +10,7 @@ import {
 import { buildMatchPopupPayload, matchSpanFasta } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 import { featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
+import { numberText } from '../../gbdraw/web/js/utils/i18n.js';
 import {
   FEATURE_CATALOG_SCHEMA,
   featureStateFromCatalog,
@@ -143,6 +144,7 @@ const createEmbeddedSearch = (popupMode) => new Function('features', 'popupMode'
   ${embeddedFunction('featureLocationParts')}
   ${embeddedFunction('rangeText')}
   ${embeddedFunction('locationText')}
+  ${embeddedFunction('numberText')}
   ${embeddedFunction('featureLengthText')}
   ${embeddedSlice('var searchFieldIds = {', 'var featuresById = new Map();')}
   ${embeddedSlice('function normalizeSearchText(', 'preparedSearchIndex = buildPreparedSearchIndex();')}
@@ -250,6 +252,17 @@ test('the app and the Interactive SVG read a start or end by the writers\' rule'
   }
 });
 
+// OV-2777: the Interactive SVG writes a number as the app does (numberText, utils/i18n.js): English digits and
+// grouping, every fraction digit, whatever the reader's browser language.
+test('the Interactive SVG writes a number by the app\'s number text rule', () => {
+  const embeddedNumber = new Function(`${embeddedFunction('numberText')} return numberText;`)();
+  for (const value of [0, -0, 7, 999, 1000, -1234, 4641652, 1234567.5, 0.25, 1 / 3, 2 ** 53, -1e21, NaN, Infinity]) {
+    assert.equal(embeddedNumber(value), numberText(value), String(value));
+  }
+  assert.equal(embeddedNumber(4641652), '4,641,652');
+  assert.equal(embeddedNumber(1234567.5), '1,234,567.5');
+});
+
 // OV-1010 / OV-1017: the runtime shows a member's location as the app popup
 // does: a null or blank bound is missing (not 0), a bound that does not read
 // shows its stored text, and one side shows alone when the other is empty.
@@ -300,15 +313,15 @@ test('Similarity group member rows read their location with the shared reader', 
     [1233, '1234..20', '1,234..20']
   ]) {
     assert.equal(locationRangeText({ start, end: 20 }), plain, JSON.stringify(start));
-    assert.equal(locationRangeText({ start, end: 20 }, 'en-US'), grouped, JSON.stringify(start));
+    assert.equal(locationRangeText({ start, end: 20 }, true), grouped, JSON.stringify(start));
   }
-  assert.equal(locationRangeText({ start: 9999, end: 20000 }, 'en-US'), '10,000..20,000');
+  assert.equal(locationRangeText({ start: 9999, end: 20000 }, true), '10,000..20,000');
   assert.equal(locationRangeText({ start: null, end: undefined }), '');
   assert.equal(locationRangeText(null), '');
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   assert.doesNotMatch(html, /Number\(member\.(start|end)\)/);
   assert.equal(html.match(/\{\{ orthogroupMemberRangeText\(member\) \}\}/g)?.length, 1);
-  assert.equal(html.match(/\{\{ orthogroupMemberRangeText\(member, 'en-US'\) \}\}/g)?.length, 1);
+  assert.equal(html.match(/\{\{ orthogroupMemberRangeText\(member, true\) \}\}/g)?.length, 1);
 });
 
 // OV-211: the active match names its record, in the app and the Interactive SVG.

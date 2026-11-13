@@ -1,4 +1,5 @@
 // @ts-check
+import { numberText } from '../utils/i18n.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 
 /**
@@ -168,18 +169,18 @@ export const normalizeMemberStrand = (strand) => {
  * never reads as position 1 (OV-1015). The member popup, the feature popup's
  * member table and the Similarity drawer show this text.
  * @param {unknown} part
- * @param {string} [locale] Group the digits for this locale (`toLocaleString`);
+ * @param {boolean} [grouped] Group the digits by thousands (`numberText`);
  *   plain digits when omitted.
  * @returns {string}
  */
-export const locationRangeText = (part, locale) => {
+export const locationRangeText = (part, grouped = false) => {
   if (!part || typeof part !== 'object') return '';
   const fields = /** @type {Record<string, unknown>} */ (part);
   /** @param {unknown} value @param {number} shift */
   const boundText = (value, shift) => {
     const bound = locationPartNumber(value);
     if (bound === null) return String(value === null || value === undefined ? '' : value).trim();
-    return locale ? (bound + shift).toLocaleString(locale) : String(bound + shift);
+    return grouped ? numberText(bound + shift) : String(bound + shift);
   };
   const startText = boundText(fields.start, 1);
   const endText = boundText(fields.end, 0);
@@ -213,7 +214,7 @@ export const formatFeatureLength = (feature) => {
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
     length += end - start;
   }
-  return `${Math.round(length).toLocaleString()} bp`;
+  return `${numberText(Math.round(length))} bp`;
 };
 
 /**
