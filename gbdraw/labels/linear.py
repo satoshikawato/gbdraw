@@ -744,9 +744,9 @@ def _feature_track_positions(
 
 
 class _LabelSegment(NamedTuple):
-    """The stretch of a feature that its label is centred on: its start and end x in the record's drawn
-    width, its wrap row in a wrapped record (else None), and the drawn block it is (``block``, in the row
-    ``block_row``; ``linear_drawn_parts``)."""
+    """The drawn block a feature's label is centred on (``block``, in the row ``block_row``;
+    ``linear_drawn_parts``): its start and end x in the record's drawn width (``_drawn_part_x``) and its
+    wrap row in a wrapped record (else None)."""
 
     start_x: float
     end_x: float
@@ -761,46 +761,41 @@ class _LabelSegment(NamedTuple):
         return (self.start_x + self.end_x) / 2.0
 
 
-def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) -> _LabelSegment | None:
-    """The drawn part that ``display_label_segment`` chooses when the feature has drawn parts (None when
-    none of them is shown), else its longest segment."""
+def _drawn_part_x(part: FeatureLocationPart, context: _LinearLabelContext) -> tuple[float, float]:
+    """The start and end x of a drawn part in the record's drawn width, as the feature drawer puts it."""
 
-    genome_length = context.genome_length
+    genome_length, alignment_width = context.genome_length, context.alignment_width
+    return (
+        normalize_position_to_linear_track(int(part.start), genome_length, alignment_width),
+        normalize_position_to_linear_track(int(part.end), genome_length, alignment_width),
+    )
+
+
+def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) -> _LabelSegment | None:
+    """The drawn block a feature's label is centred on: the part ``display_label_segment`` chooses when
+    the feature has drawn parts (None when none of them is shown), else the longest block of its
+    location, the first of equal ones. Its extents are the drawn block's, so a feature at the record's
+    first base, whose block starts at 1 (``get_exon_coordinate``), is labeled at that block's middle
+    (OV-3452)."""
+
     wrap_row: int | None = None
     if feature_object.display_parts is not None:
         record_transform = context.record_transform
-        projected_segment = display_label_segment(feature_object, genome_length, record_transform=record_transform)
+        projected_segment = display_label_segment(
+            feature_object, context.genome_length, record_transform=record_transform
+        )
         if projected_segment is None:
             return None
-        longest_segment_start: float = projected_segment.start
-        longest_segment_end: float = projected_segment.end
-        if record_transform is not None and record_transform.wrap_length is not None:
-            wrap_row = projected_segment.row
         block, block_row = projected_segment.anchor_part.location, projected_segment.anchor_part.fragment.row
+        if record_transform is not None and record_transform.wrap_length is not None:
+            wrap_row = block_row
     else:
-        longest_segment_length = 0
-        longest_segment_start = longest_segment_end = 0
-        longest_index = 0
-        for index, coordinate in enumerate(feature_object.coordinates):
-            start = int(coordinate.start)
-            end = int(coordinate.end)
-            segment_length = abs(end - start + 1)
-            if segment_length > longest_segment_length:
-                longest_segment_start = start
-                longest_segment_end = end
-                longest_segment_length = segment_length
-                longest_index = index
-        # The location has one block per coordinate, in order (``get_exon_and_intron_coordinates``).
-        block = [part for part in feature_object.location if part.kind == "block"][longest_index]
+        block = max(
+            (part for part in feature_object.location if part.kind == "block"),
+            key=lambda part: abs(int(part.end) - int(part.start)),
+        )
         block_row = 0
-    alignment_width = context.alignment_width
-    return _LabelSegment(
-        normalize_position_to_linear_track(longest_segment_start, genome_length, alignment_width),
-        normalize_position_to_linear_track(longest_segment_end, genome_length, alignment_width),
-        wrap_row,
-        block,
-        block_row,
-    )
+    return _LabelSegment(*_drawn_part_x(block, context), wrap_row, block, block_row)
 
 
 # The x spans that the features drawn after a label's feature draw in a lane and row over a stretch of it.
@@ -821,12 +816,7 @@ def _drawn_part_spans(
             continue
         order[feature_id] = len(order)
         for part in linear_drawn_parts(feature_object):
-            spans.add(
-                order[feature_id],
-                (position, part.row),
-                normalize_position_to_linear_track(int(part.location.start), context.genome_length, context.alignment_width),
-                normalize_position_to_linear_track(int(part.location.end), context.genome_length, context.alignment_width),
-            )
+            spans.add(order[feature_id], (position, part.row), *_drawn_part_x(part.location, context))
     return spans, order
 
 
@@ -850,10 +840,8 @@ def _embedded_label_anchor_x(
     )
     if ink is None:
         return centre_x
-    block = segment.block
+    block, start_x, end_x = segment.block, segment.start_x, segment.end_x
     genome_length, alignment_width = context.genome_length, context.alignment_width
-    start_x = normalize_position_to_linear_track(int(block.start), genome_length, alignment_width)
-    end_x = normalize_position_to_linear_track(int(block.end), genome_length, alignment_width)
     outline = linear_block_outline(
         linear_block_glyph(feature_object.glyph_kind, block.strand, block.is_last, context.shaft_width_ratio),
         start_x,
