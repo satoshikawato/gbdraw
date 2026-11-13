@@ -2535,7 +2535,7 @@ export const createAppSetup = () => {
   });
 
   const {
-    rememberShownResultInventory, drawingSwitchBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
+    installArrivingSlot, drawingSwitchBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
   } = createDrawingSwitch({
     state, results, selectedResultIndex, errorLog, failedGeneratePreservedResult, sessionOperationAvailability,
     historyAvailability: history.historyAvailability, historyRestoring: () => history.restoring.value,
@@ -2549,8 +2549,7 @@ export const createAppSetup = () => {
     clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
     presentSelectedResult: previewRuntime.presentSelectedResult,
     rememberResultInventory: legendActions.rememberResultInventory, artifactSlotsSwap: artifactSlots.swap,
-    captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot,
-    adoptShownSetInventory: legendActions.adoptShownSetInventory
+    captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot
   });
   // The operations on the drawing list, each one project step (R11, R16-2).
   const drawingList = createDrawingList({
@@ -2616,13 +2615,13 @@ export const createAppSetup = () => {
   const drawingSwitchBusyReason = computed(() => tm(drawingSwitchBusy()?.reason || ''));
   // Session Load: the loaded Session's artifact slots, before its preview
   // mounts. `opening` is the shown drawing's slot when its set is not the
-  // committed one; each `stashed` slot waits in its drawing. The stash starts
-  // again with the loaded Session. The Legend owner takes the shown set's inventory.
+  // committed one (Load installed the committed set itself); each `stashed`
+  // slot waits in its drawing. The stash starts again with the loaded Session.
+  // The opening slot installs as a switch installs the arriving one.
   /** @param {LoadedArtifactSlots} slots */
   const installLoadedArtifactSlots = ({ opening, stashed }) => {
     artifactSlots.replaceLoaded(stashed);
-    if (opening) historySnapshots.installArtifactSlot(opening, { drawing: state.drawingOf(opening.drawingId) });
-    rememberShownResultInventory(opening);
+    if (opening) installArrivingSlot(opening);
   };
 
   const { requestPaletteChange, selectPalette, requestResetColors } = resultsManager;

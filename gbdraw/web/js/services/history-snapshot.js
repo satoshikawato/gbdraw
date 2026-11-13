@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { ArtifactSlot, FeatureEditorStatus } from './artifact-slot.js' */
+/** @import { ArtifactSlot, FeatureEditorStatus, ShownSetLegend, ShownSetLegendRefs } from './artifact-slot.js' */
+/** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { DrawnInputSummary } from './input-summary.js' */
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
@@ -21,7 +22,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLayoutPreferences } from './layout-preferences.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
-  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore
+  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore, installShownSetLegend
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { losatEvidenceAfterStep, losatRowsAfterStep, losatRowsOfDrawing } from './losat-cache.js';
@@ -94,6 +95,39 @@ const editedIntentPartOf = (path, value) => (
  *   featureStrokes?: { overrides?: unknown } | null
  * }} EditorIntentData
  */
+/**
+ * The Legend of an editor state: the drawing's Legend paint (its rows and
+ * their edits) and the shown set's generated Legend (`ShownSetLegend`).
+ * @typedef {ShownSetLegend & {
+ *   entries: LegendEntry[],
+ *   deletedEntries: KeptLegendEntry[],
+ *   dormantEntries: KeptLegendEntry[],
+ *   colorOverrides: Record<string, string>,
+ *   strokeOverrides: Record<string, StrokeOverride>,
+ *   addedCaptions: string[]
+ * }} EditorStateLegend
+ */
+/**
+ * The editor state that a capture writes (`buildEditorStateData` in config.js,
+ * a generated artifact handle here) and a restore installs as it is
+ * (`applyEditorStateData`): the drawing's Legend and stroke edits, and the
+ * shown set's generated Legend, stroke defaults, alignment Reset receipt and
+ * feature catalog.
+ * @typedef {object} EditorStateData
+ * @property {EditorStateLegend} legend
+ * @property {{ overrides: Record<string, StrokeOverride> }} featureStrokes
+ * @property {{ color: string | null, width: number | null }} originalSvgStroke
+ * @property {AlignmentResetReceipt | null} alignmentResetReceipt
+ * @property {FeatureCatalog | null} featureCatalog
+ */
+/**
+ * A checkpoint's editor state: the checkpoint keeps the catalog beside it (`checkpointFeatureCatalogs`).
+ * @typedef {Omit<EditorStateData, 'featureCatalog'>} CheckpointEditorState
+ */
+/**
+ * A generated artifact handle's editor state: its owner set holds the receipt and the catalog.
+ * @typedef {Omit<EditorStateData, 'alignmentResetReceipt' | 'featureCatalog'>} HandleEditorState
+ */
 /** @typedef {{ selectedOrthogroupId?: unknown, selectedOrthogroupAlignmentFeature?: unknown }} OrthogroupIntentData */
 /** @typedef {{ orthogroupNameOverrides?: unknown, orthogroupDescriptionOverrides?: unknown, orthogroupDormantOverrides?: unknown }} GroupNameIntentData */
 /** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
@@ -139,7 +173,7 @@ const editedIntentPartOf = (path, value) => (
  * @property {IntentUiData} [ui]
  * @property {HistorySnapshotData[]} [results]
  * @property {FeatureEditsData & { extractedFeatures?: unknown, featureRecordIds?: unknown }} [features]
- * @property {EditorIntentData} [editorState]
+ * @property {CheckpointEditorState} [editorState] Absent without the editor capture port.
  * @property {OrthogroupIntentData & GroupNameIntentData & { groups?: unknown }} [orthogroupState]
  * @property {{ lastRunInfo?: unknown, pairwiseMatchFactors?: unknown }} [runState]
  */
@@ -155,7 +189,7 @@ const editedIntentPartOf = (path, value) => (
  * @typedef {object} GeneratedArtifactIntent
  * @property {IntentUiData} ui
  * @property {FeatureEditsData} features
- * @property {EditorIntentData & { originalSvgStroke?: unknown }} editorState
+ * @property {HandleEditorState} editorState
  * @property {OrthogroupIntentData & GroupNameIntentData} orthogroupState
  * @property {unknown} alignmentState
  * @property {PresentationData} presentation
@@ -240,6 +274,10 @@ const replacePlainObject = (target, source) => {
     target[key] = value;
   });
 };
+
+// A checkpoint keeps the catalog of its captured editor state beside it.
+/** @param {EditorStateData} editorState @returns {CheckpointEditorState} */
+const withoutCatalog = ({ featureCatalog: _catalog, ...editorState }) => editorState;
 
 /** @param {FeatureEditsData} [features] */
 const buildFeatureIntentData = (features = {}) => ({
@@ -354,6 +392,32 @@ const applyEditorIntentData = (drawing, editorState = {}) => {
     addedLegendCaptions: Array.isArray(legend.addedCaptions) ? legend.addedCaptions.map((entry) => String(entry || '')) : [],
     featureStrokeOverrides: /** @type {Record<string, StrokeOverride>} */ (clonePlainObject(editorState?.featureStrokes?.overrides))
   });
+};
+
+/**
+ * A generated artifact handle's editor state as captured, with its owner
+ * set's receipt and catalog, installed as it is.
+ * @template {DrawingView} D
+ * @param {D} drawing
+ * @param {HandleEditorState | undefined} editorState
+ * @param {{ readonly similarityAlignmentResetReceipt?: AlignmentResetReceipt | null,
+ *   readonly featureCatalog?: FeatureCatalog | null } | null | undefined} ownerSet
+ * @param {{ state: HistorySnapshotState, applyEditorStateData: ((drawing: D, editorState: EditorStateData) => unknown) | null }} restore
+ */
+const restoreHandleEditorState = (drawing, editorState, ownerSet, { state, applyEditorStateData }) => {
+  if (!editorState) return;
+  /** @type {EditorStateData} */
+  const trusted = {
+    ...cloneJsonData(editorState),
+    alignmentResetReceipt: ownerSet?.similarityAlignmentResetReceipt ?? null,
+    featureCatalog: ownerSet?.featureCatalog || null
+  };
+  if (typeof applyEditorStateData === 'function') {
+    applyEditorStateData(drawing, trusted);
+    return;
+  }
+  applyEditorIntentData(drawing, trusted);
+  setGeneratedArtifactRef(state.featureCatalog, trusted.featureCatalog);
 };
 
 /**
@@ -809,7 +873,8 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
  * (state.js `DrawingState`); the service reads them as a `DrawingView`.
  * @template {DrawingView} [D=DrawingView]
  * @typedef {object} HistorySnapshotServiceOptions
- * @property {Record<string, any> & { drawingOf: (id: DrawingId) => D, drawingList: () => readonly D[] }} state App state (state.js; not yet typed).
+ * @property {Record<string, any> & { drawingOf: (id: DrawingId) => D, drawingList: () => readonly D[] } & ShownSetLegendRefs} state
+ *   App state (state.js; not yet typed but for these members).
  * @property {HistorySnapshotFileStore} fileStore
  *   The file store that holds the files an intent and a checkpoint name.
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
@@ -825,9 +890,9 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildFeatureStateData] The feature-override capture.
  * @property {((drawing: D, features: HistorySnapshotData) => unknown) | null} [applyFeatureStateData]
  *   The feature-override restore.
- * @property {((drawing: D) => HistorySnapshotData) | null} [buildEditorStateData] The legend and stroke editor capture.
- * @property {((drawing: D, editorState: HistorySnapshotData, options: { normalized: boolean }) => unknown) | null} [applyEditorStateData]
- *   The editor restore; `normalized` marks a state that is installed as captured.
+ * @property {((drawing: D) => EditorStateData) | null} [buildEditorStateData] The legend and stroke editor capture.
+ * @property {((drawing: D, editorState: EditorStateData) => unknown) | null} [applyEditorStateData]
+ *   The editor restore, which installs a captured state as it is.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
  * @property {((drawing: D, orthogroupState: HistorySnapshotData,
  *   options: { catalogFeatureState: FeatureCatalogFeatureState | null }) => unknown) | null} [applyOrthogroupStateData]
@@ -855,7 +920,7 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
 // SE-01/N-20 (R11): a checkpoint never copies or signs the Generate-owned
 // feature catalog. It keeps the admitted catalog by reference, and History
 // retains each checkpoint object as captured.
-/** @type {WeakMap<ArtifactCheckpointData, unknown>} */
+/** @type {WeakMap<ArtifactCheckpointData, FeatureCatalog | null>} */
 const checkpointFeatureCatalogs = new WeakMap();
 // The catalog's features are its admission's (`featureStateFromCatalog`),
 // the objects Generate and Load install and the rule matches are recorded on
@@ -1232,7 +1297,10 @@ export const createHistorySnapshotService = ({
       values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
         key, key === 'results' ? results : toRaw(getGeneratedArtifactRef(state[key], null))
       ])),
-      legendInventory: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
+      legend: {
+        originalOrder: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
+        originalColors: toRaw(getGeneratedArtifactRef(state.originalLegendColors, {})) || {}
+      },
       matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
       runtimeState: generatedArtifactRuntimeOwner?.capture?.() || null,
       transportIdentity: currentGeneratedArtifactIdentity,
@@ -1240,31 +1308,33 @@ export const createHistorySnapshotService = ({
     });
   };
 
-  // Installs `drawing`'s slot, or its empty slot (no Result, no committed
-  // Session, the defaults of the drawing's mode), as the displayed artifact;
-  // a null value of the slot installs the empty slot's. Nothing outside the
-  // slot changes, so the draft, the editor intent and the caches stay shared.
+  // Installs `drawing`'s slot as the displayed artifact (a slot made with no
+  // values is its empty slot: no Result, no committed Session, the defaults of
+  // the drawing's mode); a null value of the slot installs the empty slot's.
+  // Its Legend inventory and colors install through their one install
+  // (`installShownSetLegend`), after its Results. Nothing
+  // outside the slot changes, so the draft, the editor intent and the caches
+  // stay shared.
   /**
-   * @param {Readonly<ArtifactSlot> | null} slot
+   * @param {Readonly<ArtifactSlot>} slot
    * @param {{ drawing: DrawingIdentity, ui?: { canvasPan?: { x: number, y: number } } }} options
    *   `ui.canvasPan` is the pan the runtime owner's viewport reset keeps.
    */
   const installArtifactSlot = (slot, { drawing, ui = {} }) => {
-    if (slot && slot.drawingId !== drawing.id) {
+    if (slot.drawingId !== drawing.id) {
       throw diagnosticError('RESULT_INVALID', { reason: 'DRAWING_MISMATCH', drawingId: drawing.id, artifactDrawingId: slot.drawingId }, { stage: 'result-admission', operation: 'installArtifactSlot' });
     }
     ARTIFACT_SLOT_KEYS.forEach((key) => {
-      setGeneratedArtifactRef(state[key], slot?.values[key]
+      setGeneratedArtifactRef(state[key], slot.values[key]
         ?? ARTIFACT_SLOT_EMPTY[key](drawing.mode, getGeneratedArtifactRef(state[key], null)));
     });
+    installShownSetLegend(state, slot.legend);
     setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
-    if (slot?.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
+    if (slot.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
     else state.matchSequenceRegistry?.reset?.();
-    generatedArtifactRuntimeOwner?.restore?.(slot?.runtimeState ?? null, { ui });
-    currentGeneratedArtifactIdentity = /** @type {HistorySnapshotTransportIdentity | null} */ (
-      slot?.transportIdentity ?? null
-    );
-    currentGeneratedArtifactRetainedBytes = slot?.retainedBytes ?? 0;
+    generatedArtifactRuntimeOwner?.restore?.(slot.runtimeState, { ui });
+    currentGeneratedArtifactIdentity = /** @type {HistorySnapshotTransportIdentity | null} */ (slot.transportIdentity);
+    currentGeneratedArtifactRetainedBytes = slot.retainedBytes;
   };
 
   // OV-2212: the shown artifact is still the one the fingerprint names while
@@ -1420,17 +1490,14 @@ export const createHistorySnapshotService = ({
       ...labelTextEditsData(drawing.slices.labelTables)
     };
     const paint = captureLegendPaint(drawing.slices.paint);
+    /** @type {HandleEditorState} */
     const editorState = {
       legend: {
         entries: paint.legendEntries,
         deletedEntries: paint.deletedLegendEntries,
         dormantEntries: paint.dormantLegendEntries,
-        originalOrder: cloneJsonData(
-          getGeneratedArtifactRef(state.originalLegendOrder, [])
-        ) || [],
-        originalColors: clonePlainObject(
-          getGeneratedArtifactRef(state.originalLegendColors, {})
-        ),
+        originalOrder: [...state.originalLegendOrder.value],
+        originalColors: { ...state.originalLegendColors.value },
         colorOverrides: paint.legendColorOverrides,
         strokeOverrides: paint.legendStrokeOverrides,
         addedCaptions: paint.addedLegendCaptions
@@ -1564,21 +1631,7 @@ export const createHistorySnapshotService = ({
       );
       applyGroupNameIntentData(drawing, mutableIntent.orthogroupState);
 
-      const trustedEditorState = {
-        ...cloneJsonData({
-          legend: mutableIntent.editorState?.legend || {},
-          featureStrokes: mutableIntent.editorState?.featureStrokes || {},
-          originalSvgStroke: mutableIntent.editorState?.originalSvgStroke || {}
-        }),
-        alignmentResetReceipt: handle.ownerSet?.similarityAlignmentResetReceipt ?? null,
-        featureCatalog: handle.ownerSet?.featureCatalog || null
-      };
-      if (typeof applyEditorStateData === 'function') {
-        applyEditorStateData(drawing, trustedEditorState, { normalized: true });
-      } else {
-        applyEditorIntentData(drawing, trustedEditorState);
-        setGeneratedArtifactRef(state.featureCatalog, trustedEditorState.featureCatalog);
-      }
+      restoreHandleEditorState(drawing, mutableIntent.editorState, handle.ownerSet, { state, applyEditorStateData });
       const presentation = mutableIntent.presentation || {};
       setGeneratedArtifactRef(state.resultGenerationKey, presentation.resultGenerationKey ?? 0);
       setGeneratedArtifactRef(state.resultPanelTab, presentation.resultPanelTab || 'preview');
@@ -1664,7 +1717,7 @@ export const createHistorySnapshotService = ({
       : buildFallbackFeatureStateData(state, drawing);
     const editorState = typeof buildEditorStateData === 'function'
       ? buildEditorStateData(drawing)
-      : {};
+      : null;
     const orthogroupState = typeof buildOrthogroupStateData === 'function'
       ? buildOrthogroupStateData(drawing)
       : buildFallbackOrthogroupStateData(state, drawing);
@@ -1705,13 +1758,10 @@ export const createHistorySnapshotService = ({
       applyFallbackOrthogroupStateData(state, drawing, snapshot?.orthogroupState || {});
     }
 
-    if (typeof applyEditorStateData === 'function') {
+    if (typeof applyEditorStateData === 'function' && snapshot.editorState) {
       // The checkpoint holds the editor state as captured: install a copy as
       // is, so a value such as the Result's named stroke color stays unchanged.
-      applyEditorStateData(drawing, {
-        ...cloneJsonData(snapshot?.editorState || {}),
-        featureCatalog
-      }, { normalized: true });
+      applyEditorStateData(drawing, { ...cloneJsonData(snapshot.editorState), featureCatalog });
     }
 
     if (typeof applyRunStateData === 'function') {
@@ -1919,8 +1969,8 @@ export const createHistorySnapshotService = ({
   /** @param {DrawingId} drawingId */
   const buildArtifactCheckpoint = (drawingId) => {
     const drawing = state.drawingOf(drawingId);
-    const generated = buildGeneratedArtifactSnapshot(drawing);
-    const { featureCatalog = null, ...editorState } = generated.editorState || {};
+    const { editorState: captured, ...generated } = buildGeneratedArtifactSnapshot(drawing);
+    const featureCatalog = captured ? captured.featureCatalog : null;
     const checkpoint = cloneJsonData({
       config: buildDrawingConfig(drawing),
       files: buildFilesData(drawing),
@@ -1928,7 +1978,7 @@ export const createHistorySnapshotService = ({
       ...generated,
       features: checkpointFeatureCopy(generated.features, featureCatalog),
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
-      editorState
+      ...(captured ? { editorState: withoutCatalog(captured) } : {})
     });
     checkpointFeatureCatalogs.set(checkpoint, featureCatalog);
     return checkpoint;

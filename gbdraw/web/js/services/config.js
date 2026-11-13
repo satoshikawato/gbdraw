@@ -376,7 +376,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceDrawing, SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
-/** @import { ArtifactSlot, LoadedArtifactSlots } from './artifact-slot.js' */
+/** @import { ArtifactSlot, LoadedArtifactSlots, ShownSetLegend } from './artifact-slot.js' */
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
@@ -405,7 +405,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ConservationFile, ConservationSourcePlace, RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots, DepthSlotFile } from './depth-track-state.js' */
 
-/** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
+/** @import { EditorStateData, FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
 
 // A saved `ui` or `features` object (a Session's, a mode slice's, a History
 // snapshot's) has one unvalidated view, declared with History's fallback
@@ -1082,9 +1082,15 @@ const admittedFeatureCatalog = (catalog) => {
   return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
 };
 
+/**
+ * The shown Result's editor artifacts, the project part of an editor state.
+ * @typedef {Pick<EditorStateData, 'originalSvgStroke' | 'alignmentResetReceipt' | 'featureCatalog'>
+ *   & { legend: ShownSetLegend }} EditorArtifactData
+ */
 // The shown Result's editor artifacts as `applyEditorArtifactData` reads
 // them: the project part of `buildEditorStateData`. The catalog stays by
 // reference (R11).
+/** @returns {EditorArtifactData} */
 const editorArtifactData = () => ({
   legend: {
     originalOrder: cloneJsonArray(state.originalLegendOrder.value),
@@ -1098,7 +1104,7 @@ const editorArtifactData = () => ({
   featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
 });
 
-/** @param {DrawingState} drawing */
+/** @param {DrawingState} drawing @returns {EditorStateData} */
 export const buildEditorStateData = (drawing) => {
   const paint = captureLegendPaint(drawing.slices.paint);
   const artifact = editorArtifactData();
@@ -1482,25 +1488,18 @@ const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
   repairs.push(...unresolved.map(({ path, recordId }) => loadRepair({ code: 'record-id-unresolved', path, effect: 'changed', stored: recordId })));
 };
 
-/** @param {DrawingState} drawing */
-export const applyEditorStateData = (
-  drawing,
-  editorState = {},
-  { normalized: alreadyNormalized = false } = {}
-) => {
-  const normalized = alreadyNormalized
-    ? editorState
-    : normalizeEditorStateData(editorState);
-
-  applyEditorArtifactData(normalized);
-  applyDrawingEditorData(drawing, normalized);
+// History's restore of an editor state it captured, installed as it is.
+/** @param {DrawingState} drawing @param {EditorStateData} editorState */
+export const applyEditorStateData = (drawing, editorState) => {
+  applyEditorArtifactData(editorState);
+  applyDrawingEditorData(drawing, editorState);
 };
 
 // The shown Result's editor artifacts: its alignment Reset receipt, generated
 // Legend inventory and colors (`installShownSetLegend`, by the rule of a set
 // without a Result), stroke defaults, and feature catalog. The caller has
 // installed the Results.
-/** @param {Record<string, any>} normalized The result of `normalizeEditorStateData`. */
+/** @param {EditorArtifactData} normalized */
 const applyEditorArtifactData = (normalized) => {
   if (state.similarityAlignmentResetReceipt) {
     state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
@@ -1515,7 +1514,7 @@ const applyEditorArtifactData = (normalized) => {
 // The Legend and stroke edits of a drawing, already normalized.
 /**
  * @param {DrawingState} drawing
- * @param {Record<string, any>} normalized The result of `normalizeEditorStateData`.
+ * @param {Record<string, any>} normalized The result of `normalizeEditorStateData`, or a captured editor state.
  */
 const applyDrawingEditorData = (drawing, normalized) => {
   const { legend, featureStrokes } = normalized;
@@ -3473,12 +3472,11 @@ const buildLoadedArtifactSlot = (set, {
       appliedPaletteName: String(ui.appliedPaletteName || 'default'),
       appliedPaletteColors: cloneColors(readPaletteColors(ui.appliedPaletteColors).value),
       similarityAlignmentResetReceipt: editorState.alignmentResetReceipt ?? null,
-      originalLegendColors: keptLegend.originalColors,
       originalSvgStroke: editorState.originalSvgStroke,
       // The set's own manifest, adopted once it validates (D-197).
       proteinIdentityManifest: loadedProteinIdentityManifest(set.proteinIdentityManifest, { adoptCurrent: true })
     },
-    legendInventory: keptLegend.originalOrder,
+    legend: keptLegend,
     matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
       ...(features.sequenceSources || []), ...restoredSequenceSources
     ]) || null,
@@ -6498,6 +6496,7 @@ const applySessionFeatureRecoveryPlan = (plan) => {
 // the composition root keeps. `mode` is the artifact's diagram mode.
 /**
  * @typedef {Readonly<Record<string, any>> & {
+ *   legend: Readonly<ShownSetLegend>,
  *   mode: 'circular' | 'linear',
  *   committedCanonicalSession: any,
  *   activeSessionResourceTable: any,
@@ -6513,7 +6512,7 @@ const displayedArtifactView = (drawing) => Object.freeze({
   ...Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
   // The displayed Result's edits are written into its text when Save reads it (R1).
   results: previewRuntimePorts.currentResults(),
-  originalLegendOrder: state.originalLegendOrder.value,
+  legend: { originalOrder: state.originalLegendOrder.value, originalColors: state.originalLegendColors.value },
   mode: drawing.mode,
   committedCanonicalSession,
   activeSessionResourceTable,
@@ -6525,7 +6524,7 @@ const displayedArtifactView = (drawing) => Object.freeze({
  */
 const stashedArtifactView = (slot) => Object.freeze({
   ...slot.values,
-  originalLegendOrder: slot.legendInventory,
+  legend: slot.legend,
   mode: state.drawingOf(slot.drawingId).mode,
   committedCanonicalSession: slot.runtimeState?.canonical?.committedCanonicalSession ?? null,
   activeSessionResourceTable: slot.runtimeState?.canonical?.activeSessionResourceTable ?? null,
@@ -6571,8 +6570,8 @@ const serializeArtifactResults = (view) => logicalResultsOf(view.results);
 const buildArtifactEditorState = (view) => {
   return {
     legend: {
-      originalOrder: cloneJsonArray(view.originalLegendOrder),
-      originalColors: cloneStringMap(view.originalLegendColors)
+      originalOrder: [...view.legend.originalOrder],
+      originalColors: cloneStringMap(view.legend.originalColors)
     },
     originalSvgStroke: {
       color: view.originalSvgStroke?.color ?? null,

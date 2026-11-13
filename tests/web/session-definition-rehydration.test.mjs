@@ -57,11 +57,12 @@ assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} feature
 // last Load or Generate in any drawing wrote. A drawing switch swaps the artifact slots.
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const slotSnapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
 // The Load made no Linear drawing (D-15-120); the offer tab makes it.
 (await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder())();
 const circularSlot = slotSnapshots.captureArtifactSlot();
-slotSnapshots.installArtifactSlot(null, { drawing: modeDrawing(state, 'linear') });
+slotSnapshots.installArtifactSlot(createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: {} }), { drawing: modeDrawing(state, 'linear') });
 assert.equal(state.featureEditorStatusText.value, 'No features ready', 'the Linear drawing has no Result');
 slotSnapshots.installArtifactSlot(circularSlot, { drawing: modeDrawing(state, 'circular') });
 assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} features ready`);
