@@ -21,8 +21,8 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { draftFieldsForConfigValues } = await import('../../gbdraw/web/js/services/session-request.js');
 const {
-  labelCapacityNoticeText, labelCapacityText, normalizeLabelCapacityNotice, normalizeLabelFitFailure, normalizeLabelFitRow,
-  normalizeResultLabelFits
+  labelCapacityNoticeText, labelCapacityText, labelFitRowNoteText, labelFitRowReasonText, normalizeLabelCapacityNotice,
+  normalizeLabelFitFailure, normalizeLabelFitRow, normalizeResultLabelFits
 } = await import('../../gbdraw/web/js/services/label-fit.js');
 const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { createLabelFitDialog } = await import('../../gbdraw/web/js/app/label-fit-dialog.js');
@@ -31,7 +31,7 @@ const drawing = modeDrawing(state, 'circular');
 const Y_OFFSET = 'labels.unified_adjustment.outer_labels.y_radius_offset';
 const row = (kind, status, extra = {}) => ({
   kind, title: kind.replace(/_/g, ' '), status, values: null, trackOptions: {}, settings: [], canvasSize: null,
-  reason: null, note: null, ...extra
+  reason: null, remaining: [], ...extra
 });
 const foundRow = (kind, value) => row(kind, 'found', {
   values: { [Y_OFFSET]: value }, settings: [{ name: 'Outer Y Offset', unit: '', value }],
@@ -46,6 +46,7 @@ const report = (rows, { drawn = false } = {}) => ({
   rows,
   remedies: []
 });
+const SPACING_LIMIT = { kind: 'spacing_limit', limit: 0.1 };
 const failure = (value, rowToken = null) => JSON.stringify({ report: value, rowToken });
 const normalizeReport = (value) => normalizeLabelFitFailure(failure(value)).report;
 
@@ -83,7 +84,7 @@ test('a report reads the requested sides of a larger figure that Python cannot e
 });
 
 test('the failure reader keeps Python\'s rows in order, the record counts, and the row token', () => {
-  const rows = [foundRow('outward_vertical', 1.15), row('tighter_rows', 'not_found', { reason: 'No fit' }),
+  const rows = [foundRow('outward_vertical', 1.15), row('tighter_rows', 'not_found', { reason: SPACING_LIMIT }),
     row('combination', 'not_computed'),
     row('labels_out', 'found', { values: { 'labels.circular.scope': 'outer' },
       settings: [{ name: 'Label Mode', unit: '', value: 'Out' }], canvasSize: { width: 900, height: 900 } })];
@@ -100,7 +101,7 @@ test('the failure reader keeps Python\'s rows in order, the record counts, and t
   assert.deepEqual(separate.values, { 'canvas.resolve_overlaps': true });
   assert.equal(separate.settings[0].value, 'On');
   assert.deepEqual(parsed.rows[0].canvasSize, { width: 1708, height: 1130 });
-  assert.equal(parsed.rows[1].reason, 'No fit');
+  assert.deepEqual(parsed.rows[1].reason, SPACING_LIMIT);
   assert.equal(normalizeLabelFitFailure(undefined), null);
   assert.ok(Object.isFrozen(parsed.rows[0].values));
 });
@@ -121,19 +122,22 @@ test('the notice bar shows Python\'s sentences and has no wording of its own', a
 
 const noticeRow = () => row('separate_features', 'found_with_notice', { values: { 'canvas.resolve_overlaps': true },
   settings: [{ name: 'Resolve Overlaps', unit: '', value: 'On' }], canvasSize: { width: 1045, height: 873 },
-  note: '14 leader pairs still cross' });
+  remaining: [{ field: 'crossing_pairs', count: 14 }] });
 
-test('a row that leaves crossing leaders carries its settings and Python\'s note (LP-D57)', () => {
+test('a row that leaves crossing leaders carries its settings and what it leaves (LP-D57)', () => {
   const parsed = normalizeLabelFitRow(noticeRow());
   assert.equal(parsed.status, 'found_with_notice');
   assert.deepEqual(parsed.values, { 'canvas.resolve_overlaps': true });
   assert.deepEqual(parsed.canvasSize, { width: 1045, height: 873 });
-  assert.equal(parsed.note, '14 leader pairs still cross');
-  assert.equal(normalizeLabelFitRow(row('x', 'not_found')).note, null);
+  assert.deepEqual(parsed.remaining, [{ field: 'crossing_pairs', count: 14 }]);
+  assert.deepEqual(normalizeLabelFitRow(row('x', 'not_found')).remaining, []);
   const invalid = (error) => error.code === 'RESULT_INVALID';
   // Offered like a found row: it has values and a canvas size.
   assert.throws(() => normalizeLabelFitRow(row('x', 'found_with_notice')), invalid);
-  assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), note: 14 }), invalid);
+  assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: 14 }), invalid);
+  assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: [{ field: 'crossings', count: 14 }] }), invalid);
+  assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: [{ field: 'crossing_pairs', count: -1 }] }), invalid);
+  assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: undefined }), invalid);
 });
 
 test('a malformed report or row is RESULT_INVALID', () => {
@@ -274,6 +278,101 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
   return { dialog, steps, writes, generates, shown, pending };
 };
 
+// OV-3109: Python sends why a row has no value and what a row leaves as kinds, numbers and counts by field name;
+// the dialog words them in the shown language, a count in its plural form.
+const reasonRows = () => [
+  row('outward_both', 'not_found', { reason: { kind: 'xy_offset_limit', limit: 2 } }),
+  row('outward_vertical', 'not_found', { reason: { kind: 'y_offset_limit', limit: 2 } }),
+  row('outward_horizontal', 'not_found', { reason: { kind: 'x_offset_limit', limit: 2 } }),
+  row('smaller_font', 'not_found', { reason: { kind: 'font_limit', limit: 6 } }),
+  row('tighter_rows', 'not_found', { reason: SPACING_LIMIT }),
+  row('combination', 'not_found', { reason: { kind: 'combination_limit', fontSize: 13.5, limit: 2 } }),
+  row('labels_out', 'not_found', { reason: { kind: 'labels_do_not_fit', counts: [
+    { field: 'overlap_pairs', count: 0 }, { field: 'crossing_pairs', count: 1 }] } }),
+  row('radial', 'not_found', { reason: { kind: 'labels_not_placed' } }),
+  row('separate_features', 'found_with_notice', { values: { 'canvas.resolve_overlaps': true },
+    canvasSize: { width: 900, height: 900 }, remaining: [{ field: 'crossing_pairs', count: 1 },
+      { field: 'definition_overlaps', count: 2 }, { field: 'region_overlaps', count: 1 }, { field: 'region_cuts', count: 3 }] }),
+  row('narrow_tracks', 'found_with_notice', { values: {}, trackOptions: { centerReservedRadius: 247.31 },
+    canvasSize: { width: 900, height: 900 }, remaining: [{ field: 'definition_track_overlaps', count: 2 }] }),
+  row('smaller_definition_font', 'not_computed', { reason: { kind: 'search_bound', limit: 30 } })
+];
+
+test('the dialog words each row reason and note from Python\'s kinds and counts (OV-3109)', async () => {
+  const { dialog } = dialogHarness();
+  await dialog.openLabelFitDialog(normalizeReport(report(reasonRows())), { drawing });
+  assert.deepEqual(dialog.labelFitDialog.rows.map(({ reason, note }) => reason ?? note), [
+    'Does not fit up to X and Y offset 2',
+    'Does not fit up to Y offset 2',
+    'Does not fit up to X offset 2',
+    'Does not fit down to 6 pt',
+    'Does not fit down to 0.1 px label spacing',
+    'Does not fit at 13.5 pt up to Y offset 2',
+    'Labels still do not fit (0 label pairs overlap and 1 leader pair crosses)',
+    'The labels cannot be placed with this setting',
+    '1 leader pair still crosses, 2 labels still cover the definition text, and the figure is drawn with 1 region '
+      + 'label overlap and 3 region labels cut',
+    '2 definition lines still overlap a track',
+    'No value found within 30 seconds.'
+  ]);
+  const words = (reason) => {
+    const parsed = normalizeLabelFitRow(row('radial', 'not_found', { reason }));
+    return labelFitRowReasonText(/** @type {NonNullable<typeof parsed.reason>} */ (parsed.reason));
+  };
+  assert.equal(words({ kind: 'labels_do_not_fit', counts: [] }), 'Labels still do not fit');
+  assert.equal(words({ kind: 'search_bound', limit: 1 }), 'No value found within 1 second.');
+  assert.equal(words({ kind: 'outer_labels_only' }), 'Does not move inner, embedded, or radial labels');
+  assert.equal(words({ kind: 'tracks_do_not_fit' }), 'The tracks do not fit with this setting');
+  assert.equal(words({ kind: 'stale' }), 'Generate again to compute this choice.');
+  assert.equal(labelFitRowNoteText([]), null);
+  const invalid = (error) => error.code === 'RESULT_INVALID';
+  for (const reason of ['Does not fit down to 6 pt', { kind: 'font_limit' }, { kind: 'font_limit', limit: '6' },
+    { kind: 'combination_limit', limit: 2 }, { kind: 'labels_do_not_fit' }, { kind: 'sideways' }, undefined]) {
+    assert.throws(() => normalizeLabelFitRow(row('radial', 'not_found', { reason })), invalid, JSON.stringify(reason));
+  }
+});
+
+test('the row reasons and notes follow the shown language and its plural forms (OV-3109)', async () => {
+  const japanese = {
+    'Does not fit down to {size} pt': '{size} pt まで小さくしても収まりません',
+    '{count} leader pair still crosses': '引き出し線 {count} 組がまだ交差しています',
+    '{count} leader pairs still cross': '引き出し線 {count} 組がまだ交差しています',
+    '{count} region label overlap': '領域ラベルの重なり {count} 件',
+    '{count} region label overlaps': '領域ラベルの重なり {count} 件',
+    'the figure is drawn with {warnings}': '図は{warnings}のまま描かれます'
+  };
+  const french = {
+    '{count} leader pair still crosses': '{count} paire de lignes de rappel se croise encore',
+    '{count} leader pairs still cross': '{count} paires de lignes de rappel se croisent encore'
+  };
+  const page = globalThis.document;
+  globalThis.document = undefined;
+  const shown = async (locale, catalog, rows) => {
+    await setUiLocale(locale, async () => ({ default: catalog }));
+    const { dialog } = dialogHarness();
+    await dialog.openLabelFitDialog(normalizeReport(report(rows)), { drawing });
+    return dialog.labelFitDialog.rows.map(({ reason, note }) => reason ?? note);
+  };
+  const crossing = (count) => row('separate_features', 'found_with_notice', { values: { 'canvas.resolve_overlaps': true },
+    canvasSize: { width: 900, height: 900 }, remaining: [{ field: 'crossing_pairs', count }] });
+  try {
+    assert.deepEqual(await shown('ja', japanese, [
+      row('smaller_font', 'not_found', { reason: { kind: 'font_limit', limit: 6 } }),
+      row('radial', 'found_with_notice', { values: { 'labels.circular.placement': 'radial' },
+        canvasSize: { width: 900, height: 900 },
+        remaining: [{ field: 'crossing_pairs', count: 3 }, { field: 'region_overlaps', count: 1 }] })
+    ]), ['6 pt まで小さくしても収まりません', '引き出し線 3 組がまだ交差しています、図は領域ラベルの重なり 1 件のまま描かれます']);
+    // French takes the singular for 0 and 1, the plural from 2.
+    assert.deepEqual(await shown('fr', french, [crossing(0), crossing(1), crossing(2)]), [
+      '0 paire de lignes de rappel se croise encore', '1 paire de lignes de rappel se croise encore',
+      '2 paires de lignes de rappel se croisent encore'
+    ]);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+    globalThis.document = page;
+  }
+});
+
 const definitionRecord = (recordId, recordIndex) => ({
   recordId, recordIndex, labelKind: 'circular_definition', labelKindTitle: 'definition lines', labelCount: 1, fontSize: 18,
   overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 0, refused: false, capacityRatio: null,
@@ -399,7 +498,7 @@ test('only a Generate that drew nothing or the notice bar opens the dialog; a re
 });
 
 test('Apply writes the chosen row as one History step, closes, and Generates; Cancel writes nothing', async () => {
-  const rows = [row('outward_vertical', 'not_found', { reason: 'No fit' }), foundRow('smaller_font', 1.2)];
+  const rows = [row('outward_vertical', 'not_found', { reason: SPACING_LIMIT }), foundRow('smaller_font', 1.2)];
   const { dialog, steps, writes, generates } = dialogHarness();
   await dialog.openLabelFitDialog(normalizeReport(report(rows)), { drawing });
   assert.equal(dialog.labelFitDialog.show, true);
@@ -420,7 +519,7 @@ test('Apply writes the chosen row as one History step, closes, and Generates; Ca
 
 test('a row that leaves crossing leaders is offered after the rows that fit, and Apply writes it', async () => {
   const { dialog, steps, writes, generates } = dialogHarness();
-  await dialog.openLabelFitDialog(normalizeReport(report([row('radial', 'not_found', { reason: 'No fit' }), noticeRow()])),
+  await dialog.openLabelFitDialog(normalizeReport(report([row('radial', 'not_found', { reason: SPACING_LIMIT }), noticeRow()])),
     { drawing });
   const rows = dialog.labelFitDialog.rows;
   assert.deepEqual(rows.map((item) => [item.kind, item.offered]), [['radial', false], ['separate_features', true]]);
@@ -443,7 +542,7 @@ test('rows Generate did not search are computed one after another when the dialo
   const computeRow = async (token, kind) => {
     asked.push([token, kind]);
     if (kind === 'tighter_rows') throw new Error('worker');
-    return { row: kind === 'outward_vertical' ? foundRow(kind, 1.3) : row(kind, 'not_found', { reason: 'No fit' }) };
+    return { row: kind === 'outward_vertical' ? foundRow(kind, 1.3) : row(kind, 'not_found', { reason: SPACING_LIMIT }) };
   };
   const rows = [row('outward_vertical', 'not_computed'), row('tighter_rows', 'not_computed'),
     row('combination', 'not_computed')];
@@ -462,7 +561,8 @@ test('rows Generate did not search are computed one after another when the dialo
 // that opening of the dialog.
 test('a row that fits is selected over a row with the notice, until the user chooses a row', async () => {
   const regionNote = 'the figure is drawn with 1 region label overlap';
-  const notice = (kind) => row(kind, 'found_with_notice', { values: { [Y_OFFSET]: 1.025 }, note: regionNote,
+  const notice = (kind) => row(kind, 'found_with_notice', { values: { [Y_OFFSET]: 1.025 },
+    remaining: [{ field: 'region_overlaps', count: 1 }],
     canvasSize: { width: 1693, height: 939 } });
   const arrived = { outward_both: notice('outward_both'), outward_vertical: notice('outward_vertical'),
     smaller_font: foundRow('smaller_font', 14) };
@@ -694,7 +794,7 @@ test('the dialog over a sized capacity stop names the larger figure Python estim
 });
 
 test('when every row does not fit, the dialog also lists Python\'s ways to make room (NO-ROW-WAYS, OV-2180)', async () => {
-  const notFound = (kind) => row(kind, 'not_found', { reason: 'Does not fit down to 6 pt' });
+  const notFound = (kind) => row(kind, 'not_found', { reason: { kind: 'font_limit', limit: 6 } });
   const ways = ['filter', 'label_text', 'linear'];
   const words = [
     'Label fewer features: Blacklist or Whitelist under LABEL FILTERING.',
@@ -762,7 +862,7 @@ test('Apply or Cancel during a row waits for that row, says so, and starts no fu
     let release;
     const computeRow = (token, kind) => {
       asked.push(kind);
-      return new Promise((resolve) => { release = () => resolve({ row: row(kind, 'not_found', { reason: 'No value found within 30 seconds.' }) }); });
+      return new Promise((resolve) => { release = () => resolve({ row: row(kind, 'not_found', { reason: { kind: 'search_bound', limit: 30 } }) }); });
     };
     const rows = [row('outward_vertical', 'not_computed'), row('combination', 'not_computed'), foundRow('smaller_font', 1.2)];
     const applying = [];

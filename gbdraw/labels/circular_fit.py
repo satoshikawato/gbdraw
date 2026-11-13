@@ -59,6 +59,7 @@ from .fit import (
     REGION_WARNING_FIELDS,
     FONT_LIMIT_PT,
     FONT_SIZE_PATHS,
+    CombinationLimitReason,
     LabelCapacityRecord,
     PLACEMENT_PATH,
     RADIAL_PLACEMENT,
@@ -74,10 +75,13 @@ from .fit import (
     LabelFitReport,
     LabelFitRow,
     LabelFitRowKind,
+    LabelFitRowReason,
     LabelFitOutcome,
     LabelFitValue,
     LabelFitVerification,
     LabelKind,
+    LimitReason,
+    PlainReason,
     label_fit_outcome,
     raise_or_warn,
     shown_capacity_ratio,
@@ -135,7 +139,8 @@ _SWITCH_VALUES: Mapping[LabelFitRowKind, Mapping[str, LabelFitValue]] = {
     "radial": {PLACEMENT_PATH: RADIAL_PLACEMENT},
     "separate_features": SEPARATE_FEATURES_VALUES,
 }
-_OUTER_LEVER_REASON = "Does not move inner, embedded, or radial labels"
+_OUTER_LEVER_REASON = PlainReason("outer_labels_only")
+_FONT_LIMIT_REASON = LimitReason("font_limit", FONT_LIMIT_PT)
 
 CircularLabelPlacement: TypeAlias = Literal["horizontal", "radial"]
 CircularLabelFitProbe: TypeAlias = Callable[[Mapping[str, LabelFitValue]], LabelFit]
@@ -376,7 +381,7 @@ def _settings_key(values: Mapping[str, LabelFitValue]) -> tuple[tuple[str, Label
 class _Lever:
     grid: list[float]
     values_for: Callable[[float], dict[str, LabelFitValue]]
-    reason: str
+    reason: LabelFitRowReason
     bound: float | None = None
     limit_first: bool = True
     downward: bool = False
@@ -642,9 +647,7 @@ class CircularLabelFitSearch:
             notice = notice or row
         if notice is not None:
             return notice, None
-        return LabelFitRow(
-            "smaller_font", "not_found", reason=f"Does not fit down to {FONT_LIMIT_PT:g} pt"
-        ), None
+        return LabelFitRow("smaller_font", "not_found", reason=_FONT_LIMIT_REASON), None
 
     def _definition_font_scan(self) -> LabelFitRow:
         """The largest smaller definition font at which the definition text clears every track (D-12).
@@ -685,9 +688,7 @@ class CircularLabelFitSearch:
             except _SearchStopped:
                 self._unfinished = True
             return row
-        return LabelFitRow(
-            "smaller_definition_font", "not_found", reason=f"Does not fit down to {FONT_LIMIT_PT:g} pt"
-        )
+        return LabelFitRow("smaller_definition_font", "not_found", reason=_FONT_LIMIT_REASON)
 
     def _narrow_tracks(self) -> LabelFitRow:
         """The inside tracks kept out of the definition's one-line band (``center_reserved_radius``, PD-OI-097).
@@ -709,14 +710,14 @@ class CircularLabelFitSearch:
             return _Lever(
                 _offset_grid(y_offset),
                 lambda value: {Y_OFFSET_PATH: value},
-                f"Does not fit up to Y offset {OFFSET_LIMIT:g}",
+                LimitReason("y_offset_limit", OFFSET_LIMIT),
                 limit_first=False,
             )
         if kind == "outward_both":
             return _Lever(
                 _offset_grid(max(self._x_offset, y_offset)),
                 lambda value: {X_OFFSET_PATH: value, Y_OFFSET_PATH: value},
-                f"Does not fit up to X and Y offset {OFFSET_LIMIT:g}",
+                LimitReason("xy_offset_limit", OFFSET_LIMIT),
                 bound=self._row("outward_vertical")[1],
                 downward=True,
             )
@@ -724,20 +725,20 @@ class CircularLabelFitSearch:
             return _Lever(
                 _offset_grid(self._x_offset),
                 lambda value: {X_OFFSET_PATH: value},
-                f"Does not fit up to X offset {OFFSET_LIMIT:g}",
+                LimitReason("x_offset_limit", OFFSET_LIMIT),
             )
         if kind == "smaller_font":
             return _Lever(
                 _font_grid(self._font_size),
                 _font_values,
-                f"Does not fit down to {FONT_LIMIT_PT:g} pt",
+                _FONT_LIMIT_REASON,
                 limit_first=False,
             )
         if kind == "tighter_rows":
             return _Lever(
                 _spacing_grid(self._spacing),
                 lambda value: {SPACING_PATH: value},
-                f"Does not fit down to {TIGHTER_ROW_GRID_PX[-1]:g} px label spacing",
+                LimitReason("spacing_limit", TIGHTER_ROW_GRID_PX[-1]),
             )
         # Combination (OD-F4, OD-F7): half the font row's drop, at least one step,
         # then the smallest Y offset at that font; the current Y offset comes first.
@@ -757,7 +758,7 @@ class CircularLabelFitSearch:
         return _Lever(
             [y_offset, *_offset_grid(y_offset)],
             combined_values,
-            f"Does not fit at {combined_font:g} pt up to Y offset {OFFSET_LIMIT:g}",
+            CombinationLimitReason(combined_font, OFFSET_LIMIT),
             bound=self._row("outward_vertical")[1],
         )
 

@@ -181,8 +181,13 @@ RegionWarningField: TypeAlias = Literal[
     "region_cuts_left_out",
 ]
 REGION_WARNING_FIELDS: tuple[RegionWarningField, ...] = get_args(RegionWarningField)
-# Each region label warning's count words (singular, plural).
-_REGION_WARNING_WORDS: Mapping[RegionWarningField, tuple[str, str]] = {
+# A count's words in a fit's counts (singular, plural), each field by its name. The Web words the same fields in
+# the dialog's language (`LABEL_FIT_COUNT_WORDS` in gbdraw/web/js/services/label-fit.js, OV-3109).
+_FIT_COUNT_WORDS: Mapping[LabelFitField, tuple[str, str]] = {
+    "overlap_pairs": ("label pair overlaps", "label pairs overlap"),
+    "crossing_pairs": ("leader pair crosses", "leader pairs cross"),
+    "definition_overlaps": ("label covers the definition text", "labels cover the definition text"),
+    "definition_track_overlaps": ("line overlaps a track", "lines overlap a track"),
     "region_overlaps": ("region label overlap", "region label overlaps"),
     "region_cuts": ("region label cut", "region labels cut"),
     "region_track_overlaps": ("region label on another track", "region labels on other tracks"),
@@ -260,11 +265,12 @@ class LabelFit:
         return self == FITS
 
     def __add__(self, other: LabelFit) -> LabelFit:
-        return LabelFit(**{name: self.count(name) + other.count(name) for name in _FIT_FIELDS})
+        return LabelFit(**{name: self.count(name) + other.count(name) for name in LABEL_FIT_FIELDS})
 
 
 FITS = LabelFit(0, 0)
-_FIT_FIELDS: tuple[LabelFitField, ...] = get_args(LabelFitField)
+# The Web words each count by its field name (OV-3109).
+LABEL_FIT_FIELDS: tuple[LabelFitField, ...] = get_args(LabelFitField)
 
 
 @dataclass(frozen=True)
@@ -544,6 +550,59 @@ class LabelFitRecord:
     capacity: LabelCapacityRecord | None = None
 
 
+# A fit's counts as a surface states them: each field by its name with its count, in order (OV-3109).
+LabelFitCounts: TypeAlias = tuple[tuple[LabelFitField, int], ...]
+# Why a row has no value is data that each surface words: the Web dialog in its language, from these kinds and their
+# numbers (OV-3109). A lever's limit: no Y offset, X offset, or X and Y offset up to ``limit`` fits, no font down to
+# ``limit`` pt, no label spacing down to ``limit`` px; ``search_bound``: the Web's search for one row stopped after
+# ``limit`` seconds (LP-D60).
+LimitReasonKind: TypeAlias = Literal[
+    "y_offset_limit", "x_offset_limit", "xy_offset_limit", "font_limit", "spacing_limit", "search_bound"
+]
+# ``outer_labels_only``: the row moves outer labels only; ``tracks_do_not_fit``: its settings leave the tracks no room
+# (OV-1266, D-07); ``labels_not_placed``: the engine cannot place the labels with its settings (``LabelLayoutError``);
+# ``stale``: the figure the row belongs to is no longer kept, so Generate computes it again.
+PlainReasonKind: TypeAlias = Literal["outer_labels_only", "tracks_do_not_fit", "labels_not_placed", "stale"]
+# The Web reads these kinds from the generated contracts and words each (OV-3109).
+LIMIT_REASON_KINDS: tuple[LimitReasonKind, ...] = get_args(LimitReasonKind)
+PLAIN_REASON_KINDS: tuple[PlainReasonKind, ...] = get_args(PlainReasonKind)
+
+
+@dataclass(frozen=True)
+class LimitReason:
+    """No value of the row's lever fits up to (or down to) ``limit``, or the search stopped after ``limit`` s."""
+
+    kind: LimitReasonKind
+    limit: float
+
+
+@dataclass(frozen=True)
+class CombinationLimitReason:
+    """The Combination row: no Y offset up to ``limit`` fits at its ``font_size`` (pt)."""
+
+    font_size: float
+    limit: float
+    kind: Literal["combination_limit"] = "combination_limit"
+
+
+@dataclass(frozen=True)
+class UnfitReason:
+    """A switch row's one assembly leaves labels that do not fit: ``fit`` its counts, None when it has none to state."""
+
+    fit: LabelFit | None
+    kind: Literal["labels_do_not_fit"] = "labels_do_not_fit"
+
+
+@dataclass(frozen=True)
+class PlainReason:
+    """A reason without numbers (``PlainReasonKind``)."""
+
+    kind: PlainReasonKind
+
+
+LabelFitRowReason: TypeAlias = LimitReason | CombinationLimitReason | UnfitReason | PlainReason
+
+
 @dataclass(frozen=True)
 class LabelFitRow:
     """One lever: its mildest fitting value, or why there is none.
@@ -552,14 +611,15 @@ class LabelFitRow:
     the (width, height) of the verified figure; both are set only when
     ``status`` is ``found`` or ``found_with_notice``. ``remaining`` is what a
     ``found_with_notice`` row leaves: crossing leaders, labels over the
-    definition text, and region label warnings.
+    definition text, and region label warnings. ``reason`` says why a row
+    has no value, as data (OV-3109).
     """
 
     kind: LabelFitRowKind
     status: LabelFitRowStatus
     values: Mapping[str, LabelFitValue] | None = None
     canvas_size: tuple[float, float] | None = None
-    reason: str | None = None
+    reason: LabelFitRowReason | None = None
     remaining: LabelFit | None = None
 
 
@@ -578,7 +638,7 @@ class LabelFitVerification:
     outcome: LabelFitOutcome
     canvas_size: tuple[float, float] | None
     fit: LabelFit | None = None
-    reason: str | None = None
+    reason: PlainReason | None = None
     record_fits: Mapping[int, LabelFit] = field(default_factory=dict)
 
     @property
@@ -617,12 +677,8 @@ def switch_row(
     row = verified_row(kind, values, verification, offer_notice=offer_notice)
     if row is not None:
         return row
-    if verification.reason is not None:
-        reason = verification.reason
-    elif verification.fit is not None and not verification.fit.fits:
-        reason = f"Labels still do not fit ({fit_counts(verification.fit)})"
-    else:
-        reason = "Labels still do not fit"
+    fit = verification.fit
+    reason = verification.reason or UnfitReason(fit if fit is not None and not fit.fits else None)
     return LabelFitRow(kind, "not_found", reason=reason)
 
 
@@ -766,54 +822,61 @@ def _counted(count: int, singular: str, plural: str) -> str:
     return f"{count} {singular if count == 1 else plural}"
 
 
-def _region_counts(fit: LabelFit) -> list[str]:
-    return [
-        _counted(fit.count(name), *_REGION_WARNING_WORDS[name]) for name in REGION_WARNING_FIELDS if fit.count(name)
-    ]
+_STATED_WHEN_ANY: tuple[LabelFitField, ...] = ("definition_overlaps", *REGION_WARNING_FIELDS, "definition_track_overlaps")
 
 
-def fit_counts(fit: LabelFit) -> str:
-    counts: list[str] = []
+def fit_count_items(fit: LabelFit) -> LabelFitCounts:
+    """The counts that state a fit, in order: overlapping label pairs and crossing leader pairs (even 0), labels over
+    the definition text, region label warnings, and definition lines over a track, each when there are any."""
+
+    fields: list[LabelFitField] = []
     # Region labels (LP-D68, LP-D87, RGN-CUT-EMPTY-OMIT, LP-D86, LBL-ROOM-STOP-AT-CENTRE-OMIT,
     # LBL-ROOM-CLIP-FIT-OMIT) and the definition text over a track (D-12) are counted on their own record, which has
     # no other counts.
     if fit.overlap_pairs or fit.crossing_pairs or not (fit.region_warnings or fit.definition_track_overlaps):
-        counts.append(_counted(fit.overlap_pairs, "label pair overlaps", "label pairs overlap"))
-        counts.append(_counted(fit.crossing_pairs, "leader pair crosses", "leader pairs cross"))
-    if fit.definition_overlaps:
-        counts.append(f"{_counted(fit.definition_overlaps, 'label covers', 'labels cover')} the definition text")
-    counts.extend(_region_counts(fit))
-    if fit.definition_track_overlaps:
-        counts.append(_counted(fit.definition_track_overlaps, "line overlaps a track", "lines overlap a track"))
-    return ", ".join(counts)
+        fields.extend(("overlap_pairs", "crossing_pairs"))
+    fields.extend(name for name in _STATED_WHEN_ANY if fit.count(name))
+    return tuple((name, fit.count(name)) for name in fields)
 
 
-def row_note(row: LabelFitRow) -> str | None:
-    """What a ``found_with_notice`` row leaves, in the counts' words: crossing leaders, labels over the definition
-    text (LP-D57) and region label warnings (OV-3108) for a label row, definition lines over a track for a
-    definition row."""
+def fit_counts(fit: LabelFit) -> str:
+    return ", ".join(_counted(count, *_FIT_COUNT_WORDS[name]) for name, count in fit_count_items(fit))
+
+
+# What a row that draws with the notice still leaves, in its note's words (singular, plural); region label warnings
+# take their count words after "the figure is drawn with".
+_NOTE_WORDS: Mapping[LabelFitField, tuple[str, str]] = {
+    "crossing_pairs": ("leader pair still crosses", "leader pairs still cross"),
+    "definition_overlaps": ("label still covers the definition text", "labels still cover the definition text"),
+    "definition_track_overlaps": ("definition line still overlaps a track", "definition lines still overlap a track"),
+}
+
+
+def row_remaining(row: LabelFitRow) -> LabelFitCounts:
+    """What a ``found_with_notice`` row leaves, in its note's order: crossing leaders, labels over the definition
+    text (LP-D57) and region label warnings (OV-3108) for a label row, definition lines over a track for a definition
+    row; each when there are any. Empty for another row."""
 
     remaining = row.remaining
     if row.status != "found_with_notice" or remaining is None:
-        return None
-    if row.kind in DEFINITION_ROW_KINDS:
-        if not remaining.definition_track_overlaps:
-            return None
-        return (
-            _counted(remaining.definition_track_overlaps, "definition line still overlaps", "definition lines still overlap")
-            + " a track"
-        )
-    notes: list[str] = []
-    if remaining.crossing_pairs:
-        notes.append(_counted(remaining.crossing_pairs, "leader pair still crosses", "leader pairs still cross"))
-    if remaining.definition_overlaps:
-        notes.append(
-            _counted(remaining.definition_overlaps, "label still covers", "labels still cover")
-            + " the definition text"
-        )
-    # Region label warnings are named the same whether the figure had them or the row's values add them (D-115).
-    if region_counts := _region_counts(remaining):
-        notes.append("the figure is drawn with " + ", ".join(region_counts))
+        return ()
+    fields: tuple[LabelFitField, ...] = (
+        ("definition_track_overlaps",)
+        if row.kind in DEFINITION_ROW_KINDS
+        # Region label warnings are named the same whether the figure had them or the row's values add them (D-115).
+        else ("crossing_pairs", "definition_overlaps", *REGION_WARNING_FIELDS)
+    )
+    return tuple((name, remaining.count(name)) for name in fields if remaining.count(name))
+
+
+def row_note(row: LabelFitRow) -> str | None:
+    """The CLI's words for what a row leaves (``row_remaining``)."""
+
+    items = row_remaining(row)
+    notes = [_counted(count, *_NOTE_WORDS[name]) for name, count in items if name in _NOTE_WORDS]
+    regions = [_counted(count, *_FIT_COUNT_WORDS[name]) for name, count in items if name not in _NOTE_WORDS]
+    if regions:
+        notes.append("the figure is drawn with " + ", ".join(regions))
     return " and ".join(notes) or None
 
 
@@ -1126,9 +1189,13 @@ __all__ = [
     "WARN_SEARCH_SECONDS",
     "X_OFFSET_PATH",
     "Y_OFFSET_PATH",
+    "LABEL_FIT_FIELDS",
+    "LIMIT_REASON_KINDS",
+    "PLAIN_REASON_KINDS",
     "LabelCapacityRecord",
     "LabelCapacityRemedy",
     "LabelFit",
+    "LabelFitCounts",
     "LabelFitField",
     "OFFERED_ROW_STATUSES",
     "REGION_WARNING_FIELDS",
@@ -1138,7 +1205,14 @@ __all__ = [
     "LabelFitReport",
     "LabelFitRow",
     "LabelFitRowKind",
+    "LabelFitRowReason",
     "LabelFitRowStatus",
+    "CombinationLimitReason",
+    "LimitReason",
+    "LimitReasonKind",
+    "PlainReason",
+    "PlainReasonKind",
+    "UnfitReason",
     "LabelFitVerification",
     "LabelFitRows",
     "LabelFitValue",
@@ -1151,6 +1225,7 @@ __all__ = [
     "box_covers_definition_text",
     "covers_definition_text",
     "crossing_pairs",
+    "fit_count_items",
     "fit_counts",
     "is_horizontal_label_kind",
     "format_label_fit_report",
@@ -1171,6 +1246,7 @@ __all__ = [
     "polylines_cross",
     "raise_or_warn",
     "row_note",
+    "row_remaining",
     "shapes_overlap",
     "shown_capacity_ratio",
     "split_row_option_values",

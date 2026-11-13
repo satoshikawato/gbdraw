@@ -201,6 +201,7 @@ from gbdraw.labels.fit import (
     LabelFitRowKind,
     LabelFitValue,
     LabelFitVerification,
+    PlainReason,
     split_row_option_values,
 )
 from gbdraw.labels.linear import (
@@ -3853,10 +3854,6 @@ def _circular_label_layouts(drawing: Drawing) -> tuple[CircularLabelLayout, ...]
     return tuple(layout for layout in layouts if isinstance(layout, CircularLabelLayout))
 
 
-# The reason of a row whose settings leave the tracks no room (OV-1266, D-07).
-_TRACKS_DO_NOT_FIT_REASON = "The tracks do not fit with this setting"
-
-
 def _unfit_row_verification(error: ValidationError) -> LabelFitVerification | None:
     """A row's assembly error that means the row does not fit, or None when the error must be raised.
 
@@ -3866,9 +3863,10 @@ def _unfit_row_verification(error: ValidationError) -> LabelFitVerification | No
     """
 
     if isinstance(error, LabelLayoutError):
-        return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
+        return LabelFitVerification(outcome="stop", canvas_size=None, reason=PlainReason("labels_not_placed"))
     if track_layout_reason(error) is not None:
-        return LabelFitVerification(outcome="stop", canvas_size=None, reason=_TRACKS_DO_NOT_FIT_REASON)
+        # The row's settings leave the tracks no room (OV-1266, D-07).
+        return LabelFitVerification(outcome="stop", canvas_size=None, reason=PlainReason("tracks_do_not_fit"))
     return None
 
 

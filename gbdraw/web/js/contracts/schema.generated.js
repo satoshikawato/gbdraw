@@ -283,6 +283,22 @@ export const CIRCULAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
 /** @type {readonly ['found', 'found_with_notice']} */
 export const LABEL_FIT_OFFERED_ROW_STATUSES = Object.freeze(['found', 'found_with_notice']);
 
+// gbdraw/labels/fit.py: LABEL_FIT_FIELDS
+/** @type {readonly ['overlap_pairs', 'crossing_pairs', 'definition_overlaps', 'region_overlaps', 'region_cuts', 'region_track_overlaps', 'definition_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out']} */
+export const LABEL_FIT_FIELDS = Object.freeze(['overlap_pairs', 'crossing_pairs', 'definition_overlaps', 'region_overlaps', 'region_cuts', 'region_track_overlaps', 'definition_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out']);
+
+// gbdraw/labels/fit.py: REGION_WARNING_FIELDS
+/** @type {readonly ['region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out']} */
+export const LABEL_FIT_REGION_WARNING_FIELDS = Object.freeze(['region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out']);
+
+// gbdraw/labels/fit.py: LIMIT_REASON_KINDS
+/** @type {readonly ['y_offset_limit', 'x_offset_limit', 'xy_offset_limit', 'font_limit', 'spacing_limit', 'search_bound']} */
+export const LABEL_FIT_LIMIT_REASON_KINDS = Object.freeze(['y_offset_limit', 'x_offset_limit', 'xy_offset_limit', 'font_limit', 'spacing_limit', 'search_bound']);
+
+// gbdraw/labels/fit.py: PLAIN_REASON_KINDS
+/** @type {readonly ['outer_labels_only', 'tracks_do_not_fit', 'labels_not_placed', 'stale']} */
+export const LABEL_FIT_PLAIN_REASON_KINDS = Object.freeze(['outer_labels_only', 'tracks_do_not_fit', 'labels_not_placed', 'stale']);
+
 // gbdraw/tracks/linear.py: LINEAR_SLOT_UNREAD_PARAM_KEYS
 /** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features', readonly string[]>>} */
 export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({

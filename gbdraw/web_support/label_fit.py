@@ -1,9 +1,11 @@
 """The label fit report as the Web reads it, and the rows it computes later.
 
-Python owns every value and every word of the report: the Web dialog shows
-the rows' titles, the settings they change, the records' counts, and the
-canvas sizes as given, and nothing in JavaScript places labels or searches
-values (LP-D43, LP-D48). Rows a bounded search did not reach arrive
+Python owns every value of the report and the words of its titles, settings
+and counts: the Web dialog shows the rows' titles, the settings they change,
+the records' counts, and the canvas sizes as given, and nothing in JavaScript
+places labels or searches values (LP-D43, LP-D48). Why a row has no value and
+what a row that draws with the notice leaves are data the Web words in its
+language (OV-3109). Rows a bounded search did not reach arrive
 ``not_computed`` (OD-F14 for a drawn figure, the font scan bound when nothing
 was drawn); :class:`LabelFitRowSearches` keeps the last such figure or failure
 of each mode so the Web can compute one row through :func:`label_fit_row`,
@@ -38,19 +40,29 @@ from gbdraw.labels.fit import (
     SPACING_PATH,
     X_OFFSET_PATH,
     Y_OFFSET_PATH,
+    CombinationLimitReason,
     HorizontalLabelKind,
     LabelCapacityRemedy,
     LabelFitRecord,
     LabelFitReport,
     LabelFitRow,
+    LabelFitCounts,
+    LabelFitField,
     LabelFitRowKind,
+    LabelFitRowReason,
     LabelFitRowStatus,
     LabelFitValue,
     LabelKind,
+    LimitReason,
+    LimitReasonKind,
+    PlainReason,
+    PlainReasonKind,
+    UnfitReason,
+    fit_count_items,
     label_fit_notice,
     label_fit_record_counts,
     label_kind_title,
-    row_note,
+    row_remaining,
     shown_capacity_ratio,
     split_row_option_values,
 )
@@ -91,7 +103,7 @@ _VALUE_WORDS: Mapping[tuple[str, str | bool], str] = {
     (SEPARATE_FEATURES_PATH, True): "On",
 }
 _ROW_KINDS: frozenset[str] = frozenset(get_args(LabelFitRowKind))
-_STALE_REASON = "Generate again to compute this choice."
+_STALE_REASON = PlainReason("stale")
 _UNKNOWN_CONFIG_PATH = {"code": "INPUT_INVALID", "field": "configOverrides", "reason": "UNKNOWN_CONFIG_PATH"}
 _UNKNOWN_ROW_KIND = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 
@@ -114,6 +126,48 @@ class LabelFitTrackOptionsPayload(TypedDict, total=False):
     centerReservedRadius: float
 
 
+class LabelFitCountPayload(TypedDict):
+    """One count of a fit, by its ``LabelFit`` field name."""
+
+    field: LabelFitField
+    count: int
+
+
+class LabelFitLimitReasonPayload(TypedDict):
+    """``LimitReason``: the lever's limit, or the seconds of the Web's row search."""
+
+    kind: LimitReasonKind
+    limit: float
+
+
+class LabelFitCombinationReasonPayload(TypedDict):
+    """``CombinationLimitReason``: the Combination row's font size (pt) and its Y offset limit."""
+
+    kind: Literal["combination_limit"]
+    fontSize: float
+    limit: float
+
+
+class LabelFitUnfitReasonPayload(TypedDict):
+    """``UnfitReason``: the counts the switch row's assembly leaves, in order (none to state: empty)."""
+
+    kind: Literal["labels_do_not_fit"]
+    counts: list[LabelFitCountPayload]
+
+
+class LabelFitPlainReasonPayload(TypedDict):
+    kind: PlainReasonKind
+
+
+# Why a row has no value, by ``kind`` (OV-3109): the Web words it in its language.
+LabelFitRowReasonPayload: TypeAlias = (
+    LabelFitLimitReasonPayload
+    | LabelFitCombinationReasonPayload
+    | LabelFitUnfitReasonPayload
+    | LabelFitPlainReasonPayload
+)
+
+
 class LabelFitRowPayload(TypedDict):
     kind: LabelFitRowKind
     title: str
@@ -123,8 +177,9 @@ class LabelFitRowPayload(TypedDict):
     trackOptions: LabelFitTrackOptionsPayload
     settings: list[LabelFitSettingPayload]
     canvasSize: LabelFitCanvasSizePayload | None
-    reason: str | None
-    note: str | None
+    reason: LabelFitRowReasonPayload | None
+    # What a row that draws with the notice leaves (LP-D57), in its note's order; empty for another row.
+    remaining: list[LabelFitCountPayload]
 
 
 class LabelFitRecordPayload(TypedDict):
@@ -229,6 +284,20 @@ def _settings(values: Mapping[str, LabelFitValue], mode: LabelFitMode) -> list[L
     return list(settings.values())
 
 
+def _counts_payload(counts: LabelFitCounts) -> list[LabelFitCountPayload]:
+    return [{"field": name, "count": count} for name, count in counts]
+
+
+def _reason_payload(reason: LabelFitRowReason) -> LabelFitRowReasonPayload:
+    if isinstance(reason, LimitReason):
+        return {"kind": reason.kind, "limit": float(reason.limit)}
+    if isinstance(reason, CombinationLimitReason):
+        return {"kind": reason.kind, "fontSize": float(reason.font_size), "limit": float(reason.limit)}
+    if isinstance(reason, UnfitReason):
+        return {"kind": reason.kind, "counts": _counts_payload(fit_count_items(reason.fit) if reason.fit else ())}
+    return {"kind": reason.kind}
+
+
 def label_fit_row_payload(row: LabelFitRow, mode: LabelFitMode) -> LabelFitRowPayload:
     """One row with its title, the settings it changes (as the controls of ``mode`` name them), and its canvas size."""
 
@@ -254,9 +323,8 @@ def label_fit_row_payload(row: LabelFitRow, mode: LabelFitMode) -> LabelFitRowPa
             if row.canvas_size is not None
             else None
         ),
-        "reason": row.reason,
-        # What a row that draws with the notice leaves (LP-D57).
-        "note": row_note(row),
+        "reason": _reason_payload(row.reason) if row.reason is not None else None,
+        "remaining": _counts_payload(row_remaining(row)),
     }
 
 
@@ -456,7 +524,7 @@ class LabelFitRowSearches:
             return label_fit_row_payload(LabelFitRow(row_kind, "not_computed", reason=_STALE_REASON), mode)
         if row.status == "not_computed":
             # The bound stopped the search: no value, which is neither "does not fit" nor stale.
-            reason = f"No value found within {self._row_search_seconds:g} seconds."
+            reason = LimitReason("search_bound", self._row_search_seconds)
             return label_fit_row_payload(LabelFitRow(row_kind, "not_computed", reason=reason), mode)
         return label_fit_row_payload(row, mode)
 
@@ -467,9 +535,11 @@ __all__ = [
     "LabelCapacityNoticePayload",
     "LabelFitFailurePayload",
     "LabelFitMode",
+    "LabelFitCountPayload",
     "LabelFitRecordPayload",
     "LabelFitReportPayload",
     "LabelFitRowPayload",
+    "LabelFitRowReasonPayload",
     "LabelFitRowSearches",
     "label_capacity_notice_payload",
     "label_capacity_notices",

@@ -54,6 +54,9 @@ from gbdraw.labels.fit import (
     LabelFitRow,
     LabelFitVerification,
     LabelShape,
+    LimitReason,
+    PlainReason,
+    UnfitReason,
     fit_counts,
     format_label_fit_report,
     label_fit_notice,
@@ -191,9 +194,9 @@ def test_overlaps_raise_with_six_verified_rows() -> None:
     assert rows["outward_vertical"].canvas_size == (1000.0, 1150.0)
     assert rows["outward_both"].values == {X_OFFSET_PATH: 1.15, Y_OFFSET_PATH: 1.15}
     assert rows["outward_horizontal"].values is None
-    assert rows["outward_horizontal"].reason == "Does not fit up to X offset 2"
+    assert rows["outward_horizontal"].reason == LimitReason("x_offset_limit", 2.0)
     assert rows["smaller_font"].values == {path: 12.0 for path in FONT_SIZE_PATHS}
-    assert rows["tighter_rows"].reason == "Does not fit down to 0.1 px label spacing"
+    assert rows["tighter_rows"].reason == LimitReason("spacing_limit", 0.1)
     # OD-F7: half the font row's 2 pt drop, then the smallest Y offset at 13 pt.
     assert rows["combination"].values == {
         **{path: 13.0 for path in FONT_SIZE_PATHS},
@@ -298,9 +301,9 @@ def test_wording_lists_fitting_rows_and_names_the_others() -> None:
         rows=(
             LabelFitRow("outward_both", "found", {X_OFFSET_PATH: 1.15, Y_OFFSET_PATH: 1.15}, (1.0, 1.0)),
             LabelFitRow("outward_vertical", "found", {Y_OFFSET_PATH: 1.15}, (1.0, 1.0)),
-            LabelFitRow("outward_horizontal", "not_found", reason="Does not fit up to X offset 2"),
+            LabelFitRow("outward_horizontal", "not_found", reason=LimitReason("x_offset_limit", 2.0)),
             LabelFitRow("smaller_font", "found", {path: 12.0 for path in FONT_SIZE_PATHS}, (1.0, 1.0)),
-            LabelFitRow("tighter_rows", "not_found", reason="Does not fit down to 0.1 px label spacing"),
+            LabelFitRow("tighter_rows", "not_found", reason=LimitReason("spacing_limit", 0.1)),
             LabelFitRow(
                 "combination",
                 "found",
@@ -436,7 +439,7 @@ def test_inner_rows_verify_the_switches_first_then_scan_the_font_down() -> None:
     assert [row.kind for row in rows] == ["smaller_font", "labels_out", "radial"]
     assert rows[0].values == {path: 12.0 for path in FONT_SIZE_PATHS}
     assert [row.status for row in rows] == ["found", "not_found", "not_found"]
-    assert rows[1].reason == "Labels still do not fit (1 label pair overlaps, 0 leader pairs cross)"
+    assert rows[1].reason == UnfitReason(LabelFit(1, 0))
     assert str(raised.value) == (
         "P1: 54 inner labels do not fit at 14 pt (3 label pairs overlap, 2 leader pairs cross, "
         "1 label covers the definition text). Nothing was drawn.\n"
@@ -463,7 +466,7 @@ def test_outer_levers_do_not_move_inner_labels() -> None:
     ]
     assert rows["labels_out"].status == "found"
     # The outer levers do not move embedded labels either (OV-725).
-    assert rows["outward_vertical"].reason == "Does not move inner, embedded, or radial labels"
+    assert rows["outward_vertical"].reason == PlainReason("outer_labels_only")
     assert "--labels out   (all labels outside)" in str(raised.value)
 
 
@@ -601,7 +604,7 @@ def test_separated_features_that_leave_no_track_room_are_a_row_not_found(tmp_pat
 
     rows = {row.kind: row for row in raised.value.report.rows}
     assert rows["separate_features"].status == "not_found"
-    assert rows["separate_features"].reason == "The tracks do not fit with this setting"
+    assert rows["separate_features"].reason == PlainReason("tracks_do_not_fit")
 
 
 def _fit_assembly(fit_for: Callable[[Mapping[str, object]], LabelFit]):
@@ -724,7 +727,7 @@ def test_each_lever_offers_a_value_that_leaves_only_crossings_when_none_fits() -
     assert rows["outward_vertical"].values == {Y_OFFSET_PATH: 1.3}
     assert rows["outward_vertical"].remaining == LabelFit(0, 2)
     assert rows["outward_horizontal"].status == "not_found"
-    assert rows["outward_horizontal"].reason == "Does not fit up to X offset 2"
+    assert rows["outward_horizontal"].reason == LimitReason("x_offset_limit", 2.0)
     statuses = [row.status for row in raised.value.report.rows]
     assert statuses == sorted(statuses, key=lambda status: status == "found_with_notice")
 
@@ -739,7 +742,7 @@ def test_a_drawn_figure_offers_only_rows_that_fit() -> None:
     assert checked is not None
     rows = {row.kind: row for row in checked[0].rows}
     assert rows["labels_out"].status == "not_found"
-    assert rows["labels_out"].reason == "Labels still do not fit (0 label pairs overlap, 1 leader pair crosses)"
+    assert rows["labels_out"].reason == UnfitReason(LabelFit(0, 1))
     assert checked[1].row("labels_out").status == "not_found"
 
 

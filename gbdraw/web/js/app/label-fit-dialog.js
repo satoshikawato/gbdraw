@@ -21,7 +21,9 @@
 // room they need from Python's values (`labelCapacityText`, OV-2179). When every
 // row is known not to fit, it lists the same ways under the rows (NO-ROW-WAYS,
 // OV-2180).
-import { labelCapacityRemedyText, labelFitRowOffered, labelFitRowRank, normalizeLabelFitRow } from '../services/label-fit.js';
+import {
+  labelCapacityRemedyText, labelFitRowNoteText, labelFitRowOffered, labelFitRowRank, labelFitRowReasonText, normalizeLabelFitRow
+} from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 
@@ -40,9 +42,10 @@ import { msg } from '../utils/i18n.js';
  * @property {boolean} offered Apply can choose it (`found`, or `found_with_notice`).
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
- * @property {string | null} reason
+ * @property {string | null} reason Why the row has no value, in the shown language (a failed computation: the
+ *   error's summary).
  * @property {string | null} note What the row leaves (crossing leaders, labels over the definition text, region
- *   label warnings).
+ *   label warnings), in the shown language.
  */
 /**
  * @typedef {object} LabelFitDialogState
@@ -90,6 +93,7 @@ import { msg } from '../utils/i18n.js';
  */
 
 /**
+ * A row as the dialog shows it: its reason and note worded in the shown language from Python's data (OV-3109).
  * @param {LabelFitRow} row
  * @returns {LabelFitDialogRow}
  */
@@ -100,8 +104,8 @@ const displayRow = (row) => ({
   offered: labelFitRowOffered(row.status),
   settings: row.settings,
   canvasSize: row.canvasSize,
-  reason: row.reason,
-  note: row.note
+  reason: row.reason ? labelFitRowReasonText(row.reason) : null,
+  note: labelFitRowNoteText(row.remaining)
 });
 
 /**

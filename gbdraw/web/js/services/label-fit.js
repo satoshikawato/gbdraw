@@ -1,9 +1,8 @@
 // @ts-check
 // The label fit report Python sends (gbdraw/web_support/label_fit.py): the one
-// JavaScript reader of it. Python owns every value and word of the report:
-// the counts and each record's counts text, the rows' titles, the settings a
-// row changes by config path and by request track option, the canvas sizes,
-// and the reasons (LP-D43, LP-D48). Nothing here places labels or searches values; a row that was not
+// JavaScript reader of it. Python owns every value of the report and the words of
+// each record's counts text, the rows' titles, and the settings a row changes by
+// config path and by request track option, with the canvas sizes (LP-D43, LP-D48). Nothing here places labels or searches values; a row that was not
 // computed is computed by the Worker (`computeLabelFitRow`, OD-F14).
 // The exceptions are the Web's own words for labels that need much more room
 // than the map has: the ways to make room (CAPACITY-STOP, NO-ROW-WAYS), which Python names
@@ -12,9 +11,15 @@
 // A row's title and the names and option words of its settings are English
 // catalog keys: `tools/generate_web_contracts.py` lists them from Python for
 // the catalogs (`tools/i18n/source-keys.mjs`), and the dialog shows them with `tm()`.
+// Why a row has no value and what a row that draws with the notice leaves are
+// Python's data, which the Web words in the shown language: each reason kind
+// with its numbers, each count by its field name (OV-3109).
 import { diagnosticError, isFigureLengthText } from '../utils/error-normalization.js';
-import { msg, tn } from '../utils/i18n.js';
-import { LABEL_FIT_OFFERED_ROW_STATUSES } from '../contracts/schema.generated.js';
+import { listText, msg, numberText, t, tn } from '../utils/i18n.js';
+import {
+  LABEL_FIT_FIELDS, LABEL_FIT_LIMIT_REASON_KINDS, LABEL_FIT_OFFERED_ROW_STATUSES, LABEL_FIT_PLAIN_REASON_KINDS,
+  LABEL_FIT_REGION_WARNING_FIELDS
+} from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
 
 /**
@@ -23,7 +28,7 @@ import { LABEL_FIT_OFFERED_ROW_STATUSES } from '../contracts/schema.generated.js
  * leaders, labels over the definition text or region label warnings (LP-D57),
  * or a Circular label row fits the labels it moves while each record keeps
  * region label warnings it already had (OV-3105, D-112, D-115), so the figure
- * draws with the notice bar; its `note` says what the figure is drawn with.
+ * draws with the notice bar; its `remaining` says what the figure is drawn with.
  */
 /** @typedef {string & { readonly labelFitRowKind: unique symbol }} LabelFitRowKind A Python row kind, such as `outward_vertical`. */
 /** @typedef {string & { readonly configPath: unique symbol }} ConfigPath A dotted config path, such as `labels.spacing.circular`. */
@@ -40,6 +45,27 @@ import { LABEL_FIT_OFFERED_ROW_STATUSES } from '../contracts/schema.generated.js
  * The canonical render request's Circular track options (`diagramOptions.tracks`) a row sets, by their request
  * names: "narrow the inside tracks" sets `centerReservedRadius` (PD-OI-097).
  */
+/** @typedef {typeof LABEL_FIT_FIELDS[number]} LabelFitField A count of a label fit, by its Python field name. */
+/**
+ * @typedef {object} LabelFitCount One count of a label fit (Python's `LabelFitCountPayload`).
+ * @property {LabelFitField} field
+ * @property {number} count
+ */
+/**
+ * @typedef {typeof LABEL_FIT_LIMIT_REASON_KINDS[number]} LabelFitLimitReasonKind A lever's limit (an offset, a font
+ *   size in pt, a label spacing in px), or `search_bound`: the Worker's search for the row stopped after `limit` seconds.
+ */
+/**
+ * @typedef {typeof LABEL_FIT_PLAIN_REASON_KINDS[number]} LabelFitPlainReasonKind A reason without numbers.
+ */
+/**
+ * Why a row has no value (Python's `LabelFitRowReasonPayload`), by `kind`: a lever's `limit`; the Combination row's
+ * `fontSize` and Y offset `limit`; the `counts` a switch row's assembly leaves (none to state: empty); or none.
+ * @typedef {{ kind: LabelFitLimitReasonKind, limit: number }
+ *   | { kind: 'combination_limit', fontSize: number, limit: number }
+ *   | { kind: 'labels_do_not_fit', counts: readonly LabelFitCount[] }
+ *   | { kind: LabelFitPlainReasonKind }} LabelFitRowReason
+ */
 /**
  * @typedef {object} LabelFitRow
  * @property {LabelFitRowKind} kind
@@ -50,8 +76,9 @@ import { LABEL_FIT_OFFERED_ROW_STATUSES } from '../contracts/schema.generated.js
  *   when the row sets none.
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
- * @property {string | null} reason
- * @property {string | null} note What a `found_with_notice` row leaves, in Python's words.
+ * @property {LabelFitRowReason | null} reason Why the row has no value; worded by `labelFitRowReasonText`.
+ * @property {readonly LabelFitCount[]} remaining What a `found_with_notice` row leaves, in its note's order (empty for
+ *   another row); worded by `labelFitRowNoteText`.
  */
 /**
  * @typedef {object} LabelFitRecord
@@ -240,6 +267,83 @@ export const labelCapacityNoticeText = ({ recordId, labelKind, labelCount, fontS
   LABEL_CAPACITY_KIND_WORDS[labelKind].notice(labelCount, { record: recordId, size: fontSize, ratio: capacityRatio })
 );
 
+/**
+ * Each count of a label fit as one item of a list, by Python's field name (`LABEL_FIT_FIELDS`): the counts of a row
+ * whose one assembly leaves labels that do not fit, and the region label warnings a row draws with.
+ * @type {Readonly<Record<LabelFitField, (count: number) => string>>}
+ */
+const LABEL_FIT_COUNT_WORDS = Object.freeze({
+  overlap_pairs: (count) => tn(count, '{count} label pair overlaps', '{count} label pairs overlap'),
+  crossing_pairs: (count) => tn(count, '{count} leader pair crosses', '{count} leader pairs cross'),
+  definition_overlaps: (count) => tn(count, '{count} label covers the definition text', '{count} labels cover the definition text'),
+  region_overlaps: (count) => tn(count, '{count} region label overlap', '{count} region label overlaps'),
+  region_cuts: (count) => tn(count, '{count} region label cut', '{count} region labels cut'),
+  region_track_overlaps: (count) => tn(count, '{count} region label on another track', '{count} region labels on other tracks'),
+  definition_track_overlaps: (count) => tn(count, '{count} line overlaps a track', '{count} lines overlap a track'),
+  region_rooms_past_centre: (count) => tn(count, '{count} region label left out for want of room before the centre',
+    '{count} region labels left out for want of room before the centre'),
+  region_rooms_clipped: (count) => tn(count, '{count} region label left out in clipped slots',
+    '{count} region labels left out in clipped slots'),
+  region_cuts_left_out: (count) => tn(count, '{count} region label left out: no letter fits its circle',
+    '{count} region labels left out: no letter fits their circles')
+});
+/**
+ * What a row that draws with the notice still leaves, other than region label warnings, by field name.
+ * @type {Readonly<Partial<Record<LabelFitField, (count: number) => string>>>}
+ */
+const LABEL_FIT_NOTE_WORDS = Object.freeze({
+  crossing_pairs: (count) => tn(count, '{count} leader pair still crosses', '{count} leader pairs still cross'),
+  definition_overlaps: (count) => tn(count, '{count} label still covers the definition text',
+    '{count} labels still cover the definition text'),
+  definition_track_overlaps: (count) => tn(count, '{count} definition line still overlaps a track',
+    '{count} definition lines still overlap a track')
+});
+/** @type {ReadonlySet<string>} */
+const REGION_WARNING_FIELDS = new Set(LABEL_FIT_REGION_WARNING_FIELDS);
+
+/**
+ * The note of a row that draws with the notice: what it still leaves, with the region label warnings the figure is
+ * drawn with; null when it leaves nothing.
+ * @param {readonly LabelFitCount[]} remaining
+ * @returns {string | null}
+ */
+export const labelFitRowNoteText = (remaining) => {
+  const regions = remaining.filter(({ field }) => REGION_WARNING_FIELDS.has(field));
+  const clauses = remaining.flatMap(({ field, count }) => LABEL_FIT_NOTE_WORDS[field]?.(count) ?? []);
+  if (regions.length) {
+    clauses.push(t('the figure is drawn with {warnings}',
+      { warnings: listText(regions.map(({ field, count }) => LABEL_FIT_COUNT_WORDS[field](count))) }));
+  }
+  return clauses.length ? listText(clauses) : null;
+};
+
+/**
+ * Why a row has no value, in the shown language.
+ * @param {LabelFitRowReason} reason
+ * @returns {string}
+ */
+export const labelFitRowReasonText = (reason) => {
+  switch (reason.kind) {
+    case 'y_offset_limit': return t('Does not fit up to Y offset {limit}', { limit: numberText(reason.limit) });
+    case 'x_offset_limit': return t('Does not fit up to X offset {limit}', { limit: numberText(reason.limit) });
+    case 'xy_offset_limit': return t('Does not fit up to X and Y offset {limit}', { limit: numberText(reason.limit) });
+    case 'font_limit': return t('Does not fit down to {size} pt', { size: numberText(reason.limit) });
+    case 'spacing_limit': return t('Does not fit down to {spacing} px label spacing', { spacing: numberText(reason.limit) });
+    case 'search_bound': return tn(reason.limit, 'No value found within {count} second.',
+      'No value found within {count} seconds.', { count: numberText(reason.limit) });
+    case 'combination_limit': return t('Does not fit at {size} pt up to Y offset {limit}',
+      { size: numberText(reason.fontSize), limit: numberText(reason.limit) });
+    case 'labels_do_not_fit': return reason.counts.length
+      ? t('Labels still do not fit ({counts})',
+        { counts: listText(reason.counts.map(({ field, count }) => LABEL_FIT_COUNT_WORDS[field](count))) })
+      : t('Labels still do not fit');
+    case 'outer_labels_only': return t('Does not move inner, embedded, or radial labels');
+    case 'tracks_do_not_fit': return t('The tracks do not fit with this setting');
+    case 'labels_not_placed': return t('The labels cannot be placed with this setting');
+    case 'stale': return t('Generate again to compute this choice.');
+  }
+};
+
 const ROW_STATUSES = new Set(['found', 'found_with_notice', 'not_found', 'not_computed']);
 /** @type {ReadonlyMap<string, number>} Python's offered statuses, by preference (0 first). */
 const OFFERED_STATUS_RANK = new Map(LABEL_FIT_OFFERED_ROW_STATUSES.map((status, rank) => [status, rank]));
@@ -276,8 +380,45 @@ const isToken = (value) => value === null || (typeof value === 'string' && value
 const isRemedy = (value) => typeof value === 'string' && Object.hasOwn(LABEL_CAPACITY_REMEDY_WORDS, value);
 /** @param {unknown} value @returns {value is number} */
 const isRatio = (value) => isNumber(value) && value > 0;
-/** @param {unknown} value @returns {value is string | null} */
-const isOptionalText = (value) => value === null || value === undefined || typeof value === 'string';
+/** @type {ReadonlySet<string>} */
+const FIELDS = new Set(LABEL_FIT_FIELDS);
+/** @type {ReadonlySet<string>} */
+const LIMIT_REASON_KINDS = new Set(LABEL_FIT_LIMIT_REASON_KINDS);
+/** @type {ReadonlySet<string>} */
+const PLAIN_REASON_KINDS = new Set(LABEL_FIT_PLAIN_REASON_KINDS);
+
+/**
+ * Counts of a label fit, each a field Python names with its count.
+ * @param {unknown} value
+ * @returns {readonly LabelFitCount[]}
+ */
+const normalizeCounts = (value) => {
+  if (!Array.isArray(value)) throw invalid();
+  return Object.freeze(value.map((item) => {
+    if (!isObject(item) || typeof item.field !== 'string' || !FIELDS.has(item.field) || !isCount(item.count)) throw invalid();
+    return Object.freeze({ field: /** @type {LabelFitField} */ (item.field), count: item.count });
+  }));
+};
+
+/**
+ * A row's reason, with the fields its kind has.
+ * @param {unknown} value
+ * @returns {LabelFitRowReason | null}
+ */
+const normalizeReason = (value) => {
+  if (value === null) return null;
+  if (!isObject(value) || typeof value.kind !== 'string') throw invalid();
+  const { kind } = value;
+  if (LIMIT_REASON_KINDS.has(kind) && isNumber(value.limit)) {
+    return Object.freeze({ kind: /** @type {LabelFitLimitReasonKind} */ (kind), limit: value.limit });
+  }
+  if (kind === 'combination_limit' && isNumber(value.fontSize) && isNumber(value.limit)) {
+    return Object.freeze({ kind, fontSize: value.fontSize, limit: value.limit });
+  }
+  if (kind === 'labels_do_not_fit') return Object.freeze({ kind, counts: normalizeCounts(value.counts) });
+  if (PLAIN_REASON_KINDS.has(kind)) return Object.freeze({ kind: /** @type {LabelFitPlainReasonKind} */ (kind) });
+  throw invalid();
+};
 
 /**
  * One row, as the report or the Worker's `computeLabelFitRow` gives it.
@@ -288,8 +429,7 @@ export const normalizeLabelFitRow = (value) => {
   if (!isObject(value) || typeof value.kind !== 'string' || !value.kind
     || typeof value.title !== 'string' || typeof value.status !== 'string'
     || !ROW_STATUSES.has(value.status) || !Array.isArray(value.settings)
-    || !isObject(value.trackOptions) || !Object.values(value.trackOptions).every(isNumber)
-    || !isOptionalText(value.reason) || !isOptionalText(value.note)) throw invalid();
+    || !isObject(value.trackOptions) || !Object.values(value.trackOptions).every(isNumber)) throw invalid();
   const status = /** @type {LabelFitRowStatus} */ (value.status);
   const offered = labelFitRowOffered(status);
   /** @type {Record<ConfigPath, LabelFitValue> | null} */
@@ -314,8 +454,8 @@ export const normalizeLabelFitRow = (value) => {
     settings: Object.freeze(settings),
     canvasSize: offered && isObject(size)
       ? Object.freeze({ width: Number(size.width), height: Number(size.height) }) : null,
-    reason: typeof value.reason === 'string' ? value.reason : null,
-    note: typeof value.note === 'string' ? value.note : null
+    reason: normalizeReason(value.reason),
+    remaining: normalizeCounts(value.remaining)
   });
 };
 

@@ -938,15 +938,15 @@ def test_no_fitting_row_at_a_requested_size_offers_a_larger_figure_without_an_es
     requested size the words stay as they were, byte for byte."""
 
     from gbdraw.core.figure_length import RequestedFigureSize
-    from gbdraw.labels.fit import LabelFit, LabelFitRecord, LabelFitReport, LabelFitRow, format_label_fit_report
+    from gbdraw.labels.fit import LabelFit, LabelFitRecord, LabelFitReport, LabelFitRow, LimitReason, format_label_fit_report
     from gbdraw.layout.figure_size import LargerFigure, larger_figure
 
     plan = plan_composition(CompositionRequest(primary=CompositionItem("primary", Aabb(0.0, 0.0, 300.0, 200.0))))
     width, height = FigureLength(180.0, "mm"), FigureLength(6.0, "in")
     record = LabelFitRecord("AP027078.1", "circular_outer", 562, 6.0, LabelFit(30, 2))
     rows = (
-        LabelFitRow("outward_both", "not_found", reason="Does not fit up to 2 Outer X and Y Offset"),
-        LabelFitRow("smaller_font", "not_found", reason="Does not fit down to 6 pt"),
+        LabelFitRow("outward_both", "not_found", reason=LimitReason("xy_offset_limit", 2.0)),
+        LabelFitRow("smaller_font", "not_found", reason=LimitReason("font_limit", 6.0)),
     )
     auto = LabelFitReport(records=(record,), rows=rows, drawn=False)
     assert format_label_fit_report(auto) == "\n".join([

@@ -147,6 +147,11 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("CIRCULAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.circular", "CIRCULAR_SLOT_UNREAD_PARAM_KEYS"),
     # The label fit row statuses Apply can choose, the preferred first: the dialog selects by this order.
     ("LABEL_FIT_OFFERED_ROW_STATUSES", "gbdraw.labels.fit", "OFFERED_ROW_STATUSES"),
+    # A label fit's counts by field name, and the kinds of why a row has no value: the dialog words each (OV-3109).
+    ("LABEL_FIT_FIELDS", "gbdraw.labels.fit", "LABEL_FIT_FIELDS"),
+    ("LABEL_FIT_REGION_WARNING_FIELDS", "gbdraw.labels.fit", "REGION_WARNING_FIELDS"),
+    ("LABEL_FIT_LIMIT_REASON_KINDS", "gbdraw.labels.fit", "LIMIT_REASON_KINDS"),
+    ("LABEL_FIT_PLAIN_REASON_KINDS", "gbdraw.labels.fit", "PLAIN_REASON_KINDS"),
     ("LINEAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.linear", "LINEAR_SLOT_UNREAD_PARAM_KEYS"),
     # The media type a Session writer stores for a resource kind gbdraw makes, and for an input file (OV-2964).
     ("WRITTEN_RESOURCE_MEDIA_TYPES", "gbdraw.session_io", "WRITTEN_RESOURCE_MEDIA_TYPES"),
