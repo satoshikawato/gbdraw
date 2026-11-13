@@ -336,6 +336,8 @@ def test_a_view_reads_its_edge_rows_once_for_its_whole_counts(
     view = sequence_view(seq, 1_233, 31_111, strand=strand)
     first = known_base_counts(view)
     assert edges
+    # Kept as an array of its own, read-only: a view of the (4, 1) result kept that base too (review 6, F1).
+    assert first.base is None and not first.flags.writeable
     edges.clear()
     assert known_base_counts(view).tolist() == known_base_counts(copy.copy(view)).tolist() == first.tolist()
     assert edges == []
@@ -381,7 +383,7 @@ def test_first_counts_from_many_threads_agree(tmp_path: Path) -> None:
 
     bases = _random_bases(31, 300_000)
     (record,) = read_sequence_file_records(str(_fasta(tmp_path / "t.fasta", bases)), "fasta")
-    assert record.seq._data._bases._rows is not None  # built by the parse pass, before any reader
+    assert record.seq._data._bases.index.counts is not None  # built by the parse pass, before any reader
     expected = [row[0] for row in _oracle(bases, [len(bases)])]
     interval = sys.getswitchinterval()
     sys.setswitchinterval(1e-6)
@@ -405,7 +407,7 @@ def test_first_counts_from_many_threads_agree(tmp_path: Path) -> None:
 
 
 def test_bases_in_memory_asked_from_many_threads_are_counted_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    """One holder per bytes object, built under a lock, and its rows counted once under its own lock: threads that
+    """One holder per bytes object, built under a lock, and its rows counted once under a lock: threads that
     first count the same new bases (each through its own ``Seq``) count them once together. Slow holders and slow
     counts open the window each lock closes; without either lock the bases are counted several times."""
 
@@ -468,3 +470,28 @@ def test_an_api_render_of_a_read_record_counts_its_bases_once(tmp_path: Path, mo
     assert parsed <= path.stat().st_size  # the parse pass, once
     assert "<svg" in gbdraw.draw_circular(records).to_svg()
     assert counted[0] == parsed
+
+
+def test_small_records_share_their_file_s_index(tmp_path: Path) -> None:
+    """The records of one parse pass share one index of their file (its chunks and every record's count rows), so
+    a small record holds a few objects and no array of its own: 100,000 small entries held about 0.8 KB more per
+    record than before the counts, about 0.1 KB less now (review of the finishing round, N-B)."""
+
+    bases = _random_bases(37, 2_000 * 1_000)
+    text = b"".join(b">e%d\n" % i + bases[i * 1_000: (i + 1) * 1_000] + b"\n" for i in range(2_000))
+    path = tmp_path / "many.fasta"
+    path.write_bytes(text)
+    ours = [tracemalloc.Filter(True, record_sequences.__file__), tracemalloc.Filter(True, base_counts.__file__)]
+    tracemalloc.start()
+    try:
+        records = read_sequence_file_records(str(path), "fasta")
+        held = tracemalloc.take_snapshot().filter_traces(ours)
+    finally:
+        tracemalloc.stop()
+    per_record = sum(stat.size for stat in held.statistics("filename")) / len(records)
+    assert per_record < 700, per_record  # 4c64e8c65: about 1,200 bytes
+    tables = [record.seq._data._bases for record in records]
+    assert len({id(table.index) for table in tables}) == 1
+    assert not any(hasattr(table, "__dict__") for table in tables)
+    assert [known_base_counts(record.seq).tolist() for record in records[::499]] == [
+        [row[0] for row in _oracle(bases[i * 1_000: (i + 1) * 1_000], [1_000])] for i in range(0, 2_000, 499)]
