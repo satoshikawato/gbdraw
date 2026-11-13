@@ -1432,7 +1432,8 @@ export const createFeatureSvgActions = ({
         const referenceFeature = uniqueRenderedFeature(reference.anchor);
 
         const element = document.createElement('div');
-        element.className = 'gbdraw-alignment-overlay';
+        // Placed at the figure's coordinates, which read left to right in every language.
+        Object.assign(element, { className: 'gbdraw-alignment-overlay', dir: 'ltr' });
         element.setAttribute('data-similarity-alignment-canvas', '');
         const drawing = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         drawing.setAttribute('aria-hidden', 'true');

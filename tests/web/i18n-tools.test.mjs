@@ -249,11 +249,11 @@ test('the review page data: ids are sha1(key)[:12], drafts are the catalogs, the
   const style = readFileSync(join(import.meta.dirname, '..', '..', 'docs', 'internal', 'I18N_STYLE.md'), 'utf8');
   // Each language's endonym, English name and style section come from UI_LOCALES and its I18N_STYLE.md heading.
   for (const row of JSON.parse(files.get('locales.json'))) {
-    assert.deepEqual(Object.keys(row), ['tag', 'label', 'language', 'section']);
+    assert.deepEqual(Object.keys(row), ['tag', 'label', 'language', 'section', 'dir']);
     assert.equal(row.label, UI_LOCALES.find(({ tag }) => tag === row.tag).name);
     assert.ok(style.includes(`\n## ${row.section}. ${row.language.split(' (')[0]} (\`${row.tag}\``), `${row.tag}: section ${row.section}`);
   }
-  assert.deepEqual(JSON.parse(files.get('locales.json')).find(({ tag }) => tag === 'pt'), { tag: 'pt', label: 'Português', language: 'Portuguese (Brazilian usage)', section: '8' });
+  assert.deepEqual(JSON.parse(files.get('locales.json')).find(({ tag }) => tag === 'pt'), { tag: 'pt', label: 'Português', language: 'Portuguese (Brazilian usage)', section: '8', dir: 'ltr' });
   assert.throws(() => reviewLocales(style.replace('## 12. German (`de`)', '## 12. German')), /de has no I18N_STYLE\.md section heading/);
   assert.throws(() => reviewLocales(`${style}\n## 99. German again (\`de\`)\n`), /two sections for de/);
   assert.equal(kept, createHash('sha1').update('Cancel').digest('hex').slice(0, 12));

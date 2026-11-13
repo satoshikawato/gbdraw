@@ -41,6 +41,13 @@ const LIST_GAP_PX = 4;
 const VIEWPORT_MARGIN_PX = 8;
 
 /**
+ * Where a list of `width` starts under its toggle: at the toggle's left edge,
+ * or so that it ends at the toggle's right edge in a right-to-left page.
+ * @param {HTMLElement} toggle @param {DOMRect} box The toggle's box. @param {number} width
+ */
+const startEdge = (toggle, box, width) => (getComputedStyle(toggle).direction === 'rtl' ? box.right - width : box.left);
+
+/**
  * The one text of a step, for the list rows and the Undo and Redo titles.
  * @param {HistoryTimelineStep} step
  * @returns {HistoryStepText}
@@ -113,14 +120,15 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
   let anchor = null;
   const listElement = () => document.getElementById(LIST_ID);
 
-  // Below its toggle, inside the window.
+  // Below its toggle and starting where it starts (its right edge in a
+  // right-to-left page), inside the window.
   const placeList = () => {
     const list = listElement();
     if (!anchor || !list) return;
     if (!anchor.getClientRects().length) { closeList(); return; }
     const box = anchor.getBoundingClientRect();
     const right = window.innerWidth - list.offsetWidth - VIEWPORT_MARGIN_PX;
-    place.value = { top: box.bottom + LIST_GAP_PX, left: Math.max(VIEWPORT_MARGIN_PX, Math.min(box.left, right)) };
+    place.value = { top: box.bottom + LIST_GAP_PX, left: Math.max(VIEWPORT_MARGIN_PX, Math.min(startEdge(anchor, box, list.offsetWidth), right)) };
   };
   /** @param {PointerEvent} event */
   const onOutsidePress = (event) => {

@@ -455,6 +455,13 @@ export const settingsSection = (element, { value }) => {
  * settings, the focus on its heading, or on `focus` when one is given.
  * @typedef {(key: SettingsSectionKey, focus?: HTMLElement | null) => unknown} RevealSection
  */
+/** @typedef {'right' | 'left'} RailTipSide */
+// The text of a rail button stands beside it at the rail's inline end, where
+// the settings are: right of it, or left of it in a right-to-left page.
+/** @param {DOMRect} box @param {HTMLElement} button @returns {{ side: RailTipSide, left: number }} */
+const besideRail = (box, button) => (getComputedStyle(button).direction === 'rtl'
+  ? { side: 'left', left: box.left - 6 }
+  : { side: 'right', left: box.right + 6 });
 export const SettingsSectionIndex = {
   template: '#settings-section-index-template',
   props: {
@@ -478,7 +485,7 @@ export const SettingsSectionIndex = {
     const current = ref(SETTINGS_SECTIONS[0].key);
     /** @type {{ value: SettingsSectionKey | null }} */
     const marked = computed(() => (rail.value ? props.view.docked : current.value));
-    /** @type {{ value: { text: string, side: 'below' | 'right', left: number, top: number } | null }} */
+    /** @type {{ value: { text: string, side: RailTipSide | 'below', left: number, top: number } | null }} */
     const tip = ref(null);
     /** @type {{ value: HTMLElement | null }} */
     const tipElement = ref(null);
@@ -496,7 +503,7 @@ export const SettingsSectionIndex = {
     /** @type {{ value: number }} */
     const inset = ref(0);
     const cardEdge = new ResizeObserver(() => {
-      inset.value = area().offsetWidth - area().clientWidth + parseFloat(getComputedStyle(area()).paddingRight);
+      inset.value = area().offsetWidth - area().clientWidth + parseFloat(getComputedStyle(area()).paddingInlineEnd);
     });
 
     const area = () => /** @type {HTMLElement} */ (document.getElementById(props.controls));
@@ -565,7 +572,7 @@ export const SettingsSectionIndex = {
       tipButton = button;
       const box = button.getBoundingClientRect();
       tip.value = rail.value && root.value?.contains(button)
-        ? { text, side: 'right', left: box.right + 6, top: box.top + box.height / 2 }
+        ? { text, ...besideRail(box, button), top: box.top + box.height / 2 }
         : { text, side: 'below', left: box.left + box.width / 2, top: box.bottom + 6 };
       await nextTick();
       const half = (tipElement.value?.offsetWidth ?? 0) / 2;
@@ -778,7 +785,7 @@ export const DefaultColorScopeLine = {
   template: `
     <span data-default-color-scope-sentence>
       <i18n-text v-if="line.kind === 'replaces'" :text="t('Replaces your {type} default color {color}.')" :params="{ type: line.type }">
-        <template #color><color-swatch class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :color="line.color"></color-swatch><span :class="{ 'font-mono': !swatch.none }">{{ swatch.label }}</span></template>
+        <template #color><color-swatch class="inline-block w-3 h-3 me-1 align-middle rounded border border-slate-300" :color="line.color"></color-swatch><span :class="{ 'font-mono': !swatch.none }">{{ swatch.label }}</span></template>
       </i18n-text>
       <template v-else>{{ t('Sets the {type} default color ({type} features without their own color or rule, also hidden ones).', { type: line.type }) }}</template>
     </span>

@@ -11,7 +11,8 @@
 // release tier requires every key (`node tools/i18n/sync.mjs status
 // --require-complete`, .claude/skills/translate-web-ui/SKILL.md).
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
@@ -710,6 +711,56 @@ test('the UI languages are the seventeen of the Language menu, Latin script firs
   }
 });
 
+// A copy of utils/i18n.js with one more language read right to left, `qaa`
+// (a language tag reserved for local use): a test fixture, not a UI language.
+const loadWithRightToLeftFixture = async () => {
+  const source = readFileSync(join(jsRoot, 'utils/i18n.js'), 'utf8');
+  const opening = 'export const UI_LOCALES = Object.freeze([\n';
+  assert.equal(source.split(opening).length, 2, 'the fixture inserts its language at the start of UI_LOCALES');
+  const directory = mkdtempSync(join(tmpdir(), 'gbdraw-i18n-rtl-'));
+  const path = join(directory, 'i18n.js');
+  writeFileSync(path, source.replace(opening, `${opening}  Object.freeze({ tag: 'qaa', name: 'qaa', sentenceSeparator: ' ', dir: 'rtl' }),\n`));
+  try {
+    return await import(pathToFileURL(path).href);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+};
+
+test('in a right-to-left language each inserted value is isolated (FSI ... PDI); a left-to-right language keeps the bytes', async () => {
+  const i18n = await loadWithRightToLeftFixture();
+  const attributes = new Map();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  globalThis.document = { documentElement: { setAttribute: (name, value) => attributes.set(name, value) } };
+  const shown = () => [
+    i18n.t('Rows {from}–{to}', { from: 3, to: 'a.gbk' }),
+    i18n.tn(2, '{count} row', '{count} rows'),
+    i18n.tx('Linear (size scaling)', '{name} is linear', { name: 'NC_1' }),
+    i18n.tm('Step {n}', { n: 2 }),
+    i18n.t('Help: {name}'),
+    i18n.textParts('Replaces your {type} default color {color}.', ['color'], { type: 'CDS' })
+  ];
+  const english = shown();
+  try {
+    await i18n.setUiLocale('qaa', async () => ({ default: { 'Rows {from}–{to}': 'R {to} {from}' } }));
+    assert.deepEqual(Object.fromEntries(attributes), { lang: 'qaa', dir: 'rtl' });
+    assert.deepEqual(shown(), [
+      'R \u2068a.gbk\u2069 \u20683\u2069',
+      '\u20682\u2069 rows',
+      '\u2068NC_1\u2069 is linear',
+      'Step \u20682\u2069',
+      'Help: {name}',
+      [{ text: 'Replaces your \u2068CDS\u2069 default color ' }, { slot: 'color' }, { text: '.' }]
+    ]);
+    await i18n.setUiLocale('en');
+    assert.deepEqual(Object.fromEntries(attributes), { lang: 'en', dir: 'ltr' });
+    assert.deepEqual(shown(), english);
+    assert.deepEqual(english.slice(0, 4), ['Rows 3–a.gbk', '2 rows', 'NC_1 is linear', 'Step 2']);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'document', previous); else delete globalThis.document;
+  }
+});
+
 test('a locale outside the UI languages is refused', async () => {
   await assert.rejects(setUiLocale('xx', async () => ({ default: {} })), /Unknown UI locale/);
   assert.equal(uiLocale.value, SOURCE_LOCALE);
@@ -759,18 +810,21 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
   }
 });
 
-test('the shown locale sets the page language, and only a switch that applies does', async () => {
-  const root = { lang: 'en', setAttribute(name, value) { assert.equal(name, 'lang'); this.lang = value; } };
+test('the shown locale sets the page language and direction, and only a switch that applies does', async () => {
+  assert.deepEqual(UI_LOCALES.filter(({ dir }) => dir !== 'ltr').map(({ tag }) => tag), [], 'every UI language reads left to right');
+  /** @type {Record<string, string>} */
+  const attributes = {};
+  const root = { setAttribute(name, value) { assert.ok(name === 'lang' || name === 'dir', name); attributes[name] = value; } };
   const previous = globalThis.document;
   globalThis.document = { documentElement: root };
   try {
     await setUiLocale('zh-Hant', async () => ({ default: {} }));
-    assert.equal(root.lang, 'zh-Hant');
+    assert.deepEqual(attributes, { lang: 'zh-Hant', dir: 'ltr' });
     await assert.rejects(setUiLocale('ja', async () => { throw new Error('offline'); }), /offline/);
-    assert.equal(root.lang, 'zh-Hant', 'a catalog that fails to load changes nothing');
+    assert.deepEqual(attributes, { lang: 'zh-Hant', dir: 'ltr' }, 'a catalog that fails to load changes nothing');
     assert.equal(uiLocale.value, 'zh-Hant');
     await setUiLocale(SOURCE_LOCALE);
-    assert.equal(root.lang, 'en');
+    assert.deepEqual(attributes, { lang: 'en', dir: 'ltr' });
   } finally {
     await setUiLocale(SOURCE_LOCALE);
     globalThis.document = previous;

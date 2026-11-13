@@ -29,7 +29,7 @@ import { UI_LOCALES } from '../../gbdraw/web/js/utils/i18n.js';
 import { CATALOG_LOCALES, glossaryMatcher, pluralFormEntries, readCatalog, readGlossary } from './catalogs.mjs';
 import { REPOSITORY_ROOT, sourceKeys } from './source-keys.mjs';
 
-/** @import { PluralForms } from '../../gbdraw/web/js/utils/i18n.js' */
+/** @import { PluralForms, TextDirection } from '../../gbdraw/web/js/utils/i18n.js' */
 /** @typedef {import('./source-keys.mjs').KeyRole} KeyRole */
 /**
  * One string of the review page (data/keys.json).
@@ -52,6 +52,7 @@ import { REPOSITORY_ROOT, sourceKeys } from './source-keys.mjs';
  * @property {string} label the endonym of the Language menu (UI_LOCALES)
  * @property {string} language the English name of the language and its usage, from its I18N_STYLE.md heading
  * @property {string} section the number of its I18N_STYLE.md section, e.g. `6`
+ * @property {TextDirection} dir the direction the language reads in (UI_LOCALES)
  */
 /**
  * The screenshot map: screenshots, and per key id the rectangles [shot index, x, y, w, h].
@@ -89,7 +90,7 @@ export const reviewLocales = (style) => {
     const option = UI_LOCALES.find((entry) => entry.tag === tag);
     const heading = sections.get(tag);
     if (!option || !heading) throw new Error(`${tag} has no ${option ? 'I18N_STYLE.md section heading ("## <n>. <Language> (`' + tag + '`)")' : 'UI_LOCALES entry'}`);
-    return { tag, label: option.name, ...heading };
+    return { tag, label: option.name, ...heading, dir: option.dir };
   });
 };
 

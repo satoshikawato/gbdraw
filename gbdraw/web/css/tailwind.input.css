@@ -19,10 +19,11 @@
     .settings-index button:hover { background-color: #f1f5f9; color: var(--ui-text); }
     .settings-index > nav > button[aria-current="true"] { background-color: var(--ui-accent-soft); color: var(--ui-accent); }
     .settings-index button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
-    .settings-index-switch { flex: none; width: 26px; margin-left: 9px; }
-    .settings-index-switch::before { content: ''; position: absolute; left: -5px; top: 4px; bottom: 4px; width: 1px; background-color: var(--ui-line); }
+    .settings-index-switch { flex: none; width: 26px; margin-inline-start: 9px; }
+    .settings-index-switch::before { content: ''; position: absolute; inset-inline-start: -5px; top: 4px; bottom: 4px; width: 1px; background-color: var(--ui-line); }
     .settings-index-tip { @apply pointer-events-none fixed whitespace-nowrap; z-index: 90; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px; background-color: #1e293b; color: #fff; font-size: 11px; font-weight: 600; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25); }
     .settings-index-tip[data-side="right"] { transform: translateY(-50%); }
+    .settings-index-tip[data-side="left"] { transform: translate(-100%, -50%); }
 
     /* The same index as the rail: a 60 px column, the switch back first, then one entry per section
        (icon over a short name, 48 px high; in a short column an entry shrinks, but never below 34 px,
@@ -43,9 +44,9 @@
     [data-settings-display="rail"] > .settings-index > nav > button { --rail-entry-floor: 34px; --rail-icon: 20px; --rail-gap: 2px; @apply flex-col; flex: 0 1 48px; gap: var(--rail-gap); min-width: 0; max-width: none; min-height: min-content; border-radius: 8px; font-size: var(--rail-icon); }
     [data-settings-display="rail"] > .settings-index > nav > button > span { min-height: calc(var(--rail-entry-floor) - var(--rail-icon) - var(--rail-gap)); font-size: 10px; font-weight: 600; line-height: 1.1; color: var(--ui-text-2); text-align: center; word-break: keep-all; overflow-wrap: normal; hyphens: none; font-feature-settings: 'palt'; }
     [data-settings-display="rail"] > .settings-index > nav > button[aria-current="true"] > span { color: var(--ui-accent); }
-    [data-settings-display="rail"] > .settings-index > nav > button[aria-current="true"]::before { content: ''; position: absolute; left: -4px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background-color: var(--ui-accent); }
+    [data-settings-display="rail"] > .settings-index > nav > button[aria-current="true"]::before { content: ''; position: absolute; inset-inline-start: -4px; top: 10px; bottom: 10px; width: 3px; border-start-start-radius: 0; border-start-end-radius: 3px; border-end-end-radius: 3px; border-end-start-radius: 0; background-color: var(--ui-accent); }
     [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 9px; }
-    [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { content: ''; position: absolute; left: 8px; right: 8px; top: -6px; height: 1px; background-color: var(--ui-line); }
+    [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { content: ''; position: absolute; inset-inline-start: 8px; inset-inline-end: 8px; top: -6px; height: 1px; background-color: var(--ui-line); }
     [data-settings-display="rail"] > .settings-index > nav > .at-end { margin-top: auto; }
     /* A low window also packs the column: entries touch, 2 px before a line, and a 24 px switch 3 px below the
        column's top, so that every Circular entry fits below the drawing bar at 1280x720 (OV-1785, Owner
@@ -104,7 +105,7 @@
        the "(auto)" value drawn behind a transparent input. */
     .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
     .auto-value-input { display: block; width: 100%; box-sizing: border-box; background: transparent; position: relative; z-index: 1; }
-    .track-slot-geometry-input { height: 1.5rem; padding-right: 1.55rem !important; background: transparent; position: relative; z-index: 1; }
+    .track-slot-geometry-input { height: 1.5rem; padding-inline-end: 1.55rem !important; background: transparent; position: relative; z-index: 1; }
     /* A disabled field dims like a disabled .btn, and so do the "(auto)" value and unit drawn with it.
        The ground is left alone, so an "(auto)" value behind a transparent input stays visible. */
     .form-input:disabled { cursor: not-allowed; opacity: 0.5; }
@@ -125,14 +126,14 @@
     .app-notice.is-info { @apply border-blue-200 bg-blue-50 text-blue-900; }
     .app-notice.is-warning { @apply border-amber-200 bg-amber-50 text-amber-900; }
     /* A choice dialog shows one primary option; the others share one secondary style. */
-    .choice-option { @apply flex w-full items-start gap-2 rounded-lg border px-4 py-2 text-left text-sm font-bold transition-colors; color: var(--ui-text-2); background-color: var(--ui-surface); border-color: var(--ui-line-strong); }
+    .choice-option { @apply flex w-full items-start gap-2 rounded-lg border px-4 py-2 text-start text-sm font-bold transition-colors; color: var(--ui-text-2); background-color: var(--ui-surface); border-color: var(--ui-line-strong); }
     .choice-option:hover { @apply bg-slate-50; }
     .choice-option > i { @apply mt-0.5 shrink-0 text-lg; }
     .choice-option.is-primary { @apply border-transparent text-white hover:bg-blue-700; background-color: var(--ui-accent); }
     .choice-option-note { @apply -mt-1 px-1 text-xs font-normal text-slate-600; }
     .choice-group-label { @apply mt-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500; }
     .choice-cancel { @apply mt-3 w-full px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700; }
-    .app-notice-dismiss { @apply -my-1 -mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-white/70; }
+    .app-notice-dismiss { @apply -my-1 -me-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-white/70; }
     .btn-icon-sm { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed; }
     .app-config-button { @apply flex items-center gap-0.5 rounded border px-1 py-0.5 font-bold whitespace-nowrap transition-colors; font-size: 11px; color: #475569; background-color: var(--ui-surface); border-color: var(--ui-line); }
     .app-config-button:hover:not(:disabled) { color: var(--ui-accent); border-color: var(--ui-accent); }
@@ -152,7 +153,25 @@
     details > summary::before { content: ''; @apply h-4 w-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
     details[open] > summary { @apply mb-2; }
     details[open] > summary::before { transform: rotate(90deg); }
+    details > summary:dir(rtl)::before { scale: -1 1; }
     .card > details > summary { font-size: 14px; color: var(--ui-text); }
     .card > details[open] > summary { margin-bottom: 10px; }
     details > summary:hover { color: var(--ui-accent); }
+}
+
+/* Right to left. setUiLocale writes the page's dir from the UI language. Numbers, colors, code and
+   sequences read left to right in every language; font-mono elements carry dir="ltr" in index.html. */
+:where(input[type="number"], input[type="color"], input[inputmode="numeric"], input[inputmode="decimal"], code, pre) {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+/* An icon of a direction (back and forward, open and close, move) points the other way in a
+   right-to-left page; an inline box takes no scale, so it becomes inline-block there. */
+:is(.ph-arrow-u-up-left, .ph-arrow-u-up-right, .ph-arrow-left, .ph-arrow-right, .ph-caret-right,
+    .ph-caret-double-left, .ph-caret-double-right, .ph-sidebar-simple, .ph-arrow-square-out):dir(rtl) {
+    scale: -1 1;
+}
+:where(:is(.ph-arrow-u-up-left, .ph-arrow-u-up-right, .ph-arrow-left, .ph-arrow-right, .ph-caret-right,
+    .ph-caret-double-left, .ph-caret-double-right, .ph-sidebar-simple, .ph-arrow-square-out):dir(rtl)) {
+    display: inline-block;
 }

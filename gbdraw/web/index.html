@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="
@@ -272,9 +272,9 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         input, select, textarea, button { font-family: inherit; }
-        .help-tip { margin-left: 0.25rem; }
+        .help-tip { margin-inline-start: 0.25rem; }
         /* A timing note's clock (SettingNote): the pill is the tip's holder. */
-        .apply-note > .help-tip { margin-left: 0; }
+        .apply-note > .help-tip { margin-inline-start: 0; }
         [v-cloak] { display: none !important; }
         #app-boot-splash {
             position: fixed;
@@ -479,7 +479,7 @@
         .track-slot-unit-suffix {
             position: absolute;
             top: 50%;
-            right: 0.45rem;
+            inset-inline-end: 0.45rem;
             transform: translateY(-50%);
             color: var(--ui-muted);
             font-size: 11px;
@@ -512,7 +512,7 @@
             flex: 1 1 auto;
             min-height: 0;
             overflow: auto;
-            padding: 0 0.25rem 1.5rem 0;
+            padding-block: 0 1.5rem; padding-inline: 0 0.25rem;
         }
         .pairwise-match-popup-section {
             border: 1px solid #e2e8f0;
@@ -586,7 +586,7 @@
         .pairwise-match-feature-table td {
             padding: 0.45rem 0.55rem;
             border-bottom: 1px solid #f1f5f9;
-            text-align: left;
+            text-align: start;
             vertical-align: top;
         }
         .pairwise-match-feature-table th {
@@ -717,7 +717,7 @@
         .drawing-bar-menu > .action-menu-items {
             position: absolute;
             z-index: 45;
-            left: 0;
+            inset-inline-start: 0;
             min-width: 10rem;
             background: #fff;
             box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
@@ -730,7 +730,7 @@
             border-radius: 0.25rem;
             color: #334155;
             font-size: 11px;
-            text-align: left;
+            text-align: start;
             white-space: nowrap;
         }
         .action-menu-item:hover:not(:disabled) {
@@ -796,7 +796,7 @@
         .match-table td {
             padding: 0.35rem 0.4rem;
             border-bottom: 1px solid #f1f5f9;
-            text-align: left;
+            text-align: start;
             vertical-align: top;
         }
         .match-table th {
@@ -817,7 +817,7 @@
             min-width: 0;
             padding: 0;
             color: #1e293b;
-            text-align: left;
+            text-align: start;
         }
         .match-cell-button:hover:not(:disabled) .match-cell-main {
             color: #1d4ed8;
@@ -957,7 +957,7 @@
             flex: 1 1 auto;
             min-height: 0;
             overflow: auto;
-            padding: 0 0.25rem 1.5rem 0;
+            padding-block: 0 1.5rem; padding-inline: 0 0.25rem;
         }
         .feature-popup-resize-handle {
             position: absolute;
@@ -1270,7 +1270,7 @@
         .gbdraw-ring-hover-row[data-hovered] { background: #e8eef8; font-weight: 700; color: #1f2937; }
         .gbdraw-ring-hover-swatch { width: 0.75rem; height: 0.75rem; border: 1px solid rgba(15, 23, 42, 0.18); }
         .gbdraw-ring-hover-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .gbdraw-ring-hover-value { text-align: right; font-variant-numeric: tabular-nums; }
+        .gbdraw-ring-hover-value { text-align: end; font-variant-numeric: tabular-nums; }
         .gbdraw-ring-hover-value[data-no-hit] { color: #64748b; }
         @media print { .gbdraw-ring-hover-overlay { display: none !important; } }
         .gbdraw-alignment-line { stroke: #2563eb; stroke-width: 1.5; }
@@ -1459,7 +1459,7 @@
         .feature-selection-toolbar {
             position: absolute;
             top: 8.5rem;
-            left: 1rem;
+            inset-inline-start: 1rem;
             z-index: 24;
             /* Clear of the Editor toggle at the right edge, and no taller than
                the Preview below its top, scrolling inside itself (OV-1098). */
@@ -1502,7 +1502,7 @@
         .feature-selection-status {
             position: absolute;
             top: 6.25rem;
-            left: 1rem;
+            inset-inline-start: 1rem;
             z-index: 23;
             max-width: min(420px, calc(100% - 2rem));
             border: 1px solid #bfdbfe;
@@ -1544,6 +1544,14 @@
                 -50%
             );
         }
+        /* In a right-to-left page the drawer sits at the left edge: it hides to the left and the
+           open toggle moves right. */
+        .right-drawer[aria-hidden="true"]:where(:dir(rtl)) {
+            transform: translateX(-100%);
+        }
+        .drawer-toggle[aria-expanded="true"]:where(:dir(rtl)) {
+            transform: translate(var(--right-drawer-width), -50%);
+        }
         /* The Editor opens from the Preview top edge; search and controls keep the
            remaining width (PD-OI-054 revision 2). */
         .preview-editor-layout {
@@ -1563,7 +1571,7 @@
             grid-row: 1;
             justify-self: end;
             width: min(39.5rem, calc(100% - 1rem - var(--preview-editor-reserve)));
-            margin-right: calc(0.5rem + var(--preview-editor-reserve));
+            margin-inline-end: calc(0.5rem + var(--preview-editor-reserve));
         }
         .preview-editor-layout > .preview-workspace {
             grid-row: 2;
@@ -1579,7 +1587,7 @@
         }
         .preview-editor-layout > .preview-controls {
             grid-row: 3;
-            margin-right: var(--preview-editor-reserve);
+            margin-inline-end: var(--preview-editor-reserve);
         }
         .preview-workspace {
             --preview-search-space: 0px;
@@ -1664,10 +1672,10 @@
             }
             .app-header[data-file-icons] .app-file-actions .app-config-button i { font-size: 0.95rem !important; }
             .app-header[data-file-icons][data-gallery-icon] .app-toolbar { gap: 0.25rem; }
-            .app-header[data-file-icons][data-gallery-icon] .app-file-actions { margin-left: 0.25rem; padding-left: 0.25rem; }
+            .app-header[data-file-icons][data-gallery-icon] .app-file-actions { margin-inline-start: 0.25rem; padding-inline-start: 0.25rem; }
             .app-header[data-session-title-alone] .app-session-label { display: none; }
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-toolbar { gap: 0.125rem; }
-            .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-left: 0.125rem; padding-left: 0.125rem; }
+            .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-inline-start: 0.125rem; padding-inline-start: 0.125rem; }
             .app-header[data-language-narrow] .app-language-select { field-sizing: content; }
         }
         /* The two-row header (`data-header-wrapped`, app/header-fit.js): always at 768 px and below, where the
@@ -1690,7 +1698,7 @@
             gap: 0.5rem !important;
         }
 
-        .app-header[data-header-wrapped] .app-file-actions .app-gallery-link { position: absolute; top: 0.5rem; right: 0.75rem; height: 2rem; }
+        .app-header[data-header-wrapped] .app-file-actions .app-gallery-link { position: absolute; top: 0.5rem; inset-inline-end: 0.75rem; height: 2rem; }
         .app-header[data-header-wrapped] .app-gallery-link-label { display: none; }
 
         .app-header[data-header-wrapped] .app-brand {
@@ -1763,22 +1771,27 @@
         .history-list-rows { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
         .history-list-row {
             display: flex; align-items: center; gap: 0.75rem; width: 100%; min-height: 1.875rem; padding: 0 0.75rem;
-            text-align: left; white-space: nowrap;
+            text-align: start; white-space: nowrap;
         }
         .history-list-row[aria-disabled="true"] { cursor: default; }
         .history-list-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .history-list-value {
-            flex: 1 1 0; min-width: 2.5rem; overflow: hidden; text-overflow: ellipsis; text-align: right;
+            flex: 1 1 0; min-width: 2.5rem; overflow: hidden; text-overflow: ellipsis; text-align: end;
             color: #64748b; font-variant-numeric: tabular-nums;
         }
         .history-list-swatch {
-            display: inline-block; width: 0.7rem; height: 0.7rem; margin-right: 0.3rem; vertical-align: -0.05rem;
+            display: inline-block; width: 0.7rem; height: 0.7rem; margin-inline-end: 0.3rem; vertical-align: -0.05rem;
             border: 1px solid rgba(15, 23, 42, 0.25); border-radius: 0.15rem;
         }
         .history-list-row[data-place="undone"], .history-list-row[data-place="undone"] .history-list-value { color: #94a3b8; }
         .history-list-row[data-place="start"] { color: #475569; }
         .history-list-row[data-place="current"] { background-color: #eff6ff; box-shadow: inset 3px 0 0 #2563eb; font-weight: 600; color: #1d4ed8; }
         .history-list-row[data-place="current"] .history-list-value { font-weight: 400; color: #1d4ed8; }
+        /* A value reads in its own direction (dir="auto") and stands at the row's end in either page
+           direction; in a right-to-left page the mark of the current step is at the row's start. */
+        .history-list-row:dir(ltr) > .history-list-value { text-align: right; }
+        .history-list-row:dir(rtl) > .history-list-value { text-align: left; }
+        .history-list-row[data-place="current"]:where(:dir(rtl)) { box-shadow: inset -3px 0 0 #2563eb; }
         .history-list-row:not([aria-disabled="true"]):hover, .history-list-row:focus-visible { background-color: #bfdbfe; outline: none; }
         .history-list-tag {
             flex: none; padding: 0 0.3rem; border-radius: 0.25rem; background-color: #dbeafe;
@@ -1876,8 +1889,8 @@
             .drawing-picker > .action-menu-items {
                 position: absolute;
                 z-index: 46;
-                left: 0;
-                right: 0;
+                inset-inline-start: 0;
+                inset-inline-end: 0;
                 background: #fff;
                 box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
             }
@@ -1887,8 +1900,8 @@
             }
             /* The menu sits at the row's right end: it opens aligned to that edge. */
             .drawing-bar-menu > .action-menu-items {
-                left: auto;
-                right: 0;
+                inset-inline-start: auto;
+                inset-inline-end: 0;
             }
             .phone-pane-tabs {
                 display: flex;
@@ -1928,8 +1941,8 @@
                 #app:has(> .app-main[data-phone-pane="preview"]) > footer[data-app-footer] {
                     position: absolute;
                     top: 100%;
-                    left: 0;
-                    right: 0;
+                    inset-inline-start: 0;
+                    inset-inline-end: 0;
                 }
                 .app-main[data-phone-pane="preview"] {
                     flex: 1 1 0 !important;
@@ -1977,15 +1990,15 @@
 
             .settings-scroll {
                 overflow: visible !important;
-                padding-right: 0 !important;
+                padding-inline-end: 0 !important;
                 padding-bottom: 10rem !important;
                 margin-bottom: 0 !important;
             }
 
             .generate-bar {
                 position: fixed !important;
-                left: 0 !important;
-                right: 0 !important;
+                inset-inline-start: 0 !important;
+                inset-inline-end: 0 !important;
                 width: auto !important;
                 bottom: 0 !important;
                 padding: 0.65rem 0.75rem calc(0.65rem + env(safe-area-inset-bottom)) !important;
@@ -2019,7 +2032,7 @@
 
             .preview-toolbar {
                 width: 100% !important;
-                margin-right: 0 !important;
+                margin-inline-end: 0 !important;
             }
 
             .preview-toolbar > * {
@@ -2072,27 +2085,27 @@
         @container (min-width: 56.125rem) {
             .preview-workspace:has(> .alignment-review-panel) {
                 display: flex;
-                padding-right: 24rem;
+                padding-inline-end: 24rem;
             }
             .preview-workspace > .alignment-review-panel {
                 position: absolute;
                 top: 0;
-                right: 0;
+                inset-inline-end: 0;
                 bottom: 0;
                 width: 24rem;
                 border-top: 0;
-                border-left: 1px solid #e2e8f0;
+                border-inline-start: 1px solid #e2e8f0;
             }
             .preview-workspace:has(> .alignment-review-panel) > .drawer-toggle {
                 top: 50%;
-                right: 24rem;
+                inset-inline-end: 24rem;
                 transform: translateY(-50%);
             }
         }
         .alignment-review-panel > header { flex: none; padding: 12px 16px 10px; border-bottom: 1px solid #e2e8f0; }
         .alignment-review-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
         .alignment-review-title h2 { margin: 0; color: #1e293b; font-size: 15px; font-weight: 700; white-space: nowrap; }
-        .alignment-review-title button { margin-left: auto; }
+        .alignment-review-title button { margin-inline-start: auto; }
         .alignment-review-group {
             padding: 1px 6px;
             border-radius: 999px;
@@ -2116,8 +2129,8 @@
         }
         .alignment-review-caption > span:first-child { color: #475569; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
         .alignment-review-key { display: flex; align-items: center; gap: 4px; }
-        .alignment-review-key i { display: inline-block; margin-left: 7px; }
-        .alignment-review-key i:first-child { margin-left: 0; }
+        .alignment-review-key i { display: inline-block; margin-inline-start: 7px; }
+        .alignment-review-key i:first-child { margin-inline-start: 0; }
         .alignment-review-key .is-chosen { width: 11px; height: 9px; border-radius: 2px; background: #2563eb; }
         .alignment-review-key .is-other { width: 10px; height: 8px; border: 1.3px dashed #2563eb; border-radius: 2px; }
         .alignment-review-key .is-line { width: 1.5px; height: 12px; background: #2563eb; }
@@ -2143,7 +2156,7 @@
         .alignment-review-detail { color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
         .alignment-review-card.is-skipped .alignment-review-record,
         .alignment-review-card.is-skipped .alignment-review-gene b { color: #64748b; }
-        .alignment-review-direction { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-left: auto; }
+        .alignment-review-direction { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-inline-start: auto; }
         .alignment-review-arrow { color: #64748b; font-size: 13px; line-height: 1; }
         .alignment-review-chip { flex: none; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
         .alignment-review-chip.is-reference { background: #2563eb; color: #fff; font-weight: 700; }
@@ -2173,7 +2186,7 @@
         /* The second line of a one-candidate card: evidence at the left, Skip at the right. */
         .alignment-review-evidence { display: flex; flex: 0 0 100%; align-items: center; gap: 4px; min-width: 0; }
         .alignment-review-evidence .alignment-review-chip { flex: 0 1 auto; }
-        .alignment-review-skip { display: flex; flex: none; align-items: center; gap: 4px; margin-left: auto; color: #64748b; font-size: 11px; cursor: pointer; }
+        .alignment-review-skip { display: flex; flex: none; align-items: center; gap: 4px; margin-inline-start: auto; color: #64748b; font-size: 11px; cursor: pointer; }
         .alignment-review-skip input { width: 12px; height: 12px; margin: 0; }
         .alignment-review-note { margin: 2px 0 0; color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
         .alignment-review-note b { color: #92400e; font-weight: 600; }
@@ -2226,7 +2239,7 @@
             }
             [data-result-preview] > .card-header {
                 margin-inline: 0;
-                padding-right: calc(var(--editor-toggle-width) + 0.75rem);
+                padding-inline-end: calc(var(--editor-toggle-width) + 0.75rem);
             }
             .preview-editor-layout,
             .preview-editor-layout:has(> .preview-workspace > .right-drawer[aria-hidden="false"]) {
@@ -2239,7 +2252,7 @@
             .preview-editor-layout > .preview-feature-search {
                 justify-self: stretch;
                 width: auto;
-                margin-right: 0.5rem;
+                margin-inline-end: 0.5rem;
             }
             /* The hidden bar's empty row keeps no gap above the canvas. */
             .preview-feature-search.is-hidden ~ .preview-workspace {
@@ -2310,7 +2323,7 @@
                 width: 100%;
                 min-height: 0;
                 max-height: clamp(11rem, calc(var(--compact-preview-space) - 7rem), 30rem);
-                border-left: 0;
+                border-inline-start: 0;
                 border-top: 1px solid #e2e8f0;
                 transform: none;
             }
@@ -2327,12 +2340,12 @@
             .preview-workspace .drawer-toggle {
                 top: 0.5rem;
                 bottom: auto;
-                right: 0;
+                inset-inline-end: 0;
                 width: var(--editor-toggle-width);
                 transform: none;
             }
             .preview-workspace .drawer-toggle[aria-expanded="true"] {
-                right: 0;
+                inset-inline-end: 0;
                 transform: none;
             }
             .preview-controls > button {
@@ -2405,7 +2418,7 @@
         /* The radio covers its segment, so a pointer on the segment is a pointer on the radio. */
         .linear-pair-source > label { position: relative; }
         .linear-pair-source-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-        .linear-pair-source > label + label { border-left: 1px solid var(--ui-line, #cbd5e1); }
+        .linear-pair-source > label + label { border-inline-start: 1px solid var(--ui-line, #cbd5e1); }
         .linear-pair-source > label.is-active { background: #eff6ff; color: #1d4ed8; box-shadow: inset 0 -2px 0 #3b82f6; }
         .linear-pair-source > label:focus-within { outline: 2px solid #3b82f6; outline-offset: -2px; }
         .linear-pair-file-name > summary::before { width: 0.75rem; height: 0.75rem; }
@@ -2431,7 +2444,7 @@
         .linear-comparison-summary { overflow-wrap: anywhere; }
         .generate-bar {
             position: fixed;
-            left: 1rem;
+            inset-inline-start: 1rem;
             bottom: 2rem;
             width: var(--settings-pane-width);
         }
@@ -2469,7 +2482,7 @@
             display: grid;
             grid-template: minmax(0, 1fr) / var(--settings-rail-width);
             column-gap: 8px;
-            margin-right: 14px;
+            margin-inline-end: 14px;
         }
         .settings-pane[data-settings-display="rail"][data-settings-docked] {
             --settings-pane-width: calc(var(--settings-rail-width) + 8px + 320px);
@@ -2496,7 +2509,7 @@
         }
         /* The close button sits over the top right corner of the panel: a heading keeps clear of it. */
         [data-settings-display="rail"] [data-settings-in-dock="true"] > :is(.card-header, [tabindex="-1"]),
-        [data-settings-display="rail"] [data-settings-in-dock="true"] > details > summary { padding-right: 2rem; }
+        [data-settings-display="rail"] [data-settings-in-dock="true"] > details > summary { padding-inline-end: 2rem; }
         .settings-dock-close {
             position: absolute; top: 9px; z-index: 5; display: inline-flex; align-items: center; justify-content: center;
             width: 26px; height: 26px; border: 1px solid var(--ui-line); border-radius: 6px;
@@ -2517,17 +2530,17 @@
             min-height: 0; margin: 0; padding-top: 0; overflow-y: auto; border: 0; border-radius: 0; box-shadow: none;
         }
         .settings-popup > [data-settings-section] > details > summary {
-            position: sticky; top: 0; z-index: 1; margin: 0 -0.75rem 10px; padding: 12px 2.75rem 12px 0.75rem;
+            position: sticky; top: 0; z-index: 1; margin: 0 -0.75rem 10px; padding-block: 12px; padding-inline: 0.75rem 2.75rem;
             border-bottom: 1px solid var(--ui-line); background-color: #f1f5f9; cursor: move;
         }
         .settings-popup > [data-settings-section] > details > summary::before { content: none; }
-        .settings-popup > .settings-dock-close { right: 9px; }
+        .settings-popup > .settings-dock-close { inset-inline-end: 9px; }
         /* A rail column too low for its entries scrolls and shows it: a 4 px scrollbar beside the entries.
            Where the width cannot be set (Firefox), a thin scrollbar takes up to 8 px: it uses the column's
            right padding first, so an entry keeps at least 46 px for its name. */
         [data-settings-display="rail"] > .settings-index > nav::-webkit-scrollbar { width: 4px; }
         @supports not selector(::-webkit-scrollbar) {
-            .settings-pane[data-settings-display="rail"] > .settings-index > nav { scrollbar-width: thin; padding-right: 0; }
+            .settings-pane[data-settings-display="rail"] > .settings-index > nav { scrollbar-width: thin; padding-inline-end: 0; }
             .settings-pane[data-settings-display="rail"] > .settings-index > nav > button { max-width: 50px; }
         }
         /* Beside the rail alone, Generate is a 60 px button: the icon over the first word, and the loader alone
@@ -2605,7 +2618,7 @@
                         <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
                     </button>
                 </div>
-                <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
+                <div class="app-file-actions ms-2 flex gap-0.5 border-s border-slate-300 ps-2">
                     <button data-history-list-toggle data-history-ignore @click="historyList.toggleList" :disabled="!historyList.available.value" :aria-expanded="historyList.open.value ? 'true' : 'false'" :aria-controls="historyList.id" class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="t('History')" :aria-label="t('History')">
                         <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
                     </button>
@@ -2637,7 +2650,7 @@
                     <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{{ t('Session') }}</span>
                     <button @click="editSessionTitle" class="app-session-button text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start" :disabled="!semanticMutationAvailable">
                         <i class="ph ph-pencil-simple" aria-hidden="true"></i>
-                        <span class="truncate">{{ sessionTitleLabel }}</span>
+                        <span dir="auto" class="truncate">{{ sessionTitleLabel }}</span>
                     </button>
                 </div>
 
@@ -2663,7 +2676,7 @@
                             @pointerenter="historyList.pointed.value = row.key" @pointerleave="historyList.pointed.value = null"
                             @focus="historyList.pointed.value = row.key" @blur="historyList.pointed.value = null">
                         <span class="history-list-name">{{ row.text.name }}</span>
-                        <span class="history-list-value"><span v-if="row.text.color" class="history-list-swatch" :style="{ backgroundColor: row.text.color }"></span>{{ row.text.value }}</span>
+                        <span dir="auto" class="history-list-value"><span v-if="row.text.color" class="history-list-swatch" :style="{ backgroundColor: row.text.color }"></span>{{ row.text.value }}</span>
                         <span v-if="row.place === 'current'" class="history-list-tag">{{ t('Current') }}</span>
                     </button>
                 </li>
@@ -2696,7 +2709,7 @@
                     :disabled="!drawingSwitchAvailable" :title="drawingSwitchAvailable ? (tab.kind === 'offer' ? t('New Linear drawing') : null) : drawingSwitchBusyReason"
                     :class="tab.selected ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : (tab.kind === 'offer' ? 'text-slate-400 hover:text-slate-700' : 'text-slate-500 hover:text-slate-700')"
                     class="drawing-tab shrink-0 px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5 max-w-[14rem]">
-                <i :class="['ph', tab.kind === 'offer' ? 'ph-plus' : (tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler')]" aria-hidden="true"></i><span class="truncate">{{ tab.label }}</span>
+                <i :class="['ph', tab.kind === 'offer' ? 'ph-plus' : (tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler')]" aria-hidden="true"></i><span dir="auto" class="truncate">{{ tab.label }}</span>
             </button>
         </div>
         <template v-for="tab in drawingBarTabs" :key="tab.id">
@@ -2734,7 +2747,7 @@
             <settings-section-index :mode="mode" controls="settings-sections" :view="settingsPane" :reveal="revealSettingsSection"
                                     @rail="showSettingsPaneRail" @stacked="showSettingsPaneStacked" @close="closeDockedSettings"></settings-section-index>
 
-            <div id="settings-sections" class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
+            <div id="settings-sections" class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pe-2 pb-4 space-y-2">
 
                 <div v-settings-section="'input-genomes'" data-setting="inputs" class="card">
                     <div tabindex="-1" class="card-header min-w-0"><settings-section-title section="input-genomes"></settings-section-title> <setting-note setting="inputs"></setting-note></div>
@@ -2906,7 +2919,7 @@
                                 {{ t('Depth TSV tracks') }}
                                 <setting-note setting="depth-sources"></setting-note>
                                 <help-tip :text="t('A tab-separated read-depth table drawn as a track. With several records, one file is used for the same series of every record; a loaded Session keeps each record\'s Depth TSV as saved, empty ones included.')"></help-tip>
-                                <span v-if="hasCircularDepthFiles" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(files.c_depth) }}</span>
+                                <span v-if="hasCircularDepthFiles" class="ms-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(files.c_depth) }}</span>
                             </summary>
                             <p v-if="circularRecordDiscoveryState.records.length > 1" class="ui-hint pt-1">{{ t('Each file is used for every record.') }}</p>
                             <div v-if="!hasCircularDepthFiles" class="pt-1">
@@ -3248,7 +3261,7 @@
                             <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
                                 <summary v-show="source.records.length > 1" role="button" :aria-label="t('Records for file {n}', { n: sourceIndex + 1 })" class="mt-1 text-xs font-normal text-slate-500">
                                     {{ t('Number of records: {count} · {drawn} drawn', { count: source.records.length, drawn: recordSelection.drawnCount('linear', source.records.map(({ sequence }) => sequence.uid)) }) }}
-                                    <span v-if="linearSourceGencodeProblem(source)" class="ml-1 text-red-700">{{ linearGencodeMark(linearSourceGencodeProblem(source)) }}</span>
+                                    <span v-if="linearSourceGencodeProblem(source)" class="ms-1 text-red-700">{{ linearGencodeMark(linearSourceGencodeProblem(source)) }}</span>
                                 </summary>
                                 <div
                                     v-for="({ sequence: seq, index: idx }) in source.records"
@@ -3267,12 +3280,12 @@
                                     <span
                                         v-if="!recordSelection.isDrawn('linear', seq.uid)"
                                         data-record-off-badge
-                                        class="ml-auto rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
+                                        class="ms-auto rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
                                     >{{ t('OFF') }}</span>
                                     <span
                                         v-if="linearRecordGencodeProblem(seq)"
                                         :id="`linear-record-gencode-${seq.uid}`"
-                                        :class="recordSelection.isDrawn('linear', seq.uid) ? 'ml-auto' : ''"
+                                        :class="recordSelection.isDrawn('linear', seq.uid) ? 'ms-auto' : ''"
                                         class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
                                     >{{ linearGencodeMark(linearRecordGencodeProblem(seq)) }}</span>
                                 </summary>
@@ -3295,7 +3308,7 @@
                                     data-history-managed
                                     :data-record-delete-settings="seq.uid"
                                     @click="recordSelection.deleteSettings('linear', [seq.uid])"
-                                    class="ml-auto text-[10px] text-red-600 hover:text-red-700"
+                                    class="ms-auto text-[10px] text-red-600 hover:text-red-700"
                                     :disabled="!semanticMutationAvailable"
                                 ><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Delete settings') }}</button>
                             </div>
@@ -3311,7 +3324,7 @@
                                     <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                     {{ t('Per-record Depth TSV') }}
                                     <setting-note setting="depth-sources"></setting-note>
-                                    <span v-if="hasLinearDepthFiles(seq)" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(seq.depth) }}</span>
+                                    <span v-if="hasLinearDepthFiles(seq)" class="ms-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
                                 <div class="space-y-1.5 pt-1">
                                     <div class="space-y-1.5">
@@ -3655,7 +3668,7 @@
                                 <ul class="mt-1 space-y-1.5">
                                     <li v-for="issue in linearComparisonUi.issues" :key="issue.key" :data-linear-comparison-issue="issue.issueCode">
                                         <span>{{ issue.text }}</span>
-                                        <span class="ml-1 inline-flex flex-wrap gap-x-2">
+                                        <span class="ms-1 inline-flex flex-wrap gap-x-2">
                                             <button v-for="action in issue.actions" :key="action.key" type="button" data-history-ignore :aria-label="action.ariaLabel" class="font-semibold text-blue-700 underline disabled:opacity-40" @click="runLinearComparisonIssueAction(issue, action.key)" :disabled="action.key !== 'show' && !semanticMutationAvailable">{{ action.label }}</button>
                                         </span>
                                     </li>
@@ -3928,7 +3941,7 @@
                                             <button
                                                 v-if="pair.draft?.fileActive"
                                                 type="button"
-                                                class="max-w-full text-left text-[9px] text-amber-700"
+                                                class="max-w-full text-start text-[9px] text-amber-700"
                                                 :aria-label="t('Keep BLAST TSV but do not use it for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"
                                                 @click="deactivateLinearComparisonFile(pair.draft.id)"
                                                 :disabled="!semanticMutationAvailable"
@@ -3962,7 +3975,7 @@
                                                 <button
                                                     v-if="pair.draft?.losatFilenameActive || pair.resolved?.losatFilenameActive"
                                                     type="button"
-                                                    class="max-w-full text-left text-[10px] text-amber-700"
+                                                    class="max-w-full text-start text-[10px] text-amber-700"
                                                     :aria-label="t('Use automatic Raw LOSAT filename for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"
                                                     @click="deactivateResolvedLinearComparisonLosatFilename(pair.edgeKey)"
                                                     :disabled="!semanticMutationAvailable"
@@ -4088,7 +4101,7 @@
                                 <div v-if="linearRecordLayoutEnabled" class="min-w-0 space-y-1.5">
                                     <template v-for="cell in linearLayoutCellRows()" :key="`layout-${cell.key}`">
                                         <div v-for="{ seq, idx } in [{ seq: linearSeqs[cell.cardIndex], idx: cell.cardIndex }]" :key="`layout-cell-${cell.key}`" class="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1" data-linear-record-layout-cell :data-layout-window="cell.window ?? ''" :class="{ 'opacity-60': !recordSelection.isDrawn('linear', seq.uid) }">
-                                            <div class="flex min-w-0 items-center self-center text-[10px] font-semibold text-slate-600" data-linear-record-layout-name><record-name :prefix="`#${idx + 1}`" v-bind="linearComparisonRecordName(seq.uid)"></record-name><span v-if="cell.window !== null" data-linear-record-layout-window class="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-600 text-[9px] font-bold text-slate-700" :class="{ invisible: cell.number === null }" :aria-label="cell.number === null ? null : t('Window {n}', { n: cell.number })">{{ cell.number ?? '' }}</span><span v-if="!recordSelection.isDrawn('linear', seq.uid)" data-record-off-badge class="ml-1 shrink-0 rounded bg-slate-200 px-1 text-[9px] text-slate-700">{{ t('OFF') }}</span></div>
+                                            <div class="flex min-w-0 items-center self-center text-[10px] font-semibold text-slate-600" data-linear-record-layout-name><record-name :prefix="`#${idx + 1}`" v-bind="linearComparisonRecordName(seq.uid)"></record-name><span v-if="cell.window !== null" data-linear-record-layout-window class="ms-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-600 text-[9px] font-bold text-slate-700" :class="{ invisible: cell.number === null }" :aria-label="cell.number === null ? null : t('Window {n}', { n: cell.number })">{{ cell.number ?? '' }}</span><span v-if="!recordSelection.isDrawn('linear', seq.uid)" data-record-off-badge class="ms-1 shrink-0 rounded bg-slate-200 px-1 text-[9px] text-slate-700">{{ t('OFF') }}</span></div>
                                             <input type="number" min="1" v-committed-value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact min-w-0" :aria-label="cell.window === null ? t('Linear record row for sequence {n}', { n: idx + 1 }) : t('Linear record row for sequence {n}, window {window}', { n: idx + 1, window: cell.label })" :disabled="!semanticMutationAvailable">
                                             <div class="col-span-2 grid min-w-0 grid-cols-2 gap-1">
                                                 <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, -1, cell.window)" :disabled="!semanticMutationAvailable">{{ t('Up') }}</button>
@@ -4277,14 +4290,14 @@
                             </button>
                             <div v-else class="space-y-2">
                                 <label for="sequence-search-query" class="input-label text-[10px] mb-0">{{ t('Query FASTA') }}</label>
-                                <textarea id="sequence-search-query" v-committed-value="sequenceSearch.panel.queryText" @input="sequenceSearch.editQueryText($event.target.value)" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
+                                <textarea dir="ltr" id="sequence-search-query" v-committed-value="sequenceSearch.panel.queryText" @input="sequenceSearch.editQueryText($event.target.value)" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
                                 <p v-if="sequenceSearch.panel.queryError" id="sequence-search-query-error" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.queryError.summaryParts) }}</p>
                                 <button type="button" class="btn btn-secondary text-[10px] w-full" @click="$refs.sequenceSearchQueryInput.click()"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Choose file') }}</button>
                                 <input ref="sequenceSearchQueryInput" type="file" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,.gz,application/gzip" class="hidden" :aria-label="t('Query FASTA file')" @change="sequenceSearch.chooseQueryFile">
                                 <ul v-if="sequenceSearch.panel.queries.length" class="space-y-1" :aria-label="t('Queries')">
                                     <li v-for="query in sequenceSearch.panel.queries" :key="query.name" data-sequence-search-query class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1 text-[10px]">
                                         <input type="color" v-committed-value="query.color" @change="sequenceSearch.setQueryColor(query.name, $event.target.value)" :disabled="sequenceSearch.panel.colorMode === 'gradient'" :aria-label="t('Hit color of {query}', { query: query.name })" class="h-5 w-6 p-0 border border-slate-300 rounded">
-                                        <span class="truncate font-mono" :title="query.name">{{ query.name }}</span>
+                                        <span dir="ltr" class="truncate font-mono" :title="query.name">{{ query.name }}</span>
                                         <span class="text-slate-500">{{ sequenceSearch.queryLengthText(query) }}</span>
                                         <button type="button" class="btn btn-secondary h-5 w-5 p-0" @click="sequenceSearch.removeQuery(query.name)" :aria-label="t('Remove {query}', { query: query.name })" :title="t('Remove {query}', { query: query.name })"><i class="ph ph-x" aria-hidden="true"></i></button>
                                     </li>
@@ -4344,24 +4357,24 @@
                                      numbers keep their width, and short headers name their columns in full. -->
                                 <div class="overflow-x-auto" data-sequence-search-table>
                                     <table class="w-full text-[10px] tabular-nums" :aria-label="t('Hits of {set}', { set: sequenceSearch.shownOutcome.setId })">
-                                        <thead><tr class="text-left align-bottom text-[9px] leading-tight text-slate-500">
-                                            <th scope="col" class="font-medium pr-0.5">{{ t('Query') }} · {{ t('record') }}</th>
-                                            <th scope="col" class="font-medium pr-0.5 whitespace-nowrap">{{ t('Start-end') }}</th>
-                                            <th scope="col" class="font-medium pr-0.5" :aria-label="t('Strand')" :title="t('Strand')">{{ t('Str.') }}</th>
-                                            <th scope="col" class="font-medium pr-0.5 text-right" :aria-label="t('Identity')" :title="t('Identity')">{{ t('Ident. %') }}</th>
-                                            <th scope="col" class="font-medium pr-0.5 text-right" :aria-label="t('Length')" :title="t('Length')">{{ t('Len.') }}</th>
-                                            <th scope="col" class="font-medium pr-0.5 whitespace-nowrap text-right">{{ t('E-value') }}</th>
-                                            <th scope="col" class="font-medium text-right" :aria-label="t('Bit score')" :title="t('Bit score')">{{ t('Bits') }}</th>
+                                        <thead><tr class="text-start align-bottom text-[9px] leading-tight text-slate-500">
+                                            <th scope="col" class="font-medium pe-0.5">{{ t('Query') }} · {{ t('record') }}</th>
+                                            <th scope="col" class="font-medium pe-0.5 whitespace-nowrap">{{ t('Start-end') }}</th>
+                                            <th scope="col" class="font-medium pe-0.5" :aria-label="t('Strand')" :title="t('Strand')">{{ t('Str.') }}</th>
+                                            <th scope="col" class="font-medium pe-0.5 text-end" :aria-label="t('Identity')" :title="t('Identity')">{{ t('Ident. %') }}</th>
+                                            <th scope="col" class="font-medium pe-0.5 text-end" :aria-label="t('Length')" :title="t('Length')">{{ t('Len.') }}</th>
+                                            <th scope="col" class="font-medium pe-0.5 whitespace-nowrap text-end">{{ t('E-value') }}</th>
+                                            <th scope="col" class="font-medium text-end" :aria-label="t('Bit score')" :title="t('Bit score')">{{ t('Bits') }}</th>
                                         </tr></thead>
                                         <tbody>
                                             <tr v-for="hit in sequenceSearch.hitRows" :key="hit.annotationId" data-sequence-search-hit :aria-selected="sequenceSearch.panel.selectedHit === hit.annotationId" tabindex="0" class="cursor-pointer align-top hover:bg-slate-100 aria-selected:bg-blue-50" @click="sequenceSearch.selectHit(hit)" @keydown.enter.prevent="sequenceSearch.selectHit(hit)">
-                                                <td class="w-full max-w-0 pr-0.5"><span class="block font-mono truncate" :title="hit.query">{{ hit.query }}</span><span class="block text-slate-500 truncate" :title="sequenceSearch.recordOf(hit)">{{ sequenceSearch.recordOf(hit) }}</span></td>
-                                                <td class="pr-0.5">{{ numberText(hit.start) }}–{{ numberText(hit.end) }}</td>
-                                                <td class="pr-0.5 text-center">{{ hit.strand }}</td>
-                                                <td class="pr-0.5 text-right" :title="String(hit.identity)">{{ hit.identity.toFixed(1) }}</td>
-                                                <td class="pr-0.5 text-right whitespace-nowrap">{{ sequenceSearch.hitLengthText(hit) }}</td>
-                                                <td class="pr-0.5 text-right whitespace-nowrap">{{ hit.evalue }}</td>
-                                                <td class="text-right">{{ hit.bitscore }}</td>
+                                                <td class="w-full max-w-0 pe-0.5"><span dir="ltr" class="block font-mono truncate" :title="hit.query">{{ hit.query }}</span><span class="block text-slate-500 truncate" :title="sequenceSearch.recordOf(hit)">{{ sequenceSearch.recordOf(hit) }}</span></td>
+                                                <td class="pe-0.5">{{ numberText(hit.start) }}–{{ numberText(hit.end) }}</td>
+                                                <td class="pe-0.5 text-center">{{ hit.strand }}</td>
+                                                <td class="pe-0.5 text-end" :title="String(hit.identity)">{{ hit.identity.toFixed(1) }}</td>
+                                                <td class="pe-0.5 text-end whitespace-nowrap">{{ sequenceSearch.hitLengthText(hit) }}</td>
+                                                <td class="pe-0.5 text-end whitespace-nowrap">{{ hit.evalue }}</td>
+                                                <td class="text-end">{{ hit.bitscore }}</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -4389,7 +4402,7 @@
                                 <div class="flex items-center justify-between gap-1">
                                     <div class="min-w-0 flex items-center gap-1 text-[9px] font-semibold text-slate-500">
                                         <span class="shrink-0">#{{ i + 1 }}</span>
-                                        <span class="truncate font-mono" :title="track.id">{{ track.id }}</span>
+                                        <span dir="ltr" class="truncate font-mono" :title="track.id">{{ track.id }}</span>
                                     </div>
                                     <div class="flex items-center justify-end gap-0.5">
                                         <button :aria-label="t('Move track {id} up', { id: track.id })" type="button" @click="moveFeatureDensityTrack(track.id, -1)" :disabled="!semanticMutationAvailable || i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move track up')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
@@ -4409,7 +4422,7 @@
                                         <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fd-type-${value}`" :value="value">{{ value }}</option>
                                     </select>
                                     <input v-committed-value="track.query.qualifier ?? ''" @change="setFeatureDensityTrackField(track.id, 'qualifier', $event.target.value)" :aria-label="t('Track {id} qualifier', { id: track.id })" list="feature-visibility-qualifier-options" :placeholder="t('qualifier')" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
-                                    <input v-committed-value="track.query.value ?? ''" @change="setFeatureDensityTrackField(track.id, 'value', $event.target.value)" :aria-label="t('Track {id} value regex', { id: track.id })" :placeholder="t('value regex')" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                    <input dir="ltr" v-committed-value="track.query.value ?? ''" @change="setFeatureDensityTrackField(track.id, 'value', $event.target.value)" :aria-label="t('Track {id} value regex', { id: track.id })" :placeholder="t('value regex')" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <label class="block"><span class="input-label text-[10px]">{{ t('Shortest (bp)') }}</span>
@@ -4642,7 +4655,7 @@
                             </p>
                         </div>
                     </div>
-                    <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                    <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto pe-1">
                         <div
                             v-for="entry in unmanagedConfigOverrideEntries"
                             :key="entry.path"
@@ -4726,7 +4739,7 @@
                                         </label>
                                         <help-tip id="help-linear-resolve-feature-overlaps" :text="t('Overlapping genomic features are assigned to additional lanes; other tracks are repacked automatically.')"></help-tip>
                                     </div>
-                                    <label class="ml-6 flex items-center gap-2 text-[11px] text-slate-600">{{ t('Feature overlap tolerance (bp)') }}
+                                    <label class="ms-6 flex items-center gap-2 text-[11px] text-slate-600">{{ t('Feature overlap tolerance (bp)') }}
                                         <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" :aria-label="t('Feature overlap tolerance (bp)')" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
                                     </label>
 
@@ -4751,7 +4764,7 @@
                                             <span>{{ t('Normalize Record Lengths') }}</span>
                                         </label>
                                         <help-tip id="help-linear-normalize-record-lengths" :text="t('Draw all sequences at the same displayed length. Hides the length bar.')"></help-tip>
-                                        <p v-if="linearWrapFixesNormalize" id="linear-wrap-fixed-normalize" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
+                                        <p v-if="linearWrapFixesNormalize" id="linear-wrap-fixed-normalize" class="ui-hint ms-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
                                     </div>
                                     <div class="text-xs space-y-1" data-linear-wrap-field>
                                         <div class="flex items-center">
@@ -4761,7 +4774,7 @@
                                             </label>
                                             <help-tip id="help-linear-wrap-rows" :text="t('Draw each record over rows of this length. Leave the length empty for Auto, which chooses it from the longest record.')"></help-tip>
                                         </div>
-                                        <div v-if="linearWrapOn" class="ml-6 flex items-center gap-1">
+                                        <div v-if="linearWrapOn" class="ms-6 flex items-center gap-1">
                                             <auto-value-field class="flex-1 min-w-0" :visible="linearWrapAmount === ''" :text="linearWrapAutoText">
                                                 <input type="number" id="linear-wrap-length" min="1" step="any" v-committed-value="linearWrapAmount" @change="settleCommittedField($event.target, changeLinearWrap($event, 'amount'))" :aria-label="t('Row length')" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable || linearWrapBlocked">
                                             </auto-value-field>
@@ -4810,7 +4823,7 @@
                                             <div class="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold">
                                                 <button
                                                     type="button"
-                                                    class="inline-flex min-w-0 items-center gap-1 text-left select-none"
+                                                    class="inline-flex min-w-0 items-center gap-1 text-start select-none"
                                                     :class="linearTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
                                                     :aria-expanded="linearTrackSlotsPanelOpen ? 'true' : 'false'"
                                                     aria-controls="linear-custom-track-slots-panel"
@@ -5138,7 +5151,7 @@
                                         <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>{{ t('Resolve Overlaps') }}</span>
                                     </label>
-                                    <label class="ml-6 flex items-center gap-2 text-[11px] text-slate-600">{{ t('Feature overlap tolerance (bp)') }}
+                                    <label class="ms-6 flex items-center gap-2 text-[11px] text-slate-600">{{ t('Feature overlap tolerance (bp)') }}
                                         <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" :aria-label="t('Feature overlap tolerance (bp)')" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
                                     </label>
 
@@ -5188,7 +5201,7 @@
                                             <div class="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold">
                                                 <button
                                                     type="button"
-                                                    class="inline-flex min-w-0 items-center gap-1 text-left select-none"
+                                                    class="inline-flex min-w-0 items-center gap-1 text-start select-none"
                                                     :class="circularTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
                                                     :aria-expanded="circularTrackSlotsPanelOpen ? 'true' : 'false'"
                                                     data-track-slots-toggle
@@ -6055,7 +6068,7 @@
                                             <span class="col-span-4">{{ t('Qualifier') }}</span>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input v-committed-value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="t('Visibility rule {n} record ID', { n: i + 1 })" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                            <input dir="ltr" v-committed-value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="t('Visibility rule {n} record ID', { n: i + 1 })" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
                                             <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="t('Visibility rule {n} feature type', { n: i + 1 })" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                                 <option v-if="rule.featureType && !featureVisibilityFeatureSuggestions.includes(rule.featureType)" :value="rule.featureType">{{ rule.featureType }}</option>
                                                 <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value">{{ value }}</option>
@@ -6064,7 +6077,7 @@
                                         </div>
                                         <div>
                                             <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">{{ t('Value regex') }}</label>
-                                            <input v-committed-value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="t('Visibility rule {n} value regex', { n: i + 1 })" :placeholder="t('value regex')" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
+                                            <input dir="ltr" v-committed-value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="t('Visibility rule {n} value regex', { n: i + 1 })" :placeholder="t('value regex')" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <!-- The action has its own line: its longest text does not fit a quarter of the row. -->
                                         <div>
@@ -6188,7 +6201,7 @@
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
-                                        <p class="ui-hint"><i18n-text :text="t('Only show labels matching case-insensitive Python regex. Examples: {first} and {second}. Use {exact} for exact matches.')"><template #first><span class="font-mono">NADH|ATPase</span></template><template #second><span class="font-mono">(?P&lt;name&gt;NADH)</span></template><template #exact><span class="font-mono">^...$</span></template></i18n-text></p>
+                                        <p class="ui-hint"><i18n-text :text="t('Only show labels matching case-insensitive Python regex. Examples: {first} and {second}. Use {exact} for exact matches.')"><template #first><span dir="ltr" class="font-mono">NADH|ATPase</span></template><template #second><span dir="ltr" class="font-mono">(?P&lt;name&gt;NADH)</span></template><template #exact><span dir="ltr" class="font-mono">^...$</span></template></i18n-text></p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
                                             <input v-committed-value="row.feat" @input="setWhitelistRuleField(row, 'feat', $event.target.value)" :placeholder="t('Feature')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
                                             <input v-committed-value="row.qual" @input="setWhitelistRuleField(row, 'qual', $event.target.value)" :placeholder="t('Qualifier')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
@@ -6207,7 +6220,7 @@
                                     <div class="space-y-1 mb-3">
                                         <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
                                             <span class="w-16 font-bold truncate shrink-0" :title="rule.feat">{{rule.feat}}</span>
-                                            <span class="flex-grow text-slate-600 truncate font-mono" :title="rule.order">{{rule.order}}</span>
+                                            <span dir="ltr" class="flex-grow text-slate-600 truncate font-mono" :title="rule.order">{{rule.order}}</span>
                                             <button :aria-label="t('Remove priority rule')" @click="removePriorityRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                         </div>
                                     </div>
@@ -6476,7 +6489,7 @@
                                         <span>{{ t('Ruler on Axis') }}</span>
                                     </label>
                                     <help-tip id="help-linear-axis-ruler-on-axis" :text="t('Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler.')"></help-tip>
-                                    <p v-if="linearWrapFixesRulerOnAxis" id="linear-wrap-fixed-ruler-on-axis" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
+                                    <p v-if="linearWrapFixesRulerOnAxis" id="linear-wrap-fixed-ruler-on-axis" class="ui-hint ms-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
                                 </div>
                                 <div class="space-y-1">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -6567,7 +6580,7 @@
                                 data-history-ignore
                                 data-scale-visibility-note
                                 @click="showCircularTicksSlot"
-                                class="text-xs text-blue-600 text-left">{{ t('Show Ticks slot') }}</button>
+                                class="text-xs text-blue-600 text-start">{{ t('Show Ticks slot') }}</button>
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
@@ -6753,7 +6766,7 @@
 
                             <div>
                                 <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes" aria-hidden="true"></i> {{ t('How to cite') }}</strong>
-                                <div class="bg-white p-2 rounded border border-slate-200 font-mono text-[10px] select-all text-slate-500 break-all">
+                                <div dir="ltr" class="bg-white p-2 rounded border border-slate-200 font-mono text-[10px] select-all text-slate-500 break-all">
                                     Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
                                 </div>
                                 <p class="mt-1.5 text-[11px] flex items-center gap-1">
@@ -6818,7 +6831,7 @@
                 <i :class="notice.tone === 'warning' ? 'ph ph-warning' : 'ph ph-check-circle'" aria-hidden="true"></i>
                 <div class="min-w-0 flex-1 break-words">
                     <p class="font-semibold">{{ notice.text }}</p>
-                    <ul v-if="notice.items.length" class="mt-1 list-disc space-y-0.5 pl-4">
+                    <ul v-if="notice.items.length" class="mt-1 list-disc space-y-0.5 ps-4">
                         <li v-for="(item, index) in notice.items" :key="index">{{ item }}</li>
                     </ul>
                     <!-- #1383 (PD-OI-108): a loaded Gallery example offers its tutorial. -->
@@ -6837,7 +6850,7 @@
 
             <operation-error v-if="errorDisplay && !(errorDisplay.operation === 'align' && (similarityAlignmentDialogOpen || similarityAlignmentResetDialogOpen))"
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
-                class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
+                class="card border-s-4 border-s-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="mt-2 flex flex-wrap gap-2">
                     <button v-if="comparisonCauseShown" type="button" data-history-ignore @click="showComparisonCause" class="btn btn-secondary btn-sm">{{ t('Show in Comparison') }}</button>
                     <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">{{ t('Retry Generate') }}</button>
@@ -6860,7 +6873,7 @@
             </operation-error>
 
             <div v-if="results.length > 0" data-result-preview role="region" :aria-label="t('Result Preview')" class="card p-0 flex flex-col flex-grow overflow-clip relative">
-                <div class="card-header mb-0 py-2 pl-5 pr-6 border-b border-slate-200 flex justify-between items-center shrink-0 flex-wrap gap-x-2 gap-y-1">
+                <div class="card-header mb-0 py-2 ps-5 pe-6 border-b border-slate-200 flex justify-between items-center shrink-0 flex-wrap gap-x-2 gap-y-1">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
                         <h2 class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 min-w-0">
                             <i class="ph ph-check-circle text-xl text-green-600 shrink-0" aria-hidden="true"></i>
@@ -6898,11 +6911,11 @@
                         </div>
                     </div>
                     <span id="session-export-help" class="sr-only">{{ t('Save Session stores the current Result and settings draft. The SVG, Interactive SVG, PNG, and PDF buttons download the current Result. Neither applies pending settings.') }}</span>
-                    <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-x-2 gap-y-1 items-center flex-wrap mr-2" aria-describedby="session-export-help">
+                    <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-x-2 gap-y-1 items-center flex-wrap me-2" aria-describedby="session-export-help">
                         <p id="preview-layout-help" class="sr-only">{{ t('Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.') }}</p>
                         <div class="flex items-center gap-2 bg-white px-3 py-1 rounded border border-slate-300">
                             <span class="text-sm font-bold text-slate-700">DPI</span>
-                            <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
+                            <select dir="ltr" v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
                                 <option v-for="choice in pngDpiChoices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                             </select>
                             <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none">
@@ -7000,7 +7013,7 @@
                      aria-atomic="true"
                      class="-mx-4 border-b border-blue-100 bg-blue-50 px-5 py-2 text-xs text-blue-900 shrink-0">
                     <span class="font-semibold">{{ t('Similarity alignment applied.') }}</span>
-                    <span class="ml-1">
+                    <span class="ms-1">
                         {{ t('{count} aligned', { count: similarityAlignmentSummary.aligned }) }} ·
                         {{ t('{count} unchanged', { count: similarityAlignmentSummary.unchanged }) }} ·
                         {{ t('{count} explicitly skipped', { count: similarityAlignmentSummary.explicitlySkipped }) }} ·
@@ -7238,7 +7251,7 @@
                     <div v-if="featureSelectionDrag.active"
                          class="feature-selection-marquee"
                          :style="featureSelectionMarqueeStyle"></div>
-                    <div v-if="regionOverlay && regionOverlay.readout" class="region-select-readout" data-region-select-readout
+                    <div v-if="regionOverlay && regionOverlay.readout" dir="ltr" class="region-select-readout" data-region-select-readout
                          :style="{ left: `${regionOverlay.readoutX + 14}px`, top: `${regionOverlay.readoutY + 14}px` }">{{ regionOverlay.readout }}</div>
 
                     <!-- Zoom and Canvas controls -->
@@ -7246,12 +7259,12 @@
                          CSS shows it, and the sentence that applies, while a layout target or a drawn element
                          with a settings section is hovered; a popup that a click on that target opened (a
                          Legend row, a record definition) hides it. -->
-                    <div v-if="svgContent && !layoutRepositionMode && !clickedPairwiseMatch && !clickedFeature" class="preview-layout-hint drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200" aria-hidden="true">
+                    <div v-if="svgContent && !layoutRepositionMode && !clickedPairwiseMatch && !clickedFeature" class="preview-layout-hint drag-hint absolute top-4 start-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200" aria-hidden="true">
                         <p class="text-sm text-slate-600"><span class="preview-settings-hint">{{ t('Click to open its settings') }}</span><span class="preview-move-hint">{{ t('Turn on Layout edit to move this item') }}</span></p>
                     </div>
 
                     <!-- Drag hint -->
-                    <div v-if="svgContent && layoutRepositionMode" class="drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
+                    <div v-if="svgContent && layoutRepositionMode" class="drag-hint absolute top-4 start-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
                         <p class="text-sm text-slate-500 flex items-center gap-2">
                             <i class="ph ph-hand-grabbing text-base" aria-hidden="true"></i> {{ t('Drag a record, legend, title, or Linear scale to reposition') }}
                         </p>
@@ -7264,7 +7277,7 @@
                             <span class="text-xs font-bold text-slate-700 flex items-center gap-1">{{ t('Canvas Padding') }} <help-tip id="canvas-padding-help" :label="t('About Canvas Padding')" :text="settingApplicationHelp('canvas-padding')"></help-tip></span>
                             <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800" :disabled="!semanticMutationAvailable">{{ t('Reset') }}</button>
                         </div>
-                        <div class="grid grid-cols-3 gap-1 text-center">
+                        <div dir="ltr" class="grid grid-cols-3 gap-1 text-center">
                             <div></div>
                             <div>
                                 <label for="canvas-padding-top" class="text-[10px] text-slate-500 block">{{ t('Top') }}</label>
@@ -7291,7 +7304,7 @@
                         </div>
                     </div>
 
-                    <div class="preview-canvas absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
+                    <div dir="ltr" class="preview-canvas absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
                          ref="canvasContainerRef"
                          style="cursor: grab;"
                          :class="{ 'region-select-on': regionSelectOn }"
@@ -7315,11 +7328,11 @@
                         </div>
                     </div>
                     <!-- The selected region's band, drawn over the Result (never in it) in the record's frame. -->
-                    <svg v-if="regionOverlay" :ref="regionSelect.bindOverlay" class="region-select-overlay absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
+                    <svg v-if="regionOverlay" :ref="regionSelect.bindOverlay" direction="ltr" class="region-select-overlay absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
                         <path v-if="regionOverlayMatrix" :ref="regionSelect.bindBand" data-region-select-band :transform="regionOverlayMatrix" :d="regionOverlay.path" class="region-select-band"></path>
                     </svg>
                     <!-- The outline of the search hits a row or a chip of the hit table names, over the Result (never in it). -->
-                    <svg v-if="sequenceSearch.outline" :ref="sequenceSearch.hitOutline.bindOverlay" data-search-hit-outline class="absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
+                    <svg v-if="sequenceSearch.outline" :ref="sequenceSearch.hitOutline.bindOverlay" data-search-hit-outline direction="ltr" class="absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
                         <path v-for="(shape, index) in sequenceSearch.hitOutline.shapes" :key="index" :transform="shape.transform" :d="shape.d" class="search-hit-outline"></path>
                     </svg>
 
@@ -7341,11 +7354,11 @@
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100" data-popup-header>
                             <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0 flex-1">
-                                <div tabindex="-1" data-dialog-initial-focus class="text-base font-bold text-slate-700 truncate" data-feature-popup-title>{{ clickedFeatureHeading.title }}</div>
+                                <div dir="auto" tabindex="-1" data-dialog-initial-focus class="text-base font-bold text-slate-700 truncate" data-feature-popup-title>{{ clickedFeatureHeading.title }}</div>
                                 <div v-if="clickedFeatureHeading.product" class="feature-popup-product text-sm text-slate-600" data-feature-popup-product>{{ clickedFeatureHeading.product }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5 break-all" data-feature-popup-summary>{{ clickedFeatureSummary }}</div>
                             </div>
-                            <button @click="closeFeaturePopup" class="text-slate-500 hover:text-slate-600 ml-auto text-xl shrink-0" :aria-label="t('Close feature popup')">
+                            <button @click="closeFeaturePopup" class="text-slate-500 hover:text-slate-600 ms-auto text-xl shrink-0" :aria-label="t('Close feature popup')">
                                 <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
@@ -7403,7 +7416,7 @@
                                        :title="t('Change fill color')"
                                        :aria-label="t('Feature fill color')"
                                        class="w-12 h-10 border-2 border-slate-200 rounded-lg cursor-pointer">
-                                <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
+                                <span dir="ltr" class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
                                 <button :aria-label="t('Reset fill color to default')" @click="resetClickedFeatureFillColor"
                                         data-history-managed
                                         class="text-slate-500 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
@@ -7534,7 +7547,7 @@
                             <!-- UX-B03: one summary row, the primary actions, then secondary actions and members on demand. -->
                             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1" data-similarity-summary>
                                 <span class="match-popup-badge">{{ clickedFeature.orthogroupId }}</span>
-                                <span v-if="clickedOrthogroupDetail && clickedOrthogroupDetail.displayName && clickedOrthogroupDetail.displayName !== clickedOrthogroupDetail.id"
+                                <span dir="auto" v-if="clickedOrthogroupDetail && clickedOrthogroupDetail.displayName && clickedOrthogroupDetail.displayName !== clickedOrthogroupDetail.id"
                                       class="text-sm font-semibold text-slate-700">{{ clickedOrthogroupDetail.displayName }}</span>
                                 <span v-if="clickedOrthogroupDetail && clickedOrthogroupDetail.scopeLabel" class="text-xs text-slate-500">{{ clickedOrthogroupDetail.scopeLabel }}</span>
                                 <span class="text-xs text-slate-600">{{ clickedOrthogroupDetail ? clickedOrthogroupDetail.countText : tn(Number(clickedFeature.orthogroupMemberCount), '{count} gene', '{count} genes') }}</span>
@@ -7604,7 +7617,7 @@
                                                 <tr v-for="member in recordGroup.members"
                                                     :key="`${member.featureSvgId}-${member.proteinId}`"
                                                     :aria-current="member === clickedOrthogroupDetail.currentMember ? 'true' : null">
-                                                    <td>{{ member.recordId || recordGroup.recordLabel }}</td>
+                                                    <td dir="auto">{{ member.recordId || recordGroup.recordLabel }}</td>
                                                     <td class="match-mono whitespace-nowrap">{{ orthogroupMemberRangeText(member) }}<span v-if="member.strand"> ({{ member.strand }})</span></td>
                                                     <td>
                                                         <div class="text-slate-800">{{ member.product || member.note || '' }}</div>
@@ -7639,7 +7652,7 @@
                                     aria-controls="feature-record-actions"
                                     :disabled="Boolean(featureRecordRotationUnavailable)"
                                     :aria-describedby="featureRecordRotationUnavailable ? 'feature-record-rotation-unavailable' : null"
-                                    class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-white disabled:text-slate-400 disabled:hover:bg-white">
+                                    class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-start text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-white disabled:text-slate-400 disabled:hover:bg-white">
                                 <span>{{ t('Rotate record using this feature') }}</span>
                                 <i v-if="!featureRecordRotationUnavailable" :class="recordActionsExpanded ? 'ph ph-caret-up' : 'ph ph-caret-down'" aria-hidden="true"></i>
                             </button>
@@ -7667,7 +7680,7 @@
                                               class="text-[10px] text-amber-700">{{ choice.message }}</span>
                                     </div>
                                     <div v-if="featureRecordRotationDraft.position === 'custom'"
-                                         class="mt-1 ml-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                                         class="mt-1 ms-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
                                         <label for="feature-record-rotation-reference">{{ t('Record starts at') }}</label>
                                         <select id="feature-record-rotation-reference"
                                                 :value="featureRecordRotationDraft.reference"
@@ -7710,7 +7723,7 @@
                                                class="mt-0.5 rounded border-slate-300">
                                         <span>{{ t('Show this feature on the forward strand') }}</span>
                                     </label>
-                                    <p id="feature-record-rotation-orient-note" class="ml-5 text-[10px]"
+                                    <p id="feature-record-rotation-orient-note" class="ms-5 text-[10px]"
                                        :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : featureRecordRotationDraft.orientCapability.message }}</p>
                                 </div>
                                 <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
@@ -7776,7 +7789,7 @@
                                 </div>
                                 <dl class="feature-popup-fields" data-feature-popup-qualifiers>
                                     <template v-for="row in clickedFeature.qualifierRows" :key="`feature-qualifier-${row.key}`">
-                                        <dt class="font-mono">{{ row.key }}</dt>
+                                        <dt dir="ltr" class="font-mono">{{ row.key }}</dt>
                                         <dd><div v-for="(value, index) in row.values" :key="index">{{ value }}</div></dd>
                                     </template>
                                 </dl>
@@ -7817,7 +7830,7 @@
                                         <i class="ph ph-copy" aria-hidden="true"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.sequence.nucleotideFasta"
+                                <pre dir="ltr" v-if="clickedFeature.sequence.nucleotideFasta"
                                      class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.sequence.nucleotideFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     {{ t('No nucleotide sequence available.') }}
@@ -7837,7 +7850,7 @@
                                         <i class="ph ph-copy" aria-hidden="true"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.sequence.aminoAcidFasta"
+                                <pre dir="ltr" v-if="clickedFeature.sequence.aminoAcidFasta"
                                      class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.sequence.aminoAcidFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     {{ t('No amino acid sequence available.') }}
@@ -7873,25 +7886,25 @@
                             <svg v-else-if="previewItemView.kind === 'region'" class="w-4 h-4 shrink-0 mt-1" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" class="region-select-band"></rect></svg>
                             <i v-else class="ph ph-text-aa text-slate-500 mt-1 shrink-0" aria-hidden="true"></i>
                             <div v-if="previewItemView && previewItemView.kind === 'region'" class="min-w-0 flex-1">
-                                <div class="text-base font-bold text-slate-700 truncate" data-match-popup-title>{{ previewItemView.title }}</div>
+                                <div dir="auto" class="text-base font-bold text-slate-700 truncate" data-match-popup-title>{{ previewItemView.title }}</div>
                                 <div class="text-sm text-slate-600 break-words" data-preview-item-subtitle>{{ previewItemView.subtitle }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5 break-all" data-region-span>{{ previewItemView.span }}</div>
                                 <div v-if="regionPopup" class="text-xs text-slate-500 break-all" data-region-feature-count>{{ regionPopup.featureText }}</div>
                             </div>
                             <div v-else-if="previewItemView" class="min-w-0">
-                                <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ previewItemView.title }}</div>
+                                <div dir="auto" class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ previewItemView.title }}</div>
                                 <div v-if="previewItemView.subtitle" class="text-xs text-slate-500 mt-0.5 break-words" data-preview-item-subtitle>{{ previewItemView.subtitle }}</div>
                             </div>
                             <div v-else class="min-w-0">
                                 <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group ? clickedPairwiseMatch.group.title : clickedPairwiseMatch.title }}</div>
                                 <span v-if="clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group?.badge"
                                       class="match-popup-badge mt-0.5">{{ clickedPairwiseMatch.group.badge }}</span>
-                                <div v-if="clickedPairwiseMatch.subtitle && !clickedPairwiseMatch.block" class="text-xs text-slate-500 mt-0.5 font-mono break-all">
+                                <div dir="ltr" v-if="clickedPairwiseMatch.subtitle && !clickedPairwiseMatch.block" class="text-xs text-slate-500 mt-0.5 font-mono break-all">
                                     {{ clickedPairwiseMatch.subtitle }}
                                 </div>
                             </div>
                             <button @click="clickedPairwiseMatch = null"
-                                    class="text-slate-500 hover:text-slate-600 ml-auto text-xl"
+                                    class="text-slate-500 hover:text-slate-600 ms-auto text-xl"
                                     :aria-label="clickedPairwiseMatch.previewItem ? t('Close popup') : t('Close match popup')"
                                     data-nodrag="true">
                                 <i class="ph ph-x" aria-hidden="true"></i>
@@ -8023,7 +8036,7 @@
                             <template v-else-if="clickedPairwiseMatch.block">
                                 <!-- UX-B01: one readable summary of the block, then the gene pairs and the block facts, both closed. -->
                                 <section class="match-lead" data-collinear-summary>
-                                    <div><span class="font-semibold">{{ clickedPairwiseMatch.block.query.recordId }}</span> {{ clickedPairwiseMatch.block.query.intervalText }}<span v-if="clickedPairwiseMatch.block.query.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.query.lengthText }})</span></div>
+                                    <div><span dir="auto" class="font-semibold">{{ clickedPairwiseMatch.block.query.recordId }}</span> {{ clickedPairwiseMatch.block.query.intervalText }}<span v-if="clickedPairwiseMatch.block.query.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.query.lengthText }})</span></div>
                                     <div v-if="clickedPairwiseMatch.block.query.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.query.tableInterval }) }}</div>
                                     <div><i18n-text :text="t('vs {record}')" text-class="match-muted"><template #record><span class="font-semibold">{{ clickedPairwiseMatch.block.subject.recordId }}</span></template></i18n-text> {{ clickedPairwiseMatch.block.subject.intervalText }}<span v-if="clickedPairwiseMatch.block.subject.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.subject.lengthText }})</span></div>
                                     <div v-if="clickedPairwiseMatch.block.subject.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.subject.tableInterval }) }}</div>
@@ -8083,7 +8096,7 @@
                                                                     :aria-pressed="selectedPairwiseBlockOrthogroupId === pair.group.id ? 'true' : 'false'"
                                                                     :title="t('Show the members of {id}', { id: pair.group.id })"
                                                                     @click="selectPairwiseBlockOrthogroup(pair.group)">
-                                                                <span class="match-cell-main">{{ pair.group.displayName || pair.group.id }}</span>
+                                                                <span dir="auto" class="match-cell-main">{{ pair.group.displayName || pair.group.id }}</span>
                                                                 <span v-if="pair.group.displayName && pair.group.displayName !== pair.group.id" class="match-cell-sub">{{ pair.group.id }}</span>
                                                             </button>
                                                         </td>
@@ -8105,7 +8118,7 @@
                                             <div class="min-w-0 flex-1">
                                                 <div class="text-xs font-semibold text-slate-700">{{ t('{role} span', { role: entry.span.displayRole }) }}</div>
                                                 <!-- OV-1264: a long record ID may break; a span or length stays whole. -->
-                                                <div class="text-[10px] font-mono text-slate-500 break-words" data-match-span-line>
+                                                <div dir="ltr" class="text-[10px] font-mono text-slate-500 break-words" data-match-span-line>
                                                     {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available && entry.sequenceLength"> · <span class="whitespace-nowrap">{{ numberText(entry.sequenceLength) }} bp</span></template>
                                                 </div>
                                             </div>
@@ -8130,7 +8143,7 @@
                                     </div>
                                     <div v-if="clickedPairwiseMatch.sequenceBundle.entries.length > 1"
                                          class="flex items-center justify-end gap-1 pt-1" data-match-both-spans>
-                                        <span class="mr-auto text-[10px] font-semibold uppercase text-slate-500">{{ t('Both spans') }}</span>
+                                        <span class="me-auto text-[10px] font-semibold uppercase text-slate-500">{{ t('Both spans') }}</span>
                                         <button type="button"
                                                 @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'copy')"
                                                 :disabled="!sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
@@ -8185,7 +8198,7 @@
                                                       featureRow.canOpen ? '' : 'is-disabled'
                                                     ]">
                                                     <td>
-                                                        <div class="pairwise-match-feature-main">{{ featureRow.label }}</div>
+                                                        <div dir="auto" class="pairwise-match-feature-main">{{ featureRow.label }}</div>
                                                         <div v-if="featureRow.subLabel"
                                                              class="pairwise-match-feature-sub">
                                                             {{ featureRow.subLabel }}
@@ -8193,7 +8206,7 @@
                                                     </td>
                                                     <td class="pairwise-match-feature-mono">{{ featureRow.record }}</td>
                                                     <td class="pairwise-match-feature-mono">{{ featureRow.location }}</td>
-                                                    <td class="text-slate-700">{{ featureRow.product }}</td>
+                                                    <td dir="auto" class="text-slate-700">{{ featureRow.product }}</td>
                                                     <td>
                                                         <button :aria-label="t('Copy feature row')" type="button"
                                                                 @click.stop="copyText(featureRow.copyText)"
@@ -8211,7 +8224,7 @@
                             <!-- UX-B02: one similarity group. The member table is the main content; one menu copies the group. -->
                             <section v-if="pairwiseGroupView" class="mb-3" data-match-group>
                                 <div v-if="clickedPairwiseMatch.matchKind !== 'orthogroup'" class="flex flex-wrap items-baseline gap-x-2 mb-1">
-                                    <span class="text-sm font-semibold text-slate-700">{{ pairwiseGroupView.title }}</span>
+                                    <span dir="auto" class="text-sm font-semibold text-slate-700">{{ pairwiseGroupView.title }}</span>
                                     <span v-if="pairwiseGroupView.badge" class="match-popup-badge">{{ pairwiseGroupView.badge }}</span>
                                 </div>
                                 <p v-if="pairwiseGroupView.description" class="mb-1 text-xs text-slate-600">{{ pairwiseGroupView.description }}</p>
@@ -8665,15 +8678,15 @@
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                             <div class="border border-slate-200 rounded p-3">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('Mode') }}</div>
-                                <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.mode }}</div>
+                                <div dir="ltr" class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.mode }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('Run time') }}</div>
-                                <div class="mt-1 font-mono font-semibold text-slate-700">{{ runInfoElapsedText(lastRunInfo) }}</div>
+                                <div dir="ltr" class="mt-1 font-mono font-semibold text-slate-700">{{ runInfoElapsedText(lastRunInfo) }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('Results') }}</div>
-                                <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.resultCount }}</div>
+                                <div dir="ltr" class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.resultCount }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('CLI rerun') }}</div>
@@ -8707,7 +8720,7 @@
                                     <span>{{ runInfoCopyStatus || t('Copy command') }}</span>
                                 </button>
                             </div>
-                            <pre class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sourceRecipe?.command || lastRunInfo.command }}</pre>
+                            <pre dir="ltr" class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sourceRecipe?.command || lastRunInfo.command }}</pre>
                         </div>
 
                         <div v-if="lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand" class="space-y-2">
@@ -8721,7 +8734,7 @@
                                     <span>{{ exactReplayCopyStatus || t('Copy command') }}</span>
                                 </button>
                             </div>
-                            <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand }}</pre>
+                            <pre dir="ltr" class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand }}</pre>
                         </div>
 
                         <div v-if="runInfoHasCliHelperFiles" class="space-y-2 rounded border border-emerald-200 bg-emerald-50 p-3">
@@ -8799,7 +8812,7 @@
                                     <legend v-if="card.kind !== 'reference'" class="sr-only">{{ record.recordLabel }}</legend>
                                     <div class="alignment-review-head">
                                         <span v-if="card.kind === 'reference'" class="alignment-review-chip is-reference">{{ t('Reference') }}</span>
-                                        <span class="alignment-review-record">{{ record.recordName }}</span>
+                                        <span dir="auto" class="alignment-review-record">{{ record.recordName }}</span>
                                         <span v-if="record.recordDetail" class="alignment-review-detail">{{ record.recordDetail }}</span>
                                         <span class="alignment-review-direction" data-similarity-alignment-direction>
                                             <span :id="'alignment-direction-' + card.recordKey" class="sr-only">{{ card.direction.description }}</span>
@@ -8822,7 +8835,7 @@
                                     </div>
                                     <svg v-if="card.strip" class="alignment-strip" :class="{ 'is-need': card.needsChoice, 'is-skipped': card.skipped }"
                                          v-bind="{ viewBox: '0 0 ' + similarityAlignmentReview.stripWidth + ' 17' }" preserveAspectRatio="none"
-                                         aria-hidden="true" data-alignment-strip>
+                                         aria-hidden="true" direction="ltr" data-alignment-strip>
                                         <line class="axis" :x1="card.strip.baseline.x" :x2="card.strip.baseline.x + card.strip.baseline.width" y1="8.5" y2="8.5"></line>
                                         <rect v-for="(feature, featureIndex) in card.strip.features" :key="featureIndex" class="feature"
                                               :x="feature.x" y="6" :width="feature.width" height="5" rx="1"></rect>
@@ -8834,7 +8847,7 @@
                                               :x="box.x" y="3" :width="box.width" height="11" rx="2"></rect>
                                     </svg>
                                     <template v-if="card.kind === 'reference'">
-                                        <p class="alignment-review-gene"><b>{{ record.name }}</b> <code v-if="record.ids">{{ record.ids }}</code>
+                                        <p class="alignment-review-gene"><b dir="auto">{{ record.name }}</b> <code v-if="record.ids">{{ record.ids }}</code>
                                             <span class="alignment-review-place">{{ record.coordinates }} ({{ record.displayedStrand }})</span></p>
                                         <p v-if="similarityAlignmentDirectionPreview.referenceShift" class="alignment-review-note" data-similarity-alignment-reference-correction>
                                             {{ similarityAlignmentDirectionPreview.referenceShift }}
@@ -8931,7 +8944,7 @@
                         </fieldset>
                         <details class="mt-3 rounded-lg border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
                             <summary class="cursor-pointer font-semibold text-slate-700">{{ t('How alignment works') }}</summary>
-                            <ul class="mt-1.5 list-disc space-y-1 pl-4">
+                            <ul class="mt-1.5 list-disc space-y-1 ps-4">
                                 <li>{{ t('Nothing changes until Apply. Cancel keeps the current diagram.') }}</li>
                                 <li>{{ t('The reference feature keeps its place; each record moves so its chosen feature lines up with it.') }}</li>
                                 <li>{{ t('Reversing flips a whole record with its labels and ribbons. Strands in the data (+/−) do not change.') }}</li>
@@ -8962,7 +8975,7 @@
                 <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="toggleRightDrawer"
                         data-history-ignore
-                        class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-40 transition-all"
+                        class="drawer-toggle absolute end-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-s-lg shadow-lg z-40 transition-all"
                         :aria-expanded="showRightDrawer"
                         :disabled="Boolean(similarityAlignmentEditorDisabledReason)"
                         :aria-label="t('Editor')"
@@ -8972,7 +8985,7 @@
                 </button>
 
                 <div v-if="svgContent && resultPanelTab === 'preview'"
-                     class="right-drawer absolute right-0 top-0 bottom-0 bg-white border-l border-slate-200 shadow-xl z-30 transition-transform duration-300 flex flex-col"
+                     class="right-drawer absolute end-0 top-0 bottom-0 bg-white border-s border-slate-200 shadow-xl z-30 transition-transform duration-300 flex flex-col"
                      :aria-hidden="!showRightDrawer">
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
                         <div class="flex items-center gap-2">
@@ -9032,7 +9045,7 @@
                             <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="layoutRepositionMode ? t('Reset the legend position. Drag the legend in the preview to move it.') : t('Reset the legend position. To move the legend, turn on Layout edit and drag it in the preview.')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset position') }}
                             </button>
-                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 ml-auto flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="t('Reset all stroke colors and widths to default')" :disabled="!semanticMutationAvailable">
+                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 ms-auto flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="t('Reset all stroke colors and widths to default')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset strokes') }}
                             </button>
                         </div>
@@ -9129,14 +9142,14 @@
                                            :aria-label="t('Fill color for {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
                                            class="w-5 h-5 rounded shrink-0 cursor-pointer">
                                     <button type="button" data-history-ignore
-                                            class="flex-1 min-w-0 flex items-center gap-1.5 text-left text-slate-700 rounded hover:text-blue-700"
+                                            class="flex-1 min-w-0 flex items-center gap-1.5 text-start text-slate-700 rounded hover:text-blue-700"
                                             :aria-expanded="featureListExpandedId === feat.id ? 'true' : 'false'"
                                             :title="featureListExpandedId === feat.id ? t('Hide the label editor') : t('Show the label editor')"
                                             @click="featureListExpandedId = featureListExpandedId === feat.id ? null : feat.id">
-                                        <span v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)?.text" class="max-w-[5rem] truncate shrink-0 font-semibold text-slate-800">{{ getEditableLabelByFeatureId(featureListState(feat).renderedId).text }}</span>
-                                        <span class="truncate">{{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}</span>
+                                        <span dir="auto" v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)?.text" class="max-w-[5rem] truncate shrink-0 font-semibold text-slate-800">{{ getEditableLabelByFeatureId(featureListState(feat).renderedId).text }}</span>
+                                        <span dir="auto" class="truncate">{{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}</span>
                                     </button>
-                                    <span class="max-w-[7rem] font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
+                                    <span dir="ltr" class="max-w-[7rem] font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
                                     <label class="flex items-center gap-0.5 shrink-0 text-slate-500 cursor-pointer" :title="t('Show on the diagram')">
                                         <input type="checkbox"
                                                data-history-managed
@@ -9153,7 +9166,7 @@
                                     </button>
                                 </div>
                                 <div v-if="featureListExpandedId === feat.id" class="h-[44px] px-3 flex items-center gap-2" data-feature-list-editor>
-                                    <span class="font-mono text-[10px] text-slate-500 shrink-0">{{ feat.type }}</span>
+                                    <span dir="ltr" class="font-mono text-[10px] text-slate-500 shrink-0">{{ feat.type }}</span>
                                     <template v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)">
                                         <label class="flex-1 min-w-0 flex items-center gap-1 text-[10px] text-slate-500">
                                             <span class="shrink-0">{{ t('Label') }}</span>
@@ -9218,7 +9231,7 @@
                                  data-similarity-alignment-plan-inspector
                                  class="relative rounded border border-blue-200 bg-blue-50">
                                 <details>
-                                    <summary class="!mb-0 min-h-[2rem] py-1 pl-2 pr-[7.5rem] text-xs !font-medium !text-slate-700">
+                                    <summary class="!mb-0 min-h-[2rem] py-1 ps-2 pe-[7.5rem] text-xs !font-medium !text-slate-700">
                                         <span class="min-w-0">{{ similarityAlignmentPlanInspector.summary }}</span>
                                     </summary>
                                     <div class="space-y-2 border-t border-blue-100 px-2 py-2 text-[11px] text-slate-600">
@@ -9246,7 +9259,7 @@
                                         data-similarity-alignment-reset
                                         @click="openSimilarityAlignmentReset"
                                         :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
-                                        class="btn btn-secondary absolute right-1 top-1 px-2 py-0.5 text-[11px]">
+                                        class="btn btn-secondary absolute end-1 top-1 px-2 py-0.5 text-[11px]">
                                     {{ t('Reset alignment…') }}
                                 </button>
                             </div>
@@ -9287,12 +9300,12 @@
                                     :aria-current="selectedOrthogroup && selectedOrthogroup.id === row.id ? 'true' : null"
                                     @click="selectOrthogroup(row.group.id)"
                                     :class="[
-                                      'w-full text-left px-3 py-1.5 border-b border-l-4 border-b-slate-100 hover:bg-emerald-50 transition-colors',
-                                      selectedOrthogroup && selectedOrthogroup.id === row.id ? 'bg-emerald-50 border-l-emerald-500' : 'bg-white border-l-transparent'
+                                      'w-full text-start px-3 py-1.5 border-b border-s-4 border-b-slate-100 hover:bg-emerald-50 transition-colors',
+                                      selectedOrthogroup && selectedOrthogroup.id === row.id ? 'bg-emerald-50 border-s-emerald-500' : 'bg-white border-s-transparent'
                                     ]">
                                 <div class="flex items-center gap-2">
-                                    <span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700" :title="row.name">{{ row.name }}</span>
-                                    <span v-if="row.name !== row.id" class="shrink-0 font-mono text-[10px] text-slate-500">{{ row.id }}</span>
+                                    <span dir="auto" class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700" :title="row.name">{{ row.name }}</span>
+                                    <span dir="ltr" v-if="row.name !== row.id" class="shrink-0 font-mono text-[10px] text-slate-500">{{ row.id }}</span>
                                     <span v-if="row.renamed" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">{{ t('Edited') }}</span>
                                 </div>
                                 <div class="truncate text-[11px] text-slate-500">{{ row.countsLabel }}<template v-if="row.scopeLabel"> · {{ row.scopeLabel }}</template></div>
@@ -9303,14 +9316,14 @@
                         <div v-if="selectedOrthogroup" data-similarity-group-detail class="flex-[3_1_0%] min-h-[9rem] overflow-y-auto p-3 space-y-4 custom-scrollbar">
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2">
-                                    <span class="shrink-0 font-mono text-[11px] text-slate-500">{{ selectedOrthogroup.id }}</span>
+                                    <span dir="ltr" class="shrink-0 font-mono text-[11px] text-slate-500">{{ selectedOrthogroup.id }}</span>
                                     <span v-if="orthogroupScope(selectedOrthogroup) !== 'global'" class="min-w-0 truncate text-[11px] text-slate-500" :title="orthogroupScopeLabel(selectedOrthogroup)">{{ orthogroupScopeLabel(selectedOrthogroup) }}</span>
                                     <span v-if="isOrthogroupRenamed(selectedOrthogroup)" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">{{ t('Edited') }}</span>
                                     <button type="button"
                                             @click="resetOrthogroupRename(selectedOrthogroup.id)"
                                             :disabled="!semanticMutationAvailable || !isOrthogroupRenamed(selectedOrthogroup)"
                                             :title="t('Restore the group\'s original name and description')"
-                                            class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] text-blue-700 hover:bg-blue-50 disabled:text-slate-400 disabled:hover:bg-transparent">
+                                            class="ms-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] text-blue-700 hover:bg-blue-50 disabled:text-slate-400 disabled:hover:bg-transparent">
                                         {{ t('Reset name') }}
                                     </button>
                                 </div>
@@ -9418,9 +9431,9 @@
                                             :key="`${member.featureSvgId}-${member.proteinId}`"
                                             class="flex items-start justify-between gap-2 px-2 py-1.5">
                                             <div class="min-w-0 space-y-1">
-                                                <div class="font-semibold text-slate-700 break-words">{{ member.recordId || recordGroup.recordLabel }}</div>
+                                                <div dir="auto" class="font-semibold text-slate-700 break-words">{{ member.recordId || recordGroup.recordLabel }}</div>
                                                 <div class="break-words">
-                                                    <span class="font-mono">{{ orthogroupMemberRangeText(member, true) }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
+                                                    <span dir="ltr" class="font-mono">{{ orthogroupMemberRangeText(member, true) }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span dir="ltr" class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
                                                 </div>
                                             </div>
                                             <action-menu class="shrink-0" label="FASTA" :title="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })" :aria-label="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })"
@@ -9510,7 +9523,7 @@
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
                             <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom in')"><i class="ph ph-plus" aria-hidden="true"></i></button>
-                            <button @click="zoom = 1.0" data-zoom-reset class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" :aria-label="t('Reset zoom')"><preview-zoom-percent></preview-zoom-percent></button>
+                            <button dir="ltr" @click="zoom = 1.0" data-zoom-reset class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" :aria-label="t('Reset zoom')"><preview-zoom-percent></preview-zoom-percent></button>
                             <button @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom out')"><i class="ph ph-minus" aria-hidden="true"></i></button>
                             <button @click="fitPreviewToViewport" class="h-10 px-2 flex items-center justify-center gap-1 hover:bg-slate-100 text-slate-600 text-sm rounded" :aria-label="t('Fit to preview')" :title="t('Fit to preview')"><i class="ph ph-corners-in text-lg" aria-hidden="true"></i><span>{{ t('Fit') }}</span></button>
                         </div>
@@ -9586,8 +9599,8 @@
                             <label for="alignment-reset-directions" class="font-semibold" :class="similarityAlignmentResetPreview.disabledReason ? 'text-slate-500' : 'text-slate-800'">{{ similarityAlignmentResetPreview.directionsLabel }}</label>
                         </div>
                         <!-- The reason sits under the radio it disables (PD-OI-029: an explicit reason, never a guess). -->
-                        <p v-if="similarityAlignmentResetPreview.disabledReason" id="alignment-reset-direction-reason" class="mt-1 pl-6 text-xs text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
-                        <div v-else-if="similarityAlignmentResetScope === 'positions-and-directions'" class="mt-2 pl-6 text-xs">
+                        <p v-if="similarityAlignmentResetPreview.disabledReason" id="alignment-reset-direction-reason" class="mt-1 ps-6 text-xs text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
+                        <div v-else-if="similarityAlignmentResetScope === 'positions-and-directions'" class="mt-2 ps-6 text-xs">
                             <p class="text-slate-500">{{ t('Record direction, current → restored (relative to the source file)') }}</p>
                             <ul :aria-label="t('Alignment direction restoration targets')" class="mt-1 space-y-0.5">
                                 <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="flex items-baseline gap-2 text-slate-800">
@@ -9683,7 +9696,7 @@
                         <span class="block font-semibold text-slate-800">{{ row.label }}</span>
                         <span v-if="row.queryUid" class="block min-w-0 text-xs text-slate-500"><record-name :prefix="`#${row.queryIndex + 1}`" v-bind="linearComparisonRecordName(row.queryUid)"></record-name></span>
                         <span v-if="row.subjectUid" class="block min-w-0 text-xs text-slate-500"><record-name :prefix="`→ #${row.subjectIndex + 1}`" v-bind="linearComparisonRecordName(row.subjectUid)"></record-name></span>
-                        <span class="block truncate text-xs" :class="row.missing ? 'text-red-700' : 'text-green-700'">{{ row.missing ? t('No file') : row.fileName }}</span>
+                        <span dir="auto" class="block truncate text-xs" :class="row.missing ? 'text-red-700' : 'text-green-700'">{{ row.missing ? t('No file') : row.fileName }}</span>
                     </span>
                     <button type="button" data-history-ignore :disabled="!semanticMutationAvailable" @click="chooseLinearComparisonPairFile(row.edgeKey)" :aria-label="t('Choose BLAST TSV for {name}', { name: row.label })" class="btn btn-secondary btn-sm shrink-0">{{ row.missing ? t('Choose file…') : t('Change…') }}</button>
                 </li>
@@ -9740,7 +9753,7 @@
             <p v-else-if="!labelFitDialog.capacity" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
             <div v-if="labelFitDialog.remedies.length" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
                 <p class="font-semibold">{{ t('To make room:') }}</p>
-                <ul class="mt-1 list-disc pl-5 space-y-1">
+                <ul class="mt-1 list-disc ps-5 space-y-1">
                     <li v-for="remedy in labelFitDialog.remedies" :key="remedy.text">{{ tm(remedy.text, remedy.params) }}</li>
                 </ul>
             </div>
@@ -9793,7 +9806,7 @@
                         <input type="checkbox" data-history-managed :data-record-list-row="row.key" class="form-checkbox shrink-0"
                                :checked="row.drawn" :disabled="!semanticMutationAvailable"
                                @change="recordSelection.toggleRecord(recordSelection.recordListView.value.mode, recordSelection.recordListView.value.sourceKey, row.key, $event)">
-                        <span class="min-w-0 truncate" :title="row.recordId">{{ row.recordId }}</span>
+                        <span dir="auto" class="min-w-0 truncate" :title="row.recordId">{{ row.recordId }}</span>
                     </label>
                     <span v-if="row.hasSettings" data-record-list-settings class="shrink-0 rounded bg-blue-50 px-1 text-[10px] text-blue-700">{{ t('settings') }}</span>
                     <span class="shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
@@ -9828,7 +9841,7 @@
             <ul class="mt-3 max-h-[60vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
                 <li v-for="example in galleryExamples" :key="example.id" class="flex items-center">
                     <button type="button" data-history-managed :data-gallery-example="example.id" @click="loadExampleSession(example)"
-                            class="flex min-w-0 flex-1 items-center gap-3 p-2 text-left hover:bg-slate-50 focus-visible:bg-slate-50">
+                            class="flex min-w-0 flex-1 items-center gap-3 p-2 text-start hover:bg-slate-50 focus-visible:bg-slate-50">
                         <img v-if="example.thumbnailUrl" :src="example.thumbnailUrl" alt="" loading="lazy"
                              class="h-14 w-20 shrink-0 rounded border border-slate-200 bg-white object-contain">
                         <span class="min-w-0">
@@ -9881,7 +9894,7 @@
                     <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" :aria-label="t('Search installed fonts')" :placeholder="t('Search installed fonts')" data-history-ignore>
                     <ul class="max-h-64 overflow-y-auto text-xs" :aria-label="t('Installed font families')">
                         <li v-for="entry in fontSettings.filteredInstalledFamilies.value" :key="entry.family">
-                            <button type="button" class="w-full text-left px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
+                            <button type="button" class="w-full text-start px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
                         </li>
                     </ul>
                 </template>
@@ -9905,10 +9918,10 @@
                     <label class="flex min-w-0 items-center gap-2">
                         <input type="checkbox" data-history-ignore data-region-drawing-check class="form-checkbox shrink-0"
                                :checked="row.checked" @change="regionDrawings.editRow(row.recordKey, { checked: $event.target.checked })">
-                        <span class="min-w-0 truncate font-semibold text-slate-800" :title="row.caption">{{ row.caption }}</span>
-                        <span class="ml-auto shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
+                        <span dir="auto" class="min-w-0 truncate font-semibold text-slate-800" :title="row.caption">{{ row.caption }}</span>
+                        <span class="ms-auto shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
                     </label>
-                    <div v-if="row.checked" class="mt-1.5 flex flex-wrap items-end gap-2 pl-6">
+                    <div v-if="row.checked" class="mt-1.5 flex flex-wrap items-end gap-2 ps-6">
                         <label class="text-[11px] font-semibold text-slate-600">{{ t('Region') }}
                             <select data-history-ignore data-region-drawing-kind class="form-select mt-0.5 block px-2 py-1 text-xs font-normal"
                                     :value="row.kind" @change="regionDrawings.editRow(row.recordKey, { kind: $event.target.value })">
@@ -9932,7 +9945,7 @@
                             <select data-history-ignore data-region-drawing-feature class="form-select mt-0.5 block w-full max-w-xs px-2 py-1 text-xs font-normal"
                                     :value="row.featureId" @change="regionDrawings.editRow(row.recordKey, { featureId: $event.target.value })">
                                 <option value="">{{ t('Choose a feature') }}</option>
-                                <option v-for="feature in row.features || []" :key="feature.featureId" :value="feature.featureId">{{ feature.label }}</option>
+                                <option dir="auto" v-for="feature in row.features || []" :key="feature.featureId" :value="feature.featureId">{{ feature.label }}</option>
                             </select>
                         </label>
                         <p v-if="row.featureReason" data-region-drawing-feature-reason class="basis-full text-[11px] text-slate-500">{{ row.featureReason }}</p>
@@ -9945,14 +9958,14 @@
                 <template v-if="regionDrawings.dialog.status === 'derived' || regionDrawings.dialog.status === 'creating'">
                     <div v-if="regionDrawings.dialog.returnedToAuto.length" data-region-drawing-returned>
                         <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
-                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                        <ul class="mt-0.5 list-disc space-y-0.5 ps-5">
                             <li v-for="item in regionDrawings.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
                         </ul>
                     </div>
                     <p v-else>{{ t('Every setting is carried over.') }}</p>
                     <div v-if="regionDrawings.dialog.notCarried.length" data-region-drawing-not-carried class="mt-2">
                         <p class="font-semibold text-slate-700">{{ t('Not carried to the new drawing:') }}</p>
-                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                        <ul class="mt-0.5 list-disc space-y-0.5 ps-5">
                             <li v-for="(line, index) in regionDrawings.dialog.notCarried" :key="index">{{ line }}</li>
                         </ul>
                     </div>
@@ -9983,7 +9996,7 @@
             <h2 id="find-files-title" class="text-base font-bold text-slate-800">{{ t('Find in other files') }}</h2>
             <template v-if="findInOtherFiles.dialog.screen === 'search'">
                 <p id="find-files-description" class="mt-1 text-sm leading-relaxed text-slate-600">{{ t('Find where the genes of the reference windows lie in the other files, and draw them as windows, one row per file.') }}</p>
-                <div class="mt-2 max-h-[62vh] overflow-y-auto pr-1">
+                <div class="mt-2 max-h-[62vh] overflow-y-auto pe-1">
                     <h3 class="text-xs font-semibold text-slate-700">{{ t('Reference windows') }}</h3>
                     <ol data-find-files-rows class="mt-1 divide-y divide-slate-100 rounded-lg border border-slate-200">
                         <li v-for="(row, index) in findInOtherFiles.dialog.rows" :key="row.id" data-find-files-row class="px-2 py-1.5 text-xs">
@@ -10030,8 +10043,8 @@
                             <label class="flex min-w-0 items-center gap-2">
                                 <input type="checkbox" data-history-ignore class="form-checkbox shrink-0" :checked="findInOtherFiles.dialog.targets[file.fileKey]"
                                        @change="findInOtherFiles.setTarget(file.fileKey, $event.target.checked)">
-                                <span class="min-w-0 truncate font-semibold text-slate-800" :title="file.name">{{ file.name }}</span>
-                                <span class="ml-auto shrink-0 tabular-nums text-slate-500">{{ file.size }}</span>
+                                <span dir="auto" class="min-w-0 truncate font-semibold text-slate-800" :title="file.name">{{ file.name }}</span>
+                                <span class="ms-auto shrink-0 tabular-nums text-slate-500">{{ file.size }}</span>
                             </label>
                         </li>
                     </ul>
@@ -10069,19 +10082,19 @@
             <template v-else>
                 <p id="find-files-description" class="mt-1 text-sm leading-relaxed text-slate-600">{{ findInOtherFiles.dialog.reference }} {{ t('Each file becomes one row of the new drawing. Untick a window to leave it out.') }}</p>
                 <p v-if="findInOtherFiles.dialog.cutGenes" data-find-files-cut class="mt-1 text-xs text-amber-800">{{ findInOtherFiles.dialog.cutGenes }}</p>
-                <div data-find-files-proposal class="mt-2 max-h-[58vh] space-y-2 overflow-y-auto pr-1">
+                <div data-find-files-proposal class="mt-2 max-h-[58vh] space-y-2 overflow-y-auto pe-1">
                     <section v-for="file in findInOtherFiles.dialog.proposal" :key="file.fileKey" :data-find-files-file="file.fileKey" class="rounded-lg border border-slate-200 text-xs">
                         <header class="flex flex-wrap items-baseline justify-between gap-x-3 px-2 pt-1.5">
-                            <span class="font-semibold text-slate-800">{{ file.name }}</span>
+                            <span dir="auto" class="font-semibold text-slate-800">{{ file.name }}</span>
                             <span class="text-slate-500" data-find-files-summary>{{ file.summary }}</span>
                         </header>
                         <p v-if="file.empty" data-find-files-empty class="px-2 py-1.5 text-slate-600">{{ file.empty }}</p>
                         <!-- 768 px and wider: a table, one line per window -->
                         <table v-if="file.windows.length || file.notSelected.length" class="hidden w-full md:table" data-find-files-table>
                             <thead class="text-[11px] text-slate-500"><tr>
-                                <th class="w-14 px-2 text-left font-semibold">#</th><th class="px-2 text-left font-semibold">{{ t('Record') }}</th>
-                                <th class="px-2 text-left font-semibold">{{ t('Span') }}</th><th class="px-2 text-left font-semibold">{{ t('Genes') }}</th>
-                                <th class="px-2 text-left font-semibold">{{ t('Reaches') }}</th><th class="px-2"></th>
+                                <th class="w-14 px-2 text-start font-semibold">#</th><th class="px-2 text-start font-semibold">{{ t('Record') }}</th>
+                                <th class="px-2 text-start font-semibold">{{ t('Span') }}</th><th class="px-2 text-start font-semibold">{{ t('Genes') }}</th>
+                                <th class="px-2 text-start font-semibold">{{ t('Reaches') }}</th><th class="px-2"></th>
                             </tr></thead>
                             <tbody>
                                 <template v-for="(window, index) in [...file.windows, ...file.notSelected]" :key="window.key">
@@ -10090,11 +10103,11 @@
                                         <td class="px-2 py-1 whitespace-nowrap"><label class="flex items-center gap-1"><input type="checkbox" data-history-ignore class="form-checkbox" :checked="window.ticked"
                                             :aria-label="t('Keep window {record} {span}', { record: window.recordId, span: window.span })" @change="findInOtherFiles.toggleWindow(window.key, $event.target.checked)">
                                             <span class="tabular-nums">{{ window.number }}</span></label></td>
-                                        <td class="px-2 py-1 font-semibold">{{ window.recordId }}</td>
+                                        <td dir="auto" class="px-2 py-1 font-semibold">{{ window.recordId }}</td>
                                         <td class="px-2 py-1 tabular-nums whitespace-nowrap">{{ window.span }}</td>
                                         <td class="px-2 py-1">{{ window.genes }}<span v-if="window.reason" class="block text-[11px]">{{ window.reason }}</span></td>
                                         <td class="px-2 py-1 whitespace-nowrap">{{ window.ends.join(', ') }}</td>
-                                        <td class="px-2 py-1 text-right"><button type="button" data-history-ignore data-find-files-edit class="text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button></td>
+                                        <td class="px-2 py-1 text-end"><button type="button" data-history-ignore data-find-files-edit class="text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button></td>
                                     </tr>
                                 </template>
                             </tbody>
@@ -10107,8 +10120,8 @@
                                     <div class="flex items-center gap-2">
                                         <input type="checkbox" data-history-ignore class="form-checkbox" :checked="window.ticked"
                                                :aria-label="t('Keep window {record} {span}', { record: window.recordId, span: window.span })" @change="findInOtherFiles.toggleWindow(window.key, $event.target.checked)">
-                                        <span class="tabular-nums">{{ window.number }}</span><span class="min-w-0 truncate font-semibold">{{ window.recordId }}</span>
-                                        <button type="button" data-history-ignore data-find-files-edit class="ml-auto text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button>
+                                        <span class="tabular-nums">{{ window.number }}</span><span dir="auto" class="min-w-0 truncate font-semibold">{{ window.recordId }}</span>
+                                        <button type="button" data-history-ignore data-find-files-edit class="ms-auto text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button>
                                     </div>
                                     <p class="tabular-nums">{{ window.span }}<span v-if="window.ends.length"> · {{ window.ends.join(', ') }}</span></p>
                                     <p>{{ window.genes }}</p>
@@ -10136,7 +10149,7 @@
                             <input type="checkbox" data-history-ignore data-find-files-edit-reverse class="form-checkbox"
                                    :checked="findInOtherFiles.dialog.edit.reverseComplement" @change="findInOtherFiles.editWindowField({ reverseComplement: $event.target.checked })">
                             <span>{{ t('Reverse complement') }}</span></label>
-                        <span class="ml-auto flex gap-2">
+                        <span class="ms-auto flex gap-2">
                             <button type="button" data-history-ignore data-find-files-edit-cancel class="btn btn-secondary btn-sm" @click="findInOtherFiles.cancelEdit()">{{ t('Cancel') }}</button>
                             <button type="button" data-history-ignore data-find-files-edit-apply class="btn btn-primary btn-sm" @click="findInOtherFiles.applyEdit()">{{ t('Apply') }}</button>
                         </span>
@@ -10147,20 +10160,20 @@
                     <p v-if="findInOtherFiles.dialog.message" data-find-files-message class="text-red-700">{{ findInOtherFiles.dialog.message }}</p>
                     <div v-if="findInOtherFiles.dialog.returnedToAuto.length" data-find-files-returned>
                         <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
-                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                        <ul class="mt-0.5 list-disc space-y-0.5 ps-5">
                             <li v-for="item in findInOtherFiles.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
                         </ul>
                     </div>
                     <div v-if="findInOtherFiles.dialog.notCarried.length" data-find-files-not-carried class="mt-1">
                         <p class="font-semibold text-slate-700">{{ t('Not carried to the new drawing:') }}</p>
-                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                        <ul class="mt-0.5 list-disc space-y-0.5 ps-5">
                             <li v-for="(line, index) in findInOtherFiles.dialog.notCarried" :key="index">{{ line }}</li>
                         </ul>
                     </div>
                 </div>
                 <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
-                    <span data-find-files-count class="mr-auto text-xs text-slate-600">{{ findInOtherFiles.dialog.count }}</span>
-                    <p v-if="findInOtherFiles.dialog.createReason" data-find-files-create-reason class="basis-full text-right text-xs text-slate-600">{{ findInOtherFiles.dialog.createReason }}</p>
+                    <span data-find-files-count class="me-auto text-xs text-slate-600">{{ findInOtherFiles.dialog.count }}</span>
+                    <p v-if="findInOtherFiles.dialog.createReason" data-find-files-create-reason class="basis-full text-end text-xs text-slate-600">{{ findInOtherFiles.dialog.createReason }}</p>
                     <button type="button" data-history-ignore data-find-files-back @click="findInOtherFiles.back()" class="btn btn-secondary btn-sm">{{ t('Back') }}</button>
                     <button type="button" data-history-ignore data-find-files-cancel @click="findInOtherFiles.close()" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
                     <button type="button" data-history-managed data-find-files-create @click="findInOtherFiles.confirm()" class="btn btn-primary btn-sm"
@@ -10178,7 +10191,7 @@
                 <ul v-if="choicePrompt.lines.length" class="space-y-1" data-choice-prompt-lines>
                     <li v-for="(line, index) in choicePrompt.lines" :key="index" class="flex items-center gap-2"><i class="ph" :class="line.icon" aria-hidden="true"></i><span>{{ line.text }}</span></li>
                 </ul>
-                <ul v-if="choicePrompt.items.length" class="mt-1 list-disc space-y-0.5 pl-5">
+                <ul v-if="choicePrompt.items.length" class="mt-1 list-disc space-y-0.5 ps-5">
                     <li v-for="(item, index) in choicePrompt.items" :key="index">{{ item }}</li>
                 </ul>
                 <p v-if="choicePrompt.note" class="mt-2">{{ choicePrompt.note }}</p>
@@ -10275,9 +10288,9 @@
         <div class="min-w-0 flex-1">
         <details data-color-rule-editor>
             <summary class="flex min-w-0 cursor-pointer items-center gap-1 py-1 text-slate-700">
-                <span class="min-w-0 truncate"><span class="text-slate-500">{{ rule.feat }} ·</span> {{ rule.qual }} = <span class="font-mono">{{ patternText(rule) }}</span></span>
+                <span class="min-w-0 truncate"><span class="text-slate-500">{{ rule.feat }} ·</span> {{ rule.qual }} = <span dir="ltr" class="font-mono">{{ patternText(rule) }}</span></span>
                 <span v-if="patternDraft(rule)" class="shrink-0 font-semibold text-amber-700">{{ t('Not applied') }}</span>
-                <span v-else-if="rule.cap" class="ml-auto max-w-[40%] shrink-0 truncate text-slate-500" :title="rule.cap">{{ rule.cap }}</span>
+                <span v-else-if="rule.cap" class="ms-auto max-w-[40%] shrink-0 truncate text-slate-500" :title="rule.cap">{{ rule.cap }}</span>
             </summary>
             <div class="mt-1 space-y-1">
                 <div class="grid grid-cols-2 gap-1">
@@ -10286,7 +10299,7 @@
                     </select>
                     <input v-committed-value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(rule) ? undefined : `${fieldId(rule)}-qualifier`" class="form-input form-input-compact" :disabled="!available">
                 </div>
-                <input :id="fieldId(rule)" :disabled="!available" v-committed-value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
+                <input dir="ltr" :id="fieldId(rule)" :disabled="!available" v-committed-value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
                 <!-- The pattern's state under its field, once; the rule for what Save Session, Generate and the downloads use sits in the help tip. -->
                 <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="space-y-0.5 break-words text-[10px] leading-snug" data-color-rule-pattern-status data-history-ignore>
                     <div class="flex items-center gap-1 text-amber-800">
@@ -10380,17 +10393,17 @@
 <script type="text/x-template" id="record-display-control-template">
   <div class="rounded border border-slate-200 bg-white/70 p-2 text-xs space-y-1.5" :data-record-rotation="row.key">
     <div class="flex min-w-0 items-baseline justify-between gap-2">
-      <span class="min-w-0 truncate font-semibold text-slate-700" :title="row.recordId">{{ row.recordId }}</span>
+      <span dir="auto" class="min-w-0 truncate font-semibold text-slate-700" :title="row.recordId">{{ row.recordId }}</span>
       <span class="text-[10px] text-slate-500" :class="place ? 'min-w-0 truncate' : 'shrink-0'" :title="place || null">{{ place || row.selector }} · {{ numberText(Number(row.recordLength)) }} bp</span>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <label class="flex items-center gap-1.5"><input ref="topology" data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="t('Circular record {record} {selector}', { record: row.recordId, selector: row.selector })"> {{ t('Circular record') }}</label>
       <span class="ui-hint">{{ detectedTopologyNote(row.detectedTopology) }}</span>
-      <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="$refs.topology.focus(); controller.setTopology(row, null)">{{ t('Reset to detected') }}</button>
+      <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ms-auto text-[10px] text-blue-600" @click="$refs.topology.focus(); controller.setTopology(row, null)">{{ t('Reset to detected') }}</button>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <label class="flex items-center gap-1.5">{{ t('Display start') }} <input ref="start" data-history-managed type="number" min="1" :max="row.recordLength" v-committed-value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="t('Display start {record} {selector}', { record: row.recordId, selector: row.selector })" class="form-input form-input-compact w-24"></label>
-      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="($refs.start.disabled ? $refs.topology : $refs.start).focus(); controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">{{ t('Reset start') }}</button>
+      <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="($refs.start.disabled ? $refs.topology : $refs.start).focus(); controller.resetStart(row)" class="ms-auto text-[10px] text-blue-600">{{ t('Reset start') }}</button>
     </div>
     <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
     <div v-if="!surface.startEnabled" class="ui-hint">{{ surface.disabledReason }}</div>
@@ -10414,7 +10427,7 @@
             <p>{{ errorText(model.summaryParts) }}</p>
             <details ref="details" class="mt-0.5">
                 <summary class="cursor-pointer text-[10px] font-semibold text-slate-600">{{ t('Details') }}</summary>
-                <textarea ref="diagnosticText" :value="diagnostics" readonly :aria-label="t('Safe diagnostics')" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
+                <textarea dir="ltr" ref="diagnosticText" :value="diagnostics" readonly :aria-label="t('Safe diagnostics')" rows="4" class="mt-1 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-1 font-mono text-[10px] text-red-800" data-history-ignore></textarea>
                 <div class="flex flex-wrap gap-3 text-[10px]">
                     <button type="button" @click="copyDiagnostics" class="font-semibold text-blue-700 underline">{{ t('Copy diagnostics') }}</button>
                     <button type="button" @click="selectDiagnostics" class="font-semibold text-blue-700 underline">{{ t('Select diagnostics') }}</button>
@@ -10428,7 +10441,7 @@
             <p v-if="recoveryText" class="mt-1 text-xs text-red-800">{{ recoveryText }}</p>
             <details ref="details" class="mt-2 rounded border border-red-100 bg-white/50 p-2">
                 <summary class="cursor-pointer text-xs font-semibold text-red-700">{{ t('Details') }}</summary>
-                <textarea ref="diagnosticText" :value="diagnostics" readonly :aria-label="t('Safe diagnostics')" rows="5" class="mt-2 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-2 font-mono text-xs text-red-800" data-history-ignore></textarea>
+                <textarea dir="ltr" ref="diagnosticText" :value="diagnostics" readonly :aria-label="t('Safe diagnostics')" rows="5" class="mt-2 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-2 font-mono text-xs text-red-800" data-history-ignore></textarea>
                 <div class="mt-2 flex flex-wrap gap-2">
                     <button type="button" @click="copyDiagnostics" class="btn btn-secondary btn-sm">{{ t('Copy diagnostics') }}</button>
                     <button type="button" @click="selectDiagnostics" class="btn btn-secondary btn-sm">{{ t('Select diagnostics') }}</button>
@@ -10449,7 +10462,7 @@
 </script>
 
 <script type="text/x-template" id="settings-section-index-template">
-    <div ref="root" class="settings-index" data-history-ignore :style="rail ? null : { marginRight: inset + 'px' }" @keydown.esc="onEscape">
+    <div ref="root" class="settings-index" data-history-ignore :style="rail ? null : { marginInlineEnd: inset + 'px' }" @keydown.esc="onEscape">
         <button v-if="rail" type="button" class="settings-index-switch" :aria-label="t('Expand settings')" :aria-controls="controls"
                 v-on="tipOn(t('Expand settings'))" @click="showStacked">
             <i class="ph ph-caret-double-right" aria-hidden="true"></i>
@@ -10469,7 +10482,7 @@
         <div v-if="tip" ref="tipElement" class="settings-index-tip" aria-hidden="true" :data-side="tip.side" :style="{ left: tip.left + 'px', top: tip.top + 'px' }">{{ tip.text }}</div>
     </div>
     <button v-if="rail && view.docked" type="button" class="settings-dock-close" data-history-ignore :aria-label="t('Close section')" :aria-controls="controls"
-            :style="{ right: inset + 10 + 'px' }" v-on="tipOn(t('Close section'))" @keydown.esc="onEscape" @click="closeDocked">
+            :style="{ insetInlineEnd: inset + 10 + 'px' }" v-on="tipOn(t('Close section'))" @keydown.esc="onEscape" @click="closeDocked">
         <i class="ph ph-x" aria-hidden="true"></i>
     </button>
 </script>
@@ -10485,7 +10498,7 @@
         </button>
         <Teleport to="body">
             <span :id="descriptionId" hidden>{{ text }}</span>
-            <div v-if="visible" ref="tooltip" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
+            <div v-if="visible" ref="tooltip" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-start leading-relaxed">
                  {{ text }}
             </div>
         </Teleport>
@@ -10544,7 +10557,7 @@
             @change="chooseSessionFile"
         >
             <option value="" selected>{{ t('Files in this Session') }}</option>
-            <option v-for="file in sessionFiles" :key="file.fileId" :value="file.fileId">{{ file.name }}</option>
+            <option dir="auto" v-for="file in sessionFiles" :key="file.fileId" :value="file.fileId">{{ file.name }}</option>
         </select>
     </div>
 </script>

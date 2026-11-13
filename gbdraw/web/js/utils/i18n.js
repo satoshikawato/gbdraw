@@ -31,6 +31,11 @@
  * @property {UiLocale} tag
  * @property {string} name The language's name in itself (an endonym); never translated.
  * @property {string} sentenceSeparator What separates two sentences shown one after the other.
+ * @property {TextDirection} dir The direction the page reads in this language: the page's `dir`.
+ */
+/**
+ * The direction a language is read in (the HTML `dir` attribute).
+ * @typedef {'ltr' | 'rtl'} TextDirection
  */
 /**
  * The translation of the `other` form of a `tn` pair in a language whose
@@ -72,23 +77,23 @@ export const SOURCE_LOCALE = 'en';
  * @type {readonly Readonly<UiLocaleOption>[]}
  */
 export const UI_LOCALES = Object.freeze([
-  Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('id'), name: 'Bahasa Indonesia', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('de'), name: 'Deutsch', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('it'), name: 'Italiano', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('pl'), name: 'Polski', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('vi'), name: 'Tiếng Việt', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ko'), name: '한국어', sentenceSeparator: ' ' })
+  Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('id'), name: 'Bahasa Indonesia', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('de'), name: 'Deutsch', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('it'), name: 'Italiano', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pl'), name: 'Polski', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('vi'), name: 'Tiếng Việt', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ko'), name: '한국어', sentenceSeparator: ' ', dir: 'ltr' })
 ]);
 // Separates the context of `tx` from its text in a catalog key.
 export const CONTEXT_SEPARATOR = '\u0004';
@@ -129,13 +134,27 @@ let shownPlurals = ENGLISH_PLURALS;
  */
 export const uiLocale = locale;
 
+// First Strong Isolate and Pop Directional Isolate (Unicode bidi).
+const FSI = '\u2068';
+const PDI = '\u2069';
+
+/**
+ * A value as a text puts it in place of its placeholder. In a right-to-left
+ * language the value is isolated (FSI ... PDI), so a file name or a number
+ * keeps its own order inside the sentence; a left-to-right language shows the
+ * value as it is, so its texts keep their bytes.
+ * @param {string | number} value
+ * @returns {string}
+ */
+const insertedValue = (value) => (shownLocale().dir === 'rtl' ? `${FSI}${value}${PDI}` : String(value));
+
 /**
  * Replaces each `{name}` whose value is given; any other placeholder stays.
  * @param {string} text
  * @param {TranslationParams | undefined} params
  */
 const substitute = (text, params) => (params
-  ? text.replace(PLACEHOLDER, (/** @type {string} */ whole, /** @type {string} */ name) => (Object.hasOwn(params, name) ? String(params[name]) : whole))
+  ? text.replace(PLACEHOLDER, (/** @type {string} */ whole, /** @type {string} */ name) => (Object.hasOwn(params, name) ? insertedValue(params[name]) : whole))
   : text);
 
 /**
@@ -343,7 +362,7 @@ export const textParts = (text, slots, params) => {
       parts.push({ slot: name });
       pending = '';
     } else {
-      pending += params && Object.hasOwn(params, name) ? String(params[name]) : whole;
+      pending += params && Object.hasOwn(params, name) ? insertedValue(params[name]) : whole;
     }
   }
   pending += text.slice(at);
@@ -359,7 +378,8 @@ let latestRequest = 0;
 
 /**
  * Shows the UI in `next`: loads its catalog, then switches, and sets the
- * page's `lang` (the one writer of `<html lang>`). `en` needs no catalog. When
+ * page's `lang` and `dir` (the one writer of `<html lang>` and `<html dir>`).
+ * `en` needs no catalog. When
  * calls overlap, only the latest one applies; a catalog that fails to load
  * rejects and changes nothing. The header Language menu and the stored
  * language at boot call it (app/ui-language.js).
@@ -379,5 +399,6 @@ export const setUiLocale = async (next, load = importCatalog) => {
   locale.value = tag;
   // A unit test without a page has no document.
   globalThis.document?.documentElement.setAttribute('lang', tag);
+  globalThis.document?.documentElement.setAttribute('dir', shownLocale().dir);
   return true;
 };
