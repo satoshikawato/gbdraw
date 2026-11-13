@@ -1,6 +1,6 @@
 ---
 name: translate-web-ui
-description: Translate the new and changed gbdraw Web UI keys into the ten locale catalogs in one batch before a release - status, English-source fixes, term audit, per-locale drafting and review, apply, and one PR. Use before a release tag when `node tools/i18n/sync.mjs status --require-complete` fails, or when the Owner asks for the translation batch.
+description: Translate the new and changed gbdraw Web UI keys into every locale catalog in one batch before a release - status, English-source fixes, term audit, per-locale drafting and review, apply, and one PR. Use before a release tag when `node tools/i18n/sync.mjs status --require-complete` fails, or when the Owner asks for the translation batch.
 ---
 
 # Translate the Web UI before a release

@@ -702,21 +702,21 @@ test('OV-1506: Layout, Labels and Features have rail keys of their own', async (
   assert.deepEqual(rail.map(({ context, english }) => `${context}:${english}`), ['rail:Layout', 'rail:Features', 'rail:Labels']);
 });
 
-test('the UI languages are the seventeen of the Language menu, Latin script first, then Cyrillic, then Thai, each named in itself', () => {
+test('the UI languages are the nineteen of the Language menu, Latin script first, then Cyrillic, Hindi, Bengali, Thai, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
     ['en', 'English'], ['id', 'Bahasa Indonesia'], ['de', 'Deutsch'], ['es', 'Español'], ['fr', 'Français'], ['it', 'Italiano'],
     ['pl', 'Polski'], ['pt', 'Português'], ['vi', 'Tiếng Việt'], ['tr', 'Türkçe'],
-    ['ru', 'Русский'], ['uk', 'Українська'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
+    ['ru', 'Русский'], ['uk', 'Українська'], ['hi', 'हिन्दी'], ['bn', 'বাংলা'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
-  // Upper-casing and tracking stay only in the cased scripts; Thai also gets the 12 px floor (index.html).
+  // Upper-casing and tracking stay only in the cased scripts; Thai, Hindi and Bengali also get the 12 px floor (index.html).
   const tagsOf = (style) => UI_LOCALES.filter(({ textStyle }) => textStyle === style).map(({ tag }) => tag);
   assert.deepEqual(['cased', 'no-caps', 'tall-marks'].map(tagsOf), [
-    ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'tr', 'ru', 'uk'], ['vi', 'ja', 'zh-Hans', 'zh-Hant', 'ko'], ['th']
+    ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'tr', 'ru', 'uk'], ['vi', 'ja', 'zh-Hans', 'zh-Hant', 'ko'], ['hi', 'bn', 'th']
   ]);
   assert.equal(tagsOf('cased').length + tagsOf('no-caps').length + tagsOf('tall-marks').length, UI_LOCALES.length);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
-  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'xx', null, undefined, 3, '../x']) {
+  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'hi-IN', 'bn-BD', 'bn-IN', 'xx', null, undefined, 3, '../x']) {
     assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
   }
 });
@@ -726,11 +726,11 @@ test('a locale outside the UI languages is refused', async () => {
   assert.equal(uiLocale.value, SOURCE_LOCALE);
 });
 
-test('two sentences are joined with a space in English, the other Latin-script languages, Thai and Korean and with nothing in Japanese and Chinese', async () => {
+test('two sentences are joined with a space in English, the other Latin-script languages, Hindi, Bengali, Thai and Korean and with nothing in Japanese and Chinese', async () => {
   assert.equal(sentenceSeparator(), ' ');
   assert.equal(joinSentences('Exported a.svg.', 'Find it in your browser\'s downloads.'), 'Exported a.svg. Find it in your browser\'s downloads.');
   try {
-    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ko']) {
+    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'hi', 'bn', 'th', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       assert.equal(sentenceSeparator(), ' ', tag);
       assert.equal(joinSentences('A.', 'B.'), 'A. B.', tag);
@@ -747,8 +747,8 @@ test('two sentences are joined with a space in English, the other Latin-script l
 
 // OV-2782: a sentence set inside a template that ends it loses its own full stop first.
 test('OV-2782: a sentence body drops one final full stop of any UI script and keeps every other end', () => {
-  assert.deepEqual(['Done.', '完了しました。', 'Готово.', 'Wait...', 'Done', 'Done?', 'Done!', 'Loading…', 'เสร็จแล้ว', '。', '']
-    .map(sentenceBody), ['Done', '完了しました', 'Готово', 'Wait..', 'Done', 'Done?', 'Done!', 'Loading…', 'เสร็จแล้ว', '', '']);
+  assert.deepEqual(['Done.', '完了しました。', 'সম্পন্ন হয়েছে।', 'पूरा हुआ।', 'Готово.', 'Wait...', 'Done', 'Done?', 'Done!', 'Loading…', 'เสร็จแล้ว', '。', '']
+    .map(sentenceBody), ['Done', '完了しました', 'সম্পন্ন হয়েছে', 'पूरा हुआ', 'Готово', 'Wait..', 'Done', 'Done?', 'Done!', 'Loading…', 'เสร็จแล้ว', '', '']);
 });
 
 test('a list keeps today\'s English and uses the locale\'s list pattern in every other locale', async () => {
@@ -785,6 +785,8 @@ test('the shown locale sets the page language, and only a switch that applies do
     assert.deepEqual([root.lang, root.textStyle], ['zh-Hant', 'no-caps']);
     await setUiLocale('th', async () => ({ default: {} }));
     assert.deepEqual([root.lang, root.textStyle], ['th', 'tall-marks']);
+    await setUiLocale('hi', async () => ({ default: {} }));
+    assert.deepEqual([root.lang, root.textStyle], ['hi', 'tall-marks']);
     await setUiLocale('zh-Hant', async () => ({ default: {} }));
     await assert.rejects(setUiLocale('ja', async () => { throw new Error('offline'); }), /offline/);
     assert.deepEqual([root.lang, root.textStyle], ['zh-Hant', 'no-caps'], 'a catalog that fails to load changes nothing');
@@ -806,6 +808,9 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
       // fr and pt take `one` for 0 too; es only for 1.
       ['fr', ['one:0', 'one:1', 'other:2', 'other:1000000']],
       ['pt', ['one:0', 'one:1', 'other:2', 'other:1000000']],
+      // hi and bn too (their catalogs give that `one` its own text in an object, below).
+      ['hi', ['one:0', 'one:1', 'other:2', 'other:1000000']],
+      ['bn', ['one:0', 'one:1', 'other:2', 'other:1000000']],
       // es and fr select `many` for 1000000, which takes `other`.
       ['es', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       // de and tr take `one` for 1 only; it selects `many` for 1000000, pl, ru and uk `few` for 2 and `many` for 0
@@ -870,14 +875,16 @@ test('a language with few and many forms: the `one` form is the text for exactly
 // `one` and the `other` text for every other count; plural forms (an object)
 // give each category its text for every count but exactly 1.
 // - PLURAL_FORMS_NEEDED: the categories, besides `other`, of each locale whose
-//   object holds them for every pair.
+//   object holds them for every pair. Hindi and Bengali call 0 (and fractions
+//   below 1) `one`, and give those counts a text of their own, so 0 never shows
+//   the sentence about exactly one.
 // - `many` in es, fr, it and pt (exact multiples of a million) shows the
 //   `other` text: Owner decision of 2026-11-08.
 // - A pair whose English `one` text has no {count} is a sentence about exactly
 //   one; where the locale's rule calls another count `one` (0 and fractions in
 //   fr and pt), the value is an object, so that count shows a plural text
 //   (OV-2779).
-const PLURAL_FORMS_NEEDED = Object.freeze({ pl: ['few', 'many'], ru: ['one', 'few', 'many'], uk: ['one', 'few', 'many'] });
+const PLURAL_FORMS_NEEDED = Object.freeze({ hi: ['one'], bn: ['one'], pl: ['few', 'many'], ru: ['one', 'few', 'many'], uk: ['one', 'few', 'many'] });
 const MANY_SHOWS_OTHER = Object.freeze(['es', 'fr', 'it', 'pt']);
 // Counts other than exactly 1 that reach every category of the UI languages' rules.
 const PLURAL_SAMPLE = [0, 0.5, 1.5, ...Array.from({ length: 119 }, (_, index) => index + 2), 1000, 1000000, 1000001, 2000000];
@@ -923,6 +930,10 @@ test('plural form check: a locale needs the forms its rule selects for counts ot
   assert.deepEqual(pluralFormProblems('pl', pairs, { '{count} rows': 'x', '{count} more': { other: 'y' } }), [
     '"{count} rows": pl needs plural forms few, many, other',
     '"{count} more": pl plural forms lack few, many'
+  ]);
+  assert.deepEqual(pluralFormProblems('hi', pairs, { '{count} rows': 'x', '{count} more': { other: 'y' } }), [
+    '"{count} rows": hi needs plural forms one, other',
+    '"{count} more": hi plural forms lack one'
   ]);
   assert.deepEqual(pluralFormProblems('ru', pairs, { '{count} rows': { one: 'a', few: 'b', many: 'c', other: 'd' }, '{count} more': { few: 'b', other: 'd', two: 'e' } }), [
     '"{count} more": ru plural forms lack one, many',

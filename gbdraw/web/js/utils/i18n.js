@@ -284,14 +284,15 @@ export const tmx = (context, text) => lookup(context + CONTEXT_SEPARATOR + text,
  */
 export const sentenceSeparator = () => shownLocale().sentenceSeparator;
 
-// The full stops of the UI languages' scripts: . (Latin, Cyrillic, Korean)
-// and 。 (Japanese, Chinese). Thai ends a sentence with none.
-const FULL_STOP_END = /[.。]$/u;
+// The full stops of the UI languages' scripts: . (Latin, Cyrillic, Korean),
+// 。 (Japanese, Chinese) and the dari । (Hindi, Bengali). Thai ends a sentence
+// with none.
+const FULL_STOP_END = /[.。।]$/u;
 
 /**
  * A shown sentence without its final full stop, for a template that ends the
  * sentence with its own mark (`t('{pair}: {text}.', { text: sentenceBody(x) })`):
- * the locale's mark then shows once, never 。。. Only a full stop goes;
+ * the locale's mark then shows once, never 。。 or ।।. Only a full stop goes;
  * ?, ! and … keep their meaning and stay.
  * @param {string} text a shown text
  * @returns {string}

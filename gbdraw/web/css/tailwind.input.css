@@ -157,7 +157,7 @@
     details > summary:hover { color: var(--ui-accent); }
 }
 /* A one-line text that ends with an ellipsis (`truncate`) is cut at its sides only. Its top and bottom stay open, so a
-   mark above or below the letters (a Thai tone mark, a Vietnamese stacked mark) is never cut where the font draws it
+   mark above or below the letters (a Devanagari or Bengali sign, a Thai tone mark, a Vietnamese stacked mark) is never cut where the font draws it
    outside the line box. `clip`, unlike `hidden`, allows a visible other axis; it makes no scroll container, so the
    zero minimum size a scroll container had is set here, below any min-w-* or min-h-* utility. A browser without `overflow: clip` keeps `overflow: hidden`, since `hidden` beside a
    visible axis would make that axis scroll. */
