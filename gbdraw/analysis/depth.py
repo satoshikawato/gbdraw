@@ -543,7 +543,6 @@ def depth_df(
     step: int,
     *,
     circular: bool,
-    normalize: bool = False,
     min_depth: float | None = None,
     max_depth: float | None = None,
 ) -> DataFrame:
@@ -556,7 +555,9 @@ def depth_df(
     windows are those of :func:`gbdraw.analysis.windows.sliding_windows`, centred
     on the sample; ``circular`` says whether the molecule is circular. A crop
     reads its flanking positions of the source where the depth rows cover them;
-    a mean is over the bases a window reads (``_window_bases_read``).
+    a mean is over the bases a window reads (``_window_bases_read``), clipped
+    to ``min_depth``..``max_depth``. Where a mean is drawn on the track, linear
+    or log scaled, is the drawers' (``_prepare_depth_plot_dataframe``).
     """
 
     if window <= 0:
@@ -568,7 +569,7 @@ def depth_df(
     coverage_source = depth_table if isinstance(depth_table, DepthCoverage) else _table_coverage(depth_table)
     record_len = len(record.seq)
     if record_len <= 0:
-        return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
+        return pd.DataFrame(columns=["position", "depth"])
 
     windows = sliding_windows(record, int(window), int(step), circular=circular)
     reference = _select_record_reference(record, coverage_source)
@@ -581,35 +582,10 @@ def depth_df(
         upper = float(max_depth) if max_depth is not None else None
         means = np.clip(means, lower, upper)
 
-    if normalize:
-        # Log-scale depth follows IGV-style coverage scaling:
-        # 1x, 10x, and 100x occupy evenly spaced heights.
-        normalization_min = float(min_depth) if min_depth is not None else 0.0
-        normalization_max = float(max_depth) if max_depth is not None else float(np.max(means, initial=0.0))
-
-        def transform(values: np.ndarray | float) -> np.ndarray:
-            values_arr = np.asarray(values, dtype=np.float64)
-            transformed_arr = np.zeros_like(values_arr, dtype=np.float64)
-            positive = values_arr > 0
-            transformed_arr[positive] = np.log10(values_arr[positive]) + 1.0
-            return transformed_arr
-
-        transformed = transform(means)
-        transformed_min = float(transform(normalization_min))
-        transformed_max = float(transform(normalization_max))
-        if transformed_max <= transformed_min:
-            normalized = np.zeros_like(means, dtype=np.float64)
-        else:
-            normalized = (transformed - transformed_min) / (transformed_max - transformed_min)
-            normalized = np.clip(normalized, 0.0, 1.0)
-    else:
-        normalized = means.astype(np.float64, copy=True)
-
     return pd.DataFrame(
         {
             "position": windows.samples,
             "depth": means,
-            "depth_normalized": normalized,
         }
     )
 

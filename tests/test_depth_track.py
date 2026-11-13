@@ -42,6 +42,7 @@ from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.layout.scalar_axis import _prepare_depth_plot_dataframe
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
@@ -528,7 +529,7 @@ def test_depth_df_matching_fallback_and_mismatch() -> None:
         depth_df(record, multi_ref, window=10, step=10, circular=False)
 
 
-def test_depth_df_missing_positions_clipping_and_normalization() -> None:
+def test_depth_df_missing_positions_and_clipping() -> None:
     record = _make_record("rec1", length=40)
     df = depth_df(
         record,
@@ -536,19 +537,18 @@ def test_depth_df_missing_positions_clipping_and_normalization() -> None:
         window=10,
         step=10,
         circular=False,
-        normalize=True,
         min_depth=5,
         max_depth=20,
     )
 
+    # The window means only: where a mean is drawn is the drawers' (OV-3107).
+    assert list(df.columns) == ["position", "depth"]
     assert df["position"].tolist() == [0, 10, 20, 30]
     # Windows centred on each sample: bases 1..5, 6..15, 16..25 and 26..35 (6, 4, 0 and 8), clipped to 5..20.
     assert df["depth"].tolist() == pytest.approx([6.0, 5.0, 5.0, 8.0])
-    assert df["depth_normalized"].min() >= 0
-    assert df["depth_normalized"].max() <= 1
 
 
-def test_depth_df_log_scale_makes_ten_x_twice_one_x() -> None:
+def test_depth_track_log_scale_makes_ten_x_twice_one_x() -> None:
     record = _make_record("rec1", length=20)
     depth_table = pd.DataFrame(
         {
@@ -559,11 +559,12 @@ def test_depth_df_log_scale_makes_ten_x_twice_one_x() -> None:
     )
 
     # One-base windows read base 1 (1x) and base 11 (10x).
-    log_scaled = depth_df(record, depth_table, window=1, step=10, circular=False, normalize=True)
-    linear = depth_df(record, depth_table, window=1, step=10, circular=False)
+    frame = depth_df(record, depth_table, window=1, step=10, circular=False)
+    log_scaled = _prepare_depth_plot_dataframe(frame, None, None, normalize=True)
+    linear = _prepare_depth_plot_dataframe(frame, None, None, normalize=False)
 
     assert log_scaled["depth_normalized"].tolist() == pytest.approx([0.5, 1.0])
-    assert linear["depth_normalized"].tolist() == pytest.approx([1.0, 10.0])
+    assert linear["depth_normalized"].tolist() == pytest.approx([0.1, 1.0])
 
 
 def test_depth_config_defaults_to_linear_scale() -> None:

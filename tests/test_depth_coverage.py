@@ -61,13 +61,13 @@ def _linear_windows(record_len, window, step):
     return samples, np.clip(starts, 0, record_len), np.clip(starts + int(window), 0, record_len)
 
 
-def _reference_depth_df(record, table, window, step, *, normalize=False, min_depth=None, max_depth=None):
+def _reference_depth_df(record, table, window, step, *, min_depth=None, max_depth=None):
     table = table.loc[:, _COLUMNS].copy()
     table["reference_name"] = table["reference_name"].astype("string")
     _reference_validate(table)
     record_len = len(record.seq)
     if record_len <= 0:
-        return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
+        return pd.DataFrame(columns=["position", "depth"])
     record_id = str(record.id)
     rows = table[table["reference_name"] == record_id]
     if rows.empty:
@@ -93,20 +93,7 @@ def _reference_depth_df(record, table, window, step, *, normalize=False, min_dep
     means = (prefix[ends] - prefix[starts]) / (ends - starts)
     if min_depth is not None or max_depth is not None:
         means = np.clip(means, min_depth, max_depth)
-    if normalize:
-        def transform(values):
-            values = np.asarray(values, dtype=np.float64)
-            out = np.zeros_like(values)
-            positive = values > 0
-            out[positive] = np.log10(values[positive]) + 1.0
-            return out
-
-        low = float(transform(float(min_depth) if min_depth is not None else 0.0))
-        high = float(transform(float(max_depth) if max_depth is not None else float(np.max(means, initial=0.0))))
-        normalized = np.zeros_like(means) if high <= low else np.clip((transform(means) - low) / (high - low), 0.0, 1.0)
-    else:
-        normalized = means.astype(np.float64, copy=True)
-    return pd.DataFrame({"position": samples, "depth": means, "depth_normalized": normalized})
+    return pd.DataFrame({"position": samples, "depth": means})
 
 
 def _outcome(build):
@@ -178,7 +165,6 @@ def _binning(rng: np.random.Generator) -> dict[str, object]:
     return {
         "window": int(rng.integers(1, 60)),
         "step": int(rng.integers(1, 60)),
-        "normalize": bool(rng.random() < 0.5),
         "min_depth": min_depth,
         "max_depth": max_depth,
     }
@@ -198,7 +184,7 @@ def test_binned_depth_equals_the_row_table_algorithm(seed: int, tmp_path: Path, 
         record = _record(rng, text)
         binning = _binning(rng)
         args = (binning["window"], binning["step"])
-        kwargs = {key: binning[key] for key in ("normalize", "min_depth", "max_depth")}
+        kwargs = {key: binning[key] for key in ("min_depth", "max_depth")}
         expected = _outcome(lambda: _reference_depth_df(record, _reference_parse(path), *args, **kwargs))
         _assert_same(_outcome(lambda: depth_df(record, parse_depth_tsv(str(path)), *args, circular=False, **kwargs)), expected)
         _assert_same(_outcome(lambda: depth_df(record, read_depth_tsv(str(path)), *args, circular=False, **kwargs)), expected)

@@ -760,7 +760,6 @@ def build_depth_track_dataframes(
                         int(window),
                         int(step),
                         circular=transforms[record_index].is_circular,
-                        normalize=bool(base_config.normalize),
                         min_depth=base_config.min_depth,
                         max_depth=base_config.max_depth,
                     ),
