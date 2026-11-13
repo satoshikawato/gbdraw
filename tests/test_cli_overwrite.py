@@ -26,6 +26,7 @@ from gbdraw.api.requests import (
     RecordInput,
     RenderOutputRequest,
 )
+from gbdraw.api.input_summary import InputSummary
 from gbdraw.api.session_compat import SessionMigrationReport
 from gbdraw.circular import _get_args as get_circular_args
 from gbdraw.circular import circular_main
@@ -765,7 +766,12 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
         (plan,) = plans
         captured["overwrite"] = plan.request.output.overwrite
         captured["include_feature_catalog"] = include_feature_catalog
-        return {plan.drawing.id: SimpleNamespace(feature_identity_notices=(), linear_metadata=None)}
+        return {
+            plan.drawing.id: SimpleNamespace(
+                feature_identity_notices=(), annotation_warnings=(), input_summary=InputSummary(()),
+                linear_metadata=None,
+            )
+        }
 
     monkeypatch.setattr(session_module, "_render_session_drawing_plans", fake_render)
 
@@ -828,6 +834,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
                 migration_report=SessionMigrationReport(),
                 feature_identity_notices=(),
                 annotation_warnings=(),
+                input_summary=InputSummary(()),
             )
         }
 

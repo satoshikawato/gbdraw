@@ -800,7 +800,7 @@ def render_session_drawings_cli(
         diagram_request_output_paths,
         preflight_diagram_request_outputs,
     )
-    from gbdraw.features.overrides import log_feature_identity_notices
+    from gbdraw.cli_utils.diagram_run import log_render_notices
     from gbdraw.session import (
         _build_session_document_from_drawings,
         _plan_session_drawings,
@@ -872,14 +872,13 @@ def render_session_drawings_cli(
                 plans,
                 include_feature_catalog=save,
             )
+        # Each drawing logs as its mode command logs its run: a Circular batch
+        # writes a warning of an input its Results share once.
         for result in rendered.values():
-            items = (
-                result.items
-                if isinstance(result, CircularBatchRenderResult)
-                else (result,)
-            )
-            for item in items:
-                log_feature_identity_notices(item.feature_identity_notices)
+            if isinstance(result, CircularBatchRenderResult):
+                log_render_notices(result.items, warned=set())
+            else:
+                log_render_notices((result,))
         if sidecar is None:
             return
         sidecar_path, title_fallback = sidecar

@@ -1551,3 +1551,55 @@ def test_a_session_file_with_a_composite_input_replays_the_figure_of_its_source(
         entries = set(archive.namelist())
     assert {f"resources/{card['gb']['resourceId']}" for card in cards} <= entries
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "source.svg").read_bytes()
+
+
+_REGION_TABLE = (
+    "set_id\tid\tmark\tstart\tend\tfeature_selector\tlabel\n"
+    "regions\tcI_region\tband\t37200\t38100\t\tcI region\n"
+    "regions\tpast_end\tband\t48000\t50000\t\tpast the end\n"
+    "regions\tmissing\tbracket\t\t\tlocus_tag=NO_SUCH_TAG\tmissing gene\n"
+)
+
+
+def _render_notices(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """The annotation warnings and input summary lines of the runs since the last ``caplog.clear()``."""
+
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith(("out_of_bounds_clipped:", "feature_selector_unmatched:", "Record "))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("mode", "files"),
+    [("circular", ("NC_001416.gb",)), ("linear", ("NC_001416.gb",)), ("circular", ("a.gb", "b.gb"))],
+    ids=["circular", "linear", "circular-batch"],
+)
+def test_a_session_render_logs_the_notices_of_the_direct_command(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, mode: str, files: tuple[str, ...]
+) -> None:
+    source = REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"
+    gbks = []
+    for name in files:
+        (tmp_path / name).write_bytes(source.read_bytes())
+        gbks.append(str(tmp_path / name))
+    table = tmp_path / "regions.tsv"
+    table.write_text(_REGION_TABLE, encoding="utf-8")
+    command = circular_main if mode == "circular" else linear_main
+    annotations = ["--annotation_table", str(table)] if len(files) == 1 else []
+    caplog.set_level("INFO")
+
+    command(["--gbk", *gbks, *annotations, "-o", str(tmp_path / "direct"), "--save_session"])
+    direct = _render_notices(caplog)
+    session = str(tmp_path / "direct.gbdraw")
+    caplog.clear()
+    render_main(["--session", session, "-o", str(tmp_path / "render")])
+    rendered = _render_notices(caplog)
+    caplog.clear()
+    command(["--session", session, "-o", str(tmp_path / "replay")])
+    replayed = _render_notices(caplog)
+
+    assert len(direct) == (3 if annotations else 2)
+    assert rendered == direct
+    assert replayed == direct
