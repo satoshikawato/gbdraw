@@ -358,11 +358,11 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
     typed_name = "collinearityResult" if source_mode == "collinear" else "orthogroupResult"
     assert converted["pairs"] == api_payload["pairs"]
     if reversed_record is not None:
-        # Rows of the reversed record name its CDS in the search frame (F).
-        search_frame = {
-            (int(protein["start"]) + 1, int(protein["end"]))
-            for protein in web_records[reversed_record]["proteinMap"].values()
-        }
+        # Rows of the reversed record start and end at its CDS ends in the
+        # search frame (F); a collinear block may span several CDS.
+        proteins = web_records[reversed_record]["proteinMap"].values()
+        starts = {int(protein["start"]) + 1 for protein in proteins}
+        stops = {int(protein["end"]) for protein in proteins}
         ends = [
             tuple(sorted(int(value) for value in columns[start:start + 2]))
             for pair in api_payload["pairs"]
@@ -371,7 +371,7 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
             for index, start in ((pair["query_index"], 6), (pair["subject_index"], 8))
             if index == reversed_record
         ]
-        assert ends and set(ends) <= search_frame
+        assert ends and all(start in starts and stop in stops for start, stop in ends)
     assert converted["identity"] == api_payload["identity"]
     assert reply["derived"]["key"] == converted["identityKey"] == api_entry["key"]
     assert converted["provenance"] == api_payload["provenance"]

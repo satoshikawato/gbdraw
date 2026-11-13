@@ -3416,7 +3416,6 @@ def extract_cds_proteins(
     for record_index, record in enumerate(records):
         global_record_index = record_index + int(record_index_offset)
         record_candidates: list[_CdsProteinCandidate] = []
-        cds_count = 0
         feature_items = _iter_record_features(record)
         parent_graph = _build_parent_graph(feature_items)
         record_overrides = feature_overrides[record_index] if feature_overrides else {}
@@ -3444,7 +3443,6 @@ def extract_cds_proteins(
             if protein_sequence is None:
                 continue
 
-            cds_count += 1
             feature_svg_id, hash_parts = source_feature_hash_and_parts(feature, record)
             view_hash_parts = _view_feature_hash_parts(feature)
             view_feature_svg_id = (
@@ -3457,7 +3455,6 @@ def extract_cds_proteins(
                 else None
             )
             hash_start, hash_end, hash_strand = hash_parts[0] if hash_parts else (None, None, None)
-            synthetic_protein_id = f"gbd_r{global_record_index + 1:04d}_cds{cds_count:06d}"
             source_protein_id = _first_qualifier(feature, "protein_id")
             fasta_safe_source_id = _fasta_safe_protein_id(source_protein_id)
             if fasta_safe_source_id is not None:
@@ -3476,15 +3473,11 @@ def extract_cds_proteins(
                 if ancestor_id:
                     parent_ids = (ancestor_id,)
             gene_parent_id = _resolve_gene_parent_id(feature, ancestors, parent_graph)
-            label = (
-                _first_qualifier_from_any(
-                    feature, ("locus_tag", "protein_id", "gene", "product")
-                )
-                or synthetic_protein_id
-            )
+            # The synthetic ID (and the label of a CDS without a name) is set below, once the CDS are known.
+            label = _first_qualifier_from_any(feature, ("locus_tag", "protein_id", "gene", "product")) or ""
             record_candidates.append(
                 _CdsProteinCandidate(
-                    protein_id=synthetic_protein_id,
+                    protein_id="",
                     source_protein_id=source_protein_id,
                     record_index=global_record_index,
                     feature_index=feature_index,
@@ -3520,7 +3513,7 @@ def extract_cds_proteins(
                 )
             )
 
-        candidate_records.append(record_candidates)
+        candidate_records.append(_numbered_in_search_frame(record, record_candidates, global_record_index + 1))
 
     proteins_by_record: list[list[CdsProtein]] = []
     used_ids: set[str] = set()
@@ -3592,6 +3585,53 @@ def proteins_to_fasta(proteins: Sequence[CdsProtein]) -> str:
         sequence = protein.sequence
         lines.extend(sequence[index : index + 80] for index in range(0, len(sequence), 80))
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _search_frame_order(record: SeqRecord, source_positions: Sequence[int]) -> list[int]:
+    """Indexes into ``source_positions``, the source feature positions of one record's proteins in drawn order, in
+    the order the record's search frame lists them: drawn order, or source order for a record drawn reversed."""
+
+    if _read_coord_map(record)[1] == 1:
+        return list(range(len(source_positions)))
+    return sorted(range(len(source_positions)), key=source_positions.__getitem__)
+
+
+def _numbered_in_search_frame(
+    record: SeqRecord, candidates: Sequence[_CdsProteinCandidate], record_number: int
+) -> list[_CdsProteinCandidate]:
+    """``candidates``, one record's CDS in drawn order, with their synthetic IDs ``gbd_r<record>_cds<ordinal>``.
+
+    The ordinal counts the CDS in the record's search frame, the order its FASTA lists them, so a record drawn
+    reversed names a CDS without a name as the Web helper does (OV-3457). A CDS without a name takes its ID as its
+    label.
+    """
+
+    numbered = list(candidates)
+    order = _search_frame_order(record, [candidate.feature_index for candidate in candidates])
+    for ordinal, position in enumerate(order, start=1):
+        synthetic_protein_id = f"gbd_r{record_number:04d}_cds{ordinal:06d}"
+        candidate = candidates[position]
+        numbered[position] = replace(
+            candidate, protein_id=synthetic_protein_id, label=candidate.label or synthetic_protein_id
+        )
+    return numbered
+
+
+def search_frame_protein_fasta(record: SeqRecord, proteins: Sequence[CdsProtein]) -> str:
+    """FASTA of ``record``'s proteins in its search frame: the text a LOSATP search of the record reads.
+
+    The search frame is the record before its display reverse complement (PD-OI-073), and a record in its source's
+    orientation lists its features in source order (``reverse_records``, OV-3271). A record drawn reversed lists its
+    proteins by source feature position, so the CLI, which extracts from the drawn records, and the Web helper, which
+    extracts from the search region, write one FASTA for one record and one searchContext for a side of several
+    records (OV-3457). The nucleotide twin is ``gbdraw.comparisons.losat_jobs.losat_search_frame_fasta``.
+    """
+
+    positions = [
+        protein.feature_index if protein.source_feature_position is None else protein.source_feature_position
+        for protein in proteins
+    ]
+    return proteins_to_fasta([proteins[index] for index in _search_frame_order(record, positions)])
 
 
 def source_protein_letters(
@@ -6488,7 +6528,7 @@ def _search_losatp_record_pairs(
 
     def record_fasta(index: int) -> str:
         if index not in fasta_by_record:
-            fasta_by_record[index] = proteins_to_fasta(extraction.proteins_by_record[index])
+            fasta_by_record[index] = search_frame_protein_fasta(records[index], extraction.proteins_by_record[index])
         return fasta_by_record[index]
 
     sizes = losatp_cache.database_sizes if losatp_cache is not None else None
@@ -7283,6 +7323,7 @@ __all__ = [
     "parse_losat_fasta_ids",
     "percent_encode_losat_transport_field",
     "proteins_to_fasta",
+    "search_frame_protein_fasta",
     "source_protein_letters",
     "promote_legacy_protein_raw_cache_entries",
     "raw_protein_tsv_matches_bindings",

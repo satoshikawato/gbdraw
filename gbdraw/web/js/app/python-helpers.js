@@ -646,7 +646,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
     try:
         from gbdraw.analysis.protein_colinearity import (
             extract_protein_identity_manifest,
-            proteins_to_fasta,
+            search_frame_protein_fasta,
         )
         from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file
 
@@ -718,7 +718,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             for protein in proteins
         }
         return json.dumps({
-            "fasta": proteins_to_fasta(proteins),
+            "fasta": search_frame_protein_fasta(record, proteins),
             "record_id": record.id,
             "record_length": len(record.seq),
             "protein_count": len(proteins),
