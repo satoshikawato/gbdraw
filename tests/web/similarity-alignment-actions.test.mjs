@@ -27,12 +27,22 @@ const anchor = (recordKey, biologicalFeatureId, sourceFeatureIndex) => ({
   recordKey, biologicalFeatureId, sourceFeatureIndex,
   stableFeatureSvgId: `stable-${biologicalFeatureId}`
 });
-const member = (recordKey, id, index, strand, representative = false) => ({
-  ...anchor(recordKey, id, index), recordIndex: recordKey === 'a' ? 0 : recordKey === 'b' ? 1 : 2,
-  featureIndex: index, start: 10 + index * 10, end: 30 + index * 10,
-  strand, proteinId: id, sourceProteinId: id, representative, role: 'member',
-  gene: `gene-${id}`
-});
+// The source facts of each fixture feature, as the committed request's records hold them: the fake helper reads
+// them here by identity, as Python reads them from the request (a helper request names a member by identity only).
+const sourceFacts = new Map();
+const factsOf = ({ recordKey, biologicalFeatureId }) => sourceFacts.get(`${recordKey}\0${biologicalFeatureId}`);
+const member = (recordKey, id, index, strand, representative = false) => {
+  const start = 10 + index * 10;
+  const end = 30 + index * 10;
+  sourceFacts.set(`${recordKey}\0${id}`, { sourceStart: start, sourceEnd: end,
+    sourceStrand: strand === '+' ? 1 : strand === '-' ? -1 : null });
+  return {
+    ...anchor(recordKey, id, index), recordIndex: recordKey === 'a' ? 0 : recordKey === 'b' ? 1 : 2,
+    featureIndex: index, start, end,
+    strand, proteinId: id, sourceProteinId: id, representative, role: 'member',
+    gene: `gene-${id}`
+  };
+};
 const reference = member('a', 'clicked', 4, '+');
 const otherReference = member('a', 'other', 7, '+', true);
 const targetA = member('b', 'target-a', 1, '-', true);
@@ -67,13 +77,11 @@ const deferred = () => {
 // A helper request record is drawn reversed by its presentation or by its windows, all reversed.
 const reversedRow = (row) => row.presentation.reverseComplement
   || (row.windows.length > 0 && row.windows.every((window) => window.reverseComplement));
-const serializedCandidate = (item, request) => {
+const serializedCandidate = (member, request) => {
+  const item = { ...member, ...factsOf(member.anchor) };
   const reverse = key => reversedRow(request.records.find(r=>r.recordKey===key));
   const displayedStrand = item.sourceStrand === null ? null : item.sourceStrand*(reverse(item.anchor.recordKey)?-1:1);
-  const referenceSourceStrand = request.members.find(({ anchor: selected }) => (
-    selected.recordKey === request.reference.recordKey
-    && selected.biologicalFeatureId === request.reference.biologicalFeatureId
-  ))?.sourceStrand;
+  const referenceSourceStrand = factsOf(request.reference)?.sourceStrand;
   const referenceStrand=referenceSourceStrand===null?null:referenceSourceStrand*(reverse(request.reference.recordKey)?-1:1);
   const strandRelation = displayedStrand === null || referenceStrand === null
     ? 'unknown' : displayedStrand === referenceStrand ? 'same' : 'opposite';
@@ -126,7 +134,9 @@ const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
   const status = records.some(({ kind }) => kind === 'ambiguous') ? 'ambiguous' : 'resolved';
   return {
     schema: 2, status, groupId: request.groupId, reference: request.reference,
-    referenceDisplayedStrand: 1, referenceDisplayCenter: 65, records, projection: null,
+    referenceDisplayedStrand: 1, referenceDisplayCenter: 65,
+    referenceSourceStart: factsOf(request.reference).sourceStart, referenceSourceEnd: factsOf(request.reference).sourceEnd,
+    records, projection: null,
     plan: status === 'resolved' ? {
       schema: 2, groupId: request.groupId, reference: request.reference,
       records: records.map(({ recordKey, status: decisionStatus, rationale, anchor: chosen }) => ({
@@ -225,7 +235,7 @@ const create = ({
         r.referenceDisplayCenter=refCandidate.displayCenter;
         r.referenceDisplayedStrand=refCandidate.displayedStrand;
         r.projection={binding:'a'.repeat(64),geometryOrientations:payload.projection.orientations||Object.fromEntries(request.records.map(r=>[r.recordKey,Boolean(r.presentation?.reverseComplement)])),records:request.records.map(record=>{
-          const candidates=request.members.filter(m=>m.anchor.recordKey===record.recordKey);
+          const candidates=request.members.filter(m=>m.anchor.recordKey===record.recordKey).map(m=>({...m,...factsOf(m.anchor)}));
           const before=reversedRow(record);
           const facts=reverse=>candidates.map(m=>{
             const candidate=r.records.find(row=>row.recordKey===record.recordKey).candidates.find(c=>JSON.stringify(c.anchor)===JSON.stringify(m.anchor));
@@ -329,14 +339,14 @@ test('normal Align applies only-usable and unusable targets with one helper and 
   assert.notEqual(fixture.state.results.value, priorResult);
 });
 
-// OV-1010: a member's null or blank bound is missing, not 0, so the member
-// has no display facts and Align sends the helper nothing.
+// OV-1010: a member's null or blank bound was read as 0. The page now sends no bound: Python reads the member's
+// source coordinates from the committed request, so a saved member without them aligns where its feature is.
 for (const missing of [null, '', '  ']) {
-  test(`Align refuses a member whose start is ${JSON.stringify(missing)} (OV-1010)`, async () => {
+  test(`Align reads a member whose saved start is ${JSON.stringify(missing)} from Python (OV-1010)`, async () => {
     const fixture = create({ members: [reference, { ...targetA, start: missing }, targetC] });
-    const outcome = await startAlign(fixture);
-    assert.notEqual(outcome.status, 'ok');
-    assert.equal(fixture.helperCalls.length, 0);
+    assert.deepEqual(await startAlign(fixture), { status: 'ok' });
+    assert.equal(fixture.helperCalls.length, 1);
+    assert.equal('sourceStart' in fixture.helperCalls[0].payload.request.members[1], false);
   });
 }
 
@@ -735,6 +745,22 @@ test('the check before Generate reads nothing from the shown Result', async () =
   const { payload: check } = fixture.helperCalls.at(-1);
   assert.equal(check.projection.geometry, false);
   assert.equal(check.projection.canonicalRequest.layout.similarityAlignment, null);
+});
+
+// A Session an older gbdraw wrote saved a member's strand in the drawn direction: the page names a member by its
+// identity, and Python reads its source facts from the committed request.
+test('a helper request names each group member by its identity only', async () => {
+  const fixture = create({ members: [reference, targetA, targetC].map((item) => ({ ...item })) });
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.currentGroup.members.forEach((item) => { item.strand = item.strand === '-' ? '+' : item.strand; });
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  for (const { payload } of fixture.helperCalls) {
+    for (const item of payload.request.members) {
+      assert.deepEqual(Object.keys(item).sort(),
+        ['anchor', 'groupId', 'hidden', 'identityIsUnique', 'representative', 'role']);
+    }
+  }
 });
 
 test('Python recommendation remains a hint while direct-RBH resolved selection is preserved', async () => {

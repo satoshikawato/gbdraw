@@ -106,15 +106,17 @@ const { computed, ref, watch } = window.Vue;
  * @typedef {{
  *   schema: 2, status: 'resolved' | 'ambiguous', groupId: string, reference: AnchorIdentity,
  *   referenceDisplayedStrand: DisplayedStrand, referenceDisplayCenter: number,
+ *   referenceSourceStart: number, referenceSourceEnd: number,
  *   records: (AlignmentDecision | AlignmentAmbiguity)[], plan: AlignmentPlan | null,
  *   projection: AlignmentProjection
  * }} AlignmentResolution The validated helper response: Python places every candidate on the committed request
  *   that the call names, and returns its projection (D5-13).
  * @typedef {{ recordKey: string, kind: 'select' | 'skip', anchor: AnchorIdentity | null }} AlignmentChoice
  * @typedef {{
- *   groupId: string, anchor: AnchorIdentity, sourceStart: number, sourceEnd: number, sourceStrand: DisplayedStrand,
+ *   groupId: string, anchor: AnchorIdentity,
  *   identityIsUnique: boolean, hidden: boolean, representative: boolean, role: string
- * }} AlignmentMemberFacts
+ * }} AlignmentMemberFacts A group member as a helper request names it: by its identity. Python reads its source
+ *   coordinates and strand from the committed request (Python's `_member_candidate`); the page sends no copy.
  * @typedef {{
  *   recordKey: string, windows: CanonicalRecordWindow[], presentation: { reverseComplement: boolean }
  * }} AlignmentRequestRecord A displayed record of a helper request: its windows and orientation as the committed
@@ -415,8 +417,9 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
  * @param {Map<string, RecordNameEntry>} recordLabels
  */
 const referenceView = (response, request, displayFacts, recordLabels) => {
-  const member = request.members.find(({ anchor }) => sameJson(anchor, response.reference));
-  if (!member) throw new Error('Alignment reference has no current member facts.');
+  if (!request.members.some(({ anchor }) => sameJson(anchor, response.reference))) {
+    throw new Error('Alignment reference has no current member facts.');
+  }
   const feature = featureView(response.reference, displayFacts);
   const record = recordLabels.get(response.reference.recordKey);
   return {
@@ -427,8 +430,9 @@ const referenceView = (response, request, displayFacts, recordLabels) => {
     recordName: record?.name,
     recordDetail: record?.detail,
     recordKey: response.reference.recordKey,
-    coordinates: (member.sourceStart + 1).toLocaleString('en-US') + '..'
-      + member.sourceEnd.toLocaleString('en-US') + ' bp',
+    // Python's source coordinates of the reference, read from the committed request.
+    coordinates: (response.referenceSourceStart + 1).toLocaleString('en-US') + '..'
+      + response.referenceSourceEnd.toLocaleString('en-US') + ' bp',
     displayedStrand: strandLabel(response.referenceDisplayedStrand)
   };
 };
@@ -910,7 +914,7 @@ const decisionsOnlyProjection = (canonicalRequest) => ({ canonicalRequest, orien
  */
 const helperReplyFields = (value) => exactObject(value, [
   'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
-  'referenceDisplayCenter', 'records', 'plan', 'projection'
+  'referenceDisplayCenter', 'referenceSourceStart', 'referenceSourceEnd', 'records', 'plan', 'projection'
 ], 'alignment helper response');
 
 /**
@@ -923,7 +927,9 @@ const validateDecisions = (raw, request) => {
   if (raw.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !oneOf(['resolved', 'ambiguous'], raw.status)
     || raw.groupId !== request.groupId || !Array.isArray(raw.records)
     || !oneOf([null, -1, 1], raw.referenceDisplayedStrand)
-    || !isFiniteNumber(raw.referenceDisplayCenter)) {
+    || !isFiniteNumber(raw.referenceDisplayCenter)
+    || !isSafeInteger(raw.referenceSourceStart) || !isSafeInteger(raw.referenceSourceEnd)
+    || raw.referenceSourceStart < 0 || raw.referenceSourceEnd < raw.referenceSourceStart) {
     throw new Error('Alignment helper response does not match its request.');
   }
   const reference = validateAnchor(raw.reference, 'alignment helper response.reference');
@@ -965,6 +971,7 @@ const validateDecisions = (raw, request) => {
     schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
+    referenceSourceStart: raw.referenceSourceStart, referenceSourceEnd: raw.referenceSourceEnd,
     records, plan: /** @type {AlignmentPlan | null} */ (null)
   };
   if (raw.status === 'resolved') {
@@ -1062,24 +1069,15 @@ const buildHelperRequest = ({ group, members, reference, request, choices }) => 
   const displayedRecords = new Set(records.map(({ recordKey }) => recordKey));
   const normalizedMembers = members.map((member, index) => {
     const anchor = anchorFromSource(member, `Similarity Group member ${index + 1}`);
-    const start = locationPartBound(member, 'start');
-    const end = locationPartBound(member, 'end');
-    if (
-      !displayedRecords.has(anchor.recordKey)
-      || !Number.isSafeInteger(start)
-      || start < 0
-      || !Number.isSafeInteger(end)
-      || end < start
-    ) throw new Error(`Similarity Group member ${index + 1} has invalid display facts.`);
+    if (!displayedRecords.has(anchor.recordKey)) {
+      throw new Error(`Similarity Group member ${index + 1} has invalid display facts.`);
+    }
     return {
       source: member,
       canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
       payload: {
         groupId: groupStatus.value,
         anchor,
-        sourceStart: start,
-        sourceEnd: end,
-        sourceStrand: strandValue(member?.strand, `Similarity Group member ${index + 1}`),
         identityIsUnique: true,
         hidden: Boolean(member?.hidden),
         representative: Boolean(member?.representative),

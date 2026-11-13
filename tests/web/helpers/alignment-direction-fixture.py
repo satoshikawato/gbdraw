@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
+from Bio import SeqIO  # noqa: E402
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult  # noqa: E402
 from gbdraw.api import SessionDrawingSpec, build_session_document, materialize_session, save_session_document  # noqa: E402
 from gbdraw.io.regions import RecordWindow  # noqa: E402
@@ -40,13 +41,15 @@ def main(directory: Path, variant: str = '') -> None:
         if member['anchor']['recordKey'] == 'unusable':
             continue
         key = member['anchor']['recordKey']
+        location = SeqIO.read(directory / (key + '.gbk'), 'genbank').features[0].location
         members.append(OrthogroupMember(
             orthogroup_id='group', protein_id=key + '-protein',
             # A member's record index counts drawn units: the target sits in record-2's second window, a unit of its own.
             record_index=next(i for i, record in enumerate(request.records) if record.record_key == key)
             + (variant in ('windows', 'windows-mixed') and key != 'ref'),
             feature_index=0, record_id=key, label=key + '-protein',
-            start=member['sourceStart'], end=member['sourceEnd'], strand=member['sourceStrand'],
+            # The member's source facts, read from its record as Python reads them (the helper request has none).
+            start=int(location.start), end=int(location.end), strand=location.strand,
             feature_svg_id=None, source_protein_id=key + '-protein'))
     request = replace(request, records=records, layout=replace(request.layout,
         record_translations=tuple(replace(entry, record_key=f'record-{index + 1}')

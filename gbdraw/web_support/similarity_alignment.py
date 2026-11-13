@@ -165,16 +165,17 @@ def _member_candidate(
     collection: ResolvedRecordCollection,
     record_keys: Set[str],
 ) -> SimilarityAlignmentCandidate:
-    """A group member, placed where the committed request draws it (``project_similarity_alignment_anchor_fact``)."""
+    """A group member, placed where the committed request draws it (``project_similarity_alignment_anchor_fact``).
+
+    The Web names the member by its identity only: its source coordinates and strand are what the committed request's
+    record holds, never a copy the page keeps (an older gbdraw saved a member's strand in the drawn direction).
+    """
 
     raw = _object(
         value,
         {
             "groupId",
             "anchor",
-            "sourceStart",
-            "sourceEnd",
-            "sourceStrand",
             "identityIsUnique",
             "hidden",
             "representative",
@@ -188,23 +189,11 @@ def _member_candidate(
     anchor = _anchor(raw["anchor"], f"{path}.anchor")
     if anchor.record_key not in record_keys:
         raise ValidationError(f"{path} belongs to an unknown displayed record.")
-    start = _integer(raw["sourceStart"], f"{path}.sourceStart")
-    end = _integer(raw["sourceEnd"], f"{path}.sourceEnd")
-    assert start is not None and end is not None
-    if end < start:
-        raise ValidationError(f"{path}.sourceEnd must not precede sourceStart.")
-    source_strand = raw["sourceStrand"]
-    if source_strand is not None and (
-        isinstance(source_strand, bool) or source_strand not in (-1, 1)
-    ):
-        raise ValidationError(f"{path}.sourceStrand must be -1, 1, or null.")
     role = raw["role"]
     if not isinstance(role, str) or "\0" in role:
         raise ValidationError(f"{path}.role must be text without NUL.")
 
     fact = project_similarity_alignment_anchor_fact(collection, anchor)
-    if (start, end, source_strand) != (fact.source_start, fact.source_end, fact.source_strand):
-        raise ValidationError("Alignment projection source anchor facts changed.")
     display_name = raw.get("displayName", anchor.biological_feature_id)
     return SimilarityAlignmentCandidate(
         group_id=group_id,
@@ -218,8 +207,8 @@ def _member_candidate(
         hidden=_boolean(raw["hidden"], f"{path}.hidden"),
         representative=_boolean(raw["representative"], f"{path}.representative"),
         role=role.strip(),
-        source_start=start,
-        source_end=end,
+        source_start=fact.source_start,
+        source_end=fact.source_end,
         display_name=_text(display_name, f"{path}.displayName"),
     )
 
@@ -603,6 +592,8 @@ def resolve_similarity_alignment_payload(
         "reference": _serialize_anchor(resolution.reference),
         "referenceDisplayedStrand": resolution.reference_candidate.displayed_strand,
         "referenceDisplayCenter": resolution.reference_candidate.display_center,
+        "referenceSourceStart": resolution.reference_candidate.source_start,
+        "referenceSourceEnd": resolution.reference_candidate.source_end,
         "records": [
             _serialize_ambiguity(record, row)
             if isinstance(record, AmbiguousAlignmentRecord)

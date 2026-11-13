@@ -54,9 +54,7 @@ def bgc_og18(tmp_path_factory):
             "stableFeatureSvgId": feature.get("stableFeatureId") or member["biologicalFeatureId"],
         }
         members.append({
-            "groupId": "og_18", "anchor": anchor, "sourceStart": feature["start"],
-            "sourceEnd": feature["end"], "sourceStrand": {"+": 1, "-": -1}.get(feature["strand"], feature["strand"]),
-            "identityIsUnique": True, "hidden": bool(member.get("hidden")),
+            "groupId": "og_18", "anchor": anchor, "identityIsUnique": True, "hidden": bool(member.get("hidden")),
             "representative": bool(member.get("representative")), "role": str(member.get("role") or ""),
         })
         anchors[gene[feature["protein_id"]]] = anchor
@@ -201,14 +199,12 @@ def _two_record_helper(tmp_path, *, target_strands=(1,), representative=None, re
         path = tmp_path / f"{key}.gbk"
         SeqIO.write(record, path, "genbank")
         for index, identity in enumerate(capture_source_features(SeqIO.read(path, "genbank")).entries):
-            location = record.features[index].location
             members.append({
                 "groupId": "og-1",
                 "anchor": {"recordKey": key, "biologicalFeatureId": identity.biological_feature_id,
                            "sourceFeatureIndex": identity.source_feature_index,
                            "stableFeatureSvgId": identity.stable_feature_id},
-                "sourceStart": int(location.start), "sourceEnd": int(location.end),
-                "sourceStrand": location.strand, "identityIsUnique": True, "hidden": False,
+                "identityIsUnique": True, "hidden": False,
                 "representative": (key, index) == ("b", representative), "role": "member",
             })
         inputs.append(RecordInput(GenBankInputSource(path), record_key=key,

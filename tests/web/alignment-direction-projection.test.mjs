@@ -19,7 +19,7 @@ const fixture = () => {
       role: '', usable: true, directEvidence: [], strandRelation: 'opposite'
     }] : [] }));
   const response = { schema: 2, status: 'resolved', groupId: 'group', reference: anchor('ref'),
-    referenceDisplayedStrand: -1, referenceDisplayCenter: 80, records,
+    referenceDisplayedStrand: -1, referenceDisplayCenter: 80, referenceSourceStart: 60, referenceSourceEnd: 100, records,
     plan: { schema: 2, groupId: 'group', reference: anchor('ref'), records: records.map(
       ({ recordKey, status, rationale, anchor }) => ({ recordKey, status, rationale, anchor })
     ) }, projection: { binding: 'a'.repeat(64), geometryOrientations: { ref: true, target: true },

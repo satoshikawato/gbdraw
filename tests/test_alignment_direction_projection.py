@@ -72,8 +72,7 @@ def build_fixture(tmp_path):
                                   column=None)],
                             presentation=dict(reverseComplement=presentation.reverse_complement)))
         if key != 'missing':
-            members.append(dict(groupId='group', anchor=anchor, sourceStart=100, sourceEnd=260,
-                                sourceStrand=strand, identityIsUnique=True, hidden=False,
+            members.append(dict(groupId='group', anchor=anchor, identityIsUnique=True, hidden=False,
                                 representative=False, role='member'))
     request = LinearDiagramRequest(records=tuple(records),
         options=LinearDiagramOptions(selected_features_set=('CDS',), output=LinearOutputOptions(legend='none'),
@@ -210,10 +209,11 @@ def test_source_bytes_and_selector_changes_are_stale(fixture):
 def test_source_anchor_claims_and_canonical_coverage_rejected(fixture):
     _request, helper, context, resource_paths, _response, _paths = fixture
     helper = copy.deepcopy(helper)
+    # A member is named by its identity only; the page sends no copy of its source facts.
     helper['members'][0]['sourceEnd'] = 261
-    with pytest.raises(ValidationError, match='source anchor facts changed'):
+    with pytest.raises(ValidationError, match=r'request\.members\[0\] has invalid fields'):
         resolve_similarity_alignment_payload(helper, projection=context, resource_paths=resource_paths)
-    helper['members'][0]['sourceEnd'] = 260
+    del helper['members'][0]['sourceEnd']
     helper['members'][0]['anchor']['stableFeatureSvgId'] = 'wrong'
     with pytest.raises(ValidationError, match='exactly one source feature'):
         resolve_similarity_alignment_payload(helper, projection=context, resource_paths=resource_paths)
@@ -326,8 +326,7 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
         members.append(dict(groupId='group', anchor=dict(
             recordKey=key, biologicalFeatureId=identity.biological_feature_id,
             sourceFeatureIndex=identity.source_feature_index, stableFeatureSvgId=identity.stable_feature_id),
-            sourceStart=int(location.start), sourceEnd=int(location.end), sourceStrand=1, identityIsUnique=True,
-            hidden=False, representative=False, role='member'))
+            identityIsUnique=True, hidden=False, representative=False, role='member'))
         records.append(RecordInput(GenBankInputSource(path), record_key=key,
                                    windows=windows if key == 'circ' else (),
                                    presentation=RecordPresentation(reverse_complement=reverse and key == 'circ')))
