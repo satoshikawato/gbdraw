@@ -100,7 +100,10 @@ CROP_EDGE_ROUNDS = 8
 # sees outside the highlighted element: an outline HIGHLIGHT_FRAME_WIDTH px wide, drawn
 # HIGHLIGHT_FRAME_OFFSET px outside the element, with a glow HIGHLIGHT_FRAME_GLOW px wide, moves in
 # (down to just inside the element's edge) where such text sits closer, and stays
-# HIGHLIGHT_FRAME_CLEARANCE px clear of it.
+# HIGHLIGHT_FRAME_CLEARANCE px clear of it. An open-select overlay frames its control and its
+# selected option inside them, in the same colour and width (highlight_frame_css).
+HIGHLIGHT_FRAME_COLOR = "#f59e0b"
+HIGHLIGHT_FRAME_GLOW_COLOR = "rgba(245, 158, 11, 0.18)"
 HIGHLIGHT_FRAME_WIDTH = 3.0
 HIGHLIGHT_FRAME_OFFSET = 3.0
 HIGHLIGHT_FRAME_GLOW = 4.0
@@ -936,11 +939,7 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
             style = document.createElement('style');
             style.id = 'gbdraw-capture-select-style';
             style.textContent = `
-              .gbdraw-capture-select-control {
-                outline: 3px solid #f59e0b !important;
-                outline-offset: -3px !important;
-                box-shadow: inset 0 0 0 4px rgba(245, 158, 11, 0.18) !important;
-              }
+              .gbdraw-capture-select-control { ${CONTROL_FRAME} }
               .gbdraw-capture-select-menu {
                 position: absolute;
                 z-index: 2147483647;
@@ -965,8 +964,7 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
                 white-space: nowrap;
               }
               .gbdraw-capture-select-option.is-selected {
-                outline: 3px solid #f59e0b;
-                outline-offset: -2px;
+                ${OPTION_FRAME}
                 background: #fff7ed;
                 color: #1d4ed8;
                 font-weight: 800;
@@ -1096,7 +1094,8 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
             }
           });
         }
-        """,
+        """.replace("${CONTROL_FRAME}", highlight_frame_css(-HIGHLIGHT_FRAME_WIDTH, HIGHLIGHT_FRAME_GLOW, inset=True))
+        .replace("${OPTION_FRAME}", highlight_frame_css(-2.0, 0.0, inset=True)),
         {"specs": specs, "maxVisibleOptions": OPEN_SELECT_MAX_VISIBLE_OPTIONS},
     )
     if not specs:
@@ -1251,8 +1250,9 @@ def capture_multi_selector_clip(
 
 # The lines of text and the controls drawn in a region of the page, in page coordinates, each
 # trimmed to the part a reader sees: a hit test at points over it must find it, not a popup or
-# menu above it, the pane that scrolls it out of view, or nothing (hidden). Hit tests see every
-# element for the measure (pointer-events), and the parked pointer hovers nothing.
+# menu above it, the pane that scrolls it out of view, its own clip (a screen-reader line), or
+# nothing. For the measure, hit tests see the measured text and every painted layer the page
+# leaves without pointer events (pointer-events), and the parked pointer hovers nothing.
 class TextBox(TypedDict):
     """A line of text or a control a reader sees, or the seen part of one, in page CSS px
     (VISIBLE_TEXT_BOXES_SCRIPT). The edge rule, the crop guard and the highlight frame read it."""
@@ -1265,19 +1265,15 @@ class TextBox(TypedDict):
 
 
 VISIBLE_TEXT_BOXES_SCRIPT = """
-(region) => {
+({ region, exclude }) => {
   const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
   const left = region.x - window.scrollX;
   const top = region.y - window.scrollY;
   const right = left + region.width;
   const bottom = top + region.height;
   const shown = (element) => element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-  // What covers a point is what paints there (M1): hit testing with the page's own
-  // pointer-events, passing over layers that paint nothing (a clear full-cover overlay, an
-  // svg root, a group), plus the layers a capture draws without pointer events.
-  const OCCLUDERS = '.gbdraw-capture-select-menu';
-  const occluders = [...document.querySelectorAll(OCCLUDERS)].filter(shown)
-    .map((element) => ({ element, rect: element.getBoundingClientRect() }));
+  // What covers a point is what paints there (M1): the first layer of the hit list that paints,
+  // passing over layers that paint nothing (a clear full-cover overlay, an svg root, a group).
   const SHAPES = new Set(['path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text',
     'tspan', 'textPath', 'image', 'use', 'foreignObject']);
   const REPLACED = new Set(['IMG', 'CANVAS', 'VIDEO', 'IFRAME', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON']);
@@ -1297,31 +1293,39 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
     paintsCache.set(element, result);
     return result;
   };
-  // The boxes of the ancestors that clip an owner (a scrolled list, an svg): its text outside
-  // them is not seen.
+  // The boxes that clip an owner, its own included (a scrolled list, an svg, a screen-reader
+  // line in a 1 px box or under `clip: rect(0 0 0 0)`): its text outside them is not seen. A
+  // clip-path counts by its element's box; within the viewport the hit test below follows its shape.
   const clipsCache = new Map();
   const clipsOf = (owner) => {
     if (!clipsCache.has(owner)) {
       const clips = [];
-      for (let element = owner.parentElement; element && element !== document.body; element = element.parentElement) {
+      for (let element = owner; element && element !== document.body; element = element.parentElement) {
         const style = getComputedStyle(element);
-        if (style.overflowX !== 'visible' || style.overflowY !== 'visible') clips.push(element.getBoundingClientRect());
+        const rect = element.getBoundingClientRect();
+        if (style.overflowX !== 'visible' || style.overflowY !== 'visible' || style.clipPath !== 'none') clips.push(rect);
+        if (style.clip.startsWith('rect(') && ['absolute', 'fixed'].includes(style.position)) {
+          const [clipTop, clipRight, clipBottom, clipLeft] = style.clip.slice(5, -1).split(/[,\\s]+/)
+            .map((value, index) => (value === 'auto' ? [0, rect.width, rect.height, 0][index] : parseFloat(value)));
+          clips.push(new DOMRect(rect.left + clipLeft, rect.top + clipTop,
+            Math.max(0, clipRight - clipLeft), Math.max(0, clipBottom - clipTop)));
+        }
       }
       clipsCache.set(owner, clips);
     }
     return clipsCache.get(owner);
   };
+  // A point is seen where the owner itself is hit before anything that paints: where its text
+  // paints, not where only an ancestor's box lies (a clipped line, the corner of a rotated label).
   // Outside the viewport no hit test answers: count the point as seen.
   const sees = (owner, x, y) => {
     if (clipsOf(owner).some((rect) => x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom)) return false;
     if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return true;
-    if (occluders.some(({ element, rect }) => !element.contains(owner) && x >= rect.left && x < rect.right
-        && y >= rect.top && y < rect.bottom)) return false;
     for (const hit of document.elementsFromPoint(x, y)) {
-      if (hit === owner || owner.contains(hit) || hit.contains(owner)) return true;
+      if (hit === owner || owner.contains(hit)) return true;
       if (paints(hit)) return false;
     }
-    return true;
+    return false;
   };
   const candidates = [];
   const measured = new Set();
@@ -1338,6 +1342,7 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
     const owner = node.parentElement;
     const text = normalize(node.nodeValue);
     if (!text || !owner || owner.closest('script, style, template, noscript, select, textarea, title')) continue;
+    if (exclude && exclude.contains(node)) continue;
     if (!shown(owner)) continue;
     const range = document.createRange();
     range.selectNodeContents(node);
@@ -1365,7 +1370,7 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
   };
   for (const control of document.querySelectorAll(CONTROLS)) {
     // A drawn group that opens settings (role="button") is figure: its labels count as text.
-    if (control instanceof SVGElement || !shown(control)) continue;
+    if (control instanceof SVGElement || !shown(control) || (exclude && exclude.contains(control))) continue;
     const name = normalize(control.getAttribute('aria-label') || control.textContent || control.value);
     const { owner, rect } = shapeOf(control);
     add(owner, rect, `${control.tagName.toLowerCase()}: ${name}`);
@@ -1403,8 +1408,12 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
     x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height, text,
   }];
   // An owner the page leaves without pointer events (a figure label) is made hittable, so the
-  // hit list says what lies above it; nothing else changes its pointer events.
-  for (const owner of measured) owner.setAttribute('data-gbdraw-measured', '');
+  // hit list says what lies above it, and so is every shown HTML layer without pointer events
+  // that paints (a help tip, a hover summary, a capture's select menu), so it covers what lies
+  // under it (L1). Nothing else changes its pointer events.
+  const covers = [...document.body.querySelectorAll('*')].filter((element) => element instanceof HTMLElement
+    && getComputedStyle(element).pointerEvents === 'none' && paints(element) && shown(element));
+  for (const element of [...measured, ...covers]) element.setAttribute('data-gbdraw-measured', '');
   const style = document.createElement('style');
   style.textContent = '[data-gbdraw-measured] { pointer-events: auto !important; }';
   document.head.appendChild(style);
@@ -1442,16 +1451,17 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
   });
   } finally {
     style.remove();
-    for (const owner of measured) owner.removeAttribute('data-gbdraw-measured');
+    for (const element of [...measured, ...covers]) element.removeAttribute('data-gbdraw-measured');
   }
 }
 """
 
 
-def visible_text_boxes(page, region: dict[str, float]) -> list[TextBox]:
-    """The lines of text and the controls a reader sees in ``region`` (VISIBLE_TEXT_BOXES_SCRIPT)."""
+def visible_text_boxes(page, region: dict[str, float], exclude: Any = None) -> list[TextBox]:
+    """The lines of text and the controls a reader sees in ``region`` (VISIBLE_TEXT_BOXES_SCRIPT),
+    less those inside the element ``exclude`` (an element handle) when one is given."""
 
-    return page.evaluate(VISIBLE_TEXT_BOXES_SCRIPT, region)
+    return page.evaluate(VISIBLE_TEXT_BOXES_SCRIPT, {"region": region, "exclude": exclude})
 
 
 def park_pointer(page) -> None:
@@ -1560,6 +1570,26 @@ def clear_crop_edges(
     }
 
 
+def crop_edge_moves(
+    clip: dict[str, float], cleared: dict[str, float], boxes: list[TextBox], dimensions: dict[str, float]
+) -> dict[str, dict[str, Any]]:
+    """Each edge that clear_crop_edges moved: by how many CSS px (outward positive) and the text
+    of the boxes it would cut where it stood, in the final crop (the capture log names them)."""
+
+    origin, sides = _crop_sides(clip), _crop_sides(cleared)
+    moves: dict[str, dict[str, Any]] = {}
+    for side in ("top", "bottom", "left", "right"):
+        if sides[side] == origin[side]:
+            continue
+        outward = -1.0 if side in {"left", "top"} else 1.0
+        crossed = _edge_crossings({**sides, side: origin[side]}, boxes, dimensions, side)
+        moves[side] = {
+            "by": round((sides[side] - origin[side]) * outward, 1),
+            "off": sorted({box["text"][:80] for box in crossed}),
+        }
+    return moves
+
+
 def crop_edge_cuts(
     clip: dict[str, float], boxes: list[TextBox], dimensions: dict[str, float]
 ) -> list[tuple[str, TextBox]]:
@@ -1587,8 +1617,9 @@ def assert_crop_edges_cut_no_text(
 
 
 def highlight_frame_room(element: dict[str, float], boxes: list[TextBox]) -> float:
-    """How far outside ``element`` a frame reaches before it meets a box of text or a control that
-    lies outside the element (a box that overlaps the element is the element's own)."""
+    """How far outside ``element`` a frame reaches before it meets a box of text or a control
+    other than the element's own (``boxes`` holds no box of the element's own text). A box that
+    overlaps the element (a neighbour's label across a figure path's bounding box) leaves none."""
 
     left, top = float(element["x"]), float(element["y"])
     right, bottom = left + float(element["width"]), top + float(element["height"])
@@ -1596,8 +1627,6 @@ def highlight_frame_room(element: dict[str, float], boxes: list[TextBox]) -> flo
     for box in boxes:
         box_left, box_top = float(box["x"]), float(box["y"])
         box_right, box_bottom = box_left + float(box["width"]), box_top + float(box["height"])
-        if box_left < right and box_right > left and box_top < bottom and box_bottom > top:
-            continue
         # A frame grown by d on every side meets the box once d reaches both gaps.
         gap_x = max(box_left - right, left - box_right, 0.0)
         gap_y = max(box_top - bottom, top - box_bottom, 0.0)
@@ -1609,49 +1638,54 @@ def highlight_frame_style(room: float) -> dict[str, float]:
     """The outline offset and glow of a highlight frame that ``room`` px outside its element
     leaves clear (highlight_frame_room)."""
 
-    reach = room - HIGHLIGHT_FRAME_CLEARANCE
+    # Rounded to 1/100 px: a room of 3.99999 (box edges in fractional px) must not give an offset
+    # of -1e-14 px, which Chrome floors to -1 px.
+    reach = round(room - HIGHLIGHT_FRAME_CLEARANCE, 2)
     return {
-        "offset": max(-HIGHLIGHT_FRAME_WIDTH, min(HIGHLIGHT_FRAME_OFFSET, reach - HIGHLIGHT_FRAME_WIDTH)),
-        "glow": max(0.0, min(HIGHLIGHT_FRAME_GLOW, reach)),
+        "offset": max(-HIGHLIGHT_FRAME_WIDTH, min(HIGHLIGHT_FRAME_OFFSET, reach - HIGHLIGHT_FRAME_WIDTH)) + 0.0,
+        "glow": max(0.0, min(HIGHLIGHT_FRAME_GLOW, reach)) + 0.0,
     }
 
 
-HIGHLIGHT_ELEMENT_BOXES_SCRIPT = """
-(selector) => [...document.querySelectorAll(selector)].map((element) => {
+def highlight_frame_css(offset: float, glow: float, *, inset: bool = False) -> str:
+    """The declarations of every frame a capture draws: its colour and width, the outline
+    ``offset`` (negative: inside the element) and a glow ``glow`` px wide, outside the element or
+    ``inset`` inside it."""
+
+    return (
+        f"outline: {HIGHLIGHT_FRAME_WIDTH:g}px solid {HIGHLIGHT_FRAME_COLOR} !important; "
+        f"outline-offset: {offset:g}px !important; "
+        f"box-shadow: {'inset ' if inset else ''}0 0 0 {glow:g}px {HIGHLIGHT_FRAME_GLOW_COLOR} !important;"
+    )
+
+
+HIGHLIGHT_ELEMENT_BOX_SCRIPT = """
+(element) => {
   const rect = element.getBoundingClientRect();
   return { x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height };
-})
-"""
-
-DRAW_HIGHLIGHT_FRAMES_SCRIPT = """
-([selector, styles]) => {
-  [...document.querySelectorAll(selector)].forEach((element, index) => {
-    const { offset, glow } = styles[index];
-    element.style.setProperty('outline', `${WIDTH}px solid #f59e0b`, 'important');
-    element.style.setProperty('outline-offset', `${offset}px`, 'important');
-    element.style.setProperty('box-shadow', `0 0 0 ${glow}px rgba(245, 158, 11, 0.18)`, 'important');
-    element.style.setProperty('border-radius', '4px', 'important');
-  });
 }
 """
 
 
 def draw_highlight_frames(page, selector: str) -> None:
-    """Frame each element ``selector`` matches, clear of the text a reader sees around it."""
+    """Frame each element ``selector`` matches, clear of the text a reader sees around it other
+    than its own. Run it on the page as it is captured (after the pointer park, the scroll resets,
+    the hidden panes and the open-select overlays), so the room is measured on what the crop shows."""
 
     reach = HIGHLIGHT_FRAME_OFFSET + HIGHLIGHT_FRAME_WIDTH + HIGHLIGHT_FRAME_GLOW
-    styles = []
-    for element in page.evaluate(HIGHLIGHT_ELEMENT_BOXES_SCRIPT, selector):
+    for handle in page.query_selector_all(selector):
+        element = handle.evaluate(HIGHLIGHT_ELEMENT_BOX_SCRIPT)
         around = {
             "x": float(element["x"]) - reach,
             "y": float(element["y"]) - reach,
             "width": float(element["width"]) + 2 * reach,
             "height": float(element["height"]) + 2 * reach,
         }
-        styles.append(highlight_frame_style(highlight_frame_room(element, visible_text_boxes(page, around))))
-    page.evaluate(
-        DRAW_HIGHLIGHT_FRAMES_SCRIPT.replace("${WIDTH}", f"{HIGHLIGHT_FRAME_WIDTH:g}"), [selector, styles]
-    )
+        style = highlight_frame_style(highlight_frame_room(element, visible_text_boxes(page, around, handle)))
+        handle.evaluate(
+            "(element, css) => { element.style.cssText += `; ${css}`; }",
+            highlight_frame_css(style["offset"], style["glow"]) + " border-radius: 4px !important;",
+        )
 
 
 def assert_capture_app_state(page, capture: dict[str, Any]) -> None:
@@ -1914,10 +1948,6 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
     if wait_selector:
         page.locator(wait_selector).wait_for(state="visible")
 
-    highlight_selector = as_text(capture.get("highlightSelector"))
-    if highlight_selector:
-        draw_highlight_frames(page, highlight_selector)
-        page.wait_for_timeout(100)
 
 
 def hide_settings_pane_under_popup(page) -> None:
@@ -2017,6 +2047,9 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
     if as_text(capture.get("crop")) == "openSelect":
         hide_page_around_settings_pane(page)
     apply_open_select_overlays(page, capture.get("openSelect"))
+    highlight_selector = as_text(capture.get("highlightSelector"))
+    if highlight_selector:
+        draw_highlight_frames(page, highlight_selector)
     wait_for_css_transitions(page)
 
     clip_selectors = [as_text(selector) for selector in as_array(capture.get("clipSelectors")) if as_text(selector)]
@@ -2059,13 +2092,9 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         },
     )
     cleared = clear_crop_edges(clip, boxes, padding, dimensions)
-    moves = {
-        side: round(cleared_side - _crop_sides(clip)[side], 1)
-        for side, cleared_side in _crop_sides(cleared).items()
-        if cleared_side != _crop_sides(clip)[side]
-    }
+    moves = crop_edge_moves(clip, cleared, boxes, dimensions)
     if moves:
-        print(f"crop edges moved off text (CSS px): {moves}", flush=True)
+        print(f"crop edges moved off text (CSS px, outward positive): {json.dumps(moves)}", flush=True)
     clip = cleared
     assert_crop_edges_cut_no_text(clip, boxes, dimensions)
     if as_text(capture.get("source")).lower() in {"webapp", "web-app", "app"}:

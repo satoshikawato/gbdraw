@@ -194,7 +194,7 @@ def _boxes_of(page, region):
 
 
 def test_text_counts_as_covered_only_where_something_paints_over_it() -> None:
-    """A capture menu without pointer events hides the text under it; a clear layer over the
+    """A layer without pointer events that paints (a capture menu) hides the text under it; a clear layer over the
     page hides nothing, with or without pointer events; a figure label without pointer events
     over a painted background is seen (M1)."""
 
@@ -295,3 +295,112 @@ def test_the_seen_part_of_a_long_line_starts_where_its_cover_ends() -> None:
     clip = {"x": 560.0, "y": 60.0, "width": 80.0, "height": 120.0}
     cuts = capture_tool.crop_edge_cuts(clip, boxes, {"width": 1400.0, "height": 300.0})
     assert [side for side, _ in cuts] == ["right"]
+
+
+def test_text_its_own_box_clips_away_is_not_seen() -> None:
+    """A screen-reader line (`.sr-only`: a 1 px box, `overflow:hidden`, `clip: rect(0 0 0 0)`) at the
+    end of a card head runs on into the pane's padding but is never drawn: an edge in that padding
+    cuts nothing (BGC 7-2, 7-3: the right edge moved out to the panel's border). A line whose
+    right half a clip-path hides is seen only where it is drawn."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:14px sans-serif'>"
+        "<style>.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;"
+        " clip:rect(0,0,0,0); white-space:nowrap; border-width:0; }</style>"
+        "<div class='pane' style='position:absolute;left:20px;top:20px;width:400px;padding:16px;overflow-x:hidden;"
+        "background:#fff;border:1px solid #cbd5e1'>"
+        "<div style='display:flex;justify-content:space-between'><span>Arrow direction</span>"
+        "<span style='display:flex;justify-content:flex-end'>"
+        "<span class='sr-only'>Arrow direction for BGC0000713, drawn reversed</span></span></div>"
+        "</div><span class='sr-only' style='left:480px;top:120px'>a line that runs out of the viewport</span>"
+        "<span id='half' style='position:absolute;left:20px;top:160px;white-space:pre;"
+        "clip-path:inset(0 50% 0 0)'>mmmmmmmmmmmmmmmmmmmm</span>"
+        "</body></html>"
+    )
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 500, "height": 200})
+            page.set_content(html)
+            boxes = _boxes_of(page, {"x": 0.0, "y": 0.0, "width": 500.0, "height": 200.0})
+            half = page.evaluate("() => document.getElementById('half').getBoundingClientRect().toJSON()")
+            content_right = page.evaluate(
+                """() => { const pane = document.querySelector('.pane').getBoundingClientRect();
+                  return pane.right - 1 - 16; }"""
+            )
+        finally:
+            browser.close()
+
+    assert sorted({box["text"] for box in boxes}) == ["Arrow direction", "mmmmmmmmmmmmmmmmmmmm"]
+    drawn = [box for box in boxes if box["text"].startswith("m")]
+    middle = half["x"] + half["width"] / 2
+    assert max(box["x"] + box["width"] for box in drawn) <= middle + 2.5
+    boxes = [box for box in boxes if box not in drawn]
+    clip = {"x": 10.0, "y": 10.0, "width": content_right + 8.0 - 10.0, "height": 60.0}
+    page_size = {"width": 500.0, "height": 200.0}
+    padding = capture_tool.normalize_crop_padding(12)
+    assert capture_tool.clear_crop_edges(clip, boxes, padding, page_size) == clip
+
+
+def test_an_opaque_layer_without_pointer_events_covers_the_text_under_it() -> None:
+    """A help tip, a hover summary or a readout the page draws without pointer events hides the
+    text under it, by what it paints and not by its name (L1); a clear one hides nothing."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:16px sans-serif'>"
+        "<span style='position:absolute;left:20px;top:20px'>under the tip</span>"
+        "<div role='tooltip' style='position:fixed;left:10px;top:10px;width:220px;height:40px;"
+        "background:#1e293b;color:#fff;pointer-events:none;z-index:50'><span>Help</span></div>"
+        "<span style='position:absolute;left:20px;top:120px'>under a clear tip</span>"
+        "<div style='position:fixed;left:10px;top:110px;width:220px;height:40px;pointer-events:none;z-index:50'></div>"
+        "</body></html>"
+    )
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 200})
+            page.set_content(html)
+            boxes = _boxes_of(page, {"x": 0.0, "y": 0.0, "width": 400.0, "height": 200.0})
+            hittable = page.evaluate("() => document.elementFromPoint(200, 45).tagName")
+        finally:
+            browser.close()
+
+    texts = {box["text"] for box in boxes}
+    assert "under the tip" not in texts
+    assert {"Help", "under a clear tip"} <= texts
+    # The measure leaves the page's pointer events as they were.
+    assert hittable == "BODY"
+
+
+def test_a_highlight_frame_around_a_figure_path_covers_no_neighbours_label() -> None:
+    """A neighbour's label crossing the bounding box of a highlighted figure path: the frame
+    lies on the path's own edge, inside the box, with no glow (L2)."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:14px sans-serif'>"
+        "<svg width='400' height='200' style='position:absolute;left:0;top:0'>"
+        "<path id='arc' d='M 40 40 Q 200 160 360 40' fill='none' stroke='#2563eb' stroke-width='12'/>"
+        "<text id='neighbour' x='180' y='70' font-size='14'>dnaB</text>"
+        "<path id='alone' d='M 40 170 L 120 170' stroke='#2563eb' stroke-width='12'/>"
+        "</svg></body></html>"
+    )
+    frames = """() => Object.fromEntries(['arc', 'alone'].map((id) => {
+      const style = getComputedStyle(document.getElementById(id));
+      return [id, { offset: parseFloat(style.outlineOffset), glow: style.boxShadow }];
+    }))"""
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 200})
+            page.set_content(html)
+            capture_tool.draw_highlight_frames(page, "#arc, #alone")
+            drawn = page.evaluate(frames)
+        finally:
+            browser.close()
+
+    assert drawn["arc"]["offset"] == -capture_tool.HIGHLIGHT_FRAME_WIDTH
+    assert drawn["arc"]["glow"].endswith(" 0px 0px 0px 0px")
+    assert drawn["alone"]["offset"] == capture_tool.HIGHLIGHT_FRAME_OFFSET

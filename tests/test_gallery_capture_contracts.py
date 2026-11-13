@@ -1396,17 +1396,86 @@ def test_highlight_frame_moves_in_where_text_sits_closer_than_its_reach() -> Non
         "offset": capture_tool.HIGHLIGHT_FRAME_OFFSET,
         "glow": capture_tool.HIGHLIGHT_FRAME_GLOW,
     }
-    # The field's own control and value overlap it: they do not limit the frame.
-    own = [{"x": 100.0, "y": 100.0, "width": 120.0, "height": 24.0, "text": "input: near"},
-           {"x": 108.0, "y": 104.0, "width": 30.0, "height": 16.0, "text": "0.4"}]
-    assert room(field, own) == float("inf")
+    # A neighbour's label across the element's box (a figure path's bounding box) leaves no room:
+    # the frame lies on the element's own edge. The element's own text is not measured at all
+    # (draw_highlight_frames passes the element to visible_text_boxes as `exclude`).
+    across = {"x": 200.0, "y": 110.0, "width": 60.0, "height": 16.0, "text": "dnaA"}
+    assert room(field, [across]) == 0.0
     # A label whose descenders end 3 px above the field: the frame stops 1 px short of them.
     label = {"x": 100.0, "y": 79.0, "width": 140.0, "height": 18.0, "text": "Head Length Ratio"}
     assert room(field, [label]) == 3.0
     near = style(3.0)
     assert near["offset"] + width == 3.0 - clearance and near["glow"] == 3.0 - clearance
+    # Box edges in fractional px: a room a hair under 4 gives the frame of a room of 4, never an
+    # offset of -1e-14 px (Chrome floors it to -1 px, ATskew 7-1).
+    assert style(4.0 - 1.4e-14) == style(4.0) == {"offset": 0.0, "glow": 3.0}
+    assert str(style(4.0 - 1.4e-14)["offset"]) == "0.0"
     # Text touching the field: the frame lies on the field's own edge, with no glow.
     assert style(0.0) == {"offset": -width, "glow": 0.0}
     # A box off a corner limits the frame by the larger of its two gaps.
     corner = {"x": 230.0, "y": 60.0, "width": 40.0, "height": 20.0, "text": "x"}
     assert room(field, [corner]) == 20.0
+
+
+def test_every_frame_a_capture_draws_takes_its_colour_and_width_from_one_function() -> None:
+    """The highlight frames and the open-select overlay frames share highlight_frame_css: the
+    tool names the frame colour once."""
+
+    source = Path(capture_tool.__file__).read_text(encoding="utf-8")
+    assert source.count("#f59e0b") == 1 and source.count("245, 158, 11") == 1
+    css = capture_tool.highlight_frame_css(-3.0, 4.0, inset=True)
+    assert "outline: 3px solid #f59e0b !important" in css
+    assert "outline-offset: -3px !important" in css and "box-shadow: inset 0 0 0 4px" in css
+
+
+def test_the_log_names_the_text_each_moved_edge_would_cut() -> None:
+    """Each moved crop edge is logged with the text of the boxes it would cut where it stood."""
+
+    label = _text_box(10, 95, 80, 10, "Palette")
+    clip = {"x": 0.0, "y": 100.0, "width": 200.0, "height": 100.0}
+    cleared = capture_tool.clear_crop_edges(clip, [label], _EDGE_PADDING, _EDGE_PAGE)
+
+    assert capture_tool.crop_edge_moves(clip, cleared, [label], _EDGE_PAGE) == {
+        "top": {"by": 9.0, "off": ["Palette"]},
+    }
+    assert capture_tool.crop_edge_moves(clip, clip, [label], _EDGE_PAGE) == {}
+
+
+def test_highlight_frames_are_drawn_on_the_page_as_it_is_captured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The frame room is measured after the pointer park, the hidden panes and the open-select
+    overlays, just before the crop (a later step could add or move text next to the frame)."""
+
+    events: list[object] = []
+
+    class Mouse:
+        def move(self, x: float, y: float) -> None:
+            events.append("park pointer")
+
+    class FakePage:
+        mouse = Mouse()
+
+        def evaluate(self, script: str, *args: object) -> list[object]:
+            return []
+
+        def screenshot(self, **kwargs: object) -> bytes:
+            buffer = io.BytesIO()
+            Image.new("RGB", (2, 2)).save(buffer, "PNG")
+            return buffer.getvalue()
+
+    monkeypatch.setattr(capture_tool, "prepare_capture_page", lambda *args: events.append("prepare"))
+    monkeypatch.setattr(capture_tool, "page_scroll_dimensions", lambda page: dict(_EDGE_PAGE))
+    monkeypatch.setattr(capture_tool, "hide_settings_pane_under_popup", lambda page: events.append("hide pane"))
+    monkeypatch.setattr(capture_tool, "apply_open_select_overlays", lambda page, spec: events.append("overlays"))
+    monkeypatch.setattr(capture_tool, "wait_for_css_transitions", lambda page: events.append("transitions"))
+    monkeypatch.setattr(capture_tool, "draw_highlight_frames", lambda page, selector: events.append(("frames", selector)))
+    monkeypatch.setattr(capture_tool, "visible_text_boxes", lambda page, region: events.append("measure text") or [])
+    monkeypatch.setattr(capture_tool, "output_path_for_operation", lambda operation: tmp_path / "crop.webp")
+    operation = {"capture": {"boundingBox": {"x": 0, "y": 100, "width": 200, "height": 100},
+                             "highlightSelector": "#field"}}
+
+    capture_tool.capture_operation(FakePage(), {}, operation, "http://127.0.0.1", 90)
+
+    assert events == ["prepare", "park pointer", "hide pane", "overlays", ("frames", "#field"), "transitions",
+                      "measure text"]
