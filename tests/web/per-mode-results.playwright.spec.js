@@ -609,7 +609,7 @@ test('Save names the hidden mode whose older Result needs Generate, and Generate
   expect(error.code).toBe('SESSION_SAVE_REQUIRES_GENERATE');
   expect(error.summary).toContain('Diagram: Linear.');
 
-  await page.locator('.border-l-red-500').getByRole('button', { name: 'Generate', exact: true }).click();
+  await page.getByRole('alert', { name: 'Operation error' }).getByRole('button', { name: 'Generate', exact: true }).click();
   await page.waitForFunction(() => window.__GBDRAW_APP__.mode === 'linear', null, { timeout: 60_000 });
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 300_000 });
   await settleLive(page);

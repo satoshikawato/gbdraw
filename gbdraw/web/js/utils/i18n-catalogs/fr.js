@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "{tracks} à l’extérieur",
   "{type} feature color": "Couleur des éléments {type}",
   "{value} (auto)": "{value} (auto)",
+  "{value} (auto; varies by record)": "{value} (auto ; varie selon l’enregistrement)",
   "{value} (not found in current file)": "{value} (introuvable dans le fichier actuel)",
   "{value} ms": "{value} ms",
   "{value} s": "{value} s",
-  "{value} {unit} (auto)": "{value} {unit} (auto)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (auto ; varie selon l’enregistrement)",
   "· changed after Align": "· modifié après l’alignement",
   "· custom colors": "· couleurs personnalisées",
   "· gaps set": "· écarts définis",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (estimation)"
+  "≈ {value} (estimate)": "≈ {value} (estimation)"
 });

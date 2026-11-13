@@ -3035,15 +3035,14 @@ export default Object.freeze({
   "{tracks} outside": "外側：{tracks}",
   "{type} feature color": "{type}フィーチャーの色",
   "{value} (auto)": "{value}（自動）",
+  "{value} (auto; varies by record)": "{value}（自動、レコードごとに異なる）",
   "{value} (not found in current file)": "{value}（現在のファイルに見つかりません）",
   "{value} ms": "{value}ミリ秒",
   "{value} s": "{value}秒",
-  "{value} {unit} (auto)": "{value} {unit}（自動）",
-  "{value} {unit} (auto; varies by record)": "{value} {unit}（自動、レコードごとに異なる）",
   "· changed after Align": "· 整列後に変更",
   "· custom colors": "· カスタムの色",
   "· gaps set": "· ギャップ設定済み",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit}（推定値）"
+  "≈ {value} (estimate)": "≈ {value}（推定値）"
 });

@@ -1203,8 +1203,8 @@ test('the review words record and feature name fallbacks in the language shown, 
     const names = { alignmentRecordName: reviewView.alignmentRecordName, alignmentFeatureName: reviewView.alignmentFeatureName };
     // The card's record name and its accessible name, as index.html words them.
     const legend = templateBinding(/<legend v-if="card\.kind !== 'reference'" class="sr-only">\{\{ (.+?) \}\}<\/legend>/);
-    const shownName = templateBinding(/<span class="alignment-review-record">\{\{ (.+?) \}\}<\/span>/);
-    const single = templateBinding(/^\s*<b>\{\{ (.*?card\.candidates\[0\].*?) \}\}<\/b>$/m);
+    const shownName = templateBinding(/<span dir="auto" class="alignment-review-record">\{\{ (.+?) \}\}<\/span>/);
+    const single = templateBinding(/^\s*<b dir="auto">\{\{ (.*?card\.candidates\[0\].*?) \}\}<\/b>$/m);
     assert.deepEqual(draft.rows.map((record) => legend({ record, ...names })), ['Genome B · レコード2', 'Genome B · レコード3']);
     assert.equal(shownName({ record: draft.reference, ...names }), 'レコード1');
     const untypedCandidate = draft.rows[1].candidates[0];

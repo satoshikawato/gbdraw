@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "바깥쪽: {tracks}",
   "{type} feature color": "{type} feature 색",
   "{value} (auto)": "{value}(자동)",
+  "{value} (auto; varies by record)": "{value}(자동, 레코드마다 다름)",
   "{value} (not found in current file)": "{value}(현재 파일에 없음)",
   "{value} ms": "{value}밀리초",
   "{value} s": "{value}초",
-  "{value} {unit} (auto)": "{value} {unit}(자동)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit}(자동, 레코드마다 다름)",
   "· changed after Align": "· ‘맞춤’ 후 변경됨",
   "· custom colors": "· 사용자 지정 색",
   "· gaps set": "· 간격 설정됨",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit}(추정값)"
+  "≈ {value} (estimate)": "≈ {value}(추정값)"
 });

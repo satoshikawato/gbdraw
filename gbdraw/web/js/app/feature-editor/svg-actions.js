@@ -232,19 +232,39 @@ export {
  * @typedef {object} HoverSummaryView
  * @property {HTMLElement} element
  * @property {HTMLElement} swatch
- * @property {Text} heading
+ * @property {Text} headingType
+ * @property {Text} headingName
  * @property {Text} subtitle
  * @property {HoverSummaryRowView[]} rows
  */
 
 /**
- * What one hover summary shows: a feature's or a match's.
+ * What one hover summary shows: a feature's or a match's. The heading is
+ * `headingType` ("CDS: ", none for a match), then `headingName`, which reads
+ * in the direction of its own letters (dir="auto").
  * @typedef {object} HoverSummaryContent
  * @property {string} color
- * @property {string} heading
+ * @property {string} headingType
+ * @property {string} headingName
  * @property {string} subtitle
  * @property {Array<{ label: string, value: unknown, clamp: boolean }>} rows
  */
+
+/** @param {string} tagName @param {string} [className] */
+const createHoverSummaryElement = (tagName, className = '') => {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  return element;
+};
+
+/** @param {HTMLElement} parent @param {string} className */
+const appendHoverSummaryText = (parent, className) => {
+  const element = createHoverSummaryElement('div', className);
+  const text = document.createTextNode('');
+  element.appendChild(text);
+  parent.appendChild(element);
+  return { element, text };
+};
 
 /**
  * The state of the feature and match hover summary. The tooltip is built on the
@@ -496,22 +516,6 @@ export const createFeatureSvgActions = ({
     ''
   );
 
-  /** @param {string} tagName @param {string} [className] */
-  const createHoverSummaryElement = (tagName, className = '') => {
-    const element = document.createElement(tagName);
-    if (className) element.className = className;
-    return element;
-  };
-
-  /** @param {HTMLElement} parent @param {string} className */
-  const appendHoverSummaryText = (parent, className) => {
-    const element = createHoverSummaryElement('div', className);
-    const text = document.createTextNode('');
-    element.appendChild(text);
-    parent.appendChild(element);
-    return { element, text };
-  };
-
   /** @param {FeatureLike} feat @param {string} primaryLabel */
   const buildHoverSummaryRows = (feat, primaryLabel) => {
     const product = getQualifierFirstValue(feat, 'product');
@@ -755,13 +759,15 @@ export const createFeatureSvgActions = ({
     const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
     const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
     const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    const heading = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-heading truncate').text;
+    const heading = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-heading truncate');
+    const name = heading.element.appendChild(Object.assign(document.createElement('span'), { dir: 'auto' }))
+      .appendChild(document.createTextNode(''));
     const subtitle = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-subtitle truncate').text;
     title.appendChild(swatch);
     title.appendChild(titleTextWrap);
     element.appendChild(title);
     document.body.appendChild(element);
-    hoverSummaryState.view = { element, swatch, heading, subtitle, rows: [] };
+    hoverSummaryState.view = { element, swatch, headingType: heading.text, headingName: name, subtitle, rows: [] };
     return hoverSummaryState.view;
   };
 
@@ -820,7 +826,7 @@ export const createFeatureSvgActions = ({
       color: resolveColorToHex(
         featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
       ) || '#94a3b8',
-      heading: primaryLabel ? `${featureType}: ${primaryLabel}` : featureType,
+      ...(primaryLabel ? { headingType: `${featureType}: `, headingName: primaryLabel } : { headingType: featureType, headingName: '' }),
       subtitle: formatFeatureLocation(feat),
       rows: buildHoverSummaryRows(feat, primaryLabel)
         .map(([label, value, clamp]) => ({ label, value, clamp: Boolean(clamp) }))
@@ -833,7 +839,8 @@ export const createFeatureSvgActions = ({
    */
   const matchHoverContent = (summary) => summary && {
     color: resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8',
-    heading: summary.title,
+    headingType: '',
+    headingName: summary.title,
     subtitle: summary.subtitle || summary.id || '',
     rows: summary.rows.map((row) => ({ ...row, clamp: row.id === 'Query' || row.id === 'Subject' }))
   };
@@ -848,7 +855,8 @@ export const createFeatureSvgActions = ({
     }
     const view = ensureHoverSummaryView();
     view.swatch.style.backgroundColor = content.color;
-    view.heading.data = content.heading;
+    view.headingType.data = content.headingType;
+    view.headingName.data = content.headingName;
     view.subtitle.data = content.subtitle;
     const rows = content.rows
       .map((row) => ({ ...row, value: String(row.value === null || row.value === undefined ? '' : row.value).trim() }))
@@ -1459,7 +1467,8 @@ export const createFeatureSvgActions = ({
         const referenceFeature = uniqueRenderedFeature(reference.anchor);
 
         const element = document.createElement('div');
-        element.className = 'gbdraw-alignment-overlay';
+        // Placed at the figure's coordinates, which read left to right in every language.
+        Object.assign(element, { className: 'gbdraw-alignment-overlay', dir: 'ltr' });
         element.setAttribute('data-similarity-alignment-canvas', '');
         const drawing = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         drawing.setAttribute('aria-hidden', 'true');

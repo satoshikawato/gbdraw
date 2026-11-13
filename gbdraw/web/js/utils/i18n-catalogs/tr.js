@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "Dışta: {tracks}",
   "{type} feature color": "{type} özellik rengi",
   "{value} (auto)": "{value} (otomatik)",
+  "{value} (auto; varies by record)": "{value} (otomatik; kayda göre değişir)",
   "{value} (not found in current file)": "{value} (geçerli dosyada bulunamadı)",
   "{value} ms": "{value} ms",
   "{value} s": "{value} sn",
-  "{value} {unit} (auto)": "{value} {unit} (otomatik)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (otomatik; kayda göre değişir)",
   "· changed after Align": "· Hizala sonrasında değişti",
   "· custom colors": "· özel renkler",
   "· gaps set": "· boşluklar ayarlandı",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (tahmin)"
+  "≈ {value} (estimate)": "≈ {value} (tahmin)"
 });

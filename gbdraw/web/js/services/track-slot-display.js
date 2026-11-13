@@ -12,15 +12,25 @@ export const normalizeOptionalText = (value) => {
 };
 
 /**
+ * A number as the Auto texts show it: at most `digits` decimals, without trailing zeros; empty for no number.
  * @param {unknown} value
  * @param {number} [digits]
  */
-const roundDisplayNumber = (value, digits = 1) => {
+export const roundDisplayNumber = (value, digits = 1) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
   const fixed = numeric.toFixed(digits);
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 };
+
+/** @param {string} text @param {string} unit */
+const withUnit = (text, unit) => (text ? `${text} ${unit}` : '');
+
+/** A size in px as the Auto texts show it (`12.5 px`); empty for no number. @param {unknown} value */
+export const formatPx = (value) => withUnit(roundDisplayNumber(value, 1), 'px');
+
+/** A radius factor as the Auto texts show it (`0.85 R`); empty for no number. @param {unknown} value */
+export const formatFactor = (value) => withUnit(roundDisplayNumber(value, 2), 'R');
 
 /** @param {unknown} value */
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
@@ -94,19 +104,20 @@ export const linearLabelSizeLengths = (recordLengths, labelScope) => (
 );
 
 /**
- * The note an Auto field shows: a value measured in the last render, or,
- * before one, an estimate marked as such (TK-15). `variesByRecord` says the
- * measured value differs between records (a Linear features row).
+ * The note an Auto field shows: a value with its unit (`12.5 px`) measured in
+ * the last render, or, before one, an estimate marked as such (TK-15).
+ * `variesByRecord` says the measured value differs between records (a Linear
+ * features row). The value and its unit are one placeholder, so a
+ * right-to-left language shows them in one left-to-right isolate.
  * @param {string} text
- * @param {string} unit
  * @param {boolean} estimate
  * @param {boolean} [variesByRecord]
  */
-const autoNote = (text, unit, estimate, variesByRecord = false) => {
+const autoNote = (text, estimate, variesByRecord = false) => {
   if (!text) return '';
-  const params = { value: text, unit };
-  if (estimate) return t('≈ {value} {unit} (estimate)', params);
-  return variesByRecord ? t('{value} {unit} (auto; varies by record)', params) : t('{value} {unit} (auto)', params);
+  const params = { value: text };
+  if (estimate) return t('≈ {value} (estimate)', params);
+  return variesByRecord ? t('{value} (auto; varies by record)', params) : t('{value} (auto)', params);
 };
 
 /**
@@ -130,7 +141,7 @@ export const overlayFollowsNote = (slot) => {
 
 /** @param {unknown} value @param {{ estimate?: boolean, variesByRecord?: boolean }} [options] */
 export const formatPxAuto = (value, { estimate = false, variesByRecord = false } = {}) => (
-  autoNote(roundDisplayNumber(value, 1), 'px', estimate, variesByRecord)
+  autoNote(formatPx(value), estimate, variesByRecord)
 );
 
 /**
@@ -145,7 +156,7 @@ export const formatRadiusFactorAuto = (value, { estimate = false, awayFromAxis =
   const rounded = awayFromAxis && Number.isFinite(numeric)
     ? (numeric < 1 ? Math.floor((numeric * 100) + 1e-9) : Math.ceil((numeric * 100) - 1e-9)) / 100
     : numeric;
-  return autoNote(roundDisplayNumber(rounded, 2), 'R', estimate);
+  return autoNote(formatFactor(rounded), estimate);
 };
 
 // tick_sides_for_tick_label_layout (gbdraw/tracks/circular.py): the side of

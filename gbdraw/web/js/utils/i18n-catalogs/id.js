@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "di luar: {tracks}",
   "{type} feature color": "Warna fitur {type}",
   "{value} (auto)": "{value} (otomatis)",
+  "{value} (auto; varies by record)": "{value} (otomatis; berbeda per record)",
   "{value} (not found in current file)": "{value} (tidak ditemukan di file saat ini)",
   "{value} ms": "{value} milidetik",
   "{value} s": "{value} detik",
-  "{value} {unit} (auto)": "{value} {unit} (otomatis)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (otomatis; berbeda per record)",
   "· changed after Align": "· diubah setelah Ratakan",
   "· custom colors": "· warna kustom",
   "· gaps set": "· celah diatur",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (perkiraan)"
+  "≈ {value} (estimate)": "≈ {value} (perkiraan)"
 });

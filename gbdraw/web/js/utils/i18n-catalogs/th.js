@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "{tracks} ด้านนอก",
   "{type} feature color": "สีฟีเจอร์ {type}",
   "{value} (auto)": "{value} (อัตโนมัติ)",
+  "{value} (auto; varies by record)": "{value} (อัตโนมัติ แตกต่างกันตามระเบียน)",
   "{value} (not found in current file)": "{value} (ไม่พบในไฟล์ปัจจุบัน)",
   "{value} ms": "{value} มิลลิวินาที",
   "{value} s": "{value} วินาที",
-  "{value} {unit} (auto)": "{value} {unit} (อัตโนมัติ)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (อัตโนมัติ แตกต่างกันตามระเบียน)",
   "· changed after Align": "· เปลี่ยนหลัง “จัดแนว”",
   "· custom colors": "· สีที่กำหนดเอง",
   "· gaps set": "· ตั้งช่องว่างแล้ว",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (ค่าประมาณ)"
+  "≈ {value} (estimate)": "≈ {value} (ค่าประมาณ)"
 });

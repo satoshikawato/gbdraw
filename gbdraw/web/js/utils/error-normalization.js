@@ -6,7 +6,7 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import {
   INPUT_NAME_CHARACTERS, SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
 } from '../contracts/schema.generated.js';
-import { msg, numberText } from './i18n.js';
+import { fillText, msg, numberText } from './i18n.js';
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
@@ -549,7 +549,6 @@ const NOT_A_SESSION = Object.freeze({
  * @property {Readonly<Record<string, string | number | ErrorTextPart>>} [params]
  * @property {true} [verbatim]
  */
-const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 /**
  * LOSAT's words as the summary shows them: the hyphens that start an option name (`-searchsp`) are non-breaking, so a
  * line never ends between them and the name. The Diagnostics keep the words as LOSAT wrote them.
@@ -565,29 +564,30 @@ const shownLosatMessage = (message) => message.replace(/(^|[\s'"(<[])(-+)/g, (_w
  */
 export const reasonText = (reason) => (Object.hasOwn(REASONS, reason) ? REASONS[reason] : null);
 /**
+ * A key's text with its values: the English text (`fillText`), or the shown
+ * text (`tm`, which isolates the values in a right-to-left language).
+ * @typedef {(text: string, params?: Readonly<Record<string, string | number>>) => string} PartText
+ */
+/**
  * @param {ErrorTextPart} part
- * @param {(text: string) => string} translate
+ * @param {PartText} shown
  * @returns {string}
  */
-const renderPart = (part, translate) => {
-  const text = part.verbatim ? part.text : translate(part.text);
+const renderPart = (part, shown) => {
   const { params } = part;
-  return params ? text.replace(PLACEHOLDER, (whole, /** @type {string} */ name) => {
-    if (!Object.hasOwn(params, name)) return whole;
-    const value = params[name];
-    return typeof value === 'object' ? renderPart(value, translate) : String(value);
-  }) : text;
+  const values = params && Object.fromEntries(Object.entries(params).map(([name, value]) => [name, typeof value === 'object' ? renderPart(value, shown) : value]));
+  return part.verbatim ? fillText(part.text, values) : shown(part.text, values);
 };
 /**
- * The one renderer of error text parts: the English text with no `translate`,
+ * The one renderer of error text parts: the English text with no `shown`,
  * the shown text with the UI translation (`errorText` in utils/error-text.js).
  * @param {readonly ErrorTextPart[]} parts
- * @param {(text: string) => string} [translate] the shown text of a key
+ * @param {PartText} [shown] the shown text of a key with its values
  * @param {string} [separator] between two parts
  * @returns {string}
  */
-export const renderErrorText = (parts, translate = (text) => text, separator = ' ') =>
-  parts.map((part) => renderPart(part, translate)).join(separator);
+export const renderErrorText = (parts, shown = fillText, separator = ' ') =>
+  parts.map((part) => renderPart(part, shown)).join(separator);
 /**
  * The leading whole parts whose English text fits in `limit` characters, so the
  * summary and the shown text are one cut; a first part longer than `limit` is
@@ -601,7 +601,7 @@ const capParts = (parts, limit) => {
   const kept = [];
   let length = -1;
   for (const part of parts) {
-    length += 1 + renderPart(part, (text) => text).length;
+    length += 1 + renderPart(part, fillText).length;
     if (length > limit) break;
     kept.push(part);
   }

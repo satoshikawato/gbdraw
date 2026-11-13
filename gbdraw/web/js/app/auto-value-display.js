@@ -2,8 +2,11 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { TrackSlotRow } from '../services/track-slot-validation.js' */
 import {
+  formatFactor,
+  formatPx,
   linearLabelSizeLengths,
   normalizeOptionalText,
+  roundDisplayNumber,
   sharedSizeClass,
   sizeClassForRecordLengths
 } from '../services/track-slot-display.js';
@@ -77,17 +80,6 @@ const parsePositiveNumber = (value) => {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
-/**
- * @param {unknown} value
- * @param {number} [digits]
- */
-const roundDisplayNumber = (value, digits = 1) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return '';
-  const fixed = numeric.toFixed(digits);
-  return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
-};
-
 /** A length in bp as the Auto texts show it (`10 kbp`). @param {unknown} value */
 export const formatBp = (value) => {
   const numeric = Number(value);
@@ -99,18 +91,6 @@ export const formatBp = (value) => {
     return `${roundDisplayNumber(numeric / 1000, 1)} kbp`;
   }
   return `${roundDisplayNumber(numeric, 0)} bp`;
-};
-
-/** @param {unknown} value */
-const formatPx = (value) => {
-  const text = roundDisplayNumber(value, 1);
-  return text ? `${text} px` : '';
-};
-
-/** @param {unknown} value */
-const formatFactor = (value) => {
-  const text = roundDisplayNumber(value, 2);
-  return text ? `${text} R` : '';
 };
 
 /** @param {unknown} text */

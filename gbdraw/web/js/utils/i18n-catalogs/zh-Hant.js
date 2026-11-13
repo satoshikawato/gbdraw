@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "{tracks}在外側",
   "{type} feature color": "{type}特徵顏色",
   "{value} (auto)": "{value}（自動）",
+  "{value} (auto; varies by record)": "{value}（自動；因記錄而異）",
   "{value} (not found in current file)": "{value}（在目前檔案中找不到）",
   "{value} ms": "{value}毫秒",
   "{value} s": "{value}秒",
-  "{value} {unit} (auto)": "{value} {unit}（自動）",
-  "{value} {unit} (auto; varies by record)": "{value} {unit}（自動；因記錄而異）",
   "· changed after Align": "· 「對齊」後已變更",
   "· custom colors": "· 自訂顏色",
   "· gaps set": "· 已設定間隙",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit}（估計值）"
+  "≈ {value} (estimate)": "≈ {value}（估計值）"
 });
