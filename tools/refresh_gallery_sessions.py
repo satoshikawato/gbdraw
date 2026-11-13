@@ -55,6 +55,8 @@ from gbdraw.session_container import is_session_container, read_session_containe
 from gbdraw.session import _keep_resources  # noqa: E402
 from gbdraw.session_drawings import (  # noqa: E402
     _drawing_view,
+    active_session_drawing,
+    read_session_drawings,
     replace_session_drawings,
     write_session_drawings,
 )
@@ -1239,6 +1241,36 @@ def _write_staged_session(session_path: Path, payload: Mapping[str, Any]) -> Non
     write_session_container(document, sources, session_path)
 
 
+def _keep_render_of_shown_drawing(document: dict[str, Any]) -> int:
+    """A Gallery Session keeps a render only for its shown drawing.
+
+    The Gallery shows the drawing the Web app opens (``active_session_drawing``).
+    A tutorial that creates that drawing from another, as **Find in other
+    files** does, keeps the other one as its input but undrawn, as the Web
+    leaves a drawing without a Result set (``withStoredResultSet`` in
+    gbdraw/web/js/services/session-authority.js): no request, Results, run
+    record, command, or feature catalog. Returns the number of drawings undrawn;
+    a Session whose other drawings have no render is left as it is.
+    """
+
+    drawings = document.get("drawings")
+    if not isinstance(drawings, list):
+        return 0
+    shown = active_session_drawing(document, read_session_drawings(document))
+    undrawn = 0
+    for drawing in drawings:
+        if shown is None or drawing.get("id") == shown.id or drawing.get("renderRequest") is None:
+            continue
+        drawing.pop("runMetadata", None)
+        drawing.pop("cliInvocation", None)
+        drawing["renderRequest"] = None
+        drawing["results"] = []
+        if isinstance(drawing.get("editorState"), dict):
+            drawing["editorState"]["featureCatalog"] = None
+        undrawn += 1
+    return undrawn
+
+
 def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """The one-drawing view a refresh reads and edits, and the ID of its drawing.
 
@@ -1766,6 +1798,7 @@ def _refresh_one_session(
     gallery_id = _gallery_id(session_path)
     load_session(session_path)
     document = _read_session_file(session_path)
+    _keep_render_of_shown_drawing(document)
     session, drawing_id = _gallery_view(document)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
