@@ -5765,14 +5765,14 @@ const projectGeneratedProteinPipeline = (
 
 /**
  * The comparison plan of a request without saved controls whose protein pipeline the controls hold: the pairs a
- * Pairwise pipeline lists (projected to the LOSAT edges of `files.linearComparisons`) as Selected pairs (OV-3382),
+ * Pairwise pipeline lists (projected to the LOSAT edges of `files.linearComparisons`) as Selected pairs (OV-3383),
  * else the adjacent pairs.
- * @param {ReturnType<typeof projectGeneratedProteinPipeline>} pipeline
+ * @param {NonNullable<ReturnType<typeof projectGeneratedProteinPipeline>>} pipeline
  * @param {readonly { source?: unknown }[] | undefined} projectedEdges
  */
 const cliProteinPlan = (pipeline, projectedEdges) => {
   const listed = (projectedEdges ?? []).filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
-  return normalizeLinearComparisonPlan(pipeline?.generatedProteinComparison.mode === 'pairwise' && listed.length > 0
+  return normalizeLinearComparisonPlan(pipeline.generatedProteinComparison.mode === 'pairwise' && listed.length > 0
     ? { mode: 'selected', defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT, edges: listed.map((edge) => ({ ...edge, included: true })) }
     : { mode: 'adjacent' });
 };
@@ -7668,7 +7668,7 @@ export const projectCanonicalSessionRequest = ({
       form,
       adv,
       ...(cliDraftWithoutComparison ? cliProteinSettings : projectedProteinPipeline?.config || {}),
-      ...(cliProteinDraft ? { linearComparisonPlan: cliProteinPlan(projectedProteinPipeline, files.linearComparisons) } : {}),
+      ...(cliProteinDraft && projectedProteinPipeline ? { linearComparisonPlan: cliProteinPlan(projectedProteinPipeline, files.linearComparisons) } : {}),
       colors: projectedDefaultColors,
       colorsAreOverrides: true,
       palette: options.colors?.defaultColorsPalette || 'default',

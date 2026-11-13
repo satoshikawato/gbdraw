@@ -219,8 +219,13 @@ const circularControls = ({ linear = false, discovered = true, oneCard = false, 
   const getCommittedRequest = () => committed.renderRequest;
   const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
   const linearDiscovery = { status: discovered ? 'ready' : 'loading', error: '' };
+  // How often the controls read a Linear card's records (each build of its rows reads them).
+  const reads = { linearRecords: 0 };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearWindowsOf: linearDrawingWindowsOf, linearRecordsFor: (_drawing, seq) => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
+    watch: () => {}, linearWindowsOf: linearDrawingWindowsOf, linearRecordsFor: (_drawing, seq) => {
+      reads.linearRecords += 1;
+      return discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [];
+    },
     linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
     runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
@@ -230,7 +235,7 @@ const circularControls = ({ linear = false, discovered = true, oneCard = false, 
   const feature = { scope: state.mode.value, record_key: recordKeys[1], biological_feature_id: 'logical-feature' };
   // The card that holds the feature's record.
   const featureCard = () => circularSources[oneCard ? 0 : 1];
-  return { state, actions, controls, feature, makeFile, featureCard, linearDiscovery, history,
+  return { state, actions, controls, feature, makeFile, featureCard, linearDiscovery, history, reads,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
     // A committed request that draws every record of its cards (cardinality 'all').
     commitAllRecords: () => {
@@ -690,6 +695,23 @@ test('a record\'s orientation owner is counted in its own drawing, not the shown
   assert.equal(model.controls.captureTargetDraft({ ...row, drawingId: source.id }).ownerUid, 'record-2');
   shown.linearSeqs.splice(1, 1);
   assert.equal(model.controls.captureTargetDraft({ ...row, drawingId: source.id }).ownerUid, 'record-2');
+});
+
+// Align at a feature captures the start of every drawn record: the rows that find each record's orientation owner are
+// built once per drawing for the capture, not once per record.
+test('a capture of several record starts builds each drawing\'s rows once for their orientation owners', () => {
+  const model = circularControls({ linear: true });
+  const targets = model.controls.rows.value.map((row) => ({ row: { ...row }, startCoordinate: 1 }));
+  assert.equal(targets.length, 2);
+  /** @param {typeof targets} list */
+  const readsOf = (list) => {
+    const before = model.reads.linearRecords;
+    const checkpoints = model.controls.captureRecordStarts(list);
+    assert.deepEqual(checkpoints.map((checkpoint) => checkpoint.ownerUid), list.map(({ row }) => row.sourceUid));
+    return model.reads.linearRecords - before;
+  };
+  const one = readsOf(targets.slice(0, 1));
+  assert.ok(readsOf(targets) < 2 * one, 'the second record builds no rows of its own for its owner');
 });
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {

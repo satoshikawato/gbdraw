@@ -255,6 +255,21 @@ const sourceRows = (source, selector = source.selector) => buildRecordDisplayRow
 const shownRows = (sources) => sources.filter((source) => source.shown).flatMap((source) => {
   try { return source.source ? sourceRows(source) : []; } catch { return []; }
 });
+/** The rows a drawing shows (`shownRows`). @typedef {ReturnType<typeof shownRows>} ShownRows */
+/** @typedef {(drawing: DrawingState) => ShownRows} ShownRowsOf */
+/**
+ * The rows each drawing shows, built once per drawing for one use: a capture of many records reads them once.
+ * @param {(drawing: DrawingState) => DrawingRecordSource[]} sourcesOf
+ * @returns {ShownRowsOf}
+ */
+const shownRowsOnce = (sourcesOf) => {
+  /** @type {Map<DrawingState, ShownRows>} */
+  const built = new Map();
+  return (drawing) => {
+    if (!built.has(drawing)) built.set(drawing, shownRows(sourcesOf(drawing)));
+    return /** @type {ShownRows} */ (built.get(drawing));
+  };
+};
 
 /**
  * @param {RecordDisplayControlsOptions} options
@@ -296,11 +311,14 @@ export const createRecordDisplayControls = ({
   // row override remains only for Circular and for a Linear card that draws
   // several records.
   // The rows are counted in the row's own drawing: another drawing can hold a card of the same uid.
-  /** @param {DrawingState} drawing the row's drawing @param {{ scope: string, sourceUid: string } | null | undefined} row */
-  const linearOrientationOwner = (drawing, row) => {
+  /**
+   * @param {DrawingState} drawing the row's drawing @param {{ scope: string, sourceUid: string } | null | undefined} row
+   * @param {ShownRowsOf} [rowsOf] The rows of a drawing; a capture of many records passes one that builds them once.
+   */
+  const linearOrientationOwner = (drawing, row, rowsOf = shownRowsOnce(sourcesOf)) => {
     if (row?.scope !== 'linear') return null;
     const sequence = drawing.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === row.sourceUid);
-    return sequence && shownRows(sourcesOf(drawing)).filter((entry) => entry.scope === 'linear'
+    return sequence && rowsOf(drawing).filter((entry) => entry.scope === 'linear'
       && entry.sourceUid === row.sourceUid).length === 1 ? sequence : null;
   };
   /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {RecordDisplayDraft} draft @param {boolean | null} reverseComplement */
@@ -388,14 +406,14 @@ export const createRecordDisplayControls = ({
       return { recordKey: orientation.recordKey, orientation, drafts, sequence };
     });
   };
-  /** @param {DrawingState} drawing the Linear drawing the alignment run pinned @param {AlignmentOrientation[]} orientations @returns {AlignmentOrientationCheckpoint[]} */
-  const captureAlignmentOrientationIntent = (drawing, orientations) => {
+  /** @param {DrawingState} drawing the Linear drawing the alignment run pinned @param {AlignmentOrientation[]} orientations @param {ShownRowsOf} [rowsOf] The rows of the drawing, built once for the capture. @returns {AlignmentOrientationCheckpoint[]} */
+  const captureAlignmentOrientationIntent = (drawing, orientations, rowsOf = shownRowsOnce(sourcesOf)) => {
     // A draft names no mode: these are the Linear drawing's (PD-OI-090, OV-579).
     // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
     settleDrafts(drawing);
     return alignmentRows(drawing, orientations)
       .map(({recordKey, sequence, drafts}) => ({ recordKey, card: captureLinearCardOrientation(sequence),
-        drafts: drafts.map((/** @type {RecordDisplayDraft} */ draft) => captureTargetDraft({ ...draft, scope: 'linear', drawingId: drawing.id })) }));
+        drafts: drafts.map((/** @type {RecordDisplayDraft} */ draft) => captureTargetDraft({ ...draft, scope: 'linear', drawingId: drawing.id }, rowsOf)) }));
   };
   /** @param {DrawingState} drawing @param {AlignmentOrientationCheckpoint[]} checkpoints */
   const restoreAlignmentOrientationIntent = (drawing, checkpoints) => {
@@ -636,15 +654,18 @@ export const createRecordDisplayControls = ({
     }
     return { status: 'written', recordIds: changes.map(({ row }) => String(row.recordId || row.recordKey)) };
   };
-  /** @param {RecordDraftTarget} row @returns {TargetDraftCheckpoint} */
-  const captureTargetDraft = (row) => {
+  /**
+   * @param {RecordDraftTarget} row @param {ShownRowsOf} [rowsOf] The rows of a drawing, for the orientation owner.
+   * @returns {TargetDraftCheckpoint}
+   */
+  const captureTargetDraft = (row, rowsOf) => {
     const drawing = state.drawingOf(row.drawingId);
     settleDrafts(drawing);
     const key = recordDisplayKey(row);
     const index = drawing.recordDisplayDrafts.findIndex(
       (/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === key
     );
-    const owner = linearOrientationOwner(drawing, row);
+    const owner = linearOrientationOwner(drawing, row, rowsOf);
     return {
       scope: row.scope,
       drawingId: row.drawingId,
@@ -688,8 +709,12 @@ export const createRecordDisplayControls = ({
       return { row: matches[0], startCoordinate: /** @type {number} */ (parseRecordDisplayStart(startCoordinate)) };
     });
   };
-  /** @param {readonly RecordStartTarget[]} targets @returns {TargetDraftCheckpoint[]} */
-  const captureRecordStarts = (targets) => targets.map(({ row }) => captureTargetDraft(row));
+  /**
+   * @param {readonly RecordStartTarget[]} targets
+   * @param {ShownRowsOf} [rowsOf] The rows of each drawing, built once for the whole capture.
+   * @returns {TargetDraftCheckpoint[]}
+   */
+  const captureRecordStarts = (targets, rowsOf = shownRowsOnce(sourcesOf)) => targets.map(({ row }) => captureTargetDraft(row, rowsOf));
   /** @param {readonly TargetDraftCheckpoint[]} checkpoints */
   const restoreRecordStarts = (checkpoints) => checkpoints.forEach(restoreTargetDraft);
   // The start is the record's own now: like an edit of its Display start, it replaces any earlier anchor intent.
