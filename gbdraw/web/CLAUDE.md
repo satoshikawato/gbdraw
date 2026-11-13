@@ -816,8 +816,9 @@ or Reset Settings).
   artifact transactions.
 - A restore (Undo, Redo, the failed Session Load rollback) installs a copy of
   the captured state as is: `applyConfigData(..., { resolveTrackPlacements: false })`
-  and `applyEditorStateData(..., { normalized: true })`. Unset values stay unset;
-  resolving them belongs to the request builder, not to the restore.
+  and `applyEditorStateData`, which installs an editor state only as captured.
+  Unset values stay unset; resolving them belongs to the request builder, not
+  to the restore.
 - The History intent holds neither the selected Result nor the offsets read
   from the mounted root (`buildUiIntentData` in
   `services/history-snapshot.js`). Composition offsets are recorded per Result
