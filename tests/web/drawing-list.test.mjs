@@ -1027,10 +1027,21 @@ test('Every drawing while the drawing switch is busy writes nothing and shows th
   waiting = null;
 });
 
+// A drawing's LOSAT evidence (D-221) as its panel reads it: shown, its values in the state; else none when it is out of
+// the project. The switch there and back leaves every value as it was.
+const losatValuesOf = (app, drawingId) => {
+  if (!state.drawingTabs.value.some((tab) => tab.id === drawingId)) return { losatCacheInfo: [], losatCache: new Map() };
+  const shown = state.activeDrawingId.value;
+  app.selectDrawing(drawingId);
+  const values = { losatCacheInfo: state.losatCacheInfo.value, losatCache: state.losatCache.value };
+  app.selectDrawing(shown);
+  return values;
+};
+const losatRowKeysOf = (app, drawingId) => losatValuesOf(app, drawingId).losatCacheInfo.map(({ key }) => key);
+
 // #1777 round 13 (OV-3205): a copy draws its source's rings from the source's Result, so it holds the source's LOSAT
-// results, one row per drawing as a Session Load gives them: Save Raw LOSAT TSV saves the same tables in the copy,
-// Clear counts the copy's results (the searches are shared, never copied), and Undo and Redo of the Duplicate
-// take the copy's rows away and back with the copy.
+// results (D-221: its evidence is the source's values, shared by reference): Save Raw LOSAT TSV saves the same tables
+// in the copy, Clear counts the copy's results, and Undo and Redo of the Duplicate take the copy's away and back.
 test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo take them away and back', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
@@ -1043,7 +1054,7 @@ test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo ta
     schema: 2, kind: 'raw-losat', identityKind: 'nucleotide', key, text: `${key}\n`, program: 'blastn', outfmt: '6',
     args: [], queryCanonicalHash: `q-${key}`, subjectCanonicalHash: `s-${key}`, runtime: webLosatRuntimeRecord('blastn')
   }]));
-  state.losatCacheInfo.value = keys.map((key, index) => ({ key, filename: files[index], display: true, drawingId: source }));
+  state.losatCacheInfo.value = keys.map((key, index) => ({ key, filename: files[index], display: true }));
   const createElement = document.createElement;
   const saved = async () => {
     const names = [];
@@ -1051,15 +1062,15 @@ test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo ta
     try { await app.downloadLosatCache(); } finally { document.createElement = createElement; }
     return names;
   };
-  const rowsOf = (drawingId) => state.losatCacheInfo.value.filter((row) => row.drawingId === drawingId).map(({ key }) => key);
+  const rowsOf = (drawingId) => losatRowKeysOf(app, drawingId);
   try {
     assert.deepEqual(await saved(), files);
     const { drawingId: copyId } = app.drawingList.duplicateDrawing(source);
     assert.equal(state.activeDrawingId.value, copyId);
     assert.deepEqual(await saved(), files, 'the copy saves the tables its rings draw');
     assert.equal(app.losatResultRows.value.length, 3, '"Clear 3 LOSAT results" counts the copy\'s results');
-    assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, keys], 'one row per drawing that holds a search');
-    assert.equal(state.losatCache.value.size, 3, 'the searches are shared, never copied');
+    assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, keys], 'each drawing lists its results');
+    assert.equal(losatValuesOf(app, copyId).losatCache, losatValuesOf(app, source).losatCache, 'the searches are shared, never copied');
 
     await history.undo();
     assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, []], 'Undo takes the copy\'s rows with the copy');
@@ -1075,23 +1086,21 @@ test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo ta
   }
 });
 
-// #1777 round 14 (OV-3209, OV-3208): a drawing's LOSAT rows are in the state only while the drawing is. Delete holds
-// them with its slot and its Undo writes them back, so New or Duplicate under the deleted drawing's ID neither takes
-// nor erases them.
+// #1777 round 14 (OV-3209, OV-3208), D-221: a drawing's LOSAT evidence is in its slot. Delete holds it with the slot
+// and its Undo puts it back, so New or Duplicate under the deleted drawing's ID neither takes nor erases it.
 test('Delete holds a drawing\'s LOSAT rows; New and Duplicate under its ID neither take nor erase them', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
   const source = modeDrawing(state, 'circular').id;
   app.selectDrawing(source);
-  const rowsOf = (drawingId) => state.losatCacheInfo.value.filter((row) => row.drawingId === drawingId).map(({ key }) => key);
+  const rowsOf = (drawingId) => losatRowKeysOf(app, drawingId);
   try {
     const { drawingId: second } = app.drawingList.newDrawing('circular');
-    state.losatCacheInfo.value = [
-      { key: 'k1', filename: 'k1.tsv', display: true, drawingId: source },
-      { key: 'k2', filename: 'k2.tsv', display: true, drawingId: second }
-    ];
-    state.losatCache.value = new Map(['k1', 'k2'].map((key) => [key, { key }]));
+    state.losatCacheInfo.value = [{ key: 'k2', filename: 'k2.tsv', display: true }];
+    state.losatCache.value = new Map([['k2', { key: 'k2' }]]);
     app.selectDrawing(source);
+    state.losatCacheInfo.value = [{ key: 'k1', filename: 'k1.tsv', display: true }];
+    state.losatCache.value = new Map([['k1', { key: 'k1' }]]);
     app.drawingList.deleteDrawing(second);
     assert.deepEqual([rowsOf(source), rowsOf(second)], [['k1'], []], 'the deleted drawing\'s rows leave with it');
     const { drawingId: fresh } = app.drawingList.newDrawing('circular');
@@ -1126,19 +1135,20 @@ test('a Linear drawing and its copy each list a window pair once, from their own
     const { drawingId: linear } = app.drawingList.newDrawing('linear');
     state.featureCatalog.value = { items: [{ recordKeys: ['a#1', 'a#2', 'b'], windowOf: { 'a#1': 'a', 'a#2': 'a' } }] };
     state.losatCacheInfo.value = ['e1', 'e2'].map((edgeKey, index) => ({
-      key: `w${index + 1}`, filename: `w${index + 1}.tsv`, display: true, drawingId: linear, edgeKey,
+      key: `w${index + 1}`, filename: `w${index + 1}.tsv`, display: true, edgeKey,
       queryUid: `a#${index + 1}`, subjectUid: 'b'
     }));
     state.losatCache.value = new Map(['w1', 'w2'].map((key) => [key, { key }]));
     const { drawingId: copy } = app.drawingList.duplicateDrawing(linear);
     const listed = () => Object.values(app.linearLosatWindowPairs.value).flat().map(({ edgeKey }) => edgeKey);
-    const byEdge = () => Object.values(app.linearLosatCacheInfoByEdgeKey.value).map(({ edgeKey, drawingId }) => [edgeKey, drawingId]);
+    const byEdge = () => Object.values(app.linearLosatCacheInfoByEdgeKey.value).map(({ edgeKey }) => edgeKey);
     assert.deepEqual(listed(), ['e1', 'e2'], 'the copy lists each window pair once');
-    assert.deepEqual(byEdge(), [['e1', copy], ['e2', copy]], 'from its own rows');
+    assert.deepEqual(byEdge(), ['e1', 'e2'], 'from its own rows');
+    assert.equal(state.activeDrawingId.value, copy);
     // A name typed on a window pair lives in the drawing's comparison plan (#1845), not in these rows.
     app.selectDrawing(linear);
     assert.deepEqual(listed(), ['e1', 'e2'], 'the source lists each pair once');
-    assert.deepEqual(byEdge(), [['e1', linear], ['e2', linear]]);
+    assert.deepEqual(byEdge(), ['e1', 'e2']);
     await history.undo();
     await history.undo();
   } finally {

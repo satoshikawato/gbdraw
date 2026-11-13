@@ -18,8 +18,9 @@ import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { createHash } from 'node:crypto';
 import {
-  losatResultRowsOfDrawing, losatRowsOnePerKey, validateProteinRawEntryReferences
+  emptyLosatEvidence, losatRowsOnePerKey, validateProteinRawEntryReferences
 } from '../../gbdraw/web/js/services/losat-cache.js';
+import { withArtifactSlotValues } from '../../gbdraw/web/js/services/artifact-slot.js';
 
 globalThis.window = {
   Vue: {
@@ -719,6 +720,13 @@ const loadKeepingSlots = async (session) => {
   });
   return { loaded, stashed, opening };
 };
+// Each drawing's LOSAT evidence after a Load (D-221): the shown one's from state, any other's from its slot.
+const loadedLosatEvidenceOf = (id, { stashed, opening }) => {
+  if (id === state.activeDrawing().id && !opening) {
+    return { losatCacheInfo: state.losatCacheInfo.value, losatCache: state.losatCache.value };
+  }
+  return [opening, ...stashed].find((entry) => entry?.drawingId === id)?.values ?? emptyLosatEvidence();
+};
 // Each drawing's held request and features, by drawing ID: the shown one's from state, any other from its slot.
 const heldSetOf = (id, { stashed, opening }) => {
   if (id === state.activeDrawing().id && !opening) {
@@ -836,9 +844,11 @@ test('a Session 51 whose Linear drawings hold different LOSAT entries keeps each
   for (const opened of [first.id, second.id]) {
     session.ui.activeDrawingId = opened;
     resetDrawings();
-    const loaded = await load(session);
-    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-    assert.deepEqual([...state.losatCache.value.keys()].sort(), [entry.key, `${entry.key}-second`].sort(), opened);
+    const outcome = await loadKeepingSlots(session);
+    assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+    // Each drawing holds its own entries, whichever is shown (D-221).
+    assert.deepEqual([first.id, second.id].map((id) => [...loadedLosatEvidenceOf(id, outcome).losatCache.keys()]),
+      [[entry.key], [`${entry.key}-second`]], opened);
   }
 });
 
@@ -850,17 +860,17 @@ test('two Linear drawings that hold one LOSAT pair each read the pair once, from
   const [first, second] = session.drawings;
   second.losatCache.entries = structuredClone(first.losatCache.entries);
   resetDrawings();
-  const loaded = await load(session);
-  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const outcome = await loadKeepingSlots(session);
+  assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
   const [{ edgeKey }] = first.losatCache.entries;
-  for (const drawing of [first, second]) {
+  const rowsOf = [first, second].map((drawing) => loadedLosatEvidenceOf(drawing.id, outcome).losatCacheInfo);
+  assert.notEqual(rowsOf[0], rowsOf[1], 'each drawing has its own rows (D-221)');
+  for (const [index, drawing] of [first, second].entries()) {
     const { linearLosatCacheInfoByEdgeKey } = createLinearLayoutReaders({
-      state, shownDrawingOfMode: () => state.drawingOf(drawing.id), losatCacheInfo: state.losatCacheInfo
+      state, shownDrawingOfMode: () => state.drawingOf(drawing.id), losatCacheInfo: { value: rowsOf[index] }
     });
-    assert.deepEqual(Object.values(linearLosatCacheInfoByEdgeKey.value).map((row) => [row.edgeKey, row.drawingId]),
-      [[edgeKey, drawing.id]], drawing.id);
+    assert.deepEqual(Object.values(linearLosatCacheInfoByEdgeKey.value).map((row) => row.edgeKey), [edgeKey], drawing.id);
   }
-  state.losatCacheInfo.value = [];
 });
 
 // D-15-120: a Session 51 without a Linear drawing loads without one; the Linear drawing the app
@@ -1594,8 +1604,8 @@ test('a Session 47 Load then Save reuses Load\'s check of each protein LOSAT ent
 });
 
 // #1540 (OV-2379): rows the gbdraw 0.14.4 Web engine searched (`runtime.version: null`) for a search the
-// current build gives alike are reused. Load merges both Linear drawings' entries into the one cache with
-// that record, the reuse rule takes each of them, and Save writes each record back into its own drawing.
+// current build gives alike are reused. Load gives each Linear drawing its entries with that record (D-221), the
+// reuse rule takes each of them, and Save writes each record back into its own drawing.
 test('a Session 51 keeps each Linear drawing\'s 0.14.4 Web LOSAT entries reusable through Load and Save', async () => {
   const { isReusableLosatEntry } = await import('../../gbdraw/web/js/services/losat-cache.js');
   const session = v49Session('drawings-linear-pair-losat');
@@ -1611,8 +1621,8 @@ test('a Session 51 keeps each Linear drawing\'s 0.14.4 Web LOSAT entries reusabl
     resetDrawings();
     const loaded = await loadKeepingSlots(session);
     assertLoadedDrawings(session, loaded);
-    for (const key of [entry.key, `${entry.key}-second`]) {
-      const cached = state.losatCache.value.get(key);
+    for (const [id, key] of [['linear', entry.key], ['linear-2', `${entry.key}-second`]]) {
+      const cached = loadedLosatEvidenceOf(id, loaded).losatCache.get(key);
       assert.deepEqual(cached?.runtime, entry.runtime, `${opened}: ${key}`);
       // OV-2377: the 0.14.4 Wasm's rows are reused for LOSATP only. The fixture's entries are LOSATN, so they
       // are searched again; the LOSATP spelling of the same record is reusable.
@@ -1665,7 +1675,7 @@ test('Save writes a Circular conservation LOSAT entry into no drawing whose requ
   resetDrawings();
   const loaded = await loadKeepingSlots(session);
   assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
-  assert.deepEqual([...state.losatCache.value.keys()], [conservation.key]);
+  assert.deepEqual([...loadedLosatEvidenceOf('circular', loaded).losatCache.keys()], [conservation.key]);
   const result = await exportSession('losat-conservation', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
   const saved = await readSavedSession(result.blob);
@@ -1673,7 +1683,7 @@ test('Save writes a Circular conservation LOSAT entry into no drawing whose requ
     { circular: [], linear: [] });
 });
 
-// OV-3201 (#1777 review 8): a cache-info row names the drawing whose entry it is, so a ring edit clears only its
+// OV-3201 (#1777 review 8), D-221: each drawing's rows are its own evidence's, so a ring edit clears only its
 // drawing's rows. A ring entry is each Circular drawing's that holds it, one row each, never a Linear drawing's; a
 // Session 27-50's one list gives its ring entries to its Circular part.
 const ringCacheEntry = () => ({
@@ -1681,33 +1691,34 @@ const ringCacheEntry = () => ({
   outfmt: '6', args: ['--task', 'megablast'], queryCanonicalHash: 'a'.repeat(64), subjectCanonicalHash: 'b'.repeat(64),
   text: 'q\ts\t100.000\t10\t0\t0\t1\t10\t1\t10\t0.0\t20\n', key: 'c'.repeat(64), filename: 'ring.circular_conservation.losatn.tsv', display: true
 });
-const cacheRowDrawings = () => state.losatCacheInfo.value.map((row) => [row.key.slice(0, 4), row.drawingId]);
+/** @param {string} id @param {Awaited<ReturnType<typeof loadKeepingSlots>>} outcome */
+const ringRowKeysOf = (id, outcome) => loadedLosatEvidenceOf(id, outcome).losatCacheInfo
+  .map((row) => row.key.slice(0, 4)).filter((key) => key === 'cccc');
 test('a Load gives a ring entry one cache-info row for each Circular drawing that holds it, none for a Linear one (OV-3201)', async () => {
-  for (const [name, holders, rows] of /** @type {const} */ ([
-    ['drawings-per-drawing-cards', ['circular', 'circular-2'], [['cccc', 'circular'], ['cccc', 'circular-2']]],
-    ['drawings-circular-linear', ['circular', 'linear'], [['cccc', 'circular']]]
+  for (const [name, holders] of /** @type {const} */ ([
+    ['drawings-per-drawing-cards', ['circular', 'circular-2']],
+    ['drawings-circular-linear', ['circular', 'linear']]
   ])) {
     const session = v49Session(name);
     session.drawings.filter((candidate) => holders.includes(candidate.id)).forEach((candidate) => { candidate.losatCache.entries = [ringCacheEntry()]; });
     resetDrawings();
-    const { loaded } = await loadKeepingSlots(session);
-    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-    assert.deepEqual(cacheRowDrawings(), rows, name);
-    // Each panel reads its drawing's results, one per cache key (#1777 review 9, OV-3203): 1 row in each Circular
-    // drawing's panel, none in the Linear one's.
-    assert.deepEqual(holders.map((id) => losatResultRowsOfDrawing(state.losatCacheInfo.value, id).length),
+    const outcome = await loadKeepingSlots(session);
+    assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+    // Each panel reads its drawing's results, one per cache key (#1777 review 9, OV-3203, D-223): 1 row in each
+    // Circular drawing's panel, none in the Linear one's.
+    assert.deepEqual(holders.map((id) => ringRowKeysOf(id, outcome)),
+      holders.map((id) => (id.startsWith('circular') ? ['cccc'] : [])), name);
+    assert.deepEqual(holders.map((id) => losatRowsOnePerKey(loadedLosatEvidenceOf(id, outcome).losatCacheInfo).length),
       holders.map((id) => (id.startsWith('circular') ? 1 : 0)), name);
-    // Clear counts the project's searches, one per cache key (round 12): two drawings, one ring, 1.
-    assert.equal(losatRowsOnePerKey(state.losatCacheInfo.value).length, 1, name);
   }
   const legacy = fixtureSession('two-mode-linear-shown.v48');
   legacy.losatCache.entries.push(ringCacheEntry());
   resetDrawings();
-  const { loaded } = await loadKeepingSlots(legacy);
-  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(cacheRowDrawings().filter(([key]) => key === 'cccc'), [['cccc', modeDrawing(state, 'circular').id]],
+  const outcome = await loadKeepingSlots(legacy);
+  assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+  assert.deepEqual(state.drawingList().map(({ id }) => [id, ringRowKeysOf(id, outcome)]),
+    state.drawingList().map(({ id, mode }) => [id, mode === 'circular' ? ['cccc'] : []]),
     'a Session 27-50\'s ring entry names its Circular part');
-  state.losatCacheInfo.value = [];
 });
 
 // K-3: a ring's query hash is the SHA-256 of the FASTA the Python ring reader
@@ -1791,6 +1802,23 @@ test('Save after a Load reads no ring file and writes each Circular drawing its 
   assert.deepEqual(requests, []);
   assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
   assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2, keys.other]);
+});
+
+// OV-3475 (F1), D-221: Save writes each drawing's own evidence. After Clear in circular-2 (its LOSAT evidence
+// emptied in its slot), it writes no entry, not even the ring searches circular still holds.
+test('a drawing whose shared ring searches were cleared writes none of them (OV-3475)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const cleared = (slot) => (slot?.drawingId === 'circular-2'
+    ? withArtifactSlotValues(slot, state.drawingOf('circular-2'), emptyLosatEvidence())
+    : slot);
+  const saved = await savedEntryKeys('cleared circular-2', {
+    opening: cleared(loaded.opening), stashed: loaded.stashed.map(cleared)
+  });
+  assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(saved['circular-2'], [], 'circular-2 lists no result after its Clear');
 });
 
 // K-3 (D-15-124): a drawing's entries are its request's. A ring file bound in

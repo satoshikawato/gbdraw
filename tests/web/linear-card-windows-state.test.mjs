@@ -68,7 +68,7 @@ test('a card\'s windows load as the card saved them: across the origin, reversed
 const recordEditsOfApp = () => {
   const shownDrawingOfMode = () => modeDrawing(state, 'linear');
   const { invalidateLinearComparisonArtifacts } = createLinearComparisonView({
-    state, mode: { value: 'linear' }, losatCacheInfo: { value: null }, writeLosatCacheInfo: () => {}, shownDrawingOfMode
+    state, mode: { value: 'linear' }, editLosatRows: () => {}, shownDrawingOfMode
   });
   const through = (_drawing, change) => change();
   const { applyLinearSeqMutation } = createLinearSourceEdits({

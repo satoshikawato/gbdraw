@@ -25,7 +25,8 @@ import {
   ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore, installShownSetLegend
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { losatEvidenceAfterStep, losatRowsAfterStep, losatRowsOfDrawing } from './losat-cache.js';
+import { LOSAT_EVIDENCE_EMPTY, LOSAT_EVIDENCE_KEYS } from './losat-cache.js';
+/** @import { LosatEvidence, LosatCacheInfoEntry } from './losat-cache.js' */
 import { CANVAS_SLICE } from './drawing/canvas.js';
 /** @import { CanvasPadding, CanvasSlice } from './drawing/canvas.js' */
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
@@ -906,6 +907,8 @@ const applyFilesData = (drawing, filesData, fileStore) => {
  *   discovery derived from them reads them again, or keeps a read that still matches them.
  *   Clears the Similarity groups "Copied!" feedback when a Generate's artifact replaces the shown
  *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
+ * @property {() => void} [onArtifactSlotsChanged] Called when the kept artifact slots change (D-221: the LOSAT hint
+ *   reads the drawings not shown).
  */
 
 /**
@@ -950,56 +953,39 @@ const checkpointCatalogFeatures = (snapshot) => {
 };
 
 /**
- * Installs the LOSAT rows and caches a Generate's commit, an Undo, a Redo, or a failed Generate's rollback of drawing
- * `drawingId` leaves: the other drawings' rows stay, the drawing's are the owner set's (OV-3207, OV-3212), and no
- * cached search or converted payload goes; a commit installs the owner set's caches, the others put back what the
- * drawing's rows and protein identity manifest name (D-200, `losatEvidenceAfterStep`).
- * @param {{ losatCacheInfo: { value: readonly { key: unknown, drawingId: DrawingId }[] },
- *   losatCache: { value: ReadonlyMap<unknown, unknown> },
- *   losatDerivedCache: { value: ReadonlyMap<unknown, { rawKeys?: readonly unknown[] }> } }} state The state's rows and caches.
- * @param {{ losatCacheInfo?: readonly { key: unknown, drawingId: DrawingId }[] | null, losatCache?: ReadonlyMap<unknown, unknown> | null,
- *   losatDerivedCache?: ReadonlyMap<unknown, { rawKeys?: readonly unknown[] }> | null, proteinIdentityManifest?: unknown }} ownerSet
- * @param {DrawingId} drawingId
- * @param {boolean} commit
+ * A drawing's LOSAT evidence where its artifact is (D-221): the displayed values while it is shown, else its kept
+ * slot's. Reads and one writer of its rows; nothing here counts holders or reaches a drawing History holds.
+ * @param {{ shownDrawingId: () => DrawingId,
+ *   artifactSlots: { kept: () => readonly Readonly<ArtifactSlot>[] },
+ *   readSlotValues: (drawingId: DrawingId, keys: readonly (typeof LOSAT_EVIDENCE_KEYS)[number][]) => Partial<LosatEvidence>,
+ *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void }} owner
  */
-const installLosatAfterStep = (state, ownerSet, drawingId, commit) => {
-  const rows = losatRowsAfterStep(getGeneratedArtifactRef(state.losatCacheInfo, []), drawingId, ownerSet.losatCacheInfo || []);
-  const evidence = losatEvidenceAfterStep({ commit, rows: losatRowsOfDrawing(rows, drawingId), manifest: ownerSet.proteinIdentityManifest }, {
-    cache: ownerSet.losatCache || new Map(), derived: ownerSet.losatDerivedCache || new Map()
-  }, { cache: getGeneratedArtifactRef(state.losatCache, new Map()), derived: getGeneratedArtifactRef(state.losatDerivedCache, new Map()) });
-  setGeneratedArtifactRef(state.losatCache, evidence.cache);
-  setGeneratedArtifactRef(state.losatDerivedCache, evidence.derived);
-  setGeneratedArtifactRef(state.losatCacheInfo, rows);
-};
-
-/**
- * Clear LOSAT results' reach into the drawings not shown (PD-OI-022 scenario revision 2): `begin` counts the Clear and
- * returns the protein identity manifest of each drawing the slot store keeps (D-197), in which the protein searches the
- * Clear keeps for that drawing resolve. A drawing History holds out of the store (a Delete, an undone New or Duplicate)
- * is no drawing of the project, so a Clear keeps nothing for it: it notes the `count` when it leaves and comes back
- * through `putHeldSlot` with an empty manifest and no rows after a Clear (OV-3274).
- * @param {{ kept: () => readonly Readonly<ArtifactSlot>[], putSlot: (slot: Readonly<ArtifactSlot>) => void }} artifactSlots
- * @param {(drawingId: DrawingId, values: { proteinIdentityManifest: unknown }) => void} writeArtifactValues
- *   Writes artifact slot values of a drawing the store holds.
- */
-const createLosatClearReach = (artifactSlots, writeArtifactValues) => {
-  let clears = 0;
+const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, readSlotValues, writeArtifactValues }) => {
+  /**
+   * Drawing `drawingId`'s LOSAT evidence.
+   * @param {DrawingId} drawingId @returns {Partial<LosatEvidence>}
+   */
+  const losatEvidenceOf = (drawingId) => readSlotValues(drawingId, LOSAT_EVIDENCE_KEYS);
   return {
-    begin: () => {
-      clears += 1;
-      return artifactSlots.kept().map(({ values }) => values.proteinIdentityManifest);
-    },
-    count: () => clears,
+    losatEvidenceOf,
     /**
-     * Puts a held drawing's Result slot back; returns whether a Clear ran since it left (its LOSAT rows are gone too).
-     * @param {DrawingId} drawingId @param {Readonly<ArtifactSlot> | null} slot @param {number} heldClears Its `count`.
+     * The LOSAT evidence of every drawing of the project: the shown drawing's and each kept slot's. A drawing History
+     * holds out of the project (a Delete, an undone New or Duplicate) is none of them (D-224).
+     * @returns {Partial<LosatEvidence>[]}
      */
-    putHeldSlot: (drawingId, slot, heldClears) => {
-      if (slot) artifactSlots.putSlot(slot);
-      if (slot && heldClears !== clears) {
-        writeArtifactValues(drawingId, { proteinIdentityManifest: ARTIFACT_SLOT_EMPTY.proteinIdentityManifest() });
-      }
-      return heldClears !== clears;
+    projectLosatEvidence: () => [losatEvidenceOf(shownDrawingId()), ...artifactSlots.kept()
+      .filter((slot) => slot.drawingId !== shownDrawingId()).map(({ values }) => values)],
+    /**
+     * Rewrites drawing `drawingId`'s LOSAT result rows (a ring edit, a Linear comparison edit, a file name): only its
+     * own (OV-3470). Rows equal one by one keep the array, so the History owner-set capture keeps it (OV-2210).
+     * @param {DrawingId} drawingId
+     * @param {(rows: readonly LosatCacheInfoEntry[]) => LosatCacheInfoEntry[]} edit
+     */
+    editLosatRows: (drawingId, edit) => {
+      const rows = losatEvidenceOf(drawingId).losatCacheInfo ?? [];
+      const next = edit(rows);
+      if (next.length === rows.length && next.every((row, index) => row === rows[index])) return;
+      writeArtifactValues(drawingId, { losatCacheInfo: next });
     }
   };
 };
@@ -1028,7 +1014,8 @@ export const createHistorySnapshotService = ({
   buildRunStateData = null,
   applyRunStateData = null,
   clearSimilarityGroupCopyFeedback = null,
-  discoverDrawingRecords = null
+  discoverDrawingRecords = null,
+  onArtifactSlotsChanged = () => {}
 }) => {
   if (!state || !fileStore || typeof currentResults !== 'function') {
     throw new Error('createHistorySnapshotService requires state, fileStore, and currentResults.');
@@ -1184,9 +1171,9 @@ export const createHistorySnapshotService = ({
     /**
      * `drawing` receives the owner set's color rules and queued palette: the
      * drawing whose Generate commits it or whose History handle restores it.
-     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: SvgResultEntry[]) => unknown) | null, commit?: boolean }}
+     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: SvgResultEntry[]) => unknown) | null }}
      */
-    { drawing, selectedResultIndex = 0, installResults = null, commit = false }
+    { drawing, selectedResultIndex = 0, installResults = null }
   ) => {
     if (!ownerSet || typeof ownerSet !== 'object') {
       throw new Error('A generated artifact owner set is required.');
@@ -1235,12 +1222,8 @@ export const createHistorySnapshotService = ({
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
     );
-    setGeneratedArtifactRef(state.proteinIdentityManifest, ownerSet.proteinIdentityManifest);
-    setGeneratedArtifactRef(state.legacyProteinRawCandidates, ownerSet.legacyProteinRawCandidates);
-    setGeneratedArtifactRef(state.legacyProteinDerivedEvidence, ownerSet.legacyProteinDerivedEvidence);
-    installLosatAfterStep({
-      losatCacheInfo: state.losatCacheInfo, losatCache: state.losatCache, losatDerivedCache: state.losatDerivedCache
-    }, ownerSet, drawing.id, commit);
+    // The drawing's LOSAT evidence is the owner set's, as every artifact value (D-221).
+    LOSAT_EVIDENCE_KEYS.forEach((key) => setGeneratedArtifactRef(state[key], ownerSet[key] ?? LOSAT_EVIDENCE_EMPTY[key]()));
     setGeneratedArtifactRef(state.lastRunInfo, ownerSet.lastRunInfo ?? null);
     setGeneratedArtifactRef(state.pairwiseMatchFactors, ownerSet.pairwiseMatchFactors || {});
     setGeneratedArtifactRef(state.editableLabels, ownerSet.editableLabels || []);
@@ -1331,11 +1314,10 @@ export const createHistorySnapshotService = ({
 
   // OV-2212: the shown artifact is still the one the fingerprint names while
   // the drawing's own artifact values are the ones its Generate committed: these
-  // artifact slot values, by reference. The project
-  // LOSAT values and the alignment draft are not the drawing's (a Generate in
-  // another drawing replaces them), and Clear empties its protein manifest: the
-  // fingerprint covers what of them the Result drew, and the compact
-  // signature covers the alignment plan and record translations, by value.
+  // artifact slot values, by reference. The drawing's LOSAT evidence is left
+  // out (Clear empties it and keeps the Result), and the alignment draft is not
+  // the drawing's: the fingerprint covers what of them the Result drew, and the
+  // compact signature covers the alignment plan and record translations, by value.
   /** @type {readonly (typeof ARTIFACT_SLOT_KEYS)[number][]} */
   const TRANSPORT_IDENTITY_SLOT_KEYS = Object.freeze([
     'results',
@@ -1783,7 +1765,7 @@ export const createHistorySnapshotService = ({
   // writes a hidden drawing's slot values (`writeArtifactValues`); the mode
   // transition and Session Load (with its rollback) use its other named
   // operations through the service's `artifactSlots`.
-  const artifactSlots = createArtifactSlotStore();
+  const artifactSlots = createArtifactSlotStore({ changed: onArtifactSlotsChanged });
   // OV-1168, OV-1195: the artifact slot values in a drawing's intent (the
   // applied palette in `ui`, the alignment Reset receipt) are its own
   // artifact's: the displayed one's while it is shown, else the slot that
@@ -1807,7 +1789,9 @@ export const createHistorySnapshotService = ({
     }
     artifactSlots.writeValues(state.drawingOf(drawingId), values);
   };
-  const losatClearReach = createLosatClearReach(artifactSlots, writeArtifactValues);
+  const losatEvidence = createLosatEvidenceAccess({
+    shownDrawingId: () => state.activeDrawingId.value, artifactSlots, readSlotValues, writeArtifactValues
+  });
   const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
 
   // Synchronous: History captures it without an await (OV-922).
@@ -2085,9 +2069,9 @@ export const createHistorySnapshotService = ({
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,
     setGeneratedArtifactRuntimeOwner,
-    beginLosatClear: losatClearReach.begin,
-    losatClearCount: losatClearReach.count,
-    putHeldSlot: losatClearReach.putHeldSlot,
+    losatEvidenceOf: losatEvidence.losatEvidenceOf,
+    projectLosatEvidence: losatEvidence.projectLosatEvidence,
+    editLosatRows: losatEvidence.editLosatRows,
     setAfterApplyHistoryIntent,
     snapshotSignature
   };

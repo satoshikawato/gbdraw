@@ -38,14 +38,13 @@ const SWAPPED = [
   'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
   'similarityAlignmentResetReceipt', 'originalSvgStroke',
-  // D-197: the manifest the drawing's LOSAT protein rows resolve in.
-  'proteinIdentityManifest'
+  // D-221: the drawing's LOSAT evidence (D-197: with the manifest its LOSAT protein rows resolve in).
+  'proteinIdentityManifest', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'legacyProteinRawCandidates',
+  'legacyProteinDerivedEvidence'
 ];
 // Draft and project state that sits in today's owner set or beside it.
 const KEPT = [
-  'pendingPaletteName', 'pendingPaletteColors', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
-  'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence',
-  'similarityAlignmentPlan', 'linearRecordTranslations', 'legendEntries', 'deletedLegendEntries',
+  'pendingPaletteName', 'pendingPaletteColors', 'similarityAlignmentPlan', 'linearRecordTranslations', 'legendEntries', 'deletedLegendEntries',
   // The slot carries the generated Legend inventory and colors beside its values (`legend`).
   'originalLegendOrder', 'originalLegendColors'
 ];
@@ -73,15 +72,14 @@ const fillCircularArtifact = async () => {
     appliedPaletteName: 'tableau', appliedPaletteColors: { CDS: '#111111' },
     similarityAlignmentResetReceipt: null,
     originalSvgStroke: { color: '#000000', width: 1 },
-    proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} }
+    proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} },
+    losatCache: new Map([['k', {}]]), losatDerivedCache: new Map([['d', {}]]), losatCacheInfo: [{ key: 'k', edgeKey: 'e' }],
+    legacyProteinRawCandidates: { schema: 1, entries: [] }, legacyProteinDerivedEvidence: { schema: 1, entries: [] }
   };
   Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
   state.generatedDrawingId.value = modeDrawing(state, 'circular').id; // the displayed artifact is Circular's
   const kept = {
-    pendingPaletteName: 'pending', pendingPaletteColors: { CDS: '#222222' }, losatCache: new Map([['k', {}]]),
-    losatDerivedCache: new Map([['d', {}]]), losatCacheInfo: [{ edgeKey: 'e' }],
-    legacyProteinRawCandidates: { schema: 1, entries: [] },
-    legacyProteinDerivedEvidence: { schema: 1, entries: [] }, similarityAlignmentPlan: { groupId: 'g' },
+    pendingPaletteName: 'pending', pendingPaletteColors: { CDS: '#222222' }, similarityAlignmentPlan: { groupId: 'g' },
     linearRecordTranslations: [{ recordKey: 'r', x: 1, y: 2 }], legendEntries: [{ caption: 'CDS' }],
     deletedLegendEntries: [{ caption: 'gene' }]
   };
@@ -124,6 +122,8 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.strictEqual(state.appliedPaletteColors.value, values.appliedPaletteColors);
   assert.deepEqual(state.originalLegendOrder.value, []);
   assert.deepEqual(state.originalLegendColors.value, {});
+  // The empty slot's LOSAT evidence is fresh and empty (D-221).
+  assert.deepEqual([state.losatCacheInfo.value, [...state.losatCache.value], [...state.losatDerivedCache.value]], [[], [], []]);
   // Draft and project state stays.
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
@@ -320,31 +320,47 @@ test('the slot, owner-set and checkpoint captures read the Results through curre
   assert.equal(reads, 3);
 });
 
-// OV-2210: the project's LOSAT cache-info rows sit in every drawing's owner set,
-// and the transport identity names them by reference. A pass over them that
-// changes no row (another drawing's Linear file change filters its pairs out
-// of an empty list) keeps the array, so the shown drawing's Result keeps its
-// fingerprint and an unchanged Generate there records no step.
+// OV-2210: a drawing's LOSAT cache-info rows sit in its owner set (D-221), and
+// the transport identity names them by reference. A pass over them that
+// changes no row (a Linear file change filters its pairs out of an empty list)
+// keeps the array, so the shown drawing's Result keeps its fingerprint and an
+// unchanged Generate there records no step.
 test('a pass over the LOSAT rows that changes none keeps the shown artifact\'s transport identity', async () => {
-  const { writeLosatCacheInfo } = await import('../../gbdraw/web/js/services/config.js');
   await fillCircularArtifact();
+  const drawingId = state.activeDrawing().id;
   state.losatCacheInfo.value = [{ key: 'k', filename: 'pair.tsv', display: true }];
   snapshots.setGeneratedArtifactIdentity({ schema: 1, algorithm: 'SHA-256', fingerprint: 'b'.repeat(64), retainedBytes: 10 },
     { results: state.results.value });
   const fingerprint = () => snapshots.captureGeneratedArtifactHandle(state.activeDrawing()).identity.fingerprint;
   assert.equal(fingerprint(), 'b'.repeat(64));
   const rows = state.losatCacheInfo.value;
-  writeLosatCacheInfo(rows.filter((entry) => !entry?.edgeKey));
+  snapshots.editLosatRows(drawingId, (current) => current.filter((entry) => !entry?.edgeKey));
   assert.strictEqual(state.losatCacheInfo.value, rows, 'no row changed: the array stays');
   assert.equal(fingerprint(), 'b'.repeat(64), 'the Result keeps its identity');
-  writeLosatCacheInfo([]);
+  snapshots.editLosatRows(drawingId, () => []);
   assert.deepEqual(state.losatCacheInfo.value, [], 'a pass that drops a row writes');
-  // OV-2212: the rows are project state, not the drawing's Result.
-  assert.equal(fingerprint(), 'b'.repeat(64), 'changed project rows leave the Result its identity');
+  // OV-2212: the rows are not the drawing's drawn Result.
+  assert.equal(fingerprint(), 'b'.repeat(64), 'changed rows leave the Result its identity');
+});
+
+// OV-3470 (D-221): a row edit (a ring edit, a Linear comparison edit) rewrites the rows of the drawing it names, in
+// its kept slot when it is not shown, and leaves the shown drawing's values.
+test('editLosatRows rewrites only the drawing it names, shown or kept', async () => {
+  await fillCircularArtifact();
+  const shown = { rows: state.losatCacheInfo.value, cache: state.losatCache.value };
+  const linear = modeDrawing(state, 'linear');
+  snapshots.artifactSlots.writeValues(linear, { losatCacheInfo: [{ key: 'l', edgeKey: 'e' }, { key: 'm' }] });
+  snapshots.editLosatRows(linear.id, (rows) => rows.filter((row) => !row.edgeKey));
+  assert.deepEqual(snapshots.losatEvidenceOf(linear.id).losatCacheInfo, [{ key: 'm' }]);
+  assert.equal(state.losatCacheInfo.value, shown.rows, 'the shown drawing\'s rows stay');
+  assert.equal(state.losatCache.value, shown.cache);
+  assert.ok(snapshots.projectLosatEvidence().some((values) => values.losatCacheInfo?.[0]?.key === 'm'),
+    'the project\'s evidence holds the kept drawing\'s');
+  snapshots.artifactSlots.takeSlot(linear.id);
 });
 
 // OV-2212: a drawing's transport identity matches only what its Result is: its
-// artifact slot values. Each Generate installs its own project LOSAT and protein
+// artifact slot values. Each Generate installs its own LOSAT and protein
 // values (new objects), so a Generate in another drawing replaces them; the
 // Result's fingerprint covers what of them it drew, and the compact signature
 // covers the alignment plan and record translations by value. So an unchanged

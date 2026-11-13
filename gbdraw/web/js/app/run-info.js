@@ -38,7 +38,7 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
-/** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { LosatCacheInfoEntry } from '../services/losat-cache.js' */
 /** @import { ErrorTextPart } from '../utils/error-normalization.js' */
 /** @import { RecordPlace, RecordPlaceInput } from '../contracts/card-windows.generated.js' */
 

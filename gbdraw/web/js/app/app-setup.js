@@ -18,6 +18,7 @@
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { LosatEvidence } from '../services/losat-cache.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
@@ -125,13 +126,13 @@ import {
   installShownDrawing,
   duplicateDrawingState,
   applyDrawingStyle,
-  writeLosatCacheInfo,
   CIRCULAR_RECORD_FORM_DEFAULTS,
   linearCardWindowPlanRecords,
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
+import { emptyLosatEvidence, listsLosatResults, losatRowsOnePerKey } from '../services/losat-cache.js';
 import {
   setStoredProteinResultFrameConverter
 } from '../services/main-session-comparison-frame.js';
@@ -480,6 +481,40 @@ const provideSettingNoteReaders = () => {
   provide(SETTING_NOTE_ONE_CIRCLE_CHANGE, committedOneCircleChange);
 };
 
+/**
+ * **Clear LOSAT results** as one History step of drawing `drawingId` (C5 (a), Owner 2026-11-14): it empties the
+ * drawing's LOSAT evidence (D-221); its Undo puts back the values it cleared, and its Redo puts back the same empty
+ * values (fresh for this step, never shared with another drawing). No step when the drawing lists no result (the
+ * button is off then, D-223).
+ * @param {DrawingId} drawingId
+ * @param {{ losatEvidenceOf: (drawingId: DrawingId) => Partial<LosatEvidence>,
+ *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void }} owner
+ */
+const clearLosatResultsCommand = (drawingId, { losatEvidenceOf, writeArtifactValues }) => {
+  const cleared = losatEvidenceOf(drawingId);
+  if (!listsLosatResults(cleared)) return null;
+  const empty = emptyLosatEvidence();
+  return {
+    apply: () => writeArtifactValues(drawingId, empty),
+    revert: () => writeArtifactValues(drawingId, cleared)
+  };
+};
+
+/**
+ * The shown drawing's LOSAT results panel (D-221). The count and the enabled state are the shown drawing's listed
+ * results, one per cache key (D-223); the hint says whether a drawing of the project lists some, reading the kept slots
+ * through `slotRevision`, which every slot change bumps (the slots are not reactive); Clear is one History step.
+ * @param {{ runUndoableCommand: (label: string, build: () => ReturnType<typeof clearLosatResultsCommand>) => Promise<unknown>,
+ *   owner: Parameters<typeof clearLosatResultsCommand>[1] & { projectLosatEvidence: () => Partial<LosatEvidence>[] },
+ *   slotRevision: { readonly value: number } }} ports
+ */
+const createLosatResultsPanel = ({ runUndoableCommand, owner, slotRevision }) => ({
+  losatResultRows: computed(() => losatRowsOnePerKey(state.losatCacheInfo.value)),
+  projectHasLosatResults: computed(() => slotRevision.value >= 0 && owner.projectLosatEvidence().some(listsLosatResults)),
+  clearLosatCache: () => runUndoableCommand(msg('Clear LOSAT results'),
+    () => clearLosatResultsCommand(state.activeDrawingId.value, owner))
+});
+
 export const createAppSetup = () => {
   provideSettingNoteReaders();
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
@@ -679,10 +714,6 @@ export const createAppSetup = () => {
   });
 
   const {
-    comparisonHeightValidationError, invalidateLinearComparisonArtifacts, linearComparisonUi,
-    linearComparisonGlobalAction, canRunLinearLosat
-  } = createLinearComparisonView({ state, mode, losatCacheInfo, writeLosatCacheInfo, shownDrawingOfMode });
-  const {
     linearSourceGroups, linearSourceRemovalDialog, linearSourceRemovalReturnFocus, linearSourceRemovalTarget,
     linearSourceRemovalCanDelete, linearSourceFileName, linearCardFileLine, shownInputComplete, linearCardHoldsInput,
     isLinearSourceFolded, syncLinearSourceFold, linearSourceRemovalTargetName
@@ -694,13 +725,6 @@ export const createAppSetup = () => {
   // view: every "show this setting" path below ends in `revealSetting`, so a
   // setting of a section the icon rail does not show is docked first.
   const settingsPaneActions = createSettingsPaneController({ state });
-  const {
-    openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
-    comparisonCauseShown, showComparisonCause
-  } = createLinearComparisonFocus({
-    state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting,
-    revealSettingsSection: settingsPaneActions.revealSettingsSection
-  });
   const { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey, linearLosatWindowPairs, linearWindowPairSide } = createLinearLayoutReaders({
     state, shownDrawingOfMode, losatCacheInfo
   });
@@ -801,8 +825,11 @@ export const createAppSetup = () => {
 
   // Before the History snapshot service, which clears its copy feedback (D-37).
   const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest, memberAction: sequenceReads.memberAction });
+  // Bumped by every change of the kept artifact slots, which are not reactive: the LOSAT hint reads them (D-221).
+  const artifactSlotRevision = ref(0);
   const historySnapshots = createHistorySnapshotService({
     state,
+    onArtifactSlotsChanged: () => { artifactSlotRevision.value += 1; },
     fileStore: state.inputFiles,
     nextTick,
     // The discovery owner exists once the runner does; a restore runs after setup.
@@ -823,6 +850,20 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData,
     clearSimilarityGroupCopyFeedback: orthogroupActions.clearCopyFeedback
+  });
+  // After the History snapshot service: a comparison edit rewrites its drawing's LOSAT rows there (D-221, OV-3470).
+  const {
+    comparisonHeightValidationError, invalidateLinearComparisonArtifacts, linearComparisonUi,
+    linearComparisonGlobalAction, canRunLinearLosat
+  } = createLinearComparisonView({
+    state, mode, editLosatRows: historySnapshots.editLosatRows, shownDrawingOfMode
+  });
+  const {
+    openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
+    comparisonCauseShown, showComparisonCause
+  } = createLinearComparisonFocus({
+    state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting,
+    revealSettingsSection: settingsPaneActions.revealSettingsSection
   });
   // R13: a History restore keeps the open specific-color pattern drafts, and
   // Undo and Redo of a rule edit follow the restored rules as the edit did
@@ -1670,20 +1711,20 @@ export const createAppSetup = () => {
     askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
-    state, writeLosatCacheInfo, askingStackPorts,
+    state, editLosatRows: historySnapshots.editLosatRows, askingStackPorts,
     syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
     rekeyCircularConservationRows: circularTrackSlotEditor.rekeyCircularConservationRows,
     circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving
   });
   const circularConservationSeriesPanel = createCircularConservationSeriesPanel({
-    state, shownAction, shownDrawingOfMode, writeLosatCacheInfo, circularConservationFastaInput,
+    state, shownAction, shownDrawingOfMode, editLosatRows: historySnapshots.editLosatRows, circularConservationFastaInput,
     reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   const {
     settleComparisonRecordLabels, addCircularConservationComparisonFile, addRingRowFiles,
     removeRingRowFile, removeCircularConservationSource
   } = createCircularConservationComparisonFiles({
-    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, setRingGenomeLists,
+    state, shownAction, editLosatRows: historySnapshots.editLosatRows, runUndoable: history.runUndoable, setRingGenomeLists,
     setCircularConservationSourceFiles, reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   // The auxiliary file imports still applying: the watchers add them, Save and
@@ -1781,10 +1822,8 @@ export const createAppSetup = () => {
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
-    losatResultRowsOf, projectHasLosatResults, swapLosatResultRows, losatRowsOf,
-    downloadLosatCache: downloadLosatCacheOfDrawing,
+    downloadLosatCache,
     downloadLosatPair: downloadLosatPairOfDrawing,
-    clearLosatCache,
     getLosatPairDefaultName: losatPairDefaultNameOfDrawing,
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState
@@ -1836,7 +1875,7 @@ export const createAppSetup = () => {
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
     installRedrawnArtifact: historySnapshots.installRedrawnArtifact,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
-    beginLosatClear: historySnapshots.beginLosatClear,
+    projectLosatEvidence: historySnapshots.projectLosatEvidence,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
     runGeneratedArtifactReplacement: (...args) => history.runUndoableArtifactReplacement(...args),
     previewRuntime,
@@ -1885,8 +1924,9 @@ export const createAppSetup = () => {
   };
   /** @param {string} edgeKey @param {unknown} customName */
   const downloadLosatPair = (edgeKey, customName) => downloadLosatPairOfDrawing(state.activeDrawing(), edgeKey, customName);
-  const losatResultRows = computed(() => losatResultRowsOf(state.activeDrawing()));
-  const downloadLosatCache = () => downloadLosatCacheOfDrawing(state.activeDrawing());
+  const { losatResultRows, projectHasLosatResults, clearLosatCache } = createLosatResultsPanel({
+    runUndoableCommand: history.runUndoableCommand, owner: historySnapshots, slotRevision: artifactSlotRevision
+  });
   /** @param {string} edgeKey */
   const getLosatPairDefaultName = (edgeKey) => losatPairDefaultNameOfDrawing(state.activeDrawing(), edgeKey);
   // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
@@ -2583,21 +2623,18 @@ export const createAppSetup = () => {
       const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
-      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatRowsOf(sourceId), losatClears: historySnapshots.losatClearCount() } };
+      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null } };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
     regionDrawing: makeRegionDrawing,
     addDrawing: state.addDrawing,
     // An error that names a drawing leaves with it (R17-29), as on a switch away (OV-372): every Delete, its Redo,
-    // and the Undo of New and Duplicate remove a drawing here, which hands over its slot and LOSAT rows (OV-3209).
-    removeDrawing: (drawingId, left = []) => {
+    // and the Undo of New and Duplicate remove a drawing here, which hands over its slot with its LOSAT evidence.
+    removeDrawing: (drawingId) => {
       if (errorDrawingId() === drawingId) errorLog.value = null;
-      return { slot: state.removeDrawing(drawingId, artifactSlots), losatRows: swapLosatResultRows(drawingId, left), losatClears: historySnapshots.losatClearCount() };
+      return { slot: state.removeDrawing(drawingId, artifactSlots) };
     },
-    putHeld: (drawingId, { slot, losatRows, losatClears }) => {
-      const cleared = historySnapshots.putHeldSlot(drawingId, slot, losatClears);
-      return swapLosatResultRows(drawingId, cleared ? [] : losatRows);
-    },
+    putHeld: ({ slot }) => { if (slot) artifactSlots.putSlot(slot); },
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,
     addDrawingHistory: history.addMember,
@@ -3990,7 +4027,7 @@ export const createAppSetup = () => {
     requestPaletteChange,
     selectPalette,
     requestResetColors,
-    losatResultRows, projectHasLosatResults: computed(projectHasLosatResults),
+    losatResultRows, projectHasLosatResults,
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,

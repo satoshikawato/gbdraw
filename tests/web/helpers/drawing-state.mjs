@@ -75,7 +75,9 @@ export const DRAWING_KEYS = Object.freeze([
 
 // What a Generate produces and shows: the Results and their catalog, run facts,
 // generated Legend inventory and colors, the user's offsets on the Result, and
-// the protein identity manifest its LOSAT protein rows resolve in.
+// its LOSAT evidence: the listed results, the raw searches and converted
+// payloads, the protein identity manifest they resolve in, and the older
+// Session's protein candidates Load gave it (D-221).
 export const ARTIFACT_KEYS = Object.freeze([
   'results', 'selectedResultIndex', 'lastRunInfo', 'trackSlotResolvedGeometry', 'annotationWarnings',
   'featureIdentityNotices', 'featureEditRemovalCount', 'comparisonWarnings', 'labelFitReports', 'inputSummaries',
@@ -86,14 +88,12 @@ export const ARTIFACT_KEYS = Object.freeze([
   'featureRecordIds', 'editableLabels', 'originalLegendOrder', 'originalLegendColors', 'originalSvgStroke',
   'legendCurrentOffset', 'diagramOffset', 'lengthBarUserOffset', 'plotTitleUserOffset',
   'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
-  'proteinIdentityManifest'
-]);
-
-// Inputs and caches that every drawing shares.
-export const PROJECT_KEYS = Object.freeze([
-  'sessionTitle', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
+  'proteinIdentityManifest', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
+
+// Inputs that every drawing shares.
+export const PROJECT_KEYS = Object.freeze(['sessionTitle', 'inputFiles']);
 
 // App settings and catalogs outside any drawing, and the shown drawing: its ID
 // (`activeDrawingId`, which `installShownDrawing` writes) and its mode (`mode`,

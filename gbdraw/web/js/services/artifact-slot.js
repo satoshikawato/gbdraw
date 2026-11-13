@@ -3,7 +3,7 @@
 // drawing ID, while another drawing is shown. The History snapshot service
 // captures and installs it (`captureArtifactSlot`, `installArtifactSlot`);
 // Session Save writes it and Session Load builds it (`services/config.js`).
-import { emptyProteinIdentityManifest } from './losat-cache.js';
+import { LOSAT_EVIDENCE_EMPTY } from './losat-cache.js';
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { PythonLegendKey } from './legend-svg.js' */
 
@@ -23,10 +23,11 @@ export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error:
  * installs, given the mode of the slot's drawing and the current value: the displayed-Result
  * part of the owner set, the selected Result, the feature-editor status, the generated
  * stroke defaults, the alignment Reset receipt (it binds the
- * committed Linear Session), and the protein identity manifest its LOSAT
- * protein rows resolve in (D-197). Draft and project state stays shared: the specific
- * color rules, the file Legend captions, the Linear record orientations, the
- * pending palette, the LOSAT caches and legacy protein candidates, the alignment plan and
+ * committed Linear Session), and its LOSAT evidence (D-221: its LOSAT results, the
+ * raw searches and converted payloads it holds, the protein identity manifest they
+ * resolve in, and the older Session's protein candidates Load gave it). Draft and
+ * project state stays shared: the specific color rules, the file Legend captions,
+ * the Linear record orientations, the pending palette, the alignment plan and
  * record translations, and every editor intent (R2).
  * @satisfies {Readonly<Record<string, (mode: 'circular' | 'linear', current: any) => any>>}
  */
@@ -59,7 +60,7 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   appliedPaletteColors: (_mode, current) => current,
   similarityAlignmentResetReceipt: () => null,
   originalSvgStroke: () => ({ color: null, width: null }),
-  proteinIdentityManifest: () => emptyProteinIdentityManifest()
+  ...LOSAT_EVIDENCE_EMPTY
 });
 // The cast: `ARTIFACT_SLOT_EMPTY` is the frozen literal above, so its own keys are exactly the keys of its type.
 export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFACT_SLOT_EMPTY)[]} */ (Object.keys(ARTIFACT_SLOT_EMPTY)));
@@ -167,7 +168,7 @@ export const createArtifactSlot = ({
  * @param {Readonly<Record<string, unknown>>} values
  * @returns {Readonly<ArtifactSlot>}
  */
-const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
+export const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
   drawing,
   values: { ...slot?.values, ...values },
   legend: slot?.legend,
@@ -221,12 +222,16 @@ export const artifactSlotAs = (slot, drawing) => withArtifactSlotValues(slot, dr
  *   A held slot back, with its drawing (the Undo of a Delete, the Redo of a New).
  */
 
-/** @returns {ArtifactSlotStore} */
-export const createArtifactSlotStore = () => {
+/**
+ * @param {{ changed?: () => void }} [options] `changed`: called after every operation that changes the kept slots, so
+ *   a reader of `kept` outside a drawing switch (the LOSAT hint) can follow them (D-221).
+ * @returns {ArtifactSlotStore}
+ */
+export const createArtifactSlotStore = ({ changed = () => {} } = {}) => {
   /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
   const slots = new Map();
   /** @param {Readonly<ArtifactSlot>} slot */
-  const keep = (slot) => { slots.set(slot.drawingId, slot); };
+  const keep = (slot) => { slots.set(slot.drawingId, slot); changed(); };
   const kept = () => Object.freeze([...slots.values()]);
   return {
     kept,
@@ -239,20 +244,24 @@ export const createArtifactSlotStore = () => {
       keep(departing);
       const arriving = slots.get(arrivingId) ?? null;
       slots.delete(arrivingId);
+      changed();
       return arriving;
     },
     replaceLoaded: (stashed) => {
       slots.clear();
       stashed.forEach(keep);
+      changed();
     },
     snapshot: kept,
     restore: (snapshot) => {
       slots.clear();
       snapshot.forEach(keep);
+      changed();
     },
     takeSlot: (drawingId) => {
       const taken = slots.get(drawingId) ?? null;
       slots.delete(drawingId);
+      changed();
       return taken;
     },
     putSlot: keep,

@@ -1014,6 +1014,8 @@ const exercisePairLoop = async ({failure = null, promote = false} = {}) => {
     async getSeqHash() { return 'hash'; },
     losatSequenceKey: (hash) => `protein:${hash}`,
     sequenceEntriesByKey: new Map(), cacheMap,
+    // No other drawing holds a search here (D-224).
+    projectSearches: () => ({searches: new Map(), payloads: new Map()}),
     getReusableLosatCacheEntry(map, key, metadata, identity) {
       return counted.getCurrentRawLosatCacheEntry(map, key, metadata, identity);
     },
@@ -1108,8 +1110,8 @@ await exercisePairLoop({failure: 'cancel'});
     promoteRawLosatCacheEntry() {},
     losatTiming: { totalPairs: 0, cacheHits: 0, cacheMisses: 0 },
     losatPairs: [], cacheInfo: [],
-    // The drawing whose cache-info rows these are (a ring edit of another drawing leaves them, OV-3196).
-    drawing: { id: 'drawing-linear' },
+    // No other drawing holds a search here (D-224).
+    projectSearches: () => ({ searches: new Map(), payloads: new Map() }),
     // The card's file name (`buildCacheFilename` reads the edge the spec names).
     buildCacheFilename: (spec) => `${spec.edgeKey}.tsv`,
     pendingJobKeys: new Set(), losatJobs: []
@@ -1221,18 +1223,16 @@ for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expe
     JSON.stringify({ left, right, queryWindow, subjectWindow }));
 }
 
-// #1777 review 9 (OV-3203, OV-3204): the LOSAT results a drawing's panel counts, downloads and clears are its own
-// cache-info rows, one per cache key (the first row of a key, as Save writes one entry per key); a drawing's
-// Generate, ring edit and Clear leave the other drawings' rows.
+// #1777 review 9 (OV-3203, OV-3204), D-221, D-223: a drawing's LOSAT results are its own evidence's rows; its panel
+// counts, downloads and Save writes one per cache key (the first row of a key).
 {
-  const row = (key, drawingId, filename = `${key}.tsv`) => ({ key, filename, display: true, drawingId });
-  const rows = [row('pair', 'linear'), row('ring', 'circular'), row('ring', 'circular', 'again.tsv'), row('ring', 'circular-2'),
-    row('other', 'circular')];
-  assert.deepEqual(cache.losatRowsOnePerKey(rows), [rows[0], rows[1], rows[4]]);
-  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'circular'), [rows[1], rows[4]]);
-  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'circular-2'), [rows[3]]);
-  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'linear'), [rows[0]]);
-  assert.deepEqual(cache.losatRowsOfOtherDrawings(rows, 'circular'), [rows[0], rows[3]]);
+  const row = (key, filename = `${key}.tsv`) => ({ key, filename, display: true });
+  const rows = [row('pair'), row('ring'), row('ring', 'again.tsv'), row('other')];
+  assert.deepEqual(cache.losatRowsOnePerKey(rows), [rows[0], rows[1], rows[3]]);
+  assert.equal(cache.listsLosatResults({ losatCacheInfo: rows }), true);
+  assert.equal(cache.listsLosatResults({ losatCacheInfo: [], losatCache: new Map([['pair', {}]]) }), false,
+    'a drawing that keeps searches but lists none has no results to count (D-223)');
+  assert.equal(cache.listsLosatResults(null), false);
   // The one kind rule Save and Load read (review 9 finding 3): a ring search is a Circular drawing's, any other a
   // Linear drawing's (its pairs, or an older Session's search without record ids).
   assert.equal(cache.losatEntryDrawingKind({ flow: cache.CIRCULAR_CONSERVATION_FLOW }), 'circular');
@@ -1240,37 +1240,26 @@ for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expe
   assert.equal(cache.losatEntryDrawingKind({}), 'linear');
 }
 
-// #1777 round 17 (D-200, OV-3215, OV-3260): the one rule for the LOSAT caches an install leaves. No install removes a
-// cached search or converted payload; a Generate's commit installs its caches whole; an Undo, a Redo or a rollback
-// keeps the current caches and puts back only what the restored drawing's rows and protein identity manifest name, and
-// the converted payloads all of whose searches are then cached.
+// D-221, D-224: a drawing's LOSAT evidence is its own; Clear leaves fresh empty values, never one object two drawings
+// share; a Generate may reuse the searches and payloads the project's drawings hold now, and only those.
 {
-  const entry = (key) => ({ key });
-  const derived = (rawKeys) => ({ rawKeys });
-  const step = {
-    cache: new Map([['row', entry('row')], ['stale', entry('stale')], ['protein-key', proteinEntry], ['kept', entry('kept-step')]]),
-    derived: new Map([['live', derived(['row', 'protein-key'])], ['dead', derived(['row', 'stale'])], ['bare', {}],
-      ['current-raw', derived(['other'])]])
-  };
-  const current = {
-    cache: new Map([['other', entry('other')], ['kept', entry('kept')]]),
-    derived: new Map([['current', derived(['gone'])]])
-  };
-  const restored = cache.losatEvidenceAfterStep({ commit: false, rows: [{ key: 'row' }, { key: 'kept' }], manifest }, step, current);
-  // Everything cached now stays (OV-3260), even a payload whose searches are gone; the step adds its rows' search and
-  // the manifest's protein search, not 'stale' (OV-3215), and never replaces an entry cached now.
-  assert.deepEqual([...restored.cache.keys()], ['other', 'kept', 'row', 'protein-key']);
-  assert.equal(restored.cache.get('kept').key, 'kept');
-  assert.deepEqual([...restored.derived.keys()], ['current', 'live', 'current-raw'],
-    'a payload comes back only with all its searches cached, and one without rawKeys never');
-  // A manifest that does not resolve the search names nothing.
-  const unresolved = cache.losatEvidenceAfterStep({ commit: false, rows: [], manifest: { ...manifest, recordInstances: {} } },
-    step, { cache: new Map(), derived: new Map() });
-  assert.deepEqual([...unresolved.cache.keys()], []);
-  // The current Maps themselves when nothing comes back (a rollback's retry, PD-OI-022), and the step whole on a commit.
-  const none = cache.losatEvidenceAfterStep({ commit: false, rows: [{ key: 'other' }], manifest: null },
-    { cache: new Map([['stale', entry('stale')]]), derived: new Map([['dead', derived(['stale'])]]) }, current);
-  assert.equal(none.cache, current.cache);
-  assert.equal(none.derived, current.derived);
-  assert.equal(cache.losatEvidenceAfterStep({ commit: true, rows: [], manifest: null }, step, current), step);
+  const first = cache.emptyLosatEvidence();
+  const second = cache.emptyLosatEvidence();
+  assert.deepEqual(Object.keys(first), [...cache.LOSAT_EVIDENCE_KEYS]);
+  for (const key of cache.LOSAT_EVIDENCE_KEYS) {
+    assert.notEqual(first[key], second[key], `${key}: a fresh value each time`);
+    assert.notEqual(cache.LOSAT_EVIDENCE_EMPTY[key](), first[key], `${key}: a fresh value from its factory`);
+  }
+  assert.equal(cache.listsLosatResults(first), false);
+  const searchA = { key: 'a' };
+  const searchB = { key: 'b' };
+  const payload = { key: 'p' };
+  const project = cache.projectLosatSearches([
+    { losatCache: new Map([['a', searchA]]), losatDerivedCache: new Map([['p', payload]]) },
+    { losatCache: new Map([['b', searchB]]) },
+    {}
+  ]);
+  assert.deepEqual([...project.searches], [['a', searchA], ['b', searchB]]);
+  assert.deepEqual([...project.payloads], [['p', payload]]);
+  assert.deepEqual([...cache.projectLosatSearches([]).searches], []);
 }

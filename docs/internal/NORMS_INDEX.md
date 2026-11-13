@@ -241,7 +241,6 @@ under "Cited ids without a record".
 - [PD-OI-021](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-021-optional-collinear-self-search-and-orthogroup-inference): Optional Collinear self-search and orthogroup inference. ACCEPTED, concern `diagram-generation.collinear-optional-orthogroup-inference`, scenario revision 2, supersedes scenario revision 1.
 
 - [PD-OI-022](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-022-reuse-completed-losat-searches-after-cancellation): Reuse completed LOSAT searches after cancellation. ACCEPTED, concern `diagram-generation.completed-losat-search-retry`, scenario revision 2, supersedes scenario revision 1.
-  - `tests/web/losat-cache.test.mjs`
   - `tests/web/losat-rows-walk.test.mjs`
   - `tests/web/run-analysis-derived-cache.test.mjs`
   - `tests/web/run-analysis-simple-path.test.mjs`

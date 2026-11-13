@@ -16,7 +16,6 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @import { DrawingState, DrawingTab } from '../state.js' */
 /** @import { ProjectListStep } from '../services/history.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
-/** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { AskChoice, AskText } from './app-messages.js' */
 /** @import { DiagnosticError } from '../utils/error-normalization.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
@@ -31,25 +30,20 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
  * @typedef {(sourceId: DrawingId, drawingId: DrawingId, mode: ModeProfileName) => DrawingState} StyleDrawing
  *   A new drawing of `mode` at its defaults with the style of a drawing the store holds (PD-OI-090 〔作成〕(3)).
- * @typedef {readonly LosatCacheInfoEntry[]} HeldLosatRows LOSAT result rows of one drawing ID.
- * @typedef {{ slot: HeldSlot, losatRows: HeldLosatRows, losatClears: number }} HeldDrawing What a drawing out of the
- *   store keeps for its return: its Result slot, its LOSAT result rows, and the count of Clear LOSAT results when it
- *   left; a Clear since then empties its protein identity manifest and its rows on return (OV-3274). A drawing's rows
- *   are in the state only while it is (OV-3209).
+ * @typedef {{ slot: HeldSlot }} HeldDrawing What a drawing out of the store keeps for its return: its Result slot,
+ *   which holds its LOSAT evidence too (D-221), so it comes back with the values it left with.
  * @typedef {{ drawing: DrawingState, held: HeldDrawing }} MadeDrawing A new drawing and what it starts with.
  * @typedef {(sourceId: DrawingId, copyId: DrawingId) => MadeDrawing} CopyDrawing
- *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result) and its
- *   source's LOSAT result rows (OV-3205).
+ *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result), which shares
+ *   its source's LOSAT evidence (OV-3205).
  * @typedef {import('../services/config.js').RegionDerivation} RegionDerivation A derived region drawing and the request it was derived from.
  * @typedef {(derivation: RegionDerivation, create: { runSavedComparison: boolean }) => Promise<(drawingId: DrawingId) => DrawingState>} RegionDrawing
  *   Reads a derived region drawing; the result makes its state under the new drawing's ID. Find in other files' Create
  *   runs its saved comparison at Generate (PD-OI-123); New drawing from a region leaves the choice to the user.
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
- * @typedef {(drawingId: DrawingId, left?: HeldLosatRows) => HeldDrawing} RemoveDrawingFromStore
- *   Removes a drawing that is not shown and hands over its slot and LOSAT rows; `left` are the rows its ID had
- *   before the drawing came (none unless a History restore wrote some, OV-3207).
- * @typedef {(drawingId: DrawingId, held: HeldDrawing) => HeldLosatRows} PutHeld
- *   A held slot and LOSAT rows back, with their drawing; returns the rows its ID had.
+ * @typedef {(drawingId: DrawingId) => HeldDrawing} RemoveDrawingFromStore
+ *   Removes a drawing that is not shown and hands over its slot.
+ * @typedef {(held: HeldDrawing) => void} PutHeld A held slot back, with its drawing.
  * @typedef {(drawingId: DrawingId) => boolean} ReadDrawingHas Whether a drawing has a Result, or edits.
  * @typedef {(drawingId: DrawingId) => Iterable<string>} ReadBoundFileIds The files a drawing binds.
  * @typedef {(drawingId: DrawingId, name: string) => void} RenameDrawingInStore
@@ -115,8 +109,8 @@ const copyNamePhrase = (name, number) => (
   number > 1 ? t('{name} copy {number}', { name, number }) : t('{name} copy', { name })
 );
 
-/** @type {HeldDrawing} What a drawing with no Result and no LOSAT rows holds; it has nothing a Clear could empty. */
-const NOTHING_HELD = Object.freeze({ slot: null, losatRows: [], losatClears: 0 });
+/** @type {HeldDrawing} What a drawing with no slot holds. */
+const NOTHING_HELD = Object.freeze({ slot: null });
 /**
  * Where a new drawing's tab goes: right after the tab of `after`, or at the end of the tabs without it.
  * @param {readonly DrawingTab[]} tabs @param {DrawingId | null} after
@@ -161,14 +155,12 @@ export const createDrawingList = ({
     const { drawing, held: made } = make(drawingId);
     let held = made;
     const name = nameOf(drawingId);
-    // Redo gets the drawing's History back from the router, which holds it, and its slot and LOSAT rows (a Result
-    // it got before the Undo) from this step; the rows its reused ID had go back on the Undo.
-    /** @type {HeldLosatRows} */
-    let left = [];
+    // Redo gets the drawing's History back from the router, which holds it, and its slot (a Result and LOSAT
+    // evidence it got before the Undo) from this step.
     const add = (first = false) => {
       addDrawing(drawing, name, newTabIndex(drawingTabs(), after));
       if (first) addDrawingHistory(drawingId);
-      left = putHeld(drawingId, held);
+      putHeld(held);
       showDrawingNow(drawingId);
     };
     runListStep(label, {
@@ -176,7 +168,7 @@ export const createDrawingList = ({
       redo: () => add(),
       undo: () => {
         showDrawingNow(before);
-        held = removeDrawing(drawingId, left);
+        held = removeDrawing(drawingId);
       }
     });
     return drawingId;
@@ -270,8 +262,8 @@ export const createDrawingList = ({
   };
 
   /**
-   * Deletes a drawing, as one project step that holds it with its settings, LOSAT result rows,
-   * edits, Result slot, and History until the step is evicted (R16-3). The
+   * Deletes a drawing, as one project step that holds it with its settings,
+   * edits, Result slot (with its LOSAT evidence), and History until the step is evicted (R16-3). The
    * last drawing cannot be deleted (R11). Deleting the shown drawing first
    * shows the next tab, else the previous (R16-2).
    * @param {DrawingId} drawingId @returns {DrawingListOutcome}
@@ -287,8 +279,6 @@ export const createDrawingList = ({
       const { name } = tabs[index];
       /** @type {HeldDrawing} */
       let held = NOTHING_HELD;
-      /** @type {HeldLosatRows} */
-      let left = [];
       // The step keeps the files only this drawing binds until it is evicted.
       const fileIds = [...boundFileIdsOf(drawingId)];
       // The switch settles the drawing's open step while its History is still a member.
@@ -297,15 +287,15 @@ export const createDrawingList = ({
         apply: () => {
           showDrawingNow(after);
           removeDrawingHistory(drawingId);
-          held = removeDrawing(drawingId, left);
+          held = removeDrawing(drawingId);
         },
         redo: () => {
           showDrawingNow(after);
-          held = removeDrawing(drawingId, left);
+          held = removeDrawing(drawingId);
         },
         undo: () => {
           addDrawing(drawing, name, index);
-          left = putHeld(drawingId, held);
+          putHeld(held);
           showDrawingNow(before);
         }
       });

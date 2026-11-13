@@ -65,20 +65,20 @@ const askingStackPorts = () => ({
 });
 const editor = createCircularTrackSlotEditor({ state });
 const sources = createCircularConservationSources({
-  state, writeLosatCacheInfo: () => {}, askingStackPorts,
+  state, editLosatRows: () => {}, askingStackPorts,
   syncCircularConservationSlots: (drawing) => editor.syncCircularConservationSlots(drawing),
   rekeyCircularConservationRows: (drawing, keyChanges) => editor.rekeyCircularConservationRows(drawing, keyChanges),
   circularConservationRowsLeaving: (drawing, entries, keyChanges) => editor.circularConservationRowsLeaving(drawing, entries, keyChanges)
 });
 const panel = createCircularConservationSeriesPanel({
-  state, shownAction, shownDrawingOfMode: (mode) => modeDrawing(state, mode), writeLosatCacheInfo: () => {},
+  state, shownAction, shownDrawingOfMode: (mode) => modeDrawing(state, mode), editLosatRows: () => {},
   circularConservationFastaInput: { value: null },
   reconcileCircularConservation: sources.reconcileCircularConservation,
   refreshCircularConservationSlots: sources.refreshCircularConservationSlots,
   askRingSourceRemoval: sources.askRingSourceRemoval
 });
 const files = createCircularConservationComparisonFiles({
-  state, shownAction, writeLosatCacheInfo: () => {}, runUndoable: async () => undefined,
+  state, shownAction, editLosatRows: () => {}, runUndoable: async () => undefined,
   setRingGenomeLists: sources.setRingGenomeLists,
   setCircularConservationSourceFiles: sources.setCircularConservationSourceFiles,
   reconcileCircularConservation: sources.reconcileCircularConservation,

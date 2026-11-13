@@ -1997,10 +1997,9 @@ const createLayoutPreferences = () => ({
       state.legacyProteinDerivedEvidence.value,
       expected.legacyProteinDerivedEvidence
     );
-    // An Undo or a Redo puts back the step's searches and payloads its rows name and removes none (D-200).
-    for (const cache of ['losatCache', 'losatDerivedCache']) {
-      expected[cache].forEach((entry, key) => assert.equal(state[cache].value.get(key), entry, `${cache} ${key}`));
-    }
+    // An Undo or a Redo puts back the step's LOSAT evidence as it was, the Maps themselves (D-221).
+    assert.equal(state.losatCache.value, expected.losatCache);
+    assert.equal(state.losatDerivedCache.value, expected.losatDerivedCache);
     assert.equal(state.losatCacheInfo.value, expected.losatCacheInfo);
   };
   const authorityOwnersA = captureAuthorityOwners();
@@ -2186,7 +2185,7 @@ const createLayoutPreferences = () => ({
     [1]
   );
   let installedResults = null;
-  // An install adds to the current searches (D-200), so it reads them; only the capture above must not.
+  // An install puts back the owner set's LOSAT evidence as it is (D-221); the capture above reads nothing heavy.
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
@@ -2288,7 +2287,8 @@ const createLayoutPreferences = () => ({
   assert.equal(state.legendEntries.value[0].caption, 'A');
   assert.equal(state.featureIdentityNotices.value, noticesA);
   assertAuthorityOwners(authorityOwnersA);
-  assert.deepEqual([...state.losatCache.value.keys()], ['replacement', 'raw-a'], 'the later search stays (D-200, OV-3260)');
+  // Flipped (D-224): the Undo of a Generate puts back the drawing's searches as they were; a later search goes with it.
+  assert.deepEqual([...state.losatCache.value.keys()], ['raw-a'], 'the step\'s searches only (D-221, D-224)');
   assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
   assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);
   const recapturedA = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
