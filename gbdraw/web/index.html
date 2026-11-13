@@ -246,8 +246,10 @@
         /* A Korean field label whose one word is wider than its column breaks inside the word, so its help
            tip stays inside the column (다이뉴클레오타이드 in a three-column row, OV-1525). */
         :root:lang(ko) .input-label { overflow-wrap: anywhere; }
-        /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. */
+        /* Thai, Hindi and Bengali UI text: system fonts (none vendored), listed before the generic fallback. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
+        :root:lang(hi) body { font-family: 'Inter', 'Nirmala UI', 'Kohinoor Devanagari', 'Noto Sans Devanagari', sans-serif; }
+        :root:lang(bn) body { font-family: 'Inter', 'Nirmala UI', 'Kohinoor Bangla', 'Noto Sans Bengali', sans-serif; }
         /* The figure keeps the English stack in every UI language. */
         :root svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
         /* The page's data-ui-text-style is the shown locale's textStyle (UI_LOCALES, js/utils/i18n.js); the figure is exempt.

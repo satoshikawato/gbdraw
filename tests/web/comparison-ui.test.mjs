@@ -575,9 +575,9 @@ test('a pair issue names its pair once in the list and marks the pair row', () =
 });
 
 // OV-2782: the pair template ends the sentence with the locale's own mark; the
-// message inside it loses its full stop first, so the mark shows once (。 was
-// doubled, only a doubled ASCII period was collapsed).
-test('OV-2782: a pair issue ends with one full stop in English and Japanese', async () => {
+// message inside it loses its full stop first, so the mark shows once (。 and ।
+// were doubled, only a doubled ASCII period was collapsed).
+test('OV-2782: a pair issue ends with one full stop in English, Japanese and Bengali', async () => {
   const issueOf = () => projectLinearComparisonUi({
     plan: { mode: 'selected', defaultSource: 'losat', edges: [createLinearComparisonEdge({ id: 'p', queryUid: 'a', subjectUid: 'b', source: 'losat' })] },
     resolution: {
@@ -590,6 +590,8 @@ test('OV-2782: a pair issue ends with one full stop in English and Japanese', as
   try {
     await setUiLocale('ja', async () => ({ default: { '{pair}: {text}.': '{pair}：{text}。', 'A pair compares a record with itself.': 'ペアがレコードをそれ自身と比較しています。' } }));
     assert.equal(issueOf(), '#1 → #2：ペアがレコードをそれ自身と比較しています。');
+    await setUiLocale('bn', async () => ({ default: { '{pair}: {text}.': '{pair}: {text}।', 'A pair compares a record with itself.': 'একটি জোড়া একটি রেকর্ডকে নিজের সঙ্গে তুলনা করে।' } }));
+    assert.equal(issueOf(), '#1 → #2: একটি জোড়া একটি রেকর্ডকে নিজের সঙ্গে তুলনা করে।');
   } finally {
     await setUiLocale('en');
   }

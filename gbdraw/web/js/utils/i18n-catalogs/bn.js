@@ -3,4 +3,5 @@
 /** @import { TranslationCatalog } from '../i18n.js' */
 /** @type {TranslationCatalog} */
 export default Object.freeze({
+
 });
