@@ -168,8 +168,12 @@ const panelOf = (cards, resolution, cacheInfo, catalog) => {
   const losatCacheInfo = { value: cacheInfo };
   const state = { activeDrawing: () => drawing, featureCatalog: { value: catalog }, inputFiles: {} };
   const view = createLinearComparisonView({
-    state, mode: { value: 'linear' }, losatCacheInfo, shownDrawingOfMode: () => drawing,
-    writeLosatCacheInfo: (next) => { losatCacheInfo.value = next; }
+    state, mode: { value: 'linear' }, shownDrawingOfMode: () => drawing,
+    // The drawing's own rows (D-221): the panel edits only the drawing it names.
+    editLosatRows: (drawingId, edit) => {
+      assert.equal(drawingId, drawing.id);
+      losatCacheInfo.value = edit(losatCacheInfo.value);
+    }
   });
   const readers = createLinearLayoutReaders({ state, shownDrawingOfMode: () => drawing, losatCacheInfo });
   return { drawing, losatCacheInfo, view, readers };

@@ -17,7 +17,6 @@ import {
 import { linearRecordPositionTokens } from '../services/linear-record-layout.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge } from '../services/linear-units.js';
-import { losatRowsOfDrawing } from '../services/losat-cache.js';
 import { inputSourceFiles } from '../services/input-types.js';
 import {
   comparisonCauseRepeats, diagnosticError, losatFailureRepeats, normalizeUserFacingError
@@ -30,15 +29,14 @@ import { projectLinearComparisonUi } from './comparison-ui.js';
 /** @import { LinearComparisonPair, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
 /** @import { LinearWindowPair } from '../services/linear-units.js' */
-/** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { EditLosatRows, LosatCacheInfoEntry } from '../services/losat-cache.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { RevealSettingsSection } from './settings-pane.js' */
 
 const { computed, nextTick, watch } = window.Vue;
 
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
-/** @typedef {(next: LosatCacheInfoEntry[]) => void} WriteLosatCacheInfo The write of the project's LOSAT cache-info rows. */
-/** @typedef {{ readonly value: unknown }} LosatCacheInfoRows The project's LOSAT cache-info rows (an array once a run or a Load wrote them). */
+/** @typedef {{ readonly value: unknown }} LosatCacheInfoRows The shown drawing's LOSAT result rows. */
 /**
  * The control of the Comparison card that an issue names, and the pair it is about.
  * @typedef {{ disclosureKey: string, focusTargetKey: string, edgeKey?: string, edgeId?: string }} LinearComparisonFocusTarget
@@ -58,8 +56,7 @@ export const linearRecordRowFor = (drawing, uid, fallback) => (
  * @typedef {object} LinearComparisonViewPorts
  * @property {WebState} state
  * @property {{ readonly value: DiagramMode }} mode The shown drawing's mode.
- * @property {LosatCacheInfoRows} losatCacheInfo
- * @property {WriteLosatCacheInfo} writeLosatCacheInfo
+ * @property {EditLosatRows} editLosatRows
  * @property {ShownDrawingOfMode} shownDrawingOfMode
  */
 
@@ -69,7 +66,7 @@ export const linearRecordRowFor = (drawing, uid, fallback) => (
  * after its plan or record rows changed.
  * @param {LinearComparisonViewPorts} ports
  */
-export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeLosatCacheInfo, shownDrawingOfMode }) => {
+export const createLinearComparisonView = ({ state, mode, editLosatRows, shownDrawingOfMode }) => {
   const comparisonHeightValidationError = computed(() => {
     const drawing = state.activeDrawing();
     if (
@@ -84,7 +81,6 @@ export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeL
 
   /** @param {DrawingState} drawing */
   const reindexLinearLosatCacheInfo = (drawing) => {
-    if (!Array.isArray(losatCacheInfo.value)) return;
     // Resolution indexes are positions among the drawn records.
     const indexByUid = new Map(
       drawing.drawnLinearSeqs.value.map((sequence, index) => [String(sequence?.uid || ''), index])
@@ -95,7 +91,7 @@ export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeL
     // A window pair's row names the drawn units of the last Generate, whose indexes only that request counts: it
     // stays while the records of its units are drawn (the drawn Result's units, OV-2742).
     const places = catalogUnitPlaces(state.featureCatalog.value);
-    writeLosatCacheInfo(losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
+    editLosatRows(drawing.id, (rows) => rows.flatMap((entry) => {
       const edgeKey = String(entry?.edgeKey || '');
       if (!edgeKey) return [entry];
       if (isDrawnWindowPairRow(entry, places, (uid) => indexByUid.has(uid))) return [entry];
@@ -122,10 +118,8 @@ export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeL
   /** @param {DrawingState} drawing */
   const invalidateLinearComparisonArtifacts = (drawing, { preserveLosatCacheInfo = false } = {}) => {
     bindDrawingCanonicalComparisons(state.inputFiles, drawing.slices.inputs, []);
-    if (Array.isArray(losatCacheInfo.value)) {
-      if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo(drawing);
-      else writeLosatCacheInfo(losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ entry) => !entry?.edgeKey));
-    }
+    if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo(drawing);
+    else editLosatRows(drawing.id, (rows) => rows.filter((entry) => !entry?.edgeKey));
   };
 
   const linearComparisonUi = computed(() => {
@@ -364,12 +358,9 @@ export const createLinearLayoutReaders = ({ state, shownDrawingOfMode, losatCach
         : []
     );
   });
-  // The shown Linear drawing's rows, never another drawing's that holds the same pair (OV-3210).
+  // The shown Linear drawing's rows, its own (D-221, OV-3210).
   /** @returns {LosatCacheInfoEntry[]} */
-  const cacheInfoRows = () => {
-    const drawing = shownDrawingOfMode('linear');
-    return drawing === null || !Array.isArray(losatCacheInfo.value) ? [] : losatRowsOfDrawing(losatCacheInfo.value, drawing.id);
-  };
+  const cacheInfoRows = () => (shownDrawingOfMode('linear') === null || !Array.isArray(losatCacheInfo.value) ? [] : losatCacheInfo.value);
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
     cacheInfoRows()
       .filter((entry) => String(entry?.edgeKey || ''))

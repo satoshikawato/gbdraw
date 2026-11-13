@@ -10,7 +10,6 @@ import {
   bindDrawingInputFileList, bindDrawingInputFileTree, ringGenomeFileLists, setConservationBlastsSource
 } from '../services/drawing/inputs.js';
 import { readComparisonSequence } from '../services/record-discovery.js';
-import { losatRowsOfOtherDrawings } from '../services/losat-cache.js';
 import { showChosenFileRefusal, showReadRefusal } from '../services/file-content-cache.js';
 import {
   applyComparisonSequenceRecordLabel,
@@ -53,7 +52,7 @@ import { askTrackSourceRemoval } from './track-slot-edits.js';
  * }
  *   from '../services/conservation-series.js'
  */
-/** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { EditLosatRows } from '../services/losat-cache.js' */
 /** @import { SearchedRingAdoption } from '../services/circular-conservation-keys.js' */
 /** @import { DepthSourceChange } from '../services/depth-track-state.js' */
 
@@ -65,7 +64,6 @@ const { computed } = window.Vue;
  * @typedef {<T>(drawingMode: DiagramMode, action: (drawing: DrawingState) => T) => T | SessionBusy | undefined} ShownAction
  */
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
-/** @typedef {(next: LosatCacheInfoEntry[]) => void} WriteLosatCacheInfo The write of the project's LOSAT cache-info rows. */
 /** @typedef {(drawing: DrawingState) => void} DrawingRingStep A ring transition of one drawing. */
 /**
  * The series a change of the comparison sources leaves and how it moves the rings' keys (`RingKeyChanges`).
@@ -187,15 +185,11 @@ const adoptedRingKeyChanges = (drawing, draftSources, ringAdoption) => {
   }));
 };
 /**
- * The LOSAT cache-info rows a change of a drawing's ring files leaves: the drawing's own rows go with the search they
- * name, the rows of other drawings stay (OV-3196).
- * @param {WebState} state @param {WriteLosatCacheInfo} writeLosatCacheInfo @param {DrawingState} drawing
+ * A change of a drawing's ring files takes its LOSAT result rows away; its searches stay for its next Generate, and
+ * other drawings' rows are theirs (OV-3196, D-221).
+ * @param {EditLosatRows} editLosatRows @param {DrawingState} drawing
  */
-const clearRingCacheInfo = (state, writeLosatCacheInfo, drawing) => {
-  /** @type {LosatCacheInfoEntry[]} */
-  const rows = state.losatCacheInfo.value;
-  writeLosatCacheInfo(losatRowsOfOtherDrawings(rows, drawing.id));
-};
+const clearRingCacheInfo = (editLosatRows, drawing) => editLosatRows(drawing.id, () => []);
 
 /**
  * A change of the ring sources (`write`) that keeps each ring at its place: each series entry takes the identity of
@@ -249,7 +243,7 @@ const seriesOfReplayTables = (drawing, keyChanges) => {
 /**
  * @typedef {object} CircularConservationSourcesPorts
  * @property {WebState} state
- * @property {WriteLosatCacheInfo} writeLosatCacheInfo
+ * @property {EditLosatRows} editLosatRows
  * @property {DrawingRingStep} syncCircularConservationSlots The stack editor's managed ring rows follow the series.
  * @property {(drawing: DrawingState, keyChanges: RingKeyChanges) => void} rekeyCircularConservationRows
  *   The stack editor's managed ring rows move to their rings' new keys.
@@ -265,7 +259,7 @@ const seriesOfReplayTables = (drawing, keyChanges) => {
  * @param {CircularConservationSourcesPorts} ports
  */
 export const createCircularConservationSources = ({
-  state, writeLosatCacheInfo, syncCircularConservationSlots, rekeyCircularConservationRows, circularConservationRowsLeaving,
+  state, editLosatRows, syncCircularConservationSlots, rekeyCircularConservationRows, circularConservationRowsLeaving,
   askingStackPorts
 }) => {
   /** @param {DrawingState} drawing */
@@ -280,7 +274,7 @@ export const createCircularConservationSources = ({
       clearDerivedCircularConservationBlasts(drawing);
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', lists);
     }));
-    clearRingCacheInfo(state, writeLosatCacheInfo, drawing);
+    clearRingCacheInfo(editLosatRows, drawing);
     reconcileCircularConservation(drawing, keyChanges);
   };
   /** @type {SetRingSourceFiles} */
@@ -295,7 +289,7 @@ export const createCircularConservationSources = ({
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
       }
     });
-    clearRingCacheInfo(state, writeLosatCacheInfo, drawing);
+    clearRingCacheInfo(editLosatRows, drawing);
     reconcileCircularConservation(drawing, keyChanges);
   };
   /**
@@ -310,7 +304,7 @@ export const createCircularConservationSources = ({
       bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
       if (uploaded) setConservationBlastsSource(drawing.slices.inputs, null);
     }));
-    if (uploaded) clearRingCacheInfo(state, writeLosatCacheInfo, drawing);
+    if (uploaded) clearRingCacheInfo(editLosatRows, drawing);
     reconcileCircularConservation(drawing, keyChanges);
   };
   /**
@@ -413,7 +407,7 @@ export const createCircularConservationSources = ({
  * @property {WebState} state
  * @property {ShownAction} shownAction
  * @property {ShownDrawingOfMode} shownDrawingOfMode
- * @property {WriteLosatCacheInfo} writeLosatCacheInfo
+ * @property {EditLosatRows} editLosatRows
  * @property {{ value: HTMLInputElement | null }} circularConservationFastaInput The Add Seq file input.
  * @property {DrawingRingStep} reconcileCircularConservation
  * @property {DrawingRingStep} refreshCircularConservationSlots
@@ -426,7 +420,7 @@ export const createCircularConservationSources = ({
  * @param {CircularConservationSeriesPanelPorts} ports
  */
 export const createCircularConservationSeriesPanel = ({
-  state, shownAction, shownDrawingOfMode, writeLosatCacheInfo, circularConservationFastaInput,
+  state, shownAction, shownDrawingOfMode, editLosatRows, circularConservationFastaInput,
   reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
 }) => {
   /**
@@ -443,7 +437,7 @@ export const createCircularConservationSeriesPanel = ({
         setConservationBlastsSource(drawing.slices.inputs, null);
       });
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', []);
-      clearRingCacheInfo(state, writeLosatCacheInfo, drawing);
+      clearRingCacheInfo(editLosatRows, drawing);
       reconcileCircularConservation(drawing);
       turnOffReaching?.();
     };
@@ -582,7 +576,7 @@ const registerChosenComparisonFile = (state, file) => {
  * @typedef {object} CircularConservationComparisonFilesPorts
  * @property {WebState} state
  * @property {ShownAction} shownAction
- * @property {WriteLosatCacheInfo} writeLosatCacheInfo
+ * @property {EditLosatRows} editLosatRows
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable History's undoable step.
  * @property {SetRingGenomeLists} setRingGenomeLists
  * @property {SetRingSourceFiles} setCircularConservationSourceFiles
@@ -650,7 +644,7 @@ const createRingRowFileEdits = ({ state, shownAction, setRingGenomeLists }) => {
  * @param {CircularConservationComparisonFilesPorts} ports
  */
 export const createCircularConservationComparisonFiles = ({
-  state, shownAction, writeLosatCacheInfo, runUndoable, setRingGenomeLists,
+  state, shownAction, editLosatRows, runUndoable, setRingGenomeLists,
   setCircularConservationSourceFiles, reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
 }) => {
   const pendingComparisonRecordLabels = new Set();
@@ -735,7 +729,7 @@ export const createCircularConservationComparisonFiles = ({
           );
           setConservationBlastsSource(drawing.slices.inputs, kept.blasts.length > 0 ? 'losat-cache' : null);
         });
-        clearRingCacheInfo(state, writeLosatCacheInfo, drawing);
+        clearRingCacheInfo(editLosatRows, drawing);
         reconcileCircularConservation(drawing, keptChange.keyChanges);
         turnOffReaching?.();
       };

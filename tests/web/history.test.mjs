@@ -1997,10 +1997,9 @@ const createLayoutPreferences = () => ({
       state.legacyProteinDerivedEvidence.value,
       expected.legacyProteinDerivedEvidence
     );
-    // An Undo or a Redo puts back the step's searches and payloads its rows name and removes none (D-200).
-    for (const cache of ['losatCache', 'losatDerivedCache']) {
-      expected[cache].forEach((entry, key) => assert.equal(state[cache].value.get(key), entry, `${cache} ${key}`));
-    }
+    // An Undo or a Redo puts back the step's LOSAT evidence as it was, the Maps themselves (D-221).
+    assert.equal(state.losatCache.value, expected.losatCache);
+    assert.equal(state.losatDerivedCache.value, expected.losatDerivedCache);
     assert.equal(state.losatCacheInfo.value, expected.losatCacheInfo);
   };
   const authorityOwnersA = captureAuthorityOwners();
@@ -2186,7 +2185,7 @@ const createLayoutPreferences = () => ({
     [1]
   );
   let installedResults = null;
-  // An install adds to the current searches (D-200), so it reads them; only the capture above must not.
+  // An install puts back the owner set's LOSAT evidence as it is (D-221); the capture above reads nothing heavy.
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
@@ -2288,7 +2287,8 @@ const createLayoutPreferences = () => ({
   assert.equal(state.legendEntries.value[0].caption, 'A');
   assert.equal(state.featureIdentityNotices.value, noticesA);
   assertAuthorityOwners(authorityOwnersA);
-  assert.deepEqual([...state.losatCache.value.keys()], ['replacement', 'raw-a'], 'the later search stays (D-200, OV-3260)');
+  // Flipped (D-224): the Undo of a Generate puts back the drawing's searches as they were; a later search goes with it.
+  assert.deepEqual([...state.losatCache.value.keys()], ['raw-a'], 'the step\'s searches only (D-221, D-224)');
   assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
   assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);
   const recapturedA = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
@@ -3620,24 +3620,22 @@ for (const previousSuppressed of [false, true]) {
 
 // OV-2436: the snapshot service's held figures. A figure shows only in its
 // own drawing while that drawing is shown, while the committed Session it was
-// drawn from is the current one, while no Clear LOSAT results ran since it was
-// held (review M1: the Clear is no step), and when it is not the figure shown;
-// without the display owner none shows. Its show restores the step's intent
+// drawn from is the current one, and when it is not the figure shown; without
+// the display owner none shows. No Clear count gates it: Clear LOSAT results
+// is a History step (C5 (a)), so a step back to the figure has undone it first. Its show restores the step's intent
 // and then makes its Results' records say what its bytes show. An evicted
 // figure is no longer on its step (the budget case above).
 {
   const committed = { session: 1 };
   const runtime = (session) => ({ canonical: { committedCanonicalSession: session } });
   const slotOf = (drawingId, results, session = committed) => ({ drawingId, values: { results }, runtimeState: runtime(session), retainedBytes: 10 });
-  const world = { shown: slotOf('circular', [{ content: 'A' }]), clears: 0, arrived: [], log: [] };
+  const world = { shown: slotOf('circular', [{ content: 'A' }]), arrived: [], log: [] };
   const ports = createHeldFigurePorts({
     captureArtifactSlot: () => world.shown,
     paint: {
       capture: (results, drawing) => results.map(() => (drawing ? 'drawn paint' : 'shown paint')),
       arrive: (results, paints) => { world.log.push('arrive'); world.arrived.push([results, paints]); }
-    },
-    losatClearedSince: (count) => count !== world.clears,
-    losatClearCount: () => world.clears
+    }
   });
   const port = ports.of('circular');
   const figure = { ...port.capture('replaced'), drawn: true };
@@ -3655,15 +3653,69 @@ for (const previousSuppressed of [false, true]) {
   world.shown = slotOf('circular', [{ content: 'B' }], { session: 2 });
   assert.equal(port.usable(figure), false, 'another committed Session');
   world.shown = slotOf('circular', [{ content: 'B' }]);
-  world.clears = 1;
-  assert.equal(port.usable(figure), false, 'Clear LOSAT results ran since it was held');
-  world.clears = 0;
   await port.show(figure, async () => { world.log.push('intent'); });
   assert.deepEqual(world.log, ['depart', 'intent', 'arrive', 'shown'], 'its records are written after the intent, before it shows');
   assert.deepEqual(world.arrived[0][1], ['shown paint'], 'the paint its bytes showed as it was held');
   assert.equal(world.arrived[0][0], figure.key);
   assert.deepEqual(port.capture('drawn').slot.shown, ['drawn paint'], 'a rerender figure as its Legend is read');
   console.log('history held figure port tests passed');
+}
+
+// D-221, C5 (a): a held figure shows with the LOSAT evidence it was held with,
+// which is the drawing's at its History position: a rerender step, Clear LOSAT
+// results (a step), Undo (the Clear), Undo (the rerender step) shows the figure
+// the rerender replaced, at once, with the very values the Clear had removed.
+{
+  const { createArtifactSlot, artifactSlotShowing } = await import(pathToFileURL(join(tempDir, 'services', 'artifact-slot.js')));
+  const drawing = { id: 'circular', mode: 'circular' };
+  const runtimeState = { canonical: { committedCanonicalSession: { session: 1 } } };
+  const evidence = {
+    losatCacheInfo: [{ key: 'k1', filename: 'k1.tsv', display: true }], losatCache: new Map([['k1', { key: 'k1' }]]),
+    losatDerivedCache: new Map([['d1', { payload: 'd1' }]]),
+    proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} },
+    legacyProteinRawCandidates: { schema: 1, entries: [] }, legacyProteinDerivedEvidence: { schema: 1, entries: [] }
+  };
+  const losatKeys = Object.keys(evidence);
+  const world = { shown: createArtifactSlot({ drawing, values: { results: [{ content: 'A' }], ...evidence }, runtimeState }), visible: true, slow: 0 };
+  const ports = createHeldFigurePorts({
+    captureArtifactSlot: () => world.shown,
+    paint: { capture: (results) => results.map(() => 'paint'), arrive: () => {} }
+  });
+  ports.setDisplay(async (slot, restoreIntent) => {
+    await restoreIntent();
+    world.shown = artifactSlotShowing(slot, drawing, world.shown);
+  });
+  const history = createHistoryManager({
+    buildIntent: () => ({ visible: world.visible }),
+    applyIntent: (intent, context) => { world.visible = intent.visible; if (!context.figure) world.slow += 1; },
+    buildCheckpoint: () => ({ visible: world.visible }),
+    applyCheckpoint: (checkpoint) => { world.visible = checkpoint.visible; },
+    heldFigures: ports.of('circular')
+  });
+  await history.captureBaseline('initial');
+  let requestedAt = -1;
+  await history.runUndoable('Hide feature', () => { world.visible = false; requestedAt = history.intentStepSerial(); });
+  const held = world.shown;
+  history.adoptDrawnWrite(() => {
+    world.shown = createArtifactSlot({ drawing, values: { ...world.shown.values, results: [{ content: 'B' }] }, runtimeState });
+  }, { requestedAt, figure: 'replaced' });
+  history.adoptDrawnWrite(() => {}, { requestedAt, figure: 'drawn' });
+  /** @param {Record<string, unknown>} values */
+  const writeLosat = (values) => { world.shown = createArtifactSlot({ drawing, values: { ...world.shown.values, ...values }, runtimeState }); };
+  const before = Object.fromEntries(losatKeys.map((key) => [key, world.shown.values[key]]));
+  const empty = { losatCacheInfo: [], losatCache: new Map(), losatDerivedCache: new Map(),
+    proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} },
+    legacyProteinRawCandidates: { schema: 1, entries: [] }, legacyProteinDerivedEvidence: { schema: 1, entries: [] } };
+  await history.runUndoableCommand('Clear LOSAT results', () => ({ apply: () => writeLosat(empty), revert: () => writeLosat(before) }));
+  assert.deepEqual(world.shown.values.losatCacheInfo, [], 'Clear empties the rows');
+  await history.undo();
+  assert.ok(losatKeys.every((key) => world.shown.values[key] === before[key]), 'Undo of Clear brings the values back');
+  await history.undo();
+  assert.deepEqual([world.visible, world.shown.values.results[0].content, world.slow], [true, 'A', 0],
+    'the second Undo shows the figure the rerender replaced, without a rerender');
+  assert.ok(losatKeys.every((key) => world.shown.values[key] === held.values[key] && held.values[key] === before[key]),
+    'with the LOSAT values it was held with, the drawing\'s at that History position');
+  console.log('history held figure after Clear tests passed');
 }
 
 // D-07 (b) (Owner 2026-10-16 「確認を出す」): a change outside History (the
