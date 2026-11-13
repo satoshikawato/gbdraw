@@ -9,9 +9,8 @@ import logging
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal, Optional, Sequence, cast
+from typing import Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 from .config.toml import load_config_toml
-from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
     RequestRenderResult,
@@ -20,16 +19,14 @@ from .api.request_render import (
     stored_protein_result_request,
 )
 from .api.session_compat import render_session_compatible_request
-from .api.input_summary import log_input_summary
-from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
+    RecordInputManifest,
     parse_cli_bool,
     record_input_manifest_from_paths,
     record_input_manifest_from_table,
 )
 from .api.options import (
-    AnnotationOptions,
-    ColorOptions,
+    DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
     LinearOutputOptions,
@@ -50,7 +47,6 @@ from .layout.record_placement import (
 from .api.requests import (
     LinearDiagramRequest,
     RecordCardinality,
-    RenderOutputRequest,
 )
 from .definition_line_styles import (
     parse_definition_line_style_assignment,
@@ -71,7 +67,7 @@ from .analysis.protein_colinearity import (
 from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
 from .config.models.canvas import LINEAR_WRAP_LENGTH_PATH, linear_axis_ruler_applies
-from .features.shapes import parse_feature_shape_overrides
+from .features.shapes import FeatureShape, parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import (
     LINEAR_MODE_PROFILE,
@@ -92,7 +88,6 @@ from .cli_utils.common import (
     add_feature_density_args,
     depth_track_inputs_from_args,
     _add_depth_track_source_args,
-    feature_density_tracks_from_args,
     add_identity_scale_arg,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
@@ -109,7 +104,6 @@ from .cli_utils.common import (
     _add_retired_option_args,
     _add_gc_content_axis_args,
     _add_font_args,
-    cli_font_family,
     _add_label_rendering_args,
     _add_legend_size_args,
     _add_palette_arg,
@@ -129,9 +123,22 @@ from .cli_utils.common import (
     validate_scale_interval_arg,
     figure_size_overrides,
     legend_row_overrides,
-    handle_output_formats,
     png_dpi,
     register_font_files,
+)
+from .cli_utils.diagram_run import (
+    cli_output_formats,
+    depth_overrides,
+    gc_content_overrides,
+    label_filtering_override,
+    label_style_overrides,
+    legend_size_overrides,
+    log_render_notices,
+    mode_option_fields,
+    paired_overrides,
+    render_output_request,
+    stroke_width_overrides,
+    style_overrides,
 )
 from .cli_utils.session import (
     DiagramRunResult,
@@ -1469,299 +1476,157 @@ def _cli_losat_search(
         raise ValidationError(message, diagnostic=diagnostic) from exc
 
 
-def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
-    """Run linear rendering from an already parsed argparse namespace."""
+class _CollinearityFields(TypedDict):
+    """The collinearity fields of the Linear options: each mode as given, else the Linear default."""
 
-    source_session = getattr(args, "_gbdraw_source_session", None)
-    if not isinstance(source_session, SessionDrawingArtifacts):
-        source_session = None
-    out_file_prefix: str = args.output
-    blast_files: list[str] | None = args.blast
-    losat_search = _cli_losat_search(args)
-    orthogroup_membership_mode: str = str(
-        _LINEAR_OPTION_DEFAULTS.orthogroup_membership_mode
-    )
-    similarity_alignment_feature: str = str(
-        args.similarity_alignment_feature or ""
-    ).strip()
-    collinear_unit_mode: str = str(
-        args.collinear_unit_mode or _LINEAR_OPTION_DEFAULTS.collinearity_unit_mode
-    )
-    collinear_anchor_mode: str = str(
-        args.collinear_anchor_mode or _LINEAR_OPTION_DEFAULTS.collinearity_anchor_mode
-    )
-    collinear_search_scope: str = str(
-        args.collinear_search_scope
-        or _LINEAR_OPTION_DEFAULTS.collinearity_search_scope
-    )
-    collinear_color_mode: str = str(
-        args.collinear_color_mode or _LINEAR_OPTION_DEFAULTS.collinearity_color_mode
-    )
-    collinearity_params = LosslessCollinearityParameters(
-        min_anchors=args.collinear_min_anchors,
-        max_unit_gap=args.collinear_max_unit_gap,
-        max_diagonal_drift=args.collinear_max_diagonal_drift,
-        max_conflicts=args.collinear_max_conflicts_in_merge_gap,
-        merge_orientation=args.collinear_merge_orientation,
-    )
-    color_table_path: str = args.table
-    strandedness: bool = args.separate_strands
-    resolve_overlaps: bool = args.resolve_overlaps
-    dinucleotide: str = args.nt.upper()
-    show_gc: bool = args.show_gc
-    gc_content_mode: str | None = args.gc_content_mode
-    gc_content_min_percent: Optional[float] = args.gc_content_min_percent
-    gc_content_max_percent: Optional[float] = args.gc_content_max_percent
-    gc_content_show_axis: bool | None = args.gc_content_show_axis
-    gc_content_tick_interval: Optional[float] = args.gc_content_tick_interval
-    gc_content_large_tick_interval: Optional[float] = args.gc_content_large_tick_interval
-    gc_content_small_tick_interval: Optional[float] = args.gc_content_small_tick_interval
-    gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
-    manual_window: int = args.window
-    manual_step: int = args.step
-    depth_track_groups: list[list[str]] | None = args.depth_track
-    show_depth: bool = bool(depth_track_groups)
-    depth_color: str | None = args.depth_color
-    depth_height: Optional[float] = args.depth_height
-    depth_window: Optional[int] = args.depth_window
-    depth_step: Optional[int] = args.depth_step
-    depth_share_axis: bool = bool(args.share_depth_axis)
-    depth_min: Optional[float] = args.depth_min
-    depth_max: Optional[float] = args.depth_max
-    depth_normalize: bool | None = args.depth_normalize
-    depth_show_axis: bool | None = args.depth_show_axis
-    depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
-    depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
-    depth_tick_font_size: Optional[float] = args.depth_tick_font_size
-    align_center: bool = args.align_center
-    keep_definition_left_aligned: bool = args.keep_definition_left_aligned
-    evalue: float = args.evalue
-    legend: str = args.legend
-    gc_height: Optional[float] = args.gc_height
-    show_skew: bool = args.show_skew
-    bitscore: float = args.bitscore
-    identity: float = args.identity
-    alignment_length: int = args.alignment_length
-    pairwise_match_style: Literal["ribbon", "curve"] = args.pairwise_match_style
-    show_labels: str = args.show_labels
-    label_whitelist: str = args.label_whitelist
-    label_blacklist: str = args.label_blacklist
-    qualifier_priority_path: str = args.qualifier_priority
-    label_table_path: str = args.label_table
-    feature_table_path: str = args.feature_table
-    selected_features_set: str = args.features.split(',')
-    feature_shapes = parse_feature_shape_overrides(args.feature_shape)
-    arrow_head_length_ratio: str | float | None = args.arrow_head_length_ratio
-    arrow_shaft_width_ratio: float | None = args.arrow_shaft_width_ratio
-    feature_height: Optional[float] = args.feature_height
-    comparison_height: Optional[float] = args.comparison_height
+    collinearity_params: LosslessCollinearityParameters
+    collinearity_unit_mode: str
+    collinearity_anchor_mode: str
+    collinearity_search_scope: str
+    collinearity_color_mode: str
+    orthogroup_membership_mode: str
+    collinear_infer_orthogroups: bool
+    collinear_max_paralog_links_per_orthogroup: int
 
-    out_formats: list[str] = parse_formats(args.format)
-    out_formats = handle_output_formats(out_formats)
-    user_defined_default_colors: str = args.default_colors
-    show_scale: bool = not bool(args.hide_scale)
-    scale_style: str = args.effective_scale_style
-    scale_stroke_color: Optional[str] = args.scale_stroke_color
-    scale_stroke_width: Optional[float] = args.scale_stroke_width
-    scale_font_size: Optional[float] = args.scale_font_size
-    ruler_label_font_size: Optional[float] = args.ruler_label_font_size
-    effective_ruler_label_font_size: Optional[float] = (
-        ruler_label_font_size if ruler_label_font_size is not None else scale_font_size
-    )
-    scale_label_color: Optional[str] = args.ruler_label_color
-    scale_interval: Optional[int] = args.scale_interval
-    legend_box_size: Optional[float] = args.legend_box_size
-    legend_font_size: Optional[float] = args.legend_font_size
-    normalize_length = args.normalize_length
-    if alignment_length < 0:
-        raise ValidationError("alignment_length must be >= 0")
-    if blast_files or args.comparisons_table or losat_search is not None:
-        load_comparison = True
-    else:
-        load_comparison = False
-    palette: str = args.palette
-    annotation_options = (
-        AnnotationOptions(table_file=args.annotation_table)
-        if args.annotation_table
-        else None
-    )
-    config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
-    filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
+def _linear_collinearity_fields(args: argparse.Namespace) -> _CollinearityFields:
+    """The collinearity fields; ``LosslessCollinearityParameters`` validates the numbers."""
 
-    block_stroke_color: Optional[str] = args.block_stroke_color
-    block_stroke_width: Optional[float] = args.block_stroke_width
-    definition_font_size: Optional[float] = args.definition_font_size
-    definition_line_styles = parse_definition_line_style_overrides(args.definition_line_style)
-    definition_show_replicon: bool = bool(args.show_replicon)
-    definition_show_accession: bool = not bool(args.hide_accession)
-    definition_show_length: bool = not bool(args.hide_length)
-    plot_title: str = str(args.plot_title or "").strip()
-    plot_title_position: str = str(args.plot_title_position or LINEAR_DEFAULT_PLOT_TITLE_POSITION).strip().lower()
-    plot_title_font_size: Optional[float] = args.plot_title_font_size
-    label_font_size: Optional[float] = args.label_font_size
-    label_rendering: str = args.label_rendering
-    label_placement: Optional[str] = args.label_placement
-    label_rotation: Optional[float] = args.label_rotation
-    track_layout: str = args.effective_track_layout
-    track_axis_gap: Optional[float] = args.track_axis_gap
-    linear_track_slot_specs = args.linear_track_slot_specs
-    linear_track_axis_index: int | None = args.linear_track_axis_index
-    ruler_on_axis: bool = bool(args.ruler_on_axis)
-    if ruler_on_axis and not show_scale:
+    defaults = _LINEAR_OPTION_DEFAULTS
+    unit_mode = str(args.collinear_unit_mode or defaults.collinearity_unit_mode)
+    anchor_mode = str(args.collinear_anchor_mode or defaults.collinearity_anchor_mode)
+    search_scope = str(args.collinear_search_scope or defaults.collinearity_search_scope)
+    color_mode = str(args.collinear_color_mode or defaults.collinearity_color_mode)
+    return {
+        "collinearity_params": LosslessCollinearityParameters(
+            min_anchors=args.collinear_min_anchors,
+            max_unit_gap=args.collinear_max_unit_gap,
+            max_diagonal_drift=args.collinear_max_diagonal_drift,
+            max_conflicts=args.collinear_max_conflicts_in_merge_gap,
+            merge_orientation=args.collinear_merge_orientation,
+        ),
+        "collinearity_unit_mode": unit_mode,
+        "collinearity_anchor_mode": anchor_mode,
+        "collinearity_search_scope": search_scope,
+        "collinearity_color_mode": color_mode,
+        "orthogroup_membership_mode": str(defaults.orthogroup_membership_mode),
+        "collinear_infer_orthogroups": args.collinear_infer_orthogroups == "on",
+        "collinear_max_paralog_links_per_orthogroup": args.collinear_max_paralog_links_per_orthogroup,
+    }
+
+
+def _linear_ruler_on_axis(args: argparse.Namespace) -> bool:
+    """``--ruler_on_axis`` when the scale draws a ruler beside the axis; a warning when it is ignored."""
+
+    if not args.ruler_on_axis:
+        return False
+    show_scale = not bool(args.hide_scale)
+    if not show_scale:
         logger.warning(
             "--ruler_on_axis is ignored when --hide_scale is set."
         )
-        ruler_on_axis = False
-    elif ruler_on_axis and not linear_axis_ruler_applies(
-        show_scale=show_scale, scale_style=scale_style, track_layout=track_layout
+        return False
+    if not linear_axis_ruler_applies(
+        show_scale=show_scale, scale_style=args.effective_scale_style, track_layout=args.effective_track_layout
     ):
         # With a wrap length the record lengths decide whether it draws: rows always have the axis ruler.
         if args.wrap_length is None:
             logger.warning(
                 "--ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
             )
-        ruler_on_axis = False
-    axis_stroke_width: Optional[float] = args.axis_stroke_width
-    line_stroke_color: Optional[str] = args.line_stroke_color
-    line_stroke_width: Optional[float] = args.line_stroke_width
-    if args.linear_label_spacing is not None and float(args.linear_label_spacing) <= 0:
-        raise ValidationError("linear_label_spacing must be > 0")
-    filtering_override = dict(filtering_cfg)
-    if label_blacklist is not None:
-        filtering_override["blacklist_keywords"] = (
-            [keyword.strip() for keyword in label_blacklist.split(",") if keyword.strip()]
-            if isinstance(label_blacklist, str)
-            else label_blacklist
-        )
-    gc_large_tick_interval = (
-        gc_content_large_tick_interval
-        if gc_content_large_tick_interval is not None
-        else gc_content_tick_interval
-    )
-    override_candidates: dict[str, object | None] = {
-        "objects.text.font_family": cli_font_family(args),
-        "objects.features.block_stroke_color": block_stroke_color,
-        "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
-        "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
-        "objects.axis.linear.stroke_color": args.axis_stroke_color,
-        "objects.definition.linear.show_replicon": definition_show_replicon,
-        "objects.definition.linear.show_accession": definition_show_accession,
-        "objects.definition.linear.show_length": definition_show_length,
+        return False
+    return True
+
+
+def _linear_override_candidates(
+    args: argparse.Namespace,
+    filtering: Mapping[str, object],
+    definition_line_styles: dict[str, dict[str, object]],
+    ruler_on_axis: bool,
+) -> dict[str, object | None]:
+    """Every config leaf a Linear option sets, in the order the request records them (None: not given)."""
+
+    ruler_label_font_size = args.ruler_label_font_size
+    return {
+        **style_overrides(args, mode="linear"),
+        "objects.definition.linear.show_replicon": bool(args.show_replicon),
+        "objects.definition.linear.show_accession": not bool(args.hide_accession),
+        "objects.definition.linear.show_length": not bool(args.hide_length),
         "labels.spacing.linear": args.linear_label_spacing,
-        "labels.rendering": label_rendering,
-        "labels.linear.line": args.label_line,
-        "labels.linear.protection": args.label_protection,
-        # Only the italic style is an override, so a default run's request is unchanged.
-        "labels.linear.italic_gene_labels": True if args.italic_gene_labels else None,
+        **label_style_overrides(args, mode="linear"),
         LINEAR_IDENTITY_SCALE_PATH: list(args.identity_scale) if args.identity_scale else None,
-        "labels.linear.placement": label_placement,
-        "labels.linear.rotation": label_rotation,
-        "objects.features.line_stroke_color": line_stroke_color,
-        "canvas.show_gc": show_gc,
-        "objects.gc_content.mode": gc_content_mode,
-        "objects.gc_content.min_percent": gc_content_min_percent,
-        "objects.gc_content.max_percent": gc_content_max_percent,
-        "objects.gc_content.show_axis": gc_content_show_axis,
-        "objects.gc_content.show_ticks": args.gc_content_show_ticks,
-        "objects.gc_content.axis_labels": args.gc_content_axis_labels,
-        "objects.gc_content.large_tick_interval": gc_large_tick_interval,
-        "objects.gc_content.small_tick_interval": gc_content_small_tick_interval,
-        "objects.gc_content.tick_font_size": gc_content_tick_font_size,
-        "canvas.show_skew": show_skew,
-        "canvas.show_depth": show_depth,
-        "objects.depth.fill_color": depth_color,
-        "canvas.linear.depth_height": depth_height,
-        "objects.depth.min_depth": depth_min,
-        "objects.depth.max_depth": depth_max,
-        "objects.depth.normalize": depth_normalize,
-        "objects.depth.show_axis": depth_show_axis,
-        "objects.depth.show_ticks": args.depth_show_ticks,
-        "objects.depth.axis_labels": args.depth_axis_labels,
-        "objects.depth.large_tick_interval": depth_large_tick_interval,
-        "objects.depth.small_tick_interval": depth_small_tick_interval,
-        "objects.depth.tick_font_size": depth_tick_font_size,
-        "objects.depth.share_axis": depth_share_axis,
-        "labels.linear.scope": show_labels,
-        "canvas.resolve_overlaps": resolve_overlaps,
+        "labels.linear.placement": args.label_placement,
+        "labels.linear.rotation": args.label_rotation,
+        "objects.features.line_stroke_color": args.line_stroke_color,
+        "canvas.show_gc": args.show_gc,
+        **gc_content_overrides(args, gc_content_mode=args.gc_content_mode),
+        "canvas.show_skew": args.show_skew,
+        "canvas.show_depth": bool(args.depth_track),
+        "objects.depth.fill_color": args.depth_color,
+        "canvas.linear.depth_height": args.depth_height,
+        **depth_overrides(args),
+        "labels.linear.scope": args.show_labels,
+        "canvas.resolve_overlaps": args.resolve_overlaps,
         "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,
         "canvas.linear.track_layout": args.track_layout,
         LINEAR_WRAP_LENGTH_PATH: args.wrap_length,
         **figure_size_overrides(args),
         **legend_row_overrides(args),
-        "canvas.linear.track_axis_gap": track_axis_gap,
+        "canvas.linear.track_axis_gap": args.track_axis_gap,
         "canvas.linear.ruler_on_axis": ruler_on_axis,
-        "canvas.linear.align_center": align_center,
-        "canvas.linear.keep_definition_left_aligned": keep_definition_left_aligned,
-        "canvas.strandedness": strandedness,
-        "labels.filtering.raw": filtering_override,
-        "canvas.linear.comparison_height": comparison_height,
-        "canvas.linear.default_gc_height": gc_height,
-        "objects.scale.show": show_scale,
+        "canvas.linear.align_center": args.align_center,
+        "canvas.linear.keep_definition_left_aligned": args.keep_definition_left_aligned,
+        "canvas.strandedness": args.separate_strands,
+        "labels.filtering.raw": label_filtering_override(filtering, args.label_blacklist),
+        "canvas.linear.comparison_height": args.comparison_height,
+        "canvas.linear.default_gc_height": args.gc_height,
+        "objects.scale.show": not bool(args.hide_scale),
         "objects.scale.style": args.scale_style,
-        "objects.scale.stroke_color": scale_stroke_color,
-        "objects.scale.label_color": scale_label_color,
-        "objects.scale.stroke_width": scale_stroke_width,
-        "objects.scale.interval": scale_interval,
-        "objects.blast_match.style": pairwise_match_style,
-        "canvas.linear.normalize_length": normalize_length,
+        "objects.scale.stroke_color": args.scale_stroke_color,
+        "objects.scale.label_color": args.ruler_label_color,
+        "objects.scale.stroke_width": args.scale_stroke_width,
+        "objects.scale.interval": args.scale_interval,
+        "objects.blast_match.style": args.pairwise_match_style,
+        "canvas.linear.normalize_length": args.normalize_length,
+        **{
+            f"objects.definition.linear.line_styles.{line_kind}.{property_name}": value
+            for line_kind, properties in (definition_line_styles or {}).items()
+            for property_name, value in properties.items()
+        },
+        **stroke_width_overrides(args, mode="linear"),
+        **paired_overrides(
+            {
+                "objects.definition.linear.font_size": args.definition_font_size,
+                "labels.font_size.linear": args.label_font_size,
+                "canvas.linear.default_cds_height": args.feature_height,
+                "objects.scale.font_size": args.scale_font_size,
+                # --ruler_label_font_size falls back on --scale_font_size.
+                "objects.scale.ruler_label_font_size": (
+                    ruler_label_font_size if ruler_label_font_size is not None else args.scale_font_size
+                ),
+            }
+        ),
+        **legend_size_overrides(args),
     }
-    for line_kind, properties in (definition_line_styles or {}).items():
-        for property_name, value in properties.items():
-            override_candidates[
-                "objects.definition.linear.line_styles."
-                f"{line_kind}.{property_name}"
-            ] = value
-    for width_path in (
-        "objects.features.block_stroke_width.short",
-        "objects.features.block_stroke_width.long",
-    ):
-        override_candidates[width_path] = block_stroke_width
-    for width_path in (
-        "objects.axis.linear.stroke_width.short",
-        "objects.axis.linear.stroke_width.long",
-    ):
-        override_candidates[width_path] = axis_stroke_width
-    for width_path in (
-        "objects.features.line_stroke_width.short",
-        "objects.features.line_stroke_width.long",
-    ):
-        override_candidates[width_path] = line_stroke_width
-    for font_path in (
-        "objects.definition.linear.font_size.short",
-        "objects.definition.linear.font_size.long",
-    ):
-        override_candidates[font_path] = definition_font_size
-    for font_path in (
-        "labels.font_size.linear.short",
-        "labels.font_size.linear.long",
-    ):
-        override_candidates[font_path] = label_font_size
-    for height_path in (
-        "canvas.linear.default_cds_height.short",
-        "canvas.linear.default_cds_height.long",
-    ):
-        override_candidates[height_path] = feature_height
-    for font_path in (
-        "objects.scale.font_size.short",
-        "objects.scale.font_size.long",
-    ):
-        override_candidates[font_path] = scale_font_size
-    for font_path in (
-        "objects.scale.ruler_label_font_size.short",
-        "objects.scale.ruler_label_font_size.long",
-    ):
-        override_candidates[font_path] = effective_ruler_label_font_size
-    for size_path in (
-        "objects.legends.color_rect_size.short",
-        "objects.legends.color_rect_size.long",
-    ):
-        override_candidates[size_path] = legend_box_size
-    for size_path in (
-        "objects.legends.font_size.short",
-        "objects.legends.font_size.long",
-    ):
-        override_candidates[size_path] = legend_font_size
+
+
+class _LinearConfig(NamedTuple):
+    """The config the request draws with, and the overrides a wrap applies when it cuts a record."""
+
+    config: dict
+    wrap_default_overrides: dict[str, object] | None
+
+
+def _linear_config(args: argparse.Namespace) -> _LinearConfig:
+    """The packaged config with every config option given, completed by the Linear profile."""
+
+    config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
+    filtering = config_dict.setdefault("labels", {}).setdefault("filtering", {})
+    definition_line_styles = parse_definition_line_style_overrides(args.definition_line_style)
+    ruler_on_axis = _linear_ruler_on_axis(args)
+    if args.linear_label_spacing is not None and float(args.linear_label_spacing) <= 0:
+        raise ValidationError("linear_label_spacing must be > 0")
+    override_candidates = _linear_override_candidates(args, filtering, definition_line_styles, ruler_on_axis)
     explicit_overrides = {path: value for path, value in override_candidates.items() if value is not None}
     # The Linear profile supplies the auto axis color, and the override owner
     # derives unset ruler colors from it, as for API and Web requests.
@@ -1769,17 +1634,28 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         config_dict,
         resolve_mode_profile_overrides("linear", explicit_overrides),
     )
-    wrap_default_overrides = linear_wrap_default_overrides(explicit_overrides)
+    return _LinearConfig(copy.deepcopy(config_dict), linear_wrap_default_overrides(explicit_overrides))
+
+
+class _LinearRecords(NamedTuple):
+    """The records, the LOSAT search with their genetic codes, and their placement."""
+
+    manifest: RecordInputManifest
+    losat_search: LosatSearchOptions | None
+    layout: LinearMultiRecordOptions | None
+
+
+def _linear_records(args: argparse.Namespace, losat_search: LosatSearchOptions | None) -> _LinearRecords:
+    """Read the records (a records table, else the input files) and take the table's genetic codes for LOSAT."""
 
     if args.records_table:
         record_manifest = record_input_manifest_from_table(args.records_table)
         linear_positions: list[str] = []
     else:
-        source_count = len(args.gbk or args.fasta or ())
         cardinality = _linear_cli_record_cardinality(
             is_gff_source=bool(args.gff),
-            source_count=source_count,
-            load_comparison=load_comparison,
+            source_count=len(args.gbk or args.fasta or ()),
+            load_comparison=bool(args.blast or args.comparisons_table or losat_search is not None),
         )
         record_manifest = record_input_manifest_from_paths(
             gbk_paths=args.gbk,
@@ -1801,7 +1677,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 diagnostic={"code": "COMPARISON_INPUT", "field": "record_gencodes"},
             )
         losat_search = _cli_losat_search(args, record_manifest.losat_gencodes)
-    if record_manifest.record_options.regions and blast_files:
+    if record_manifest.record_options.regions and args.blast:
         logger.warning(
             "Region cropping is enabled; BLAST coordinates must refer "
             "to the cropped regions, counted on the source strand."
@@ -1820,69 +1696,71 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         if linear_positions or has_table_placement
         else None
     )
-    depth_tracks = depth_track_inputs_from_args(args, heights=args.depth_track_height)
+    return _LinearRecords(record_manifest, losat_search, linear_layout)
 
-    canonical_config = copy.deepcopy(config_dict)
-    request_path = Path(str(out_file_prefix))
-    canonical_request = LinearDiagramRequest(
-        records=record_manifest.records,
+
+class _LinearInputs(NamedTuple):
+    """What the command reads and parses from its options before it builds the request."""
+
+    collinearity: _CollinearityFields
+    feature_shapes: dict[str, FeatureShape]
+    out_formats: list[str]
+    config: _LinearConfig
+    records: _LinearRecords
+    depth_tracks: tuple[DepthTrackInput, ...] | None
+
+
+def _read_linear_inputs(args: argparse.Namespace) -> _LinearInputs:
+    """The LOSAT search, collinearity, feature shapes, formats, config, records and depth tracks, in this order."""
+
+    losat_search = _cli_losat_search(args)
+    collinearity = _linear_collinearity_fields(args)
+    feature_shapes = parse_feature_shape_overrides(args.feature_shape)
+    out_formats = cli_output_formats(args.format)
+    if args.alignment_length < 0:
+        raise ValidationError("alignment_length must be >= 0")
+    config = _linear_config(args)
+    records = _linear_records(args, losat_search)
+    depth_tracks = depth_track_inputs_from_args(args, heights=args.depth_track_height)
+    return _LinearInputs(collinearity, feature_shapes, out_formats, config, records, depth_tracks)
+
+
+def _linear_request(
+    args: argparse.Namespace,
+    inputs: _LinearInputs,
+    source_session: SessionDrawingArtifacts | None,
+) -> LinearDiagramRequest:
+    """The typed Linear request; the typed layer validates it."""
+
+    similarity_alignment_feature = str(args.similarity_alignment_feature or "").strip()
+    wrap_default_overrides = inputs.config.wrap_default_overrides
+    return LinearDiagramRequest(
+        records=inputs.records.manifest.records,
         options=LinearDiagramOptions(
-            config=canonical_config,
-            colors=ColorOptions(
-                color_table_file=color_table_path or None,
-                default_colors_palette=palette,
-                default_colors_file=user_defined_default_colors or None,
-            ),
+            config=inputs.config.config,
             tracks=(
                 None
                 if args.wrap_track_order is not None
                 else LinearRequestTrackOptions(
-                    linear_track_slots=linear_track_slot_specs,
-                    linear_track_axis_index=linear_track_axis_index,
+                    linear_track_slots=args.linear_track_slot_specs,
+                    linear_track_axis_index=args.linear_track_axis_index,
                 )
             ),
-            annotations=annotation_options,
             output=LinearOutputOptions(
-                legend=legend,
+                legend=args.legend,
                 # argparse restricts --plot_title_position to the Linear choices.
                 plot_title_position=cast(
-                    'Literal["center", "top", "bottom"]', plot_title_position
+                    'Literal["center", "top", "bottom"]',
+                    str(args.plot_title_position or LINEAR_DEFAULT_PLOT_TITLE_POSITION).strip().lower(),
                 ),
             ),
-            selected_features_set=tuple(selected_features_set),
-            feature_visibility_table_file=feature_table_path or None,
-            feature_placement_table_file=args.feature_placement_table,
-            feature_override_table_file=args.feature_override_table,
-            label_whitelist_file=label_whitelist or None,
-            qualifier_priority_file=qualifier_priority_path or None,
-            label_override_file=label_table_path or None,
-            feature_shapes=feature_shapes or None,
-            dinucleotide=dinucleotide,
-            window=manual_window,
-            step=manual_step,
-            depth_window=depth_window,
-            depth_step=depth_step,
-            depth_tracks=depth_tracks,
-            feature_density_tracks=feature_density_tracks_from_args(args),
-            plot_title=plot_title or None,
-            plot_title_font_size=plot_title_font_size,
-            blast_files=tuple(blast_files) if blast_files else None,
+            **mode_option_fields(args, feature_shapes=inputs.feature_shapes, depth_tracks=inputs.depth_tracks),
+            blast_files=tuple(args.blast) if args.blast else None,
             comparison_table_file=args.comparisons_table,
             auto_orient=args.auto_orient,
-            losat_search=losat_search,
-            pairwise_match_style=pairwise_match_style,
-            collinearity_params=collinearity_params,
-            collinearity_unit_mode=collinear_unit_mode,
-            collinearity_anchor_mode=collinear_anchor_mode,
-            collinearity_search_scope=collinear_search_scope,
-            collinearity_color_mode=collinear_color_mode,
-            orthogroup_membership_mode=orthogroup_membership_mode,
-            collinear_infer_orthogroups=args.collinear_infer_orthogroups == "on",
-            collinear_max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
+            losat_search=inputs.records.losat_search,
+            pairwise_match_style=args.pairwise_match_style,
+            **inputs.collinearity,
             wrap_defaults=(
                 None
                 if wrap_default_overrides is None
@@ -1890,27 +1768,35 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
             anchor_feature=args.anchor_feature,
         ),
-        layout=linear_layout,
+        layout=inputs.records.layout,
         similarity_alignment=(
             SimilarityAlignmentReference(feature_id=similarity_alignment_feature)
             if similarity_alignment_feature and source_session is None
             else None
         ),
-        record_options=record_manifest.record_options,
-        output=RenderOutputRequest(
-            output_prefix=request_path.name,
-            output_directory=(
-                request_path.parent if request_path.parent != Path(".") else None
-            ),
-            formats=tuple(out_formats),
+        record_options=inputs.records.manifest.record_options,
+        output=render_output_request(
+            args.output,
+            inputs.out_formats,
             overwrite=args.overwrite,
             embed_fonts=args.embed_fonts,
-            dpi=png_dpi(args.dpi, out_formats),
+            dpi=png_dpi(args.dpi, inputs.out_formats),
         ),
     )
-    diagram_output_paths = diagram_request_output_paths(canonical_request)
+
+
+def _render_linear(
+    args: argparse.Namespace,
+    request: LinearDiagramRequest,
+    source_session: SessionDrawingArtifacts | None,
+    *,
+    writes_session: bool,
+) -> RequestRenderResult:
+    """Refuse an existing Session sidecar or LOSAT output, then render (a Session's drawing with its artifacts)."""
+
+    diagram_output_paths = diagram_request_output_paths(request)
     session_output_path = preflight_session_sidecar_if_requested(
-        save_session=bool(args.save_session or args.session_output),
+        save_session=writes_session,
         session_output=args.session_output,
         output_prefix=args.output,
         diagram_output_paths=diagram_output_paths,
@@ -1923,51 +1809,50 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         session_output_path=session_output_path,
         overwrite=bool(args.overwrite),
     )
-    render_result: RequestRenderResult
-    legacy_protein_raw_candidates = None
-    legacy_protein_derived_evidence = None
-    writes_session = bool(args.save_session or args.session_output)
-    if source_session is not None:
-        # A Linear request renders to one session-compatible result, never a batch.
-        render_result = cast(
-            RequestRenderResult,
-            render_session_compatible_request(
-                canonical_request,
-                source_session,
-                include_feature_catalog=writes_session,
-            ),
-        )
-        legacy_protein_raw_candidates = (
-            render_result.migration_report.protein_raw_candidates
-        )
-        legacy_protein_derived_evidence = (
-            render_result.migration_report.protein_derived_evidence
-        )
-        if writes_session:
-            require_search_frame_protein_results(render_result.migration_report)
-    else:
+    if source_session is None:
         try:
             # A Linear request renders to one result, never a batch.
-            render_result = cast(
+            return cast(
                 RequestRenderResult,
                 render_request(
-                    canonical_request,
+                    request,
                     artifacts=CurrentRequestArtifacts(),
                     include_feature_catalog=writes_session,
                 ),
             )
         except SimilarityAlignmentReferenceError as exc:
             raise ValidationError(f"--similarity_alignment_feature {exc.detail}") from exc
-    for warning in render_result.annotation_warnings:
-        logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
-            warning.set_id, warning.annotation_id, warning.record_index + 1,
-            warning.record_id, warning.message)
-    log_feature_identity_notices(render_result.feature_identity_notices)
-    log_input_summary(render_result.input_summary)
+    # A Linear request renders to one session-compatible result, never a batch.
+    render_result = cast(
+        RequestRenderResult,
+        render_session_compatible_request(
+            request,
+            source_session,
+            include_feature_catalog=writes_session,
+        ),
+    )
+    if writes_session:
+        require_search_frame_protein_results(render_result.migration_report)
+    return render_result
+
+
+def _linear_run_result(
+    args: argparse.Namespace,
+    render_result: RequestRenderResult,
+    out_formats: list[str],
+    *,
+    from_session: bool,
+    writes_session: bool,
+) -> DiagramRunResult:
+    """The run's SVG, feature metadata, LOSAT results and the request the Session saves, after the render's log."""
+
+    log_render_notices((render_result,))
     if render_result.linear_metadata is not None and render_result.linear_metadata.wrap is not None:
         logger.info(render_result.linear_metadata.wrap.message)
     interactive_context = render_result.interactive_context
-    rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)
+    rendered_svg = make_rendered_svg(args.output, Path(str(args.output)).name)
+    # A Session replay keeps the protein evidence the Session saved.
+    migration_report = render_result.migration_report if from_session else None
 
     return DiagramRunResult(
         mode="linear",
@@ -1988,8 +1873,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         losat_cache_entries=render_result.losat_cache_entries,
         losat_derived_cache_entries=render_result.losat_derived_cache_entries,
         protein_identity_manifest=render_result.protein_identity_manifest,
-        legacy_protein_raw_candidates=legacy_protein_raw_candidates,
-        legacy_protein_derived_evidence=legacy_protein_derived_evidence,
+        legacy_protein_raw_candidates=(
+            migration_report.protein_raw_candidates if migration_report is not None else None
+        ),
+        legacy_protein_derived_evidence=(
+            migration_report.protein_derived_evidence if migration_report is not None else None
+        ),
         run_metadata=build_run_metadata("linear", [RenderedResult(render_result, rendered_svg.result_name)]),
         # A Session stores the protein results this render computed (OV-1068).
         canonical_request=(
@@ -1997,6 +1886,25 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             if writes_session
             else render_result.request
         ),
+    )
+
+
+def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
+    """Run linear rendering from an already parsed argparse namespace."""
+
+    source_session = getattr(args, "_gbdraw_source_session", None)
+    if not isinstance(source_session, SessionDrawingArtifacts):
+        source_session = None
+    inputs = _read_linear_inputs(args)
+    request = _linear_request(args, inputs, source_session)
+    writes_session = bool(args.save_session or args.session_output)
+    render_result = _render_linear(args, request, source_session, writes_session=writes_session)
+    return _linear_run_result(
+        args,
+        render_result,
+        inputs.out_formats,
+        from_session=source_session is not None,
+        writes_session=writes_session,
     )
 
 
