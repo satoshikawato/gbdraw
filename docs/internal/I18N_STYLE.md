@@ -2851,8 +2851,9 @@ The system typeface is used (Nirmala UI on Windows); Devanagari marks need Thai'
   (Notice), त्रुटि, चेतावनी, विवरण (Details), वर्णन (Description), स्वचालित (Auto), चालू / बंद.
 - **Loanwords** in Devanagari as Microsoft and Google spell them (फ़ाइल, फ़ॉन्ट, ट्रैक, ज़ूम); a
   Hindi word where vendors use one (सत्र, सहेजें, आरेख). Masculine loans do not change in the
-  direct plural (2 फ़ीचर, 2 ट्रैक, 2 रिकॉर्ड, 2 लेबल); feminine ones take -एँ (फ़ाइलें); the
-  oblique plural takes -ों (फ़ाइलों में). सेटिंग्स is the one established -s form.
+  direct plural (2 फ़ीचर, 2 ट्रैक, 2 रिकॉर्ड, 2 लेबल); feminine ones take -एँ (फ़ाइलें); before
+  a postposition the plural of both genders takes -ों (फ़ाइलों में, 2 फ़ीचरों की लेन, इन लेबलों
+  को, दोनों ट्रैकों में). सेटिंग्स is the one established -s form.
 - **Gender**: फ़ीचर, ट्रैक, रिकॉर्ड, लेबल, लेजेंड, सत्र, आरेख, परिणाम, स्ट्रैंड masculine; फ़ाइल,
   सेटिंग, पंक्ति, तालिका, सूचना, त्रुटि feminine.
 - **Never**: विशेषता or सुविधा for feature, किंवदंती (a myth) for legend, रज्जुक for strand,
