@@ -11,7 +11,8 @@
 //   (c) every row's key is a cached search (also after a Clear and the Undo of a Delete before it);
 //   (d) Undo then Redo of a step the walk recorded (a Generate, New, Duplicate or Delete) gives back the same rows;
 //   (f) the shown Linear drawing's per-pair readers list each of its edges once, from its own rows (OV-3210);
-//   (g) Clear LOSAT results counts no fewer searches than the rows name, and none after a Clear (OV-3211);
+//   (g) Clear LOSAT results counts the shown drawing's rows, one per key; after a Clear the shown drawing has none and
+//       the cache holds only the searches the other drawings' rows name (or their manifests resolve) (OV-3211);
 //   (h) an Undo or a Redo changes the rows of no drawing but the one it shows (OV-3207, OV-3212);
 //   (i) a drawing that comes back (an Undo of its Delete, a Redo of its New or Duplicate) has the rows it left with,
 //       or none after a Clear (OV-3209, OV-3212: another drawing's Generate and its Undo in between take none away),
@@ -224,7 +225,8 @@ test('a drawing held by an undone New or Duplicate keeps its searches through an
 });
 
 // OV-3215 (review 13's P3): after Clear, the Undo of one drawing's Generate brings back that drawing's rows from
-// before it, with their searches, and no search that no row names (PD-OI-022).
+// before it, with their searches, and no search that no row names (PD-OI-022); another drawing's results stay
+// (scenario revision 2).
 test('Clear then the Undo of a Generate brings back no search that no row names (OV-3215)', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
@@ -237,7 +239,7 @@ test('Clear then the Undo of a Generate brings back no search that no row names 
     app.selectDrawing(a); await generateRows([ringRow('m1')]);
     app.clearLosatCache();
     await history.undo();
-    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys(), app.clearableLosatResultCount.value], [[], [], [], 0]);
+    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys(), app.losatResultRows.value.length], [[], ['m2'], ['m2'], 0]);
   } finally { resetLosat(); }
 });
 
@@ -303,25 +305,114 @@ test('each Linear drawing\'s protein pairs resolve in its own manifest after ano
   } finally { resetLosat(); }
 });
 
-// OV-3211: Clear LOSAT results removes every cached search, one a Delete holds for its Undo included, so its count
-// and both panels' hints count those searches: Clear is enabled and the hint is true while one is cached.
-test('Clear counts every search it removes, the one a deleted drawing holds included (OV-3211)', () => {
+// OV-3211, scenario revision 2: the count is the shown drawing's results, and the hint says whether another drawing
+// has some. A drawing a Delete holds out of the project is no drawing of it: a Clear keeps none of its searches, and
+// the Undo of its Delete brings it back without LOSAT results (OV-3274).
+test('Clear counts the shown drawing\'s results; a deleted drawing comes back without the searches a Clear removed (OV-3211)', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  resetLosat();
+  try {
+    onlyShownDrawing(app);
+    const a = state.activeDrawingId.value;
+    const { drawingId: b } = app.drawingList.newDrawing('circular');
+    await generateRows([ringRow('k2')]);
+    app.selectDrawing(a);
+    assert.deepEqual([app.losatResultRows.value.length, app.projectHasLosatResults.value], [0, true],
+      'Clear is disabled; the hint says "No LOSAT results in this drawing"');
+    await generateRows([ringRow('k1')]);
+    app.drawingList.deleteDrawing(b);
+    app.selectDrawing(a);
+    assert.equal(app.losatResultRows.value.length, 1, '"Clear 1 LOSAT result"');
+    app.clearLosatCache();
+    assert.deepEqual([cachedKeys(), app.losatResultRows.value.length, app.projectHasLosatResults.value], [[], 0, false],
+      'no drawing of the project names k2: "No LOSAT results yet"');
+    await history.undo();
+    assert.deepEqual([state.drawingTabs.value.some((tab) => tab.id === b), keysOf(b)], [true, []], 'B comes back without results');
+  } finally { resetLosat(); }
+});
+
+// PD-OI-022 scenario revision 2 (Owner 2026-11-13, Q2=B): Clear LOSAT results clears the shown drawing's results. Its
+// count is the shown drawing's results, one per cache key, and Clear takes every one of them from its list; a search
+// another drawing names (a row of it, or a protein search that resolves in its manifest) stays for that drawing,
+// whose list is unchanged; a search no remaining drawing names leaves the cache, with the converted payloads read
+// from it.
+test('Clear LOSAT results clears the shown drawing\'s results; a search another drawing names stays (PD-OI-022 rev 2)', async () => {
+  const app = createAppSetup();
+  /** @param {string} key */
+  const pairRow = (key) => ({ key, filename: `${key}.tsv`, display: true, drawingId: '', edgeKey: `edge-${key}`, queryUid: 'u1', subjectUid: 'u2' });
+  for (const mode of ['circular', 'linear']) {
+    resetLosat();
+    try {
+      onlyShownDrawing(app);
+      const { drawingId: a } = app.drawingList.newDrawing(mode);
+      onlyShownDrawing(app);
+      const { drawingId: b } = app.drawingList.newDrawing(mode);
+      const linear = mode === 'linear';
+      const row = linear ? pairRow : ringRow;
+      // B: the shared search kS and its own kB; a Linear B also an all-against-all search that only its manifest names.
+      app.selectDrawing(b);
+      await generateRows([row('kS'), row('kB')], linear ? {
+        searches: new Map([['kB', proteinSearch('b', 'u1', 'u2')], ['allB', proteinSearch('b', 'u2', 'u1')]]),
+        manifest: proteinManifest('b', ['u1', 'u2']), derived: [derivedEvidence('pB', ['kB', 'allB'])]
+      } : {});
+      // A (shown): kS, its own kA, a search no row names (a failed Generate's) and, Linear, its own all-against-all.
+      app.selectDrawing(a);
+      await generateRows([row('kS'), row('kA')], linear ? {
+        searches: new Map([['kA', proteinSearch('a', 'u1', 'u2')], ['allA', proteinSearch('a', 'u2', 'u1')], ['orphan', { key: 'orphan' }]]),
+        manifest: proteinManifest('a', ['u1', 'u2']), derived: [derivedEvidence('pA', ['kA', 'allA']), derivedEvidence('pS', ['kS'])]
+      } : { searches: new Map([['orphan', { key: 'orphan' }]]) });
+      const bRowsBefore = state.losatCacheInfo.value.filter((entry) => entry.drawingId === b);
+      assert.equal(app.losatResultRows.value.length, 2, `${mode}: "Clear 2 LOSAT results" counts the shown drawing's results`);
+      app.clearLosatCache();
+      assert.deepEqual([keysOf(a), app.losatResultRows.value.length], [[], 0], `${mode}: the shown drawing's list is empty`);
+      assert.deepEqual(state.losatCacheInfo.value.filter((entry) => entry.drawingId === b), bRowsBefore, `${mode}: B's rows are unchanged`);
+      assert.deepEqual(cachedKeys(), linear ? ['allB', 'kB', 'kS'] : ['kB', 'kS'],
+        `${mode}: the searches B names stay; A's own and the one no row names go`);
+      assert.deepEqual([...state.losatDerivedCache.value.keys()].sort(), linear ? ['pB', 'pS'] : [], `${mode}: payloads of kept searches stay`);
+      assert.deepEqual(state.proteinIdentityManifest.value, emptyProteinIdentityManifest(), `${mode}: A's manifest is emptied`);
+      app.selectDrawing(b);
+      assert.equal(app.losatResultRows.value.length, 2, `${mode}: B still lists 2 results`);
+      if (linear) assert.deepEqual(state.proteinIdentityManifest.value, proteinManifest('b', ['u1', 'u2']), 'B keeps its manifest');
+      // Clear in B, now the only drawing with results: nothing is named any more, the cache empties.
+      app.clearLosatCache();
+      assert.deepEqual([state.losatCacheInfo.value, cachedKeys(), state.losatDerivedCache.value.size], [[], [], 0], `${mode}: B's Clear`);
+    } finally { resetLosat(); }
+  }
+});
+
+// A project of one drawing: Clear empties the whole cache, as before revision 2 (a search no row names included).
+test('in a project of one drawing, Clear LOSAT results empties every LOSAT cache', async () => {
   const app = createAppSetup();
   resetLosat();
   try {
+    onlyShownDrawing(app);
+    await generateRows([ringRow('k1')], { searches: new Map([['orphan', { key: 'orphan' }]]), derived: [derivedEvidence('p1', ['k1'])] });
+    app.clearLosatCache();
+    assert.deepEqual([state.losatCacheInfo.value, cachedKeys(), state.losatDerivedCache.value.size, app.losatResultRows.value.length], [[], [], 0, 0]);
+  } finally { resetLosat(); }
+});
+
+// Clear is no History step: an Undo after it takes back the shown drawing's last step, and History's install puts back
+// the rows that step's drawing state had, with their searches (D-200); its Redo brings back the cleared rows.
+test('Undo and Redo after Clear bring back the cleared drawing\'s rows with their searches', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  resetLosat();
+  try {
+    onlyShownDrawing(app);
     const a = state.activeDrawingId.value;
     const { drawingId: b } = app.drawingList.newDrawing('circular');
-    state.losatCacheInfo.value = [{ ...ringRow('k1'), drawingId: a }, { ...ringRow('k2'), drawingId: b }];
-    state.losatCache.value = new Map([['k1', { key: 'k1' }], ['k2', { key: 'k2' }]]);
-    app.drawingList.deleteDrawing(b);
-    assert.equal(app.clearableLosatResultCount.value, 2, 'S2: Clear removes 2 searches');
-    state.losatCacheInfo.value = [];
-    state.losatCache.value = new Map([['k2', { key: 'k2' }]]);
+    app.selectDrawing(b); await generateRows([ringRow('kS')]);
     app.selectDrawing(a);
-    assert.deepEqual([app.clearableLosatResultCount.value, app.losatResultRows.value.length], [1, 0],
-      'S3: Clear is enabled, and the shown drawing has no results ("No LOSAT results in this drawing")');
+    await generateRows([ringRow('k1')]);
+    await generateRows([ringRow('kS'), ringRow('k2')]);
     app.clearLosatCache();
-    assert.equal(app.clearableLosatResultCount.value, 0, '"No LOSAT results yet", Clear disabled');
+    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [[], ['kS'], ['kS']]);
+    await history.undo();
+    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [['k1'], ['kS'], ['k1', 'kS']], 'the step before comes back');
+    await history.redo();
+    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [['kS', 'k2'], ['kS'], ['k1', 'k2', 'kS']], 'the cleared rows come back');
   } finally { resetLosat(); }
 });
 
@@ -345,7 +436,8 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
     assert.equal(new Set(pairs).size, pairs.length, `${where} (b): one row per drawing and key: ${pairs}`);
     const unsearched = rows.filter((row) => !state.losatCache.value.has(row.key)).map((row) => row.key);
     assert.deepEqual(unsearched, [], `${where} (c): rows whose search is not cached`);
-    assert.ok(app.clearableLosatResultCount.value >= new Set(rows.map(({ key }) => key)).size, `${where} (g): uncounted`);
+    assert.equal(app.losatResultRows.value.length, new Set(rows.filter((row) => row.drawingId === state.activeDrawingId.value)
+      .map(({ key }) => key)).size, `${where} (g): the count is the shown drawing's results`);
     const shown = state.activeDrawing();
     const ownRows = rows.filter((row) => row.drawingId === shown.id);
     const unresolved = ownRows.filter(({ key }) => {
@@ -454,7 +546,11 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
           else if (kind === 'clear') { app.clearLosatCache(); clears += 1; }
           else if ((kind === 'undo' || kind === 'redo') && timeline[kind].length > 0) await traverse(kind);
         }, { undoOrRedo: kind === 'undo' || kind === 'redo' });
-        if (kind === 'clear') assert.equal(app.clearableLosatResultCount.value, 0, `${at} (g): Clear left searches`);
+        if (kind === 'clear') {
+          const named = new Set(state.losatCacheInfo.value.map(({ key }) => key));
+          const kept = [...state.losatCache.value].filter(([key, entry]) => !named.has(key) && entry.identityKind !== 'protein');
+          assert.deepEqual([app.losatResultRows.value.length, kept.map(([key]) => key)], [0, []], `${at} (g): Clear left results or unnamed searches`);
+        }
         if (kind === 'orders') {
           // Review 13's P1 and P2: a new drawing's Generate, then the older steps' Undo and Redo from the first drawing.
           const first = state.activeDrawingId.value;

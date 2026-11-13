@@ -204,6 +204,7 @@ import {
   losatRowsOfDrawing,
   losatRowsOfOtherDrawings,
   losatRowsWithDrawing,
+  losatEvidenceAfterClear,
   CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
 import {
@@ -1730,9 +1731,10 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: SvgResultEntry[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
- * @property {() => void} [emptyKeptProteinIdentityManifests] Empties the protein identity manifest each drawing not
- *   shown keeps in its artifact slot (Clear LOSAT results, D-197), and counts the Clear for the drawings History holds
- *   out of the store, which come back emptied (OV-3274).
+ * @property {() => readonly unknown[]} [beginLosatClear] **Clear LOSAT results**' reach into the drawings not shown:
+ *   counts the Clear for the drawings History holds out of the store, which come back without LOSAT results (OV-3274),
+ *   and returns the protein identity manifest each drawing not shown keeps in its artifact slot (D-197), in which the
+ *   protein searches Clear keeps for it resolve.
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
@@ -1800,9 +1802,8 @@ const losatResultRowsAccess = ({ losatCacheInfo, losatCache }) => {
     losatResultRowsOf: (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id),
     /** A drawing's rows as written, which a Duplicate copies (OV-3205). @param {DrawingId} drawingId */
     losatRowsOf: (drawingId) => losatRowsOfDrawing(cacheInfoRows(), drawingId),
-    /** The count of **Clear LOSAT results**: the searches it removes, the whole cache, one per key (PD-OI-022: Clear Cache
-     * invalidates retained evidence), a search only a deleted drawing's rows name included (OV-3211). */
-    clearableLosatResultCount: () => losatCache.value.size,
+    /** Whether a drawing of the project has LOSAT results: the hint under a panel without its own says which is true. */
+    projectHasLosatResults: () => cacheInfoRows().length > 0,
     /** A drawing's rows come and go with it (OV-3205, OV-3209); a row whose search a Clear removed meanwhile stays out. @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
     swapLosatResultRows: (drawingId, drawingRows) => {
       const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows.filter((row) => losatCache.value.has(row.key)));
@@ -1830,7 +1831,7 @@ export const createRunAnalysis = ({
   installGeneratedArtifactOwnerSet,
   installRedrawnArtifact,
   restoreGeneratedArtifactHandle,
-  emptyKeptProteinIdentityManifests = () => {},
+  beginLosatClear = () => [],
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
   previewRuntime = null,
@@ -6464,7 +6465,7 @@ export const createRunAnalysis = ({
   };
 
   const {
-    cacheInfoRows, losatResultRowsOf, losatRowsOf, clearableLosatResultCount, swapLosatResultRows
+    cacheInfoRows, losatResultRowsOf, losatRowsOf, projectHasLosatResults, swapLosatResultRows
   } = losatResultRowsAccess({ losatCacheInfo, losatCache });
 
   /** @param {DrawingState} drawing */
@@ -6504,17 +6505,21 @@ export const createRunAnalysis = ({
     }
   };
 
+  // **Clear LOSAT results** clears the shown drawing's results (PD-OI-022 scenario revision 2): its rows and protein
+  // identity manifest, and every search and converted payload no other drawing names (`losatEvidenceAfterClear`).
+  // The retry of a run's completed searches and the pending legacy protein candidates go too: no drawing names them.
   const clearLosatCache = () => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    const left = losatEvidenceAfterClear({ rows: cacheInfoRows(), drawingId: state.activeDrawing().id,
+      manifests: beginLosatClear() }, { cache: losatCache.value, derived: losatDerivedCache.value });
     completedLosatSearch = null;
-    losatCache.value = new Map();
-    losatDerivedCache.value = new Map();
+    losatCache.value = left.cache;
+    losatDerivedCache.value = left.derived;
     proteinIdentityManifest.value = emptyProteinIdentityManifest();
-    emptyKeptProteinIdentityManifests();
     legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
     legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-    losatCacheInfo.value = [];
+    losatCacheInfo.value = left.rows;
   };
 
   // A run that is not a Generate (a Sequence search, PD-OI-117; Find in other files, PD-OI-123) under the
@@ -6594,7 +6599,7 @@ export const createRunAnalysis = ({
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     losatResultRowsOf,
-    clearableLosatResultCount, swapLosatResultRows, losatRowsOf,
+    projectHasLosatResults, swapLosatResultRows, losatRowsOf,
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,

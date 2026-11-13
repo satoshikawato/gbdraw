@@ -1029,7 +1029,7 @@ test('Every drawing while the drawing switch is busy writes nothing and shows th
 
 // #1777 round 13 (OV-3205): a copy draws its source's rings from the source's Result, so it holds the source's LOSAT
 // results, one row per drawing as a Session Load gives them: Save Raw LOSAT TSV saves the same tables in the copy,
-// Clear still counts each search once (the searches are shared, never copied), and Undo and Redo of the Duplicate
+// Clear counts the copy's results (the searches are shared, never copied), and Undo and Redo of the Duplicate
 // take the copy's rows away and back with the copy.
 test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo take them away and back', async () => {
   const app = createAppSetup();
@@ -1057,7 +1057,7 @@ test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo ta
     const { drawingId: copyId } = app.drawingList.duplicateDrawing(source);
     assert.equal(state.activeDrawingId.value, copyId);
     assert.deepEqual(await saved(), files, 'the copy saves the tables its rings draw');
-    assert.equal(app.clearableLosatResultCount.value, 3, 'Clear still counts 3 searches');
+    assert.equal(app.losatResultRows.value.length, 3, '"Clear 3 LOSAT results" counts the copy\'s results');
     assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, keys], 'one row per drawing that holds a search');
     assert.equal(state.losatCache.value.size, 3, 'the searches are shared, never copied');
 

@@ -107,7 +107,7 @@ export const losatRowsOfDrawing = (rows, drawingId) => rows.filter((row) => row.
 export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(losatRowsOfDrawing(rows, drawingId));
 
 /**
- * The cache-info rows of the other drawings: what a drawing's Generate or ring edit leaves.
+ * The cache-info rows of the other drawings: what a drawing's Generate, ring edit or **Clear LOSAT results** leaves.
  * @template {{ drawingId: DrawingId }} Row
  * @param {readonly Row[]} rows @param {DrawingId} drawingId
  * @returns {Row[]}
@@ -143,8 +143,8 @@ export const losatRowsAfterStep = (rows, drawingId, stepRows) => {
 };
 
 /**
- * The LOSAT caches an install leaves (D-200). No install removes a cached search or converted payload: only Clear does,
- * for the whole project, as on dev. A Generate's commit installs its caches whole: they are the cache it started from
+ * The LOSAT caches an install leaves (D-200). No install removes a cached search or converted payload: only Clear does
+ * (`losatEvidenceAfterClear`). A Generate's commit installs its caches whole: they are the cache it started from
  * and what it searched or converted (as on dev). An Undo, a Redo or a rollback keeps the current caches and puts back
  * from the step only the evidence of the drawing it restores: the searches its rows name, the protein searches that
  * resolve in its protein identity manifest (the all-against-all searches of Similarity groups and Collinear have no
@@ -169,6 +169,32 @@ export const losatEvidenceAfterStep = ({ commit, rows, manifest }, step, current
   const payloads = [...step.derived].filter(([key, { rawKeys }]) => !current.derived.has(key)
     && Array.isArray(rawKeys) && rawKeys.every((rawKey) => cache.has(rawKey)));
   return { cache, derived: payloads.length ? new Map([...current.derived, ...payloads]) : current.derived };
+};
+
+/**
+ * What **Clear LOSAT results** of drawing `drawingId` leaves (PD-OI-022 scenario revision 2): it clears that drawing's
+ * results, so its rows go and a cached search stays only while another drawing of the project names it, by a row
+ * (`rows` of the other drawings) or, for a protein search, by resolving in that drawing's protein identity manifest
+ * (`manifests`: the all-against-all searches of Similarity groups and Collinear have no row). A search no remaining
+ * drawing names goes, so in a project of one drawing every search goes, as before. A converted payload stays while
+ * every search it was converted from (`rawKeys`) stays. The current Maps themselves when nothing goes.
+ * @template {{ key: unknown, drawingId: DrawingId }} Row
+ * @template Entry
+ * @template {{ rawKeys?: readonly unknown[] }} Derived
+ * @param {{ rows: readonly Row[], drawingId: DrawingId, manifests: readonly unknown[] }} clear The project's rows, the
+ *   cleared drawing, and the protein identity manifests of the other drawings.
+ * @param {{ cache: Map<unknown, Entry>, derived: Map<unknown, Derived> }} current The current caches.
+ * @returns {{ rows: Row[], cache: Map<unknown, Entry>, derived: Map<unknown, Derived> }}
+ */
+export const losatEvidenceAfterClear = ({ rows, drawingId, manifests }, current) => {
+  const kept = losatRowsOfOtherDrawings(rows, drawingId);
+  const keys = new Set(kept.map(({ key }) => key));
+  const searches = [...current.cache].filter(([key, entry]) => keys.has(key)
+    || manifests.some((manifest) => proteinSearchResolvesIn(entry, manifest)));
+  const cache = searches.length === current.cache.size ? current.cache : new Map(searches);
+  const payloads = [...current.derived].filter(([, { rawKeys }]) => Array.isArray(rawKeys) && rawKeys.length > 0
+    && rawKeys.every((rawKey) => cache.has(rawKey)));
+  return { rows: kept, cache, derived: payloads.length === current.derived.size ? current.derived : new Map(payloads) };
 };
 
 // The runtime identity the Web stores beside each raw entry it searches
