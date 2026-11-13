@@ -896,6 +896,18 @@ def _bound_drops_labels(
     return lambda band: room.drops_labels(band, axis, slot.side, annotation)
 
 
+class _MeasureInputs(NamedTuple):
+    """What every slot measurement of one radial layout reads besides the slot: built once per layout and passed
+    down the placement functions as one value."""
+
+    axis_radius_px: float
+    feature_dict: Mapping[str, object] | None
+    geometry: CircularCanvasGeometry
+    cfg: GbdrawConfig
+    total_length: int
+    scalar_axes: CircularScalarAxes | None
+
+
 class _SlotAt(NamedTuple):
     """One slot asked for at an anchor radius and a width: what each renderer's band owner reads."""
 
@@ -903,12 +915,7 @@ class _SlotAt(NamedTuple):
     anchor_offset_px: float
     anchor_radius_px: float
     width_px: float
-    axis_radius_px: float
-    feature_dict: Mapping[str, Any] | None
-    geometry: CircularCanvasGeometry
-    cfg: GbdrawConfig
-    total_length: int
-    scalar_axes: CircularScalarAxes | None
+    measure: _MeasureInputs
 
 
 class _SlotBands(NamedTuple):
@@ -927,13 +934,14 @@ def _feature_lanes_bands(at: _SlotAt) -> _SlotBands:
 
     intent = at.intent
     feature_preset = intent.params.get("stack_preset", intent.params.get("preset"))
+    measure = at.measure
     feature_layout = build_circular_feature_layout(
-        at.feature_dict,
-        axis_radius_px=float(at.axis_radius_px),
+        measure.feature_dict,
+        axis_radius_px=float(measure.axis_radius_px),
         width_px=at.width_px,
         track_type=str(feature_preset) if feature_preset is not None else None,
         lane_direction=str(intent.params.get("lane_direction", "inside")),
-        strandedness=bool(at.cfg.canvas.strandedness),
+        strandedness=bool(measure.cfg.canvas.strandedness),
         anchor_radius_px=at.anchor_radius_px,
         lane_spacing_px=float(intent.spacing_px),
     )
@@ -943,7 +951,7 @@ def _feature_lanes_bands(at: _SlotAt) -> _SlotBands:
     anchor_radius_px = float(feature_layout.anchor_radius_px)
     band = feature_layout.all_band_px
     return _SlotBands(
-        float(anchor_radius_px) - float(at.axis_radius_px),
+        float(anchor_radius_px) - float(measure.axis_radius_px),
         anchor_radius_px,
         band,
         feature_layout.primary_band_px,
@@ -958,10 +966,11 @@ def _ticks_bands(at: _SlotAt) -> _SlotBands:
     intent = at.intent
     tick_params = dict(intent.params)
     tick_params["_slot_side"] = intent.side
+    measure = at.measure
     tick_layout = _tick_layout_from_params(
-        total_length=int(at.total_length),
-        geometry=at.geometry,
-        cfg=at.cfg,
+        total_length=int(measure.total_length),
+        geometry=measure.geometry,
+        cfg=measure.cfg,
         params=tick_params,
         anchor_radius_px=at.anchor_radius_px,
         width_px=at.width_px,
@@ -997,10 +1006,11 @@ def _centred_bands(at: _SlotAt) -> _SlotBands:
             if intent.side == "inside"
             else RadialBand(band.inner_px, band.outer_px + room)
         )
+    scalar_axes = at.measure.scalar_axes
     axis_footprint = (
         None
-        if at.scalar_axes is None
-        else at.scalar_axes.footprint(intent.renderer, at.width_px, slot_id=intent.slot_id, params=intent.params)
+        if scalar_axes is None
+        else scalar_axes.footprint(intent.renderer, at.width_px, slot_id=intent.slot_id, params=intent.params)
     )
     if axis_footprint is not None:
         # A scalar track's axis paints past its band (its numbered labels); other rings keep clear of it.
@@ -1024,29 +1034,15 @@ def _centred_band_may_fit(intent: _RadialSlotIntent, width_px: float, lower: flo
 
 def _measure_radial_slot(
     intent: _RadialSlotIntent,
+    measure: _MeasureInputs,
     *,
     anchor_offset_px: float,
     width_px: float | None = None,
-    axis_radius_px: float,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
     compressed: bool = False,
 ) -> CircularResolvedSlot:
     resolved_width = max(0.0, float(intent.width_px if width_px is None else width_px))
     at = _SlotAt(
-        intent,
-        float(anchor_offset_px),
-        float(axis_radius_px) + float(anchor_offset_px),
-        resolved_width,
-        float(axis_radius_px),
-        feature_dict,
-        geometry,
-        cfg,
-        total_length,
-        scalar_axes,
+        intent, float(anchor_offset_px), float(measure.axis_radius_px) + float(anchor_offset_px), resolved_width, measure
     )
     bands = _OWN_BANDS.get(intent.renderer, _centred_bands)(at)
     return _with_span_label_room(intent, CircularResolvedSlot(
@@ -1160,29 +1156,19 @@ def _slot_reserves(intent: _RadialSlotIntent) -> bool:
 
 def _place_outside_auto(
     intent: _RadialSlotIntent,
+    measure: _MeasureInputs,
     *,
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
     placement_window: PlacementWindow,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         anchor_offset = max(0.0, float(intent.anchor_offset_px or 0.0))
         for _ in range(256):
             resolved = _measure_radial_slot(
                 intent,
+                measure,
                 anchor_offset_px=anchor_offset,
                 width_px=width_px,
-                axis_radius_px=axis_radius_px,
-                feature_dict=feature_dict,
-                geometry=geometry,
-                cfg=cfg,
-                total_length=total_length,
-                scalar_axes=scalar_axes,
                 compressed=compressed,
             )
             if resolved.packing_band_px is not None and resolved.packing_band_px.inner_px < placement_window.inner_px - LAYOUT_EPSILON:
@@ -1238,15 +1224,10 @@ def _free_intervals(
 def _try_measure_inside_interval(
     intent: _RadialSlotIntent,
     *,
+    measure: _MeasureInputs,
     width_px: float,
     interval: tuple[float, float],
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
     compressed: bool,
     packing_inner_px: float = 0.0,
 ) -> CircularResolvedSlot | None:
@@ -1260,7 +1241,7 @@ def _try_measure_inside_interval(
             (lower + upper) / 2.0,
             lower + (0.5 * float(width_px)),
         ]
-    elif intent.renderer == "ticks" and upper >= float(axis_radius_px) - LAYOUT_EPSILON:
+    elif intent.renderer == "ticks" and upper >= float(measure.axis_radius_px) - LAYOUT_EPSILON:
         seeds = [
             upper,
             upper - (0.5 * float(width_px)),
@@ -1275,18 +1256,13 @@ def _try_measure_inside_interval(
             lower + (0.5 * float(width_px)),
         ]
     for seed_radius in seeds:
-        anchor_offset = float(seed_radius) - float(axis_radius_px)
+        anchor_offset = float(seed_radius) - float(measure.axis_radius_px)
         for _ in range(32):
             resolved = _measure_radial_slot(
                 intent,
+                measure,
                 anchor_offset_px=anchor_offset,
                 width_px=width_px,
-                axis_radius_px=axis_radius_px,
-                feature_dict=feature_dict,
-                geometry=geometry,
-                cfg=cfg,
-                total_length=total_length,
-                scalar_axes=scalar_axes,
                 compressed=compressed,
             )
             bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
@@ -1325,29 +1301,19 @@ def _try_measure_inside_interval(
 
 def _place_inside_auto(
     intent: _RadialSlotIntent,
+    measure: _MeasureInputs,
     *,
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
     placement_window: PlacementWindow,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         resolved = _place_inside_auto_fixed_width(
             intent,
+            measure,
             width_px=width_px,
             compressed=compressed,
             occupied=occupied,
-            axis_radius_px=axis_radius_px,
             placement_window=placement_window,
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            scalar_axes=scalar_axes,
         )
         if resolved is not None:
             return resolved
@@ -1360,17 +1326,12 @@ def _place_inside_auto(
 
 def _place_inside_auto_fixed_width(
     intent: _RadialSlotIntent,
+    measure: _MeasureInputs,
     *,
     width_px: float,
     compressed: bool,
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
     placement_window: PlacementWindow,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot | None:
     outer_limit = max(0.0, float(placement_window.outer_px))
     reserved_inner = placement_window.reserved_inner_px
@@ -1382,15 +1343,10 @@ def _place_inside_auto_fixed_width(
     for interval in sorted(intervals, key=lambda item: item[1], reverse=True):
         resolved = _try_measure_inside_interval(
             intent,
+            measure=measure,
             width_px=width_px,
             interval=interval,
             occupied=occupied,
-            axis_radius_px=axis_radius_px,
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            scalar_axes=scalar_axes,
             compressed=compressed,
             packing_inner_px=float(placement_window.inner_px),
         )
@@ -1403,30 +1359,20 @@ def _place_inside_auto_fixed_width(
 
 def _measure_anchored_inside(
     intent: _RadialSlotIntent,
+    measure: _MeasureInputs,
     *,
     width_px: float,
     compressed: bool,
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
     placement_window: PlacementWindow,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot | None:
     """A pinned row at ``width_px`` on its radius, or ``None`` when it leaves the window or overlaps."""
 
     resolved = _measure_radial_slot(
         intent,
+        measure,
         anchor_offset_px=float(intent.anchor_offset_px or 0.0),
         width_px=width_px,
-        axis_radius_px=axis_radius_px,
-        feature_dict=feature_dict,
-        geometry=geometry,
-        cfg=cfg,
-        total_length=total_length,
-        scalar_axes=scalar_axes,
         compressed=compressed,
     )
     bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
@@ -1693,15 +1639,10 @@ def _inside_stack_failure_hint(intents: Sequence[_RadialSlotIntent]) -> str:
 
 def _place_inside_auto_stack_group(
     intents: Sequence[_RadialSlotIntent],
+    measure: _MeasureInputs,
     *,
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
     placement_window: PlacementWindow,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     failure: _RadialSlotIntent | None = None
     for scale in _inside_auto_stack_width_scales(intents):
@@ -1714,16 +1655,11 @@ def _place_inside_auto_stack_group(
             place = _measure_anchored_inside if _anchored_inside(intent) else _place_inside_auto_fixed_width
             resolved = place(
                 intent,
+                measure,
                 width_px=width_px,
                 compressed=compressed,
                 occupied=working_occupied,
-                axis_radius_px=axis_radius_px,
                 placement_window=replace(placement_window, outer_px=working_outer),
-                feature_dict=feature_dict,
-                geometry=geometry,
-                cfg=cfg,
-                total_length=total_length,
-                scalar_axes=scalar_axes,
             )
             if resolved is None:
                 failure = intent
@@ -1760,15 +1696,10 @@ def _place_inside_auto_stack_group(
 
 def _place_outside_auto_stack_group(
     intents: Sequence[_RadialSlotIntent],
+    measure: _MeasureInputs,
     *,
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
     placement_window: PlacementWindow,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     """Place ``intents``, given from the axis outward, from the window's inner edge."""
 
@@ -1778,14 +1709,9 @@ def _place_outside_auto_stack_group(
     for intent_index, intent in enumerate(intents):
         resolved = _place_outside_auto(
             intent,
+            measure,
             occupied=working_occupied,
-            axis_radius_px=axis_radius_px,
             placement_window=PlacementWindow(working_inner, float(placement_window.outer_px)),
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            scalar_axes=scalar_axes,
         )
         resolved_group.append(resolved)
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
@@ -1914,27 +1840,17 @@ def _group_fits_window_and_order(
 
 def _try_place_preferred_numeric_group_at_anchors(
     intents: Sequence[_RadialSlotIntent],
+    measure: _MeasureInputs,
     *,
     occupied: Sequence[tuple[str, RadialBand]],
     placement_window: PlacementWindow,
-    axis_radius_px: float,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     resolved_group = tuple(
         _measure_radial_slot(
             intent,
+            measure,
             anchor_offset_px=float(intent.anchor_offset_px or 0.0),
             width_px=float(intent.width_px),
-            axis_radius_px=axis_radius_px,
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            scalar_axes=scalar_axes,
             compressed=False,
         )
         for intent in intents
@@ -1951,16 +1867,11 @@ def _try_place_preferred_numeric_group_at_anchors(
 
 def _place_inside_auto_group_with_width_scale(
     intents: Sequence[_RadialSlotIntent],
+    measure: _MeasureInputs,
     *,
     width_scale: float,
     occupied: Sequence[tuple[str, RadialBand]],
     placement_window: PlacementWindow,
-    axis_radius_px: float,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     working_occupied = list(occupied)
     working_outer = float(placement_window.outer_px)
@@ -1970,16 +1881,11 @@ def _place_inside_auto_group_with_width_scale(
         place = _measure_anchored_inside if _anchored_inside(intent) else _place_inside_auto_fixed_width
         resolved = place(
             intent,
+            measure,
             width_px=width_px,
             compressed=width_px < float(intent.width_px) - LAYOUT_EPSILON,
             occupied=working_occupied,
-            axis_radius_px=axis_radius_px,
             placement_window=replace(placement_window, outer_px=working_outer),
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            scalar_axes=scalar_axes,
         )
         if resolved is None:
             return None
@@ -2011,15 +1917,10 @@ def _same_band(a: RadialBand | None, b: RadialBand | None) -> bool:
 
 def _place_preferred_numeric_group(
     intents: Sequence[_RadialSlotIntent],
+    measure: _MeasureInputs,
     *,
     occupied: Sequence[tuple[str, RadialBand]],
     placement_window: PlacementWindow,
-    axis_radius_px: float,
-    feature_dict: Mapping[str, Any] | None,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    scalar_axes: CircularScalarAxes | None,
     under_a_track: bool,
     pack: bool,
 ) -> tuple[CircularResolvedSlot, ...]:
@@ -2035,28 +1936,18 @@ def _place_preferred_numeric_group(
     def at_anchors(group: Sequence[_RadialSlotIntent]) -> tuple[CircularResolvedSlot, ...] | None:
         return _try_place_preferred_numeric_group_at_anchors(
             group,
+            measure,
             occupied=occupied,
             placement_window=placement_window,
-            axis_radius_px=axis_radius_px,
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            scalar_axes=scalar_axes,
         )
 
     def packed_at(group: Sequence[_RadialSlotIntent], scale: float) -> tuple[CircularResolvedSlot, ...] | None:
         return _place_inside_auto_group_with_width_scale(
             group,
+            measure,
             width_scale=scale,
             occupied=occupied,
             placement_window=placement_window,
-            axis_radius_px=axis_radius_px,
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            scalar_axes=scalar_axes,
         )
 
     lanes = list(intents)
@@ -2168,16 +2059,7 @@ def _next_future_hard_slot(
     return None
 
 
-def _minimum_future_inside_width_px(
-    intent: _RadialSlotIntent,
-    *,
-    axis_radius_px: float,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    feature_dict: Mapping[str, Any] | None,
-    scalar_axes: CircularScalarAxes | None,
-) -> float:
+def _minimum_future_inside_width_px(intent: _RadialSlotIntent, measure: _MeasureInputs) -> float:
     width = max(0.0, float(intent.width_px))
     if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
         if intent.placement_policy == "preferred":
@@ -2189,14 +2071,9 @@ def _minimum_future_inside_width_px(
     if intent.renderer in {"features", "ticks", "depth"}:
         resolved = _measure_radial_slot(
             intent,
+            measure,
             anchor_offset_px=0.0,
             width_px=width,
-            axis_radius_px=float(axis_radius_px),
-            feature_dict=feature_dict,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=int(total_length),
-            scalar_axes=scalar_axes,
             compressed=width < float(intent.width_px) - LAYOUT_EPSILON,
         )
         footprint_widths = [width]
@@ -2211,15 +2088,10 @@ def _minimum_future_inside_width_px(
 
 def _future_unresolved_inside_span_px(
     ordered_intents: Sequence[_RadialSlotIntent],
+    measure: _MeasureInputs,
     *,
     start_pos: int,
     current_outer_intent: _RadialSlotIntent,
-    axis_radius_px: float,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    feature_dict: Mapping[str, Any] | None,
-    scalar_axes: CircularScalarAxes | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
 ) -> tuple[float, tuple[_KeptInsideSlot, ...]]:
     """The smallest span the unresolved inside rows after ``start_pos`` need, and those rows."""
@@ -2235,12 +2107,7 @@ def _future_unresolved_inside_span_px(
         slots.append(_KeptInsideSlot(future.slot_id, future.renderer))
         span += _gap_between_inner_outer_tracks(future, outer_neighbor) + _minimum_future_inside_width_px(
             future,
-            axis_radius_px=axis_radius_px,
-            geometry=geometry,
-            cfg=cfg,
-            total_length=total_length,
-            feature_dict=feature_dict,
-            scalar_axes=scalar_axes,
+            measure,
         )
         outer_neighbor = future
     return span, tuple(slots)
@@ -2271,17 +2138,12 @@ def _inner_limit_with_reserved_future_span(
 
 def _inside_placement_window(
     ordered_intents: Sequence[_RadialSlotIntent],
+    measure: _MeasureInputs,
     *,
     start_pos: int,
     current_outer_intent: _RadialSlotIntent,
     inside_max_outer: float,
     occupied: Sequence[tuple[str, RadialBand]],
-    axis_radius_px: float,
-    geometry: CircularCanvasGeometry,
-    cfg: GbdrawConfig,
-    total_length: int,
-    feature_dict: Mapping[str, Any] | None,
-    scalar_axes: CircularScalarAxes | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
     group: Sequence[_RadialSlotIntent] = (),
 ) -> PlacementWindow:
@@ -2299,7 +2161,11 @@ def _inside_placement_window(
         resolved_by_index=resolved_by_index,
         below_px=min(
             [float(inside_max_outer)]
-            + [float(axis_radius_px) + float(member.anchor_offset_px or 0.0) for member in group if _anchored_inside(member)]
+            + [
+                float(measure.axis_radius_px) + float(member.anchor_offset_px or 0.0)
+                for member in group
+                if _anchored_inside(member)
+            ]
         ),
     )
     if future_hard is not None:
@@ -2317,14 +2183,9 @@ def _inside_placement_window(
         inner_limit = reserved_inner_limit + gap_to_future_hard
     future_span, future_slots = _future_unresolved_inside_span_px(
         ordered_intents,
+        measure,
         start_pos=start_pos,
         current_outer_intent=current_outer_intent,
-        axis_radius_px=axis_radius_px,
-        geometry=geometry,
-        cfg=cfg,
-        total_length=total_length,
-        feature_dict=feature_dict,
-        scalar_axes=scalar_axes,
         resolved_by_index=resolved_by_index,
     )
     if future_span <= LAYOUT_EPSILON:
@@ -2736,17 +2597,6 @@ def _depth_slot_widths(intents: Sequence[_RadialSlotIntent]) -> tuple[DepthSlotW
     )
 
 
-class _MeasureInputs(TypedDict):
-    """What every slot measurement of one radial layout reads besides the slot, passed on as keyword arguments."""
-
-    axis_radius_px: float
-    feature_dict: Mapping[str, object] | None
-    geometry: CircularCanvasGeometry
-    cfg: GbdrawConfig
-    total_length: int
-    scalar_axes: CircularScalarAxes | None
-
-
 class _PassIntents(NamedTuple):
     """The slot intents of one pass, and the scalar axes with the GC axis font of its depth slots."""
 
@@ -2841,7 +2691,7 @@ class _RadialStack:
         # the facing gap from every one of them.
         self.rows_below_outside: list[tuple[_RadialSlotIntent, float]] = []
         self.rows_above_inside: list[tuple[_RadialSlotIntent, float]] = []
-        axis_radius_px = measure["axis_radius_px"]
+        axis_radius_px = measure.axis_radius_px
         default_axis_gap_px = _default_spacing_px(axis_radius_px)
         outside_axis_gap_px = max(
             [float(intent.inner_gap_px) for intent in intents if intent.side == "outside"] or [default_axis_gap_px]
@@ -2881,7 +2731,7 @@ class _RadialStack:
                 continue
             if intent.placement_policy not in {"hard", "overlay"}:
                 continue
-            resolved = _measure_radial_slot(intent, anchor_offset_px=float(intent.anchor_offset_px or 0.0), **self.measure)
+            resolved = _measure_radial_slot(intent, self.measure, anchor_offset_px=float(intent.anchor_offset_px or 0.0))
             if _anchored_inside(intent):
                 if resolved.reserved_band_px is not None:
                     self.anchored_blockers.append((intent.slot_id, resolved.reserved_band_px))
@@ -2904,34 +2754,43 @@ class _RadialStack:
                     pinned_occupied.append((intent.slot_id, pinned_band))
 
     def _bound_by_pinned_feature_rows(self) -> None:
-        """A pinned row bounds the rows after it on its own side (below, as it is placed); a pinned feature row also
-        bounds every row on the other side of the axis."""
+        """Pinned feature rows bound the rows on the other side of the axis (an overlay feature row bounds both
+        sides)."""
 
-        axis_radius_px = self.measure["axis_radius_px"]
         for slot_index, resolved in self.resolved_by_index.items():
             slot_intent = self.intent_by_index.get(slot_index)
-            if slot_intent is None or resolved.packing_band_px is None or resolved.renderer != "features":
+            band = resolved.packing_band_px
+            if slot_intent is None or band is None or resolved.renderer != "features":
                 continue
             if resolved.side != "outside":
                 self.rows_below_outside.append(
-                    (slot_intent, max(axis_radius_px, float(resolved.packing_band_px.outer_px)))
+                    (slot_intent, self._edge_facing_next_row(resolved.renderer, band, "outside"))
                 )
             if resolved.side != "inside":
-                self.rows_above_inside.append(
-                    (slot_intent, min(axis_radius_px, float(resolved.packing_band_px.inner_px)))
-                )
+                self.rows_above_inside.append((slot_intent, self._edge_facing_next_row(resolved.renderer, band, "inside")))
+
+    def _edge_facing_next_row(self, renderer: str, band: RadialBand, side: Literal["outside", "inside"]) -> float:
+        """The edge of a placed row's ``band`` that bounds the next row of ``side``: the outer edge for the outside
+        rows, the inner edge for the inside rows. A feature row bounds the next row from the axis at least: its edge
+        is the axis when its band ends on the other side of the axis."""
+
+        if side == "outside":
+            outer_px = float(band.outer_px)
+            return max(self.measure.axis_radius_px, outer_px) if renderer == "features" else outer_px
+        inner_px = float(band.inner_px)
+        return min(self.measure.axis_radius_px, inner_px) if renderer == "features" else inner_px
 
     def _place_outside_rows(self) -> None:
         """Outside rows are placed from the axis outward: each row's window starts at the row below it and ends at
         the next pinned row above it."""
 
-        axis_radius_px = self.measure["axis_radius_px"]
         outside_intents = [intent for intent in reversed(self.ordered) if intent.side == "outside"]
         for outside_pos, intent in enumerate(outside_intents):
             if intent.slot_index not in self.resolved_by_index:
                 outside_group = _outside_auto_stack_group_from(outside_intents, outside_pos, self.resolved_by_index)
                 resolved_group = _place_outside_auto_stack_group(
                     outside_group,
+                    self.measure,
                     occupied=[*self.occupied, *self.anchored_blockers],
                     placement_window=_outside_placement_window(
                         outside_intents,
@@ -2942,32 +2801,21 @@ class _RadialStack:
                         ),
                         resolved_by_index=self.resolved_by_index,
                     ),
-                    **self.measure,
                 )
                 self._record_group(outside_group, resolved_group)
             outside_band = self.resolved_by_index[intent.slot_index].packing_band_px
             if outside_band is not None:
-                outer_px = float(outside_band.outer_px)
-                if intent.renderer == "features":
-                    outer_px = max(axis_radius_px, outer_px)
-                self.rows_below_outside.append((intent, outer_px))
+                self.rows_below_outside.append((intent, self._edge_facing_next_row(intent.renderer, outside_band, "outside")))
 
     def _place_inside_rows(self) -> None:
         """Inside rows are placed from the axis inward, each group under the rows placed above it."""
 
-        axis_radius_px = self.measure["axis_radius_px"]
         for intent_pos, intent in enumerate(self.ordered):
             already_resolved = self.resolved_by_index.get(intent.slot_index)
             if already_resolved is not None:
-                if (
-                    intent.placement_policy == "hard"
-                    and intent.side == "inside"
-                    and already_resolved.packing_band_px is not None
-                ):
-                    inner_px = float(already_resolved.packing_band_px.inner_px)
-                    if intent.renderer == "features":
-                        inner_px = min(axis_radius_px, inner_px)
-                    self.rows_above_inside.append((intent, inner_px))
+                band = already_resolved.packing_band_px
+                if intent.placement_policy == "hard" and intent.side == "inside" and band is not None:
+                    self.rows_above_inside.append((intent, self._edge_facing_next_row(intent.renderer, band, "inside")))
                 continue
             # Outside rows are placed by ``_place_outside_rows``, and every overlay (placement policy "overlay") was
             # resolved with the pinned slots, so only inside rows remain.
@@ -2991,9 +2839,9 @@ class _RadialStack:
         if movable_group and (len(movable_group) > 1 or _anchored_inside(intent)):
             resolved_group = _place_inside_auto_stack_group(
                 movable_group,
+                self.measure,
                 occupied=self.occupied,
                 placement_window=self._inside_window(intent_pos, movable_group, outer_limit),
-                **self.measure,
             )
             self._record_inside_group(movable_group, resolved_group)
             return
@@ -3003,21 +2851,21 @@ class _RadialStack:
         if preferred_group:
             resolved_group = _place_preferred_numeric_group(
                 preferred_group,
+                self.measure,
                 occupied=self.occupied,
                 placement_window=self._inside_window(intent_pos, preferred_group, outer_limit),
                 under_a_track=any(
                     row.renderer not in _ROWS_ABOVE_THE_INSIDE_STACK for row, _edge in self.rows_above_inside
                 ),
                 pack=self.definition_pass == "limit",
-                **self.measure,
             )
             self._record_inside_group(preferred_group, resolved_group)
             return
         resolved = _place_inside_auto(
             intent,
+            self.measure,
             occupied=self.occupied,
             placement_window=self._inside_window(intent_pos, (intent,), outer_limit),
-            **self.measure,
         )
         self._record_inside_group((intent,), (resolved,))
 
@@ -3028,13 +2876,13 @@ class _RadialStack:
 
         return _inside_placement_window(
             self.ordered,
+            self.measure,
             start_pos=intent_pos + len(group) - 1,
             current_outer_intent=group[-1],
             inside_max_outer=outer_limit,
             occupied=self.occupied,
             resolved_by_index=self.resolved_by_index,
             group=group,
-            **self.measure,
         )
 
     def _record_group(
@@ -3050,7 +2898,11 @@ class _RadialStack:
     def _record_inside_group(
         self, group: Sequence[_RadialSlotIntent], resolved_group: Sequence[CircularResolvedSlot]
     ) -> None:
-        """A placed inside group (``_record_group``), whose rows bound the rows under them by their inner edges."""
+        """A placed inside group (``_record_group``), whose rows bound the rows under them by their inner edges.
+
+        The edges are taken as they are, without the axis bound of ``_edge_facing_next_row``: a placed group lies in
+        its window, which ends an axis gap under the axis, so the bound would leave them unchanged but for a band that
+        ends within the layout tolerance past the axis."""
 
         self._record_group(group, resolved_group)
         for group_intent, group_resolved in zip(group, resolved_group):
@@ -3060,7 +2912,7 @@ class _RadialStack:
     def _anchor_annotation_overlays(self) -> None:
         """Each annotation overlay drawn over the placed slots it names (``_anchored_annotation_overlay``)."""
 
-        strands_separated = bool(self.measure["cfg"].canvas.strandedness)
+        strands_separated = bool(self.measure.cfg.canvas.strandedness)
         by_id = {slot.id: slot for slot in self.resolved_by_index.values()}
         for intent in self.intents:
             overlay_resolved = self.resolved_by_index.get(intent.slot_index)
@@ -3070,7 +2922,7 @@ class _RadialStack:
                 intent,
                 overlay_resolved,
                 by_id,
-                axis_radius_px=self.measure["axis_radius_px"],
+                axis_radius_px=self.measure.axis_radius_px,
                 strands_separated=strands_separated,
             )
             if anchored is None:
