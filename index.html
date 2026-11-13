@@ -112,6 +112,10 @@ textarea:lang(zh-Hans) { font-family: var(--font-hans); }
 textarea:lang(zh-Hant) { font-family: var(--font-hant); }
 textarea:lang(ko) { font-family: var(--font-ko); word-break: keep-all; }
 textarea:lang(th), [lang="th"] { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Garuda', 'Laksaman', sans-serif; line-height: 1.5; }
+textarea:lang(hi), [lang="hi"] { font-family: 'Inter', 'Nirmala UI', 'Kohinoor Devanagari', 'Noto Sans Devanagari', 'Mangal', sans-serif; line-height: 1.6; }
+textarea:lang(bn), [lang="bn"] { font-family: 'Inter', 'Nirmala UI', 'Kohinoor Bangla', 'Noto Sans Bengali', 'Vrinda', sans-serif; line-height: 1.6; }
+textarea:lang(fa), [lang="fa"], textarea:lang(ar), [lang="ar"] { font-family: 'Inter', 'Segoe UI', system-ui, 'Geeza Pro', 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Tahoma', sans-serif; line-height: 1.7; }
+textarea:lang(ur), [lang="ur"] { font-family: 'Noto Nastaliq Urdu', 'Urdu Typesetting', 'Noto Naskh Arabic', 'Geeza Pro', 'Tahoma', sans-serif; line-height: 2.7; }
 textarea[readonly] { opacity: .85; }
 .ref { font-size: 12.5px; color: var(--muted); font-family: var(--font-hans); }
 .ref b { font-family: var(--font-ui); font-weight: 500; margin-right: 4px; }
@@ -225,7 +229,8 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
 <script>
 (() => {
   'use strict';
-  // The languages with a catalog, from data/locales.json (the generator's list of UI_LOCALES).
+  // The languages with a catalog, from data/locales.json (the generator's list of UI_LOCALES):
+  // menu label, English language name, I18N_STYLE.md section and, when the row has it, text direction.
   const LOCALES = [];
   const FILTERS = [
     { id: 'todo', label: 'To review' },
@@ -425,7 +430,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
     box.replaceChildren(...LOCALES.map((l) => el('button', {
       class: 'locale', role: 'tab', id: `tab-${l.id}`, 'aria-selected': String(l.id === state.locale),
       'aria-controls': 'list', dataset: { locale: l.id }, onclick: () => setLocale(l.id),
-    }, el('span', { class: 'name', lang: l.lang }, l.label), el('span', { class: 'count' }),
+    }, el('span', { class: 'name', lang: l.lang, dir: l.dir }, l.label), el('span', { class: 'count' }),
       el('span', { class: 'meter', 'aria-hidden': 'true' }, el('i', { class: 'm-ok' }), el('i', { class: 'm-flag' })))));
     refreshCounts();
   }
@@ -508,10 +513,10 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
 
   function renderRow(k) {
     const loc = state.locale;
-    const lang = LOCALES.find((l) => l.id === loc).lang;
+    const { lang, dir } = LOCALES.find((l) => l.id === loc);
     const gloss = (k.g || []).map((i) => state.glossary[i]).filter((g) => g && g[loc])
-      .map((g) => el('li', {}, el('b', {}, g.en), el('span', { lang }, g[loc])));
-    const ta = el('textarea', { lang, id: `t-${k.id}`, rows: String(Math.min(6, Math.max(1, Math.ceil(k.en.length / 48)))), 'aria-label': `Translation of: ${k.en}`, placeholder: draftOf(loc, k.id) ? '' : 'No draft yet. Type the translation.' });
+      .map((g) => el('li', {}, el('b', {}, g.en), el('span', { lang, dir }, g[loc])));
+    const ta = el('textarea', { lang, dir, id: `t-${k.id}`, rows: String(Math.min(6, Math.max(1, Math.ceil(k.en.length / 48)))), 'aria-label': `Translation of: ${k.en}`, placeholder: draftOf(loc, k.id) ? '' : '\u2066No draft yet. Type the translation.\u2069' }); // isolated, so a right-to-left field keeps the English order
     ta.value = currentText(loc, k.id);
     ta.dataset.saved = ta.value;
     ta.addEventListener('input', () => { checkPlaceholders(k, ta); updateRowState(k.id); });
@@ -582,11 +587,11 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
 
   function renderSugs(k) {
     const box = document.getElementById(`g-${k.id}`); if (!box) return;
-    const loc = state.locale; const lang = LOCALES.find((l) => l.id === loc).lang;
+    const loc = state.locale; const { lang, dir } = LOCALES.find((l) => l.id === loc);
     box.replaceChildren(...activeSugs(loc, k.id).map(([src, g]) => el('div', { class: 'sug' },
       el('div', { class: 'sug-head' }, el('b', {}, 'Suggestion'), `from ${src}`, g.v ? el('span', { class: `sev ${g.v}` }, g.v) : null,
         sameSet(placeholders(k.en), placeholders(g.x)) ? null : el('span', { class: 'sev high' }, 'placeholder mismatch')),
-      el('p', { class: 'sug-x', lang }, g.x),
+      el('p', { class: 'sug-x', lang, dir }, g.x),
       g.r ? el('p', { class: 'sug-r' }, g.r) : null,
       el('div', { class: 'sug-actions' },
         el('button', { class: 'btn', type: 'button', onclick: () => useSuggestion(k, g.x) }, 'Use'),
@@ -780,12 +785,9 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
   }
 
   // ---- export for an agent review / import its answer -----------------------
-  const LANGUAGE_NAMES = { ja: 'Japanese', 'zh-Hans': 'Simplified Chinese (mainland usage)', 'zh-Hant': 'Traditional Chinese (Taiwan usage)', ko: 'Korean', es: 'Spanish (international usage)', fr: 'French (France usage)', pt: 'Portuguese (Brazilian usage)', id: 'Indonesian', vi: 'Vietnamese', th: 'Thai' };
-  const STYLE_SECTION = { ja: '2.', 'zh-Hans': '3.', 'zh-Hant': '4.', ko: '5.', es: '6.', fr: '7.', pt: '8.', id: '9.', vi: '10.', th: '11.' };
-
   function styleFor(md, loc) {
     const parts = md.split(/^(?=## )/m);
-    return parts.filter((part) => !part.startsWith('## ') || part.startsWith('## 1.') || part.startsWith(`## ${STYLE_SECTION[loc]}`)).join('').trim();
+    return parts.filter((part) => !part.startsWith('## ') || part.startsWith('## 1.') || part.startsWith(`## ${LOCALES.find((l) => l.id === loc).section}.`)).join('').trim();
   }
 
   function glossaryHint(k, loc) {
@@ -793,7 +795,7 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
   }
 
   function exportMarkdown(list, loc, style) {
-    const language = LANGUAGE_NAMES[loc];
+    const { language } = LOCALES.find((l) => l.id === loc);
     const rows = list.map((k) => {
       const e = editOf(loc, k.id) || {}; const s = statusOf(loc, k.id);
       const row = { id: k.id, en: k.en };
@@ -922,8 +924,8 @@ kbd { font: 11.5px var(--font-mono); padding: 0 5px; border: 1px solid var(--lin
 
   // ---- start ----------------------------------------------------------------
   async function start() {
-    for (const { tag, label } of await loadJson('data/locales.json', [])) {
-      LOCALES.push({ id: tag, label, lang: tag });
+    for (const { tag, label, language, section, dir } of await loadJson('data/locales.json', [])) {
+      LOCALES.push({ id: tag, label, lang: tag, language, section, dir });
       state.drafts[tag] = {}; state.notes[tag] = {}; state.edits[tag] = new Map(); state.sugs[tag] = new Map();
     }
     const savedLocale = storeGet('review.locale'); if (LOCALES.some((l) => l.id === savedLocale)) state.locale = savedLocale;
