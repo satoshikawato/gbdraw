@@ -101,8 +101,8 @@ class LinearComparison:
     ``source_name`` is the name of the file the decoder read the rows from.
 
     ``protein_matches`` marks the rows of a LOSATP protein comparison: the
-    protein analysis or the Session decoder of a ``precomputedProteinComparison``
-    sets it, and the input summary words the comparison by it (OV-3512).
+    protein analysis that made them sets it, and the input summary words the
+    comparison by it. A Session does not store it.
 
     ``drawn_feature_ids`` marks a table of a Session up to 40 without
     ``*_view_feature_svg_id`` columns: main's writers before ``3bca0e8d9``

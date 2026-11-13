@@ -728,32 +728,67 @@ def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
     assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "none")]
 
 
-@pytest.mark.parametrize("mode", ["pairwise", "similarity_groups"])
-def test_a_session_replay_words_a_protein_pair_without_a_match_as_its_cli_render(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, mode: str
+def test_a_cli_session_replay_logs_the_input_summary_of_its_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """OV-3512: the Session stores each LOSATP pair's table as a protein
-    comparison, and its replay says so: a pair without a match has no protein
-    match to draw, as the fresh `gbdraw linear` render says."""
+    """OV-3528: `gbdraw render --session` logs what the replay read and drew,
+    each line once, from the owner the fresh render and the Web read."""
 
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module
-    from gbdraw.api.input_summary import input_warnings
+    from gbdraw.api.input_summary import input_summary_lines, input_warnings
     from tests.test_render_stage_protein_analysis import _no_hit_losatp, _no_search, _request
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_hit_losatp)
-    request, _identities = _request(mode, tmp_path)
+    request, _identities = _request("similarity_groups", tmp_path)
     sidecar = tmp_path / "nohit.gbdraw"
-    caplog.clear()
     _cli(monkeypatch, "linear", "--gbk", *(str(record.source.path) for record in request.records),
-         "--losat", "losatp", "--losatp_mode", mode,
+         "--losat", "losatp", "--losatp_mode", "similarity_groups",
          "-o", str(tmp_path / "nohit"), "-f", "svg", "--session_output", str(sidecar))
-    fresh = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
-    assert fresh and all(message.endswith("has no protein match to draw.") for message in fresh), fresh
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
-    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "replay") as materialized:
-        replayed = render_session(materialized)
-    assert [warning.message for warning in input_warnings(replayed.input_summary)] == fresh
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "api") as materialized:
+        summary = render_session(materialized).input_summary
+    warnings = [warning.message for warning in input_warnings(summary)]
+    assert warnings
+
+    caplog.clear()
+    caplog.set_level("INFO")
+    _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg")
+    logged = [
+        (record.levelname, record.getMessage())
+        for record in caplog.records
+        if record.name == "gbdraw.api.input_summary"
+    ]
+    assert logged == [
+        *(("INFO", line) for line in input_summary_lines(summary)),
+        *(("WARNING", message) for message in warnings),
+    ]
+
+
+def test_a_cli_session_replays_a_comparison_table_as_a_table_not_a_protein_comparison(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `--comparisons_table` BLAST table is stored without its raw text; its
+    replay still reports it as a table, never as a protein comparison."""
+
+    from gbdraw.api.input_summary import input_summary_lines
+    from tests.test_render_stage_protein_analysis import _request
+
+    request, _identities = _request("pairwise", tmp_path)
+    blast = tmp_path / "pair.tsv"
+    blast.write_text("rec0\trec1\t90\t40\t0\t0\t1\t40\t1\t40\t1e-20\t200\n", encoding="utf-8")
+    table = tmp_path / "comparisons.tsv"
+    table.write_text("blast\tquery\tsubject\npair.tsv\t#1\t#2\n", encoding="utf-8")
+    sidecar = tmp_path / "table.gbdraw"
+    _cli(monkeypatch, "linear", "--gbk", *(str(record.source.path) for record in request.records[:2]),
+         "--comparisons_table", str(table), "-o", str(tmp_path / "table"), "-f", "svg",
+         "--session_output", str(sidecar))
+
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "api") as materialized:
+        lines = input_summary_lines(render_session(materialized).input_summary)
+    (comparison,) = [line for line in lines if "record #2" in line]
+    assert not comparison.startswith("Protein comparison"), comparison
+    assert comparison.endswith("kept 1 of 1 row."), comparison
 
 
 def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(

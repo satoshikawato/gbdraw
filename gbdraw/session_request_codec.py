@@ -4747,7 +4747,7 @@ def _decode_comparisons(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
                 explicit_comparisons.append(
-                    LinearComparison(query_index, subject_index, table, protein_matches=True)
+                    LinearComparison(query_index, subject_index, table)
                 )
             else:
                 protein_tables.append(table)

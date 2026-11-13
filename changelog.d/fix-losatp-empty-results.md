@@ -2,7 +2,7 @@
   no longer stops with "computed no pairwise result" when every record shares
   one row, so there is no record pair to compare; the Session stores the empty
   result and draws the same figure again (OV-3511).
-- Fixed: a LOSATP record pair without a match is reported as a protein
-  comparison with no protein match to draw, also when the comparison is read
-  back from a Session or redrawn in the Web app after Generate; it was reported
-  as a comparison table with no rows (OV-3512).
+- Fixed: `gbdraw render --session` and `gbdraw linear|circular --session` log
+  what the replay read and drew (the per-record and per-comparison lines and
+  their warnings), as a fresh render does; before, a replay logged none of
+  them (OV-3528).

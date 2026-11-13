@@ -429,42 +429,6 @@ def test_a_protein_comparison_counts_the_matches_drawn_and_no_threshold(
     assert all(item.message.endswith("has no protein match to draw.") for item in input_warnings(summary))
 
 
-@pytest.mark.parametrize("mode", ["pairwise", "similarity_groups"])
-def test_web_reply_words_a_stored_protein_pair_without_a_match_as_the_cli(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str,
-) -> None:
-    """OV-3512: after a Generate the Web sends each LOSATP pair as a stored
-    protein comparison table; a pair without a match is a protein comparison
-    with no protein match to draw, as the CLI's fresh render says."""
-
-    from dataclasses import replace
-
-    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
-    from gbdraw.api.request_render import stored_protein_result_request
-    from tests.test_render_stage_protein_analysis import _no_hit_losatp, _no_search, _request
-
-    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_hit_losatp)
-    request, _identities = _request(mode, tmp_path)
-    request = replace(request, output=RenderOutputRequest(
-        output_prefix="protein", formats=("svg",), output_directory=tmp_path / "out",
-    ))
-    rendered = render_request(request)
-    fresh = [item.message for item in input_warnings(rendered.input_summary)]
-    assert fresh and all(message.endswith("has no protein match to draw.") for message in fresh), fresh
-
-    stored = stored_protein_result_request(rendered.request, rendered.linear_metadata)
-    document = _embedded(build_session_document(stored))
-    comparisons = document["drawings"][0]["renderRequest"]["comparisons"]
-    assert "precomputedProteinComparison" in {comparison["kind"] for comparison in comparisons}
-    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
-    reply = render_embedded_canonical_web_request(
-        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
-    )
-    (summary,) = reply["metadata"]["inputSummaries"]
-    assert [warning["message"] for warning in summary["warnings"]] == fresh
-    assert summary["lines"] == list(input_summary_lines(rendered.input_summary))
-
-
 def test_a_cropped_record_with_nothing_to_draw_names_its_region() -> None:
     from gbdraw.api.input_summary import FeatureTypeTally, InputSummary, RecordInputSummary
 

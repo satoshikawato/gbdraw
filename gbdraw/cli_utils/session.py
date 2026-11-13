@@ -800,7 +800,8 @@ def render_session_drawings_cli(
         diagram_request_output_paths,
         preflight_diagram_request_outputs,
     )
-    from gbdraw.features.overrides import log_feature_identity_notices
+    from gbdraw.api.input_summary import InputWarningKey
+    from gbdraw.cli_utils.diagram_run import log_render_notices
     from gbdraw.session import (
         _build_session_document_from_drawings,
         _plan_session_drawings,
@@ -872,14 +873,13 @@ def render_session_drawings_cli(
                 plans,
                 include_feature_catalog=save,
             )
+        # As a fresh render logs them (OV-3528): a warning the drawings share once.
+        warned: set[InputWarningKey] = set()
         for result in rendered.values():
-            items = (
-                result.items
-                if isinstance(result, CircularBatchRenderResult)
-                else (result,)
+            log_render_notices(
+                result.items if isinstance(result, CircularBatchRenderResult) else (result,),
+                warned=warned,
             )
-            for item in items:
-                log_feature_identity_notices(item.feature_identity_notices)
         if sidecar is None:
             return
         sidecar_path, title_fallback = sidecar
