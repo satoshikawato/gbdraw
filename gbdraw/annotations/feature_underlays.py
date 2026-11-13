@@ -11,6 +11,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.objects import FeatureObject
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.svg.ids import instance_svg_id
 from gbdraw.tracks.parsing import SlotView, slots_draw_features
 
@@ -59,8 +60,11 @@ def merge_feature_underlays(
     *,
     mode: str,
     record_indices: Sequence[int] | None = None,
+    record_transforms: Sequence[RecordDisplayTransform | None] | None = None,
 ) -> tuple[ResolvedAnnotationBundle, str | None]:
-    """Append private resolved highlights without mutating the public bundle."""
+    """Append private resolved highlights without mutating the public bundle. ``record_transforms``, by record,
+    are those that projected the features' display parts; a record on a circle it shares with other records
+    (``RecordDisplayTransform.circle``) ends its underlays at its display cut (``mark_parts``)."""
 
     if mode not in {"circular", "linear"}:
         raise ValidationError("Feature underlay mode must be 'circular' or 'linear'.")
@@ -69,6 +73,9 @@ def merge_feature_underlays(
     indices = tuple(record_indices or range(len(records)))
     if len(indices) != len(records):
         raise ValueError("record_indices must match records")
+    transforms = tuple(record_transforms or (None,) * len(records))
+    if len(transforms) != len(records):
+        raise ValueError("record_transforms must match records")
     if not any(underlay_features_by_record):
         return bundle, None
 
@@ -82,6 +89,7 @@ def merge_feature_underlays(
     ):
         record_index = int(indices[local_index])
         record_length = len(record.seq)
+        transform = transforms[local_index]
         stable_ids = [
             feature.feature_hash or str(feature.feature_id)
             for feature in features
@@ -120,6 +128,7 @@ def merge_feature_underlays(
                     segments=segments,
                     display_parts=(tuple(part.fragment for part in feature.display_parts if part.kind == "block")
                                    if feature.display_parts is not None else None),
+                    shares_circle=transform is not None and transform.circle is not None,
                     midpoint_bp=annotation_midpoint(segments, record_length, crosses_origin=False),
                     span_bp=sum(end - start for start, end in segments),
                     label="",

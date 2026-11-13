@@ -148,7 +148,9 @@ def prepare_annotation_track_slots(
                 parts = transform.project_local_parts(tuple(SourceInterval(start, end) for start, end in item.segments))
                 # A projecting transform makes project_local_parts return DisplayFragments.
                 item = replace(
-                    item, display_parts=tuple(cast("Sequence[DisplayFragment]", parts))
+                    item,
+                    display_parts=tuple(cast("Sequence[DisplayFragment]", parts)),
+                    shares_circle=transform.circle is not None,
                 )
             projected.append(item)
         bundle = replace(bundle, annotations=tuple(projected))

@@ -632,6 +632,9 @@ class ResolvedRegionAnnotation:
     legend_label: str | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
     display_parts: tuple[DisplayFragment, ...] | None = None
+    # Set with ``display_parts`` from the record's transform (``RecordDisplayTransform.circle``): the record is one of
+    # several drawn on one circle, so its arc ends at its display cut, where the gap to the next record starts.
+    shares_circle: bool = False
     # The span goes on across the origin of a circular record: from its last segment, which ends at the record's
     # end, into its first, which starts at 0 (``segments_cross_origin``).
     crosses_origin: bool = False
@@ -698,21 +701,22 @@ class ResolvedRegionAnnotation:
     def label_anchor(self, position: LabelPosition, *, join_origin: bool) -> LabelPlace:
         """Where a Linear label at ``position`` stands and the drawn part it stands on: centred at
         ``label_place``; at the start, the region's first base, at the end its last, as the region runs
-        (``region_run``) and as the display shows them (PD-OI-119)."""
+        (``region_run``) and as the display shows them (PD-OI-119): on the drawn part (``mark_parts``) that holds
+        that base, also where a circle joins it to another part."""
 
         if position == "center":
             return self.label_place(join_origin=join_origin)
         run = region_run(self.segments, crosses_origin=self.crosses_origin)
         first = position == "start"
         local = run[0][0] if first else run[-1][1]
-        bp, row = float(local), 0
-        if self.display_parts is not None:
-            fragment = next(
-                part for part in self.display_parts if (part.local_start if first else part.local_end) == local
-            )
-            bp, row = float(fragment.display_start if first else fragment.display_end), fragment.row
-        parts = mark_parts(self, join_origin=join_origin)
-        return LabelPlace(bp, next(part for part in parts if part.row == row and part.start <= bp <= part.end))
+        # A part runs on from its record-local start; one joined over the origin runs on past the record's end.
+        record_end = max(end for _start, end in self.segments) if self.crosses_origin else 0
+        for part in mark_parts(self, join_origin=join_origin):
+            offset = local - part.local_start
+            offset += record_end if offset < 0 else 0
+            if (0 <= offset < part.end - part.start) if first else (0 < offset <= part.end - part.start):
+                return LabelPlace(float(part.start + offset), part)
+        raise AssertionError(f"Annotation {self.id!r}: no drawn part holds its {position} base {local}.")
 
     def label_stretch(self, position: LabelPosition, *, join_origin: bool) -> tuple[LabelPlace, tuple[int, int]]:
         """Where a label at ``position`` stands (``label_anchor``) and the stretch of its row it may cover without
@@ -743,8 +747,9 @@ class ResolvedRegionAnnotation:
 class MarkPart:
     """One drawn part of a mark, in display bp on its ``row``, and whether it draws each of its ends.
 
-    An end it does not draw is a cut, where the region goes on: the display cut, a row boundary, or the origin of
-    a span across it. A cut gets no edge stroke, cap or arrow head. A part joined across the origin ends past the
+    An end it does not draw is a cut, where the region goes on: a display cut that ends the record's drawing (a
+    Linear bar, a record that shares one circle), a row boundary, or the origin of a span across it. A cut gets no
+    edge stroke, cap or arrow head. A part joined across the origin or a circle's display cut ends past the
     record's length. ``local_start`` is where the part starts on its record (record-local bp); the part runs on
     from there as it runs on the display, past the record's end when it is joined across the origin.
     """
@@ -793,15 +798,29 @@ def region_run(segments: Sequence[tuple[int, int]], *, crosses_origin: bool) -> 
     return (ordered[before], ordered[after], *(item for index, item in enumerate(ordered) if index not in {before, after}))
 
 
+def _joined(head: MarkPart, tail: MarkPart) -> MarkPart:
+    """``head`` going on into ``tail`` where the drawing meets them: one part, ``tail``'s length past ``head``'s end."""
+
+    return replace(head, end=head.end + tail.end - tail.start, capped_end=tail.capped_end)
+
+
 def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
     """The parts a mark draws, in the order of its geometry segments: the one owner of where a mark is cut, which
     its drawing and its label read.
 
+    A record that closes its own circle (``join_origin``, a Circular drawing, and not ``shares_circle``) has no end
+    at its display cut, the start of a rotated Circular drawing: a part that ends there goes on into the part that
+    starts there with its next record-local base, as one part. A Linear record ends at its display cut, and so does
+    a record that shares one circle with other records (the gap to the next record starts there), so their parts
+    stay cut there.
+
     A span across the origin (``crosses_origin``) has two sides there: its part that ends at the record's end and
-    its part that starts at 0. They become one part where they meet in the drawing: always with ``join_origin``
-    (a circle drawn whole), else where one ends on the row where the other starts (a Linear record drawn from a
-    display start). Where they do not meet, they leave those ends open.
+    its part that starts at 0. They become one part where they meet in the drawing: always on a record that closes
+    its own circle, else where one ends on the row where the other starts (a record drawn from a display start).
+    Where they do not meet, they leave those ends open.
     """
+
+    closes_circle = join_origin and not annotation.shares_circle
 
     fragments = annotation.display_parts
     parts = [
@@ -814,18 +833,27 @@ def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tu
         )
         for part in fragments
     ]
+    if closes_circle and fragments is not None:
+        # On a circle every artificial seam is the display cut (no rows): join each part cut there to the part
+        # that starts at its next base.
+        tails = {
+            head: next(
+                index for index, other in enumerate(fragments)
+                if other.artificial_start and other.local_start == fragment.local_end
+            )
+            for head, fragment in enumerate(fragments)
+            if fragment.artificial_end
+        }
+        parts = [
+            _joined(part, parts[tails[index]]) if index in tails else part
+            for index, part in enumerate(parts)
+            if index not in tails.values()
+        ]
     if not annotation.crosses_origin:
         return tuple(parts)
-    before, after = origin_sides(
-        annotation.segments if fragments is None else [(part.local_start, part.local_end) for part in fragments]
-    )
-    if join_origin or (parts[before].row == parts[after].row and parts[before].end == parts[after].start):
-        joined = parts[after]
-        parts[before] = replace(
-            parts[before],
-            end=parts[before].end + joined.end - joined.start,
-            capped_end=joined.capped_end,
-        )
+    before, after = origin_sides([(part.local_start, part.local_start + part.end - part.start) for part in parts])
+    if closes_circle or (parts[before].row == parts[after].row and parts[before].end == parts[after].start):
+        parts[before] = _joined(parts[before], parts[after])
         del parts[after]
         return tuple(parts)
     parts[before] = replace(parts[before], capped_end=False)

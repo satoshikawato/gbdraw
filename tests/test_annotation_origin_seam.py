@@ -238,17 +238,46 @@ def _circular_cap_degrees(item: ElementTree.Element) -> list[float]:
     return sorted(angles)
 
 
-@pytest.mark.parametrize("start", (501, 9501))
-def test_circular_display_cut_inside_a_span_across_the_origin_leaves_seams_open(start: int) -> None:
-    item = _bracket_item("circular", _record(), CoordinateSpan(None, 9001, 1000, wraps_origin=True), start)
+@pytest.mark.parametrize(
+    ("start", "target", "ends"),
+    (
+        (501, CoordinateSpan(None, 9001, 1000, wraps_origin=True), (9000, 1000)),
+        (9501, CoordinateSpan(None, 9001, 1000, wraps_origin=True), (9000, 1000)),
+        (5001, CoordinateSpan(None, 4001, 6000), (4000, 6000)),
+    ),
+)
+def test_circular_display_cut_inside_a_span_joins_its_parts(
+    start: int, target: CoordinateSpan, ends: tuple[int, int]
+) -> None:
+    item = _bracket_item("circular", _record(), target, start)
     arcs = [path for path in item.iter(f"{_SVG}path") if " A " in f" {path.get('d', '')} "]
 
-    # The display cut (12 o'clock) splits the span in two arcs; the origin joins its parts, so neither is a cap.
-    assert len(arcs) == 2
-    # Caps stand only at the span's own ends, bp 9000 and bp 1000, not at the display cut or the origin.
+    # The circle goes on at the display cut (12 o'clock) as at the origin: one arc (OV-2654).
+    assert len(arcs) == 1
+    # Caps stand only at the span's own ends, not at the display cut or the origin.
     offset = start - 1
-    expected = sorted(round(360.0 * ((bp - offset) % _LENGTH) / _LENGTH, 1) for bp in (9000, 1000))
+    expected = sorted(round(360.0 * ((bp - offset) % _LENGTH) / _LENGTH, 1) for bp in ends)
     assert _circular_cap_degrees(item) == expected
+
+
+@pytest.mark.parametrize("mark", ("band", "highlight"))
+def test_circular_fill_across_the_display_cut_is_one_closed_shape(mark: str) -> None:
+    annotation = RegionAnnotation(
+        "origin", CoordinateSpan(None, 4001, 6000), label="Origin", mark=mark,
+        style=RegionAnnotationStyle(stroke="#225588", fill="#ffcc00"),
+    )
+    diagram = gbdraw.draw_circular(
+        _record(),
+        options=gbdraw.CircularOptions(annotations=AnnotationOptions(sets=(AnnotationSet("r", (annotation,)),))),
+        record_displays=[RecordDisplayOptions(start_coordinate=5001)],
+    )
+    root = ElementTree.fromstring(diagram._drawing.tostring())
+    (item,) = [group for group in root.iter(f"{_SVG}g") if group.get("data-gbdraw-annotation-id") == "origin"]
+    paths = [path for path in item.iter(f"{_SVG}path") if path.get("stroke") not in {None, "none"}]
+
+    # One closed shape with one stroke, no open edges at 12 o'clock (OV-2654).
+    assert len(paths) == 1
+    assert paths[0].get("d", "").rstrip().endswith("Z")
 
 
 def _two_end_record(topology: str, *, region_applied: bool) -> SeqRecord:

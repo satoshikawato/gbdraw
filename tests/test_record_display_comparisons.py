@@ -4,7 +4,6 @@ from __future__ import annotations
 import copy
 import math
 import re
-from types import SimpleNamespace
 from dataclasses import replace
 from xml.etree import ElementTree as ET
 
@@ -96,7 +95,10 @@ def test_annotation_and_underlay_project_source_coverage(mode, reverse, target_k
     shapes = [n for n in annotation if n.tag.endswith(("}path", "}rect")) and n.get("fill") != "none"]
     underlays = [n for n in root.iter() if n.get("data-gbdraw-auto-feature-underlay") == "true"]
     expected = [(0, 20), (80, 100)] if not reverse else [(0, 21), (81, 100)]
-    assert len(shapes) == len(underlays) == 2
+    # A Linear bar ends at its display cut; a circle goes on there, so the span is one shape from its part
+    # before the cut (OV-2654).
+    pieces = 2 if mode == "linear" else 1
+    assert len(shapes) == len(underlays) == pieces
     for actual in (shapes, underlays):
         if mode == "linear":
             axis = next(n for n in root.iter() if n.get("data-gbdraw-record-id") == "reference"
@@ -112,8 +114,8 @@ def test_annotation_and_underlay_project_source_coverage(mode, reverse, target_k
             for n in actual:
                 x, y = xy(n.get("d"))[0]
                 angles.append(((math.degrees(math.atan2(y, x)) + 90) % 360) / 3.6)
-            assert sorted(angles) == pytest.approx([a for a, _ in expected])
-    assert len({n.get("id") for n in underlays}) == 2
+            assert sorted(angles) == pytest.approx([expected[-1][0]])
+    assert len({n.get("id") for n in underlays}) == pieces
     assert len({n.get("data-gbdraw-feature-id") for n in underlays}) == 1
     assert plan.transforms[0].start_coordinate == 41
     assert_source(item, before)
@@ -247,8 +249,9 @@ def test_annotation_artificial_seam_has_no_bracket_caps(mode, reverse):
     _, root = svg(request(mode, [record()], [41], [reverse],
                           annotations=AnnotationOptions(sets=(AnnotationSet("a", (annotation,)),))))
     group = next(n for n in root.iter() if n.get("data-gbdraw-annotation-id") == "bracket")
-    # Two span shapes and two real endpoint caps, independent of mode/orientation.
-    assert len(group) == 4
+    # Two real endpoint caps, independent of mode/orientation, and two span shapes on a Linear bar, which ends at
+    # its display cut; a circle goes on there, so one (OV-2654).
+    assert len(group) == (4 if mode == "linear" else 3)
 
 
 @pytest.mark.parametrize("mutation", ["duplicate_index", "duplicate_dom", "missing_marker", "conflicting_endpoint", "missing_endpoint", "conflicting_id"])
@@ -397,17 +400,59 @@ def test_circular_multiple_rings_keep_coverage_and_unique_ids(reference):
             assert float(path.get("data-identity")) == 90.
 
 
-@pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_annotation_band_outlines_exclude_artificial_edges(mode):
+def _band_group(mode):
     annotation = RegionAnnotation("band", CoordinateSpan(None, 21, 60), mark="band")
     _, root = svg(request(mode, [record()], [41], annotations=AnnotationOptions(sets=(AnnotationSet("a", (annotation,)),))))
-    group = next(n for n in root.iter() if n.get("data-gbdraw-annotation-id") == "band")
+    return next(n for n in root.iter() if n.get("data-gbdraw-annotation-id") == "band")
+
+
+def test_annotation_band_outlines_exclude_artificial_edges():
+    group = _band_group("linear")
     assert len(group) == 4
     outlines = [n for n in group if n.get("stroke-linecap") == "butt"]
     assert len(outlines) == 2
     for path in outlines:
         assert 'Z' not in path.get('d').upper()
-        assert path.get('d').count('L') == (3 if mode == "linear" else 1)
+        assert path.get('d').count('L') == 3
+
+
+def test_circular_band_across_the_display_cut_is_one_closed_outline():
+    # The circle goes on at its display cut: one band, closed by its two real ends (OV-2654).
+    (path,) = _band_group("circular")
+    assert path.get("stroke") not in {None, "none"}
+    assert path.get("d").rstrip().upper().endswith("Z")
+
+
+def _arc_degrees(path):
+    """The angles (degrees clockwise from 12 o'clock) of a Circular path's points and arc ends."""
+    ends = re.findall(r"A\s*\S+[ ,]+\S+[ ,]+\S+[ ,]+\S+[ ,]+\S+[ ,]+([-+\d.eE]+)[ ,]+([-+\d.eE]+)", path)
+    points = xy(path) + [(float(x), float(y)) for x, y in ends]
+    return sorted({round((math.degrees(math.atan2(y, x)) + 90) % 360, 2) for x, y in points})
+
+
+def test_a_record_that_shares_one_circle_ends_its_underlay_at_its_display_cut():
+    from gbdraw.api.options import CircularMultiRecordOptions
+
+    def two_kb(name):
+        item = SeqRecord(Seq(("AAAACCGTGG" * 200)[:2000]), id=name,
+                         annotations={"topology": "circular", "molecule_type": "DNA"})
+        item.features = [
+            SeqFeature(SimpleLocation(800, 1200, strand=1), type="CDS", qualifiers={"locus_tag": [f"{name}_cds"]}),
+            SeqFeature(SimpleLocation(800, 1200, strand=1), type="repeat_region", qualifiers={"rpt_family": ["r"]}),
+        ]
+        return item
+
+    req = replace(request("circular", [two_kb("a"), two_kb("b")], [1001, None]),
+                  layout=CircularMultiRecordOptions(record_layout="one_circle"))
+    _, root = svg(req)
+    underlays = [n for n in root.iter()
+                 if n.get("data-gbdraw-auto-feature-underlay") == "true" and n.get("data-gbdraw-record-id") == "a"]
+    # Record one is drawn from bp 1001 on the first half of the circle: its display cut ends its arc, where the gap
+    # to record two starts. Its repeat 800-1200 keeps its two parts at the two ends of its own arc; nothing runs on
+    # over the gap into record two (OV-2654 review).
+    spans = sorted((_arc_degrees(n.get("d"))[0], _arc_degrees(n.get("d"))[-1]) for n in underlays)
+    assert spans == [pytest.approx((0.54, 18.43), abs=0.02), pytest.approx((161.57, 179.46), abs=0.02)]
+    assert sorted(n.get("id").rsplit("__", 1)[-1] for n in underlays) == ["part1", "part2"]
 
 
 @pytest.mark.parametrize("mode", ["linear", "circular"])
