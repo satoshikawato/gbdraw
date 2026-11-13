@@ -23,7 +23,7 @@
 /**
  * The BCP 47 tag of a UI locale: `en`, or the name of a catalog module. It is
  * also the page's `lang`.
- * @typedef {'en' | 'id' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'vi' | 'tr' | 'ru' | 'uk' | 'th' | 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'} UiLocale
+ * @typedef {'en' | 'id' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'vi' | 'tr' | 'ru' | 'uk' | 'hi' | 'bn' | 'th' | 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'} UiLocale
  */
 /**
  * A language the Web UI can be shown in (PD-OI-106).
@@ -77,8 +77,8 @@
 export const SOURCE_LOCALE = 'en';
 /**
  * The languages of the header Language menu, in its order: English, the
- * Latin-script languages by name, the Cyrillic ones by name, Thai, then East
- * Asian (PD-OI-106). Japanese and Chinese put no space between sentences.
+ * Latin-script languages by name, the Cyrillic ones by name, Hindi, Bengali,
+ * Thai, then East Asian (PD-OI-106). Japanese and Chinese put no space between sentences.
  * @type {readonly Readonly<UiLocaleOption>[]}
  */
 export const UI_LOCALES = Object.freeze([
@@ -94,6 +94,8 @@ export const UI_LOCALES = Object.freeze([
   Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ', textStyle: 'cased' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ', textStyle: 'cased' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('hi'), name: 'हिन्दी', sentenceSeparator: ' ', textStyle: 'tall-marks' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('bn'), name: 'বাংলা', sentenceSeparator: ' ', textStyle: 'tall-marks' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ', textStyle: 'tall-marks' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '', textStyle: 'no-caps' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '', textStyle: 'no-caps' }),

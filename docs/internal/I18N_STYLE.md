@@ -1,6 +1,6 @@
-# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th, de, it, pl, tr, ru, uk
+# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th, de, it, pl, tr, ru, uk, hi, bn
 
-Revision 11, 2026-10-31 (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5; ru and uk time abbreviations: §1.2, §16.3, §17.3; ru tab names: §16.2; uk Load / Download / Upload sources and plural worked pair 5: §17.1, §17.5; ru and uk in the separator and plural lists: §1.3). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
+Revision 12, 2026-11-14 (Hindi and Bengali: §18, §19; their menu entries, menu label, plural objects and separator in §1.1 and §1.3). Revision 11 was the 2026-10-31 revision (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5; ru and uk time abbreviations: §1.2, §16.3, §17.3; ru tab names: §16.2; uk Load / Download / Upload sources and plural worked pair 5: §17.1, §17.5; ru and uk in the separator and plural lists: §1.3). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
 locale, rail names wrap only between words in every locale, ja/zh comparative-genomics terms with no established use stay English,
 ja Attach, zh Either and axis line, es/fr/pt counts and exact matches, fr stroke and Linear scale, id/vi/th record selector
 and feature wording: §1.5, §2, §3, §4, §5.1, §6, §7, §8, §9, §10, §11. Revision 9: counted sentences are `tn` pairs, and
@@ -58,11 +58,11 @@ nothing states that they are reviewed.
   Serif / Mono, and the Circular presets Tuckin, Middle, Spreadout.
 - **The Language menu entries** (English, Bahasa Indonesia, Deutsch, Español,
   Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский,
-  Українська, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu order) are
+  Українська, हिन्दी, বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu order) are
   endonyms and are not translated; the menu's own label is (言語 / 语言 / 語言 /
   언어 / Idioma / Langue / Idioma / Bahasa / Ngôn ngữ / ภาษา / Sprache /
-  Lingua / Język / Dil / Язык / Мова for ja / zh-Hans / zh-Hant / ko / es /
-  fr / pt / id / vi / th / de / it / pl / tr / ru / uk). Gallery
+  Lingua / Język / Dil / Язык / Мова / भाषा / ভাষা for ja / zh-Hans / zh-Hant / ko / es /
+  fr / pt / id / vi / th / de / it / pl / tr / ru / uk / hi / bn). Gallery
   example titles from `tutorial-data/manifest.json` stay English too.
 - **Names fixed in English by PD-OI-093 and PD-OI-105** stay English in the
   English UI only. Other locales translate them with the glossary (D-11).
@@ -104,6 +104,8 @@ nothing states that they are reviewed.
   plural rule has `few` or `many` categories (Polish, Russian, Ukrainian)
   the `other` key holds an object of the CLDR categories the language uses
   (`pl`: few, many, other; `ru` and `uk`: one, few, many, other),
+  and in Hindi and Bengali, whose rule calls 0 and fractions below 1 `one`
+  too, the object `{"one": …, "other": …}` (§18.5, §19.5),
   with `other` required, for example
   `{"one": "…", "few": "…", "many": "…", "other": "…"}`. The `one` key is
   then the text for exactly 1 and stays a string; the object's `one` is the
@@ -121,7 +123,7 @@ nothing states that they are reviewed.
   `<i18n-text>` component places the element at its `{name}` slot (D-04).
 - Two sentences shown together are two keys. The code joins them with a
   language-dependent separator: a space in English and in `ko`, `es`,
-  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl`, `tr`, `ru` and `uk`, none after 。 in
+  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl`, `tr`, `ru`, `uk`, `hi` and `bn`, none after 。 in
   `ja` and `zh-*` (D-18). Do
   not add a trailing space to a value.
 - `Undo {action}` and `Redo {action}` insert the label of a History step. Many
@@ -2818,3 +2820,317 @@ and science have a word, it is used even when the Russian cognate is shorter
 - Russian calques (17.1): `uk-calque-session`, `uk-calque-undo`, `uk-calque-default` (warn variant
   `uk-default-variant`), `uk-calque-enable`, `uk-calque-participle`, `uk-calque-settings`, `uk-calque-pry` (warn),
   `uk-calque-column`, `uk-track-trek-fich`, `uk-calque-words` (warn).
+
+## 18. Hindi (`hi`)
+
+Standard Hindi (मानक हिन्दी) as Microsoft and Google software write it: the Microsoft Hindi Style
+Guide (2023) for register, verbs and punctuation, Chromium and Firefox hi for loanwords, NCERT and
+Hindi Wikipedia for biology, English for the BLAST and comparative-genomics words Hindi writing
+keeps in English; CSTT coinages only where the field uses them. The Language menu shows **हिन्दी**.
+The system typeface is used (Nirmala UI on Windows); Devanagari marks need Thai's line height (§11).
+
+### 18.1 Vocabulary
+
+- **Field terms**: जीनोम, जीन, अनुक्रम, न्यूक्लियोटाइड, अमीनो अम्ल, प्रोटीन, कोशिकांग
+  (organelle), जीव (organism), प्रजाति, स्ट्रेन, स्ट्रैंड (फ़ॉरवर्ड / रिवर्स स्ट्रैंड), फ़ीचर,
+  रिकॉर्ड, क्षेत्र (region), एनोटेशन, GC मात्रा (GC content), संरेखण (sequence alignment),
+  पंक्तिबद्धता / पंक्तिबद्ध करें (Similarity-group alignment, Align), समानता समूह, Collinear
+  ब्लॉक, संरक्षण, आनुवंशिक कूट, उत्पाद (/product), डेप्थ, कवरेज, हिट, आरेख, वृत्ताकार / रैखिक,
+  ट्रैक, लेबल, लेजेंड, टिक, अक्ष, स्केल, वलय (ring), तुलना, जोड़ीवार (pairwise).
+- **Kept in English** (Latin, lower case in running text, never inflected): E-value, Bitscore,
+  Query, Subject (query प्रोटीन), identity (sequence identity), ortholog, paralog, Orthogroup,
+  Collinear, collinearity, syntenic, singleton, GC skew, Reverse complement, upstream, downstream,
+  qualifier, accession, locus tag, Reciprocal best hit, the §1.1 names, units.
+- **Command words**: सहेजें, लोड करें, खोलें, रद्द करें, जोड़ें, हटाएँ (Delete), निकालें (Remove),
+  साफ़ करें (Clear), कॉपी करें, संपादित करें, लागू करें, पूर्ववत करें / फिर से करें, रीसेट करें,
+  पुनर्स्थापित करें (Restore), वापस लाएँ (Revert), आयात / निर्यात करें, अपलोड / डाउनलोड करें,
+  बनाएँ (Generate), चलाएँ (Run), चुनें (Select, Choose), दिखाएँ / छिपाएँ, सक्षम / अक्षम करें,
+  बंद करें, खींचें, क्लिक करें, नाम बदलें, फिर से कोशिश करें (Retry).
+- **UI nouns**: सेटिंग्स, डिफ़ॉल्ट, प्रीसेट, कस्टम, सत्र (Session; Microsoft, Firefox), फ़ाइल,
+  उदाहरण, पूर्वावलोकन, गैलरी, उन्नत, लेआउट, फ़ॉन्ट, पैलेट, रंग, स्लॉट, लेन, पॉपअप, टैब, सूचना
+  (Notice), त्रुटि, चेतावनी, विवरण (Details), वर्णन (Description), स्वचालित (Auto), चालू / बंद.
+- **Loanwords** in Devanagari as Microsoft and Google spell them (फ़ाइल, फ़ॉन्ट, ट्रैक, ज़ूम); a
+  Hindi word where vendors use one (सत्र, सहेजें, आरेख). Masculine loans do not change in the
+  direct plural (2 फ़ीचर, 2 ट्रैक, 2 रिकॉर्ड, 2 लेबल); feminine ones take -एँ (फ़ाइलें); the
+  oblique plural takes -ों (फ़ाइलों में). सेटिंग्स is the one established -s form.
+- **Gender**: फ़ीचर, ट्रैक, रिकॉर्ड, लेबल, लेजेंड, सत्र, आरेख, परिणाम, स्ट्रैंड masculine; फ़ाइल,
+  सेटिंग, पंक्ति, तालिका, सूचना, त्रुटि feminine.
+- **Never**: विशेषता or सुविधा for feature, किंवदंती (a myth) for legend, रज्जुक for strand,
+  अभिलेख for record, परिग्रहण for accession, सामग्री for GC content, पहचान for sequence
+  identity, सेशन, Devanagari acronyms (जीसी, सीडीएस, ब्लास्ट), English -s plurals (फ़ीचर्स), and
+  the forms Microsoft 2.1.1 calls too formal: चयन करें, पुनः प्रयास करें, परिवर्तित करें, अतः.
+
+### 18.2 Buttons and sentences
+
+- **Register**: the user is आप, mostly implied. Commands and instructions use the polite
+  imperative in -ें (सहेजें, चुनें, हटाएँ; Microsoft 4.1.14); never तुम / तू, the -ओ imperative
+  or the -इए form (कीजिए). कृपया only where the English says please.
+- **Buttons, menu commands, toggles**: object + verb (आरेख बनाएँ, सत्र सहेजें); a command that
+  opens a further step keeps `…` (फ़ॉन्ट फ़ाइल लोड करें…). **Headings, tabs, column and field
+  labels**: nouns (निर्यात, लेआउट संपादन, रिकॉर्ड का चयन).
+- **Instructions and help**: complete sentences in the simple present, each ending with a period;
+  prefer the imperative to आप + a gendered verb (चुनें, not आप चुन सकते हैं).
+- **Status "…ing"**: passive progressive + `…` (Microsoft 4.1.14): सत्र सहेजा जा रहा है…; an
+  intransitive verb stays active: LOSAT चल रहा है…. **Completion**: past passive (सत्र सहेजा गया).
+- **Cannot, failed, errors**: passive, never the app as "I" (Microsoft 5.4.2): पढ़ी नहीं जा सकती /
+  सकी (cannot / could not), सहेजना विफल रहा (failed); अमान्य, उपलब्ध नहीं, असमर्थित.
+- **Required, optional, recommended**: आवश्यक, वैकल्पिक, अनुशंसित (Microsoft): (वैकल्पिक).
+- **Questions**: क्या … ? (Chromium hi: 114 क्या-questions against 13 imperative ones); a
+  confirmation asks with a passive subjunctive that agrees with its noun (रंग रखा जाए?).
+- **Controls named in a sentence**: label in “ ” + class noun (“आरेख बनाएँ” बटन, “लेबल दृश्यता”
+  सेटिंग); Generate again is आरेख फिर से बनाएँ, a click “आरेख बनाएँ” पर क्लिक करें.
+- **Drawing mode** attaches to the diagram: रैखिक आरेख का रिकॉर्ड, वृत्ताकार आरेख की तुलना;
+  वृत्ताकार रिकॉर्ड is only the topology of the molecule.
+
+### 18.3 Punctuation and spacing
+
+- **Sentence ends**: an ASCII period attached to the last word, never । or ॥ (Microsoft 4.1.12;
+  Chromium hi: 1,653 values end with a period after Devanagari, none with ।; Firefox hi-IN 83
+  against 19); this replaces the plan's default ।. Keys shown together join with one space.
+- **? ! , ; :** attach to the word before and take one space after (स्थिति: {state}); `!` as in the source.
+- **Quotes**: “ ”, nested ‘ ’; the period follows the closing quote (‘यहाँ क्लिक करें’.,
+  Microsoft 4.1.12). Straight quotes stay only inside code (/key="value").
+- **Parentheses**: one space outside, none inside: क्षेत्र (वैकल्पिक) (Microsoft 4.1.12).
+- **Ellipsis**: one `…`, attached (अद्यतन किया जा रहा है…).
+- **Dashes and ranges**: the source's en dash stays (पंक्तियाँ 3–4); a hyphen joins a compound
+  (फ़ीचर-सिरा); never a spaced hyphen as a dash; an em dash only where the source has one;
+  otherwise a comma or parentheses (Microsoft 4.1.12).
+- **Digits**: 0-9 only, English decimal point and grouping: 1,234,567.5, never 12,34,567 and never
+  ०-९ (PD-OI-106; the Mozilla hi-IN style guide also writes 0-9).
+- **Units and symbols** keep the source spacing (100 bp, 20px, 0.65 ×R, 16 MB); % attaches to its
+  number (50%); `→ ← · × + −` stay. **Lists**: commas, और / या before the last item, no comma
+  before और / या.
+
+### 18.4 Script and spelling
+
+- **NFC**: a nukta letter is base + U+093C (फ + ़); the precomposed U+0958-U+095F never appears.
+- **Nukta**: फ़ and ज़ for English f and z: फ़ाइल, फ़ॉन्ट, फ़ीचर, फ़ील्ड, डिफ़ॉल्ट, ऑफ़सेट,
+  ड्राफ़्ट, ज़ूम, ब्राउज़र, साइज़ (Chromium hi फ़ाइल 727 against फाइल 2; Microsoft names ज़ and फ़).
+  None on क, ख, ग (Microsoft; ख़ास, ख़बर excepted), on native words (फिर, फैलाव, सफल) or on
+  English j (जॉब). ड़ and ढ़ are Hindi letters (पड़ता, बढ़ाएँ).
+- **Chandrabindu, anusvara** (Central Hindi Directorate; Microsoft 2.1.1): ँ on a nasal vowel with
+  nothing above the headline (दिखाएँ, जाएँ, पंक्तियाँ, यहाँ, हूँ); ं where a vowel sign rises above
+  it (में, हैं, नहीं, करें, गईं). A nasal before a consonant of its class is the anusvara
+  (कंप्यूटर, पंप, अंतर, संबंध, प्रारंभ); Chromium's एम्बेड and टेम्प्लेट and the approved endonym
+  हिन्दी keep their spelling.
+- **Standard spellings**: शृंखला, चिह्न; लिए, गए, गई, किए, दिए, हुए, चाहिए (not लिये, गये);
+  हटाएँ (not हटायें). **ZWJ, ZWNJ**: never (Chromium's कंप्<ZWJ>यूटर is not copied).
+- **Latin inside a sentence**: one space between Latin or a digit and Devanagari (GC मात्रा,
+  5 फ़ाइलें). Latin keeps its case; Devanagari has none, so Title Case and ALL CAPS become ordinary
+  text. A Latin name takes the gender of the class noun after it (BLAST तालिका, GC skew ट्रैक);
+  postpositions follow as words (qualifier का मान). A §1.1 name is never transliterated.
+
+### 18.5 Placeholders and counts
+
+- `{name}` is copied verbatim with one space on each side, except next to `( ) : “ ” /` or the
+  edge of the value; it never takes an ending or a glued postposition ({file}में).
+- **Class noun**: the verb and का / की / के agree with a class noun next to the placeholder, after
+  a quoted name or file name (“{name}” फ़ीचर का, {file} फ़ाइल में, {label} लेबल को) or before an
+  ID or number (रिकॉर्ड {record}, पंक्ति {row}); never with the placeholder ({file} फ़ाइल हटाई गई,
+  not {file} हटाया गया). A label may use a colon so nothing agrees: पंक्तियाँ: {count}.
+- **Plural shape**: `Intl.PluralRules('hi')` gives `one` for 0 and 1. The `one`
+  key is the text for exactly 1; the `other` value is the object `{"one": <the text for 0 and
+  fractions below 1, with {count}>, "other": <the text for 2 and more>}`. Hindi writes 0 with the
+  plural noun and verb, as after every number but एक (Chromium hi is split: 138 `one` branches
+  singular, 142 equal to `other`), so the two texts are often equal; the object keeps 0 off the
+  exactly-1 sentence. When the English `one` has no `{count}`, the object's `one` is the plural
+  sentence. Examples (exactly 1 / 0 / 2, with the count filled in):
+  1. `Loaded {count} row.`: 1 पंक्ति लोड की गई. / 0 पंक्तियाँ लोड की गईं. / 2 पंक्तियाँ लोड की गईं.
+  2. `Importing it removes the annotation set.` (no {count}: `one` key इसे आयात करने पर एनोटेशन
+     सेट हट जाता है.; object one and other इसे आयात करने पर {count} एनोटेशन सेट हट जाते हैं.):
+     … एनोटेशन सेट हट जाता है. / … 0 एनोटेशन सेट हट जाते हैं. / … 2 एनोटेशन सेट हट जाते हैं.
+  3. `Redo {count} step`: 1 चरण फिर से करें / 0 चरण फिर से करें / 2 चरण फिर से करें (no period).
+  4. `There is {count} other feature with the legend name "{name}".`: “{name}” लेजेंड नाम वाला 1
+     अन्य फ़ीचर है. / … वाले 0 अन्य फ़ीचर हैं. / … वाले 2 अन्य फ़ीचर हैं.
+  5. `Keep your {count} changed color from the "{palette}" palette ({keys})?`: क्या “{palette}”
+     पैलेट का बदला हुआ 1 रंग ({keys}) रखा जाए? / … के बदले हुए 0 रंग ({keys}) रखे जाएँ? / … के
+     बदले हुए 2 रंग ({keys}) रखे जाएँ? (का / के, हुआ / हुए and जाए / जाएँ agree with रंग).
+
+### 18.6 Length
+
+- **Rail** (~50 px buttons; a name wraps only between words, never hyphenated): Input इनपुट,
+  Compare तुलना, Advanced उन्नत, Regions क्षेत्र, Search खोज, Density घनत्व, Layout लेआउट, Font
+  फ़ॉन्ट, Titles शीर्षक, Legend लेजेंड, Colors रंग, Features फ़ीचर, Labels लेबल, Axis अक्ष,
+  GC / skew GC / skew (as ja and th), About जानकारी: one word each, so no further short form.
+- **Long / short** (the glossary's cells; titles and help use the long form): जानकारी और उद्धरण /
+  जानकारी, इनपुट जीनोम / इनपुट, उन्नत तुलना और लेआउट / उन्नत, क्षेत्र एनोटेशन / क्षेत्र, शीर्षक
+  और रिकॉर्ड लेबल / शीर्षक, अक्ष और स्केल / अक्ष, जोड़ीवार तुलनाएँ / तुलना; अनुक्रम खोज / खोज and
+  फ़ीचर घनत्व / घनत्व (Sequence search and Feature density have no glossary row).
+- **Header**: पूर्ववत करें, फिर से करें, इतिहास, सेटिंग्स रीसेट करें / रीसेट करें, सत्र सहेजें, सत्र
+  लोड करें, उदाहरण लोड करें, गैलरी और ट्यूटोरियल, भाषा; Generate bar आरेख बनाएँ. Widths are not
+  measured in this draft: the first review round checks the header at 1,024 and 1,280 px.
+
+### 18.7 Machine checks
+
+The rules live in `tests/web/i18n-lint/hi.tsv` and run on every catalog value (placeholders
+masked as `{X}`), never on the key; `error` fails the test, `warn` is printed. Each rule flags:
+
+- `hi-danda` (error): । or ॥.
+- `hi-space-before-punct` (error): a space before `. , : ; ? !` or ।.
+- `hi-non-ascii-digit` (error): a Devanagari (०-९) or other non-ASCII digit.
+- `hi-indian-grouping` (error): lakh grouping such as 12,34,567.
+- `hi-three-dots` (error): three periods or a doubled `…`.
+- `hi-ascii-quote` (warn): a straight quote outside code such as /key="value".
+- `hi-period-inside-quote` (warn): a period before a closing ” or ’.
+- `hi-hyphen-dash` (error): a hyphen between spaces used as a dash.
+- `hi-placeholder-glued` (error): Devanagari glued to a placeholder ({X}में, {X}का, फ़ाइल{X}).
+- `hi-placeholder-agreement` (warn): a past verb agreeing with a placeholder ({X} हटाया गया).
+- `hi-nukta-missing` (warn): a loanword without its nukta (फाइल, फॉन्ट, डिफॉल्ट, जूम).
+- `hi-nukta-extra` (warn): a nukta on क or ग, on ख outside ख़ास / ख़बर, or on फिर / फैलाव.
+- `hi-precomposed-nukta` (error): a precomposed nukta letter U+0958-U+095F (not NFC).
+- `hi-chandrabindu` (warn): a word-final anusvara after ा, ए, ु or ू (दिखाएं, पंक्तियां).
+- `hi-anusvara` (warn): a half nasal before a consonant of its class (कम्प्यूटर, सम्बन्ध).
+- `hi-english-plural` (error): an English -s plural on a loan noun (फ़ीचर्स, ट्रैक्स, लेबल्स).
+- `hi-banned-term` (error): किंवदंती, रज्जुक, or a Devanagari acronym (जीसी, सीडीएस, ब्लास्ट).
+- `hi-term-variant` (warn): विशेषता, सुविधा, अभिलेख, परिग्रहण, लीजेंड, सेशन, चयन करें, पुनः प्रयास.
+- `hi-old-spelling` (warn): लिये, गये, गयी, किये, दिये, हुये, चाहिये.
+- `hi-informal` (error): तुम / तू forms or an -ओ imperative (करो, चुनो).
+- `hi-foreign-script` (error): Cyrillic, Hebrew, Arabic, Bengali or other Indic, Thai or CJK letters.
+- `hi-latin-glued` (warn): a Latin letter or digit directly next to a Devanagari letter.
+- `hi-symbol-space` (warn): no space before `(`, a space inside parentheses, or a space before %.
+- `hi-zwj` (error): ZWNJ or ZWJ.
+- `hi-whitespace` (warn): a leading, trailing or doubled space, NBSP, ZWSP, WJ or BOM.
+
+## 19. Bengali (`bn`)
+
+Standard colloquial Bengali (চলিত), written from the English source and the glossary so that it reads correctly in
+Bangladesh and in India; the tag is `bn` with no region. Where the two countries' usage differs, the Bangla Academy
+standard spelling rules (প্রমিত বাংলা বানানের নিয়ম, followed by the Bangladesh NCTB textbooks) decide, and the glossary
+note names the choice. The Language menu entry is the endonym **বাংলা**; the menu label itself is ভাষা. Text uses the
+system typeface (Nirmala UI on Windows); the app offers no font choice. Evidence order: vendor terminology (Microsoft
+terminology for IND and BGD, Google Android, Mozilla Firefox and its bn-BD style guide, GTK, LibreOffice), then field
+usage (NCTB textbooks, bn.wikipedia, Prothom Alo), then commission glossaries only as support. No coined terms
+(D-02): where Bengali software or science has no word, the English word stays, written in Bengali letters as Microsoft
+and Google write loans (ফাইল, ফিচার, সেশন).
+
+### 19.1 Vocabulary
+
+- **Biology and bioinformatics**: জিনোম, জিন, অনুক্রম (Sequence), নিউক্লিওটাইড, অ্যামিনো অ্যাসিড, প্রোটিন, DNA / RNA
+  (Latin), সূত্র (Strand; সম্মুখ সূত্র / বিপরীত সূত্র), বিপরীত পরিপূরক, অ্যানোটেশন, ফিচার (Feature; ফিচারের ধরন),
+  কোয়ালিফায়ার (the keys /gene, /product stay), রেকর্ড, অ্যাক্সেশন নম্বর, লোকাস, অবস্থান (Location), উৎপাদ (/product),
+  জীব, প্রজাতি, স্ট্রেইন, অঙ্গাণু, অণুজীব, GC পরিমাণ, ডাইনিউক্লিওটাইড, গভীরতা (Depth), কভারেজ, অভিন্নতা (Identity),
+  সাদৃশ্য, অর্থোলগ, প্যারালগ, সমরেখ (Collinear), ব্লক, ক্লাস্টার, জেনেটিক কোড, হিট, মিল (Match).
+- **Alignment has two words**: অ্যালাইনমেন্ট is a sequence alignment (BLAST, LOSAT); সারিবদ্ধকরণ / সারিবদ্ধ করুন is
+  placing records in line (Similarity group alignment, Align).
+- **Figure words**: ডায়াগ্রাম (Diagram and map), ট্র্যাক, লেন, স্লট (track slot), স্থান (File card slot), বলয় (Ring),
+  লেজেন্ড, লেবেল, শিরোনাম, টিক (বড় টিক / ছোট টিক), অক্ষ, স্কেল, স্কেল বার (Length bar), চিহ্ন (annotation mark),
+  রুলার, ভরাট (Fill), প্রান্তরেখা (Stroke), রেখা (a drawn line; a line of a file is লাইন), রঙের নমুনা (Swatch), আন্ডারলে
+  / সম্মুখভাগ, প্যাডিং, ফাঁক (Gap), ব্যবধান (Spacing), অন্তর (Interval), ব্যাপ্তি (Span), লেখচিত্র (a track's plot).
+- **Places**: উপরে / নিচে (track side), সামনে / পিছনে (draw order), ভিতরে / বাইরে, বামে / ডানে, মাঝখানে, অক্ষ বরাবর.
+- **Software**: ফাইল, সেশন, সেটিংস, ডিফল্ট, কাস্টম, প্রিসেট, প্রিভিউ, গ্যালারি, লেআউট, ফন্ট, রং, প্যালেট, ইনপুট,
+  আউটপুট, ডেটা, ক্যাশ, রানটাইম, ত্রুটি, সতর্কতা, বিজ্ঞপ্তি (Notice), বিস্তারিত, পপ-আপ, এডিটর, ট্যাব, বিভাগ (Section),
+  কার্ড, বোতাম, কলাম, সারি, টেবিল, ফিল্ড, মান, প্যাটার্ন, রেগুলার এক্সপ্রেশন, ফিল্টার, নিয়ম, মোড, বিকল্প, ইতিহাস, খসড়া.
+- **Kept in Latin**: units, file formats, program and product names (§1.1), and genomics or code terms with no Bengali
+  usage found: query, subject, seed, syntenic, singleton, orthogroup, coortholog, inparalog, locus tag, upstream /
+  downstream, reciprocal best hit, near-reciprocal hit, GC skew, AT skew, skew, E-value, Bitscore, params, lookbehind.
+  They stay lower case as in the source and take no Bengali ending.
+- **Never use**: বংশাণু, বংশাণুসমগ্র (bn.wikipedia coinages; textbooks and the press write জিন, জিনোম); কিংবদন্তি for
+  Legend (it means a myth); সত্র or অধিবেশন for Session; অমনোনীত for Default; গুপ্ত ভান্ডার for Cache; প্রতিলেপন for
+  Paste; বৈশিষ্ট্য for Feature (it means a property); জাল for Settings; সঙ্কুচিত (write সংকুচিত).
+
+### 19.2 Buttons and sentences
+
+- Address the user as আপনি (আপনার, আপনাকে), as the Mozilla bn-BD guide, Google and Microsoft do; never তুমি or তুই and
+  never a familiar imperative (করো, নাও, দাও).
+- Buttons and menu commands are polite imperatives: noun + করুন or a verb in -উন / -ান (সংরক্ষণ করুন, বাতিল করুন,
+  প্রয়োগ করুন, মুছে ফেলুন, সরান, দেখান, লুকান, খুলুন, বেছে নিন). Labels, headings, tabs, rail names and column headers
+  are nouns (সেটিংস, লেজেন্ড). Dialog headings are noun phrases (প্যালেট পরিবর্তন, X নির্বাচন). An option in a select is
+  a noun or adjective, or a verbal noun when it names an action (কেটে ফেলা, সংকুচিত করা). History step labels are verbal
+  nouns (রং পরিবর্তন, ফিচার সম্পাদনা, X অপসারণ).
+- Work in progress: X করা হচ্ছে… or X হচ্ছে… (লোড হচ্ছে…, ডায়াগ্রাম তৈরি হচ্ছে…). Done: X করা হয়েছে। Failure: X করা
+  যায়নি। then what to do (আবার চেষ্টা করুন।). A rule that forbids: X করা যাবে না। A dialog question uses the polite
+  future or আপনি কি … চান? (ফাইলটি সরাবেন?).
+- Required আবশ্যক, Optional (ঐচ্ছিক) after the field name, Recommended প্রস্তাবিত, Invalid অবৈধ, Unavailable উপলভ্য
+  নয়, Unsupported সমর্থিত নয়, Auto স্বয়ংক্রিয়, Default ডিফল্ট, On / Off চালু / বন্ধ.
+- Generate: the button is তৈরি করুন (ডায়াগ্রাম তৈরি করুন); the event in a sentence is তৈরির সময় / আগে / পরে. A control
+  cited as a word is quoted and followed by its class noun: “তৈরি করুন” বোতাম, “লেজেন্ড” ট্যাব, “স্বয়ংক্রিয়” বিকল্প.
+- Circular and Linear are বৃত্তাকার / রৈখিক. For the diagram mode add ডায়াগ্রামের (বৃত্তাকার ডায়াগ্রামের রেকর্ড);
+  বৃত্তাকার রেকর্ড is only the topology.
+- Modifiers come before the noun; a Latin name comes before its Bengali head noun (LOSAT ক্যাশ, BLAST টেবিল, GC পরিমাণ).
+
+### 19.3 Punctuation and spacing
+
+- A sentence ends with the dari । (U+0964), with no space before it; never an ASCII period after Bengali, never ৷
+  (U+09F7, a currency sign some Android data uses as a dari), never ।। or ॥. ? as in English; no ! in messages
+  (Copied! is কপি করা হয়েছে।).
+- Comma, semicolon and colon are ASCII, with no space before and one after. A label colon is :, never the visarga ঃ.
+- Quotes are “ ” with ‘ ’ nested (Bangla Academy); a {name} the English quotes becomes “{name}”. Straight quotes stay
+  only inside code (/key="value"). Punctuation follows the closing quote.
+- Dash: rephrase, or use a colon or an attached em dash —; a spaced hyphen is not a dash. The en dash of ranges stays
+  (সারি 3–4).
+- Digits are ASCII 0-9 with the English decimal point and grouping (0.65, 1,234,567.5); never ০-৯ and never the lakh
+  grouping 12,34,567 (PD-OI-106 rev 7, D-15). Units and % keep the source spacing (100 bp, 8 pt, 0.65 ×R, 300 DPI,
+  50%). Time words are written in full, as Bengali has no common short forms: {value} মিলিসেকেন্ড, {value} সেকেন্ড,
+  {minutes} মিনিট {seconds} সেকেন্ড.
+- One ellipsis … (U+2026), never three periods.
+- Parentheses and slashes as in the source (অঞ্চল (ঐচ্ছিক), জীব / স্ট্রেইন). "from … to" is থেকে (#{from} থেকে #{to});
+  a closed range is {min} থেকে {max} পর্যন্ত. No comma before এবং or বা joining two items.
+- Bengali has no letter case: English Title Case and capitals (DEFAULT COLORS) are written as ordinary text.
+
+### 19.4 Script and spelling
+
+- Bangla Academy spelling: loanwords take ি, not ী (গ্যালারি, লাইব্রেরি, এন্ট্রি); স্ট, not ষ্ট (লিস্ট, স্ট্যাক); অ্যা for
+  the English /æ/ (অ্যানোটেশন, অ্যাসিড); ং in রং and সংকুচিত, ঙ before a vowel sign (রঙের, রঙিন). Forms read alike in
+  both countries: উপলভ্য, শনাক্ত, পুরোনো, কোনো, নিচে, ভিতরে, ধরন, দেওয়া, সঙ্গে.
+- Khanda ta is ৎ (U+09CE): উৎস, তাৎক্ষণিক. Never ত + virama + ZWJ, never ত্স.
+- Ya-phala after ra is written র + ZWJ + virama + য (র‍্য), the Unicode sequence that shows a ya-phala instead of a reph;
+  no glossary word needs it today. Reph + ya (কার্য, পর্যন্ত) has no joiner. No other ZWJ or ZWNJ.
+- Text is NFC: ড় ঢ় য় are the consonant + nukta (U+09BC), since NFC excludes U+09DC, U+09DD and U+09DF; ো and ৌ are
+  one code point each.
+- Latin inside a sentence is separated by spaces. An ending on a Latin name takes a hyphen (gbdraw-এর, CLI-তে); a
+  placeholder never takes one (19.5).
+
+### 19.5 Placeholders and counts
+
+- A placeholder never takes a case ending (-এর / -র, -কে, -তে / -এ / -য়): which ending is right depends on the last sound
+  of the value. Put a class noun after it and inflect the noun ({file} ফাইলে, {record} রেকর্ডের, “{name}” লেজেন্ড
+  আইটেমের), or use a colon (লেজেন্ড আইটেম {name}: রং). Separate postpositions (থেকে, পর্যন্ত, অনুযায়ী, হিসেবে) may follow.
+- The counter টি may join a count ({count}টি রেকর্ড, {count}টির মধ্যে): it does not depend on the value (Android writes
+  %1$dটি). Bengali nouns do not change for number, so every form of a pair usually reads the same.
+- `Intl.PluralRules('bn')` gives `one` for 0, for fractions below 1 and for 1, and `other` for 2 and more. The `one` key
+  holds the text for exactly 1. The `other` key holds the object {"one": <text for 0 and fractions below 1, with
+  {count}>, "other": <text for 2 and more>}. When the English `one` has no {count}, the object's `one`
+  is the plural sentence with {count}. Keep {count} wherever the English `one` has it.
+- Worked pairs: exactly 1 (`one` key) / 0 (object `one`) / 2 (object `other`):
+  1. ({count} record): ({count}টি রেকর্ড) / ({count}টি রেকর্ড) / ({count}টি রেকর্ড)
+  2. {count} issue to fix before Generate: তৈরির আগে {count}টি সমস্যা ঠিক করতে হবে / the same / the same
+  3. {current} of {count} match: {count}টি মিলের মধ্যে {current} / the same / the same
+  4. Skipped {count} annotation row.: {count}টি অ্যানোটেশন সারি এড়িয়ে যাওয়া হয়েছে। / the same / the same
+  5. one more / {count} more: `one` key আরও একটি; object {"one": "আরও {count}টি", "other": "আরও {count}টি"}, so 0 reads
+     আরও 0টি and 2 reads আরও 2টি.
+
+### 19.6 Length
+
+- Bengali runs about 1.2–1.6 times the English width, and vowel signs and conjuncts need full line height. Shorter
+  wording first (D-11): drop a noun, then use the glossary's short form; a line breaks only between words, never
+  inside one.
+- The 14 rail names: ইনপুট, তুলনা, উন্নত, অঞ্চল, লেআউট, ফন্ট, শিরোনাম, লেজেন্ড, রং, ফিচার, লেবেল, অক্ষ, GC / skew,
+  পরিচিতি; তৈরি করুন beside the rail. শিরোনাম and লেজেন্ড are the widest; a word wider than the entry needs a shorter
+  rail key chosen at the fit check.
+- Header buttons (সেটিংস রিসেট করুন, সেশন সংরক্ষণ করুন, সেশন লোড করুন, উদাহরণ লোড করুন, ডায়াগ্রাম তৈরি করুন) must fit
+  one row: check them at 1,024 px. If one overflows, the fit check picks a shorter glossary form (রিসেট করুন, সেশন খুলুন,
+  উদাহরণ), never a broken word.
+- Options in 10 px rows use the short forms: স্বয়ংক্রিয়, ক্রমানুসারে, মাল্টিথ্রেড, উপরে / নিচে, বাইরে / ভিতরে, অক্ষ বরাবর,
+  আন্ডারলে, রিবন / বক্ররেখা. Help texts and notices wrap and may be as long as needed.
+
+### 19.7 Machine checks (`tests/web/i18n-lint/bn.tsv`)
+
+- `bn-ascii-period` (error): an ASCII period after a Bengali letter ends a sentence.
+- `bn-latin-period` (warn): a Bengali value ends a sentence with a period after Latin text, a number or a placeholder.
+- `bn-bengali-digit` (error): a Bengali digit ০-৯. `bn-indian-grouping` (error): lakh grouping such as 12,34,567.
+- `bn-currency-dari` (error): a currency numerator U+09F4-U+09F9 (৷) used as a dari.
+- `bn-dari-double` (error): ।।, ॥, or a dari beside a period.
+- `bn-space-before-punct` (error): a space before । ? ! : ; or a comma.
+- `bn-visarga-colon` (error): the visarga ঃ used as a label colon.
+- `bn-quotes` (error): straight quotes or guillemets around Bengali text or a placeholder.
+- `bn-three-dots` (error): three periods or two ellipses. `bn-spaced-hyphen` (error): a spaced hyphen as a dash.
+- `bn-placeholder-suffix` (error): a Bengali ending glued to a placeholder or its closing quote, or a detached এর / কে /
+  তে after it; the counter টি is allowed.
+- `bn-informal-pronoun` (error): তুমি, তোমার, তুই and their forms. `bn-informal-imperative` (warn): করো, নাও, দাও and
+  other familiar imperatives.
+- `bn-banned-term` (error): বংশাণু, কিংবদন্তি, সত্র, অধিবেশন, অমনোনীত, গুপ্ত ভান্ডার or প্রতিলেপন (19.1).
+  `bn-feature-property` (warn): বৈশিষ্ট্য, which is a property, not a Feature.
+- `bn-rong-spelling` (warn): রঙ alone or রং before a letter. `bn-loanword-spelling` (warn): ী or ষ্ট in a listed loanword.
+- `bn-khanda-ta-zwj` (error): ত + virama + ZWJ for ৎ. `bn-ta-sa` (warn): ত্স for ৎস.
+- `bn-nfc` (error): a precomposed ড় ঢ় য় or a split ো ৌ. `bn-stray-joiner` (warn): a ZWNJ, or a ZWJ outside র‍্য.
+- `bn-latin-touching` (warn): Latin letters touching Bengali letters with no space or hyphen.
