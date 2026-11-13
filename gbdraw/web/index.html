@@ -6948,7 +6948,7 @@
                         <p v-if="group.kind === 'left-out'" class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
                         <p v-for="(warning, index) in group.shown" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
                         <details v-if="group.rest.length" data-input-warnings-rest>
-                            <summary class="cursor-pointer font-medium">{{ tn(group.rest.length, 'and one more', 'and {count} more') }}</summary>
+                            <summary class="cursor-pointer font-medium">{{ moreLine(group.rest.length) }}</summary>
                             <div class="max-h-40 overflow-y-auto">
                                 <p v-for="(warning, index) in group.rest" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
                             </div>

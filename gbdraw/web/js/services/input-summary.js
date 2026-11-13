@@ -13,7 +13,7 @@
 // page says the summary describes the last render and keeps its warnings back.
 import { INPUT_WARNINGS_OF_DRAWN_INPUT } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { limitedList } from '../utils/i18n.js';
+import { limitedList } from '../utils/limited-list.js';
 
 /**
  * @typedef {object} InputWarning
@@ -50,7 +50,7 @@ import { limitedList } from '../utils/i18n.js';
 /**
  * The warnings the preview notice shows in one group: `left-out` says part of the input was not drawn, `drawn-in`
  * warns of an input drawn in full. `shown` and `rest` are the group cut to `NOTICE_LINE_LIMIT` lines.
- * @typedef {{ readonly kind: 'left-out' | 'drawn-in' } & import('../utils/i18n.js').LimitedList<InputWarning>} InputWarningGroup
+ * @typedef {{ readonly kind: 'left-out' | 'drawn-in' } & import('../utils/limited-list.js').LimitedList<InputWarning>} InputWarningGroup
  */
 /**
  * @typedef {InputSummary & {
@@ -62,7 +62,8 @@ import { limitedList } from '../utils/i18n.js';
 
 /**
  * The lines a warning group of the preview notice takes at most, its "and {count} more" line included (OV-3495:
- * 59 empty record pairs of one LOSATP run pushed the figure out of view). The rest opens on request.
+ * one LOSATP run of a record against 60 contigs warned of 56 record pairs without a match, and the notice pushed
+ * the figure out of view). The rest opens on request.
  */
 export const NOTICE_LINE_LIMIT = 4;
 

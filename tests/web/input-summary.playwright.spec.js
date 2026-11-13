@@ -41,8 +41,8 @@ test('a record with no feature to draw: the status area says so and Run Info lis
     'Comparison sequence file a.fna: record ID X names more than one record.'
   ]);
 
-  // OV-3495: one LOSATP run of a record against 60 contigs warned of 59 empty record pairs, and the notice listed
-  // every one above the figure. Each group shows its first lines and "and {count} more", which opens the rest in a
+  // OV-3495: one LOSATP run of a record against 60 contigs warned of 56 record pairs without a match, and the notice
+  // listed every one above the figure (this case injects 59). Each group shows its first lines and "and {count} more", which opens the rest in a
   // box of its own height: the figure stays in view, closed and open.
   await page.evaluate(async () => {
     const { drawnInputSummaries } = await import(new URL('js/services/input-summary.js', document.baseURI).href);

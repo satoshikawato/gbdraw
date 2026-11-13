@@ -119,8 +119,8 @@ test('a warning of an input drawn in full does not say part of the input was not
   ]);
 });
 
-// OV-3495: a Linear LOSATP run of one record against 60 contigs warned of 59 empty record pairs, and the notice
-// listed every one above the figure and pushed it out of view. Each group shows at most NOTICE_LINE_LIMIT lines:
+// OV-3495: a Linear LOSATP run of one record against 60 contigs warned of 56 record pairs without a match, and the
+// notice listed every one above the figure and pushed it out of view (this case gives 59). Each group shows at most NOTICE_LINE_LIMIT lines:
 // the first warnings and an "and {count} more" line that opens the rest.
 test('a group of many warnings shows the first few and sets the rest apart', () => {
   const pairs = Array.from({ length: 59 }, (_, index) => ({

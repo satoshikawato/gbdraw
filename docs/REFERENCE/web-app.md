@@ -481,7 +481,9 @@ row for shows **Part of the input was not drawn.** under the status line, with t
 warning the command line prints (see [Input
 summary](command-line.md#input-summary)). A similarity ring's comparison file
 whose record IDs repeat shows its warning there too, without that heading: the
-ring draws every record. **Run Info** lists the shown Result's
+ring draws every record. When the warnings that leave input out, or those of an input drawn in full,
+number more than four, the notice shows their first three and a line such as
+**and 53 more**, which opens the rest in a box that scrolls. **Run Info** lists the shown Result's
 **Input summary**: what it read and drew, per record and per comparison table.
 Neither is saved in a Session; the next Generate recomputes them.
 

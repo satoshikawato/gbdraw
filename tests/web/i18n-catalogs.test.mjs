@@ -17,7 +17,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import {
-  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, limitedList, listText, msg, numberText, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
+  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, numberText, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
@@ -732,16 +732,6 @@ test('two sentences are joined with a space in English, the other Latin-script l
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }
-});
-
-// OV-3495: a list longer than its line limit shows one line fewer and an "and {count} more" line for the rest, so
-// it never takes more lines than the limit (the Load dialog, the preview's input-summary notice).
-test('a list over its line limit keeps the first lines and sets the rest apart', () => {
-  const items = ['A', 'B', 'C', 'D', 'E', 'F'];
-  assert.deepEqual(limitedList(items, 6), { shown: items, rest: [] });
-  assert.deepEqual(limitedList(items, 7), { shown: items, rest: [] });
-  assert.deepEqual(limitedList(items, 4), { shown: ['A', 'B', 'C'], rest: ['D', 'E', 'F'] });
-  assert.deepEqual(limitedList([], 4), { shown: [], rest: [] });
 });
 
 test('a list keeps today\'s English and uses the locale\'s list pattern in every other locale', async () => {
