@@ -1221,3 +1221,11 @@ Clear File Depth TSV (History step label)																		ফাইল কা�
 legend entry (an entry stored in a Session, Legend: … messages)																		আইটেম	bn: Legend messages (Legend: entry {items} …, the entry stored under “{label}” …) write লেজেন্ড আইটেম, not এন্ট্রি (a list item or one saved record).
 search space (LOSAT E-value scale)																		search space	bn: Kept in Latin: no established Bengali term was found (অনুসন্ধান পরিসর is not attested); no coined terms. For a native reviewer.
 circular / linear track slot (aria-label of a slot field, id, width, radius)																		বৃত্তাকার / রৈখিক ডায়াগ্রামের ট্র্যাক স্লট	bn: The diagram mode takes ডায়াগ্রামের in every track slot label and field name.
+Selected features … (plural noun: count, placements)																	चुने गए फ़ीचरों की … / चुने गए फ़ीचरों के …		hi: Oblique plural before a postposition (STYLE 18.1); the row Selected feature … (चुने गए फ़ीचर का …) stays for the singular keys.
+Bit score (label and running text)																	Bitscore		hi: One spelling, as the row Bitscore.
+was dropped (the item that is dropped)																	उस प्रविष्टि / पंक्ति / संपादन को हटा दिया गया		hi: Name the dropped item; इसे can refer to the color, the column or the group.
+{count} files: {names} (a key that is not a plural object)																	फ़ाइलें ({count}): {names}		hi: {count} can be 1, so no number-noun agreement (STYLE 18.5).
+Show in Comparison (button)																	तुलना में दिखाएँ		hi: The button takes the short form; the row Comparison panel (cited in a sentence) keeps “तुलना” अनुभाग.
+removed (a report of what a filter or a clean-up took away)																	निकाल दिया गया / निकाला		hi: Remove is निकालें, apart from Delete हटाएँ.
+Unique (the only candidate with a direct RBH)																	एकमात्र		hi: As in the other RBH candidate texts (एकमात्र); अद्वितीय means one of a kind.
+Start / End (cited field names)																	“आरंभ” / “अंत” फ़ील्ड		hi: Class noun फ़ील्ड after the quoted name, as for every cited field.
