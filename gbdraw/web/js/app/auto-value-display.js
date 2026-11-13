@@ -469,16 +469,40 @@ const circularDepthWidthPx = (state, drawing, trackIndex) => {
 const circularDepthSeriesTickFontPx = (state, drawing, trackIndex) => {
   const series = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks[trackIndex] : null;
   return parsePositiveNumber(series?.tick_font_size)
-    ?? parsePositiveNumber(drawing.adv.depth_tick_font_size)
+    ?? drawingDepthTick(drawing, 'tick_font_size')
     ?? scalarAxisTickFontSize('circular', circularDepthWidthPx(state, drawing, trackIndex));
 };
 
 /**
+ * The drawing's own Depth tick (`adv.depth_<field>`, which a configuration or a Session from the CLI or an older
+ * writer sets), or null. A Depth series without its own tick is drawn with it (Python's `DepthConfigurator` reads a
+ * series' null tick as the drawing's), so it is the Auto value of each series' field (OV-3496).
+ * @param {DrawingState} drawing
+ * @param {'large_tick_interval' | 'small_tick_interval' | 'tick_font_size'} field
+ */
+const drawingDepthTick = (drawing, field) => parsePositiveNumber(drawing.adv[`depth_${field}`]);
+
+/**
+ * The Auto text of a Depth series' tick interval field: the drawing's own tick, else `fallback`.
+ * @param {DrawingState} drawing
+ * @param {'large_tick_interval' | 'small_tick_interval'} field
+ * @param {string} fallback
+ */
+const depthSeriesTickText = (drawing, field, fallback) => {
+  const tick = drawingDepthTick(drawing, field);
+  return tick === null ? fallback : withAuto(roundDisplayNumber(tick, 2));
+};
+
+/**
+ * The font a Depth series without its own Tick Font Size draws its numbers in: the drawing's Depth tick font, else the
+ * Auto size of its track (Linear: the series' height; Circular: its track's width).
  * @param {RecordLengthState} state
  * @param {DrawingState} drawing
  * @param {AutoValueContext | null} [trackConfig]
  */
 const depthTickFontSize = (state, drawing, trackConfig = null) => {
+  const drawingFont = drawingDepthTick(drawing, 'tick_font_size');
+  if (drawingFont !== null) return drawingFont;
   if (shownMode(state) === 'linear') {
     const trackHeight = parsePositiveNumber(trackConfig?.config.height)
       ?? parsePositiveNumber(drawing?.adv?.depth_height)
@@ -637,7 +661,8 @@ const autoTextByKey = (state, drawing, key, context = null) => {
     case 'circularDepthWidth': return circularWidthText(state, drawing, 'depth');
     case 'linearDepthHeight': return withAuto(formatPx(DEFAULTS.linear.depthHeightPx));
     case 'linearDepthTrackHeight': return withAuto(formatPx(parsePositiveNumber(drawing?.adv?.depth_height) ?? DEFAULTS.linear.depthHeightPx));
-    case 'depthLargeTick': return t('endpoints only');
+    case 'depthLargeTick': return depthSeriesTickText(drawing, 'large_tick_interval', t('endpoints only'));
+    case 'depthSmallTick': return depthSeriesTickText(drawing, 'small_tick_interval', t('None'));
     case 'depthTickFont': return withAuto(formatPx(depthTickFontSize(state, drawing, context)));
     case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? t('subject') : t('detect side');
     case 'conservationRingWidth': return circularWidthText(state, drawing, 'sequence_conservation');

@@ -6,7 +6,7 @@ import {
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
 /** @import { LosatRequestRing } from './circular-conservation-keys.js' */
-import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
+import { cardCropWindow, losatRecordGencode, readStoredCardGencode, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
 /** @import { CircularLayoutDraft } from './one-circle-layout.js' */
 import {
@@ -1486,12 +1486,13 @@ const linearRecordDefinitionLine = (seq) => ({
 });
 /**
  * One entry of `webFiles.linearRecordMetadata`: the record's key and LOSAT
- * genetic code, and the file default and record value of its definition and
+ * genetic code (the card's, `losatRecordGencode`: null when its field is
+ * cleared), and the file default and record value of its definition and
  * subtitle. presentation.label and presentation.subtitle carry the resolved
  * value; the entry records the per-record value too, so an override that
  * happens to equal the file default is restored as an override rather than
  * as inheritance. Generate and the live Record names apply (F-2) build it here.
- * @param {{ recordKey: string, losatGencode: number }} identity
+ * @param {{ recordKey: string, losatGencode: number | null }} identity
  * @param {LinearRecordNameLine} definition @param {LinearRecordNameLine} subtitle
  * @returns {LinearRecordMetadataEntry}
  */
@@ -1504,7 +1505,7 @@ const linearRecordMetadataEntry = ({ recordKey, losatGencode }, definition, subt
   ...(subtitle.file ? { recordSubtitle: subtitle.record } : {})
 });
 /**
- * @typedef {{ recordKey: string, losatGencode: number, fileDefinition?: string, fileSubtitle?: string,
+ * @typedef {{ recordKey: string, losatGencode: number | null, fileDefinition?: string, fileSubtitle?: string,
  *   recordDefinition?: string, recordSubtitle?: string }} LinearRecordMetadataEntry
  */
 
@@ -5141,7 +5142,7 @@ const projectCanonicalRenderInput = ({
       const seq = filesData.linearSeqs[sourceIndex];
       return linearRecordMetadataEntry({
         recordKey: String(records[index]?.recordKey || seq?.uid || `record-${index + 1}`),
-        losatGencode: integerSettingOr(seq?.losat_gencode, 1, 1)
+        losatGencode: losatRecordGencode(seq)
       }, linearRecordDefinitionLine(seq), {
         file: String(seq?.file_subtitle || '').trim(), record: String(seq?.record_subtitle || '')
       });
@@ -6918,7 +6919,7 @@ export const projectCanonicalSessionRequest = ({
         fasta: slotFile('fasta'),
         depth: null,
         blast: null,
-        losat_gencode: integerSettingOr(savedMetadata.losatGencode ?? savedMetadata.losat_gencode, 1, 1),
+        losat_gencode: readStoredCardGencode(Object.hasOwn(savedMetadata, 'losatGencode') ? savedMetadata.losatGencode : savedMetadata.losat_gencode).value,
         losat_filename: String(
           savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
         ),

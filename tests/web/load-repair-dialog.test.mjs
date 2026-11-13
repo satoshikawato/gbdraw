@@ -2000,24 +2000,21 @@ test('a table repair line shows the table label in the UI language', async () =>
   }
 });
 
-// OV-3351: a released Session 50 (v0.14.5) stored a Depth series tick never
-// set as null and a cleared number field as ''. Load reads the never-set tick
-// as absent (a series shows the drawing's tick, as before), a cleared series
-// tick as null (Auto, the blank the field showed when it was saved), a blank
-// over an Auto number field as null and a blank over a number default as the
-// default, with no row; no field holds ''.
+// OV-3351, OV-3496: a released Session 50 (v0.14.5) stored a Depth series
+// tick never set as null and a cleared number field as '' (the fixture's
+// provenance names the writer lines). Load reads the never-set tick as absent
+// (a series shows the drawing's tick, as before), a cleared series tick as
+// null (Auto: the field shows the drawing's tick as its Auto value, the tick
+// Generate draws), a blank over an Auto number field as null and a blank over
+// a number default as the default, with no row; no field holds ''. A blank
+// comparison filter, whose kind rule counts a blank text as a number, reads
+// as null too: the field stays blank and Generate takes the mode default.
 test('a Session 50 Depth series and blank number fields read as one blank, with no row (OV-3351)', async () => {
-  const session = fixture('HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz');
-  const unset = { large_tick_interval: null, small_tick_interval: null, tick_font_size: null };
+  const session = fixture('HmmtDNA-depth-tick-cleared.v50-web0145.gbdraw-session.json.gz');
+  const filters = ['min_bitscore', 'identity', 'alignment_length'];
   for (const mode of ['circular', 'linear']) {
-    Object.assign(session.modes[mode].config.adv, {
-      depth_large_tick_interval: 5000, legend_font_size: '', gc_content_tick_interval: '',
-      depth_tracks: [
-        { label: '', color: '#4A90E2', height: null, ...unset },
-        { label: 'B', color: '#E45756', height: null, ...unset, large_tick_interval: '', tick_font_size: 9 },
-        { label: 'C', color: '#54A24B', height: null, ...unset }
-      ]
-    });
+    assert.deepEqual(session.modes[mode].config.adv.depth_tracks[1].large_tick_interval, '', 'the fixture holds the cleared tick');
+    Object.assign(session.modes[mode].config.adv, Object.fromEntries(filters.map((field) => [field, ''])));
   }
   const { items } = await loadAnswering(session);
   assert.deepEqual(items, []);
@@ -2029,5 +2026,6 @@ test('a Session 50 Depth series and blank number fields read as one blank, with 
     assert.deepEqual(adv.depth_tracks.map((track) => [track.large_tick_interval, track.small_tick_interval, track.tick_font_size]),
       [[5000, undefined, undefined], [null, undefined, 9], [inherited, undefined, undefined]], mode);
     assert.deepEqual([adv.depth_large_tick_interval, adv.legend_font_size, adv.gc_content_tick_interval], [5000, null, 20], mode);
+    assert.deepEqual(filters.map((field) => adv[field]), [null, null, null], mode);
   }
 });

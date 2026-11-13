@@ -40,12 +40,11 @@ const inputTags = (source) => [...source.matchAll(/<input\b/g)].map((match) => {
 const MODEL = /(?:^|\s)v-model(\.[a-z.]+)?=/;
 const DIRECTIVE = /(?:^|\s)v-blank-null(?=[\s>/]|$)/;
 
+/** The modifiers of the field's `v-model` (`.lazy.number` gives `['lazy', 'number']`). */
+const modelModifiers = (text) => (MODEL.exec(text)?.[1] ?? '').split('.').filter(Boolean);
+
 /** Whether Vue writes a number, or '' when blank, for the field's `v-model`. */
-const writesNumber = (text) => {
-  const model = MODEL.exec(text);
-  if (!model) return false;
-  return (model[1] ?? '').split('.').includes('number') || /\stype="number"/.test(text);
-};
+const writesNumber = (text) => MODEL.test(text) && (modelModifiers(text).includes('number') || /\stype="number"/.test(text));
 
 /** The fields of `sources` that break the rule, as `path:line`. */
 const blankNumberProblems = (sources) => sources.flatMap(([path, source]) => inputTags(source).flatMap(({ text, line }) => {
@@ -53,6 +52,8 @@ const blankNumberProblems = (sources) => sources.flatMap(([path, source]) => inp
   const directive = DIRECTIVE.exec(text);
   if (!writesNumber(text)) return directive ? [`${where} has v-blank-null without a number v-model`] : [];
   if (!directive) return [`${where} writes '' when blank; add v-blank-null after its v-model`];
+  // `.lazy` writes on change, after the directive's input listener ran: the blank would stay ''.
+  if (modelModifiers(text).includes('lazy')) return [`${where} binds v-model.lazy, which writes '' on change after v-blank-null`];
   return directive.index < MODEL.exec(text).index ? [`${where} names v-blank-null before its v-model`] : [];
 }));
 
@@ -70,6 +71,8 @@ test('the guard finds a number field without the directive, and only there', () 
     '<input v-model.number="adv.window_size" class="x">',
     '<input type="number" min="0" v-model="panel.identity">',
     '<input type="number"\n  v-model.lazy.number="a">',
+    '<input type="number" v-model.lazy.number="a" v-blank-null>',
+    '<input type="number" v-model.lazy="a" v-blank-null>',
     '<input type="number" v-blank-null v-model.number="a">',
     '<input type="text" v-model="title" v-blank-null>'
   ]) assert.equal(problems(source).length, 1, source);

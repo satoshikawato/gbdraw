@@ -132,6 +132,7 @@ import { requireLinearLabelVisibilityMode } from '../services/linear-label-visib
 import { createZipBlob } from '../utils/zip.js';
 import { sessionDocumentOfViews } from '../services/session-drawings-upgrade.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
+import { isUnsetValue } from '../utils/field-reading.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
 import { base64ToBytes, bytesToBase64, bytesToText, sha256Hex, textToBytes } from '../services/byte-utils.js';
 import { readConvertedResources, withConvertedResources } from '../services/main-session-comparison-frame.js';
@@ -3234,40 +3235,21 @@ export const createRunAnalysis = ({
       const featureVisibilityTsv = serializeFeatureVisibilityRules(drawing.featureVisibilityRules?.value || []);
       // The rules table the protein helper reads, and part of its cache key; '' when there are no rules.
       const featureVisibilityCacheKey = featureVisibilityTsv.trim() ? featureVisibilityTsv : '';
+      // A blank number field (unset) is Auto; a set one must be greater than 0.
+      /** @param {unknown} value @param {string} message */
+      const requirePositiveWhenSet = (value, message) => {
+        if (!isUnsetValue(value) && Number(value) <= 0) throw new Error(message);
+      };
       const validateDepthStyleSettings = () => {
-        if (
-          drawing.adv.depth_min !== null &&
-          drawing.adv.depth_min !== undefined &&
-          drawing.adv.depth_min !== '' &&
-          drawing.adv.depth_max !== null &&
-          drawing.adv.depth_max !== undefined &&
-          drawing.adv.depth_max !== '' &&
-          Number(drawing.adv.depth_min) > Number(drawing.adv.depth_max)
-        ) {
+        const { depth_min: min, depth_max: max } = drawing.adv;
+        if (!isUnsetValue(min) && !isUnsetValue(max) && Number(min) > Number(max)) {
           throw new Error('Depth minimum must be less than or equal to depth maximum.');
         }
-        if (
-          drawing.adv.depth_large_tick_interval !== null &&
-          drawing.adv.depth_large_tick_interval !== undefined &&
-          drawing.adv.depth_large_tick_interval !== ''
-        ) {
-          if (Number(drawing.adv.depth_large_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
+        requirePositiveWhenSet(drawing.adv.depth_large_tick_interval, 'Depth large tick interval must be greater than 0.');
+        if (mode.value === 'circular') {
+          requirePositiveWhenSet(drawing.adv.depth_small_tick_interval, 'Depth small tick interval must be greater than 0.');
         }
-        if (
-          mode.value === 'circular' &&
-          drawing.adv.depth_small_tick_interval !== null &&
-          drawing.adv.depth_small_tick_interval !== undefined &&
-          drawing.adv.depth_small_tick_interval !== ''
-        ) {
-          if (Number(drawing.adv.depth_small_tick_interval) <= 0) throw new Error('Depth small tick interval must be greater than 0.');
-        }
-        if (
-          drawing.adv.depth_tick_font_size !== null &&
-          drawing.adv.depth_tick_font_size !== undefined &&
-          drawing.adv.depth_tick_font_size !== ''
-        ) {
-          if (Number(drawing.adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
-        }
+        requirePositiveWhenSet(drawing.adv.depth_tick_font_size, 'Depth tick font size must be greater than 0.');
       };
       /** @param {(InputFileRef | null)[][]} rows */
       const depthTrackEntriesFromRows = (rows) => Array.from(
@@ -3316,27 +3298,9 @@ export const createRunAnalysis = ({
         drawing.adv.gc_content_min_percent = minPercent;
         drawing.adv.gc_content_max_percent = maxPercent;
 
-        if (
-          drawing.adv.gc_content_tick_interval !== null &&
-          drawing.adv.gc_content_tick_interval !== undefined &&
-          drawing.adv.gc_content_tick_interval !== ''
-        ) {
-          if (Number(drawing.adv.gc_content_tick_interval) <= 0) throw new Error('GC content large tick interval must be greater than 0.');
-        }
-        if (
-          drawing.adv.gc_content_small_tick_interval !== null &&
-          drawing.adv.gc_content_small_tick_interval !== undefined &&
-          drawing.adv.gc_content_small_tick_interval !== ''
-        ) {
-          if (Number(drawing.adv.gc_content_small_tick_interval) <= 0) throw new Error('GC content small tick interval must be greater than 0.');
-        }
-        if (
-          drawing.adv.gc_content_tick_font_size !== null &&
-          drawing.adv.gc_content_tick_font_size !== undefined &&
-          drawing.adv.gc_content_tick_font_size !== ''
-        ) {
-          if (Number(drawing.adv.gc_content_tick_font_size) <= 0) throw new Error('GC content tick font size must be greater than 0.');
-        }
+        requirePositiveWhenSet(drawing.adv.gc_content_tick_interval, 'GC content large tick interval must be greater than 0.');
+        requirePositiveWhenSet(drawing.adv.gc_content_small_tick_interval, 'GC content small tick interval must be greater than 0.');
+        requirePositiveWhenSet(drawing.adv.gc_content_tick_font_size, 'GC content tick font size must be greater than 0.');
       };
       normalizeGcContentPercentState();
 

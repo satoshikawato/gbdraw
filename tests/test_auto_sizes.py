@@ -519,11 +519,14 @@ def test_the_gc_axis_tick_font_vectors_are_the_fonts_the_circular_drawing_draws(
         )
     expected = case["expected"]
     assert gc_font == pytest.approx(expected["objects.gc_content.tick_font_size"], abs=1e-9)
-    # The Auto value of series 0's own font: the size of the width of its first row.
+    # The Auto value of the drawing's own Depth tick font setting: the size of the width of series 0's first row.
     series_0_width = next(width for index, width in slots if index == 0)
-    assert scalar_axis_tick_font_size("circular", series_0_width) == pytest.approx(
-        expected["objects.depth.tick_font_size"], abs=1e-9
-    )
+    width_font = scalar_axis_tick_font_size("circular", series_0_width)
+    assert width_font == pytest.approx(expected["objects.depth.tick_font_size"], abs=1e-9)
+    # The Auto value of series 0's own Tick Font Size field (OV-3496): the font a series without its own draws in,
+    # the drawing's Depth tick font when it has one, else that size.
+    series_auto = base.tick_font_size if base.tick_font_size is not None else width_font
+    assert series_auto == pytest.approx(case["seriesAutoTickFontSize"], abs=1e-9)
 
 
 def test_auto_values_list_only_the_settings_drawn_in_the_mode(cfg: GbdrawConfig) -> None:

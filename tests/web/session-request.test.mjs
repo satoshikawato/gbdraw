@@ -4134,6 +4134,18 @@ assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.losat_gencode),
   [11, 4, 1]
 );
+// A cleared card gencode (null, `v-blank-null`) is null in the request's record metadata, as in the Session's
+// binding (`losatRecordGencode`), and reads back as the cleared card: one value for the card, not null and 1.
+{
+  const clearedLinearSeqs = linearFilesData.linearSeqs.map((seq, index) => (index === 2 ? { ...seq, losat_gencode: null } : seq));
+  // Not one of the characterized requests (the raw builder).
+  const clearedFiles = { ...linearFilesData, linearSeqs: clearedLinearSeqs };
+  const cleared = buildCanonicalRenderRequestRaw({
+    state, filesData: clearedFiles, comparisonPlanSnapshot: comparisonSnapshotForState(state, clearedFiles)
+  });
+  assert.deepEqual(cleared.webFiles.linearRecordMetadata.map((entry) => entry.losatGencode), [11, 4, null]);
+  assert.deepEqual(projectCanonicalSessionRequest(cleared).files.linearSeqs.map((seq) => seq.losat_gencode), [11, 4, null]);
+}
 assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.losat_filename),
   ['', '', ''],

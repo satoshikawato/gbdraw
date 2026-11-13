@@ -1,0 +1,11 @@
+{
+  "purpose": "Positive fixture of a released Session 50 (tag v0.14.5) holding a cleared Depth series tick as the empty text beside a drawing-level Depth large tick: Load reads the cleared tick as Auto (null) and the series fields show the drawing's tick as their Auto value, the tick Generate draws (OV-3496); a tick the series never set (null) takes the drawing's tick; a cleared number field ('') reads as one blank (OV-3351).",
+  "derivedFrom": "tests/fixtures/sessions/HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz (see its provenance: release tag v0.14.5)",
+  "derivation": "In each of modes.circular.config.adv and modes.linear.config.adv: depth_large_tick_interval 5000, legend_font_size '', gc_content_tick_interval '', and depth_tracks of three series, ticks null except series 2 (large_tick_interval '', tick_font_size 9); in the committed (Linear) request, renderRequest.diagramOptions.configOverrides objects.depth.large_tick_interval 5000, as a configuration or a CLI Session that set the drawing's tick writes it; nothing else changed. Written by scripts/build_v50_cleared_depth_tick_fixture.py of ci-review-20261110/D/work/fu-b3.",
+  "webWriter": "v0.14.5 writes these forms: its gbdraw/web/index.html:2681 (Circular) and :3206 (Linear) bind a series' Large Tick with v-model.number, which writes '' for a cleared field, and :5068 (legend_font_size) and :5944 (gc_content_tick_interval) likewise; a series added to a drawing holds its ticks as null (depthTrackEditDefaults); Save Session copies the draft as held (gbdraw/web/js/services/config.js:1325, buildModeSliceData: cloneJsonData(buildConfigData(drawing))). A drawing-level Depth tick reaches a v0.14.5 draft from a configuration or a CLI Session (objects.depth.large_tick_interval).",
+  "sourceDecompressedSha256": "69951ba82873496fb0687668d7fa14fabcc154736faef7c83b33c00bb59acab0",
+  "decompressedSha256": "b37b33852ee6a74f7cfe46d72d5fdd871245d4a409c8f5e3a4f7114cddd2c279",
+  "compression": "gzip -n -9",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

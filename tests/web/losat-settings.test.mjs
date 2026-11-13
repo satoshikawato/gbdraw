@@ -42,6 +42,7 @@ await writeFile(
     .replace("../services/linear-units.js", new URL("../services/linear-units.js", sourceRoot).href)
     .replace("../services/current-option-values.js", new URL("../services/current-option-values.js", sourceRoot).href)
     .replace("../services/linear-sources.js", new URL("../services/linear-sources.js", sourceRoot).href)
+    .replace("../services/drawing/inputs.js", new URL("../services/drawing/inputs.js", sourceRoot).href)
     .replace("../services/record-draw-selection.js", new URL("../services/record-draw-selection.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
     .replace("../services/losat.js", new URL("../services/losat.js", sourceRoot).href)

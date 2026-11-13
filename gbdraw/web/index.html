@@ -3036,7 +3036,7 @@
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Small Tick') }} <help-tip :id="`help-circular-depth-small-tick-${track.index}`" :text="t('Small tick interval in x coverage units. Leave blank to hide small ticks.')"></help-tip></span>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="autoValueText('depthSmallTick')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-circular-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
@@ -3583,7 +3583,7 @@
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Small Tick') }} <help-tip :id="`help-linear-depth-small-tick-${track.index}`" :text="t('Small tick interval in x coverage units. Leave blank to hide small ticks.')"></help-tip></span>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="autoValueText('depthSmallTick')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-linear-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>

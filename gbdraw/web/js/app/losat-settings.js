@@ -3,9 +3,8 @@ import { readCollinearSearchScope } from '../services/losat-normalization.js';
 import { requireCurrentCollinearInferOrthogroups } from '../services/current-option-values.js';
 import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
 import { drawsSeveralUnits, linearUnitPlanPayload, planLinearUnitSearch } from '../services/linear-units.js';
-import {
-  losatRecordGencode, losatSearchSequences, nucleotideLosatArgs, planLosatSourceJobs, proteinLosatArgs
-} from '../services/linear-sources.js';
+import { losatSearchSequences, nucleotideLosatArgs, planLosatSourceJobs, proteinLosatArgs } from '../services/linear-sources.js';
+import { losatRecordGencode } from '../services/drawing/inputs.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';

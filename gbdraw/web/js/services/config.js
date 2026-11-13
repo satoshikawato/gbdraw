@@ -18,7 +18,7 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
-import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
+import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, losatRecordGencode, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, parseColorTable, userTableRows } from './file-imports.js';
@@ -4527,7 +4527,7 @@ export const serializeActiveRenderFiles = async (
       gff: await serializeFileValue(store, seq.gff),
       fasta: await serializeFileValue(store, seq.fasta),
       depth: depthRequested ? await serializeFileValue(store, depthSlots[index]) : null,
-      losat_gencode: seq.losat_gencode ?? 1,
+      losat_gencode: losatRecordGencode(seq),
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
       file_definition: seq.file_definition ?? '',

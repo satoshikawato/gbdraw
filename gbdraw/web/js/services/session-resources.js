@@ -18,7 +18,7 @@ import {
 } from './session-resource-backing.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
-import { ringGenomeIdLists } from './drawing/inputs.js';
+import { losatRecordGencode, ringGenomeIdLists } from './drawing/inputs.js';
 import {
   collectCanonicalResourceIds,
   isCanonicalResourceReferenceField
@@ -607,7 +607,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
       gff: await bindFile(sequence?.gff),
       fasta: await bindFile(sequence?.fasta),
       depth: await bindFileValue(sequence?.depth),
-      losat_gencode: sequence?.losat_gencode === undefined ? 1 : sequence.losat_gencode,
+      losat_gencode: losatRecordGencode(sequence),
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
       file_definition: String(sequence?.file_definition || ''),

@@ -33,7 +33,11 @@ import { createSearchHitTable } from './sequence-search/hit-table.js';
 /** @import { RunHelper, SearchError } from './sequence-search/queries.js' */
 /** @import { SearchOutcome } from './sequence-search/hit-table.js' */
 
-/** @typedef {{ min_bitscore: string | number, evalue: string | number, identity: string | number, alignment_length: string | number }} SearchThresholdDraft */
+/**
+ * The thresholds the panel's fields hold: a number field holds its number, or null when it is blank (`v-blank-null`),
+ * which takes the mode default (`resolveComparisonThresholds`); the E-value field holds its text.
+ * @typedef {{ min_bitscore: number | null, evalue: string, identity: number | null, alignment_length: number | null }} SearchThresholdDraft
+ */
 
 /**
  * The ports the composition root gives the panel.

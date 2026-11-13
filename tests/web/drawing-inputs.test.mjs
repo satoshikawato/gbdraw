@@ -167,7 +167,7 @@ test('a file bound only by a hidden drawing survives History eviction (the union
 const {
   INPUTS_SLICE, addCircularSource, addLinearSeq, bindCircularSourceFile, bindDrawingCanonicalComparisons, bindDrawingInputFileList,
   bindDrawingInputFileTree, bindLinearSeqFile, createCircularSource, createLinearSeq, moveLinearSeq, removeLinearSeq, replaceLinearSeqs,
-  setConservationBlastsSource
+  readCardGencode, readStoredCardGencode, setConservationBlastsSource
 } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 
 // How each member is filled with a value: bound files, rows, a GFF input, and
@@ -240,6 +240,28 @@ test('inputs: a cleared Linear card gencode stays null through capture and insta
   assert.deepEqual(gencodes(handle), [11, null, 1]);
   INPUTS_SLICE.install(handle, INPUTS_SLICE.capture(handle));
   assert.deepEqual(gencodes(handle), [11, null, 1], 'History installs the captured cleared field as it was');
+});
+
+// A typed table LOSAT does not read stays as typed when the card is built again (a file added to it, a History step,
+// a Load), so its mark and Generate's refusal stay (OV-3326); only a value that is no number above 0 reads as 1.
+test('inputs: a card keeps a typed gencode LOSAT does not read; one that is no number above 0 reads as 1', () => {
+  assert.deepEqual([1.5, 8.5, 99, '7', 0, -2, 'x'].map((gencode) => createLinearSeq({ losat_gencode: gencode }).losat_gencode),
+    [1.5, 8.5, 99, 7, 1, 1, 1]);
+  assert.deepEqual([1.5, 0, 'x', '', undefined, null].map((gencode) => readCardGencode(gencode)),
+    [{ value: 1.5, lost: false }, { value: 1, lost: true }, { value: 1, lost: true }, { value: 1, lost: false },
+      { value: 1, lost: false }, { value: null, lost: false }]);
+});
+
+// Load reads a stored gencode as dev did: a whole number stays (99 keeps its mark), a cleared card stays cleared, and a
+// number that is not whole is no table, read as 1 with a Load-repair row; the card itself keeps it (above).
+test('inputs: Load reads a stored gencode that is not a whole number as 1, with a repair row', async () => {
+  const { readLinearSeqFields } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  const read = (gencode) => {
+    const { value, repairs } = readLinearSeqFields({ losat_gencode: gencode }, 'webFiles.bindings.linearSeqs[0]');
+    return [value.losat_gencode, repairs.length];
+  };
+  assert.deepEqual([8.5, 1.5, 99, 11, null, ''].map(read), [[1, 1], [1, 1], [99, 0], [11, 0], [null, 0], [1, 0]]);
+  assert.deepEqual([8.5, 99, null, 2.5].map((gencode) => readStoredCardGencode(gencode).value), [1, 99, null, 1]);
 });
 
 test('inputs: the row writers find a row by its uid and refuse an unknown one', () => {

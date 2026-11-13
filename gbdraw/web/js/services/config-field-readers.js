@@ -5,7 +5,7 @@ import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.genera
 import { normalizeOptionalHexColor, readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { CONSERVATION_COLOR_SCHEMES, CONSERVATION_DEFAULT_COLOR_SCHEME } from '../utils/conservation-colors.generated.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
-import { readCardGencode, readLinearSeqWindows } from './drawing/inputs.js';
+import { readLinearSeqWindows, readStoredCardGencode } from './drawing/inputs.js';
 import { readCanonicalRecordTranslations, readCanonicalSimilarityAlignmentPlan } from './linear-record-layout.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
@@ -283,7 +283,7 @@ const readCardWindows = (value) => (Array.isArray(value)
   ? { value, lost: false } : { value: [], lost: !isUnsetValue(value) });
 /** A Linear card's genetic code, crop, windows and texts. @type {readonly FieldRow[]} */
 const LINEAR_SEQ_ROWS = Object.freeze([
-  row('losat_gencode', readCardGencode),
+  row('losat_gencode', readStoredCardGencode),
   row('region_start', readRegionEndpoint),
   row('region_end', readRegionEndpoint),
   row('region_reverse', readRegionReverse),
@@ -1250,10 +1250,13 @@ const READ_ELSEWHERE = new Set([
  * a list; a value of `target`'s kind, or `null` on either side, is copied.
  * The app holds a blank number field as `null` (`v-blank-null`, OV-3351);
  * files of Session 50 and earlier hold some as the empty text. An empty text
- * where the default is `null` installs `null`, which every field with that
- * default reads as the empty text (the text fields of this kind read a blank
- * as unset). An empty text of another kind over a number is the field's
- * value in `defaults`, without a loss: a blank is the default (R7, OV-827).
+ * where the default is `null`, or in a comparison filter
+ * (`NUMBER_OR_ITS_TEXT_FIELDS`, which reads a blank as its mode default),
+ * reads as `null` before the kinds are compared, so it installs `null`; every
+ * field with a `null` default reads it as the empty text (the text fields of
+ * this kind read a blank as unset). An empty text of another kind over a
+ * number is the field's value in `defaults`, without a loss: a blank is the
+ * default (R7, OV-827).
  * Any other value of another kind (a list for an object included) is not
  * used; it is returned as a loss at `at`, and `target` keeps its value.
  * @param {Record<string, unknown>} target
@@ -1274,18 +1277,16 @@ const mergeStoredSettings = (target, source, at, defaults) => {
       return FREE_KEY_MAPS.includes(at) || READ_ELSEWHERE.has(keyAt) ? [] : [{ at: keyAt, stored: stored[key], used: undefined }];
     }
     const targetValue = target[key];
-    const sourceValue = stored[key];
     const fresh = defaults && Object.hasOwn(defaults, key) ? defaults[key] : undefined;
+    // A blank number field an older file holds as the empty text is `null`, as the app holds it: where the default
+    // is `null`, and in a comparison filter, whose kind rule counts a blank text as a number (`kindOf`).
+    const sourceValue = stored[key] === '' && (fresh === null || NUMBER_OR_ITS_TEXT_FIELDS.includes(keyAt)) ? null : stored[key];
     // A null over a settings group holds nothing and merges nothing (OV-822, E-OD06).
     if (isPlainObject(targetValue) && (isPlainObject(sourceValue) || sourceValue === null)) {
       return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null);
     }
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
       targetValue.splice(0, targetValue.length, ...sourceValue);
-      return [];
-    }
-    if (sourceValue === '' && fresh === null) {
-      target[key] = null;
       return [];
     }
     if (kindOf(targetValue, keyAt) === kindOf(sourceValue, keyAt) || targetValue === null || sourceValue === null) {
