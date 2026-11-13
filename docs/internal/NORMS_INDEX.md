@@ -654,12 +654,13 @@ under "Cited ids without a record".
 - [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load): Legend position of a diagram mode at Load. ACCEPTED, concern `web.legend.position-of-mode`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/legend-drawn-side.test.mjs`
 
-- [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit): Labels that do not fit. ACCEPTED, concern `product.circular-outer-label-fit`, scenario revision 28, supersedes scenario revision 27.
+- [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit): Labels that do not fit. ACCEPTED, concern `product.circular-outer-label-fit`, scenario revision 29, supersedes scenario revision 28.
   - `tests/test_annotation_lane_room.py`
   - `tests/test_circular_definition_over_track.py`
   - `tests/test_circular_label_capacity.py`
   - `tests/test_circular_track_narrowing.py`
   - `tests/test_linear_annotation_tracks.py`
+  - `tests/test_linear_embedded_label_fit.py`
   - `tests/test_web_label_fit.py`
   - `tests/web/helpers/live-random-walk.mjs`
   - `tests/web/label-fit.playwright.spec.js`
@@ -725,7 +726,7 @@ under "Cited ids without a record".
 - [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup): A click on a drawn element shows its settings in a popup. ACCEPTED, concern `web.result.element-settings-entry`, scenario revision 1.
   - `tests/web/legacy-session-load.test.mjs`
 
-- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 6, supersedes scenario revision 5.
+- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 7, supersedes scenario revision 6.
   - `tests/web/browser-preferences.test.mjs`
   - `tests/web/ui-language.playwright.spec.js`
 

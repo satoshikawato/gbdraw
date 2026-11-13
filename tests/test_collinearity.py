@@ -1606,6 +1606,45 @@ def test_anchor_core_record_local_paralog_cluster_forms_species_specific_orthogr
         for edge in result.ortholog_edges_by_orthogroup_id["og_1"]
     } == {"record_local_paralog"}
     assert len({member.record_index for member in result.orthogroups["og_1"]}) == 1
+    # The orthogroup metadata and Sessions save this text.
+    assert [result.member_by_protein_id[name].supporting_edges for name in ("a0", "a1")] == [
+        ("a0->a1:record_local_paralog",),
+        ("a0->a1:record_local_paralog",),
+    ]
+
+
+@pytest.mark.linear
+def test_anchor_core_member_names_every_anchor_edge_it_ends_in_order() -> None:
+    names = ["a0", "b0", "c0"]
+    records = [
+        _record(f"record_{name[0]}", [_cds(0, 9, {"locus_tag": [name], "protein_id": [name]})])
+        for name in names
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (query_index, subject_index): pd.DataFrame.from_records(
+            [_hit_row(names[query_index], names[subject_index], bitscore=300)],
+            columns=COMPARISON_COLUMNS,
+        )
+        for query_index in range(len(names))
+        for subject_index in range(len(names))
+        if query_index != subject_index
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert {member.protein_id for member in result.orthogroups["og_1"]} == set(names)
+    # The orthogroup metadata and Sessions save this text and order.
+    assert {name: result.member_by_protein_id[name].supporting_edges for name in names} == {
+        "a0": ("a0->b0:rbh", "a0->c0:rbh"),
+        "b0": ("a0->b0:rbh", "b0->c0:rbh"),
+        "c0": ("a0->c0:rbh", "b0->c0:rbh"),
+    }
 
 
 def _window_units(record_key: str, *features: list[SeqFeature]) -> list[SeqRecord]:

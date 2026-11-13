@@ -10,9 +10,9 @@ import os
 from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
-from typing import Any, Literal, Mapping, Optional, Sequence, TypedDict, cast
-from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
+from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 from .io.cli_tables import (
+    CircularTrackTable,
     ConservationTableEntry,
     conservation_table_text,
     read_circular_track_table,
@@ -20,10 +20,7 @@ from .io.cli_tables import (
 )
 from .config.models.objects import CONSERVATION_COLOR_SCHEME_NAMES
 from .config.toml import load_config_toml
-from .render.export import parse_formats
 from .api.options import (
-    LOSATN_TASKS,
-    AnnotationOptions,
     CircularDiagramOptions,
     LosatRuntimeOptions,
     LosatSearchOptions,
@@ -31,7 +28,7 @@ from .api.options import (
     CircularOutputOptions,
     ONE_CIRCLE_GAP_DEGREES_RANGE,
     CircularRequestTrackOptions,
-    ColorOptions,
+    DepthTrackInput,
     RingGenomeFiles,
     _ring_genome_files,
 )
@@ -46,6 +43,7 @@ from .api.request_render import (
     render_request,
 )
 from .api.record_planning import (
+    RecordInputManifest,
     record_input_manifest_from_paths,
     record_input_manifest_from_table,
 )
@@ -55,15 +53,12 @@ from .api.requests import (
     CircularDiagramRequest,
     DiagramRequest,
     RecordCardinality,
-    RenderOutputRequest,
 )
 from .config.modify import modify_config_dict
 from .layout.record_placement import parse_record_row_position
-from .api.input_summary import InputWarningKey, log_input_summary
-from .features.overrides import log_feature_identity_notices
-from .features.shapes import parse_feature_shape_overrides
+from .features.shapes import FeatureShape, parse_feature_shape_overrides
 from .exceptions import ValidationError
-from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds, resolve_mode_profile_overrides
+from .mode_profiles import CIRCULAR_MODE_PROFILE, resolve_mode_profile_overrides
 from .tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -72,21 +67,26 @@ from .tracks import (
     parse_circular_track_slots,
 )
 
-from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
+from .cli_utils.losat_output import (
+    add_losat_runtime_args,
+    add_losatn_task_arg,
+    parse_positive_int,
+    write_losat_output_files,
+)
 from .comparisons.identity_scale import CIRCULAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import unique_losat_filenames
 from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, LOSAT_GENETIC_CODE_TEXT
-from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
+from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     add_feature_density_args,
     depth_track_inputs_from_args,
     _add_depth_track_source_args,
-    feature_density_tracks_from_args,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_comparison_filter_args,
     _add_depth_axis_args,
+    _add_depth_color_arg,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_figure_size_args,
@@ -96,7 +96,7 @@ from .cli_utils.common import (
     _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
     _add_font_args,
-    cli_font_family,
+    _add_label_rendering_args,
     _add_legend_size_args,
     add_analysis_args,
     add_color_args,
@@ -104,15 +104,33 @@ from .cli_utils.common import (
     add_input_args,
     apply_record_display_cli_options,
     add_label_args,
+    require_positive_args,
     setup_logging,
+    validate_comparison_threshold_args,
+    validate_depth_axis_args,
+    validate_gc_content_axis_args,
     validate_input_args,
     validate_label_args,
     validate_output_choice_args,
+    validate_scale_interval_arg,
     figure_size_overrides,
     legend_row_overrides,
-    handle_output_formats,
     png_dpi,
     register_font_files,
+)
+from .cli_utils.diagram_run import (
+    cli_output_formats,
+    depth_overrides,
+    gc_content_overrides,
+    label_filtering_override,
+    label_style_overrides,
+    legend_size_overrides,
+    log_render_notices,
+    mode_option_fields,
+    paired_overrides,
+    render_output_request,
+    stroke_width_overrides,
+    style_overrides,
 )
 from .cli_utils.session import (
     DiagramRunResult,
@@ -167,36 +185,6 @@ def _parse_multi_record_position_arg(value: str) -> str:
     except ValidationError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
     return f"{selector_text}@{row}"
-
-
-def _render_output_request(
-    output_prefix: str,
-    formats: list[str],
-    *,
-    overwrite: bool,
-    embed_fonts: bool,
-    dpi: int | None,
-) -> RenderOutputRequest:
-    """Split a CLI path prefix into the typed output directory and basename."""
-
-    prefix_path = Path(str(output_prefix))
-    output_directory = (
-        prefix_path.parent
-        if prefix_path.parent != Path(".")
-        else None
-    )
-    return RenderOutputRequest(
-        output_prefix=prefix_path.name,
-        output_directory=output_directory,
-        formats=tuple(formats),
-        overwrite=overwrite,
-        embed_fonts=embed_fonts,
-        dpi=dpi,
-    )
-
-
-
-
 
 
 def conservation_colors_from_cli(values: Sequence[str] | None) -> list[str] | None:
@@ -359,32 +347,9 @@ def _shown_skew(args: argparse.Namespace) -> bool:
     return bool(_profile_values(args)["canvas.show_skew"])
 
 
-def _get_args(
-    args,
-    *,
-    _allow_legacy_track_transport: bool = False,
-) -> argparse.Namespace:
-    """
-    Parses command-line arguments for generating circular genome diagrams.
+def _add_circular_input_output_args(parser: argparse.ArgumentParser) -> None:
+    """The record inputs, the circular records table, and the output prefix."""
 
-    Args:
-        args (list of str): Command-line arguments.
-
-    Returns:
-        argparse.Namespace: An object containing the parsed command-line arguments.
-
-    This function defines and parses the command-line arguments required for
-    generating genome diagrams in a circular layout. It includes options for input
-    GenBank files, color customization, output formats, and various Configurator for
-    visualizing GC content, GC skew, and specific genomic features.
-    """
-    parser = argparse.ArgumentParser(
-        description=(
-            "Generate genome diagrams in PNG/PDF/SVG/PS/EPS. "
-            "By default, diagrams for multiple entries are saved separately. "
-            "Use --multi_record_canvas to place multiple records on one grid canvas."
-        )
-    )
     add_input_args(parser)
     parser.add_argument(
         "--records_table",
@@ -397,8 +362,11 @@ def _get_args(
         help='output file prefix (default: accession number of the sequence)',
         type=str)
     _add_overwrite_arg(parser)
-    add_color_args(parser)
-    add_analysis_args(parser)
+
+
+def _add_species_strain_args(parser: argparse.ArgumentParser) -> None:
+    """The species and strain of the center definition."""
+
     parser.add_argument(
         '--species',
         help='Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")',
@@ -407,10 +375,11 @@ def _get_args(
         '--strain',
         help='Strain/isolate name (optional; e.g. "K-12", "Av")',
         type=str)
-    add_feature_args(parser)
-    _add_feature_shape_arg(parser)
-    _add_arrow_geometry_args(parser)
-    _add_block_stroke_args(parser)
+
+
+def _add_circular_stroke_args(parser: argparse.ArgumentParser) -> None:
+    """The axis and line strokes."""
+
     parser.add_argument(
         '--axis_stroke_color',
         help='Axis stroke color (str; default: "gray")',
@@ -427,6 +396,11 @@ def _get_args(
         '--line_stroke_width',
         help='Line stroke width (optional; float; default: 5 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
         type=argparse_float)
+
+
+def _add_circular_title_args(parser: argparse.ArgumentParser) -> None:
+    """The center definition and the plot title."""
+
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; default: 18)',
@@ -450,6 +424,11 @@ def _get_args(
         '--keep_full_definition_with_plot_title',
         help='Keep the full species/strain center label when a circular plot title is shown (default: False).',
         action='store_true')
+
+
+def _add_circular_center_args(parser: argparse.ArgumentParser) -> None:
+    """The display start (``--origin_feature``) and the room the center definition keeps inside the tracks."""
+
     parser.add_argument(
         '--origin_feature',
         metavar='KEY=VALUE',
@@ -484,23 +463,11 @@ def _get_args(
             'the center definition (default: 30). A narrower track, or a typed width, is not narrowed.'
         ),
         type=argparse_float)
-    parser.add_argument(
-        '--label_font_size',
-        help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
-        type=argparse_float)
-    _add_format_arg(parser)
-    _add_figure_size_args(parser)
-    _add_gc_skew_toggle_args(
-        parser,
-        show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
-        show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
-        typed_dests=frozenset({"show_skew"}),  # One circle draws no skew unless asked (``_shown_skew``).
-    )
-    _add_depth_track_source_args(parser, mode="circular")
-    _add_depth_track_tick_args(parser)
-    add_feature_density_args(parser)
-    _add_conservation_input_args(parser)
-    _add_retired_option_args(parser, mode="circular")
+
+
+def _add_conservation_ring_args(parser: argparse.ArgumentParser) -> None:
+    """The similarity rings: the reference side of the BLAST tables, the ring labels, colors, width and gap."""
+
     parser.add_argument(
         '--conservation_reference',
         help='BLAST side containing displayed circular reference coordinates.',
@@ -539,6 +506,11 @@ def _get_args(
         '--conservation_ring_gap',
         help='Similarity ring gap for circular mode (in px; must be > 0).',
         type=argparse_float)
+
+
+def _add_ring_losat_args(parser: argparse.ArgumentParser) -> None:
+    """The LOSAT search that builds the similarity rings: the program, the task, the genetic codes, the runtime and the output folder."""
+
     parser.add_argument(
         '--losat',
         choices=COMPARISON_LOSAT_PROGRAMS,
@@ -552,15 +524,7 @@ def _get_args(
             'Cannot be combined with --conservation_blast (default: no LOSAT search).'
         ),
     )
-    parser.add_argument(
-        '--losatn_task',
-        choices=LOSATN_TASKS,
-        default=None,
-        help=(
-            'LOSATN search task with --losat losatn. A native runtime that does not '
-            'support the task stops before searching (default: megablast).'
-        ),
-    )
+    add_losatn_task_arg(parser)
     parser.add_argument(
         '--losat_gencode',
         metavar='CODE',
@@ -584,29 +548,7 @@ def _get_args(
             f'the NCBI tables {LOSAT_GENETIC_CODE_TEXT} (default: 1).'
         ),
     )
-    runtime_group = parser.add_mutually_exclusive_group()
-    runtime_group.add_argument(
-        '--losat_bin',
-        metavar='PATH',
-        default=None,
-        help='Native LOSAT executable for --losat (default: automatic runtime resolution).',
-    )
-    runtime_group.add_argument(
-        '--ncbi_blast_bin',
-        metavar='PATH',
-        default=None,
-        help=(
-            'NCBI BLAST+ executable of the selected --losat program (blastn or tblastx) '
-            '(default: automatic runtime resolution).'
-        ),
-    )
-    parser.add_argument(
-        '--losat_threads',
-        metavar='N',
-        type=parse_positive_int,
-        default=None,
-        help='Threads passed to each LOSAT or NCBI BLAST+ job (default: runtime default).',
-    )
+    add_losat_runtime_args(parser, blast_programs='blastn or tblastx')
     parser.add_argument(
         '--losat_output_dir',
         metavar='DIR',
@@ -617,23 +559,11 @@ def _get_args(
             '--conservation_table accepts unchanged.'
         ),
     )
-    _add_comparison_filter_args(parser)
-    parser.add_argument(
-        '--depth_color',
-        help='Depth track fill color (optional; default: #4A90E2).',
-        type=str)
-    parser.add_argument(
-        '--depth_width',
-        help='Depth track width for circular mode (in px; must be > 0).',
-        type=argparse_float)
-    _add_depth_axis_args(parser)
-    parser.add_argument(
-        '-l',
-        '--legend',
-        help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
-        type=str,
-        default="right")
-    _add_record_layout_args(parser)
+
+
+def _add_multi_record_canvas_args(parser: argparse.ArgumentParser) -> None:
+    """The grid canvas of several records: sizes, gaps, and placement."""
+
     parser.add_argument(
         '--multi_record_size_mode',
         help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; default: "auto").',
@@ -661,6 +591,11 @@ def _get_args(
         type=_parse_multi_record_position_arg,
         action='append',
         default=[])
+
+
+def _add_circular_track_args(parser: argparse.ArgumentParser) -> None:
+    """The plot title position, the strands, the track preset, and the overlap rule."""
+
     parser.add_argument(
         '--plot_title_position',
         help='Plot title position in circular mode ("none", "top", "bottom"; default: "none").',
@@ -681,6 +616,11 @@ def _get_args(
         '--resolve_overlaps',
         help='Resolve overlapping features by placing them on separate tracks (default: False). Useful for plasmid visualization.',
         action='store_true')
+
+
+def _add_circular_label_mode_args(parser: argparse.ArgumentParser) -> None:
+    """Which labels are drawn and how: ``--labels``, the rendering policy and label style, and the placement."""
+
     parser.add_argument(
         '--labels',
         help='Label placement mode: no argument or "out" (outside), "both" (outside+inside), or "none" (hidden). Default: "none".',
@@ -689,25 +629,7 @@ def _get_args(
         default='none',
         choices=['none', 'out', 'both'],
         type=str)
-    parser.add_argument(
-        '--label_rendering',
-        help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Default: "auto".',
-        choices=['auto', 'embedded_only', 'external_only'],
-        default='auto',
-        type=str)
-    parser.add_argument(
-        '--label_line',
-        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
-        '(a turned label gets none); "none" draws none. '
-        f'Default: "{DEFAULT_LABEL_LINE["circular"]}".',
-        choices=LABEL_LINES,
-        type=str)
-    parser.add_argument(
-        '--label_protection',
-        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
-        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION["circular"]}".',
-        choices=LABEL_PROTECTIONS,
-        type=str)
+    _add_label_rendering_args(parser, mode="circular")
     parser.add_argument(
         '--label_placement',
         help='External circular label placement: "horizontal" or "radial". Default: "horizontal".',
@@ -715,7 +637,9 @@ def _get_args(
         default='horizontal',
         type=str)
 
-    add_label_args(parser)
+
+def _add_label_ellipse_args(parser: argparse.ArgumentParser) -> None:
+    """The offsets of the outer and inner label ellipses."""
 
     parser.add_argument(
         '--outer_label_x_radius_offset',
@@ -733,6 +657,11 @@ def _get_args(
         '--inner_label_y_radius_offset',
         help='Inner label y-radius offset factor (float; default from config)',
         type=argparse_float)
+
+
+def _add_circular_scale_args(parser: argparse.ArgumentParser) -> None:
+    """The scale ticks and their labels, the label spacing, and the feature track width."""
+
     parser.add_argument(
         '--scale_interval',
         help='Manual scale interval for circular mode (a length in bp with an optional unit, for example 5000 or 5kb; must be > 0). Overrides automatic calculation.',
@@ -753,6 +682,11 @@ def _get_args(
         '--feature_width',
         help='Feature track width for circular mode (in px; must be > 0).',
         type=argparse_float)
+
+
+def _add_circular_track_slot_args(parser: argparse.ArgumentParser) -> None:
+    """The custom track slots: an order, slot specs, or a table, and the axis index."""
+
     parser.add_argument(
         '--circular_track_order',
         help='Comma-separated circular slot order. Omitted built-in slot geometry inherits --track_type.',
@@ -772,6 +706,11 @@ def _get_args(
         type=argparse_integer,
         default=None,
         help='Axis boundary index for --circular_track_slot order. Slots before this index render outside; slots at or after it render inside.')
+
+
+def _add_gc_track_size_args(parser: argparse.ArgumentParser) -> None:
+    """The GC content and GC skew track sizes, and the GC content axis."""
+
     parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
@@ -789,17 +728,88 @@ def _get_args(
         '--gc_skew_radius',
         help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
         type=argparse_float)
+
+
+def _circular_parser() -> argparse.ArgumentParser:
+    """The ``gbdraw circular`` parser, with its options in the order ``--help`` lists them."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate genome diagrams in PNG/PDF/SVG/PS/EPS. "
+            "By default, diagrams for multiple entries are saved separately. "
+            "Use --multi_record_canvas to place multiple records on one grid canvas."
+        )
+    )
+    _add_circular_input_output_args(parser)
+    add_color_args(parser)
+    add_analysis_args(parser)
+    _add_species_strain_args(parser)
+    add_feature_args(parser)
+    _add_feature_shape_arg(parser)
+    _add_arrow_geometry_args(parser)
+    _add_block_stroke_args(parser)
+    _add_circular_stroke_args(parser)
+    _add_circular_title_args(parser)
+    _add_circular_center_args(parser)
+    parser.add_argument(
+        '--label_font_size',
+        help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
+        type=argparse_float)
+    _add_format_arg(parser)
+    _add_figure_size_args(parser)
+    _add_gc_skew_toggle_args(
+        parser,
+        show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
+        show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
+        typed_dests=frozenset({"show_skew"}),  # One circle draws no skew unless asked (``_shown_skew``).
+    )
+    _add_depth_track_source_args(parser, mode="circular")
+    _add_depth_track_tick_args(parser)
+    add_feature_density_args(parser)
+    _add_conservation_input_args(parser)
+    _add_retired_option_args(parser, mode="circular")
+    _add_conservation_ring_args(parser)
+    _add_ring_losat_args(parser)
+    _add_comparison_filter_args(parser)
+    _add_depth_color_arg(parser)
+    parser.add_argument(
+        '--depth_width',
+        help='Depth track width for circular mode (in px; must be > 0).',
+        type=argparse_float)
+    _add_depth_axis_args(parser)
+    parser.add_argument(
+        '-l',
+        '--legend',
+        help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
+        type=str,
+        default="right")
+    _add_record_layout_args(parser)
+    _add_multi_record_canvas_args(parser)
+    _add_circular_track_args(parser)
+    _add_circular_label_mode_args(parser)
+    add_label_args(parser)
+    _add_label_ellipse_args(parser)
+    _add_circular_scale_args(parser)
+    _add_circular_track_slot_args(parser)
+    _add_gc_track_size_args(parser)
     _add_legend_size_args(parser)
     _add_font_args(parser)
-
     add_session_args(parser)
+    return parser
 
-    args = parser.parse_args(args)
-    if _allow_legacy_track_transport:
+
+def _validate_circular_args(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, legacy_session: bool
+) -> None:
+    """Refuse option values and combinations the circular command cannot draw, in this order, and normalize
+    ``--scale_interval`` and ``--circular_track_slot`` in place. ``legacy_session``: the replay of a released
+    legacy Session, which reads its stored font sizes and keeps the fallbacks it was drawn with."""
+
+    if legacy_session:
         read_stored_font_size_options(parser, args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
-    if not _allow_legacy_track_transport:
+    if not legacy_session:
         validate_output_choice_args(args)
     if args.records_table and args.multi_record_position:
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
@@ -810,51 +820,39 @@ def _get_args(
         parser.error("--circular_track_table cannot be combined with --circular_track_slot")
     if args.circular_track_table and args.circular_track_axis_index is not None:
         parser.error("--circular_track_table cannot be combined with --circular_track_axis_index")
-    if args.feature_width is not None and args.feature_width <= 0:
-        parser.error("--feature_width must be > 0")
-    if args.gc_content_width is not None and args.gc_content_width <= 0:
-        parser.error("--gc_content_width must be > 0")
-    if args.gc_content_radius is not None and args.gc_content_radius <= 0:
-        parser.error("--gc_content_radius must be > 0")
-    if (
-        args.gc_content_min_percent is not None
-        and args.gc_content_max_percent is not None
-        and args.gc_content_min_percent > args.gc_content_max_percent
-    ):
-        parser.error("--gc_content_min_percent must be <= --gc_content_max_percent")
-    if args.gc_content_tick_interval is not None and args.gc_content_tick_interval <= 0:
-        parser.error("--gc_content_tick_interval must be > 0")
-    if args.gc_content_large_tick_interval is not None and args.gc_content_large_tick_interval <= 0:
-        parser.error("--gc_content_large_tick_interval must be > 0")
-    if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
-        parser.error("--gc_content_small_tick_interval must be > 0")
-    if args.scale_interval is not None and args.scale_interval <= 0:
-        if not _allow_legacy_track_transport:
-            parser.error("--scale_interval must be > 0")
-        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
-    if args.gc_skew_width is not None and args.gc_skew_width <= 0:
-        parser.error("--gc_skew_width must be > 0")
-    if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
-        parser.error("--gc_skew_radius must be > 0")
-    if args.depth_width is not None and args.depth_width <= 0:
-        parser.error("--depth_width must be > 0")
-    if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
-        parser.error("--conservation_ring_width must be > 0")
-    if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
-        parser.error("--conservation_ring_gap must be > 0")
+    require_positive_args(parser, args, "feature_width", "gc_content_width", "gc_content_radius")
+    validate_gc_content_axis_args(parser, args)
+    validate_scale_interval_arg(parser, args, legacy_session=legacy_session)
+    require_positive_args(
+        parser,
+        args,
+        "gc_skew_width",
+        "gc_skew_radius",
+        "depth_width",
+        "conservation_ring_width",
+        "conservation_ring_gap",
+    )
     if args.center_reserved_radius is not None and args.center_reserved_radius < 0:
         parser.error("--center_reserved_radius must be a finite number >= 0")
     if args.track_narrowing_min_px is not None and args.track_narrowing_min_px < 0:
         parser.error("--track_narrowing_min_px must be a finite number >= 0")
-    try:
-        ComparisonThresholds(
-            evalue=args.evalue,
-            bitscore=args.bitscore,
-            identity=args.identity,
-            alignment_length=args.alignment_length,
-        )
-    except ValidationError as exc:
-        parser.error(str(exc))
+    validate_comparison_threshold_args(parser, args)
+    _validate_ring_sources(parser, args)
+    validate_depth_axis_args(parser, args)
+    require_positive_args(parser, args, "circular_label_spacing")
+    _normalize_circular_track_slots(parser, args, legacy_session=legacy_session)
+    if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
+        parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
+    if args.multi_record_column_gap_ratio < 0:
+        parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
+    if args.multi_record_row_gap_ratio < 0:
+        parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
+
+
+def _validate_ring_sources(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse a ring LOSAT program or output folder that cannot run, and ring labels, colors or genomes without
+    the ring sources they align with."""
+
     if args.losat == "losatp":
         raise ValidationError(
             "Circular similarity rings run --losat losatn or --losat tlosatx; "
@@ -885,32 +883,14 @@ def _get_args(
                 if args.conservation_genome
                 else "--conservation_sequence must provide one source per --conservation_blast"
             )
-    if args.depth_min is not None and args.depth_min < 0:
-        parser.error("--depth_min must be >= 0")
-    if args.depth_max is not None and args.depth_max < 0:
-        parser.error("--depth_max must be >= 0")
-    if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
-        parser.error("--depth_min must be <= --depth_max")
-    if args.depth_large_tick_interval is not None and args.depth_large_tick_interval <= 0:
-        parser.error("--depth_large_tick_interval must be > 0")
-    if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
-        parser.error("--depth_small_tick_interval must be > 0")
-    for option_name in (
-        "depth_track_large_tick_interval",
-        "depth_track_small_tick_interval",
-        "depth_track_tick_font_size",
-    ):
-        for option_value in getattr(args, option_name) or []:
-            option_text = str(option_value).strip().lower()
-            if option_text in {"", "auto", "none", "null", "-"}:
-                continue
-            numeric_option_value = parse_ascii_finite_float(str(option_value))
-            if numeric_option_value is None:
-                parser.error(f"--{option_name} values must be numbers or auto")
-            if numeric_option_value <= 0:
-                parser.error(f"--{option_name} values must be > 0")
-    if args.circular_label_spacing is not None and args.circular_label_spacing <= 0:
-        parser.error("--circular_label_spacing must be > 0")
+
+
+def _normalize_circular_track_slots(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, legacy_session: bool
+) -> None:
+    """Refuse a track order with slot specs, or an axis index without either; parse ``--circular_track_slot``
+    into slots in place, and check the axis index against the slots."""
+
     if args.circular_track_order and args.circular_track_slot:
         parser.error("--circular_track_order cannot be combined with --circular_track_slot")
     if args.circular_track_axis_index is not None and not (args.circular_track_order or args.circular_track_slot):
@@ -925,7 +905,7 @@ def _get_args(
         try:
             circular_track_slots_for_validation = parse_circular_track_slots(
                 args.circular_track_slot,
-                _allow_legacy_transport=_allow_legacy_track_transport,
+                _allow_legacy_transport=legacy_session,
             )
         except Exception as exc:
             parser.error(str(exc))
@@ -938,16 +918,33 @@ def _get_args(
             )
         except Exception as exc:
             parser.error(str(exc))
-    if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
-        parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
-    if args.multi_record_column_gap_ratio < 0:
-        parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
-    if args.multi_record_row_gap_ratio < 0:
-        parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
-    return args
 
 
+def _get_args(
+    args: Sequence[str] | None,
+    *,
+    _allow_legacy_track_transport: bool = False,
+) -> argparse.Namespace:
+    """
+    Parses command-line arguments for generating circular genome diagrams.
 
+    Args:
+        args (list of str): Command-line arguments.
+
+    Returns:
+        argparse.Namespace: An object containing the parsed command-line arguments.
+
+    This function defines and parses the command-line arguments required for
+    generating genome diagrams in a circular layout. It includes options for input
+    GenBank files, color customization, output formats, and various Configurator for
+    visualizing GC content, GC skew, and specific genomic features.
+    """
+    parser = _circular_parser()
+    namespace = parser.parse_args(args)
+    _validate_circular_args(
+        parser, namespace, legacy_session=_allow_legacy_track_transport
+    )
+    return namespace
 
 
 def replay_legacy_session(
@@ -1190,22 +1187,6 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
     return files
 
 
-def _log_render_notices(rendered_items: Sequence[RequestRenderResult]) -> None:
-    """Log each Result's annotation warnings, feature notices and input summary.
-
-    A warning of an input the Results of a batch share (one comparison file every Result reads) is logged once.
-    """
-
-    warned: set[InputWarningKey] = set()
-    for rendered_item in rendered_items:
-        for warning in rendered_item.annotation_warnings:
-            logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
-                warning.set_id, warning.annotation_id, warning.record_index + 1,
-                warning.record_id, warning.message)
-        log_feature_identity_notices(rendered_item.feature_identity_notices)
-        log_input_summary(rendered_item.input_summary, warned=warned)
-
-
 def _drawn_request(request: DiagramRequest) -> DiagramRequest:
     """The request a run's Session saves: one record drawn as separate diagrams is one single drawing.
 
@@ -1227,27 +1208,55 @@ def _drawn_request(request: DiagramRequest) -> DiagramRequest:
     )
 
 
-def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
-    """Run circular rendering from an already parsed argparse namespace."""
+class _CircularTrackInput(NamedTuple):
+    """The track list the options name: a ``--circular_track_table``, else ``--circular_track_slot`` and
+    ``--circular_track_order``."""
 
-    output_prefix = args.output
-    dinucleotide: str = args.nt.upper()
-    manual_window: int = args.window
-    manual_step: int = args.step
-    color_table_path: str = args.table
-    selected_features_set: str = args.features.split(',')
+    table: CircularTrackTable | None
+    order: str | None
+    slot_specs: Sequence[str | CircularTrackSlot]
+    axis_index: int | None
+    allow_legacy_transport: bool
+
+
+def _circular_track_input(args: argparse.Namespace) -> _CircularTrackInput:
+    """Read ``--circular_track_table`` (it wins over the slot and order options) or take the listed slots."""
+
+    allow_legacy_transport = bool(getattr(args, "_allow_legacy_track_transport", False))
+    table = (
+        read_circular_track_table(args.circular_track_table, _allow_legacy_transport=allow_legacy_transport)
+        if args.circular_track_table
+        else None
+    )
+    if table:
+        slot_specs = parse_circular_track_slots(table.slot_specs, _allow_legacy_transport=allow_legacy_transport)
+        return _CircularTrackInput(table, None, slot_specs, table.axis_index, allow_legacy_transport)
+    return _CircularTrackInput(
+        None,
+        args.circular_track_order,
+        list(args.circular_track_slot or []),
+        args.circular_track_axis_index,
+        allow_legacy_transport,
+    )
+
+
+class _CircularInputs(NamedTuple):
+    """What the command reads and parses from its options before it builds the config."""
+
+    feature_shapes: dict[str, FeatureShape]
+    record_manifest: RecordInputManifest
+    multi_record_positions: list[str]
+    show_skew: bool
+    gc_content_mode: str | None
+    tracks: _CircularTrackInput
+    depth_tracks: tuple[DepthTrackInput, ...] | None
+
+
+def _read_circular_inputs(args: argparse.Namespace) -> _CircularInputs:
+    """The feature shapes, the records, the track list and the depth tracks, read in this order."""
+
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
-    arrow_head_length_ratio: str | float | None = args.arrow_head_length_ratio
-    arrow_shaft_width_ratio: float | None = args.arrow_shaft_width_ratio
-    species: str = args.species
-    strain: str = args.strain
-    legend: str = args.legend
-    multi_record_canvas: bool = args.multi_record_canvas
-    multi_record_size_mode: str = args.multi_record_size_mode
-    multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
-    multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
-    multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
-    record_manifest = (
+    record_manifest = apply_record_display_cli_options(
         record_input_manifest_from_table(args.records_table)
         if args.records_table
         else record_input_manifest_from_paths(
@@ -1255,307 +1264,150 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             gff_paths=args.gff,
             fasta_paths=args.fasta,
             cardinalities=_circular_cli_record_cardinality(),
-        )
+        ),
+        args,
     )
-    record_manifest = apply_record_display_cli_options(record_manifest, args)
-    multi_record_positions: list[str] = (
+    multi_record_positions = (
         []
         if args.records_table
         else [str(position) for position in (args.multi_record_position or [])]
     )
-    plot_title: str = str(args.plot_title or "").strip()
-    plot_title_position: str = args.plot_title_position
-    definition_font_size: Optional[float] = args.definition_font_size
-    plot_title_font_size: Optional[float] = args.plot_title_font_size
-    keep_full_definition_with_plot_title: bool = args.keep_full_definition_with_plot_title
-    center_reserved_radius: Optional[float] = args.center_reserved_radius
-    label_font_size: Optional[float] = args.label_font_size
-    show_gc: bool = args.show_gc
-    show_skew: bool = _shown_skew(args)
-    depth_track_groups: list[list[str]] | None = args.depth_track
-    show_depth: bool = bool(depth_track_groups)
-    depth_color: str | None = args.depth_color
-    depth_width: Optional[float] = args.depth_width
-    depth_window: Optional[int] = args.depth_window
-    depth_step: Optional[int] = args.depth_step
-    depth_share_axis: bool = bool(args.share_depth_axis)
-    depth_min: Optional[float] = args.depth_min
-    depth_max: Optional[float] = args.depth_max
-    depth_normalize: bool | None = args.depth_normalize
-    depth_show_axis: bool | None = args.depth_show_axis
-    depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
-    depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
-    depth_tick_font_size: Optional[float] = args.depth_tick_font_size
-    conservation_blast_files = list(args.conservation_blast or []) or None
-    conservation_sequence_sources = _cli_conservation_genomes(args)
-    conservation_reference: str = args.conservation_reference
-    conservation_labels = list(args.conservation_labels or []) or None
-    conservation_colors = conservation_colors_from_cli(args.conservation_colors)
-    conservation_ring_width: Optional[float] = args.conservation_ring_width
-    conservation_ring_gap: Optional[float] = args.conservation_ring_gap
-    evalue: float = args.evalue
-    bitscore: float = args.bitscore
-    identity: float = args.identity
-    alignment_length: int = args.alignment_length
-    labels_mode: str = args.labels
-    label_rendering: str = args.label_rendering
-    circular_label_placement: str = args.label_placement
-    resolve_overlaps: bool = args.resolve_overlaps
-    label_whitelist: str = args.label_whitelist
-    label_blacklist: str = args.label_blacklist
-    qualifier_priority_path: str = args.qualifier_priority
-    label_table_path: str = args.label_table
-    feature_table_path: str = args.feature_table
-    annotation_options = (
-        AnnotationOptions(table_file=args.annotation_table)
-        if args.annotation_table
-        else None
-    )
-    scale_interval: Optional[int] = args.scale_interval
-    hide_scale: bool = bool(args.hide_scale)
-    tick_label_font_size: Optional[float] = args.tick_label_font_size
-    circular_label_spacing: Optional[float] = args.circular_label_spacing
-    legend_box_size = args.legend_box_size
-    legend_font_size = args.legend_font_size
-    feature_width: Optional[float] = args.feature_width
-    allow_legacy_track_transport = bool(
-        getattr(args, "_allow_legacy_track_transport", False)
-    )
-    circular_track_table = (
-        read_circular_track_table(
-            args.circular_track_table,
-            _allow_legacy_transport=allow_legacy_track_transport,
-        )
-        if args.circular_track_table
-        else None
-    )
-    circular_track_order: str | None = None if circular_track_table else args.circular_track_order
-    circular_track_slot_specs: Sequence[str | CircularTrackSlot] = (
-        parse_circular_track_slots(
-            circular_track_table.slot_specs,
-            _allow_legacy_transport=allow_legacy_track_transport,
-        )
-        if circular_track_table
-        else list(args.circular_track_slot or [])
-    )
-    circular_track_axis_index: int | None = (
-        circular_track_table.axis_index
-        if circular_track_table
-        else args.circular_track_axis_index
-    )
-    gc_content_width: Optional[float] = args.gc_content_width
-    gc_content_radius: Optional[float] = args.gc_content_radius
+    show_skew = _shown_skew(args)
+    tracks = _circular_track_input(args)
     gc_content_mode = cast("str | None", _profile_values(args).get("objects.gc_content.mode"))
-    gc_content_min_percent: Optional[float] = args.gc_content_min_percent
-    gc_content_max_percent: Optional[float] = args.gc_content_max_percent
-    gc_content_show_axis: bool | None = args.gc_content_show_axis
-    gc_content_tick_interval: Optional[float] = args.gc_content_tick_interval
-    gc_content_large_tick_interval: Optional[float] = args.gc_content_large_tick_interval
-    gc_content_small_tick_interval: Optional[float] = args.gc_content_small_tick_interval
-    gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
-    gc_skew_width: Optional[float] = args.gc_skew_width
-    gc_skew_radius: Optional[float] = args.gc_skew_radius
     depth_tracks = depth_track_inputs_from_args(args)
-    logical_depth_track_count = len(depth_tracks or ())
-
-    outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
-    outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
-    inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
-    inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
-    user_defined_default_colors: str = args.default_colors
-    block_stroke_color: Optional[str] = args.block_stroke_color
-    block_stroke_width: Optional[float] = args.block_stroke_width
-    axis_stroke_color: Optional[str] = args.axis_stroke_color
-    axis_stroke_width: Optional[float] = args.axis_stroke_width
-    line_stroke_color: Optional[str] = args.line_stroke_color
-    line_stroke_width: Optional[float] = args.line_stroke_width
-    track_type: str = args.track_type
-    strandedness = args.separate_strands
-    scale_interval = args.scale_interval
-    if (
-        not multi_record_canvas
-        and bool(multi_record_positions)
-    ):
+    if not args.multi_record_canvas and multi_record_positions:
         logger.info(
             "Ignoring --multi_record_position because --multi_record_canvas is disabled."
         )
-    config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
-
-    filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
-
-    palette: str = args.palette
-
-    filtering_override = dict(filtering_cfg)
-    if label_blacklist is not None:
-        filtering_override["blacklist_keywords"] = (
-            [keyword.strip() for keyword in label_blacklist.split(",") if keyword.strip()]
-            if isinstance(label_blacklist, str)
-            else label_blacklist
-        )
-    gc_large_tick_interval = (
-        gc_content_large_tick_interval
-        if gc_content_large_tick_interval is not None
-        else gc_content_tick_interval
+    return _CircularInputs(
+        feature_shapes,
+        record_manifest,
+        multi_record_positions,
+        show_skew,
+        gc_content_mode,
+        tracks,
+        depth_tracks,
     )
+
+
+def _circular_config(args: argparse.Namespace, inputs: _CircularInputs) -> dict:
+    """The packaged config with every config option the command was given (the CLI writes its whole config)."""
+
+    config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
+    filtering = config_dict.setdefault("labels", {}).setdefault("filtering", {})
     override_candidates: dict[str, object | None] = {
         **figure_size_overrides(args),
         **legend_row_overrides(args),
-        "objects.text.font_family": cli_font_family(args),
-        "objects.features.block_stroke_color": block_stroke_color,
-        "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
-        "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
-        "objects.axis.circular.stroke_color": axis_stroke_color,
-        "objects.features.line_stroke_color": line_stroke_color,
-        "labels.circular.scope": (
-            "outer" if labels_mode == "out" else labels_mode
-        ),
-        "canvas.circular.track_type": track_type,
+        **style_overrides(args, mode="circular"),
+        "objects.features.line_stroke_color": args.line_stroke_color,
+        "labels.circular.scope": "outer" if args.labels == "out" else args.labels,
+        "canvas.circular.track_type": args.track_type,
         "canvas.circular.track_narrowing": args.track_narrowing,
         "canvas.circular.track_narrowing_min_px": args.track_narrowing_min_px,
-        "canvas.strandedness": strandedness,
-        "canvas.resolve_overlaps": resolve_overlaps,
+        "canvas.strandedness": args.separate_strands,
+        "canvas.resolve_overlaps": args.resolve_overlaps,
         "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,
-        "canvas.show_gc": show_gc,
-        "objects.gc_content.mode": gc_content_mode,
-        "objects.gc_content.min_percent": gc_content_min_percent,
-        "objects.gc_content.max_percent": gc_content_max_percent,
-        "objects.gc_content.show_axis": gc_content_show_axis,
-        "objects.gc_content.show_ticks": args.gc_content_show_ticks,
-        "objects.gc_content.axis_labels": args.gc_content_axis_labels,
-        "objects.gc_content.large_tick_interval": gc_large_tick_interval,
-        "objects.gc_content.small_tick_interval": gc_content_small_tick_interval,
-        "objects.gc_content.tick_font_size": gc_content_tick_font_size,
-        "canvas.show_skew": show_skew,
-        "canvas.show_depth": show_depth,
-        "objects.depth.fill_color": depth_color,
-        "objects.depth.min_depth": depth_min,
-        "objects.depth.max_depth": depth_max,
-        "objects.depth.normalize": depth_normalize,
-        "objects.depth.show_axis": depth_show_axis,
-        "objects.depth.show_ticks": args.depth_show_ticks,
-        "objects.depth.axis_labels": args.depth_axis_labels,
-        "objects.depth.large_tick_interval": depth_large_tick_interval,
-        "objects.depth.small_tick_interval": depth_small_tick_interval,
-        "objects.depth.tick_font_size": depth_tick_font_size,
-        "objects.depth.share_axis": depth_share_axis,
-        "objects.definition.circular.font_size": definition_font_size,
-        "objects.definition.circular.plot_title_font_size": plot_title_font_size,
+        "canvas.show_gc": args.show_gc,
+        **gc_content_overrides(args, gc_content_mode=inputs.gc_content_mode),
+        "canvas.show_skew": inputs.show_skew,
+        "canvas.show_depth": bool(args.depth_track),
+        "objects.depth.fill_color": args.depth_color,
+        **depth_overrides(args),
+        "objects.definition.circular.font_size": args.definition_font_size,
+        "objects.definition.circular.plot_title_font_size": args.plot_title_font_size,
         # Only a hidden definition is an override, so a default run's request is unchanged.
         "objects.definition.circular.show": False if args.hide_definition else None,
         "objects.conservation.color_scheme": args.conservation_color_scheme,
         CIRCULAR_IDENTITY_SCALE_PATH: list(args.identity_scale) if args.identity_scale else None,
-        "labels.rendering": label_rendering,
-        "labels.circular.line": args.label_line,
-        "labels.circular.protection": args.label_protection,
-        # Only the italic style is an override, so a default run's request is unchanged.
-        "labels.circular.italic_gene_labels": True if args.italic_gene_labels else None,
-        "labels.circular.placement": circular_label_placement,
-        "labels.filtering.raw": filtering_override,
-        "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,
-        "labels.unified_adjustment.outer_labels.y_radius_offset": outer_label_y_radius_offset,
-        "labels.unified_adjustment.inner_labels.x_radius_offset": inner_label_x_radius_offset,
-        "labels.unified_adjustment.inner_labels.y_radius_offset": inner_label_y_radius_offset,
-        "objects.scale.interval": scale_interval,
-        "objects.scale.show": not hide_scale,
-        "objects.ticks.tick_labels.font_size": tick_label_font_size,
-        "labels.spacing.circular": circular_label_spacing,
+        **label_style_overrides(args, mode="circular"),
+        "labels.circular.placement": args.label_placement,
+        "labels.filtering.raw": label_filtering_override(filtering, args.label_blacklist),
+        "labels.unified_adjustment.outer_labels.x_radius_offset": args.outer_label_x_radius_offset,
+        "labels.unified_adjustment.outer_labels.y_radius_offset": args.outer_label_y_radius_offset,
+        "labels.unified_adjustment.inner_labels.x_radius_offset": args.inner_label_x_radius_offset,
+        "labels.unified_adjustment.inner_labels.y_radius_offset": args.inner_label_y_radius_offset,
+        "objects.scale.interval": args.scale_interval,
+        "objects.scale.show": not bool(args.hide_scale),
+        "objects.ticks.tick_labels.font_size": args.tick_label_font_size,
+        "labels.spacing.circular": args.circular_label_spacing,
+        **stroke_width_overrides(args, mode="circular"),
+        **paired_overrides({"labels.font_size": args.label_font_size}),
+        **legend_size_overrides(args),
     }
-    for width_path in (
-        "objects.features.block_stroke_width.short",
-        "objects.features.block_stroke_width.long",
-    ):
-        override_candidates[width_path] = block_stroke_width
-    for width_path in (
-        "objects.axis.circular.stroke_width.short",
-        "objects.axis.circular.stroke_width.long",
-    ):
-        override_candidates[width_path] = axis_stroke_width
-    for width_path in (
-        "objects.features.line_stroke_width.short",
-        "objects.features.line_stroke_width.long",
-    ):
-        override_candidates[width_path] = line_stroke_width
-    for font_path in (
-        "labels.font_size.short",
-        "labels.font_size.long",
-    ):
-        override_candidates[font_path] = label_font_size
-    for size_path in (
-        "objects.legends.color_rect_size.short",
-        "objects.legends.color_rect_size.long",
-    ):
-        override_candidates[size_path] = legend_box_size
-    for size_path in (
-        "objects.legends.font_size.short",
-        "objects.legends.font_size.long",
-    ):
-        override_candidates[size_path] = legend_font_size
     config_dict = modify_config_dict(
         config_dict,
-        {
-            path: value
-            for path, value in override_candidates.items()
-            if value is not None
-        },
+        {path: value for path, value in override_candidates.items() if value is not None},
     )
+    return copy.deepcopy(config_dict)
 
-    out_formats: list[str] = parse_formats(args.format)
-    out_formats = handle_output_formats(out_formats)
-    dpi = png_dpi(args.dpi, out_formats)
-    shortcut_geometry_requested = any(
-        value is not None
-        for value in (
-            feature_width,
-            depth_width,
-            gc_content_width,
-            gc_content_radius,
-            gc_skew_width,
-            gc_skew_radius,
-        )
+
+def _with_shortcut_geometry(slot: CircularTrackSlot, args: argparse.Namespace) -> CircularTrackSlot:
+    """The slot with the radius and width the geometry shortcut options give its track."""
+
+    if slot.id == "features" and args.feature_width is not None:
+        return replace(slot, width=ScalarSpec(float(args.feature_width), "px"))
+    if str(slot.renderer) == "depth" and args.depth_width is not None:
+        return replace(slot, width=ScalarSpec(float(args.depth_width), "px"))
+    for slot_id, radius, width in (
+        ("gc_content", args.gc_content_radius, args.gc_content_width),
+        ("gc_skew", args.gc_skew_radius, args.gc_skew_width),
+    ):
+        if slot.id == slot_id:
+            return replace(
+                slot,
+                radius=ScalarSpec(float(radius), "factor") if radius is not None else slot.radius,
+                width=ScalarSpec(float(width), "px") if width is not None else slot.width,
+            )
+    return slot
+
+
+def _circular_track_slots(
+    args: argparse.Namespace, tracks: _CircularTrackInput, *, show_skew: bool, depth_track_count: int
+) -> Sequence[str | CircularTrackSlot] | None:
+    """The slots the request draws: the listed ones; else those of ``--circular_track_order``, or of the default
+    order when a geometry shortcut is given, with the shortcut sizes; else None (the mode's default slots)."""
+
+    hide_scale = bool(args.hide_scale)
+    shortcut_geometry = (
+        args.feature_width,
+        args.depth_width,
+        args.gc_content_width,
+        args.gc_content_radius,
+        args.gc_skew_width,
+        args.gc_skew_radius,
     )
-    if circular_track_slot_specs and shortcut_geometry_requested:
-        slot_source_option = "--circular_track_table" if circular_track_table else "--circular_track_slot"
+    shortcut_geometry_requested = any(value is not None for value in shortcut_geometry)
+    if tracks.slot_specs and shortcut_geometry_requested:
+        slot_source_option = "--circular_track_table" if tracks.table else "--circular_track_slot"
         raise ValidationError(
             f"Circular geometry shortcut options cannot be combined with {slot_source_option}; "
             "put r= and/or w= on the matching circular track slot."
         )
 
-    circular_track_slots_or_none: Sequence[str | CircularTrackSlot] | None = None
-    if circular_track_slot_specs:
-        circular_track_slots_or_none = circular_track_slot_specs
-    elif circular_track_order:
-        circular_track_slots_or_none = circular_track_slots_from_order(
-            circular_track_order,
-            show_depth=show_depth,
-            depth_track_count=max(1, logical_depth_track_count),
-            show_gc=show_gc,
+    slots: Sequence[str | CircularTrackSlot] | None = None
+    if tracks.slot_specs:
+        slots = tracks.slot_specs
+    elif tracks.order or shortcut_geometry_requested:
+        # A shortcut without a track list draws the default order, whose ticks --hide_scale leaves out.
+        slots = circular_track_slots_from_order(
+            tracks.order or "features,ticks,depth,gc_content,gc_skew",
+            show_ticks=bool(tracks.order) or not hide_scale,
+            show_depth=bool(args.depth_track),
+            depth_track_count=max(1, depth_track_count),
+            show_gc=args.show_gc,
             show_skew=show_skew,
-            dinucleotide=dinucleotide,
-        )
-    elif shortcut_geometry_requested:
-        circular_track_slots_or_none = circular_track_slots_from_order(
-            "features,ticks,depth,gc_content,gc_skew",
-            show_ticks=not hide_scale,
-            show_depth=show_depth,
-            depth_track_count=max(1, logical_depth_track_count),
-            show_gc=show_gc,
-            show_skew=show_skew,
-            dinucleotide=dinucleotide,
+            dinucleotide=args.nt.upper(),
         )
 
-    user_explicit_track_slots = bool(
-        circular_track_table
-        or circular_track_order
-        or circular_track_slot_specs
-    )
     if (
         hide_scale
-        and user_explicit_track_slots
+        and (tracks.table or tracks.order or tracks.slot_specs)
         and any(
             slot.enabled and str(slot.renderer) == "ticks"
             for slot in parse_circular_track_slots(
-                circular_track_slots_or_none or (),
-                _allow_legacy_transport=allow_legacy_track_transport,
+                slots or (),
+                _allow_legacy_transport=tracks.allow_legacy_transport,
             )
         )
     ):
@@ -1564,74 +1416,42 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             "user-explicit Circular track list; the explicit slot wins."
         )
 
-    if circular_track_slots_or_none is not None and not circular_track_slot_specs:
-        slots = parse_circular_track_slots(circular_track_slots_or_none)
-        updated_slots: list[CircularTrackSlot] = []
-        for slot in slots:
-            if slot.id == "features" and feature_width is not None:
-                slot = replace(slot, width=ScalarSpec(float(feature_width), "px"))
-            elif str(slot.renderer) == "depth" and depth_width is not None:
-                slot = replace(slot, width=ScalarSpec(float(depth_width), "px"))
-            elif slot.id == "gc_content":
-                slot = replace(
-                    slot,
-                    radius=ScalarSpec(float(gc_content_radius), "factor") if gc_content_radius is not None else slot.radius,
-                    width=ScalarSpec(float(gc_content_width), "px") if gc_content_width is not None else slot.width,
-                )
-            elif slot.id == "gc_skew":
-                slot = replace(
-                    slot,
-                    radius=ScalarSpec(float(gc_skew_radius), "factor") if gc_skew_radius is not None else slot.radius,
-                    width=ScalarSpec(float(gc_skew_width), "px") if gc_skew_width is not None else slot.width,
-                )
-            updated_slots.append(slot)
-        circular_track_slots_or_none = updated_slots
+    if slots is None or tracks.slot_specs:
+        return slots
+    return [_with_shortcut_geometry(slot, args) for slot in parse_circular_track_slots(slots)]
 
-    canonical_config = copy.deepcopy(config_dict)
 
-    request_options = _cli_ring_options(
-        config=canonical_config,
-        colors=ColorOptions(
-            color_table_file=color_table_path or None,
-            default_colors_palette=palette,
-            default_colors_file=user_defined_default_colors or None,
-        ),
+def _circular_request_options(
+    args: argparse.Namespace,
+    inputs: _CircularInputs,
+    config: dict,
+    track_slots: Sequence[str | CircularTrackSlot] | None,
+) -> CircularDiagramOptions:
+    """The typed Circular options; the typed layer validates them, and ring diagnostics name the CLI flags."""
+
+    return _cli_ring_options(
+        config=config,
         tracks=CircularRequestTrackOptions(
-            circular_track_slots=circular_track_slots_or_none,
-            circular_track_axis_index=circular_track_axis_index,
-            center_reserved_radius=center_reserved_radius,
+            circular_track_slots=track_slots,
+            circular_track_axis_index=inputs.tracks.axis_index,
+            center_reserved_radius=args.center_reserved_radius,
         ),
-        annotations=annotation_options,
         output=CircularOutputOptions(
-            legend=legend,
+            legend=args.legend,
             # argparse restricts --plot_title_position to the Circular choices.
             plot_title_position=cast(
-                'Literal["none", "top", "bottom"]', plot_title_position
+                'Literal["none", "top", "bottom"]', args.plot_title_position
             ),
         ),
-        selected_features_set=tuple(selected_features_set),
-        feature_visibility_table_file=feature_table_path or None,
-        feature_placement_table_file=args.feature_placement_table,
-        feature_override_table_file=args.feature_override_table,
-        label_whitelist_file=label_whitelist or None,
-        qualifier_priority_file=qualifier_priority_path or None,
-        label_override_file=label_table_path or None,
-        feature_shapes=feature_shapes or None,
-        dinucleotide=dinucleotide,
-        window=manual_window,
-        step=manual_step,
-        depth_window=depth_window,
-        depth_step=depth_step,
-        depth_tracks=depth_tracks,
-        feature_density_tracks=feature_density_tracks_from_args(args),
-        conservation_blast_files=conservation_blast_files,
-        conservation_sequence_files=conservation_sequence_sources,
+        **mode_option_fields(args, feature_shapes=inputs.feature_shapes, depth_tracks=inputs.depth_tracks),
+        conservation_blast_files=list(args.conservation_blast or []) or None,
+        conservation_sequence_files=_cli_conservation_genomes(args),
         conservation_table_file=args.conservation_table,
-        conservation_reference=conservation_reference,
-        conservation_labels=conservation_labels,
-        conservation_colors=conservation_colors,
-        conservation_ring_width=conservation_ring_width,
-        conservation_ring_gap=conservation_ring_gap,
+        conservation_reference=args.conservation_reference,
+        conservation_labels=list(args.conservation_labels or []) or None,
+        conservation_colors=conservation_colors_from_cli(args.conservation_colors),
+        conservation_ring_width=args.conservation_ring_width,
+        conservation_ring_gap=args.conservation_ring_gap,
         losat_search=_cli_ring_losat_search(args),
         conservation_losat_gencodes=(
             tuple(args.conservation_losat_gencode)
@@ -1639,60 +1459,29 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             else None
         ),
         _args=args,
-        plot_title=plot_title or None,
-        plot_title_font_size=plot_title_font_size,
-        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-        species=species or None,
-        strain=strain or None,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
+        keep_full_definition_with_plot_title=args.keep_full_definition_with_plot_title,
+        species=args.species or None,
+        strain=args.strain or None,
         origin_feature=args.origin_feature,
     )
-    request_records = record_manifest.records
 
-    canonical_request: CircularDiagramRequest | CircularBatchRequest
-    if multi_record_canvas or args.one_circle:
-        canonical_request = CircularDiagramRequest(
-            records=request_records,
-            options=request_options,
-            layout=CircularMultiRecordOptions(
-                # argparse restricts --multi_record_size_mode to these choices.
-                multi_record_size_mode=cast('Literal["linear", "auto", "equal"]', multi_record_size_mode),
-                multi_record_min_radius_ratio=multi_record_min_radius_ratio,
-                multi_record_column_gap_ratio=multi_record_column_gap_ratio,
-                multi_record_row_gap_ratio=multi_record_row_gap_ratio,
-                multi_record_positions=multi_record_positions or None,
-                **_one_circle_layout_fields(args),
-            ),
-            output=_render_output_request(
-                output_prefix or "out",
-                out_formats,
-                overwrite=args.overwrite,
-                embed_fonts=args.embed_fonts,
-                dpi=dpi,
-            )
-            if output_prefix is not None
-            else replace(
-                _render_output_request(
-                    "out",
-                    out_formats,
-                    overwrite=args.overwrite,
-                    embed_fonts=args.embed_fonts,
-                    dpi=dpi,
-                ),
-                resolve_prefix_from_first_record=True,
-            ),
-            record_options=record_manifest.record_options,
-            grouping="grid",
-        )
-    else:
-        canonical_request = CircularBatchRequest(
-            records=request_records,
-            options=request_options,
+
+def _circular_request(
+    args: argparse.Namespace,
+    inputs: _CircularInputs,
+    options: CircularDiagramOptions,
+    out_formats: list[str],
+    dpi: int | None,
+) -> CircularDiagramRequest | CircularBatchRequest:
+    """One diagram of every record (a grid canvas or one circle), else a batch of one diagram per record."""
+
+    record_manifest = inputs.record_manifest
+    if not (args.multi_record_canvas or args.one_circle):
+        return CircularBatchRequest(
+            records=record_manifest.records,
+            options=options,
             output_policy=CircularBatchOutputPolicy(
-                output_prefix=output_prefix,
+                output_prefix=args.output,
                 formats=tuple(out_formats),
                 overwrite=args.overwrite,
                 embed_fonts=args.embed_fonts,
@@ -1700,38 +1489,76 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
             record_options=record_manifest.record_options,
         )
+    layout = CircularMultiRecordOptions(
+        # argparse restricts --multi_record_size_mode to these choices.
+        multi_record_size_mode=cast('Literal["linear", "auto", "equal"]', args.multi_record_size_mode),
+        multi_record_min_radius_ratio=args.multi_record_min_radius_ratio,
+        multi_record_column_gap_ratio=args.multi_record_column_gap_ratio,
+        multi_record_row_gap_ratio=args.multi_record_row_gap_ratio,
+        multi_record_positions=inputs.multi_record_positions or None,
+        **_one_circle_layout_fields(args),
+    )
+    output = render_output_request(
+        args.output or "out",
+        out_formats,
+        overwrite=args.overwrite,
+        embed_fonts=args.embed_fonts,
+        dpi=dpi,
+    )
+    if args.output is None:
+        # Without -o the file is named after the first record.
+        output = replace(output, resolve_prefix_from_first_record=True)
+    return CircularDiagramRequest(
+        records=record_manifest.records,
+        options=options,
+        layout=layout,
+        output=output,
+        record_options=record_manifest.record_options,
+        grouping="grid",
+    )
 
-    needs_sidecar_preflight = bool(args.save_session or args.session_output)
-    if needs_sidecar_preflight:
-        request_plan = plan_request(canonical_request)
-        materialized_request = request_plan.request
-        sidecar_path = resolve_session_sidecar_path(
-            explicit_path=args.session_output,
-            output_prefix=args.output,
-            outputs=diagram_request_rendered_svgs(materialized_request),
-        )
-        preflight_session_sidecar_if_requested(
-            save_session=True,
-            session_output=str(sidecar_path),
-            output_prefix=None,
-            diagram_output_paths=diagram_request_output_paths(
-                materialized_request
-            ),
-            overwrite=bool(args.overwrite),
-        )
-        batch_outputs_preflighted = isinstance(
-            request_plan,
-            CircularBatchRequestPlan,
-        )
-        request_plan.preflight_outputs()
-        prepared = build_request_plan_diagram(request_plan)
-        rendered = render_prepared_request(
-            prepared,
-            batch_outputs_preflighted=batch_outputs_preflighted,
-            include_feature_catalog=True,
-        )
-    else:
-        rendered = render_request(canonical_request)
+
+def _render_circular(
+    args: argparse.Namespace, request: CircularDiagramRequest | CircularBatchRequest
+) -> RequestRenderResult | CircularBatchRenderResult:
+    """Render the request; with a Session to save, refuse an existing sidecar or output before drawing."""
+
+    if not (args.save_session or args.session_output):
+        return render_request(request)
+    request_plan = plan_request(request)
+    materialized_request = request_plan.request
+    sidecar_path = resolve_session_sidecar_path(
+        explicit_path=args.session_output,
+        output_prefix=args.output,
+        outputs=diagram_request_rendered_svgs(materialized_request),
+    )
+    preflight_session_sidecar_if_requested(
+        save_session=True,
+        session_output=str(sidecar_path),
+        output_prefix=None,
+        diagram_output_paths=diagram_request_output_paths(
+            materialized_request
+        ),
+        overwrite=bool(args.overwrite),
+    )
+    batch_outputs_preflighted = isinstance(
+        request_plan,
+        CircularBatchRequestPlan,
+    )
+    request_plan.preflight_outputs()
+    prepared = build_request_plan_diagram(request_plan)
+    return render_prepared_request(
+        prepared,
+        batch_outputs_preflighted=batch_outputs_preflighted,
+        include_feature_catalog=True,
+    )
+
+
+def _circular_run_result(
+    rendered: RequestRenderResult | CircularBatchRenderResult, out_formats: list[str]
+) -> DiagramRunResult:
+    """The run's SVGs, the feature metadata and interactive contexts of each, and the request the Session saves."""
+
     if isinstance(rendered, CircularBatchRenderResult):
         rendered_items = rendered.items
     elif isinstance(rendered, RequestRenderResult):
@@ -1746,8 +1573,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     session_feature_metadata: list[Mapping[str, Any]] = []
     session_biological_feature_metadata: list[Mapping[str, Any]] = []
     session_interactive_contexts = []
-    _log_render_notices(rendered_items)
-    for result_index, rendered_item in enumerate(rendered_items):
+    log_render_notices(rendered_items, warned=set())
+    for rendered_item in rendered_items:
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])
@@ -1779,6 +1606,25 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         canonical_request=materialized_request,
         losat_cache_entries=rendered.losat_cache_entries,
     )
+
+
+def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
+    """Run circular rendering from an already parsed argparse namespace."""
+
+    inputs = _read_circular_inputs(args)
+    config = _circular_config(args, inputs)
+    out_formats = cli_output_formats(args.format)
+    dpi = png_dpi(args.dpi, out_formats)
+    track_slots = _circular_track_slots(
+        args,
+        inputs.tracks,
+        show_skew=inputs.show_skew,
+        depth_track_count=len(inputs.depth_tracks or ()),
+    )
+    options = _circular_request_options(args, inputs, config, track_slots)
+    request = _circular_request(args, inputs, options, out_formats, dpi)
+    return _circular_run_result(_render_circular(args, request), out_formats)
+
 
 if __name__ == "__main__":
     # ``python -m gbdraw.circular``: circular_main sets up the log as ``gbdraw circular`` does.

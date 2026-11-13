@@ -438,7 +438,7 @@ def _embedded_label_parts(label: CircularLabel, total_length: int) -> tuple[Poly
     half_height = 0.5 * float(label["height_px"])
     if radius <= half_height:
         return ()
-    center_deg = 360.0 * (float(label["middle"]) / total_length) - 90.0
+    center_deg = angle_from_middle_unwrapped(float(label["middle"]), total_length)
     half_span_deg = math.degrees(0.5 * float(label["width_px"]) / radius)
     return annular_sector_parts(radius - half_height, radius + half_height, center_deg, half_span_deg)
 
@@ -1510,6 +1510,486 @@ class _MovedLabelOverlaps:
         return total
 
 
+_LeaderSegment: TypeAlias = tuple[tuple[float, float], tuple[float, float]]
+"""A leader segment: (from, to) points."""
+_LeaderRect: TypeAlias = tuple[float, float, float, float]
+"""A label's text rectangle at the collision margin: (min_x, min_y, max_x, max_y)."""
+_LeaderMoveKind: TypeAlias = tuple[int, float]
+"""How a candidate moves a label: (0, angle offset in degrees) or (1, outward shift in px).
+
+Any angular shift ranks before a radial one."""
+_LeaderPosition: TypeAlias = tuple[_LeaderMoveKind, float, float, float]
+"""A candidate place of a label: its move, unwrapped angle, start_x and start_y."""
+_LeaderScore: TypeAlias = tuple[int, int, int, _LeaderMoveKind, float]
+"""How a label place ranks, smallest first: crossings, collisions, min-gap overlaps, move, leader length."""
+
+
+class _LeaderCollisionGeometry(NamedTuple):
+    """The collision geometry of a label set, by label index: text rectangles at the margin, both leader segments, and
+    the primary leader segment."""
+
+    rects: list[_LeaderRect]
+    segments: list[list[_LeaderSegment]]
+    primary_segments: list[_LeaderSegment]
+
+    @classmethod
+    def of(cls, labels: list[CircularLabel], total_length: int, margin_px: float) -> _LeaderCollisionGeometry:
+        rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
+        return cls(rects, segments, _build_primary_leader_segments(labels))
+
+    def is_clear(self, labels: list[CircularLabel], total_length: int, margin_px: float) -> bool:
+        """No leader passes through another label's text and no two primary leaders cross."""
+        return (
+            _count_label_leader_line_collisions(
+                labels, total_length, margin_px=margin_px, rects=self.rects, segments=self.segments
+            )
+            == 0
+            and _count_leader_line_intersections(labels, primary_segments=self.primary_segments) == 0
+        )
+
+
+class _LeaderReachIndexes:
+    """The reach boxes of a label set at `pad` (see `_reach_pad`) in three grids, kept as labels move.
+
+    `text` holds the text boxes (bbox overlaps), `crossing` the primary leaders (leader crossings), and
+    `collision` the text with both leaders (leader collisions). Each predicate of the leader collision pass
+    is false for two labels whose boxes of its grid do not touch, so a count over the touching labels
+    equals the count over every label (output-preserving peer pruning).
+    """
+
+    __slots__ = ("_labels", "_geometry", "pad", "text", "crossing", "collision")
+
+    def __init__(self, labels: list[CircularLabel], geometry: _LeaderCollisionGeometry, pad: float) -> None:
+        self._labels = labels
+        self._geometry = geometry
+        self.pad = pad
+        boxes = [self._boxes(idx) for idx in range(len(labels))]
+        # The peer lookups look only at the boxes in grid buckets near the query.
+        self.text, self.crossing, self.collision = (
+            TouchingAabbIndex.of([label_boxes[family] for label_boxes in boxes]) for family in range(3)
+        )
+
+    def _boxes(self, idx: int) -> tuple[Aabb | None, Aabb | None, Aabb | None]:
+        """Reach boxes of the text, the primary leader, and the text with both leaders of label `idx`."""
+        label = self._labels[idx]
+        rect = self._geometry.rects[idx]
+        pad = self.pad
+        return (
+            _label_reach_box(label, pad),
+            bounding_aabb(self._geometry.primary_segments[idx], pad),
+            _label_reach_box(
+                label,
+                pad,
+                points=[
+                    (rect[0], rect[1]),
+                    (rect[2], rect[3]),
+                    *(point for segment in self._geometry.segments[idx] for point in segment),
+                    *self._geometry.primary_segments[idx],
+                ],
+            ),
+        )
+
+    def moved(self, idx: int) -> None:
+        """Label `idx` and its geometry moved."""
+        for index, box in zip((self.text, self.crossing, self.collision), self._boxes(idx)):
+            index.replace(idx, box)
+
+    @staticmethod
+    def peers(index: TouchingAabbIndex, idx: int) -> list[int]:
+        """The other labels whose boxes in `index` touch the box of label `idx`."""
+        return index.touching(index.boxes[idx], skip=idx)
+
+    def sweep_peers(
+        self, label: CircularLabel, idx: int, sweep_points: list[tuple[float, float]]
+    ) -> tuple[list[int], list[int], list[int]]:
+        """The other labels that `label` (index `idx`) can touch at any of `sweep_points`: by text, crossing, collision.
+
+        The leaders run from the label to its middle point and on to its feature anchor, which do not move.
+        """
+        middle_point, feature_anchor_point = _leader_segments(label)[1]
+        pad = self.pad
+        return (
+            self.text.touching(_label_reach_box(label, pad, anchors=sweep_points), skip=idx),
+            self.crossing.touching(
+                _label_reach_box(label, pad, anchors=sweep_points, points=[middle_point]), skip=idx
+            ),
+            self.collision.touching(
+                _label_reach_box(label, pad, anchors=sweep_points, points=[middle_point, feature_anchor_point]),
+                skip=idx,
+            ),
+        )
+
+
+class _LeaderMove(NamedTuple):
+    """The best place found for a label, its geometry, and the overlap totals of the label set once it moves there."""
+
+    score: _LeaderScore
+    candidate: CircularLabel
+    rect: _LeaderRect
+    segments: list[_LeaderSegment]
+    primary_segment: _LeaderSegment
+    angle: float
+    plain_total: int
+    min_gap_total: int
+
+
+@dataclass(frozen=True, slots=True)
+class _LeaderShiftSettings:
+    """The settings of the leader collision repair, normalized: collision margin, angle step, steps, order gap."""
+
+    margin_px: float
+    step_deg: float
+    max_steps: int
+    min_order_gap_deg: float
+
+
+def _leader_shift_positions(
+    current_angle: float,
+    bounds: tuple[float, float],
+    radius: float,
+    start_x: float,
+    settings: _LeaderShiftSettings,
+) -> list[list[_LeaderPosition]]:
+    """The angular candidate places of a label, per step and in search order (+ then -), within its order bounds.
+
+    A label on one side of the vertical axis stays on that side.
+    """
+    lower_bound, upper_bound = bounds
+    current_half = _current_half_from_x(start_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
+    step_deg = settings.step_deg
+    step_positions: list[list[_LeaderPosition]] = []
+    for step_idx in range(1, settings.max_steps + 1):
+        angle_offset = step_idx * step_deg
+        positions: list[_LeaderPosition] = []
+        for direction in (1.0, -1.0):
+            candidate_angle = current_angle + (direction * angle_offset)
+            if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
+                continue
+
+            candidate_x, candidate_y = _point_on_circle(radius, candidate_angle)
+            if current_half != 0 and _current_half_from_x(
+                candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
+            ) != current_half:
+                continue
+            positions.append(((0, angle_offset), candidate_angle, candidate_x, candidate_y))
+        step_positions.append(positions)
+    return step_positions
+
+
+def _leader_radial_positions(
+    label: CircularLabel, current_angle: float, start_x: float, start_y: float, radius: float
+) -> list[_LeaderPosition]:
+    """The radial candidate places of an outer label: the same angle, further out (OV-1823).
+
+    An angular shift cannot clear a label that sits across a neighbour's radial leader between the
+    neighbour's feature and text. An inner label has none.
+    """
+    if label.get("is_inner", False) is not False:
+        return []
+    max_shift_px = LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS * float(label["height_px"])
+    radial_steps = int(max_shift_px / LEADER_LABEL_RADIAL_STEP_PX)
+    radial_positions: list[_LeaderPosition] = []
+    for step_idx in range(1, radial_steps + 1):
+        shift_px = step_idx * LEADER_LABEL_RADIAL_STEP_PX
+        scale = (radius + shift_px) / radius
+        radial_positions.append(((1, shift_px), current_angle, start_x * scale, start_y * scale))
+    return radial_positions
+
+
+@dataclass(frozen=True, slots=True)
+class _LeaderCandidateSearch:
+    """The candidate places of one label, judged against where it is: the accept/reject chain and the score.
+
+    `line_count` and `collision_count` are the label's crossings and collisions where it is; the overlap
+    counts are its own (`*_for_label`) and the label set's (`*_total`); the peers come from
+    `_LeaderReachIndexes.sweep_peers`.
+    """
+
+    labels: list[CircularLabel]
+    total_length: int
+    margin_px: float
+    geometry: _LeaderCollisionGeometry
+    label_idx: int
+    line_count: int
+    collision_count: int
+    plain_for_label: int
+    min_gap_for_label: int
+    plain_total: int
+    min_gap_total: int
+    text_peers: list[int]
+    crossing_peers: list[int]
+    collision_peers: list[int]
+
+    def best(
+        self,
+        step_positions: list[list[_LeaderPosition]],
+        radial_positions: list[_LeaderPosition],
+        current_score: _LeaderScore,
+    ) -> _LeaderMove | None:
+        """The candidate that ranks below `current_score` and every other candidate, or None."""
+        best_score = current_score
+        best: _LeaderMove | None = None
+        for positions in (*step_positions, radial_positions):
+            if positions is radial_positions and best_score[1] == 0:
+                break  # an angular shift (or none) clears every leader collision of this label
+            for position in positions:
+                found = self._judge(position, best_score)
+                if found is not None:
+                    best_score = found.score
+                    best = found
+
+            if best_score[0] == 0 and best_score[1] == 0 and best_score[2] == 0:
+                break
+        return best
+
+    def _judge(self, position: _LeaderPosition, best_score: _LeaderScore) -> _LeaderMove | None:
+        """The label at `position`, if it adds no overlap and ranks below `best_score`; otherwise None."""
+        move, candidate_angle, candidate_x, candidate_y = position
+        labels = self.labels
+        total_length = self.total_length
+        label_idx = self.label_idx
+        margin_px = self.margin_px
+        geometry = self.geometry
+        candidate = labels[label_idx].copy()
+        candidate["start_x"] = float(candidate_x)
+        candidate["start_y"] = float(candidate_y)
+        candidate["angle_unwrapped"] = float(candidate_angle)
+        leader_start_x, leader_start_y = _leader_start_point(candidate, total_length)
+        candidate["leader_start_x"] = float(leader_start_x)
+        candidate["leader_start_y"] = float(leader_start_y)
+        candidate_rect = _label_bbox_rect(candidate, total_length, margin_px=margin_px)
+        candidate_segments = _leader_segments(candidate)
+        candidate_primary_segment = _primary_leader_segment(candidate)
+
+        # Same rejections as counting everything first: a count only has to be exact
+        # while it stays within the bound that would reject the candidate.
+        line_cap = min(self.line_count, best_score[0])
+        line_count = _count_local_leader_line_intersections(
+            labels,
+            label_idx,
+            candidate=candidate,
+            primary_segments=geometry.primary_segments,
+            candidate_segment=candidate_primary_segment,
+            peers=self.crossing_peers,
+            cap=line_cap,
+        )
+        if line_count > line_cap:
+            return None
+        collision_cap = (
+            min(self.collision_count, best_score[1]) if line_count == best_score[0] else self.collision_count
+        )
+        collision_count = _count_local_leader_line_collisions(
+            labels,
+            total_length,
+            label_idx,
+            margin_px=margin_px,
+            candidate=candidate,
+            rects=geometry.rects,
+            segments=geometry.segments,
+            candidate_rect=candidate_rect,
+            candidate_segments=candidate_segments,
+            peers=self.collision_peers,
+            cap=collision_cap,
+        )
+        if collision_count > collision_cap:
+            return None
+
+        plain_for_label = _count_local_label_overlaps(
+            labels,
+            total_length,
+            label_idx,
+            candidate,
+            use_min_gap=False,
+            peers=self.text_peers,
+            cap=self.plain_for_label,
+        )
+        plain_total = self.plain_total - self.plain_for_label + plain_for_label
+        if plain_total > self.plain_total:
+            return None
+
+        min_gap_for_label = _count_local_label_overlaps(
+            labels,
+            total_length,
+            label_idx,
+            candidate,
+            use_min_gap=True,
+            peers=self.text_peers,
+            cap=self.min_gap_for_label,
+        )
+        min_gap_total = self.min_gap_total - self.min_gap_for_label + min_gap_for_label
+        if min_gap_total > self.min_gap_total:
+            return None
+
+        score = (line_count, collision_count, min_gap_for_label, move, _leader_length_px(candidate, total_length))
+        if not score < best_score:
+            return None
+        return _LeaderMove(
+            score,
+            candidate,
+            candidate_rect,
+            candidate_segments,
+            candidate_primary_segment,
+            candidate_angle,
+            plain_total,
+            min_gap_total,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _LeaderCollisionPass:
+    """One pass of the leader collision repair: each label with leader crossings or collisions, worst first, moves
+    to its best candidate place, kept in feature order and adding no label overlap."""
+
+    labels: list[CircularLabel]
+    total_length: int
+    settings: _LeaderShiftSettings
+    geometry: _LeaderCollisionGeometry
+    reach: _LeaderReachIndexes
+
+    def run(self) -> bool:
+        """Move the labels of this pass; return whether any moved."""
+        labels = self.labels
+        total_length = self.total_length
+        plain_total = _count_label_overlaps(labels, total_length, use_min_gap=False)
+        min_gap_total = _count_label_overlaps(labels, total_length, use_min_gap=True)
+        changed = False
+        unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
+        for line_count, collision_count, label_idx in self._local_scores():
+            if line_count <= 0 and collision_count <= 0:
+                break
+            move = self._best_move(
+                label_idx, line_count, collision_count, unwrapped_angles, plain_total, min_gap_total
+            )
+            if move is None:
+                continue
+            self._apply(label_idx, move)
+            unwrapped_angles[label_idx] = float(move.angle)
+            plain_total = move.plain_total
+            min_gap_total = move.min_gap_total
+            changed = True
+        return changed
+
+    def _local_scores(self) -> list[tuple[int, int, int]]:
+        """(crossings, collisions, index) of every label where it is, most crossings, then most collisions, first."""
+        labels = self.labels
+        geometry = self.geometry
+        reach = self.reach
+        local_scores = []
+        for idx in range(len(labels)):
+            crossing_peers = reach.peers(reach.crossing, idx)
+            collision_peers = reach.peers(reach.collision, idx)
+            local_scores.append(
+                (
+                    _count_local_leader_line_intersections(
+                        labels,
+                        idx,
+                        primary_segments=geometry.primary_segments,
+                        peers=crossing_peers,
+                    ),
+                    _count_local_leader_line_collisions(
+                        labels,
+                        self.total_length,
+                        idx,
+                        margin_px=self.settings.margin_px,
+                        rects=geometry.rects,
+                        segments=geometry.segments,
+                        peers=collision_peers,
+                    ),
+                    idx,
+                )
+            )
+        local_scores.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return local_scores
+
+    def _best_move(
+        self,
+        label_idx: int,
+        line_count: int,
+        collision_count: int,
+        unwrapped_angles: list[float],
+        plain_total: int,
+        min_gap_total: int,
+    ) -> _LeaderMove | None:
+        """The place label `label_idx` moves to, or None when no candidate lowers its crossings or collisions.
+
+        `plain_total` and `min_gap_total` are the label set's plain and min-gap overlap counts.
+        """
+        labels = self.labels
+        total_length = self.total_length
+        label = labels[label_idx]
+        start_x = float(label.get("start_x", 0.0))
+        start_y = float(label.get("start_y", 0.0))
+        radius = math.hypot(start_x, start_y)
+        if radius <= 1e-9:
+            return None
+
+        current_angle = float(unwrapped_angles[label_idx])
+        bounds = _cyclic_order_bounds(unwrapped_angles, label_idx, self.settings.min_order_gap_deg)
+        if bounds[0] >= bounds[1]:
+            return None
+
+        step_positions = _leader_shift_positions(current_angle, bounds, radius, start_x, self.settings)
+        radial_positions = _leader_radial_positions(label, current_angle, start_x, start_y, radius)
+        sweep_points = [(item[2], item[3]) for positions in (*step_positions, radial_positions) for item in positions]
+        if not sweep_points:
+            return None
+        current_peers = self.reach.peers(self.reach.text, label_idx)
+        plain_for_label = _count_local_label_overlaps(
+            labels, total_length, label_idx, label, use_min_gap=False, peers=current_peers
+        )
+        min_gap_for_label = _count_local_label_overlaps(
+            labels, total_length, label_idx, label, use_min_gap=True, peers=current_peers
+        )
+        current_score: _LeaderScore = (
+            line_count,
+            collision_count,
+            min_gap_for_label,
+            (0, 0.0),
+            _leader_length_px(label, total_length),
+        )
+        text_peers, crossing_peers, collision_peers = self.reach.sweep_peers(label, label_idx, sweep_points)
+        search = _LeaderCandidateSearch(
+            labels=labels,
+            total_length=total_length,
+            margin_px=self.settings.margin_px,
+            geometry=self.geometry,
+            label_idx=label_idx,
+            line_count=line_count,
+            collision_count=collision_count,
+            plain_for_label=plain_for_label,
+            min_gap_for_label=min_gap_for_label,
+            plain_total=plain_total,
+            min_gap_total=min_gap_total,
+            text_peers=text_peers,
+            crossing_peers=crossing_peers,
+            collision_peers=collision_peers,
+        )
+        best = search.best(step_positions, radial_positions, current_score)
+        if best is None or (best.score[0] >= line_count and best.score[1] >= collision_count):
+            return None
+        return best
+
+    def _apply(self, label_idx: int, move: _LeaderMove) -> None:
+        """Move label `label_idx` to `move`, with its geometry and reach boxes."""
+        label = self.labels[label_idx]
+        candidate = move.candidate
+        label["start_x"] = float(candidate["start_x"])
+        label["start_y"] = float(candidate["start_y"])
+        label["angle_unwrapped"] = float(move.angle)
+        label["leader_start_x"] = float(candidate["leader_start_x"])
+        label["leader_start_y"] = float(candidate["leader_start_y"])
+        self.geometry.rects[label_idx] = move.rect
+        self.geometry.segments[label_idx] = move.segments
+        self.geometry.primary_segments[label_idx] = move.primary_segment
+        self.reach.moved(label_idx)
+
+
+def _set_angles_from_start(labels: list[CircularLabel], total_length: int) -> None:
+    """Set each label's `angle_unwrapped` to the angle of its start point, unwrapped near its target angle."""
+    for label in labels:
+        label["angle_unwrapped"] = _angle_unwrapped_from_start(label, total_length)
+
+
 def _resolve_label_leader_line_collisions(
     labels: list[CircularLabel],
     total_length: int,
@@ -1526,344 +2006,28 @@ def _resolve_label_leader_line_collisions(
 
     step_deg = max(float(step_deg), 1e-6)
     max_shift_deg = max(float(max_shift_deg), step_deg)
-    max_steps = max(1, int(max_shift_deg / step_deg))
-    max_passes = max(1, int(max_passes))
-    min_order_gap_deg = max(float(min_order_gap_deg), 1e-6)
-    rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
-    primary_segments = _build_primary_leader_segments(labels)
-
-    if (
-        _count_label_leader_line_collisions(
-            labels,
-            total_length,
-            margin_px=margin_px,
-            rects=rects,
-            segments=segments,
-        )
-        == 0
-        and _count_leader_line_intersections(labels, primary_segments=primary_segments) == 0
-    ):
+    settings = _LeaderShiftSettings(
+        margin_px=margin_px,
+        step_deg=step_deg,
+        max_steps=max(1, int(max_shift_deg / step_deg)),
+        min_order_gap_deg=max(float(min_order_gap_deg), 1e-6),
+    )
+    passes = max(1, int(max_passes))
+    geometry = _LeaderCollisionGeometry.of(labels, total_length, margin_px)
+    if geometry.is_clear(labels, total_length, margin_px):
         return labels
 
-    # Peer pruning (output-preserving): every predicate below is false for two labels whose reach
-    # boxes are disjoint, so the counts only visit labels whose reach box meets the label's sweep.
     reach_pad = _label_reach_pad(labels, extra_margin_px=margin_px)
-
-    def _label_reach_boxes(idx: int) -> tuple[Aabb | None, Aabb | None, Aabb | None]:
-        """Reach boxes of the text (bbox overlaps), the primary leader (crossings), and all (collisions)."""
-        label = labels[idx]
-        rect = rects[idx]
-        return (
-            _label_reach_box(label, reach_pad),
-            bounding_aabb(primary_segments[idx], reach_pad),
-            _label_reach_box(
-                label,
-                reach_pad,
-                points=[
-                    (rect[0], rect[1]),
-                    (rect[2], rect[3]),
-                    *(point for segment in segments[idx] for point in segment),
-                    *primary_segments[idx],
-                ],
-            ),
-        )
-
-    def _set_reach_boxes(idx: int) -> None:
-        for index, box in zip((text_index, primary_index, reach_index), _label_reach_boxes(idx)):
-            index.replace(idx, box)
-
-    for _ in range(max_passes):
-        current_total_bbox_collisions = _count_label_leader_line_collisions(
-            labels,
-            total_length,
-            margin_px=margin_px,
-            rects=rects,
-            segments=segments,
-        )
-        current_total_line_intersections = _count_leader_line_intersections(
-            labels,
-            primary_segments=primary_segments,
-        )
-        if current_total_bbox_collisions == 0 and current_total_line_intersections == 0:
-            break
-
-        current_plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
-        current_min_gap_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=True)
-        pass_changed = False
-        unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
-        label_boxes = [_label_reach_boxes(idx) for idx in range(len(labels))]
-        # The peer lookups look only at the boxes in grid buckets near the query.
-        text_index, primary_index, reach_index = (
-            TouchingAabbIndex.of([boxes[family] for boxes in label_boxes]) for family in range(3)
-        )
-        text_boxes, primary_boxes, reach_boxes = text_index.boxes, primary_index.boxes, reach_index.boxes
-        local_scores = []
-        for idx in range(len(labels)):
-            crossing_peers = primary_index.touching(primary_boxes[idx], skip=idx)
-            near_peers = reach_index.touching(reach_boxes[idx], skip=idx)
-            local_scores.append(
-                (
-                    _count_local_leader_line_intersections(
-                        labels,
-                        idx,
-                        primary_segments=primary_segments,
-                        peers=crossing_peers,
-                    ),
-                    _count_local_leader_line_collisions(
-                        labels,
-                        total_length,
-                        idx,
-                        margin_px=margin_px,
-                        rects=rects,
-                        segments=segments,
-                        peers=near_peers,
-                    ),
-                    idx,
-                )
-            )
-        local_scores.sort(key=lambda item: (item[0], item[1]), reverse=True)
-
-        for local_line_intersection_count, local_collision_count, label_idx in local_scores:
-            if local_line_intersection_count <= 0 and local_collision_count <= 0:
-                break
-
-            label = labels[label_idx]
-            start_x = float(label.get("start_x", 0.0))
-            start_y = float(label.get("start_y", 0.0))
-            radius = math.hypot(start_x, start_y)
-            if radius <= 1e-9:
-                continue
-
-            current_angle = float(unwrapped_angles[label_idx])
-            lower_bound, upper_bound = _cyclic_order_bounds(unwrapped_angles, label_idx, min_order_gap_deg)
-            if lower_bound >= upper_bound:
-                continue
-
-            current_half = _current_half_from_x(start_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
-            current_peers = text_index.touching(text_boxes[label_idx], skip=label_idx)
-            current_plain_for_label = _count_local_label_overlaps(
-                labels, total_length, label_idx, label, use_min_gap=False, peers=current_peers
-            )
-            current_min_gap_for_label = _count_local_label_overlaps(
-                labels, total_length, label_idx, label, use_min_gap=True, peers=current_peers
-            )
-            current_score: tuple[int, int, int, tuple[int, float], float] = (
-                local_line_intersection_count,
-                local_collision_count,
-                current_min_gap_for_label,
-                (0, 0.0),
-                _leader_length_px(label, total_length),
-            )
-            best_score = current_score
-            best_candidate: CircularLabel | None = None
-            best_candidate_rect: tuple[float, float, float, float] | None = None
-            best_candidate_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None
-            best_candidate_primary_segment: tuple[tuple[float, float], tuple[float, float]] | None = None
-            best_angle: float | None = None
-            best_plain_total = current_plain_overlaps
-            best_min_gap_total = current_min_gap_overlaps
-
-            # Candidate anchors per step, in the search order; their sweep box selects the peers. Each
-            # carries its move (0, angle offset) or (1, outward shift px): any angular shift ranks first.
-            step_positions: list[list[tuple[tuple[int, float], float, float, float]]] = []
-            for step_idx in range(1, max_steps + 1):
-                angle_offset = step_idx * step_deg
-                positions: list[tuple[tuple[int, float], float, float, float]] = []
-                for direction in (1.0, -1.0):
-                    candidate_angle = current_angle + (direction * angle_offset)
-                    if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
-                        continue
-
-                    candidate_x = radius * math.cos(math.radians(candidate_angle))
-                    candidate_y = radius * math.sin(math.radians(candidate_angle))
-                    if current_half != 0 and _current_half_from_x(
-                        candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
-                    ) != current_half:
-                        continue
-                    positions.append(((0, angle_offset), candidate_angle, candidate_x, candidate_y))
-                step_positions.append(positions)
-            # OV-1823: the same angle, further out (an outer label only). An angular shift cannot clear
-            # a label that sits across a neighbour's radial leader between the neighbour's feature and text.
-            radial_positions: list[tuple[tuple[int, float], float, float, float]] = []
-            if label.get("is_inner", False) is False:
-                max_shift_px = LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS * float(label["height_px"])
-                radial_steps = int(max_shift_px / LEADER_LABEL_RADIAL_STEP_PX)
-                for step_idx in range(1, radial_steps + 1):
-                    shift_px = step_idx * LEADER_LABEL_RADIAL_STEP_PX
-                    scale = (radius + shift_px) / radius
-                    radial_positions.append(((1, shift_px), current_angle, start_x * scale, start_y * scale))
-            sweep_points = [
-                (item[2], item[3]) for positions in (*step_positions, radial_positions) for item in positions
-            ]
-            if not sweep_points:
-                continue
-            middle_point, feature_anchor_point = _leader_segments(label)[1]
-            text_peers = text_index.touching(
-                _label_reach_box(label, reach_pad, anchors=sweep_points), skip=label_idx
-            )
-            crossing_peers = primary_index.touching(
-                _label_reach_box(label, reach_pad, anchors=sweep_points, points=[middle_point]),
-                skip=label_idx,
-            )
-            collision_peers = reach_index.touching(
-                _label_reach_box(
-                    label, reach_pad, anchors=sweep_points, points=[middle_point, feature_anchor_point]
-                ),
-                skip=label_idx,
-            )
-
-            for positions in (*step_positions, radial_positions):
-                if positions is radial_positions and best_score[1] == 0:
-                    break  # an angular shift (or none) clears every leader collision of this label
-                for move, candidate_angle, candidate_x, candidate_y in positions:
-                    candidate = label.copy()
-                    candidate["start_x"] = float(candidate_x)
-                    candidate["start_y"] = float(candidate_y)
-                    candidate["angle_unwrapped"] = float(candidate_angle)
-                    leader_start_x, leader_start_y = _leader_start_point(candidate, total_length)
-                    candidate["leader_start_x"] = float(leader_start_x)
-                    candidate["leader_start_y"] = float(leader_start_y)
-                    candidate_rect = _label_bbox_rect(candidate, total_length, margin_px=margin_px)
-                    candidate_segments = _leader_segments(candidate)
-                    candidate_primary_segment = _primary_leader_segment(candidate)
-
-                    # Same rejections as counting everything first: a count only has to be exact
-                    # while it stays within the bound that would reject the candidate.
-                    line_cap = min(local_line_intersection_count, best_score[0])
-                    candidate_local_line_intersection_count = _count_local_leader_line_intersections(
-                        labels,
-                        label_idx,
-                        candidate=candidate,
-                        primary_segments=primary_segments,
-                        candidate_segment=candidate_primary_segment,
-                        peers=crossing_peers,
-                        cap=line_cap,
-                    )
-                    if candidate_local_line_intersection_count > line_cap:
-                        continue
-                    collision_cap = (
-                        min(local_collision_count, best_score[1])
-                        if candidate_local_line_intersection_count == best_score[0]
-                        else local_collision_count
-                    )
-                    candidate_local_collision_count = _count_local_leader_line_collisions(
-                        labels,
-                        total_length,
-                        label_idx,
-                        margin_px=margin_px,
-                        candidate=candidate,
-                        rects=rects,
-                        segments=segments,
-                        candidate_rect=candidate_rect,
-                        candidate_segments=candidate_segments,
-                        peers=collision_peers,
-                        cap=collision_cap,
-                    )
-                    if candidate_local_collision_count > collision_cap:
-                        continue
-
-                    candidate_plain_for_label = _count_local_label_overlaps(
-                        labels,
-                        total_length,
-                        label_idx,
-                        candidate,
-                        use_min_gap=False,
-                        peers=text_peers,
-                        cap=current_plain_for_label,
-                    )
-                    candidate_plain_total = (
-                        current_plain_overlaps - current_plain_for_label + candidate_plain_for_label
-                    )
-                    if candidate_plain_total > current_plain_overlaps:
-                        continue
-
-                    candidate_min_gap_for_label = _count_local_label_overlaps(
-                        labels,
-                        total_length,
-                        label_idx,
-                        candidate,
-                        use_min_gap=True,
-                        peers=text_peers,
-                        cap=current_min_gap_for_label,
-                    )
-                    candidate_min_gap_total = (
-                        current_min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
-                    )
-                    if candidate_min_gap_total > current_min_gap_overlaps:
-                        continue
-
-                    candidate_score = (
-                        candidate_local_line_intersection_count,
-                        candidate_local_collision_count,
-                        candidate_min_gap_for_label,
-                        move,
-                        _leader_length_px(candidate, total_length),
-                    )
-                    if candidate_score < best_score:
-                        best_score = candidate_score
-                        best_candidate = candidate
-                        best_candidate_rect = candidate_rect
-                        best_candidate_segments = candidate_segments
-                        best_candidate_primary_segment = candidate_primary_segment
-                        best_angle = candidate_angle
-                        best_plain_total = candidate_plain_total
-                        best_min_gap_total = candidate_min_gap_total
-
-                if best_score[0] == 0 and best_score[1] == 0 and best_score[2] == 0:
-                    break
-
-            if best_candidate is None:
-                continue
-            if (
-                best_score[0] >= local_line_intersection_count
-                and best_score[1] >= local_collision_count
-            ):
-                continue
-
-            label["start_x"] = float(best_candidate["start_x"])
-            label["start_y"] = float(best_candidate["start_y"])
-            label["angle_unwrapped"] = float(best_angle if best_angle is not None else current_angle)
-            label["leader_start_x"] = float(best_candidate["leader_start_x"])
-            label["leader_start_y"] = float(best_candidate["leader_start_y"])
-            unwrapped_angles[label_idx] = float(best_angle if best_angle is not None else current_angle)
-            if best_candidate_rect is not None:
-                rects[label_idx] = best_candidate_rect
-            if best_candidate_segments is not None:
-                segments[label_idx] = best_candidate_segments
-            if best_candidate_primary_segment is not None:
-                primary_segments[label_idx] = best_candidate_primary_segment
-            _set_reach_boxes(label_idx)
-            current_plain_overlaps = best_plain_total
-            current_min_gap_overlaps = best_min_gap_total
-            pass_changed = True
-
+    for _ in range(passes):
+        reach = _LeaderReachIndexes(labels, geometry, reach_pad)
+        changed = _LeaderCollisionPass(labels, total_length, settings, geometry, reach).run()
         labels = assign_leader_start_points(labels, total_length)
-        rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
-        primary_segments = _build_primary_leader_segments(labels)
-        if (
-            _count_label_leader_line_collisions(
-                labels,
-                total_length,
-                margin_px=margin_px,
-                rects=rects,
-                segments=segments,
-            )
-            == 0
-            and _count_leader_line_intersections(labels, primary_segments=primary_segments) == 0
-        ):
-            break
-        if not pass_changed:
+        geometry = _LeaderCollisionGeometry.of(labels, total_length, margin_px)
+        # A pass that moved nothing would move nothing again; the geometry is checked again only after a move.
+        if not changed or geometry.is_clear(labels, total_length, margin_px):
             break
 
-    for label in labels:
-        start_x = float(label.get("start_x", 0.0))
-        start_y = float(label.get("start_y", 0.0))
-        angle_raw = math.degrees(math.atan2(start_y, start_x))
-        target_angle = float(
-            label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-        )
-        label["angle_unwrapped"] = normalize_angle_near_reference(angle_raw, target_angle)
-
+    _set_angles_from_start(labels, total_length)
     return labels
 
 
@@ -2523,93 +2687,147 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
     if len(labels) < 2:
         return labels
 
-    labels = sort_labels(labels)
-    if len(labels) > 2:
-        # Move the optimization seam into the sparsest angular gap so labels that
-        # are adjacent around 0/360 are optimized as neighbors.
-        raw_targets = [angle_from_middle_unwrapped(float(label["middle"]), total_length) for label in labels]
-        gap_values = [raw_targets[idx + 1] - raw_targets[idx] for idx in range(len(raw_targets) - 1)]
-        gap_values.append(raw_targets[0] + 360.0 - raw_targets[-1])
-        largest_gap_idx = max(range(len(gap_values)), key=gap_values.__getitem__)
-        if largest_gap_idx < len(labels) - 1:
-            rotate_by = largest_gap_idx + 1
-            labels = labels[rotate_by:] + labels[:rotate_by]
-    pair_gaps = _PairGaps(labels)
-    max_pair_margin = pair_gaps.largest
+    labels, targets = _seam_ordered_targets(sort_labels(labels), total_length)
+    _FixedRadiiRun(labels, targets, total_length, max_shift_deg=max_angle_shift_deg, step_deg=step_deg).separate()
+    return sort_labels(labels)
 
-    min_order_gap_deg = LABEL_MIN_ORDER_GAP_DEG
-    max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
 
-    prev_target_angle: float | None = None
-    for label in labels:
-        current_x = float(label.get("start_x", 0.0))
-        current_y = float(label.get("start_y", 0.0))
-        raw_target_angle = angle_from_middle_unwrapped(float(label["middle"]), total_length)
-        if prev_target_angle is None:
-            target_angle = raw_target_angle
-        else:
-            target_angle = normalize_angle_near_reference(raw_target_angle, prev_target_angle)
-            while target_angle <= prev_target_angle:
-                target_angle += 360.0
-        current_angle = math.degrees(math.atan2(current_y, current_x))
-        current_unwrapped = normalize_angle_near_reference(current_angle, target_angle)
-        label["_fixed_radius_px"] = math.hypot(current_x, current_y)
-        label["_target_angle_unwrapped_fixed"] = target_angle
-        label["_angle_unwrapped_fixed"] = current_unwrapped
-        prev_target_angle = target_angle
+class _FixedRadiiRun:
+    """One fixed-radius overlap pass over labels in arc order, changed in place.
 
-    prev_angle: float | None = None
-    for label in labels:
-        target_angle = float(label["_target_angle_unwrapped_fixed"])
-        low_bound = target_angle - max_angle_shift_deg
-        high_bound = target_angle + max_angle_shift_deg
-        candidate = float(label["_angle_unwrapped_fixed"])
-        if prev_angle is not None:
-            candidate = max(candidate, prev_angle + min_order_gap_deg)
-        candidate = min(max(candidate, low_bound), high_bound)
-        if prev_angle is not None and candidate <= prev_angle + min_order_gap_deg:
-            candidate = prev_angle + min_order_gap_deg
-        label["_angle_unwrapped_fixed"] = candidate
-        prev_angle = candidate
+    Each label keeps the radius of its start point (`radii`) and moves only in angle: within
+    `max_shift` degrees of its target (`targets`) and in strict order with its neighbours, at least
+    `LABEL_MIN_ORDER_GAP_DEG` apart. `angles` holds the current angles, unwrapped near the targets;
+    `_apply` writes a label's start point from its angle.
+    """
 
-    def _apply_angle(label: CircularLabel) -> None:
-        radius = float(label["_fixed_radius_px"])
-        angle_unwrapped = float(label["_angle_unwrapped_fixed"])
-        label["start_x"] = radius * math.cos(math.radians(angle_unwrapped))
-        label["start_y"] = radius * math.sin(math.radians(angle_unwrapped))
+    __slots__ = ("labels", "total_length", "targets", "gaps", "padding", "max_shift", "half_step", "max_steps", "radii", "angles")
 
-    def _pair_overlaps(left: CircularLabel, right: CircularLabel, idx: int, jdx: int) -> bool:
-        return _labels_overlap_at(left, right, total_length, _min_gap_margins(pair_gaps.gap(idx, jdx)))
+    def __init__(
+        self,
+        labels: list[CircularLabel],
+        targets: list[float],
+        total_length: int,
+        *,
+        max_shift_deg: float,
+        step_deg: float,
+    ) -> None:
+        self.labels = labels
+        self.total_length = total_length
+        self.targets = targets
+        self.gaps = _PairGaps(labels)
+        self.padding = self.gaps.largest
+        self.max_shift = max_shift_deg
+        self.half_step = 0.5 * step_deg
+        self.max_steps = max(1, int(max_shift_deg / max(step_deg, 1e-6)))
+        self.radii = [math.hypot(float(label.get("start_x", 0.0)), float(label.get("start_y", 0.0))) for label in labels]
+        self.angles = [_start_angle_near(label, target) for label, target in zip(labels, targets)]
 
-    def _pair_angle_bounds(label_idx: int) -> tuple[float, float]:
-        target_angle = float(labels[label_idx]["_target_angle_unwrapped_fixed"])
-        low_bound = target_angle - max_angle_shift_deg
-        high_bound = target_angle + max_angle_shift_deg
-        if label_idx > 0:
-            low_bound = max(low_bound, float(labels[label_idx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
-        if label_idx + 1 < len(labels):
-            high_bound = min(high_bound, float(labels[label_idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
-        return low_bound, high_bound
-
-    def _separate_pair(idx: int, jdx: int) -> bool:
-        left = labels[idx]
-        right = labels[jdx]
-        pair_changed = False
-
-        for _ in range(max_pair_steps):
-            if not _pair_overlaps(left, right, idx, jdx):
+    def separate(self) -> None:
+        """Order the angles, then separate overlapping neighbours and other overlapping pairs, up to 120 passes."""
+        self._order_angles()
+        for idx in range(len(self.labels)):
+            self._apply(idx)
+        for _ in range(120):
+            changed = False
+            for idx in range(len(self.labels) - 1):
+                if self._overlaps(idx, idx + 1) and self._separate_neighbours(idx):
+                    changed = True
+            # Adjacent passes can still miss sparse non-adjacent bbox collisions.
+            for idx, jdx in _candidate_label_pairs(self.labels, self.total_length, padding=self.padding):
+                if jdx > idx + 1 and self._overlaps(idx, jdx) and self._separate_pair(idx, jdx):
+                    changed = True
+            if not changed:
                 break
 
-            left_low, left_high = _pair_angle_bounds(idx)
-            right_low, right_high = _pair_angle_bounds(jdx)
-            new_left = max(left_low, float(left["_angle_unwrapped_fixed"]) - (0.5 * step_deg))
-            new_right = min(right_high, float(right["_angle_unwrapped_fixed"]) + (0.5 * step_deg))
+    def _order_angles(self) -> None:
+        """Clamp each angle, first to last, into its target's reach and past its predecessor by the order gap."""
+        angles = self.angles
+        gap = LABEL_MIN_ORDER_GAP_DEG
+        for idx, target in enumerate(self.targets):
+            candidate = angles[idx]
+            if idx > 0:
+                candidate = max(candidate, angles[idx - 1] + gap)
+            candidate = min(max(candidate, target - self.max_shift), target + self.max_shift)
+            if idx > 0 and candidate <= angles[idx - 1] + gap:
+                candidate = angles[idx - 1] + gap
+            angles[idx] = candidate
 
+    def _apply(self, idx: int) -> None:
+        """Write label `idx`'s start point at its radius and current angle."""
+        label = self.labels[idx]
+        label["start_x"], label["start_y"] = _point_on_circle(self.radii[idx], self.angles[idx])
+
+    def _overlaps(self, idx: int, jdx: int) -> bool:
+        """Whether labels `idx` and `jdx` overlap at their pair's minimum gap."""
+        return _labels_overlap_at(
+            self.labels[idx], self.labels[jdx], self.total_length, _min_gap_margins(self.gaps.gap(idx, jdx))
+        )
+
+    def _separate_neighbours(self, idx: int) -> bool:
+        """Move overlapping neighbours `idx` and `idx + 1` apart by half a step each until they clear; whether any moved.
+
+        The left label stays above its target's reach and its predecessor, the right one below its
+        target's reach and its successor.
+        """
+        angles = self.angles
+        gap = LABEL_MIN_ORDER_GAP_DEG
+        jdx = idx + 1
+        left_low = self.targets[idx] - self.max_shift
+        right_high = self.targets[jdx] + self.max_shift
+        moved = False
+        for _ in range(self.max_steps):
+            new_left = max(left_low, angles[idx] - self.half_step)
+            new_right = min(right_high, angles[jdx] + self.half_step)
+            if idx > 0:
+                new_left = max(new_left, angles[idx - 1] + gap)
+            if jdx + 1 < len(angles):
+                new_right = min(new_right, angles[jdx + 1] - gap)
+            if new_right <= new_left + gap:
+                break
+            if abs(new_left - angles[idx]) <= 1e-9 and abs(new_right - angles[jdx]) <= 1e-9:
+                break
+            angles[idx] = new_left
+            angles[jdx] = new_right
+            self._apply(idx)
+            self._apply(jdx)
+            moved = True
+            if not self._overlaps(idx, jdx):
+                break
+        return moved
+
+    def _angle_bounds(self, idx: int) -> tuple[float, float]:
+        """The angles label `idx` may take: its target's reach, inside its neighbours by the order gap."""
+        target = self.targets[idx]
+        low_bound = target - self.max_shift
+        high_bound = target + self.max_shift
+        if idx > 0:
+            low_bound = max(low_bound, self.angles[idx - 1] + LABEL_MIN_ORDER_GAP_DEG)
+        if idx + 1 < len(self.angles):
+            high_bound = min(high_bound, self.angles[idx + 1] - LABEL_MIN_ORDER_GAP_DEG)
+        return low_bound, high_bound
+
+    def _separate_pair(self, idx: int, jdx: int) -> bool:
+        """Move overlapping labels `idx` < `jdx` (not neighbours) apart by half a step each while they overlap.
+
+        A step stays inside both labels' bounds (`_angle_bounds`) and keeps the labels between them in
+        order; whether any moved. The labels stay in strict order, so the step always leaves the two
+        more than the order gap apart: the left one at most at its successor's angle less the gap, the
+        right one at least at its predecessor's plus the gap.
+        """
+        angles = self.angles
+        gap = LABEL_MIN_ORDER_GAP_DEG
+        moved = False
+        for _ in range(self.max_steps):
+            if not self._overlaps(idx, jdx):
+                break
+            left_low, left_high = self._angle_bounds(idx)
+            right_low, right_high = self._angle_bounds(jdx)
+            new_left = max(left_low, angles[idx] - self.half_step)
+            new_right = min(right_high, angles[jdx] + self.half_step)
             # Preserve strict ordering with labels between idx and jdx.
-            if idx + 1 < jdx:
-                new_left = min(new_left, float(labels[idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
-                new_right = max(new_right, float(labels[jdx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
-
+            new_left = min(new_left, angles[idx + 1] - gap)
+            new_right = max(new_right, angles[jdx - 1] + gap)
             if (
                 new_left < (left_low - 1e-9)
                 or new_left > (left_high + 1e-9)
@@ -2617,83 +2835,14 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
                 or new_right > (right_high + 1e-9)
             ):
                 break
-            if new_right <= new_left + min_order_gap_deg:
+            if abs(new_left - angles[idx]) <= 1e-9 and abs(new_right - angles[jdx]) <= 1e-9:
                 break
-            if (
-                abs(new_left - float(left["_angle_unwrapped_fixed"])) <= 1e-9
-                and abs(new_right - float(right["_angle_unwrapped_fixed"])) <= 1e-9
-            ):
-                break
-
-            left["_angle_unwrapped_fixed"] = new_left
-            right["_angle_unwrapped_fixed"] = new_right
-            _apply_angle(left)
-            _apply_angle(right)
-            pair_changed = True
-
-        return pair_changed
-
-    for label in labels:
-        _apply_angle(label)
-
-    for _ in range(120):
-        changed = False
-        for idx in range(len(labels) - 1):
-            left = labels[idx]
-            right = labels[idx + 1]
-            if not _pair_overlaps(left, right, idx, idx + 1):
-                continue
-
-            for _ in range(max_pair_steps):
-                left_target = float(left["_target_angle_unwrapped_fixed"])
-                right_target = float(right["_target_angle_unwrapped_fixed"])
-                left_low = left_target - max_angle_shift_deg
-                right_high = right_target + max_angle_shift_deg
-
-                new_left = max(left_low, float(left["_angle_unwrapped_fixed"]) - (0.5 * step_deg))
-                new_right = min(right_high, float(right["_angle_unwrapped_fixed"]) + (0.5 * step_deg))
-
-                if idx > 0:
-                    new_left = max(new_left, float(labels[idx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
-                if idx + 2 < len(labels):
-                    new_right = min(new_right, float(labels[idx + 2]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
-
-                if new_right <= new_left + min_order_gap_deg:
-                    break
-
-                if (
-                    abs(new_left - float(left["_angle_unwrapped_fixed"])) <= 1e-9
-                    and abs(new_right - float(right["_angle_unwrapped_fixed"])) <= 1e-9
-                ):
-                    break
-
-                left["_angle_unwrapped_fixed"] = new_left
-                right["_angle_unwrapped_fixed"] = new_right
-                _apply_angle(left)
-                _apply_angle(right)
-                changed = True
-
-                if not _pair_overlaps(left, right, idx, idx + 1):
-                    break
-
-        # Adjacent passes can still miss sparse non-adjacent bbox collisions.
-        for idx, jdx in _candidate_label_pairs(labels, total_length, padding=max_pair_margin):
-            if jdx <= idx + 1:
-                continue
-            if not _pair_overlaps(labels[idx], labels[jdx], idx, jdx):
-                continue
-            if _separate_pair(idx, jdx):
-                changed = True
-
-        if not changed:
-            break
-
-    for label in labels:
-        label.pop("_fixed_radius_px", None)
-        label.pop("_target_angle_unwrapped_fixed", None)
-        label.pop("_angle_unwrapped_fixed", None)
-
-    return sort_labels(labels)
+            angles[idx] = new_left
+            angles[jdx] = new_right
+            self._apply(idx)
+            self._apply(jdx)
+            moved = True
+        return moved
 
 
 def _angle_deviation_score(labels: list[CircularLabel], total_length: int) -> tuple[float, float]:
@@ -2705,12 +2854,7 @@ def _angle_deviation_score(labels: list[CircularLabel], total_length: int) -> tu
     max_delta = 0.0
     for label in labels:
         if "angle_unwrapped" in label:
-            target_angle = float(
-                label.get(
-                    "target_angle_unwrapped",
-                    angle_from_middle_unwrapped(float(label["middle"]), total_length),
-                )
-            )
+            target_angle = _label_target_angle_unwrapped(label, total_length)
             delta = abs(float(label["angle_unwrapped"]) - target_angle)
         elif "start_x" in label and "start_y" in label:
             actual_angle = math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"]))) % 360.0
@@ -2828,12 +2972,38 @@ def calculate_angle_for_y(center_y, y_radius, y):
 
 def angle_from_middle(middle: float, total_length: int) -> float:
     """Convert genome midpoint to circular angle (degrees)."""
-    return (360.0 * (middle / total_length) - 90.0) % 360.0
+    return angle_from_middle_unwrapped(middle, total_length) % 360.0
 
 
 def angle_from_middle_unwrapped(middle: float, total_length: int) -> float:
     """Convert genome midpoint to monotonic circular angle (degrees, unwrapped)."""
     return 360.0 * (middle / total_length) - 90.0
+
+
+def _label_target_angle_unwrapped(label: CircularLabel, total_length: int) -> float:
+    """The unwrapped angle a label aims at: its `target_angle_unwrapped` when a placer set one, else its feature middle's.
+
+    The middle's angle is computed first in either case, so a label without `middle` raises KeyError.
+    """
+    return float(label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length)))
+
+
+def _angle_unwrapped_from_start(label: CircularLabel, total_length: int) -> float:
+    """The angle of a label's start point near its target angle (`_start_angle_near`, `_label_target_angle_unwrapped`)."""
+    return _start_angle_near(label, _label_target_angle_unwrapped(label, total_length))
+
+
+def _point_on_circle(radius: float, angle_deg: float) -> tuple[float, float]:
+    """The point at `radius` from the center and `angle_deg` degrees."""
+    angle_rad = math.radians(angle_deg)
+    return radius * math.cos(angle_rad), radius * math.sin(angle_rad)
+
+
+def _start_angle_near(label: CircularLabel, reference_unwrapped: float) -> float:
+    """The angle of a label's start point (the origin when unset), on the 360-degree branch nearest `reference_unwrapped`."""
+    start_x = float(label.get("start_x", 0.0))
+    start_y = float(label.get("start_y", 0.0))
+    return normalize_angle_near_reference(math.degrees(math.atan2(start_y, start_x)), reference_unwrapped)
 
 
 def angle_delta_deg(a: float, b: float) -> float:
@@ -2877,10 +3047,7 @@ def _preferred_half_for_label(
         if feature_half != 0:
             return feature_half
 
-    target_angle_unwrapped = float(
-        label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-    )
-    target_angle_mod = target_angle_unwrapped % 360.0
+    target_angle_mod = _label_target_angle_unwrapped(label, total_length) % 360.0
     if _vertical_axis_distance_deg(target_angle_mod) <= axis_neutral_deg:
         return 0
     return 1 if math.cos(math.radians(target_angle_mod)) >= 0 else -1
@@ -2922,10 +3089,7 @@ def _label_hemisphere_mismatch_weight(
     if current_half in (0, preferred_half):
         return None
 
-    target_angle_unwrapped = float(
-        label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-    )
-    target_angle_mod = target_angle_unwrapped % 360.0
+    target_angle_mod = _label_target_angle_unwrapped(label, total_length) % 360.0
     distance_from_axis = _vertical_axis_distance_deg(target_angle_mod)
     return max(0.0, distance_from_axis - axis_neutral_deg)
 
@@ -3524,27 +3688,40 @@ def _order_labels_for_arc(labels: list[CircularLabel], total_length: int, spacin
     for idx, label in enumerate(labels):
         label["_opt_original_idx"] = idx
 
+    labels, targets = _seam_ordered_targets(labels, total_length)
+    for label, target in zip(labels, targets):
+        label["target_angle_unwrapped"] = target
+    return labels
+
+
+def _seam_ordered_targets(labels: list[CircularLabel], total_length: int) -> tuple[list[CircularLabel], list[float]]:
+    """Sorted labels in arc order, and the target angle of each along that order.
+
+    The order starts after the largest gap between the labels' feature angles, so a dense cluster
+    is not cut at the 0/360-degree seam (the list itself when it already starts there). Each target
+    is the feature angle on the first 360-degree branch above the previous target.
+    """
+    raw_targets = [angle_from_middle_unwrapped(float(label["middle"]), total_length) for label in labels]
     if len(labels) > 2:
-        raw_targets = [angle_from_middle_unwrapped(label["middle"], total_length) for label in labels]
-        gap_values = [raw_targets[i + 1] - raw_targets[i] for i in range(len(labels) - 1)]
+        gap_values = [raw_targets[idx + 1] - raw_targets[idx] for idx in range(len(labels) - 1)]
         gap_values.append(raw_targets[0] + 360.0 - raw_targets[-1])
         largest_gap_idx = max(range(len(gap_values)), key=gap_values.__getitem__)
         if largest_gap_idx < len(labels) - 1:
             rotate_by = largest_gap_idx + 1
             labels = labels[rotate_by:] + labels[:rotate_by]
+            raw_targets = raw_targets[rotate_by:] + raw_targets[:rotate_by]
+    targets: list[float] = []
+    for raw_target in raw_targets:
+        targets.append(_unwrap_above(raw_target, targets[-1]) if targets else raw_target)
+    return labels, targets
 
-    prev_target_unwrapped: float | None = None
-    for label in labels:
-        raw_target = angle_from_middle_unwrapped(label["middle"], total_length)
-        if prev_target_unwrapped is None:
-            target_angle_unwrapped = raw_target
-        else:
-            target_angle_unwrapped = normalize_angle_near_reference(raw_target, prev_target_unwrapped)
-            while target_angle_unwrapped <= prev_target_unwrapped:
-                target_angle_unwrapped += 360.0
-        label["target_angle_unwrapped"] = target_angle_unwrapped
-        prev_target_unwrapped = target_angle_unwrapped
-    return labels
+
+def _unwrap_above(angle_deg: float, previous_unwrapped: float) -> float:
+    """`angle_deg` on the first 360-degree branch above `previous_unwrapped`, starting from the branch nearest it."""
+    unwrapped = normalize_angle_near_reference(angle_deg, previous_unwrapped)
+    while unwrapped <= previous_unwrapped:
+        unwrapped += 360.0
+    return unwrapped
 
 
 def _overlap_components(pairs: Iterable[tuple[int, int]], n_labels: int) -> list[list[int]]:
@@ -4189,14 +4366,11 @@ def _derive_monotonic_unwrapped_angles(labels: list[CircularLabel], total_length
         else:
             angle_raw = math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"])))
 
-        target_unwrapped = float(
-            label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-        )
-        reference = target_unwrapped if prev_unwrapped is None else prev_unwrapped
-        angle_unwrapped = normalize_angle_near_reference(angle_raw, reference)
-        if prev_unwrapped is not None:
-            while angle_unwrapped <= prev_unwrapped:
-                angle_unwrapped += 360.0
+        target_unwrapped = _label_target_angle_unwrapped(label, total_length)
+        if prev_unwrapped is None:
+            angle_unwrapped = normalize_angle_near_reference(angle_raw, target_unwrapped)
+        else:
+            angle_unwrapped = _unwrap_above(angle_raw, prev_unwrapped)
         unwrapped_angles.append(angle_unwrapped)
         prev_unwrapped = angle_unwrapped
 
@@ -4389,9 +4563,7 @@ def _wrong_half(preferred_half: int, label: CircularLabel) -> int:
 
 def _inner_mismatch_priority(label: CircularLabel, total_length: int) -> tuple[float, float]:
     """Labels on the wrong side are moved first when their feature lies far from a vertical axis and far out."""
-    target_angle_unwrapped = float(
-        label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-    )
+    target_angle_unwrapped = _label_target_angle_unwrapped(label, total_length)
     return _vertical_axis_distance_deg(target_angle_unwrapped % 360.0), abs(float(label["start_x"]))
 
 
@@ -4423,9 +4595,7 @@ def _inner_focus(placement: _InnerPlacement, total_length: int) -> _InnerFocus |
     focus_label = placement.labels[label_idx]
     current_angle = placement.angles[label_idx]
     preferred_half = _preferred_half_for_label(focus_label, total_length)
-    target_angle_unwrapped = float(
-        focus_label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(focus_label["middle"]), total_length))
-    )
+    target_angle_unwrapped = _label_target_angle_unwrapped(focus_label, total_length)
     delta_to_target = normalize_angle_near_reference(target_angle_unwrapped, current_angle) - current_angle
     if abs(delta_to_target) <= 1e-9:
         primary_direction = -1.0 if preferred_half < 0 else 1.0
@@ -4447,10 +4617,9 @@ def _shift_inner_block(
     for move_idx in range(block_start, block_end + 1):
         moved_angle = candidate_angles[move_idx] + shift_deg
         candidate_angles[move_idx] = moved_angle
-        candidate_labels[move_idx]["angle_unwrapped"] = moved_angle
-        radius = radii[move_idx]
-        candidate_labels[move_idx]["start_x"] = radius * math.cos(math.radians(moved_angle))
-        candidate_labels[move_idx]["start_y"] = radius * math.sin(math.radians(moved_angle))
+        moved_label = candidate_labels[move_idx]
+        moved_label["angle_unwrapped"] = moved_angle
+        moved_label["start_x"], moved_label["start_y"] = _point_on_circle(radii[move_idx], moved_angle)
     return _InnerPlacement(candidate_labels, candidate_angles)
 
 
@@ -4656,6 +4825,289 @@ def _rebalance_inner_labels_strict_order(labels: list[CircularLabel], total_leng
     return placement.labels if fallback_labels is None else fallback_labels
 
 
+class _HemisphereFocus(NamedTuple):
+    """A label on the half away from its feature that may move, and how it stands where it is.
+
+    `lower_bound` < angle < `upper_bound` keeps its feature order. `overlaps` counts its plain
+    overlaps and `neighbor_overlaps` its min-gap overlaps with its two neighbours, where it is.
+    """
+
+    label_idx: int
+    label: CircularLabel
+    preferred_half: int
+    lower_bound: float
+    upper_bound: float
+    target_angle_mod: float
+    overlaps: int
+    neighbor_overlaps: int
+
+
+class _HemisphereShift(NamedTuple):
+    """The focus label alone at a new place: a copy with its new start point, the angle there, the plain
+    overlap total of the label set and the label's neighbour overlaps after the move."""
+
+    label: CircularLabel
+    angle_unwrapped: float
+    plain_total: int
+    neighbor_overlaps: int
+
+
+class _HemisphereBlockShift(NamedTuple):
+    """A block of labels around the focus label turned together: copies of every label and their angles,
+    the plain overlap total and the focus label's neighbour overlaps after the move."""
+
+    labels: list[CircularLabel]
+    angles: list[float]
+    plain_total: int
+    neighbor_overlaps: int
+
+
+@dataclass(frozen=True, slots=True)
+class _HemisphereSettings:
+    """The ellipse the labels sit on and the search settings of the hemisphere refinement."""
+
+    total_length: int
+    center_x: float
+    center_y: float
+    x_radius: float
+    y_radius: float
+    axis_neutral_deg: float
+    axis_eps_px: float
+    angle_step_deg: float
+    max_steps: int
+    block_max_steps: int
+
+    def start_at(self, angle_unwrapped: float, middle: float) -> tuple[float, float]:
+        """The start point of a label at `angle_unwrapped` on the ellipse."""
+        return calculate_coordinates(
+            self.center_x, self.center_y, self.x_radius, self.y_radius, angle_unwrapped, middle, self.total_length
+        )
+
+
+def _hemisphere_blocks(label_idx: int, label_count: int) -> list[tuple[int, int]]:
+    """The index ranges a block shift tries: the label with one or two neighbours on one side, then one on
+    each side, clipped to the labels, each range once."""
+    blocks: list[tuple[int, int]] = []
+    for block_start_raw, block_end_raw in (
+        (label_idx - 1, label_idx),
+        (label_idx, label_idx + 1),
+        (label_idx - 2, label_idx),
+        (label_idx, label_idx + 2),
+        (label_idx - 1, label_idx + 1),
+    ):
+        block = (max(0, block_start_raw), min(label_count - 1, block_end_raw))
+        if block[0] < block[1] and block not in blocks:
+            blocks.append(block)
+    return blocks
+
+
+class _HemisphereRefine:
+    """One run of the hemisphere refinement over `labels`, which it changes in place.
+
+    It keeps the labels' unwrapped angles (`angles`, in feature order), the plain overlap total of
+    the label set (`plain_total`) and the labels' reach-box peers (`peers`) up to date as labels move.
+    """
+
+    __slots__ = ("settings", "labels", "plain_total", "angles", "peers")
+
+    def __init__(self, settings: _HemisphereSettings, labels: list[CircularLabel]) -> None:
+        self.settings = settings
+        self.labels = labels
+        self.plain_total = _count_label_overlaps(labels, settings.total_length, use_min_gap=False)
+        self.angles = _derive_monotonic_unwrapped_angles(labels, settings.total_length)
+        # Peer pruning (output-preserving): the plain predicate is false for labels whose reach boxes are disjoint.
+        self.peers = _LabelPeers.of(labels, _reach_pad(1.0))
+
+    def refine(self, label_idx: int) -> None:
+        """Move label `label_idx` onto its preferred half when it is on the other one: alone when it
+        can, else (a near-axis label) in a small block with its neighbours."""
+        focus = self._focus(label_idx)
+        if focus is None:
+            return
+        shift = self._best_shift(focus)
+        if shift is not None:
+            if self._kept(focus, shift.plain_total, shift.neighbor_overlaps):
+                self._apply_shift(focus, shift)
+            return
+        # Keep this block search intentionally small: it is only a fallback for near-axis labels
+        # where tiny coordinated moves can fix side preference without overlap regressions.
+        settings = self.settings
+        if len(self.labels) > FULL_SCAN_LABEL_LIMIT or settings.block_max_steps <= 0:
+            return
+        if _vertical_axis_distance_deg(focus.target_angle_mod) > (settings.axis_neutral_deg + 4.0):
+            return
+        block = self._best_block_shift(focus)
+        if block is not None and self._kept(focus, block.plain_total, block.neighbor_overlaps):
+            self.labels[:] = block.labels
+            self.peers = _LabelPeers.of(self.labels, self.peers.pad)
+            self.angles = block.angles
+            self.plain_total = block.plain_total
+
+    def _plain_overlaps(self, label_idx: int, candidate_label: CircularLabel) -> int:
+        """The plain overlaps of `candidate_label` in place of label `label_idx`."""
+        peers = self.peers
+        return _count_local_label_overlaps(
+            self.labels,
+            self.settings.total_length,
+            label_idx,
+            candidate_label,
+            use_min_gap=False,
+            peers=peers.near(peers.box(candidate_label), skip=label_idx),
+        )
+
+    def _focus(self, label_idx: int) -> _HemisphereFocus | None:
+        """Label `label_idx` when it sits on the half away from its feature, outside the neutral band
+        and with room between its neighbours; else None."""
+        settings = self.settings
+        total_length = settings.total_length
+        label = self.labels[label_idx]
+        preferred_half = _preferred_half_for_label(label, total_length, axis_neutral_deg=settings.axis_neutral_deg)
+        if preferred_half == 0:
+            return None
+        if _current_half_from_x(float(label["start_x"]), axis_eps_px=settings.axis_eps_px) in (0, preferred_half):
+            return None
+        lower_bound, upper_bound = _cyclic_order_bounds(self.angles, label_idx, LABEL_MIN_ORDER_GAP_DEG)
+        if lower_bound >= upper_bound:
+            return None
+        return _HemisphereFocus(
+            label_idx,
+            label,
+            preferred_half,
+            lower_bound,
+            upper_bound,
+            _label_target_angle_unwrapped(label, total_length) % 360.0,
+            self._plain_overlaps(label_idx, label),
+            _neighbor_min_gap_overlap_count(self.labels, label_idx, label, total_length),
+        )
+
+    def _kept(self, focus: _HemisphereFocus, plain_total: int, neighbor_overlaps: int) -> bool:
+        """Whether a move is taken: an inner label moves only when it lowers its plain or neighbour overlaps."""
+        return not (
+            bool(focus.label.get("is_inner", False))
+            and plain_total >= self.plain_total
+            and neighbor_overlaps >= focus.neighbor_overlaps
+        )
+
+    def _best_shift(self, focus: _HemisphereFocus) -> _HemisphereShift | None:
+        """The best place for the focus label alone, on its preferred half within its order bounds, or None.
+
+        Offsets from its target angle grow by one step in both directions. A place may not raise the
+        plain overlap total; places rank by (plain total, neighbour overlaps, |offset|). The search stops
+        after the first step that has a place with no more neighbour overlaps than now.
+        """
+        settings = self.settings
+        label_idx, label = focus.label_idx, focus.label
+        lower_bound, upper_bound = focus.lower_bound, focus.upper_bound
+        target_angle_mod, preferred_half, axis_eps_px = focus.target_angle_mod, focus.preferred_half, settings.axis_eps_px
+        current_angle = self.angles[label_idx]
+        best: _HemisphereShift | None = None
+        best_score: tuple[int, int, float] | None = None
+        for step in range(settings.max_steps + 1):
+            if step == 0:
+                offsets = [0.0]
+            else:
+                step_offset = step * settings.angle_step_deg
+                offsets = [step_offset, -step_offset]
+            for offset in offsets:
+                candidate_angle_mod = (target_angle_mod + offset) % 360.0
+                candidate_angle_unwrapped = normalize_angle_near_reference(candidate_angle_mod, current_angle)
+                while candidate_angle_unwrapped <= lower_bound:
+                    candidate_angle_unwrapped += 360.0
+                while candidate_angle_unwrapped >= upper_bound and (candidate_angle_unwrapped - 360.0) > lower_bound:
+                    candidate_angle_unwrapped -= 360.0
+                if not (lower_bound < candidate_angle_unwrapped < upper_bound):
+                    continue
+                candidate_x, candidate_y = settings.start_at(candidate_angle_unwrapped, label["middle"])
+                if _current_half_from_x(candidate_x, axis_eps_px=axis_eps_px) != preferred_half:
+                    continue
+                candidate_label = label.copy()
+                candidate_label["start_x"] = candidate_x
+                candidate_label["start_y"] = candidate_y
+                plain_total = self.plain_total - focus.overlaps + self._plain_overlaps(label_idx, candidate_label)
+                if plain_total > self.plain_total:
+                    continue
+                neighbor_overlaps = _neighbor_min_gap_overlap_count(
+                    self.labels, label_idx, candidate_label, settings.total_length
+                )
+                score = (plain_total, neighbor_overlaps, abs(offset))
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best = _HemisphereShift(candidate_label, candidate_angle_unwrapped, plain_total, neighbor_overlaps)
+            if best is not None and best.neighbor_overlaps <= focus.neighbor_overlaps:
+                break
+        return best
+
+    def _apply_shift(self, focus: _HemisphereFocus, shift: _HemisphereShift) -> None:
+        label = focus.label
+        label["start_x"] = shift.label["start_x"]
+        label["start_y"] = shift.label["start_y"]
+        self.peers.move(focus.label_idx, label)
+        if "angle_unwrapped" in label:
+            label["angle_unwrapped"] = shift.angle_unwrapped
+        self.angles[focus.label_idx] = shift.angle_unwrapped
+        self.plain_total = shift.plain_total
+
+    def _best_block_shift(self, focus: _HemisphereFocus) -> _HemisphereBlockShift | None:
+        """The best turn of a block around the focus label by up to `block_max_steps` steps, or None.
+
+        Turns rank by (plain total, neighbour overlaps, |turn|, block width). A block's search stops
+        after the first step that has a turn with no more neighbour overlaps than now, and so does the
+        search over blocks.
+        """
+        best: _HemisphereBlockShift | None = None
+        best_score: tuple[int, int, float, int] | None = None
+        for block_start, block_end in _hemisphere_blocks(focus.label_idx, len(self.labels)):
+            for step in range(1, self.settings.block_max_steps + 1):
+                step_offset = step * self.settings.angle_step_deg
+                for delta in (step_offset, -step_offset):
+                    candidate = self._block_candidate(focus, block_start, block_end, delta)
+                    if candidate is None:
+                        continue
+                    score = (candidate.plain_total, candidate.neighbor_overlaps, abs(delta), block_end - block_start)
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        best = candidate
+                if best is not None and best.neighbor_overlaps <= focus.neighbor_overlaps:
+                    break
+            if best is not None and best.neighbor_overlaps <= focus.neighbor_overlaps:
+                break
+        return best
+
+    def _block_candidate(
+        self, focus: _HemisphereFocus, block_start: int, block_end: int, delta: float
+    ) -> _HemisphereBlockShift | None:
+        """Copies of the labels with `block_start`..`block_end` turned by `delta` on the ellipse, or None
+        when the turn breaks feature order, leaves the focus label off its preferred half or raises the
+        plain overlap total."""
+        settings = self.settings
+        candidate_angles = self.angles.copy()
+        for move_idx in range(block_start, block_end + 1):
+            candidate_angles[move_idx] += delta
+        if any(
+            candidate_angles[check_idx] <= _cyclic_order_bounds(candidate_angles, check_idx, LABEL_MIN_ORDER_GAP_DEG)[0]
+            for check_idx in range(len(candidate_angles))
+        ):
+            return None
+        candidate_labels = [item.copy() for item in self.labels]
+        for move_idx in range(block_start, block_end + 1):
+            moved_label = candidate_labels[move_idx]
+            moved_label["start_x"], moved_label["start_y"] = settings.start_at(
+                candidate_angles[move_idx], moved_label["middle"]
+            )
+            if "angle_unwrapped" in moved_label:
+                moved_label["angle_unwrapped"] = candidate_angles[move_idx]
+        focus_x = float(candidate_labels[focus.label_idx]["start_x"])
+        if _current_half_from_x(focus_x, axis_eps_px=settings.axis_eps_px) != focus.preferred_half:
+            return None
+        plain_total = _count_label_overlaps(candidate_labels, settings.total_length, use_min_gap=False)
+        if plain_total > self.plain_total:
+            return None
+        neighbor_overlaps = _neighbor_min_gap_overlap_count(
+            candidate_labels, focus.label_idx, candidate_labels[focus.label_idx], settings.total_length
+        )
+        return _HemisphereBlockShift(candidate_labels, candidate_angles, plain_total, neighbor_overlaps)
+
+
 def _refine_labels_to_preferred_hemisphere(
     labels: list[CircularLabel],
     total_length: int,
@@ -4673,274 +5125,28 @@ def _refine_labels_to_preferred_hemisphere(
     Refine mismatched labels toward their preferred hemisphere without increasing plain overlaps.
 
     This is a lightweight post-pass and only touches labels that are clearly on the
-    opposite side (outside the neutral top/bottom band).
+    opposite side (outside the neutral top/bottom band). Labels are taken last to first, then
+    first to last; a block shift replaces the label dicts of `labels` with moved copies.
     """
     if not labels:
         return labels
 
-    min_order_gap = LABEL_MIN_ORDER_GAP_DEG
-    max_steps = int(max_shift_deg / angle_step_deg)
-    block_max_steps = int(min(max_shift_deg, 6.0) / angle_step_deg)
-    base_plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
-    current_unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
-    # Peer pruning (output-preserving): the plain predicate is false for labels whose reach boxes are disjoint.
-    peers = _LabelPeers.of(labels, _reach_pad(1.0))
-
-    def plain_overlap_count_for_candidate(label_idx: int, candidate_label: CircularLabel) -> int:
-        return _count_local_label_overlaps(
-            labels,
-            total_length,
-            label_idx,
-            candidate_label,
-            use_min_gap=False,
-            peers=peers.near(peers.box(candidate_label), skip=label_idx),
-        )
-
-    pass_orders = [range(len(labels) - 1, -1, -1), range(len(labels))]
-    for pass_order in pass_orders:
+    settings = _HemisphereSettings(
+        total_length,
+        center_x,
+        center_y,
+        x_radius,
+        y_radius,
+        axis_neutral_deg,
+        axis_eps_px,
+        angle_step_deg,
+        max_steps=int(max_shift_deg / angle_step_deg),
+        block_max_steps=int(min(max_shift_deg, 6.0) / angle_step_deg),
+    )
+    refine = _HemisphereRefine(settings, labels)
+    for pass_order in (range(len(labels) - 1, -1, -1), range(len(labels))):
         for label_idx in pass_order:
-            label = labels[label_idx]
-            is_inner_label = bool(label.get("is_inner", False))
-            preferred_half = _preferred_half_for_label(label, total_length, axis_neutral_deg=axis_neutral_deg)
-            if preferred_half == 0:
-                continue
-
-            current_half = _current_half_from_x(float(label["start_x"]), axis_eps_px=axis_eps_px)
-            if current_half in (0, preferred_half):
-                continue
-
-            lower_bound, upper_bound = _cyclic_order_bounds(current_unwrapped_angles, label_idx, min_order_gap)
-            if lower_bound >= upper_bound:
-                continue
-
-            target_angle_unwrapped = float(
-                label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
-            )
-            target_angle_mod = target_angle_unwrapped % 360.0
-            current_overlap_count = plain_overlap_count_for_candidate(label_idx, label)
-            current_neighbor_overlap_count = _neighbor_min_gap_overlap_count(
-                labels,
-                label_idx,
-                label,
-                total_length,
-            )
-            best_candidate: tuple[CircularLabel, float, int, int] | None = None
-            best_score: tuple[int, int, float] | None = None
-
-            for step in range(max_steps + 1):
-                if step == 0:
-                    offsets = [0.0]
-                else:
-                    step_offset = step * angle_step_deg
-                    offsets = [step_offset, -step_offset]
-
-                for offset in offsets:
-                    candidate_angle_mod = (target_angle_mod + offset) % 360.0
-                    candidate_angle_unwrapped = normalize_angle_near_reference(
-                        candidate_angle_mod,
-                        current_unwrapped_angles[label_idx],
-                    )
-                    while candidate_angle_unwrapped <= lower_bound:
-                        candidate_angle_unwrapped += 360.0
-                    while candidate_angle_unwrapped >= upper_bound and (candidate_angle_unwrapped - 360.0) > lower_bound:
-                        candidate_angle_unwrapped -= 360.0
-                    if not (lower_bound < candidate_angle_unwrapped < upper_bound):
-                        continue
-
-                    candidate_x, candidate_y = calculate_coordinates(
-                        center_x,
-                        center_y,
-                        x_radius,
-                        y_radius,
-                        candidate_angle_unwrapped,
-                        label["middle"],
-                        total_length,
-                    )
-                    if _current_half_from_x(candidate_x, axis_eps_px=axis_eps_px) != preferred_half:
-                        continue
-
-                    candidate_label = label.copy()
-                    candidate_label["start_x"] = candidate_x
-                    candidate_label["start_y"] = candidate_y
-                    candidate_overlap_count = plain_overlap_count_for_candidate(label_idx, candidate_label)
-                    candidate_plain_total = base_plain_overlaps - current_overlap_count + candidate_overlap_count
-                    if candidate_plain_total > base_plain_overlaps:
-                        continue
-
-                    candidate_neighbor_overlap_count = _neighbor_min_gap_overlap_count(
-                        labels,
-                        label_idx,
-                        candidate_label,
-                        total_length,
-                    )
-                    candidate_score = (
-                        candidate_plain_total,
-                        candidate_neighbor_overlap_count,
-                        abs(offset),
-                    )
-                    if best_score is None or candidate_score < best_score:
-                        best_score = candidate_score
-                        best_candidate = (
-                            candidate_label,
-                            candidate_angle_unwrapped,
-                            candidate_plain_total,
-                            candidate_neighbor_overlap_count,
-                        )
-
-                if (
-                    best_score is not None
-                    and best_score[0] <= base_plain_overlaps
-                    and best_score[1] <= current_neighbor_overlap_count
-                ):
-                    break
-
-            if best_candidate is None:
-                # Try a small coordinated block shift when single-label movement
-                # cannot satisfy side preference without increasing overlaps.
-                if len(labels) <= FULL_SCAN_LABEL_LIMIT and block_max_steps > 0:
-                    # Keep this block search intentionally small: it is only a
-                    # fallback for near-axis labels where tiny coordinated moves
-                    # can fix side preference without overlap regressions.
-                    target_distance_from_axis = _vertical_axis_distance_deg(target_angle_mod)
-                    if target_distance_from_axis > (axis_neutral_deg + 4.0):
-                        continue
-
-                    raw_block_candidates = [
-                        (label_idx - 1, label_idx),
-                        (label_idx, label_idx + 1),
-                        (label_idx - 2, label_idx),
-                        (label_idx, label_idx + 2),
-                        (label_idx - 1, label_idx + 1),
-                    ]
-                    block_candidates: list[tuple[int, int]] = []
-                    for block_start_raw, block_end_raw in raw_block_candidates:
-                        block_start = max(0, block_start_raw)
-                        block_end = min(len(labels) - 1, block_end_raw)
-                        if block_start >= block_end:
-                            continue
-                        if (block_start, block_end) not in block_candidates:
-                            block_candidates.append((block_start, block_end))
-
-                    best_block_score: tuple[int, int, float, int] | None = None
-                    best_block_result: tuple[list[CircularLabel], list[float], int, int] | None = None
-                    current_block_neighbor_overlap = _neighbor_min_gap_overlap_count(
-                        labels,
-                        label_idx,
-                        label,
-                        total_length,
-                    )
-                    for block_start, block_end in block_candidates:
-                        for step in range(1, block_max_steps + 1):
-                            step_offset = step * angle_step_deg
-                            for delta in (step_offset, -step_offset):
-                                candidate_angles = current_unwrapped_angles.copy()
-                                for move_idx in range(block_start, block_end + 1):
-                                    candidate_angles[move_idx] += delta
-
-                                if any(
-                                    candidate_angles[check_idx]
-                                    <= _cyclic_order_bounds(candidate_angles, check_idx, min_order_gap)[0]
-                                    for check_idx in range(len(candidate_angles))
-                                ):
-                                    continue
-
-                                candidate_labels = [item.copy() for item in labels]
-                                for move_idx in range(block_start, block_end + 1):
-                                    moved_label = candidate_labels[move_idx]
-                                    moved_x, moved_y = calculate_coordinates(
-                                        center_x,
-                                        center_y,
-                                        x_radius,
-                                        y_radius,
-                                        candidate_angles[move_idx],
-                                        moved_label["middle"],
-                                        total_length,
-                                    )
-                                    moved_label["start_x"] = moved_x
-                                    moved_label["start_y"] = moved_y
-                                    if "angle_unwrapped" in moved_label:
-                                        moved_label["angle_unwrapped"] = candidate_angles[move_idx]
-
-                                target_half = _current_half_from_x(
-                                    float(candidate_labels[label_idx]["start_x"]),
-                                    axis_eps_px=axis_eps_px,
-                                )
-                                if target_half != preferred_half:
-                                    continue
-
-                                candidate_plain_total = _count_label_overlaps(
-                                    candidate_labels,
-                                    total_length,
-                                    use_min_gap=False,
-                                )
-                                if candidate_plain_total > base_plain_overlaps:
-                                    continue
-
-                                block_width = block_end - block_start
-                                candidate_neighbor_overlap_count = _neighbor_min_gap_overlap_count(
-                                    candidate_labels,
-                                    label_idx,
-                                    candidate_labels[label_idx],
-                                    total_length,
-                                )
-                                block_candidate_score = (
-                                    candidate_plain_total,
-                                    candidate_neighbor_overlap_count,
-                                    abs(delta),
-                                    block_width,
-                                )
-                                if best_block_score is None or block_candidate_score < best_block_score:
-                                    best_block_score = block_candidate_score
-                                    best_block_result = (
-                                        candidate_labels,
-                                        candidate_angles,
-                                        candidate_plain_total,
-                                        candidate_neighbor_overlap_count,
-                                    )
-                            if (
-                                best_block_score is not None
-                                and best_block_score[0] <= base_plain_overlaps
-                                and best_block_score[1] <= current_block_neighbor_overlap
-                            ):
-                                break
-                        if (
-                            best_block_score is not None
-                            and best_block_score[0] <= base_plain_overlaps
-                            and best_block_score[1] <= current_block_neighbor_overlap
-                        ):
-                            break
-
-                    if best_block_result is None:
-                        continue
-
-                    candidate_labels, candidate_angles, chosen_plain_total, chosen_neighbor_overlap = best_block_result
-                    if is_inner_label and (
-                        chosen_plain_total >= base_plain_overlaps
-                        and chosen_neighbor_overlap >= current_block_neighbor_overlap
-                    ):
-                        continue
-                    labels[:] = candidate_labels
-                    peers = _LabelPeers.of(labels, peers.pad)
-                    current_unwrapped_angles = candidate_angles
-                    base_plain_overlaps = chosen_plain_total
-                    continue
-
-                continue
-
-            candidate_label, chosen_angle_unwrapped, chosen_plain_total, chosen_neighbor_overlap = best_candidate
-            if is_inner_label and (
-                chosen_plain_total >= base_plain_overlaps
-                and chosen_neighbor_overlap >= current_neighbor_overlap_count
-            ):
-                continue
-            label["start_x"] = candidate_label["start_x"]
-            label["start_y"] = candidate_label["start_y"]
-            peers.move(label_idx, label)
-            if "angle_unwrapped" in label:
-                label["angle_unwrapped"] = chosen_angle_unwrapped
-            current_unwrapped_angles[label_idx] = chosen_angle_unwrapped
-            base_plain_overlaps = chosen_plain_total
-
+            refine.refine(label_idx)
     return labels
 
 
@@ -4965,14 +5171,6 @@ def _polish_total_leader_distance(
     if not labels:
         return labels
 
-    def _target_angle_unwrapped(label: CircularLabel) -> float:
-        return float(
-            label.get(
-                "target_angle_unwrapped",
-                angle_from_middle_unwrapped(float(label["middle"]), total_length),
-            )
-        )
-
     def _move_label(label_idx: int, angle_unwrapped: float) -> None:
         unwrapped[label_idx] = angle_unwrapped
         label = labels[label_idx]
@@ -4990,7 +5188,7 @@ def _polish_total_leader_distance(
     def _total_target_delta() -> float:
         delta_sum = 0.0
         for label in labels:
-            target = _target_angle_unwrapped(label)
+            target = _label_target_angle_unwrapped(label, total_length)
             current = float(label.get("angle_unwrapped", target))
             delta_sum += abs(current - target)
         return delta_sum
@@ -5032,7 +5230,7 @@ def _polish_total_leader_distance(
         for label_idx in label_order:
             label = labels[label_idx]
             current_angle = unwrapped[label_idx]
-            target_angle = _target_angle_unwrapped(label)
+            target_angle = _label_target_angle_unwrapped(label, total_length)
             if math.isclose(current_angle, target_angle, abs_tol=1e-9):
                 continue
 
@@ -5620,8 +5818,8 @@ def prepare_label_list(
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)
             label_start = label_middle - (label_as_feature_length / 2)
             label_end = label_middle + (label_as_feature_length / 2)
-            feature_middle_x: float = feature_center_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-            feature_middle_y: float = feature_center_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+            feature_angle_deg = angle_from_middle_unwrapped(label_middle, total_length)
+            feature_middle_x, feature_middle_y = _point_on_circle(feature_center_radius, feature_angle_deg)
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
             assignment = getattr(feature_object, "placement", None)
@@ -5652,12 +5850,7 @@ def prepare_label_list(
                 if lane_clearance and not is_short_directional_feature:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
-                    feature_anchor_x = feature_outer_radius * math.cos(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
-                    feature_anchor_y = feature_outer_radius * math.sin(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
+                    feature_anchor_x, feature_anchor_y = _point_on_circle(feature_outer_radius, feature_angle_deg)
                 # With an arena, its inner edge is the "anchor" radius for leader lines.
                 middle_radius = (
                     float(outer_arena[0]) if outer_arena is not None else radius_factor * radius
@@ -5671,20 +5864,13 @@ def prepare_label_list(
                             + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
                         ),
                     )
-                middle_x = middle_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-                middle_y = middle_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+                middle_x, middle_y = _point_on_circle(middle_radius, feature_angle_deg)
             else:
                 if lane_clearance and not is_short_directional_feature:
                     # For displaced inner features, anchor leaders on the inner edge so lines
                     # do not cross over raised feature bodies.
-                    feature_anchor_x = feature_inner_radius * math.cos(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
-                    feature_anchor_y = feature_inner_radius * math.sin(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
-                middle_x = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-                middle_y = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+                    feature_anchor_x, feature_anchor_y = _point_on_circle(feature_inner_radius, feature_angle_deg)
+                middle_x, middle_y = _point_on_circle(inner_radius_factor * radius, feature_angle_deg)
             is_embedded = _is_label_embedded_in_segment(
                 label_start,
                 label_end,

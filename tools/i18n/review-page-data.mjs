@@ -5,7 +5,11 @@
 //
 //   node tools/i18n/review-page-data.mjs --out <translation-review>/data [--shots <shots.json>]
 //
-// locales.json (the languages with a catalog, {tag, label}, in menu order),
+// locales.json (the languages with a catalog, in menu order: {tag, label,
+// language, section}, where label is the UI_LOCALES endonym and language and
+// section come from the locale's level-2 heading in I18N_STYLE.md,
+// `## <section>. <Language> (`<tag>`[, <usage>])`; every catalog locale has
+// exactly one such heading),
 // keys.json (each key with its id, context, first call site and glossary
 // hints; no line numbers, so the data changes only when text changes),
 // draft-<locale>.json (the catalog by key id, each value one string:
@@ -42,6 +46,14 @@ import { REPOSITORY_ROOT, sourceKeys } from './source-keys.mjs';
  * @property {number[]} g glossary.json indexes of the terms in the English
  */
 /**
+ * One language of the review page (data/locales.json).
+ * @typedef {object} ReviewLocale
+ * @property {string} tag the UI locale tag
+ * @property {string} label the endonym of the Language menu (UI_LOCALES)
+ * @property {string} language the English name of the language and its usage, from its I18N_STYLE.md heading
+ * @property {string} section the number of its I18N_STYLE.md section, e.g. `6`
+ */
+/**
  * The screenshot map: screenshots, and per key id the rectangles [shot index, x, y, w, h].
  * @typedef {{ scale: number, shots: { file: string, w: number, h: number, state: string }[], keys: Record<string, number[][]> }} ShotMap
  */
@@ -57,6 +69,29 @@ export const reviewKeyId = (key) => createHash('sha1').update(key, 'utf8').diges
  */
 export const reviewDraftText = (value) => (typeof value === 'string' ? value
   : pluralFormEntries(value).map(([category, text]) => `${category}: ${text}`).join(' | '));
+
+const STYLE_HEADING = /^## (\d+)\. ([^\n(]+?) \(`([^`]+)`(?:, ([^)\n]+))?\)$/gm;
+
+/**
+ * The review page's row of each catalog locale, from UI_LOCALES and the
+ * level-2 headings of I18N_STYLE.md.
+ * @param {string} style the text of I18N_STYLE.md
+ * @returns {ReviewLocale[]}
+ */
+export const reviewLocales = (style) => {
+  /** @type {Map<string, { language: string, section: string }>} */
+  const sections = new Map();
+  for (const [, section, name, tag, usage] of style.matchAll(STYLE_HEADING)) {
+    if (sections.has(tag)) throw new Error(`I18N_STYLE.md has two sections for ${tag}`);
+    sections.set(tag, { language: usage ? `${name} (${usage})` : name, section });
+  }
+  return CATALOG_LOCALES.map((tag) => {
+    const option = UI_LOCALES.find((entry) => entry.tag === tag);
+    const heading = sections.get(tag);
+    if (!option || !heading) throw new Error(`${tag} has no ${option ? 'I18N_STYLE.md section heading ("## <n>. <Language> (`' + tag + '`)")' : 'UI_LOCALES entry'}`);
+    return { tag, label: option.name, ...heading };
+  });
+};
 
 /** @param {unknown} value */
 const json = (value) => JSON.stringify(value, null, 0);
@@ -80,9 +115,10 @@ export const reviewPageData = async ({ shots }) => {
     };
   });
   if (new Set(rows.map(({ id }) => id)).size !== rows.length) throw new Error('two keys share an id');
+  const style = readFileSync(join(REPOSITORY_ROOT, 'docs', 'internal', 'I18N_STYLE.md'), 'utf8');
   /** @type {Map<string, string>} */
   const files = new Map([
-    ['locales.json', json(CATALOG_LOCALES.map((tag) => ({ tag, label: UI_LOCALES.find((option) => option.tag === tag)?.name ?? tag })))],
+    ['locales.json', json(reviewLocales(style))],
     ['keys.json', json(rows)]
   ]);
   for (const locale of CATALOG_LOCALES) {
@@ -91,7 +127,7 @@ export const reviewPageData = async ({ shots }) => {
     files.set(`notes-${locale}.json`, '{}');
   }
   files.set('glossary.json', json(glossary.map((row) => Object.fromEntries(['en', ...CATALOG_LOCALES, 'note'].map((column) => [column, row[column] ?? ''])))));
-  files.set('style.md', readFileSync(join(REPOSITORY_ROOT, 'docs', 'internal', 'I18N_STYLE.md'), 'utf8'));
+  files.set('style.md', style);
   if (shots) {
     const ids = new Set(rows.map(({ id }) => id));
     files.set('shots.json', json({ ...shots, keys: Object.fromEntries(Object.entries(shots.keys).filter(([id]) => ids.has(id))) }));

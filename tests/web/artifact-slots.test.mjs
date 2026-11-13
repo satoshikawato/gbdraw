@@ -19,9 +19,10 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-const { ARTIFACT_SLOT_KEYS, createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+const { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
-const { readFile } = await import('node:fs/promises');
+const { createDrawingSwitch } = await import('../../gbdraw/web/js/app/drawing-switch.js');
+const { readdir, readFile } = await import('node:fs/promises');
 
 const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
 snapshots.setGeneratedArtifactRuntimeOwner({
@@ -36,7 +37,7 @@ const SWAPPED = [
   'pairwiseMatchFactors',
   'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
-  'similarityAlignmentResetReceipt', 'originalLegendColors', 'originalSvgStroke',
+  'similarityAlignmentResetReceipt', 'originalSvgStroke',
   // D-197: the manifest the drawing's LOSAT protein rows resolve in.
   'proteinIdentityManifest'
 ];
@@ -45,8 +46,8 @@ const KEPT = [
   'pendingPaletteName', 'pendingPaletteColors', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence',
   'similarityAlignmentPlan', 'linearRecordTranslations', 'legendEntries', 'deletedLegendEntries',
-  // The Legend owner keeps each Result's inventory; the slot carries it as `legendInventory`.
-  'originalLegendOrder'
+  // The slot carries the generated Legend inventory and colors beside its values (`legend`).
+  'originalLegendOrder', 'originalLegendColors'
 ];
 
 // The kept members of the app state and of the shown mode's drawing.
@@ -71,7 +72,7 @@ const fillCircularArtifact = async () => {
     generatedMultiRecordCanvas: true, generatedCircularPlotTitlePosition: 'top',
     appliedPaletteName: 'tableau', appliedPaletteColors: { CDS: '#111111' },
     similarityAlignmentResetReceipt: null,
-    originalLegendColors: { CDS: '#111111' }, originalSvgStroke: { color: '#000000', width: 1 },
+    originalSvgStroke: { color: '#000000', width: 1 },
     proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} }
   };
   Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
@@ -82,12 +83,15 @@ const fillCircularArtifact = async () => {
     legacyProteinRawCandidates: { schema: 1, entries: [] },
     legacyProteinDerivedEvidence: { schema: 1, entries: [] }, similarityAlignmentPlan: { groupId: 'g' },
     linearRecordTranslations: [{ recordKey: 'r', x: 1, y: 2 }], legendEntries: [{ caption: 'CDS' }],
-    deletedLegendEntries: [{ caption: 'gene' }], originalLegendOrder: ['CDS', 'tRNA']
+    deletedLegendEntries: [{ caption: 'gene' }]
   };
+  const legend = { originalOrder: ['CDS', 'tRNA'], originalColors: { CDS: '#111111' } };
+  state.originalLegendOrder.value = legend.originalOrder;
+  state.originalLegendColors.value = legend.originalColors;
   Object.entries(kept).forEach(([key, value]) => { memberOf(key).value = value; });
   state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, { qual: 'product', val: 'x', color: '#333333', cap: 'X' });
   modeDrawing(state, 'linear').linearSeqs.splice(0, modeDrawing(state, 'linear').linearSeqs.length, { uid: 'seq-1', region_reverse: true, windows: [] });
-  return { values, kept };
+  return { values, kept, legend };
 };
 
 test('the artifact slot names exactly the displayed-Result part of the generated artifact', () => {
@@ -96,16 +100,17 @@ test('the artifact slot names exactly the displayed-Result part of the generated
 });
 
 test('an empty slot clears only the artifact, and the captured slot comes back by reference', async () => {
-  const { values, kept } = await fillCircularArtifact();
+  const { values, kept, legend } = await fillCircularArtifact();
   const committed = canonicalRenderArtifactOwner.capture();
   const rules = [...state.activeDrawing().manualSpecificRules];
 
   const circular = snapshots.captureArtifactSlot();
   assert.ok(Object.isFrozen(circular));
   // The page holds no record sequences: Python reads them on demand (D5), so a slot keeps none.
-  assert.deepEqual(Object.keys(circular).sort(), ['drawingId', 'legendInventory', 'retainedBytes', 'runtimeState', 'transportIdentity', 'values']);
-  assert.deepEqual(circular.legendInventory, ['CDS', 'tRNA']);
-  snapshots.installArtifactSlot(null, { drawing: modeDrawing(state, 'linear') });
+  assert.deepEqual(Object.keys(circular).sort(), ['drawingId', 'legend', 'retainedBytes', 'runtimeState', 'transportIdentity', 'values']);
+  assert.deepEqual(circular.legend.originalOrder, ['CDS', 'tRNA']);
+  assert.strictEqual(circular.legend.originalColors, legend.originalColors);
+  snapshots.installArtifactSlot(createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: {} }), { drawing: modeDrawing(state, 'linear') });
 
   // The arriving empty Linear slot: no Result, its own mode, no committed Session.
   assert.deepEqual(state.results.value, []);
@@ -117,6 +122,8 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   // An empty slot keeps the applied palette: it has no Result to project.
   assert.equal(state.appliedPaletteName.value, 'tableau');
   assert.strictEqual(state.appliedPaletteColors.value, values.appliedPaletteColors);
+  assert.deepEqual(state.originalLegendOrder.value, []);
+  assert.deepEqual(state.originalLegendColors.value, {});
   // Draft and project state stays.
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
@@ -126,6 +133,8 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   const linear = snapshots.captureArtifactSlot();
   snapshots.installArtifactSlot(circular, { drawing: modeDrawing(state, 'circular') });
   SWAPPED.forEach((key) => assert.strictEqual(state[key].value, values[key], key));
+  assert.deepEqual(state.originalLegendOrder.value, legend.originalOrder);
+  assert.strictEqual(state.originalLegendColors.value, legend.originalColors);
   assert.strictEqual(canonicalRenderArtifactOwner.capture().committedCanonicalSession, committed.committedCanonicalSession);
   assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, committed.activeSessionResourceTable);
   // D-15-124: the request's conservation hash pairs wait in its slot with it.
@@ -156,7 +165,7 @@ test('a Generate after a switch reads no decoration of the other mode\'s Result'
   const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
   const { values } = await fillCircularArtifact();
   const circular = snapshots.captureArtifactSlot();
-  snapshots.installArtifactSlot(null, { drawing: modeDrawing(state, 'linear') });
+  snapshots.installArtifactSlot(createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: {} }), { drawing: modeDrawing(state, 'linear') });
   const capture = () => captureDecorationContinuity({
     canonical: { renderRequest: { mode: 'linear', records: [] }, resources: {} },
     results: state.results.value,
@@ -192,7 +201,6 @@ test('a step whose alignment receipt does not bind fails before anything is appl
 
 // Review alignment compares its mode's own Result whichever mode is shown (OV-622, D-45).
 test('a value of a drawing\'s artifact is read from the shown one, or from the slot that keeps it', async () => {
-  const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
   const linearResult = { name: 'linear.svg' };
   const otherLinearResult = { name: 'other.svg' };
   const circularResult = { name: 'circular.svg' };
@@ -240,14 +248,11 @@ test('a null applied palette restored in the shown drawing keeps the displayed p
 // REVIEW-1 M1: one store keeps the hidden drawings' artifacts, and only its
 // named operations change it; an entry's key is its slot's drawing.
 test('the slot store keeps a hidden drawing\'s artifact through its named operations', async () => {
-  const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');
   const store = createArtifactSlotStore();
-  const circularSlot = createArtifactSlot({ drawing: circular, values: { results: [{ name: 'c.svg' }] }, legendInventory: ['CDS'] });
-  assert.deepEqual(circularSlot.legendInventory, ['CDS']);
-  // OV-3282: a slot without a Result holds no Legend inventory, whatever it was given.
-  assert.deepEqual(createArtifactSlot({ drawing: linear, values: { results: [] }, legendInventory: ['CDS'] }).legendInventory, []);
+  const circularSlot = createArtifactSlot({ drawing: circular, values: { results: [{ name: 'c.svg' }] }, legend: { originalOrder: ['CDS'], originalColors: {} } });
+  assert.deepEqual(circularSlot.legend.originalOrder, ['CDS']);
   assert.equal(store.swap(circularSlot, 'linear'), null, 'a drawing with no artifact yet has no slot');
   assert.deepEqual(store.kept(), [circularSlot]);
   const linearSlot = createArtifactSlot({ drawing: linear, values: { results: [{ name: 'l.svg' }] } });
@@ -360,7 +365,7 @@ test('an unchanged Generate in a drawing records no step after a Generate in ano
   const show = async (id) => {
     slots.set(state.generatedDrawingId.value, snapshots.captureArtifactSlot());
     installShownDrawing(id);
-    snapshots.installArtifactSlot(slots.get(id) ?? null, { drawing: modeDrawing(state, id) });
+    snapshots.installArtifactSlot(slots.get(id) ?? createArtifactSlot({ drawing: modeDrawing(state, id), values: {} }), { drawing: modeDrawing(state, id) });
     if (!baselines.has(id)) await histories[id].initializeIntentBaseline();
     baselines.add(id);
   };
@@ -431,4 +436,137 @@ test('a Result gives back each window orientation of a Linear card whose windows
   card.windows[0].reverseComplement = false;
   snapshots.installGeneratedArtifactOwnerSet(ownerSet, { drawing: linear });
   assert.deepEqual(linear.linearSeqs[0].windows.map((entry) => entry.reverseComplement), [true, false]);
+});
+
+// A slot holds its set's generated Legend inventory and colors beside its
+// values (`legend`), and its install is their install (`installShownSetLegend`,
+// the one install of the shown set's Legend): the inventory by the rule of a
+// set without a Result, the colors by reference. An empty slot has neither.
+test('a slot install installs the slot\'s Legend inventory and colors', async () => {
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
+  assert.ok(!ARTIFACT_SLOT_KEYS.includes('originalLegendColors'), 'the colors sit beside the inventory, not among the values');
+  const colors = { CDS: '#123456' };
+  const slot = createArtifactSlot({ drawing: circular, values: { results: [{ name: 'c.svg' }] }, legend: { originalOrder: ['CDS'], originalColors: colors } });
+  assert.deepEqual(slot.legend.originalOrder, ['CDS']);
+  assert.strictEqual(slot.legend.originalColors, colors);
+  state.originalLegendOrder.value = ['stale'];
+  state.originalLegendColors.value = { stale: '#000000' };
+  snapshots.installArtifactSlot(slot, { drawing: circular });
+  assert.deepEqual(state.originalLegendOrder.value, ['CDS'], 'the slot\'s inventory is installed with its Result');
+  assert.strictEqual(state.originalLegendColors.value, colors);
+  const captured = snapshots.captureArtifactSlot();
+  assert.deepEqual(captured.legend.originalOrder, ['CDS']);
+  assert.strictEqual(captured.legend.originalColors, colors, 'a capture keeps the colors by reference');
+  // A slot without a Result holds no inventory, whatever it was given; the empty slot has no colors either.
+  const noResult = createArtifactSlot({ drawing: linear, values: { results: [] }, legend: { originalOrder: ['CDS'], originalColors: colors } });
+  assert.deepEqual(noResult.legend.originalOrder, []);
+  const empty = createArtifactSlot({ drawing: linear, values: {} });
+  snapshots.installArtifactSlot(empty, { drawing: linear });
+  assert.deepEqual(state.originalLegendOrder.value, []);
+  assert.deepEqual(state.originalLegendColors.value, {});
+  assert.notStrictEqual(createArtifactSlot({ drawing: linear, values: {} }).legend.originalColors, empty.legend.originalColors,
+    'each empty slot has its own colors, which the Legend owner fills in place after a draw');
+});
+
+// The drawing switch with History's slot capture and install, the slot store,
+// and the install of the shown drawing; its other ports do nothing. `installs`
+// holds the displayed Legend inventory and colors right after each slot install.
+const legendSwitch = () => {
+  const store = createArtifactSlotStore();
+  const installs = [];
+  const remembered = new Map();
+  const drawingSwitch = createDrawingSwitch({
+    state, results: state.results, selectedResultIndex: state.selectedResultIndex, errorLog: state.errorLog,
+    failedGeneratePreservedResult: { value: false }, sessionOperationAvailability: () => null,
+    historyAvailability: () => null, historyRestoring: () => false, traversalPending: () => false,
+    settlePendingIntent: async () => {}, refreshCurrentIntent: async () => {}, adoptSessionReset: (reset) => reset(),
+    ruleWritePending: () => false, suspendSpecificRulePatternDrafts: () => {}, clearFeatureSelection: () => {},
+    rememberDepartingResultProjection: () => {}, auxiliaryImportFailureOnArrival: () => null,
+    resetModeTransientUi: () => {}, installShownDrawing, dismissNotice: () => {}, switchDrawingSearch: () => {},
+    rebindAnnotationRecords: () => {}, clearActiveRuntime: () => {}, getResultIdentity: (result) => result.name,
+    presentSelectedResult: () => {}, rememberResultInventory: (identity, inventory) => remembered.set(identity, inventory),
+    artifactSlotsSwap: store.swap, captureArtifactSlot: snapshots.captureArtifactSlot,
+    installArtifactSlot: (slot, options) => {
+      snapshots.installArtifactSlot(slot, options);
+      installs.push({ order: [...state.originalLegendOrder.value], colors: state.originalLegendColors.value });
+    }
+  });
+  return { ...drawingSwitch, store, installs, remembered };
+};
+
+// The switch installs the arriving set's Legend inventory and colors with its
+// slot, so the two agree at every point: the departing drawing's inventory
+// never stands next to the arriving drawing's colors until the binder adopts.
+test('a drawing switch installs the arriving set\'s Legend inventory and colors with its slot', async () => {
+  installShownDrawing('circular');
+  const { legend: circularLegend } = await fillCircularArtifact();
+  const linearColors = { rRNA: '#abcdef' };
+  const { showDrawingNow, store, installs, remembered } = legendSwitch();
+  const linearSlot = createArtifactSlot({
+    drawing: modeDrawing(state, 'linear'), values: { results: [{ name: 'l.svg' }] },
+    legend: { originalOrder: ['rRNA'], originalColors: linearColors }
+  });
+  assert.equal(store.swap(linearSlot, 'circular'), null);
+  showDrawingNow('linear');
+  assert.deepEqual(installs.at(-1), { order: ['rRNA'], colors: linearColors }, 'the arriving drawing\'s inventory and colors');
+  assert.deepEqual(state.originalLegendOrder.value, ['rRNA']);
+  assert.deepEqual(remembered.get('l.svg'), ['rRNA'], 'the Legend owner keeps the arriving Result\'s inventory');
+  showDrawingNow('circular');
+  assert.deepEqual(installs.at(-1).order, circularLegend.originalOrder);
+  assert.strictEqual(installs.at(-1).colors, circularLegend.originalColors, 'the departing slot kept the colors by reference');
+  // A drawing with no artifact yet arrives with the empty slot: no inventory, no colors.
+  store.replaceLoaded([]);
+  showDrawingNow('linear');
+  assert.deepEqual(installs.at(-1), { order: [], colors: {} });
+  installShownDrawing('circular');
+});
+
+// Session Load opens on a set that is not the committed one: the restore
+// wrote the committed set's Results, inventory and colors, and the opening
+// slot replaces all three in one install (`installLoadedArtifactSlots` calls
+// the switch's `installArrivingSlot`).
+test('a Load opening on another Result set installs that set\'s Legend inventory and colors', async () => {
+  const circular = modeDrawing(state, 'circular');
+  installShownDrawing('circular');
+  snapshots.installArtifactSlot(createArtifactSlot({
+    drawing: circular, values: { results: [{ name: 'committed.svg' }] },
+    legend: { originalOrder: ['CDS', 'gene'], originalColors: { CDS: '#010101', gene: '#020202' } }
+  }), { drawing: circular });
+  const openingColors = { tRNA: '#030303' };
+  const opening = createArtifactSlot({
+    drawing: circular, values: { results: [{ name: 'opening.svg' }] },
+    legend: { originalOrder: ['tRNA'], originalColors: openingColors }
+  });
+  const { installArrivingSlot, installs, remembered } = legendSwitch();
+  installArrivingSlot(opening);
+  assert.deepEqual(installs.at(-1), { order: ['tRNA'], colors: openingColors });
+  assert.deepEqual(state.originalLegendOrder.value, ['tRNA']);
+  assert.deepEqual(remembered.get('opening.svg'), ['tRNA']);
+  const appSetup = await readFile('gbdraw/web/js/app/app-setup.js', 'utf8');
+  const load = appSetup.match(/const installLoadedArtifactSlots = \(\{ opening, stashed \}\) => \{([\s\S]*?)\n {2}\};/);
+  assert.ok(load, 'the composition root keeps its Load install of the artifact slots');
+  assert.match(load[1], /installArrivingSlot\(opening\)/, 'Load installs its opening slot through the switch\'s install');
+  assert.doesNotMatch(load[1], /installArtifactSlot/, 'and through no other install');
+});
+
+// The one writer of the displayed Legend colors outside the Legend owner's
+// edit paths is `installShownSetLegend`; a slot install reaches it through the
+// slot's `legend`, and no slot value writes the colors.
+test('installShownSetLegend is the one writer of the displayed Legend colors outside the Legend owner', async () => {
+  assert.ok(!ARTIFACT_SLOT_KEYS.includes('originalLegendColors'));
+  const root = 'gbdraw/web/js';
+  const writers = {};
+  for (const entry of await readdir(root, { recursive: true })) {
+    if (!entry.endsWith('.js')) continue;
+    const source = await readFile(`${root}/${entry}`, 'utf8');
+    const count = source.match(/originalLegendColors\.value(?:\[[^\]]*\])?\s*=(?!=)/g)?.length ?? 0;
+    if (count > 0) writers[entry] = count;
+  }
+  assert.deepEqual(writers, { 'services/artifact-slot.js': 1, 'app/legend/entry-actions.js': 2 });
+  const slotSource = await readFile(`${root}/services/artifact-slot.js`, 'utf8');
+  const install = slotSource.match(/export const installShownSetLegend = [\s\S]*?\n\};/);
+  assert.match(install?.[0] ?? '', /originalLegendColors\.value = /, 'the slot module\'s write is installShownSetLegend\'s');
+  const historySource = await readFile(`${root}/services/history-snapshot.js`, 'utf8');
+  assert.match(historySource, /installShownSetLegend\(state, slot\.legend\)/, 'a slot install writes the colors through it');
 });

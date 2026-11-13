@@ -281,7 +281,7 @@ console.log('History restores nullable config values and preserves key guards.')
 
   applyEditorStateData(state.activeDrawing(), buildEditorStateData(state.activeDrawing()));
   assert.strictEqual(liveCatalog(), catalog, 'Session rollback restores the admitted catalog');
-  applyEditorStateData(state.activeDrawing(), { featureCatalog: structuredClone(catalog) });
+  applyEditorStateData(state.activeDrawing(), { ...buildEditorStateData(state.activeDrawing()), featureCatalog: structuredClone(catalog) });
   assert.equal(state.featureCatalog.value, null, 'an unadmitted catalog never enters state');
   state.featureCatalog.value = null;
   state.extractedFeatures.value = [];
@@ -318,7 +318,8 @@ console.log('History restores nullable config values and preserves key guards.')
   assert.deepEqual(state.originalLegendColors.value, { CDS: '#112233' }, 'the restore installs the captured colors');
 
   state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
-  applyEditorStateData(state.activeDrawing(), { legend: { originalOrder: ['CDS'], originalColors: {} } });
+  const captured = buildEditorStateData(state.activeDrawing());
+  applyEditorStateData(state.activeDrawing(), { ...captured, legend: { ...captured.legend, originalOrder: ['CDS'], originalColors: {} } });
   assert.deepEqual(state.originalLegendOrder.value, ['CDS'], 'a restore with a Result installs its inventory');
   state.results.value = [];
   state.originalLegendOrder.value = [];

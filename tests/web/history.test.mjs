@@ -2046,8 +2046,7 @@ const createLayoutPreferences = () => ({
       state.selectedFeatureRecordIdx.value = features.selectedFeatureRecordIdx;
       Object.assign(state.featureColorOverrides, features.featureColorOverrides);
     },
-    applyEditorStateData: (_drawing, editorState, options) => {
-      assert.equal(options.normalized, true);
+    applyEditorStateData: (_drawing, editorState) => {
       state.legendEntries.value = editorState.legend.entries;
       state.featureCatalog.value = editorState.featureCatalog;
     },
@@ -3741,6 +3740,7 @@ for (const previousSuppressed of [false, true]) {
   const linear = drawingFixture('linear');
   const state = withModeDrawings({
     mode: ref('linear'), results: ref([]), semanticFileWatchersSuppressed: ref(false),
+    originalLegendOrder: ref([]), originalLegendColors: ref({}),
     files: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
   }, { circular, linear });
   const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, nextTick: async () => {} });
@@ -3769,6 +3769,7 @@ for (const previousSuppressed of [false, true]) {
   const linear2 = drawingFixture('linear-2', 'linear');
   const state = withModeDrawings({
     mode: ref('circular'), results: ref([]), selectedResultIndex: ref(0), semanticFileWatchersSuppressed: ref(false),
+    originalLegendOrder: ref([]), originalLegendColors: ref({}),
     files: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
   }, { circular, linear });
   withModeDrawings({}, { circular: linear2, linear: linear2 }); // gives linear-2 its slice handles
@@ -3783,7 +3784,7 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(snapshots.displayedArtifactDrawing().id, 'linear-2', 'an installed slot names its drawing');
   assert.equal(snapshots.captureArtifactSlot().drawingId, 'linear-2', 'the capture keeps it under that drawing');
   const handle = snapshots.captureGeneratedArtifactHandle(linear2);
-  snapshots.installArtifactSlot(null, { drawing: linear });
+  snapshots.installArtifactSlot(createArtifactSlot({ drawing: linear, values: {} }), { drawing: linear });
   assert.equal(snapshots.displayedArtifactDrawing().id, 'linear');
   await snapshots.restoreGeneratedArtifactHandle(handle);
   assert.equal(snapshots.displayedArtifactDrawing().id, 'linear-2', 'Undo/Redo restores the Result of linear-2');

@@ -55,19 +55,20 @@ from ..layout.spatial import (
 )
 from .circular import (
     HEMISPHERE_AXIS_EPS_PX,
+    LABEL_MIN_ORDER_GAP_DEG,
+    _angle_unwrapped_from_start,
     _current_half_from_x,
     _label_bbox_max_radius,
     _label_bbox_min_radius,
     _label_bbox_rect,
     _label_fit_box,
     _leader_start_point,
+    _point_on_circle,
     _segment_intersects_rect_interior,
     _segments_through_rect_interior,
-    angle_from_middle_unwrapped,
     assign_leader_start_points,
     circular_label_defects,
     circular_label_shape,
-    normalize_angle_near_reference,
 )
 from .circular_leaders import arrival_contact, contact_end, label_ink_box
 from .circular_types import CircularLabel
@@ -79,9 +80,6 @@ MAX_EVALUATIONS = 60_000
 # LP-D57 Q3: how far a text and an elbow may move from where the engine put them.
 MAX_TEXT_SHIFT_PX = 24.0
 MAX_ELBOW_SHIFT_PX = 12.0
-# Neighbours keep their order with at least this angular gap (or today's, if smaller).
-MIN_ORDER_GAP_DEG = 0.05
-
 ARC_STEPS_DEG = (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0)
 RADIAL_STEPS_PX = (1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0)
 RUN_RADIAL_STEPS_PX = (2.0, 4.0, 6.0, 8.0, 10.0, 12.0)
@@ -457,7 +455,7 @@ class _Repair:
                     if abs(gap - today) > 1e-6:
                         return False
                     continue
-                if gap > 180.0 or gap < min(MIN_ORDER_GAP_DEG, today) - _EPS:
+                if gap > 180.0 or gap < min(LABEL_MIN_ORDER_GAP_DEG, today) - _EPS:
                     return False
         return True
 
@@ -499,13 +497,7 @@ class _Repair:
         label = self.labels[index].copy()
         label["start_x"] = float(x)
         label["start_y"] = float(y)
-        target = float(
-            label.get(
-                "target_angle_unwrapped",
-                angle_from_middle_unwrapped(float(label["middle"]), self.total_length),
-            )
-        )
-        label["angle_unwrapped"] = normalize_angle_near_reference(_angle(x, y), target)
+        label["angle_unwrapped"] = _angle_unwrapped_from_start(label, self.total_length)
         return label
 
     def _arc(self, run: Sequence[int], deltas: Sequence[float]) -> Moved:
@@ -514,8 +506,7 @@ class _Repair:
             label = self.labels[index]
             x, y = float(label["start_x"]), float(label["start_y"])
             radius = math.hypot(x, y)
-            angle = math.radians(_angle(x, y) + delta)
-            moved[index] = self._with_start(index, radius * math.cos(angle), radius * math.sin(angle))
+            moved[index] = self._with_start(index, *_point_on_circle(radius, _angle(x, y) + delta))
         return moved
 
     def _radial(self, run: Sequence[int], delta: float) -> Moved:
@@ -577,8 +568,7 @@ class _Repair:
             ) -> bool:
                 if not turn:
                     return aabbs_touch(self.geometry[following].box, previous_box)
-                radians = math.radians(angle + turn)
-                turned["start_x"], turned["start_y"] = radius * math.cos(radians), radius * math.sin(radians)
+                turned["start_x"], turned["start_y"] = _point_on_circle(radius, angle + turn)
                 return aabbs_touch(self._fit_box(turned), previous_box)
 
             if not hits(0.0):

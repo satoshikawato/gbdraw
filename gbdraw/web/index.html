@@ -4121,7 +4121,7 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">{{ t('LOSAT cache') }}</div>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear the project\'s {count} LOSAT result', 'Clear the project\'s {count} LOSAT results') }}</button>
                                 <p v-if="clearableLosatResultCount === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
                             </section>
 
@@ -4504,7 +4504,7 @@
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
                                     <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'circular-losat-cache-reason' : null">
-                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
+                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear the project\'s {count} LOSAT result', 'Clear the project\'s {count} LOSAT results') }}
                                     </button>
                                 </div>
                                 <p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ clearableLosatResultCount === 0 ? t('No LOSAT results yet') : t('No LOSAT results in this drawing') }}</p>

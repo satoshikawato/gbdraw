@@ -19,6 +19,7 @@ import gbdraw.api.request_render as request_render_module
 from gbdraw.api.request_render import LinearRequestPlan, plan_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest, RecordInput, RecordPresentation
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import RecordWindow
 from gbdraw.layout.linear_multi_record import grid_display_pairs
 from gbdraw.layout.record_placement import resolve_record_row_positions
@@ -247,7 +248,6 @@ def test_the_cli_and_the_web_write_one_record_analysis_and_display_binding(tmp_p
 
     from gbdraw.api.request_render import _extract_linear_request_proteins, plan_linear_request
     from gbdraw.api.requests import RecordCardinality, RecordPresentation
-    from gbdraw.io.record_select import parse_record_selector
     from tests.test_origin_crossing_comparisons import _web_helpers
 
     path = MITO
@@ -284,6 +284,85 @@ def test_the_cli_and_the_web_write_one_record_analysis_and_display_binding(tmp_p
             web["identity_manifest"]["recordAnalyses"][web_binding["recordAnalysisId"]]
         ), unit_key
         assert cli_binding == web_binding, unit_key
+
+
+def test_the_cli_and_the_web_search_one_side_fasta_for_a_reversed_window_of_a_multi_record_side(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Parity (OV-3457): a LOSATP side of several records of one File, one of them a window drawn reversed, is the
+    same FASTA on the CLI as on the Web: each record's proteins in its search frame (the crop before its reverse
+    complement, as the Web helper extracts them), so the CLI's batches carry the searchContext keys the Web stored.
+    The CDS of the reversed window have no name, so their FASTA IDs and labels are the synthetic ones, numbered in
+    the search frame too."""
+
+    import pandas as pd
+    from Bio import SeqIO
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity
+    from gbdraw.api.request_render import _extract_linear_request_proteins, plan_linear_request
+    from gbdraw.comparisons.losat_jobs import losat_record_uids
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    from tests.test_origin_crossing_comparisons import _web_helpers
+
+    other = _two_record_genbank(tmp_path)
+    windows = (RecordWindow(3000, 6000), RecordWindow(7000, 12000, True))
+    mito = SeqIO.read(MITO, "genbank")
+    unnamed = [
+        feature for feature in mito.features
+        if feature.type == "CDS" and 7000 <= int(feature.location.start) and int(feature.location.end) <= 12000
+    ]
+    assert len(unnamed) > 1
+    for feature in unnamed:
+        for name in ("locus_tag", "protein_id", "gene", "product"):
+            feature.qualifiers.pop(name, None)
+    mito_path = tmp_path / "mito.gb"
+    SeqIO.write(mito, mito_path, "genbank")
+    plan = plan_linear_request(LinearDiagramRequest(records=(
+        RecordInput(GenBankInputSource(mito_path), windows=windows, record_key="mito"),
+        RecordInput(GenBankInputSource(other), selector=parse_record_selector("#2"), record_key="other"),
+    )))
+    extraction = _extract_linear_request_proteins(plan.request, plan.records, plan.inputs, plan.provenance)
+    units = plan_linear_units(
+        [{"recordKey": "mito", "gridRow": None, "windows": [
+            {"start": w.start, "end": w.end, "reverseComplement": w.reverse_complement, "column": None} for w in windows
+        ]}, {"recordKey": "other", "gridRow": None, "windows": []}],
+        [],
+    )["units"]
+    helpers = _web_helpers()
+    web_fasta: dict[str, str] = {}
+    for index, unit in enumerate(units):
+        window = unit["window"]
+        path, selector = (mito_path, None) if unit["windowOf"] else (other, "#2")
+        web = json.loads(str(helpers["extract_cds_protein_fasta"](
+            str(path), "genbank", None, None if window is None else window["searchRegion"], selector, "0", index,
+            unit["unitKey"], None, None, unit["windowOf"],
+        )))
+        assert "error" not in web, web.get("error")
+        web_fasta[unit["unitKey"]] = web["fasta"]
+
+    prepare = protein_colinearity.prepare_losat_batches
+    seen: list[tuple[object, object]] = []
+
+    def capture(jobs, *, uids, record_fasta, protein=False):
+        cli = prepare(jobs, uids=uids, record_fasta=record_fasta, protein=protein)
+        web = prepare(jobs, uids=uids, record_fasta=lambda index: web_fasta[str(uids[index])], protein=protein)
+        seen.append((cli, web))
+        return cli
+
+    monkeypatch.setattr(protein_colinearity, "prepare_losat_batches", capture)
+    uids = losat_record_uids(plan.records)
+    pairs = [(uids.index(query), uids.index("other")) for query in uids if query != "other"]
+    protein_colinearity.build_pairwise_protein_blastp_comparisons(
+        plan.records, protein_extraction=extraction, pairs=pairs,
+        runner=lambda _query, _subject: pd.DataFrame(columns=COMPARISON_COLUMNS),
+    )
+    assert seen
+    for cli_batches, web_batches in seen:
+        assert any(len(batch.query.indexes) > 1 for batch in cli_batches)
+        for cli_batch, web_batch in zip(cli_batches, web_batches, strict=True):
+            assert cli_batch.query.fasta == web_batch.query.fasta
+            assert cli_batch.subject.fasta == web_batch.subject.fasta
+            assert cli_batch.search_context == web_batch.search_context
 
 
 def _card(key, windows, length, circular, row=None, column=None, reverse=False, drawn=1):

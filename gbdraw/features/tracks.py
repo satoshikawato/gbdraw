@@ -8,9 +8,9 @@ from ..layout.spatial import IntervalIndex, split_circular_interval
 from .objects import FeatureObject
 
 
-def get_feature_ends(feature, genome_length: Optional[int] = None) -> Tuple[int, int, str]:
+def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None) -> Tuple[int, int, str]:
     """
-    Get feature start/end positions and strand.
+    Get feature start/end positions and the strand the feature is drawn on (``FeatureObject.strand``).
 
     For origin-spanning features on circular genomes, returns start > end
     to indicate the feature crosses the origin.
@@ -22,7 +22,7 @@ def get_feature_ends(feature, genome_length: Optional[int] = None) -> Tuple[int,
     Returns:
         (start, end, strand) tuple. If start > end, feature spans the origin.
     """
-    strand = feature.location[0].strand if feature.location else "undefined"
+    strand = feature.strand
 
     if hasattr(feature, "coordinates") and feature.coordinates:
         parts = list(feature.coordinates)

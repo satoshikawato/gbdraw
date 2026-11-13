@@ -50,7 +50,6 @@ import {
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
 import { rekeyLegendRowIds } from '../../services/legend-draft-rows.js';
-import { writeShownSetInventory } from '../../services/artifact-slot.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
 /** @param {unknown} value */
@@ -172,11 +171,6 @@ const inAnsweredLegendOrder = (items, added, legendOrder, keyOf, reorder) => {
   slots.forEach((slot, index) => { rows[slot] = ordered[index]; });
   return { items: rows, placed };
 };
-
-// After an artifact install (a switch, a Load): a drawing showing no Result
-// has no inventory (OV-3282). The owner's `adoptShownSetInventory` runs it.
-/** @param {Pick<LegendEntryActionsOptions['state'], 'results' | 'originalLegendOrder'>} state */
-const adoptShownSetInventoryOf = (state) => writeShownSetInventory(state, state.originalLegendOrder.value);
 
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
 // intent (`legendEntries`, `deletedLegendEntries`, the override stores) and
@@ -1046,7 +1040,6 @@ export const createLegendEntryActions = ({
   return {
     adoptRestoredLegend,
     adoptResultInventory,
-    adoptShownSetInventory: adoptShownSetInventoryOf.bind(null, { results, originalLegendOrder }),
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,

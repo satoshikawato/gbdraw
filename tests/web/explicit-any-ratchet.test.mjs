@@ -61,7 +61,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/track-slot-edits.js': 4,
   'services/annotation-state.js': 1,
   'services/artifact-slot.js': 7,
-  'services/config.js': 62,
+  'services/config.js': 61,
   'services/depth-track-state.js': 1,
   'services/diagram-generation.js': 1,
   'services/feature-catalog.js': 3,

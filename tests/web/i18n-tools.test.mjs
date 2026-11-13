@@ -12,7 +12,7 @@ import { CONTEXT_SEPARATOR, UI_LOCALES } from '../../gbdraw/web/js/utils/i18n.js
 import {
   CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, formatCatalog, glossaryMatcher, parseCatalog, parseGlossary, readCatalog
 } from '../../tools/i18n/catalogs.mjs';
-import { reviewDraftText, reviewKeyId, reviewPageData } from '../../tools/i18n/review-page-data.mjs';
+import { reviewDraftText, reviewKeyId, reviewLocales, reviewPageData } from '../../tools/i18n/review-page-data.mjs';
 import { roleAt, sourceCalls, sourceKeys } from '../../tools/i18n/source-keys.mjs';
 import { previousKeyOf, runSync } from '../../tools/i18n/sync.mjs';
 
@@ -246,7 +246,16 @@ test('the review page data: ids are sha1(key)[:12], drafts are the catalogs, the
     ...CATALOG_LOCALES.flatMap((locale) => [`draft-${locale}.json`, `notes-${locale}.json`]), 'glossary.json', 'keys.json', 'locales.json', 'shots.json', 'style.md'
   ].sort());
   assert.deepEqual(JSON.parse(files.get('locales.json')).map(({ tag }) => tag), [...CATALOG_LOCALES]);
-  assert.equal(JSON.parse(files.get('locales.json'))[0].label, UI_LOCALES.find(({ tag }) => tag === CATALOG_LOCALES[0]).name);
+  const style = readFileSync(join(import.meta.dirname, '..', '..', 'docs', 'internal', 'I18N_STYLE.md'), 'utf8');
+  // Each language's endonym, English name and style section come from UI_LOCALES and its I18N_STYLE.md heading.
+  for (const row of JSON.parse(files.get('locales.json'))) {
+    assert.deepEqual(Object.keys(row), ['tag', 'label', 'language', 'section']);
+    assert.equal(row.label, UI_LOCALES.find(({ tag }) => tag === row.tag).name);
+    assert.ok(style.includes(`\n## ${row.section}. ${row.language.split(' (')[0]} (\`${row.tag}\``), `${row.tag}: section ${row.section}`);
+  }
+  assert.deepEqual(JSON.parse(files.get('locales.json')).find(({ tag }) => tag === 'pt'), { tag: 'pt', label: 'Português', language: 'Portuguese (Brazilian usage)', section: '8' });
+  assert.throws(() => reviewLocales(style.replace('## 12. German (`de`)', '## 12. German')), /de has no I18N_STYLE\.md section heading/);
+  assert.throws(() => reviewLocales(`${style}\n## 99. German again (\`de\`)\n`), /two sections for de/);
   assert.equal(kept, createHash('sha1').update('Cancel').digest('hex').slice(0, 12));
   const rows = JSON.parse(files.get('keys.json'));
   assert.equal(rows.length, keys.size);
@@ -264,5 +273,5 @@ test('the review page data: ids are sha1(key)[:12], drafts are the catalogs, the
   assert.equal(reviewDraftText('{count} rows'), '{count} rows');
   assert.equal(reviewDraftText({ other: 'o {count}', many: 'm {count}', few: 'f {count}' }), 'few: f {count} | many: m {count} | other: o {count}');
   assert.deepEqual(JSON.parse(files.get('shots.json')).keys, { [kept]: [[0, 1, 2, 3, 4]] });
-  assert.equal(files.get('style.md'), readFileSync(join(import.meta.dirname, '..', '..', 'docs', 'internal', 'I18N_STYLE.md'), 'utf8'));
+  assert.equal(files.get('style.md'), style);
 });

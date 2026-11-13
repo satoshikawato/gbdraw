@@ -3,8 +3,8 @@
 // (`selectDrawing`), its work without the gate (`showDrawingNow`, which the
 // drawing list's steps call), why a switch waits (`drawingSwitchBusy`), the
 // drawing an operation error names, and the swap of the artifact slots with
-// the arriving Result's Legend inventory, which Session Load also keeps
-// (`rememberShownResultInventory`). The composition root passes the state, its
+// the install of the arriving slot, which Session Load also uses for the slot
+// it opens on (`installArrivingSlot`). The composition root passes the state, its
 // refs, the members of History, the artifact slots, the preview runtime, the
 // Legend and feature editors, the feature selection, the Preview search and
 // the notice banner, and the install of the shown drawing
@@ -12,6 +12,7 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 import { msg } from '../utils/i18n.js';
+import { createArtifactSlot } from '../services/artifact-slot.js';
 /** @import { DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
@@ -60,8 +61,8 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} artifactSlotsSwap
  *   Keeps the departing slot and takes the arriving drawing's, or null.
  * @property {() => Readonly<ArtifactSlot>} captureArtifactSlot The displayed artifact as a slot.
- * @property {(slot: Readonly<ArtifactSlot> | null, options: { drawing: DrawingIdentity }) => void} installArtifactSlot
- * @property {() => void} adoptShownSetInventory The Legend owner's: a drawing showing no Result has no inventory.
+ * @property {(slot: Readonly<ArtifactSlot>, options: { drawing: DrawingIdentity }) => void} installArtifactSlot
+ *   Installs the slot, with its Legend inventory and colors.
  */
 
 /**
@@ -75,32 +76,29 @@ export const createDrawingSwitch = ({
   ruleWritePending, suspendSpecificRulePatternDrafts, clearFeatureSelection, rememberDepartingResultProjection,
   auxiliaryImportFailureOnArrival, resetModeTransientUi, installShownDrawing, dismissNotice, switchDrawingSearch,
   rebindAnnotationRecords, clearActiveRuntime, getResultIdentity, presentSelectedResult, rememberResultInventory,
-  artifactSlotsSwap, captureArtifactSlot, installArtifactSlot, adoptShownSetInventory
+  artifactSlotsSwap, captureArtifactSlot, installArtifactSlot
 }) => {
-  // E1: shows the artifact of drawing `nextId`. Keeps the displayed one in
-  // the departing drawing's slot and installs the arriving slot, or an empty
-  // one. The Legend owner
-  // keeps each Result's inventory (OV-47): the arriving Result's goes to it,
-  // and the binder adopts it when the Result is displayed, as for a batch
-  // Result. The owner then gives a drawing showing no Result none (OV-3282).
-  /** @param {Readonly<ArtifactSlot> | null} slot The installed slot; null: none (an empty slot, or the set a Load restored). */
-  const rememberShownResultInventory = (slot) => {
+  // E1: installs the arriving slot as the displayed artifact, with its Legend
+  // inventory and colors. The Legend owner also keeps each Result's inventory
+  // (OV-47): the arriving Result's goes to it, and the binder adopts it when
+  // the Result is displayed, as for a batch Result.
+  /** @param {Readonly<ArtifactSlot>} slot */
+  const installArrivingSlot = (slot) => {
+    installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId) });
     const shown = results.value[Number(selectedResultIndex.value) || 0];
-    if (shown && slot) rememberResultInventory(getResultIdentity(shown), [...slot.legendInventory]);
-    adoptShownSetInventory();
+    if (shown) rememberResultInventory(getResultIdentity(shown), [...slot.legend.originalOrder]);
   };
   /**
-   * The displayed artifact is kept under the drawing it belongs to, which is
-   * the arriving drawing when the shown drawing displayed the arriving one's.
+   * Shows the artifact of `arrivingDrawing`: keeps the displayed one under the
+   * drawing it belongs to, which is the arriving drawing when the shown
+   * drawing displayed the arriving one's, and installs the arriving drawing's
+   * slot, or its empty slot when it has no artifact yet.
    * @param {DrawingIdentity} arrivingDrawing
-   * @returns {Readonly<ArtifactSlot> | null} The installed slot (null: the drawing has no artifact yet).
    */
   const swapArtifactSlots = (arrivingDrawing) => {
     clearActiveRuntime();
-    const arriving = artifactSlotsSwap(captureArtifactSlot(), arrivingDrawing.id);
-    installArtifactSlot(arriving, { drawing: arrivingDrawing });
-    rememberShownResultInventory(arriving);
-    return arriving;
+    installArrivingSlot(artifactSlotsSwap(captureArtifactSlot(), arrivingDrawing.id)
+      ?? createArtifactSlot({ drawing: arrivingDrawing, values: {} }));
   };
 
   // PD-OI-090 (R10, R15): the one switch between the drawings, in one task.
@@ -182,5 +180,5 @@ export const createDrawingSwitch = ({
     return { status: 'ok' };
   };
 
-  return { rememberShownResultInventory, drawingSwitchBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing };
+  return { installArrivingSlot, drawingSwitchBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing };
 };
