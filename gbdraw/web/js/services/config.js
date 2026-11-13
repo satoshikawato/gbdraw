@@ -56,7 +56,9 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
+import {
+  cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, recordOrderRow
+} from './record-draw-selection.js';
 import { readStoredRecordIdPlaces } from './record-discovery.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
@@ -594,8 +596,8 @@ const parseMultiRecordPositionToken = (value) => {
   if (separatorIndex <= 0 || separatorIndex === raw.length - 1) return null;
 
   const selector = raw.slice(0, separatorIndex).trim();
-  const row = Number(raw.slice(separatorIndex + 1).trim());
-  if (!selector || !Number.isInteger(row) || row <= 0) return null;
+  const row = recordOrderRow(raw);
+  if (!selector || row === null) return null;
   return { selector, row };
 };
 

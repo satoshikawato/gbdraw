@@ -2,7 +2,7 @@
 import { downloadSafeName } from '../utils/download-names.js';
 /** @import { StoredRecordTranslation } from './linear-record-layout.js' */
 import {
-  CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR, RECORD_INDEX_SELECTOR_PATTERN
+  CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR, RECORD_INDEX_SELECTOR_PATTERN, RECORD_ROW_PATTERN
 } from '../contracts/schema.generated.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
@@ -331,6 +331,21 @@ export const recordIndexNumber = (key) => {
 export const recordSelectorNumber = (key) => {
   const number = recordIndexNumber(key);
   return number !== null && Number.isSafeInteger(number) && number >= 1 ? number : null;
+};
+const RECORD_ROW = new RegExp(`^(?:${RECORD_ROW_PATTERN})$`);
+/**
+ * The row of a Record Order token `<selector>@<row>` (the text after its last `@`), as Python's renderer reads it
+ * (`parse_record_row_position`, gbdraw/layout/record_placement.py, whose pattern the generated contracts carry):
+ * spaces around it, an optional `+` and leading zeros are allowed, so `+01` is row 1; null for a row the renderer
+ * refuses (`0`, `1.0`, `0x1`, `1e0`) and for a token without `@`. The one Web reader of a token's row (OV-3313).
+ * @param {unknown} token
+ * @returns {number | null}
+ */
+export const recordOrderRow = (token) => {
+  const text = typeof token === 'string' ? token : '';
+  const match = text.includes('@') ? RECORD_ROW.exec(text.slice(text.lastIndexOf('@') + 1)) : null;
+  const row = match ? Number(match[1]) : 0;
+  return row >= 1 ? row : null;
 };
 /**
  * Whether a key is a record selector `#N` that a Session 46-50 Session move

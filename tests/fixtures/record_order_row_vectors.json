@@ -1,0 +1,101 @@
+{
+  "description": "Record Order tokens (`<selector>@<row>`) and the row Python's renderer reads from each (`parse_record_row_position`, gbdraw/layout/record_placement.py), null where it refuses the row. The Web reads the same row with `recordOrderRow` (services/record-draw-selection.js) from the pattern the generated contracts carry (OV-3313). Read by tests/test_web_contracts_generated.py and tests/web/record-draw-selection.test.mjs.",
+  "tokens": [
+    {
+      "token": "#1@1",
+      "row": 1
+    },
+    {
+      "token": "#1@01",
+      "row": 1
+    },
+    {
+      "token": "#1@+1",
+      "row": 1
+    },
+    {
+      "token": "#1@ 1 ",
+      "row": 1
+    },
+    {
+      "token": "#1@+01",
+      "row": 1
+    },
+    {
+      "token": "#2@12",
+      "row": 12
+    },
+    {
+      "token": "a@b@2",
+      "row": 2
+    },
+    {
+      "token": "#1@\u00852",
+      "row": 2
+    },
+    {
+      "token": "#1@\u001c2",
+      "row": 2
+    },
+    {
+      "token": "#1@1.0",
+      "row": null
+    },
+    {
+      "token": "#1@0x1",
+      "row": null
+    },
+    {
+      "token": "#1@1e0",
+      "row": null
+    },
+    {
+      "token": "#1@0",
+      "row": null
+    },
+    {
+      "token": "#1@00",
+      "row": null
+    },
+    {
+      "token": "#1@+0",
+      "row": null
+    },
+    {
+      "token": "#1@-1",
+      "row": null
+    },
+    {
+      "token": "#1@",
+      "row": null
+    },
+    {
+      "token": "#1@++1",
+      "row": null
+    },
+    {
+      "token": "#1@+ 1",
+      "row": null
+    },
+    {
+      "token": "#1@1_0",
+      "row": null
+    },
+    {
+      "token": "#1@\u0661",
+      "row": null
+    },
+    {
+      "token": "#1@\ufeff1",
+      "row": null
+    },
+    {
+      "token": "#1@Infinity",
+      "row": null
+    },
+    {
+      "token": "#1",
+      "row": null
+    }
+  ]
+}

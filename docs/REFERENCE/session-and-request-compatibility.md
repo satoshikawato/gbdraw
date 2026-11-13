@@ -685,6 +685,11 @@ Which records Web draws from a CLI session depends on the request:
   or the Circular record range that place (`#k`). When the file cannot be read,
   or no single record has that ID, Load lists it in its repair dialog and the
   text reads as that record number.
+- A Record Order entry (`#1@2`) whose row is not a whole number above zero,
+  written with an optional `+`, leading zeros and spaces around it, is refused
+  as the CLI refuses it: `1.0`, `0x1` and `1e0` are no rows. Only a hand edit
+  stores one. Load keeps the drawing's settings only and names the entry's
+  place in its repair dialog.
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or

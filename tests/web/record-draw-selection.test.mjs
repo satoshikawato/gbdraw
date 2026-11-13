@@ -2,6 +2,7 @@
 // answers of services/record-draw-selection.js.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   circularRecordDrawKey,
   circularRecordsToDraw,
@@ -15,6 +16,7 @@ import {
   pruneRecordsOff,
   recordIndexNumber,
   recordListRows,
+  recordOrderRow,
   recordSelectorNumber
 } from '../../gbdraw/web/js/services/record-draw-selection.js';
 
@@ -113,4 +115,17 @@ test('a #N record selector names the record the renderer draws', () => {
     assert.equal(recordIndexNumber(text), number, JSON.stringify(text));
   }
   assert.equal(recordSelectorNumber(1), null);
+});
+
+// OV-3313: the row of a Record Order token (`<selector>@<row>`, the text after its last `@`) reads as Python's
+// renderer reads it (`parse_record_row_position` in gbdraw/layout/record_placement.py, whose pattern the generated
+// contracts carry; tests/fixtures/record_order_row_vectors.json holds the tokens, which
+// tests/test_web_contracts_generated.py checks in Python). `1.0`, `0x1` and `1e0`,
+// which `Number()` read as 1, are no rows.
+test('a Record Order token\'s row is the row the renderer reads', () => {
+  /** @type {{ tokens: { token: string, row: number | null }[] }} */
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(vectors.tokens.length > 20);
+  for (const { token, row } of vectors.tokens) assert.equal(recordOrderRow(token), row, JSON.stringify(token));
+  assert.equal(recordOrderRow(1), null);
 });

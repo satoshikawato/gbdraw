@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Literal, Sequence
 
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.numeric import parse_ascii_integer
+from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector, drawn_record_units, parse_record_selector
 
 
 _PlacementCompatibility = Literal["linear", "circular"]
+
+# The row of a ``<selector>@<row>`` Record Order token, the text after its last ``@``, as
+# :func:`parse_record_row_position` reads it: spaces (``str.strip``'s, which are ``\s``'s) around it, an optional
+# ``+``, and ASCII digits, leading zeros allowed; the row is that number when it is above zero. The Web reads every
+# token's row with this pattern from the generated contracts (``RECORD_ROW_PATTERN``, OV-3313).
+RECORD_ROW_PATTERN = r"\s*\+?([0-9]+)\s*"
+_RECORD_ROW = re.compile(RECORD_ROW_PATTERN)
 
 # What ``anchor_feature`` does to one record: ``rotated``, a complete circular record turned so that the feature
 # starts at its left end; ``aligned``, any other record moved sideways so that its feature starts below the
@@ -67,8 +75,9 @@ def parse_record_row_position(value: str) -> tuple[str, int]:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must include a selector before '@'."
         )
-    row = parse_ascii_integer(row_text)
-    if row is None or row <= 0:
+    match = _RECORD_ROW.fullmatch(row_text)
+    row = parse_ascii_nonnegative_integer(match.group(1)) if match else None
+    if not row:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must use a positive integer row."
         )

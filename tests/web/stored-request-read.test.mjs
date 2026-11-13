@@ -204,6 +204,35 @@ test('a Linear layout that omits fields with a default is read as a Linear layou
     .map((key) => ({ code: 'setting-replaced', path: `renderRequest.layout.${key}` })));
 });
 
+// OV-3313: Python's renderer refuses a Record Order token whose row is no positive integer (`parse_record_row_position`;
+// `gbdraw render` stops: "multi_record_position entry '#2@2.0' must use a positive integer row."). The reader reads the
+// row with the renderer's pattern (`recordOrderRow`), so such a layout leaves no request to draw, as a layout its owner
+// refuses does (C-OD20); `Number()` read `2.0`, `0x2` and `2e0` as row 2. A row the renderer reads is kept as stored.
+test('a Record Order token whose row the renderer refuses leaves no request to draw (OV-3313)', async () => {
+  const session = gallery('BGC0000708-BGC0000713');
+  const tokens = (row) => (request) => {
+    request.records.forEach((record) => { record.presentation.gridRow = null; });
+    request.layout.multiRecordPositions = ['#1@1', `#2@${row}`, '#3@2', '#4@3', '#5@3'];
+  };
+  for (const row of ['2.0', '0x2', '2e0', '0', '-2', 'two', '']) {
+    assert.deepEqual(readRequest(session, tokens(row)),
+      { kind: 'request-dropped', path: 'renderRequest.layout.multiRecordPositions[1]', reason: 'pattern' }, row);
+  }
+  for (const row of ['2', '+2', '02', ' 2 ']) {
+    const result = readRequest(session, tokens(row));
+    assert.deepEqual(rows(result), [], row);
+    assert.equal(result.value.layout.multiRecordPositions[1], `#2@${row}`, row);
+  }
+  // At Load the drawing keeps its settings only and the dialog names the token's place, as for C-OD20.
+  tokens('2.0')(session.renderRequest);
+  const { result, dialogs } = await load(session);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.equal(state.results.value.length, 0);
+  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]),
+    [['request-dropped', 'drawings[0].renderRequest.layout.multiRecordPositions[1]']]);
+  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.layout\.multiRecordPositions\[1\]\) could not be read\. The file loads as settings only/);
+});
+
 test('the reader turns only the layout owner\'s refusal into a dropped request; a programming error there is thrown (N2)', () => {
   const session = gallery('lambda_basic_linear');
   const request = clone(session.renderRequest);

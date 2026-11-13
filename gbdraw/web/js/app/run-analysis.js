@@ -46,7 +46,7 @@ import {
   splitLosatSourceResult
 } from '../services/linear-sources.js';
 import {
-  drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves, recordSelectorNumber
+  drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves, recordOrderRow, recordSelectorNumber
 } from '../services/record-draw-selection.js';
 /** @import { DrawnRecordIdentity, RecordIdentitySources } from '../services/record-draw-selection.js' */
 import { moveInstanceRuleRecords } from '../services/feature-selector.js';
@@ -1441,7 +1441,7 @@ const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINIT
       const parts = raw.split('@');
       if (parts.length < 2) return;
       selector = parts.slice(0, -1).join('@').trim();
-      row = Number(parts[parts.length - 1]);
+      row = recordOrderRow(raw) ?? 1;
     }
     if (!selector || seen.has(selector)) return;
     const normalizedMaxRow = Number.isInteger(maxRow) && maxRow > 0 ? maxRow : Number.POSITIVE_INFINITY;

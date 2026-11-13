@@ -727,3 +727,68 @@ def test_the_web_owner_reads_every_bmp_character_in_a_record_selector_as_python_
     # The texts reach both branches: the spaces Python's `\s` holds (ASCII and others) and the ten ASCII digits.
     assert [python[2 * ord(digit) + 1] for digit in "0123456789"] == list(range(10, 20))
     assert sum(number == 1 for number in python[0::2]) > 20
+
+
+# Record Order tokens and the row the renderer reads (None where it refuses it); the Web test reads the same file.
+_RECORD_ROW_TOKENS = tuple(
+    (case["token"], case["row"])
+    for case in json.loads((REPO_ROOT / "tests" / "fixtures" / "record_order_row_vectors.json").read_text())["tokens"]
+)
+
+
+def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-3313: the Web reads the row of a Record Order token (`<selector>@<row>`) with the pattern Python's
+    # `parse_record_row_position` reads it with; the generator writes the Python owner's pattern.
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.layout import record_placement
+
+    for token, row in _RECORD_ROW_TOKENS:
+        if row is None:
+            with pytest.raises(ValidationError):
+                record_placement.parse_record_row_position(token)
+        else:
+            assert record_placement.parse_record_row_position(token)[1] == row, token
+    generator = _generator()
+    monkeypatch.setattr(record_placement, "RECORD_ROW_PATTERN", r"([0-9]+)")
+
+    assert "export const RECORD_ROW_PATTERN = '([0-9]+)';\n" in generator.render_web_contracts_module()
+
+
+# Each BMP character around and inside a token's row (a space before and after the row; a digit), read by the Web owner.
+_RECORD_ROW_TEXTS_SCRIPT = """
+const { recordOrderRow } = await import('./gbdraw/web/js/services/record-draw-selection.js');
+const read = [];
+for (let code = 0; code < 0x10000; code += 1) {
+  const c = String.fromCharCode(code);
+  read.push(recordOrderRow(`#1@${c}1${c}`), recordOrderRow(`#1@1${c}`));
+}
+process.stdout.write(JSON.stringify(read));
+"""
+
+
+@pytest.mark.browser
+def test_the_web_owner_reads_every_bmp_character_in_a_record_order_row_as_python_does() -> None:
+    # OV-3313: `recordOrderRow` (services/record-draw-selection.js), run by Node over the BMP, gives the row Python's
+    # `parse_record_row_position` gives for each token, or none where Python refuses it.
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.layout.record_placement import parse_record_row_position
+
+    def python_row(token: str) -> int | None:
+        try:
+            return parse_record_row_position(token)[1]
+        except ValidationError:
+            return None
+
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", _RECORD_ROW_TEXTS_SCRIPT],
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+    )
+    web = json.loads(completed.stdout)
+    tokens = [token for code in range(0x10000) for token in (f"#1@{chr(code)}1{chr(code)}", f"#1@1{chr(code)}")]
+    python = [python_row(token) for token in tokens]
+    assert len(web) == len(python)
+    differing = [(token, web_row, row) for token, web_row, row in zip(tokens, web, python) if web_row != row]
+    assert differing == []
+    # The tokens reach both branches: the spaces Python's `\s` holds and the ten ASCII digits.
+    assert [python[2 * ord(digit) + 1] for digit in "0123456789"] == list(range(10, 20))
+    assert sum(row == 1 for row in python[0::2]) > 20

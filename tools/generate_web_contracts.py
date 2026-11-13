@@ -191,6 +191,8 @@ _LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
 _PATTERNS: tuple[tuple[str, str, str], ...] = (
     # A `#N` record selector, as the renderer reads it (OV-2960).
     ("RECORD_INDEX_SELECTOR_PATTERN", "gbdraw.io.record_select", "RECORD_INDEX_SELECTOR_PATTERN"),
+    # The row of a Record Order token, as the renderer reads it (OV-3313).
+    ("RECORD_ROW_PATTERN", "gbdraw.layout.record_placement", "RECORD_ROW_PATTERN"),
 )
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 

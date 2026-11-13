@@ -21,7 +21,9 @@ import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
-import { cliRecordKey, expandedRecordKey, recordKeyExpansion, recordSelectorNumber } from '../services/record-draw-selection.js';
+import {
+  cliRecordKey, expandedRecordKey, recordKeyExpansion, recordOrderRow, recordSelectorNumber
+} from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import {
   CIRCULAR_SLOT_UNREAD_PARAM_KEYS,
@@ -943,7 +945,7 @@ const layoutRows = (request, records) => {
     const text = String(position || '').trim();
     const separator = text.lastIndexOf('@');
     const selector = separator > 0 ? text.slice(0, separator) : '';
-    const row = Number(separator > 0 ? text.slice(separator + 1) : NaN);
+    const row = separator > 0 ? recordOrderRow(text) : null;
     let recordIndex = -1;
     const number = recordSelectorNumber(selector);
     if (number !== null) {
@@ -960,8 +962,7 @@ const layoutRows = (request, records) => {
     }
     if (
       recordIndex < 0 ||
-      !Number.isInteger(row) ||
-      row < 1 ||
+      row === null ||
       rows[recordIndex] !== null
     ) {
       throw recipeUnavailable(msg('record placement cannot be projected into a records table.'));

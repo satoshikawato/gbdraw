@@ -101,7 +101,7 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordSelectorNumber
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordOrderRow, recordSelectorNumber
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
@@ -7590,7 +7590,7 @@ export const projectCanonicalSessionRequest = ({
     linear_track_slots: linearStack.slots,
     multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
       const split = String(token).lastIndexOf('@');
-      return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: Number(String(token).slice(split + 1)) };
+      return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: recordOrderRow(token) };
     })
   };
   const presentationOwnsLinearRows = records.some(
@@ -7614,13 +7614,10 @@ export const projectCanonicalSessionRequest = ({
             : {})
         };
       })
-    : (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token, /** @type {number} */ index) => {
-        const split = String(token).lastIndexOf('@');
-        return {
-          uid: files.linearSeqs[index]?.uid || '',
-          row: Number(String(token).slice(split + 1)) || index + 1
-        };
-      });
+    : (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token, /** @type {number} */ index) => ({
+        uid: files.linearSeqs[index]?.uid || '',
+        row: recordOrderRow(token) ?? index + 1
+      }));
   const linearLayout = renderRequest.mode === 'linear'
     ? {
         enabled: presentationOwnsLinearRows ||
@@ -7961,10 +7958,7 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
   const sourceSchema = promoted.schema;
   const storedLayout = /** @type {UnvalidatedFields<'multiRecordPositions' | 'recordGapPx'>} */ (promoted.layout);
   const linearRows = promoted.mode === 'linear'
-    ? (Array.isArray(storedLayout?.multiRecordPositions) ? storedLayout.multiRecordPositions : []).map((/** @type {unknown} */ token) => {
-        const split = String(token).lastIndexOf('@');
-        return Number(String(token).slice(split + 1)) || null;
-      })
+    ? (Array.isArray(storedLayout?.multiRecordPositions) ? storedLayout.multiRecordPositions : []).map(recordOrderRow)
     : [];
   promoted.schema = 8;
   // A malformed record is left to the repair that follows the promotion.
@@ -8374,6 +8368,8 @@ export const readStoredRenderRequest = (value, context) => {
     if (!(error instanceof Error) || Object.getPrototypeOf(error) !== Error.prototype || Object.hasOwn(error, 'code')) throw error;
     return { kind: 'request-dropped', path: `${path}.layout`, reason: 'unknown-record' };
   }
+  const refusedToken = refusedRecordOrderToken(/** @type {Record<string, unknown>} */ (repaired.value).layout, path);
+  if (refusedToken !== null) return { kind: 'request-dropped', path: refusedToken, reason: 'pattern' };
   const rebound = keepConservationSlotsOnTheirRings(
     /** @type {Record<string, unknown>} */ (repaired.value), repaired.rows, path
   );
@@ -8386,6 +8382,20 @@ export const readStoredRenderRequest = (value, context) => {
       ...storedRequestRepairs(repaired.rows, STORED_REQUEST_PLACES[mode].otherOptionKeys, rebound.droppedSlots)
     ]
   };
+};
+
+/**
+ * The place of the first Record Order token whose row Python's renderer refuses (`recordOrderRow`), or null. The CLI
+ * refuses such a request ("multi_record_position entry '#1@1.0' must use a positive integer row."), so a layout that
+ * holds one leaves no request to draw, as a layout its owner refuses does (C-OD20, OV-3313).
+ * @param {unknown} layout The read request's layout.
+ * @param {string} path The request's place.
+ * @returns {string | null}
+ */
+const refusedRecordOrderToken = (layout, path) => {
+  const tokens = isPlainObject(layout) && Array.isArray(layout.multiRecordPositions) ? layout.multiRecordPositions : [];
+  const index = tokens.findIndex((/** @type {unknown} */ token) => recordOrderRow(token) === null);
+  return index < 0 ? null : `${path}.layout.multiRecordPositions[${index}]`;
 };
 
 /**

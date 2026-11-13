@@ -729,3 +729,6 @@ export const SCALAR_AXIS_LABELS = Object.freeze({
 
 // gbdraw/io/record_select.py: RECORD_INDEX_SELECTOR_PATTERN
 export const RECORD_INDEX_SELECTOR_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*#[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*\\+?([0-9]+)[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*';
+
+// gbdraw/layout/record_placement.py: RECORD_ROW_PATTERN
+export const RECORD_ROW_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*\\+?([0-9]+)[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*';
