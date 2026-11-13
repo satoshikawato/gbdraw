@@ -54,7 +54,7 @@ const replaceReactiveObject = (target, source) => {
 
 /** @param {Pick<typeof AppState, 'paletteDefinitions'>} state */
 const defaultPaletteColors = (state) => {
-  const definitions = state.paletteDefinitions?.value || {};
+  const definitions = state.paletteDefinitions.value;
   const colors = definitions.default && typeof definitions.default === 'object'
     ? definitions.default
     : {};

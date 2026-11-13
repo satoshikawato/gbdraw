@@ -1,14 +1,14 @@
 // @ts-check
-/** @import { FeatureCatalog, FeatureCatalogItem } from './feature-catalog.js' */
+/** @import { FeatureCatalogItem } from './feature-catalog.js' */
 /** @import { StandaloneInteractivityOptions } from './standalone-interactivity.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
+/** @import { WebState } from '../state.js' */
 import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } from './preview-affordances.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /**
  * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
- * Session's request state), as the export capture and the request writer
- * unwrap it.
+ * Session's request state), as the request writer unwraps it.
  * @template T
  * @typedef {{ value: T }} ExportRef
  */
@@ -16,7 +16,7 @@ import { toRaw } from '../utils/vue-raw.js';
 /**
  * One mode's drawing, as far as the interactive export reads its edits.
  * @typedef {object} SvgExportDrawing
- * @property {FeatureOverrideDraft} [featureOverrides]
+ * @property {FeatureOverrideDraft} featureOverrides
  * @property {Record<string, string>} labelTextBulkOverrides
  * @property {Record<string, string>} orthogroupNameOverrides
  * @property {Record<string, string>} orthogroupDescriptionOverrides
@@ -24,16 +24,8 @@ import { toRaw } from '../utils/vue-raw.js';
 
 /**
  * What the export capture reads of the app state: the refs it unwraps.
- * @typedef {object} SvgExportState
- * @property {ExportRef<number | string>} selectedResultIndex
- * @property {ExportRef<ReadonlyArray<{ name?: string } | undefined> | null>} results
- * @property {ExportRef<Element | null>} svgContainer
- * @property {ExportRef<string | null>} svgContent
- * @property {ExportRef<number | string>} downloadDpi
- * @property {ExportRef<boolean>} downloadWhiteBackground
- * @property {ExportRef<boolean>} [richFeaturePopup]
- * @property {ExportRef<FeatureCatalog | null>} [featureCatalog]
- * @property {ExportRef<ReadonlyArray<{ featureId: string, text: string, sourceText: string }>>} [editableLabels]
+ * @typedef {Pick<WebState, 'selectedResultIndex' | 'results' | 'svgContainer' | 'svgContent' | 'downloadDpi'
+ *   | 'downloadWhiteBackground' | 'richFeaturePopup' | 'featureCatalog' | 'editableLabels'>} SvgExportState
  */
 
 const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
@@ -146,7 +138,7 @@ export const serializeCleanSvg = (svg, options = {}) => {
  * @returns {FeatureCatalogItem | null}
  */
 const exportedCatalogItem = (state, resultIndex, name) => {
-  const item = toRaw(state.featureCatalog?.value)?.items?.[resultIndex];
+  const item = toRaw(state.featureCatalog.value)?.items?.[resultIndex];
   return item && item.resultIndex === resultIndex && String(item.resultName || '').trim() === name.trim() ? item : null;
 };
 
@@ -160,7 +152,7 @@ const exportedCatalogItem = (state, resultIndex, name) => {
 const renderedLabelTextOverrides = (item, drawing) => {
   /** @type {Record<string, string>} */
   const overrides = {};
-  const textByFeature = new Map(Object.values(drawing.featureOverrides || {})
+  const textByFeature = new Map(Object.values(drawing.featureOverrides)
     .filter((row) => typeof row?.labelText === 'string' && row.labelText)
     .map((row) => [`${row.recordKey}\u0000${row.biologicalFeatureId}`, row.labelText]));
   (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
@@ -188,7 +180,7 @@ const renderedLabelTextOverrides = (item, drawing) => {
  */
 export const captureSvgExport = (state, drawing, { interactive = false } = {}) => {
   const resultIndex = Number(state.selectedResultIndex.value);
-  const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
+  const name = state.results.value[resultIndex]?.name || 'gbdraw.svg';
   const catalogItem = interactive ? exportedCatalogItem(state, resultIndex, name) : null;
   return {
     // A deep clone of the preview's <svg> element is an <svg> element.
@@ -198,10 +190,10 @@ export const captureSvgExport = (state, drawing, { interactive = false } = {}) =
     dpi: state.downloadDpi.value,
     whiteBackground: state.downloadWhiteBackground.value,
     ...(interactive ? { interactivity: /** @satisfies {ExportInteractivity} */ ({
-      popupMode: state.richFeaturePopup?.value === false ? 'simple' : 'rich',
+      popupMode: state.richFeaturePopup.value === false ? 'simple' : 'rich',
       catalogItem,
       requireFeatureCatalog: true,
-      editableLabels: (state.editableLabels?.value || []).map(({ featureId, text, sourceText }) => ({
+      editableLabels: state.editableLabels.value.map(({ featureId, text, sourceText }) => ({
         featureId, text, sourceText
       })),
       labelTextFeatureOverrides: renderedLabelTextOverrides(catalogItem, drawing),
