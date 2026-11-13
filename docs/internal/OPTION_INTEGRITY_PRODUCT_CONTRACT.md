@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `151`
+- Contract revision: `152`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -5795,6 +5795,36 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 152 changes: `PD-OI-022` is replaced for scenario revision `2`
+  (concern `diagram-generation.completed-losat-search-retry`). **Clear LOSAT
+  results** clears only the shown drawing's LOSAT results: its result rows, its
+  protein identity manifest, and every search and converted payload no other
+  drawing names. A search another drawing names stays for that drawing, whose
+  result list and **Save Raw LOSAT TSV** do not change, and the cleared
+  drawing's next Generate reuses it when the inputs, the raw search settings and
+  the LOSAT build match. The button counts the shown drawing's results ("Clear N
+  LOSAT results"). In a project of one drawing, Clear removes every LOSAT
+  result, as before. It comes from the Product Decision Owner `satoshikawato`'s
+  replies of `2026-11-13` in the campaign `circular-multi-file-20261108`
+  (`DECISIONS.md`, Q2).
+  - Q2 (`2026-11-13`). On a pull request sentence saying that Clear clears "the
+    LOSAT results of every drawing, not only those of the shown drawing", the
+    Owner wrote 「むしろonly those of the shown drawingが削除されるべきでは！？」. The session
+    then asked whether Clear should clear only the shown drawing's results, a
+    search another drawing also uses staying for that drawing and being reused
+    (option B), and the Owner replied 「Q2=B」. This replaces the reply 「Q2=A」 of
+    `2026-11-10`, which kept the whole-project Clear.
+  - Receipt (`2026-11-13`). The session showed the complete JSON receipt below
+    and asked for its approval. The Owner replied 「receipt 承認」.
+  - The JSON in the record reproduces the approved receipt byte for byte,
+    without translation or additional terms. New receipt SHA-256 (the JSON
+    block): `2ae5a2c4f42ac39e7bf1fecd2cd942e7ff4ce837f1990f484c6cad29fd017a5c`.
+  - `OIC-019` is unchanged: a search that stays has the same inputs, raw search
+    settings and LOSAT build.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    changelog that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -6855,30 +6885,61 @@ Decision date: 2026-10-21
 ### PD-OI-022: Reuse completed LOSAT searches after cancellation
 
 - Concern key: `diagram-generation.completed-losat-search-retry`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-022`, scenario revision `1`, only the sentence "Clear Cache
+  invalidates retained evidence." Every other scenario revision `1` term stays
+  in force.
 - Status: `ACCEPTED`
 - Normative outcome: After LOSAT raw search completes, canceling downstream
   Collinear work does not require the same raw search to run again on Generate.
   A member-only change recomputes the dependent analysis and reuses matching
-  completed raw evidence. Cache reuse still validates the actual inputs and
-  raw search settings; changing Max target seqs can require a new search.
-  Clear Cache invalidates retained evidence. Session/History replacement must
-  not revive unrelated retry data. Failure or cancellation preserves the last
-  successful Result and committed request under `OIPC-C07`.
-- Rationale: The maintainer reported a completed LOSATP search restarting after
-  canceling Collinear work and changing only member hits, and requested a fix
-  with durable regression protection.
-- Must preserve: Correct raw and derived identities; deterministic cancellation;
-  explicit clearing; last successful output. Partial raw batches are not falsely
-  admitted as completed searches.
-- May retire: Unnecessary raw reruns caused solely by downstream cancellation
-  or a member-limit edit.
-- Accepted residual risk: No new persistence or cross-reload guarantee is
-  introduced; no additional risk waiver was supplied.
+  completed raw evidence. Cache reuse still validates the actual inputs and raw
+  search settings; changing Max target seqs can require a new search. Clear
+  LOSAT results invalidates the shown drawing's retained evidence: its result
+  rows and every search no other drawing names. A search another drawing names
+  stays for that drawing and is reused when the inputs, the raw search settings
+  and the LOSAT build match. Session/History replacement must not revive
+  unrelated retry data. Failure or cancellation preserves the last successful
+  Result and committed request under `OIPC-C07`.
+- Rationale (scenario revision `1`): The maintainer reported a completed LOSATP
+  search restarting after canceling Collinear work and changing only member
+  hits, and requested a fix with durable regression protection.
+- Must preserve (scenario revision `1`): Correct raw and derived identities;
+  deterministic cancellation; explicit clearing; last successful output. Partial
+  raw batches are not falsely admitted as completed searches.
+- May retire (scenario revision `1`): Unnecessary raw reruns caused solely by
+  downstream cancellation or a member-limit edit.
+- Accepted residual risk (scenario revision `1`): No new persistence or
+  cross-reload guarantee is introduced; no additional risk waiver was supplied.
 - Acceptance contracts: `OIC-002`, `OIC-005`, `OIC-013`, `OIC-019`.
-- Decision source: Explicit maintainer request to fix the reported cancellation
-  cache behavior and add Product Decisions/Contracts against regression.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `1`): Explicit maintainer request to fix
+  the reported cancellation cache behavior and add Product Decisions/Contracts
+  against regression.
+- Owner and decision date (scenario revision `1`): `satoshikawato`,
+  `2026-09-14`.
+- Decision source (scenario revision `2`): the Product Decision Owner's approval
+  of `2026-11-13` described in the Revision 152 entry above. The JSON below
+  reproduces the approved receipt byte for byte, without translation or
+  additional terms. The runtime that implements it merges with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `2`; the JSON block, UTF-8, without its
+  final newline):
+  `2ae5a2c4f42ac39e7bf1fecd2cd942e7ff4ce837f1990f484c6cad29fd017a5c`.
+
+```json
+{
+  "concern": "diagram-generation.completed-losat-search-retry",
+  "scenarioRevision": 2,
+  "choice": "B. Clear LOSAT results は表示中の drawing の結果だけを消す",
+  "rationale": "表示中の drawing の Pairwise Comparisons で押す Clear LOSAT results は、その drawing の結果だけを消すべき（Owner 2026-11-13「むしろonly those of the shown drawingが削除されるべきでは！？」）。",
+  "mustPreserve": "scenario revision 1 のうち消去の範囲以外のすべて：raw と derived の正しい同一性、決定的なキャンセル、明示的な消去、最後に成功した出力、部分的な raw の結果を完了した検索として扱わないこと、再利用が実際の入力と raw 検索の設定を確かめること、Session/History の置き換えで無関係な retry を復活させないこと、失敗とキャンセルで最後に成功した Result と committed request を保つこと（OIPC-C07）。ボタンの件数は表示中の drawing の結果の数で、押すとその結果がすべて一覧から消える。ほかの drawing の結果一覧と Save Raw LOSAT TSV は変わらない。drawing が 1 つのプロジェクトでは、これまでどおりすべての結果が消える。",
+  "mayRetire": "Clear LOSAT results が、表示していない drawing の結果を含むプロジェクト全体の LOSAT 結果を一度に消すこと。",
+  "acceptedResidualRisk": "ほかの drawing も使っている検索はキャッシュに残るので、消した drawing の次の Generate は LOSAT を走らせずにその検索を再利用する（入力・検索設定・LOSAT の版を確かめるので結果は同じ）。共有された検索を走らせ直すには、それを使うすべての drawing で Clear する必要がある。プロジェクト全体を一度に消す操作は無くなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-13"
+}
+```
 
 ### PD-OI-023: Lossless protein paths during normal generation and saving
 
