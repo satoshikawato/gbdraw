@@ -16,13 +16,15 @@ const modulePaths = [
   'gbdraw/web/js/services/pairwise-match-popup.js',
   'gbdraw/web/js/services/feature-utils.js',
   'gbdraw/web/js/services/feature-sequence-fasta.js',
-  'gbdraw/web/js/services/match-sequences.js',
-  // match-sequences.js reads a catalog's drawn units as their records (`unitRecordsOf`).
+  // The popup names the reads of member and span sequences (D5); Python reads them when a sequence action is pressed.
+  'gbdraw/web/js/services/catalog-sequences.js',
+  // catalog-sequences.js keys a feature's reply by the draft owner's identity key.
+  'gbdraw/web/js/services/feature-placement.js',
+  // feature-catalog.js reads a catalog's drawn units as their records (`catalogUnitRecords`).
   'gbdraw/web/js/services/linear-units.js',
   'gbdraw/web/js/services/linear-comparisons.js',
   'gbdraw/web/js/services/linear-comparison-retained.js',
   'gbdraw/web/js/services/input-types.js',
-  'gbdraw/web/js/services/record-options.js',
   'gbdraw/web/js/services/record-draw-selection.js',
   'gbdraw/web/js/services/drawing/feature-edits.js',
   'gbdraw/web/js/services/drawing/paint.js',
@@ -31,24 +33,14 @@ const modulePaths = [
   'gbdraw/web/js/utils/reactivity.js',
   'gbdraw/web/js/utils/download-names.js',
   'gbdraw/web/js/services/record-source-coordinates.js',
-  'gbdraw/web/js/services/genbank-header.js',
-  'gbdraw/web/js/services/conservation-series.js',
-  // conservation-series.js reads a ring's files through the drawing inputs slice.
-  'gbdraw/web/js/services/drawing/inputs.js',
-  'gbdraw/web/js/services/history-files.js',
-  'gbdraw/web/js/utils/conservation-colors.generated.js',
-  'gbdraw/web/js/utils/color-utils.js',
-  'gbdraw/web/js/utils/named-colors.js',
   'gbdraw/web/js/utils/vue-raw.js',
   'gbdraw/web/js/services/losat-normalization.js',
   'gbdraw/web/js/contracts/request-shape.generated.js',
   'gbdraw/web/js/utils/contract-shape.js',
-  'gbdraw/web/js/utils/field-reading.js',
   'gbdraw/web/js/utils/optional-positive-number.js',
   'gbdraw/web/js/utils/error-normalization.js',
   // error-normalization.js reads Python's figure length units from the generated mode profiles.
   'gbdraw/web/js/mode-profiles.generated.js',
-  'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
   'gbdraw/web/js/contracts/schema.generated.js',
   'gbdraw/web/js/services/feature-identity.js',
@@ -61,19 +53,8 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 for (const relativePath of modulePaths) {
   const target = join(tempRoot, relativePath);
   await mkdir(dirname(target), { recursive: true });
-  const source = relativePath.endsWith('/file-content-cache.js')
-    ? 'export const readFileText = (file) => file.text();\n'
-    : await readFile(new URL(relativePath, repoRoot), 'utf8');
-  await writeFile(target, source, 'utf8');
+  await writeFile(target, await readFile(new URL(relativePath, repoRoot), 'utf8'), 'utf8');
 }
-// match-sequences.js reads restored Session files through record-discovery.js, which this test does not use.
-await writeFile(join(tempRoot, 'gbdraw/web/js/services/record-discovery.js'), [
-  "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };",
-  'export const gffFastaReaderSelector = unused;',
-  'export const readAllSequenceRecords = unused;',
-  'export const readComparisonSequenceRecords = unused;',
-  ''
-].join('\n'), 'utf8');
 
 const popupPath = join(tempRoot, 'gbdraw/web/js/services/pairwise-match-popup.js');
 const instrumentedPopupPath = join(
@@ -88,24 +69,24 @@ const replaceOnce = (source, from, to) => {
 };
 const instrumentedPopupSource = [
   [
-    "import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';",
-    "import { buildFeatureSequenceFastas as buildFeatureSequenceFastasBase } from './feature-sequence-fasta.js';"
+    "import { formatFastaEntry, memberFastaFeature } from './feature-sequence-fasta.js';",
+    "import { formatFastaEntry as formatFastaEntryBase, memberFastaFeature } from './feature-sequence-fasta.js';"
   ], [
-    "import { buildMatchSequenceBundle } from './match-sequences.js';",
-    "import { buildMatchSequenceBundle as buildMatchSequenceBundleBase } from './match-sequences.js';"
+    "import { featureSequenceReads, unreadSequence } from './catalog-sequences.js';",
+    "import { featureSequenceReads as featureSequenceReadsBase, unreadSequence } from './catalog-sequences.js';"
   ], [
     '  featureIdentity,\n  identityMatches,\n  renderedFeatureIdentity,',
     '  featureIdentity as featureIdentityBase,\n  identityMatches,\n  renderedFeatureIdentity as renderedFeatureIdentityBase,'
   ], [
     'export const PAIRWISE_MATCH_SELECTOR = [',
     `const pairwiseMetrics = () => globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__;
-const buildFeatureSequenceFastas = (...args) => {
+const formatFastaEntry = (...args) => {
   if (pairwiseMetrics()) pairwiseMetrics().fastaCalls += 1;
-  return buildFeatureSequenceFastasBase(...args);
+  return formatFastaEntryBase(...args);
 };
-const buildMatchSequenceBundle = (...args) => {
-  if (pairwiseMetrics()) pairwiseMetrics().sequenceBundleCalls += 1;
-  return buildMatchSequenceBundleBase(...args);
+const featureSequenceReads = (features) => {
+  if (pairwiseMetrics()) pairwiseMetrics().sequenceReadNames += features.length;
+  return featureSequenceReadsBase(features);
 };
 const featureIdentity = (source, options = {}) => {
   if (pairwiseMetrics()) pairwiseMetrics().identityCalls.push({
@@ -142,9 +123,9 @@ const { admitFeatureCatalog } = await import(pathToFileURL(join(
   tempRoot,
   'gbdraw/web/js/services/feature-catalog.js'
 )));
-const { createSequenceSourceRegistry } = await import(pathToFileURL(join(
+const { matchSequenceRecordsOf } = await import(pathToFileURL(join(
   tempRoot,
-  'gbdraw/web/js/services/match-sequences.js'
+  'gbdraw/web/js/services/catalog-sequences.js'
 )));
 
 const elementFrom = (attributes) => ({
@@ -192,9 +173,7 @@ const makeSyntheticState = () => {
     end: 18,
     strand: '+',
     protein_id: 'QUERY.1',
-    product: 'query enzyme',
-    nucleotide_sequence: 'ATGAAATAA',
-    amino_acid_sequence: 'MK'
+    product: 'query enzyme'
   };
   const renderedSubject = {
     fileIdx: 1,
@@ -222,9 +201,7 @@ const makeSyntheticState = () => {
     proteinId: 'QUERY.1',
     role: 'anchor',
     confidence: 'high',
-    product: 'query enzyme',
-    nucleotideSequence: 'ATGAAATAA',
-    aminoAcidSequence: 'MK'
+    product: 'query enzyme'
   };
   const subjectMember = {
     recordIndex: 1,
@@ -303,31 +280,19 @@ const commonAttributes = {
   fill: '#123456'
 };
 
+// The records the synthetic Result draws (`matchSequenceRecordsOf`): two drawn units, one per record ID.
+const syntheticSequenceRecords = ({ comparisonSupplied = true } = {}) => ({
+  unitKeys: ['query-unit', 'subject-unit'],
+  comparisonSupplied: () => comparisonSupplied
+});
+
 const buildSyntheticCases = () => {
   const state = makeSyntheticState();
-  const sources = createSequenceSourceRegistry([
-    {
-      key: 'linear:record:0',
-      recordId: 'query-record',
-      aliases: [],
-      sequence: 'AAAAAAAAAATGAAATAACCCCC',
-      origin: 'linear-record',
-      recordIndex: 0
-    },
-    {
-      key: 'linear:record:1',
-      recordId: 'subject-record',
-      aliases: [],
-      sequence: 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCATGAAATAAGGGG',
-      origin: 'linear-record',
-      recordIndex: 1
-    }
-  ]);
   const fullOptions = {
     featureLookup: state.featureLookup,
     sourceFeatures: state.sourceFeatures,
     orthogroups: [state.globalGroup, state.localGroup],
-    resolveSequenceSource: sources.resolve
+    matchSequenceRecords: syntheticSequenceRecords()
   };
   const duplicateRendered = {
     ...state.renderedQuery,
@@ -378,7 +343,8 @@ const buildSyntheticCases = () => {
         'data-track-label': 'Comparison ring',
         'data-reference-record-id': 'query-record'
       }),
-      options: { resolveSequenceSource: () => null },
+      // The comparison source supplied no FASTA: its span says so; the reference reads its drawn unit.
+      options: { matchSequenceRecords: syntheticSequenceRecords({ comparisonSupplied: false }) },
       featureReferences: []
     },
     ambiguousFeature: {
@@ -434,7 +400,7 @@ const buildSyntheticCases = () => {
   };
 };
 
-const SYNTHETIC_BASELINES_GZIP = 'H4sIAAAAAAACA+0ca28bN/KvEDwUSBBJkez24CjIAbbzqC+p08rOh8PJMKhdWmK7ItUl16ku8e+67/fLDnyTu1pZsqVaqRf5EO9wOTuc4TzJ0RfI8pRQlM9h/wucoXnGUCr/TFiWEYpRTsT8KGPJbycp7EPYglcky2Af/q23t//9D3+HLTjOWTGTU0YoHWPYh2zcniJCYQsmrKDiHP8hYB/ugTGmmANCwR7IccLylMMWTDFPcjIThFGNPyV8lqH5KZpKXL8XOJ8DTP8zn2LYgiSN8E/xdITzQ3QsvwP7PQ95i7hAsA//8cunN4N/dXogRDSkP70fhvPfkgxT/UGD/FK9f6nfv0Soc4WQm3DMZnOzqoFayFAcM81HgTl48ux5++lQ/JwzgQkFJ6+HYsAyLF+iVyTFNMFDccg5GdMppgLkGHFG1YS0SAR4DigTeEgVCe3cfKHX7XR6B+DJs6dDYRY1FPpfvDZejH7FiXAT97udzv4BeCJpOvt09M83x+d+qnnZc9iuUDEU7jnIqSgz+VQ4JoeU9nvddu+gxO/D83eHh4fnh4cB20/FbWynonNFPdsH7DOH/X9/gWhF8aJFgjUzvEyRk8RACUJvwwTRjzNMYV/kBZY72YrODHt5wz70spEKgpEociw14vLSPAzwFc7NbKtw/S68aUF6Zy5SsWR1jnUzvak+5qdMLFComd6kSrnNXNiCmgb7tiFJwllm1i//MhjhTSsUSR3f3dbbKOf95l6H872Y83XM9CTXsrOiPyFD3fyQpbF61jP1ws45Ztc4R8qySnUUOJlQkqDMqYMyimdkSjJlrYEyyODkNWzBDI1wVjt6jbIiNNhSkBpZwmY4nG6e7YTjnHFuVgB4CbciXRCRVbbbjXEWGl0fjjM2Qpk161Mkkkmbz6mYYEESqfYS8p5QOTpDJP9MuKSC5WLCFKKT2B2oj73Vcj+7HqvRHNMU5zhtq0HYghwn0tmErCumU6TG8oilvyjanZwsM0pgy5NIVTwnzf6oYKkMWDyl/eEw6c8SKnB+rZgW0xMMWEzaKlVpWYBjwZDFojUsEqplmMN8mBk9rvDwJMVUEDEPvhWA7DcODjo/LMAGMkzHYhLMXTBkcbzwCN60NdDP8xDHHNzudf2UIyJ4wvJwTgCyk77fi/jgly3xWINj11+xYy5oWMGx61cylhTc+ncZPsW+viZaki+u7Yd+w/OKtrS74TZz3iFjCTLxWuT4FLUn3m2oZ28z7+t8eDH6YGgJ8IPnIFo1r9N7MZ85w+oVqrJhB2VFHaym6B8sU/zMABSrpOKXm+njxGBuBLSzLY/CqYqz0TwDicj1FtiTW/D4kwEoXqqWo5v6Wm85oJyln14Cx59XwglVRzN/PbVZMbC1rxnlsR5aq0/FX8cKFL68dkBRUiFLR6hEYUQQqFEUxXg1ilYSKdIGwo5AnaLvgOegxIWKSpnxRUp15obWVas6v7eaYgUcvINieY6tpVolKaypXLF076hekahiH60FIWEc/17IHXtU0DTDOrufjgjFqcs9SsGXzsO+alm8Ci3eVxV/81fakn3lIkc0ffUsSk4q2AyVFl8saotRi3AxRhX3G5J9nF7+zIiJiYnTMRU5wSZdvEYkQyO5cm1Trrayal0bqaNNJ7YhzkuV4hl6WU4wFdYePINeaB90oNN/0YJ8hqiUnrFZAxaYUrlkuX16BzJwZhlOCjVKiyTDTJAUO2twUp/ZuSCZFXmC3yuDpstAfZOXSmvGBcqF8mbS7BXUMdincSonXJnvm9gfS3hv8F3GeC/3u+39DfDfmzwtgf0VJVCXCHrrWi+FXiCF/SVSuLjxCzk3luEnyR2cAgvn2hnIb9blTgFJxchaGJ93WcjPJkcDSgCSqonMXeNEVeVz3q6ZR2vPKijukUdYxYgSpdvzo2patCAbatWk3Uty7kUJt5SPT2ebEmxTgm1KsH9KCdaqXFOE/fOLsI73TRn2ocqwKxRcA7e0wZLrxd1ijSDIMN/ul5e0dqjhhdHWwiiFHPd07fcpl5QTynfSbQeT7bOdtacjCRcwlAKJkQweVOCKBSKlHasii3ibBiD7BYUi2CuOtOU8TrKCC5z71z8GcbafFUOdgNAUgzAwd1iOWcZyMGVpyNEIaHEEmMEzQGzI6GvNWqn9SFBrrg6FcWb3u1LFGqc19epwwFWrAUJB9VkxvFKAjqBhDdp9lyYTloc7w0NclKsMwRVKhBR6laktePDiu3CRPRUlAnngAi9aUD7IqFxvGRdpxjGirMhkZtvycpDoSmMGoCpi2jb0d79M7pTqsdXJnaVeLqXdq8p6iT36sqxUfaWyP2KUEjrWZlJzx7kup/smgW5BqqMfbYAwvcYZm2EOpkieMyZZkWJ9UjjGlCSukAAQTU2GKSZIAJRjmUYBpG1SR/IDkdwnMfKJB5lceLI6FPrJisM+z4KUzkEk+4ciPlL1zx6FhYRIAphGU2KQeqkMk157pewwyh3Eerriphm7ORRlM6sYaLdLaLcD++qOdF3Bo+Vghu8Ort2Ugb4Ao9nSmqGQxaYTj15FxRXLDSxfJL6nJbMSEGcqKxXiHPwW4iqaVE9e/CqwUggIVOfb5lNe9ioI6oP61YFrDpYhfwnK7vclCL3vSxAK8aalw66PLvj2qlMa0M55G9WfpZ59q+Uf9WVTh+C7W//R1m0oJmQ8uXMlSC9K/p+SYrqLVaFYGrtaFpJCuF9pqBTufYuVIb0jH64+pDfx/apEpRhux4pEetfHHNYw8L//Ar1+EPBk3SpSNQSJ89zqYH35ITDvQfUhgrqE26b3C4pJq9aktL9ISkFmWIuKPYocWXzQUS451J172NuEKP0VJZiKSxnvrXir0FdMNlzjak7cmxP35sT9sZ6436HCXbV2dqSUf9yp1l3FsePn6iUnx+v9X6nWGZVUy8XUZQXtC8XXKcvYeP6JBpp0vzN5WmTZPa69W4qq/qm5777d++4Wy4DQMdDzgtuLIdAr2XSGcsIZBbmstXlClFUBhKb4j5CIGGzRBJrmImLASXTWURmIpLIIQV69gFkZWiza5uL/sov/KwV7mwqmrlDGA68e++CVfGq3zqf65Gt7cc1KgcyZrSYTDoLxTjnA2SIvvCJvOcRYKaYIzIqrtH9GXJXWeTGbZQSn4IrlQEwIB0cfDs/Ogf5IZ7sXAKuey4cskSW8x33AOkw7Gr5IdqPpiIwLVvC3vsbxgBFEfeNcE0E0HXO72TFnbPstdwEWHf8vuguw4vm/1rNbz/fjM/vKGf9K5/ul2mP82qrn+t9Sx9tdmnIWNp81fWubuCFRdlELr7Y0/WtN/9q30r/2DSRYu1g03oFca3drufXMeZik6hF1V+nLzPQqI4kgdPyGpjNGqGgyqSaTajKpJpNqMqkmk9qZu+YVL9UkU00y1fwYSHM1qbma1FxNejQ/BtKkrSZtTYtZRhIk8LvN/qJHqZnj9saNoFfD0VRt2OhWGzZquzIcmsvoob4zo9K1UG1a6FabFmr7EGq+v7gXYdGN66217XsGb6F3v4R/A7374X54kAb+aD2707gfkKVspRRZ+m53f5mn6c1qerMeU29WoJBNd9ZDdmeFgniM/Vkb/ZWfne/Q+kv8XFBlTX+N3wsqL2udHwy6+T87cahx/WUAAA==';
+const SYNTHETIC_BASELINES_GZIP = 'H4sIAAAAAAAC/+0c2XLbRvJXprCVqqQsKqKU7Mr0k6U4Xm28tkPJD1urFGsIDEnE4IDBIUer4nft+37Z9lyYngFAkdRh2kL5wUIPeo6+u6eJm4DOx/G0TMv8Z0aLMmPB4CaYpVcsG6af8mDw75sgjoJB8EvMo2AvSOiYJfbxiiYlYATvaZx9inNG5rQIZ8FyT2OdRYwXcXGNMBHIYB8f7/9ocX4tWYYRzLN5u3+wv98/tu+fl+PfWVggDAsxOEeAcwQ4v+0FC3qdpDQSxwzTJIk5oxls5yRJw49nYj5Am8SJmOcv/cOjH378KwCmWVouggEvk0Q/nIfpQsw8TdIxTeAVuRd5/F5+zYsZK+IQwBIiqTWApRWVAJxmxSyVE5k1/xDH1Dw4v5pKcMZ4xDIW9f7QNMjhWHHKEV/Oy/mcyrHM4ZekGslYmGaRT0wLNvSR8/c02KdsfZbagJknVwO1mdSyMS9YdiWp5e4HDdzC5aY5GoYa+A4ylzBEsGrml0k85XMQyhoNt5HeajaSMD4tZgi3YcjM8dxO8KqngBbPQirisF7/wKKcxEUO9MY4CGSQfjh06GCPLeaZKMGrdD6k/N2C8WAwoUnO9kBVFtcX7M/Ck5XLQvHpslBQUKIyb3ogU8bZpSBxFOeLhF6/pfNK8OSgUDtjgZSefWTXNR3oHaBDomUENA2pUA4rPBJW5lKV3HcXWRqVYaE0Dx4KFvOG17QYe/qxJ8T8Dd6DOUDeprfFtTQWkgGOkXMFbugr2nA9RX1jjm4xEahNpd6rc5OznxCeA3RXVVTBi5a5i4xAK1F/UjJAuBACi+6BnSkUibEAKxKuFN4iK13Zde3TZaHsA/m2991lcf7h5B+vTi/2+5eFeU1LsH7UMmyeGP/PtdynK9H4ZSzTN8FoZDbKJiAdPBSv++53IPTaF32zHyz81XZd0bcncsTfOZGjALXjYHXAi1TK4Bl5Rx2cdcj3xKNGTUHyylXXVMR68U2VpM0LracmiIJbqIqlGEaWtHYwNcTbsuHChkrmcndLNXNY5XpMxQgByxloI0juScmjhKkgCiSYs+jnGLyaUgEvChqN02K2P+EUFgN/k8VMcZNe0Rj2JKbRXmbSPoc0AiNs/kb9g17/WM8rXz9rDsFSWJEXRkGeSVEWAaDyMuZEb5RPHjwH0IJycTSt2MMU2RtxBLGMdC9qI2cNHiJTOFXcVtCskCZYaHfJq6MPGc3lti5mcU6GLC+TgnyiOcnpFYvI+JpQTtIElIVMx1FGP+2RPCXg3InZd05oxog4EaETCIAInJtwMHfkNTAyowXblxKxEbW1LIxcTRodHfSOHpHi1gIomh95NK8ZIk11a1QM3Y8+E91/Mye/CViWpZkhQcYKkAtDD6AUqK2wfUtLnQutff8U1IUtVesqgysO2JYtoPOXY6PFdS6ZET95W+7ZzGirbPDUYJOxyKp2Nx00OHbDMiXLEXLDULUyisDlOVH4rZ/Nq5IOiPheIqrIJOSfFSCgLq3lXK4LQKDWFfbWYlWYlDkIr339HVJdi+VCK18HxoNgXccETTMyTyPmktICzRxoZvKMxEYabD4FskenzI6gfKo+hEXo4BsvKwMlas7J8ECVkRFKPf6SWpLlQHGeVa3Lw1maYXmyECRGIA0TGhaC6XWi7gXHz7/Bh+xLF01ENSEATPEgVFiJjK5U3HhRqYhzEh1d5KZakU57cxpzG3BqgIwzlesarIqmmzJB8u0ziKV//fBq+C8RSbdmgurvlhi6OStsiaArW9UYOtezRr23poxRbH6trNHbPQ6Z7fTrZo9VsLxhLln5gdVc2r2cx3Ks/9STHaH6UmX/DmFCzKd1jyOVVeu+9o17AYddVwaI8SuWpAuISOZU1NLApkdMVcNgJ3FYhQ4Q00RyczkEK7SQAQzMBGBpk/YFPcCQnKYlB2L11VN+akUJVw9ByeWTYYd5XlRZEYII8oO0OWVD+2ynMBA8CYKpaTwCyZd8mIhrL/m6BkrLg1WC9XSlQtN287LwzawkoBEXbLeRfa3KlqhuZWCa7raeJd2Uhj4n48XKJKQQke6ZnV6A6pabGLqI+b7zzAranA6aapur4LdsrqZJ7dtzXyWGC2iDsoarl/LCzQFpPx25ysmqyV8Q3/2+INj7viCYibATueK7qphvVccbUM55TKMpQ45X2GlA0Oc41LoJcn+odUTIUMTyMIsX2uTVbO9Kzw5pGpuPWfaSovRcD44k5khjjijdn1BaYSCtH2plOE3hv5hDZpODEn0vdOI90lORtImX+ERQK4S/X+a5qXhnMt+SCEKJwVgKE7aWhirrdFnM4unssvA0lq+psepQ4v8oLudimporMOeWHAwOK8jb4lba8cIkxRJjuEnKVyGZoJ828UpTw3KJVrStUlkhTn4UYJgBw4J+UuIqLvpxz4TCvtA1oMy6+8eqUnAW/RkMDm4PgkZxUxSkoH4glJZZyPSCZ+AkYYUjSRwwDCZwUJgK1vPqKaJyUGRUFgeeKY/b8Ppy4xiSFytYUDFbU+Jd9lZ54zWDQlsIaQsQdRlDCb5+1muoUk6ThFTCfhcZUepRkxInzmqUkiMsJf11Qi7FqHrMpRlYC7saZOVvK2WlVgU6xOLSaxAXg7HcOIRtFBjLkVaR2SAebRCbtvqXMiiu4CgY+d9/ieIxQXwXQagaP9eRoraCB2ax01Tl2towFiycQWBJvUpFPTBrL6S41QubiZrSNXJ6qHLtQKsyhCl6kDyex4m8ztexs60Kyet6lFDoZzOH8qKhF3rjKrjrZ8VIc/uAX4hp6yYwDQQ0+p2GoKIjEQWv2Uhgy3O1TgLr+TdtKHi46r4yNI9b3Efe66MimtWS9qq9/OMXmY+qoZLHyIL0D5Y7c2HgF/VvJfID1fSRA1hB6LqpQqQ2gy6xjzYi9mPcFWxXz9+iVl+3IWakVlpfKg+exKDHfPqKR4s05kXXxNU1cXVNXF0TV9fE1TVxdU1cj3ChUfPAXR9X18f19Pq4ukyvy/Sebqa3C51bUbkAT0QL9to0gmycB55XVbSeKtV5+eC5X2VDzqw+hEp81d7unMPZqzTvDu32+zJ0RWb303ZPVr0xch7a78pq90it10gtU9/jVdImVd32oq7PUteJNY8283zdWuxplua5uZ6tl3SRR/PmXyd9tzl7Y+0Ui8Q2BdQt1DtoOw8caJbO0ySdXn/gyP5v1ZE5XwARwbiRDILUrsKzSkQM0bsKz2NXeMwsQyGjCg+lBxjYIthoI/K+EBYTN4VoEy7YTIPkusrrwPQ47au1AYcrTRNk9QynNtTM2q7UtarU9fXnL6a08HgpzBCt+ThpzJfyKxRrYh405UCWrOrXFD9IEQ2aebmAqABSiUkqfmcS5+TkzcvzC6KaIr6U35m0BCFLwSnRa6LaIb/aa6s7p0+qQ+LeMqf7bEL0Wp/W70FU9lQh7m4Lovq3VeOh+ne3ZkOHSF9Er+E99BnqFvfgUToOJXjUMt9n6Ec0BnGX2hEftRHxHloQmwTogZsRG8QIz/m5mhUradrBXkVfqu6pFfGOVSu3GfH+ClaOTi4fpAtl+wbArlTRNaM8QjPKjv6M1HW5T+dXpJ+/mUXSa4srekOjjS7oPQvctcHcYxuMG2d0vS9d70vX+9L1vnS9L13vy9bVZJvNrOh5QXf6O9Xv4v2kbYtAwTel4tNS+Gsy5tlgHXb14a4+3NWHn0B92Fi8rkLcVYjvo0JcyVNXI96xGvHdmxrv8IPwO/czirUH7pFEuCioE73+ukI27wsBX3rM1n1YqPuwUPdhoTsGasjQdZ8W6j4ttKnIdB8Xephobec/L/RVhH3emZbL/wOsKrL8bmoAAA==';
 const SYNTHETIC_BASELINES = SYNTHETIC_BASELINES_GZIP
   ? JSON.parse(gunzipSync(Buffer.from(SYNTHETIC_BASELINES_GZIP, 'base64')).toString('utf8'))
   : {};
@@ -455,7 +421,8 @@ test('compact pairwise payloads and hover rows match the accepted semantic basel
       assert.equal(exposed, true, `${name} lost a canonical Feature object reference`);
     }
   }
-  assert.deepStrictEqual(captured, SYNTHETIC_BASELINES);
+  // The baselines are JSON: a member's FASTA header fields (`fastaFeature`) leave a field the feature lacks undefined.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(captured)), SYNTHETIC_BASELINES);
 });
 
 const expectedHoverSummary = (payload) => ({
@@ -503,7 +470,7 @@ test('lightweight hover summaries match accepted compact payload-derived rows', 
 const createPairwiseMetrics = () => ({
   contextCreations: 0,
   fastaCalls: 0,
-  sequenceBundleCalls: 0,
+  sequenceReadNames: 0,
   identityCalls: []
 });
 
@@ -555,7 +522,7 @@ test('hover cannot touch full payload, Feature, source, member, FASTA, or sequen
   assert.equal(orthogroupSummary.rows.at(-1).value, '2');
   assert.equal(metrics.contextCreations, 0);
   assert.equal(metrics.fastaCalls, 0);
-  assert.equal(metrics.sequenceBundleCalls, 0);
+  assert.equal(metrics.sequenceReadNames, 0);
   delete globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__;
 });
 
@@ -571,8 +538,17 @@ const countedArray = (values, onTraversal) => new Proxy(values, {
   }
 });
 
-test('one full payload request traverses each input once and builds one FASTA pair per member', () => {
+// The popup opens without a base (D5): it names one read per member and per span, and Python reads them when a
+// sequence action is pressed (app/sequence-reads.js), so opening it builds no FASTA.
+test('one full payload request traverses each input once and builds no FASTA when it opens', () => {
   const state = makeSyntheticState();
+  // The catalog rows carry the identity their sequences are read by (and, as every catalog row, no sequence).
+  for (const [feature, recordKey, biologicalFeatureId] of [
+    [state.renderedQuery, 'query-unit', 'query-bio'], [state.sourceQuery, 'query-unit', 'query-bio'],
+    [state.renderedSubject, 'subject-unit', 'subject-bio'], [state.sourceSubject, 'subject-unit', 'subject-bio']
+  ]) {
+    Object.assign(feature, { recordKey, biologicalFeatureId });
+  }
   const traversalCounts = {
     rendered: 0,
     source: 0,
@@ -598,24 +574,6 @@ test('one full payload request traverses each input once and builds one FASTA pa
   const orthogroups = countedArray([group], () => {
     traversalCounts.orthogroup += 1;
   });
-  const sequenceRegistry = createSequenceSourceRegistry([
-    {
-      key: 'linear:record:0',
-      recordId: 'query-record',
-      aliases: [],
-      sequence: 'AAAAAAAAAATGAAATAACCCCC',
-      origin: 'linear-record',
-      recordIndex: 0
-    },
-    {
-      key: 'linear:record:1',
-      recordId: 'subject-record',
-      aliases: [],
-      sequence: 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCATGAAATAAGGGG',
-      origin: 'linear-record',
-      recordIndex: 1
-    }
-  ]);
   const element = elementFrom({
     ...commonAttributes,
     'data-match-kind': 'pairwise',
@@ -628,7 +586,7 @@ test('one full payload request traverses each input once and builds one FASTA pa
     featureLookup,
     sourceFeatures,
     orthogroups,
-    resolveSequenceSource: sequenceRegistry.resolve
+    matchSequenceRecords: syntheticSequenceRecords()
   });
   delete globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__;
 
@@ -639,11 +597,25 @@ test('one full payload request traverses each input once and builds one FASTA pa
     members: 1
   });
   assert.equal(metrics.contextCreations, 1);
-  assert.equal(metrics.sequenceBundleCalls, 1);
   const memberRows = payload.group.memberRows;
   const resolvedMemberCount = memberRows.filter((row) => row.feature).length;
   assert.equal(resolvedMemberCount, 2);
-  assert.equal(metrics.fastaCalls, resolvedMemberCount);
+  // One read named per resolved member, by its catalog identity; no FASTA text is built.
+  assert.equal(metrics.sequenceReadNames, resolvedMemberCount);
+  assert.equal(metrics.fastaCalls, 0);
+  assert.deepStrictEqual(memberRows.map((row) => row.read), [
+    { recordKey: 'query-unit', biologicalFeatureId: 'query-bio', bases: 9 },
+    { recordKey: 'subject-unit', biologicalFeatureId: 'subject-bio', bases: 9 }
+  ]);
+  assert.equal(payload.group.memberSequenceCount, 2);
+  assert.deepStrictEqual(payload.group.memberRead, { status: '', error: null, retry: null });
+  // The spans name their reads by the drawn unit and the displayed coordinates.
+  assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => entry.read), [
+    { kind: 'record', recordKey: 'query-unit', recordId: 'query-record', start: 10, end: 18 },
+    { kind: 'record', recordKey: 'subject-unit', recordId: 'subject-record', start: 30, end: 38 }
+  ]);
+  const payloadText = JSON.stringify(payload);
+  assert.doesNotMatch(payloadText, /"(?:nt|aa|member(?:Nt|Aa))Fasta"|combinedFasta|"fasta"|_sequence"|Sequence":"/);
 
   const identityCounts = new Map();
   metrics.identityCalls.forEach(({ source, mode }) => {
@@ -656,6 +628,77 @@ test('one full payload request traverses each input once and builds one FASTA pa
       assert.ok(count <= 1, `identity mode ${mode} normalized one object ${count} times`);
     });
   });
+});
+
+// LOW-10 (D5 review r1): a Circular comparison band carries no record index; it names its reference by the record ID
+// of its hit, which may be an alias (name, accession) or a record without feature rows. The popup sends that ID, and
+// Python finds the drawn record by ID, then alias, as the match registry did before D5.
+test('a Circular comparison band reads its reference by the record ID its hit names', () => {
+  const attributes = {
+    ...commonAttributes,
+    'data-match-kind': 'homology',
+    'data-source-index': '0',
+    'data-reference-side': 'query',
+    'data-query-record-id': 'NC_000001'
+  };
+  delete attributes['data-query-record-index'];
+  delete attributes['data-subject-record-index'];
+  const records = { unitKeys: ['unit-a', 'unit-b'], comparisonSupplied: () => true };
+  const payload = popupModule.buildMatchPopupPayload(elementFrom(attributes), { matchSequenceRecords: records });
+  assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => [entry.read, entry.unavailableReason]), [
+    [{ kind: 'reference', recordId: 'NC_000001', recordKey: null, start: 10, end: 18 }, ''],
+    [{ kind: 'comparison', sourceIndex: 0, recordId: 'subject-record', start: 30, end: 38 }, '']
+  ]);
+});
+
+// Every coordinate is Python's to judge after the record, as the popup judged it before D5 (the record, then "whole",
+// then "greater than or equal to 1"): a coordinate that is not a whole number goes as null, a whole one as itself.
+test('a coordinate below 1 or not whole is read by Python after the record, in the popup\'s old order', () => {
+  const spansOf = (qstart) => popupModule.buildMatchPopupPayload(elementFrom({ ...commonAttributes, 'data-qstart': qstart }), {
+    matchSequenceRecords: syntheticSequenceRecords()
+  }).sequenceBundle.entries[0];
+  for (const [qstart, start] of [['0', 0], ['-5', -5], ['1.5', null], ['ten', null], ['1e21', 1e21]]) {
+    const entry = spansOf(qstart);
+    assert.deepStrictEqual([entry.read, entry.unavailableReason], [{ kind: 'record', recordKey: 'query-unit', recordId: 'query-record', start, end: 18 }, ''], qstart);
+    // The popup row shows no length for a span whose coordinates are not whole (index.html hides a 0 length).
+    if (start === null) assert.equal(entry.sequenceLength, 0, qstart);
+  }
+  // A comparison source that supplied no FASTA is said first, whatever its coordinates (base resolved the source
+  // before it read the coordinates).
+  const homology = popupModule.buildMatchPopupPayload(elementFrom({
+    ...commonAttributes, 'data-match-kind': 'homology', 'data-source-index': '4', 'data-reference-side': 'query',
+    'data-sstart': '2.5'
+  }), { matchSequenceRecords: syntheticSequenceRecords({ comparisonSupplied: false }) }).sequenceBundle.entries[1];
+  assert.deepStrictEqual([homology.read, homology.unavailableReason], [null, 'Comparison sequence was not supplied for this BLAST source.']);
+});
+
+// D5 review r3: what the popup knows at open, as base c75daa1de showed it (r4fix/probe-base.out,
+// probe-base-reference.out): a Linear record index without a drawn unit is an unavailable source; a Circular reference
+// whose record index names no unit does not find the record it names, and one that names a unit is searched there
+// only; a comparison band without a source index searches every source; the row shows the drawing's own text.
+test('the popup finds a span\'s record and shows its row as before D5', () => {
+  const entriesOf = (attributes, records = syntheticSequenceRecords()) => {
+    // A stub element reads an undefined attribute as missing.
+    const element = elementFrom({ ...commonAttributes, ...attributes });
+    return popupModule.buildMatchPopupPayload(element, { matchSequenceRecords: records }).sequenceBundle.entries;
+  };
+  const [missingUnit] = entriesOf({ 'data-query-record-index': '7' });
+  assert.deepStrictEqual([missingUnit.read, missingUnit.unavailableReason], [null, 'The sequence source for this match is unavailable.']);
+  const homology = { 'data-match-kind': 'homology', 'data-reference-side': 'query', 'data-source-index': '0' };
+  const [unitless] = entriesOf({ ...homology, 'data-query-record-index': '7' });
+  assert.deepStrictEqual([unitless.read, unitless.unavailableReason], [null, 'No sequence source matched record “query-record”.']);
+  const [reference] = entriesOf(homology);
+  assert.deepStrictEqual(reference.read, { kind: 'reference', recordId: 'query-record', recordKey: 'query-unit', start: 10, end: 18 });
+  const sourceless = { ...homology, 'data-source-index': undefined };
+  assert.deepStrictEqual(entriesOf(sourceless)[1].read,
+    { kind: 'comparison', sourceIndex: null, recordId: 'subject-record', start: 30, end: 38 });
+  const [, unsupplied] = entriesOf(sourceless, syntheticSequenceRecords({ comparisonSupplied: false }));
+  assert.deepStrictEqual([unsupplied.read, unsupplied.unavailableReason], [null, 'Comparison sequence was not supplied for this BLAST source.']);
+  for (const [qstart, row] of [['abc', 'abc..18'], ['', '..18'], ['1e1', '1e1..18']]) {
+    const [entry] = entriesOf({ 'data-qstart': qstart });
+    assert.equal(`${entry.span.start}..${entry.span.end}`, row, qstart);
+    assert.ok(!/NaN|_0-/.test(entry.filename), entry.filename);
+  }
 });
 
 // OV-1010: a member's null or blank bound is missing, not 0.
@@ -815,14 +858,19 @@ const exactState = exactAdmission.featureState;
 const exactFeatureLookup = new Map(
   exactState.extractedFeatures.map((feature) => [feature.svg_id, feature])
 );
-const exactSequenceRegistry = createSequenceSourceRegistry(exactState.sequenceSources);
+// The Gallery Session's Result and the request it was drawn from: its Linear spans read drawn units.
+const exactSequenceRecords = matchSequenceRecordsOf(
+  exactAdmission.catalog.items.find((item) => item.resultIndex === 0),
+  { renderRequest: exactSession.renderRequest, resources: {} }
+);
+assert.ok(exactSequenceRecords, 'the exact fixture names no records for its spans');
 const exactOptions = {
   featureLookup: exactFeatureLookup,
   sourceFeatures: exactState.biologicalFeatures,
   // The app passes the catalog groups, collinear presentation groups included
   // (svg-actions.js groupsForMatch); adding collinearGroups would list them twice.
   orthogroups: exactState.orthogroups,
-  resolveSequenceSource: exactSequenceRegistry.resolve
+  matchSequenceRecords: exactSequenceRecords
 };
 const exactFeatureTokens = new WeakMap([
   ...exactState.extractedFeatures.map((feature) => [feature, `rendered:${feature.svg_id}`]),
@@ -848,7 +896,8 @@ const EXACT_BASELINES = {
     },
     // The Gallery Session uploads the pinned NZ_CP006932.1 revision (tutorial-data), whose WP_025208444.1 product
     // is "GGDEF domain-containing protein"; the earlier Session's copy read "DHH family phosphoesterase".
-    digest: 'f6a0f4e3b14bdcf00dc6384b5c28aa0006c939d18ddc177773c14957ef43a0df',
+    // D5: the payload names the reads of the spans and the members' sequences, and holds no FASTA text.
+    digest: 'ced4e768e946a7c4b144b0e491aaf2bd760513dab3123bd19f8dac6def3e1919',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'Collinear block' },
       { id: 'Identity', label: 'Identity', value: '43.9684414414' },
@@ -863,7 +912,11 @@ const EXACT_BASELINES = {
     featureRowCount: 30,
     exposedFeatureCount: 105,
     sequenceAvailability: [true, true],
-    combinedSequenceLength: 33898
+    sequenceLengths: [16791,  16405],
+    sequenceReads: [
+      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', recordId: 'AP027078.1', start: 61879, end: 78669 },
+      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', recordId: 'AP027131.1', start: 19161, end: 35565 }
+    ]
   },
   laterDistinctBlock: {
     target: {
@@ -871,7 +924,7 @@ const EXACT_BASELINES = {
       blockId: 'block_0155',
       orthogroupIds: 'og_274;og_275;og_276;og_277;og_278;og_279;og_280;og_281;og_282;og_283;og_284;og_285;og_286;og_287;og_288;og_289;og_290;og_291;og_292;og_293'
     },
-    digest: '4e37391022ef00e144508b14a4f2cdb30662b1840e9cad563d8834a625998a74',
+    digest: '8ac71b136226e4e16bdf84059dfcf98f10114cd2361cc6d59dea55c42ad42436',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'Collinear block' },
       { id: 'Identity', label: 'Identity', value: '64.1326369725' },
@@ -886,7 +939,11 @@ const EXACT_BASELINES = {
     featureRowCount: 40,
     exposedFeatureCount: 140,
     sequenceAvailability: [true, true],
-    combinedSequenceLength: 19668
+    sequenceLengths: [9524,  9671],
+    sequenceReads: [
+      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', recordId: 'AP027078.1', start: 484749, end: 494272 },
+      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', recordId: 'AP027131.1', start: 586163, end: 595833 }
+    ]
   }
 };
 
@@ -924,7 +981,8 @@ test('exact large-fixture payloads retain canonical digests, structure, and Feat
       featureRowCount: featureRows.length,
       exposedFeatureCount: exposedFeatures.length,
       sequenceAvailability: payload.sequenceBundle.entries.map((entry) => entry.available),
-      combinedSequenceLength: payload.sequenceBundle.combinedFasta.length
+      sequenceLengths: payload.sequenceBundle.entries.map((entry) => entry.sequenceLength),
+      sequenceReads: payload.sequenceBundle.entries.map((entry) => entry.read)
     };
   }
   assert.deepStrictEqual(captured, EXACT_BASELINES);

@@ -12,7 +12,6 @@ import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { canonicalRecordReverseComplement, cropFormReverseComplement, linearCardCropForm } from '../services/record-display-model.js';
 /** @import { LinearSeq, WebState } from '../state.js' */
-import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,
@@ -31,7 +30,6 @@ import { catalogNameIndex } from '../services/feature-catalog.js';
 
 /**
  * @import { FeatureCatalog } from '../services/feature-catalog.js'
- * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
  * @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js'
  * @import { CommittedCanonicalSession } from '../services/session-request.js'
@@ -108,23 +106,31 @@ const { computed, ref, watch } = window.Vue;
  * @typedef {{
  *   schema: 2, status: 'resolved' | 'ambiguous', groupId: string, reference: AnchorIdentity,
  *   referenceDisplayedStrand: DisplayedStrand, referenceDisplayCenter: number,
+ *   referenceSourceStart: number, referenceSourceEnd: number,
  *   records: (AlignmentDecision | AlignmentAmbiguity)[], plan: AlignmentPlan | null,
- *   projection: AlignmentProjection | null
- * }} AlignmentResolution The validated helper response.
+ *   projection: AlignmentProjection
+ * }} AlignmentResolution The validated helper response: Python places every candidate on the committed request
+ *   that the call names, and returns its projection (D5-13).
  * @typedef {{ recordKey: string, kind: 'select' | 'skip', anchor: AnchorIdentity | null }} AlignmentChoice
  * @typedef {{
- *   groupId: string, anchor: AnchorIdentity, sourceStart: number, sourceEnd: number, sourceStrand: DisplayedStrand,
+ *   groupId: string, anchor: AnchorIdentity,
  *   identityIsUnique: boolean, hidden: boolean, representative: boolean, role: string
- * }} AlignmentMemberFacts
+ * }} AlignmentMemberFacts A group member as a helper request names it: by its identity. Python reads its source
+ *   coordinates and strand from the committed request (Python's `_member_candidate`); the page sends no copy.
  * @typedef {{
- *   recordKey: string, recordLength: number | null, windows: CanonicalRecordWindow[],
- *   presentation: { reverseComplement: boolean }
- * }} AlignmentRequestRecord A displayed record of a helper request: its windows as the request stores them (Python's
- *   `AlignmentHelperRecord`, which maps an anchor through the window that holds it).
+ *   recordKey: string, windows: CanonicalRecordWindow[], presentation: { reverseComplement: boolean }
+ * }} AlignmentRequestRecord A displayed record of a helper request: its windows and orientation as the committed
+ *   request stores them, which the page reads to check the projection. Python's `AlignmentHelperRecord` reads only
+ *   the key: the committed request owns each record's windows and source length (D5).
  * @typedef {{
  *   schema: 2, groupId: string, records: AlignmentRequestRecord[], reference: AnchorIdentity,
  *   members: AlignmentMemberFacts[], directEdges: never[], choices: AlignmentChoice[]
  * }} AlignmentHelperRequest What the Worker helper resolves.
+ * @typedef {{
+ *   canonicalRequest: Record<string, unknown>, orientations: Record<string, boolean> | null, geometry?: boolean
+ * }} AlignmentHelperProjection The committed request a helper call places every candidate on (Python's
+ *   `AlignmentHelperProjection`): `orientations` are the directions the projection geometry is drawn after (null:
+ *   every record flipped); `geometry: false` asks for the decisions only, and the reply's projection is null.
  */
 
 /** @type {Set<string | null>} */
@@ -411,8 +417,9 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
  * @param {Map<string, RecordNameEntry>} recordLabels
  */
 const referenceView = (response, request, displayFacts, recordLabels) => {
-  const member = request.members.find(({ anchor }) => sameJson(anchor, response.reference));
-  if (!member) throw new Error('Alignment reference has no current member facts.');
+  if (!request.members.some(({ anchor }) => sameJson(anchor, response.reference))) {
+    throw new Error('Alignment reference has no current member facts.');
+  }
   const feature = featureView(response.reference, displayFacts);
   const record = recordLabels.get(response.reference.recordKey);
   return {
@@ -423,8 +430,9 @@ const referenceView = (response, request, displayFacts, recordLabels) => {
     recordName: record?.name,
     recordDetail: record?.detail,
     recordKey: response.reference.recordKey,
-    coordinates: numberText(member.sourceStart + 1) + '..'
-      + numberText(member.sourceEnd) + ' bp',
+    // Python's source coordinates of the reference, read from the committed request.
+    coordinates: numberText(response.referenceSourceStart + 1) + '..'
+      + numberText(response.referenceSourceEnd) + ' bp',
     displayedStrand: strandLabel(response.referenceDisplayedStrand)
   };
 };
@@ -734,10 +742,9 @@ const validatePlan = (value, response, path) => {
 /**
  * @param {unknown} value
  * @param {AlignmentHelperRequest} request
- * @returns {AlignmentProjection | null}
+ * @returns {AlignmentProjection}
  */
 const validateProjection = (value, request) => {
-  if (value === null) return null;
   const raw = exactObject(value, ['binding', 'geometryOrientations', 'records'], 'alignment projection');
   const keys = request.records.map(({ recordKey }) => recordKey);
   if (typeof raw.binding !== 'string' || !/^[a-f0-9]{64}$/.test(raw.binding) || !Array.isArray(raw.records)
@@ -894,19 +901,35 @@ export const projectSimilarityAlignmentDirections = ({ resolution, intent, expec
 };
 
 /**
- * @param {unknown} value
- * @param {AlignmentHelperRequest} request
- * @returns {AlignmentResolution}
+ * The projection of the check before a Generate with a plan: the committed request its decisions are placed on, and
+ * no geometry (the reply's projection is null).
+ * @param {Record<string, unknown>} canonicalRequest
+ * @returns {AlignmentHelperProjection}
  */
-export const validateSimilarityAlignmentResolution = (value, request) => {
-  const raw = exactObject(value, [
-    'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
-    'referenceDisplayCenter', 'records', 'plan', 'projection'
-  ], 'alignment helper response');
+const decisionsOnlyProjection = (canonicalRequest) => ({ canonicalRequest, orientations: null, geometry: false });
+
+/**
+ * The fields of a helper reply.
+ * @param {unknown} value
+ */
+const helperReplyFields = (value) => exactObject(value, [
+  'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
+  'referenceDisplayCenter', 'referenceSourceStart', 'referenceSourceEnd', 'records', 'plan', 'projection'
+], 'alignment helper response');
+
+/**
+ * The decisions of a helper reply, checked against its request: every validator of a reply reads them.
+ * @param {ReturnType<typeof helperReplyFields>} raw
+ * @param {AlignmentHelperRequest} request
+ * @returns {Omit<AlignmentResolution, 'projection'>}
+ */
+const validateDecisions = (raw, request) => {
   if (raw.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !oneOf(['resolved', 'ambiguous'], raw.status)
     || raw.groupId !== request.groupId || !Array.isArray(raw.records)
     || !oneOf([null, -1, 1], raw.referenceDisplayedStrand)
-    || !isFiniteNumber(raw.referenceDisplayCenter)) {
+    || !isFiniteNumber(raw.referenceDisplayCenter)
+    || !isSafeInteger(raw.referenceSourceStart) || !isSafeInteger(raw.referenceSourceEnd)
+    || raw.referenceSourceStart < 0 || raw.referenceSourceEnd < raw.referenceSourceStart) {
     throw new Error('Alignment helper response does not match its request.');
   }
   const reference = validateAnchor(raw.reference, 'alignment helper response.reference');
@@ -943,15 +966,36 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
   if ((raw.status === 'ambiguous') !== ambiguous) {
     throw new Error('Alignment helper response status does not match its records.');
   }
-  /** @type {AlignmentResolution} */
+  /** @type {Omit<AlignmentResolution, 'projection'>} */
   const response = {
     schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
-    records, plan: /** @type {AlignmentPlan | null} */ (null),
-    projection: validateProjection(raw.projection, request)
+    referenceSourceStart: raw.referenceSourceStart, referenceSourceEnd: raw.referenceSourceEnd,
+    records, plan: /** @type {AlignmentPlan | null} */ (null)
   };
-  response.projection?.records.forEach((fact, index) => {
+  if (raw.status === 'resolved') {
+    if (raw.plan === null) throw new Error('Resolved alignment helper response has no plan.');
+    response.plan = validatePlan(raw.plan, response, 'alignment helper response.plan');
+  } else if (raw.plan !== null) {
+    throw new Error('Ambiguous alignment helper response must not contain a plan.');
+  }
+  return response;
+};
+
+/**
+ * A review's reply: the decisions, and the projection whose current placements agree with them.
+ * @param {unknown} value
+ * @param {AlignmentHelperRequest} request
+ * @returns {AlignmentResolution}
+ */
+export const validateSimilarityAlignmentResolution = (value, request) => {
+  const raw = helperReplyFields(value);
+  const decided = validateDecisions(raw, request);
+  const { records, reference } = decided;
+  /** @type {AlignmentResolution} */
+  const response = { ...decided, projection: validateProjection(raw.projection, request) };
+  response.projection.records.forEach((fact, index) => {
     const current = fact.variants[Number(fact.beforeReverseComplement)];
     const candidates = records[index].candidates;
     candidates.forEach((candidate) => {
@@ -969,13 +1013,19 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
       }
     }
   });
-  if (raw.status === 'resolved') {
-    if (raw.plan === null) throw new Error('Resolved alignment helper response has no plan.');
-    response.plan = validatePlan(raw.plan, response, 'alignment helper response.plan');
-  } else if (raw.plan !== null) {
-    throw new Error('Ambiguous alignment helper response must not contain a plan.');
-  }
   return deepFreeze(response);
+};
+
+/**
+ * The reply of the check before a Generate with a plan, which asks for no projection geometry (`geometry: false`):
+ * the decisions only.
+ * @param {unknown} value
+ * @param {AlignmentHelperRequest} request
+ */
+export const validateSimilarityAlignmentCheck = (value, request) => {
+  const raw = helperReplyFields(value);
+  if (raw.projection !== null) throw new Error('The alignment check reply must not contain a projection.');
+  validateDecisions(raw, request);
 };
 
 /**
@@ -991,57 +1041,14 @@ const strandValue = (value, path) => {
   throw new Error(`${path} has an invalid source strand.`);
 };
 
-// `drawnSeqs`: the drawn Linear cards, which the record catalog's `sourceIndex` counts.
-/**
- * @param {Partial<FeatureCatalog> | null | undefined} catalog
- * @param {AnnotationRecordCatalog | null | undefined} recordCatalog
- * @param {readonly { uid?: unknown }[] | null | undefined} drawnSeqs
- */
-const recordLengths = (catalog, recordCatalog, drawnSeqs) => {
-  /** @type {Map<string, number>} */
-  const lengths = new Map();
-  (Array.isArray(catalog?.items) ? catalog.items : []).forEach((item) => {
-    const keys = Array.isArray(item?.recordKeys) ? item.recordKeys : [];
-    const sources = Array.isArray(item?.sequenceSources) ? item.sequenceSources : [];
-    if (keys.length !== sources.length) return;
-    keys.forEach((recordKey, index) => {
-      const sequence = sources[index]?.sequence;
-      if (typeof sequence === 'string' && sequence.length > 0) {
-        lengths.set(String(recordKey), sequence.length);
-      }
-    });
-  });
-  if (recordCatalog?.status === 'ready') {
-    /** @type {Map<number, AnnotationCatalogRecord | null>} */
-    const discovered = new Map();
-    // Number.isSafeInteger holds only for a number: each cast below follows that check.
-    (recordCatalog.records || []).forEach((record) => {
-      const index = record?.sourceIndex;
-      if (!Number.isSafeInteger(index) || /** @type {number} */ (index) < 0) return;
-      discovered.set(/** @type {number} */ (index), discovered.has(/** @type {number} */ (index)) ? null : record);
-    });
-    discovered.forEach((record, index) => {
-      const key = String(drawnSeqs?.[index]?.uid || '');
-      if (key && record && Number.isSafeInteger(record.recordLength)
-          && /** @type {number} */ (record.recordLength) > 0 && !lengths.has(key)) {
-        lengths.set(key, /** @type {number} */ (record.recordLength));
-      }
-    });
-  }
-  return lengths;
-};
-
 /**
  * @param {{
  *   group: AliasSource | null | undefined, members: OrthogroupMemberFacts[],
- *   reference: AliasSource | null | undefined, request: CommittedAlignmentRequest,
- *   catalog: Partial<FeatureCatalog> | null | undefined, recordCatalog: AnnotationRecordCatalog | null | undefined,
- *   drawnSeqs: readonly { uid?: unknown }[] | null | undefined, choices: AlignmentChoice[]
+ *   reference: AliasSource | null | undefined, request: CommittedAlignmentRequest, choices: AlignmentChoice[]
  * }} options
  * @returns {AlignmentHelperRequest}
  */
-const buildHelperRequest = ({ group, members, reference, request, catalog,
-  recordCatalog, drawnSeqs, choices }) => {
+const buildHelperRequest = ({ group, members, reference, request, choices }) => {
   const groupStatus = orthogroupIdStatus(group);
   if (!groupStatus.valid || !groupStatus.supplied) {
     throw new Error('The selected Similarity Group identity is invalid.');
@@ -1050,13 +1057,11 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   if (!request || request.mode !== 'linear' || !Array.isArray(request.records)) {
     throw new Error('Generate a Linear diagram before aligning a Similarity Group.');
   }
-  const lengths = recordLengths(catalog, recordCatalog, drawnSeqs);
   const records = request.records.map((record, index) => {
     const recordKey = text(record?.recordKey, `renderRequest.records[${index}].recordKey`);
-    // The windows go as the request stores them; Python validates them and places each anchor by its window.
+    // The windows go as the request stores them; the page checks the projection against them.
     return {
       recordKey,
-      recordLength: lengths.get(recordKey) || null,
       windows: record.windows.map(({ start, end, reverseComplement, column }) => ({ start, end, reverseComplement, column })),
       presentation: { reverseComplement: record.presentation.reverseComplement }
     };
@@ -1064,24 +1069,15 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   const displayedRecords = new Set(records.map(({ recordKey }) => recordKey));
   const normalizedMembers = members.map((member, index) => {
     const anchor = anchorFromSource(member, `Similarity Group member ${index + 1}`);
-    const start = locationPartBound(member, 'start');
-    const end = locationPartBound(member, 'end');
-    if (
-      !displayedRecords.has(anchor.recordKey)
-      || !Number.isSafeInteger(start)
-      || start < 0
-      || !Number.isSafeInteger(end)
-      || end < start
-    ) throw new Error(`Similarity Group member ${index + 1} has invalid display facts.`);
+    if (!displayedRecords.has(anchor.recordKey)) {
+      throw new Error(`Similarity Group member ${index + 1} has invalid display facts.`);
+    }
     return {
       source: member,
       canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
       payload: {
         groupId: groupStatus.value,
         anchor,
-        sourceStart: start,
-        sourceEnd: end,
-        sourceStrand: strandValue(member?.strand, `Similarity Group member ${index + 1}`),
         identityIsUnique: true,
         hidden: Boolean(member?.hidden),
         representative: Boolean(member?.representative),
@@ -1156,7 +1152,6 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  * @property {{ readonly value: SelectedGroupDetail | null }} selectedOrthogroupDetail
  *   the orthogroup owner's detail of the drawer's selected group (OV-920)
  * @property {() => Record<string, any> | null} getCommittedRequest
- * @property {(() => AnnotationRecordCatalog) | null} [getRecordCatalog]
  * @property {() => Record<string, any> | null} getCommittedSession
  * @property {(args: Record<string, any>) => Record<string, any>} projectCommittedAlignment
  * @property {(run: AlignmentCandidateRun) => Promise<Record<string, any>>} runRecordAlignment
@@ -1212,7 +1207,6 @@ export const createSimilarityAlignmentActions = ({
   getEnrichedOrthogroupMembers,
   selectedOrthogroupDetail,
   getCommittedRequest,
-  getRecordCatalog = null,
   getCommittedSession,
   projectCommittedAlignment,
   runRecordAlignment,
@@ -1229,10 +1223,6 @@ export const createSimilarityAlignmentActions = ({
   const shownLinearCards = () => {
     const drawing = state.activeDrawing();
     return drawing.mode === 'linear' ? drawing.linearSeqs : [];
-  };
-  const drawnLinearCards = () => {
-    const drawing = state.activeDrawing();
-    return drawing.mode === 'linear' ? drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff) : [];
   };
   if (
     !state
@@ -1353,15 +1343,16 @@ export const createSimilarityAlignmentActions = ({
     return svg ? materializeRecordTranslations(svg, base, recordKeys, plan) : base;
   };
 
-  // `drafted`: the translations a draft's baseline materialized, kept as they are.
-  /** @param {{ materializePlan?: boolean, drafted?: unknown }} [options] */
-  const baseline = ({ materializePlan = false, drafted = null } = {}) => {
+  // `drafted`: the translations a draft's baseline materialized, kept as they are. `fromResult`: read the translations
+  // off the shown Result; false keeps the committed ones (a reply without geometry reads none).
+  /** @param {{ materializePlan?: boolean, drafted?: unknown, fromResult?: boolean }} [options] */
+  const baseline = ({ materializePlan = false, drafted = null, fromResult = materializePlan } = {}) => {
     const canonical = getCommittedSession();
     const request = cloneJson(canonical?.renderRequest);
     if (!request) throw new Error('Generate a Linear diagram before aligning.');
     const recordKeys = request.records.map((/** @type {CommittedRecord} */ { recordKey }) => recordKey);
     const translations = drafted ? cloneJson(drafted)
-      : materializePlan
+      : fromResult
         ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
         : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
     const orientations = request.records.map((/** @type {CommittedRecord} */ record) => ({ recordKey: record.recordKey,
@@ -1442,7 +1433,7 @@ export const createSimilarityAlignmentActions = ({
   const projectDraft = (response = draft.value?.response, choices = rowChoices()) => (
     projectSimilarityAlignmentDirections({ resolution: response,
       // The fallback is read only without a draft, where the response has its projection (`installReviewDraft`).
-      expectedBinding: draft.value?.binding || /** @type {AlignmentProjection} */ (response.projection).binding,
+      expectedBinding: draft.value?.binding || response.projection.binding,
       intent: draft.value?.intent || { mode: 'keep' }, choices })
   );
   // The draft as the review opens with it. The records without a choice then are a fact of
@@ -1455,7 +1446,6 @@ export const createSimilarityAlignmentActions = ({
    */
   const installReviewDraft = (response, request,
     rows = reviewRows(response, request, displayFacts, recordLabels), extra = {}) => {
-    if (!response.projection) throw new Error('Source-bound alignment facts are required.');
     draft.value = deepFreeze({ response, binding: response.projection.binding,
       intent: { mode: 'keep' },
       reference: referenceView(response, request, displayFacts, recordLabels),
@@ -1589,9 +1579,6 @@ export const createSimilarityAlignmentActions = ({
       const request = buildHelperRequest({
         group, members, reference,
         request: activeBaseline.request,
-        catalog: state.featureCatalog.value,
-        recordCatalog: getRecordCatalog?.(),
-        drawnSeqs: drawnLinearCards(),
         choices: []
       });
       setReviewNames(request, members, activeBaseline.request);
@@ -1847,8 +1834,7 @@ export const createSimilarityAlignmentActions = ({
         const plan = current.request.layout.similarityAlignment;
         const members = resetSourceMembers(plan, catalogNameIndex(state.featureCatalog.value).rows);
         const request = buildHelperRequest({group:{id:plan.groupId}, members,
-          reference:plan.reference, request:current.request, catalog:state.featureCatalog.value,
-          recordCatalog:getRecordCatalog?.(), drawnSeqs:drawnLinearCards(), choices:planChoices(plan)});
+          reference:plan.reference, request:current.request, choices:planChoices(plan)});
         const vector = Object.fromEntries(orientations.map(direction => [direction.recordKey,direction.reverseComplement]));
         const helper = await runHelperOperation(resolveOperation, {request,
           projection:{canonicalRequest:current.request,orientations:vector},resources:current.canonical.resources});
@@ -1991,9 +1977,6 @@ export const createSimilarityAlignmentActions = ({
         members,
         reference: plan.reference,
         request: currentRequest(),
-        catalog: state.featureCatalog.value,
-        recordCatalog: getRecordCatalog?.(),
-        drawnSeqs: drawnLinearCards(),
         choices: planChoices(plan)
       });
     } catch (cause) {
@@ -2004,9 +1987,13 @@ export const createSimilarityAlignmentActions = ({
       return prepareStaleTargetRepair(plan, request, goneRecordKeys, expectedActionId);
     }
     try {
-      const helper = await runHelperOperation(resolveOperation, { request });
+      // Python places the plan's anchors on the committed request (D5-13); the check plans and builds no layout, so it
+      // reads no placement off the shown Result (one an older gbdraw drew has no record keys to read it by).
+      const committed = baseline({ materializePlan: true, fromResult: false });
+      const helper = await runHelperOperation(resolveOperation, { request,
+        projection: decisionsOnlyProjection(committed.request), resources: committed.canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      validateSimilarityAlignmentResolution(helper?.result, request);
+      validateSimilarityAlignmentCheck(helper?.result, request);
     } catch (_cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       const alignedKeys = new Set(

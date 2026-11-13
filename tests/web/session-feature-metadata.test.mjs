@@ -107,6 +107,7 @@ const {
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
   extractSessionSourceFeatures,
+  hasUsableBiologicalFeatureCatalog,
   migrateFeatureOverrideState,
   normalizeRecordIndex
 } = await import(pathToFileURL(join(tempDir, 'services', 'session-feature-recovery.js')));
@@ -990,6 +991,22 @@ for (const invalidRecordIndex of [
   });
   assert.equal(plan.status, 'recovered', plan.reason);
   assert.deepEqual(plan.recoveredFeatureState.extractedFeatures.map((feature) => feature.rendered_svg_id), ['h_record_1', 'h_record_1']);
+}
+
+// The rows a Session 27-39 stored, which the recovery plan reads, kept their
+// sequences and no catalog identity: they are usable when a row stored a
+// sequence, as before D5 (D5 review r1), and an identity alone does not make
+// them usable.
+{
+  const row = { record_idx: 0, svg_id: 'stable-a', type: 'CDS', start: 0, end: 576, strand: '-' };
+  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [{ ...row, nucleotide_sequence: 'ATGA' }] }), true);
+  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [{ ...row, aminoAcidSequence: 'M' }] }), true);
+  assert.equal(hasUsableBiologicalFeatureCatalog({
+    biologicalFeatures: [{ ...row, recordKey: 'record-1', biologicalFeatureId: 'fcf4827e2' }]
+  }), false);
+  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [row] }), false);
+  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [] }), false);
+  assert.equal(hasUsableBiologicalFeatureCatalog({}), false);
 }
 
 console.log('session feature metadata tests passed');

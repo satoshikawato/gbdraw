@@ -707,23 +707,6 @@ test('a Load without features does not keep the previous Load\'s "Feature editor
   assert.equal(state.featureEditorStatusText.value, 'No features ready');
 });
 
-// OV-712: the sequences of the saved comparison matches that cannot be read
-// again (here: a malformed GenBank input) are listed, not only reported as
-// `degradedRecovery`.
-test('an older Session whose match sequences cannot be read again lists it (OV-712)', async () => {
-  const session = fixture('scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz');
-  session.files.linearSeqs[0].gb.data = Buffer.from('LOCUS broken\nORIGIN\n 1 zzzz\n').toString('base64');
-  const dialogs = [];
-  const loaded = await importSession(await input(session), {
-    transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
-  });
-  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.equal(loaded.degradedRecovery, true);
-  assert.ok(dialogs.flat().includes('Comparisons: the sequences of the saved comparison matches could not be read again from the'
-    + ' input files; the SVG preview stays, and the next Generate reads them.'), JSON.stringify(dialogs));
-  assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'match-sequences-unrestored').map(({ path }) => path), ['files']);
-});
-
 // OV-890: a Depth binding sits one list deeper (`c_depth[record][slot]`); one
 // that names a resource the Session does not hold is dropped with the row the
 // other bindings get, its slot left empty. With no resources at all the file

@@ -195,7 +195,7 @@ const DOCUMENT_KEYS = [
   'featurePanelTab', 'lastRunInfo', 'zoom', 'canvasPan', 'displayedResultMetadata', 'activeDrawing',
   // What Load reports and the Result artifacts it restores.
   'errorLog', 'comparisonWarnings', 'annotationWarnings', 'featureIdentityNotices', 'originalLegendOrder',
-  'originalLegendColors', 'originalSvgStroke', 'matchSequenceRegistry', 'pairwiseMatchFactors', 'featureOrthogroupIndex',
+  'originalLegendColors', 'originalSvgStroke', 'pairwiseMatchFactors', 'featureOrthogroupIndex',
   'linearReorderNotice', 'circularRecordDiscovery', 'featureEditRemovalCount',
   'generationFailureRecovery', 'svgContent'
 ];
@@ -258,7 +258,6 @@ dump.load = {
   repairs: Array.isArray(loaded?.repairs) ? loaded.repairs.map((repair) => canon(repair)) : null,
   notices: canon(loaded?.notices ?? null),
   warnings: canon(loaded?.warnings ?? null),
-  degradedRecovery: loaded?.degradedRecovery ?? null,
   comparisonDisposition: loaded?.comparisonDisposition ?? null,
   validatorCalls
 };

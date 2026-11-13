@@ -26,8 +26,8 @@ OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg e
 buildProteinLosatCacheKeys checkExportLimit convertLosatpPairsToGenomicPayload decideAutoOrientation deriveRegionDrawing convertRingTablesToSearchFrame convertStoredProteinResultFrames
 extractCdsProteinFasta extractFirstFasta findInOtherFiles hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords planCardWindows planGenomeScales planLinearUnits planRecordPlaces planRingScales promoteLegacyLosatpCache
-readAllSequenceRecords readComparisonSequence readFeatureOverrideTable readRecordSpanSequences readSearchQueries registerFonts resolveFeatureAnchor resolveLegacyProteinReferences resolveSimilarityAlignment computeLabelFitRow
-searchHitAnnotationSet synthesizeColorRules upgradeLegacySession validateConfigOverrides""".split())
+readAllSequenceRecords readComparisonSequence readEmbedSequences readFeatureOverrideTable readFeatureSequences readMatchSequences readRecordSpanSequences readSearchQueries registerFonts resolveFeatureAnchor resolveLegacyProteinReferences resolveSimilarityAlignment computeLabelFitRow
+searchHitAnnotationSet synthesisQualifiers synthesizeColorRules upgradeLegacySession validateConfigOverrides""".split())
 STAGES = frozenset("""unknown initialization resource-staging request-validation helper
 rule-validation render result-admission cleanup export-capture export-conversion font-validation""".split())
 
@@ -313,12 +313,6 @@ def _validation(error: BaseException) -> tuple[str, dict]:
             if reason == "SELECT_ONE":
                 context.update(inputOrdinal=int(match[1]), recordCount=int(match[2]))
             return code, context
-    for suffix, field, reason in (
-        ("sourceEnd must not precede sourceStart.", "sourceEnd", "ORDER"),
-        ("sourceStrand must be -1, 1, or null.", "sourceStrand", "STRAND"),
-    ):
-        if re.fullmatch(r"[\s\S]+\." + re.escape(suffix), message):
-            return "INPUT_INVALID", {"field": field, "reason": reason}
     missing = re.fullmatch(r"Missing (record_id|feature_type|qualifier|value regex) token in (?:label override|feature visibility) table at row ([0-9]+)\.", message)
     if missing:
         return "TABLE_INVALID", {"field": "pattern" if missing[1] == "value regex" else missing[1], "row": int(missing[2]), "reason": "REQUIRED"}

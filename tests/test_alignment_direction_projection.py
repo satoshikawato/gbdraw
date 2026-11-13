@@ -22,6 +22,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import RecordWindow, parse_region_spec
 from gbdraw.session_request_codec import encode_canonical_request
+from gbdraw.web_support.error_adapter import serialize_web_error
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor
 from gbdraw.render.composition import applied_composition_plan
 
@@ -66,13 +67,12 @@ def build_fixture(tmp_path):
             parse_region_spec('unusable:401-700') if key == 'unusable' else None)
         presentation = RecordPresentation(reverse_complement=key == 'skip')
         records.append(RecordInput(GenBankInputSource(path), record_key=key, region=region, presentation=presentation))
-        helpers.append(dict(recordKey=key, recordLength=length, windows=[] if region is None else
+        helpers.append(dict(recordKey=key, windows=[] if region is None else
                             [dict(start=region.start, end=region.end, reverseComplement=region.reverse_complement,
                                   column=None)],
                             presentation=dict(reverseComplement=presentation.reverse_complement)))
         if key != 'missing':
-            members.append(dict(groupId='group', anchor=anchor, sourceStart=100, sourceEnd=260,
-                                sourceStrand=strand, identityIsUnique=True, hidden=False,
+            members.append(dict(groupId='group', anchor=anchor, identityIsUnique=True, hidden=False,
                                 representative=False, role='member'))
     request = LinearDiagramRequest(records=tuple(records),
         options=LinearDiagramOptions(selected_features_set=('CDS',), output=LinearOutputOptions(legend='none'),
@@ -209,10 +209,11 @@ def test_source_bytes_and_selector_changes_are_stale(fixture):
 def test_source_anchor_claims_and_canonical_coverage_rejected(fixture):
     _request, helper, context, resource_paths, _response, _paths = fixture
     helper = copy.deepcopy(helper)
+    # A member is named by its identity only; the page sends no copy of its source facts.
     helper['members'][0]['sourceEnd'] = 261
-    with pytest.raises(ValidationError, match='source anchor facts changed'):
+    with pytest.raises(ValidationError, match=r'request\.members\[0\] has invalid fields'):
         resolve_similarity_alignment_payload(helper, projection=context, resource_paths=resource_paths)
-    helper['members'][0]['sourceEnd'] = 260
+    del helper['members'][0]['sourceEnd']
     helper['members'][0]['anchor']['stableFeatureSvgId'] = 'wrong'
     with pytest.raises(ValidationError, match='exactly one source feature'):
         resolve_similarity_alignment_payload(helper, projection=context, resource_paths=resource_paths)
@@ -325,8 +326,7 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
         members.append(dict(groupId='group', anchor=dict(
             recordKey=key, biologicalFeatureId=identity.biological_feature_id,
             sourceFeatureIndex=identity.source_feature_index, stableFeatureSvgId=identity.stable_feature_id),
-            sourceStart=int(location.start), sourceEnd=int(location.end), sourceStrand=1, identityIsUnique=True,
-            hidden=False, representative=False, role='member'))
+            identityIsUnique=True, hidden=False, representative=False, role='member'))
         records.append(RecordInput(GenBankInputSource(path), record_key=key,
                                    windows=windows if key == 'circ' else (),
                                    presentation=RecordPresentation(reverse_complement=reverse and key == 'circ')))
@@ -336,7 +336,7 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
     encoded = encode_canonical_request(request)
     paths = {item.resource_id: str(item.source_path) for item in encoded.resources}
     helper = dict(schema=2, groupId='group', reference=members[0]['anchor'], members=members, directEdges=[],
-                  choices=[], records=[dict(recordKey=stored['recordKey'], recordLength=1000,
+                  choices=[], records=[dict(recordKey=stored['recordKey'],
                                             windows=copy.deepcopy(stored['windows']),
                                             presentation=dict(reverseComplement=stored['presentation']['reverseComplement']))
                                        for stored in encoded.payload['records']])
@@ -369,17 +369,29 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
 def test_helper_center_is_the_renderer_center(tmp_path, windows, reverse, center):
     helper, context, paths = _circular_fixture(tmp_path, windows=windows, reverse=reverse)
     rendered = resolve_similarity_alignment_payload(helper, projection=context, resource_paths=paths)
-    alone = resolve_similarity_alignment_payload(helper)
 
     def circ_center(response):
         (row,) = [row for row in response['records'] if row['recordKey'] == 'circ']
         (candidate,) = row['candidates']
         return candidate['displayCenter'], candidate['displayedStrand'], candidate['usable']
 
-    assert circ_center(alone) == circ_center(rendered)
+    # The helper places the anchor where the renderer draws it on the committed request (D5-13).
     assert circ_center(rendered)[0] == center
     assert rendered['plan']['records'][1]['status'] == ('aligned' if center is not None else 'skipped')
     # The flip variant turns the record round from the direction it is drawn in: reversed by its presentation, or when
     # every window is (the Web reads it so, ``canonicalRecordReverseComplement``).
     drawn_reverse = reverse or bool(windows) and all(window.reverse_complement for window in windows)
     assert rendered['projection']['geometryOrientations']['circ'] is (not drawn_reverse)
+
+
+# A window whose start is after its end runs across the origin (OV-2771). The helper places anchors on the
+# committed request, so a window the crop refuses is refused with the crop's diagnostic, which names no record.
+@pytest.mark.parametrize('window', [RecordWindow(1011, 1020), RecordWindow(1011, 2)])
+def test_a_window_the_crop_refuses_is_refused_with_its_diagnostic(tmp_path, window):
+    helper, context, paths = _circular_fixture(tmp_path, windows=(window,))
+    with pytest.raises(ValidationError) as caught:
+        resolve_similarity_alignment_payload(helper, projection=context, resource_paths=paths)
+    result = serialize_web_error(caught.value, operation='resolveSimilarityAlignment', stage='helper')
+    assert result['code'] == 'REGION_INVALID'
+    assert result['context'] == {'field': 'region', 'reason': 'RECORD_BOUNDS'}
+    assert 'circ' not in json.dumps(result)

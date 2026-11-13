@@ -21,6 +21,9 @@ from gbdraw.web_support.feature_metadata import _source_anchor_profile
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_gff_fasta_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+from gbdraw.web_support.feature_metadata import feature_sequence_payload
+from gbdraw.features.source import drawn_source_features
+from gbdraw.io.genome import read_flat_file_records
 from gbdraw.features.visibility import compile_feature_visibility_rules, should_render_feature
 
 
@@ -72,6 +75,23 @@ def _extract_features(namespace: dict[str, object], path: Path) -> list[dict[str
     payload = json.loads(result)
     assert "error" not in payload
     return payload["features"]
+
+
+def _sequences_of(records: list[SeqRecord], row: dict[str, object]) -> dict[str, object]:
+    """The sequences the on-demand read gives a catalog row: by its record and source feature index."""
+
+    record = records[row["record_idx"]]  # type: ignore[index]
+    feature = drawn_source_features(record)[row["feature_index"]]  # type: ignore[index]
+    return dict(feature_sequence_payload(feature, record))
+
+
+def _genbank_sequences(path: Path, row: dict[str, object]) -> dict[str, object]:
+    return _sequences_of(list(read_flat_file_records(str(path))), row)
+
+
+def _gff_sequences(gff_path: Path, fasta_path: Path, row: dict[str, object]) -> dict[str, object]:
+    records = load_gff_fasta([str(gff_path)], [str(fasta_path)], keep_all_features=True)
+    return _sequences_of(list(records), row)
 
 
 class _ReplyBuffer:
@@ -301,7 +321,8 @@ def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
     assert features[0]["record_id"] == "GffRecord"
     assert features[0]["gene"] == "example"
     assert features[0]["product"] == "example protein"
-    assert features[0]["nucleotide_sequence"] == "ATGAAATAAGGG"
+    assert "nucleotide_sequence" not in features[0]
+    assert _gff_sequences(gff_path, fasta_path, features[0])["nucleotideSequence"] == "ATGAAATAAGGG"
 
     rendered_records = load_gff_fasta(
         [str(gff_path)],
@@ -345,7 +366,8 @@ def test_web_feature_extraction_includes_qualifiers_locations_and_translation(
         )
     )
 
-    features = _extract_features(python_helpers_namespace, _write_genbank(tmp_path, record))
+    path = _write_genbank(tmp_path, record)
+    features = _extract_features(python_helpers_namespace, path)
     feature = features[0]
 
     assert feature["record_id"] == "NC_000001"
@@ -366,9 +388,12 @@ def test_web_feature_extraction_includes_qualifiers_locations_and_translation(
         "partOrder": "biological",
         "strand": "+",
     }
-    assert feature["nucleotide_sequence"] == "ATGAAATAA"
-    assert feature["amino_acid_sequence"] == "MK"
-    assert feature["sequence_warnings"] == []
+    assert feature["qualifiers"]["translation"] == ["MK"]
+    assert _genbank_sequences(path, feature) == {
+        "nucleotideSequence": "ATGAAATAA",
+        "aminoAcidSequence": "MK",
+        "sequenceWarnings": [],
+    }
 
 
 def test_web_feature_extraction_translates_simple_cds_without_translation(
@@ -384,11 +409,11 @@ def test_web_feature_extraction_translates_simple_cds_without_translation(
         )
     )
 
-    feature = _extract_features(python_helpers_namespace, _write_genbank(tmp_path, record))[0]
+    path = _write_genbank(tmp_path, record)
+    feature = _extract_features(python_helpers_namespace, path)[0]
+    sequences = _genbank_sequences(path, feature)
 
-    assert feature["nucleotide_sequence"] == "ATGAAA"
-    assert feature["amino_acid_sequence"] == "MK"
-    assert feature["sequence_warnings"] == []
+    assert sequences == {"nucleotideSequence": "ATGAAA", "aminoAcidSequence": "MK", "sequenceWarnings": []}
 
 
 def test_web_feature_extraction_reports_invalid_translation_warning(
@@ -404,11 +429,13 @@ def test_web_feature_extraction_reports_invalid_translation_warning(
         )
     )
 
-    feature = _extract_features(python_helpers_namespace, _write_genbank(tmp_path, record))[0]
+    path = _write_genbank(tmp_path, record)
+    feature = _extract_features(python_helpers_namespace, path)[0]
+    sequences = _genbank_sequences(path, feature)
 
-    assert feature["nucleotide_sequence"] == "ATGAA"
-    assert feature["amino_acid_sequence"] == ""
-    assert any("not divisible by 3" in warning for warning in feature["sequence_warnings"])
+    assert sequences["nucleotideSequence"] == "ATGAA"
+    assert sequences["aminoAcidSequence"] == ""
+    assert any("not divisible by 3" in warning for warning in sequences["sequenceWarnings"])
 
 
 def _write_gff3_cds_rows(
@@ -457,10 +484,12 @@ def test_web_feature_extraction_translates_table_start_codon_as_methionine(
         SeqFeature(FeatureLocation(0, len(sequence), strand=1), type="CDS", qualifiers=qualifiers)
     )
 
-    feature = _extract_features(python_helpers_namespace, _write_genbank(tmp_path, record))[0]
+    path = _write_genbank(tmp_path, record)
+    feature = _extract_features(python_helpers_namespace, path)[0]
+    sequences = _genbank_sequences(path, feature)
 
-    assert feature["amino_acid_sequence"] == expected
-    assert feature["sequence_warnings"] == []
+    assert sequences["aminoAcidSequence"] == expected
+    assert sequences["sequenceWarnings"] == []
 
 
 def test_web_feature_extraction_translates_offset_or_five_prime_partial_cds_literally(
@@ -475,11 +504,9 @@ def test_web_feature_extraction_translates_offset_or_five_prime_partial_cds_lite
             qualifiers={"locus_tag": ["OFFSET_0001"], "codon_start": ["2"], "transl_table": ["11"]},
         )
     )
-    offset_feature = _extract_features(
-        python_helpers_namespace,
-        _write_genbank(tmp_path, record),
-    )[0]
-    assert offset_feature["amino_acid_sequence"] == "VK"
+    offset_path = _write_genbank(tmp_path, record)
+    offset_feature = _extract_features(python_helpers_namespace, offset_path)[0]
+    assert _genbank_sequences(offset_path, offset_feature)["aminoAcidSequence"] == "VK"
 
     # The 5' end of a plus-strand GFF3 CDS is its start column; of a minus-strand
     # CDS, its end column. Only an incomplete 5' end keeps the first codon literal.
@@ -500,7 +527,7 @@ def test_web_feature_extraction_translates_offset_or_five_prime_partial_cds_lite
     )
 
     assert {
-        feature["qualifiers"]["id"][0]: feature["amino_acid_sequence"]
+        feature["qualifiers"]["id"][0]: _gff_sequences(gff_path, fasta_path, feature)["aminoAcidSequence"]
         for feature in payload["features"]
     } == {"plus5": "VK", "minus5": "VK", "plus3": "MKP", "minus3": "MKP"}
 
@@ -521,11 +548,14 @@ def test_web_feature_extraction_uses_gff3_phase_as_reading_frame(tmp_path: Path)
         selected_features=["CDS"],
     )
 
-    features = {feature["qualifiers"]["id"][0]: feature for feature in payload["features"]}
-    assert features["plus"]["amino_acid_sequence"] == "MKPG"
-    assert features["minus"]["amino_acid_sequence"] == "VK"
-    assert features["plus"]["sequence_warnings"] == []
-    assert features["minus"]["sequence_warnings"] == []
+    features = {
+        feature["qualifiers"]["id"][0]: _gff_sequences(gff_path, fasta_path, feature)
+        for feature in payload["features"]
+    }
+    assert features["plus"]["aminoAcidSequence"] == "MKPG"
+    assert features["minus"]["aminoAcidSequence"] == "VK"
+    assert features["plus"]["sequenceWarnings"] == []
+    assert features["minus"]["sequenceWarnings"] == []
 
 
 def test_web_feature_extraction_matches_mg1655_translation_without_the_qualifier() -> None:
@@ -538,7 +568,7 @@ def test_web_feature_extraction_matches_mg1655_translation_without_the_qualifier
     payload = extract_features_from_records_payload([record], selected_features=["CDS"])
 
     assert {
-        feature["locus_tag"]: feature["amino_acid_sequence"]
+        feature["locus_tag"]: _sequences_of([record], feature)["aminoAcidSequence"]
         for feature in payload["features"]
         if feature["type"] == "CDS"
     } == expected
@@ -560,13 +590,15 @@ def test_web_feature_extraction_adds_compound_location_parts(
         )
     )
 
-    feature = _extract_features(python_helpers_namespace, _write_genbank(tmp_path, record))[0]
+    path = _write_genbank(tmp_path, record)
+    feature = _extract_features(python_helpers_namespace, path)[0]
+    sequences = _genbank_sequences(path, feature)
 
     assert feature["location_parts"] == [
         {"start": 0, "end": 3, "strand": "+", "display": "1..3"},
         {"start": 6, "end": 9, "strand": "+", "display": "7..9"},
     ]
-    assert feature["nucleotide_sequence"] == "AAAGGG"
+    assert sequences["nucleotideSequence"] == "AAAGGG"
 
 
 @pytest.mark.parametrize(
@@ -839,8 +871,8 @@ def test_biological_feature_catalog_keeps_features_excluded_from_rendering() -> 
     hidden = payload["biological_features"][0]
     assert hidden["feature_index"] == 0
     assert hidden["svg_id"] == hidden["stable_feature_id"] == hidden["stable_svg_id"]
-    assert hidden["nucleotide_sequence"] == "ATGAAATAA"
-    assert hidden["amino_acid_sequence"] == "MK"
+    assert _sequences_of([record], hidden)["nucleotideSequence"] == "ATGAAATAA"
+    assert _sequences_of([record], hidden)["aminoAcidSequence"] == "MK"
 
 
 def test_biological_feature_catalog_excludes_non_rendered_source_features() -> None:

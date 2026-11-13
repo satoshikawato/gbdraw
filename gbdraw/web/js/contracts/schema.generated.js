@@ -63,13 +63,27 @@ export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7,
 export const SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 2;
 
 // gbdraw/session_io.py: CURRENT_FEATURE_CATALOG_SCHEMA
-export const FEATURE_CATALOG_SCHEMA = 5;
+export const FEATURE_CATALOG_SCHEMA = 6;
 
 // gbdraw/web_support/feature_catalog.py: ANCHOR_FEATURE_CATALOG_SCHEMA
 export const ANCHOR_FEATURE_CATALOG_SCHEMA = 4;
 
 // gbdraw/web_support/feature_catalog.py: LEGACY_FEATURE_CATALOG_SCHEMA
 export const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
+
+// gbdraw/session_io.py: SEQUENCE_FEATURE_CATALOG_SCHEMA
+export const SEQUENCE_FEATURE_CATALOG_SCHEMA = 5;
+
+// gbdraw/web_support/feature_catalog.py: INTERACTIVE_EMBED_SCHEMA
+export const INTERACTIVE_EMBED_SCHEMA = 5;
+
+// gbdraw/web_support/feature_catalog.py: STORED_SEQUENCE_KEYS
+/** @type {readonly string[]} */
+export const STORED_SEQUENCE_KEYS = Object.freeze(['aminoAcidSequence', 'amino_acid_sequence', 'nucleotideSequence', 'nucleotide_sequence', 'sequenceSourceIndex', 'sequenceWarnings', 'sequence_warnings', 'translationFromAminoAcidSequence']);
+
+// gbdraw/web_support/catalog_sequences.py: MATCH_SPAN_REASONS
+/** @type {readonly ['NEVER_SUPPLIED', 'SOURCE_UNAVAILABLE', 'SOURCE_KEY_CONFLICT', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS', 'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'OUT_OF_RANGE']} */
+export const MATCH_SPAN_REASONS = Object.freeze(['NEVER_SUPPLIED', 'SOURCE_UNAVAILABLE', 'SOURCE_KEY_CONFLICT', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS', 'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'OUT_OF_RANGE']);
 
 // gbdraw/session_io.py: FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION
 /** @type {Readonly<Record<number, number>>} */
@@ -80,7 +94,7 @@ export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   48: 5,
   49: 5,
   50: 5,
-  51: 5
+  51: 6
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA

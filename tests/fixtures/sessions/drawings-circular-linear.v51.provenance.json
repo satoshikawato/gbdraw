@@ -23,5 +23,6 @@
   "decompressedSha256": "174ca7585ff46780d8292ce111888a3957ed79572201ac43c771673f72f53e8e",
   "sessionVersion": 51,
   "renumbered": "V50a (D-15-175): the file written at 49 by the script below, with its top-level version set to 50 and nothing else changed; the drawings layout is Session 50. V51a (D-15-190): top-level version 50 set to 51 and nothing else changed; the drawings layout is Session 51 (0.14.5 released the flat Session 50).",
-  "rewrittenRingColors": "conservation-ring-colors-impl-20261028 PR-B fix round 1 (2026-11-10): each drawing's config.circularConservation gained colorScheme and reassignOnReorder with their defaults by scripts/rewrite_v51_ring_colors.py in that task folder; nothing else changed"
+  "rewrittenRingColors": "conservation-ring-colors-impl-20261028 PR-B fix round 1 (2026-11-10): each drawing's config.circularConservation gained colorScheme and reassignOnReorder with their defaults by scripts/rewrite_v51_ring_colors.py in that task folder; nothing else changed",
+  "rewritten": "large-inputs d5 PR2 S1 (2026-11-09): each drawing's editorState.featureCatalog promoted from schema 5 to 6 (sequences dropped, /translation restored) by d5/impl/rewrite_v51_catalogs.py in that task folder, which applies gbdraw.web_support.feature_catalog.promote_legacy_feature_catalog; resources copied unchanged"
 }

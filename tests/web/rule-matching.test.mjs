@@ -280,3 +280,28 @@ test('a view preparation raises pending but not the edit lock (OV-377)', async (
   assert.equal(pending.value, false);
   assert.equal(blocking.value, false);
 });
+
+// D5: a group color edit sends Python's synthesis only the qualifiers it reads (its rules' keys and the keys Python
+// names for its candidate conditions), each other key in its place without values, and Python's answer is the one
+// it gives over the whole payloads.
+test('a group color edit sends the synthesis only the qualifiers it reads and gets the whole payloads\' answer', async () => {
+  const { synthesisPythonQualifiers, synthesizePythonColorRules } = await import('./helpers/python-evaluator.mjs');
+  const { ruleFeaturePayload } = await import('../../gbdraw/web/js/app/rule-matching.js');
+  const cds = (i, qualifiers) => ({ type: 'CDS', svg_id: `g${i}`, record_id: 'rec', start: i * 100, end: i * 100 + 60, strand: 1,
+    qualifiers: { locus_tag: [`L${i}`], ...qualifiers, translation: [`MK${'V'.repeat(30)}${i}`] } });
+  const features = [cds(0, { product: ['kinase'], note: ['first'] }), cds(1, { product: ['kinase'], note: ['second'] }),
+    cds(2, { product: ['ligase'], note: ['first'] })];
+  const state = { extractedFeatures: { value: features }, biologicalFeatures: { value: [] }, files: { t_color: null }, circularSources: [], manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
+  const sent = [];
+  const preparation = createRulePreparation({ state: withDrawings(state), evaluate: evaluatePythonRules,
+    synthesize: (request) => { sent.push(request); return synthesizePythonColorRules(request); },
+    synthesisQualifiers: synthesisPythonQualifiers });
+  const rules = [{ feat: 'CDS', qual: 'locus_tag', val: '^L2$', color: '#00ff00', cap: 'L' }];
+  const edit = { scope: 'group', features: [features[0]], labels: [['first']], color: '#ff0000', caption: 'G', joins: null, drawn: [] };
+  const answer = await preparation.synthesizeGroup(edit, rules);
+  const [request] = sent;
+  assert.ok(!JSON.stringify(request.features).includes('MKVVV'), 'no /translation value is sent');
+  assert.deepEqual(Object.keys(request.features[0].qualifiers), ['locus_tag', 'product', 'note', '-0']);
+  assert.deepEqual(request.features[0].qualifiers['-0'], []);
+  assert.deepEqual(answer, await synthesizePythonColorRules({ ...request, features: features.map((feature) => ruleFeaturePayload(feature)) }));
+});

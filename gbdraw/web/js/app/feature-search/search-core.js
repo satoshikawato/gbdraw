@@ -6,8 +6,15 @@ import {
   resolveInternalProteinId
 } from '../../services/feature-utils.js';
 import { uniqueOrthogroupMemberResolver } from '../../services/feature-identity.js';
+import { featureSequenceIdentity, featureSequenceKey } from '../../services/catalog-sequences.js';
 import { msg, t, tm } from '../../utils/i18n.js';
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
+/** @import { FeatureSequencesOf } from '../../services/diagram-worker-protocol.js' */
+
+/**
+ * The sequences Python read for the searched features (D5), by `featureSequenceKey`; the catalog row holds none.
+ * @typedef {ReadonlyMap<string, FeatureSequencesOf>} FeatureSearchSequences
+ */
 
 /**
  * A similarity group as the search reads it, or an unvalidated row: its ID under
@@ -81,6 +88,20 @@ const RICH_FIELD_IDS = new Set(RICH_FEATURE_SEARCH_FIELD_IDS);
 
 /** @param {unknown} field */
 export const isRichFeatureSearchField = (field) => RICH_FIELD_IDS.has(String(field || ''));
+
+/** The fields that search the sequences Python reads on demand; All and the others never read them (PD-OI-056). */
+const SEQUENCE_FIELD_IDS = new Set(['nucleotide', 'amino-acid']);
+/** @param {unknown} field */
+export const isSequenceFeatureSearchField = (field) => SEQUENCE_FIELD_IDS.has(String(field || ''));
+
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {FeatureSearchSequences | null} sequences
+ */
+const featureSequencesOf = (feature, sequences) => {
+  const identity = featureSequenceIdentity(feature);
+  return identity && sequences ? sequences.get(featureSequenceKey(identity)) ?? null : null;
+};
 
 /** @param {unknown} popupMode */
 export const normalizeFeatureSearchPopupMode = (popupMode) => (
@@ -277,17 +298,6 @@ const getFeatureQualifiers = (feature) => (
     : {}
 );
 
-/** @param {FeatureLike | null | undefined} feature */
-const resolveFeatureAminoAcidSequence = (feature) => {
-  const direct = String(feature?.amino_acid_sequence || feature?.aminoAcidSequence || '').trim();
-  if (direct) return direct;
-  const qualifiers = getFeatureQualifiers(feature);
-  /** @type {string[]} */
-  const values = [];
-  appendSearchValues(values, qualifiers.translation);
-  return values.find((value) => value.trim()) || '';
-};
-
 /** @param {FeatureLike | null | undefined} feature @param {unknown} qualifierKey */
 const getQualifierSearchItems = (feature, qualifierKey) => {
   const target = normalizeSearchText(qualifierKey).trim();
@@ -440,7 +450,8 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
  * @param {FeatureLike | null | undefined} feature
  * @param {unknown} field
  * @param {unknown} qualifierKey
- * @param {{ popupMode?: unknown, orthogroupsById?: Map<string, SearchOrthogroup> }} [options]
+ * @param {{ popupMode?: unknown, orthogroupsById?: Map<string, SearchOrthogroup>,
+ *   sequences?: FeatureSearchSequences | null }} [options]
  * @returns {SearchItem[]}
  */
 const featureSearchItems = (
@@ -449,7 +460,8 @@ const featureSearchItems = (
   qualifierKey,
   {
     popupMode = 'rich',
-    orthogroupsById = new Map()
+    orthogroupsById = new Map(),
+    sequences = null
   } = {}
 ) => {
   /** @type {SearchItem[]} */
@@ -486,12 +498,14 @@ const featureSearchItems = (
   if (selectedField === 'qualifier-value') {
     return getQualifierSearchItems(feature, qualifierKey);
   }
+  // The sequence fields search only what Python read (D5): the amino acid sequence is its /translation or its
+  // translation there, never derived here.
   if (selectedField === 'nucleotide') {
-    appendSearchItems(items, t('Nucleotide sequence'), feature?.nucleotide_sequence || feature?.nucleotideSequence, { alphabet: 'nucleotide' });
+    appendSearchItems(items, t('Nucleotide sequence'), featureSequencesOf(feature, sequences)?.nucleotideSequence, { alphabet: 'nucleotide' });
     return items;
   }
   if (selectedField === 'amino-acid') {
-    appendSearchItems(items, t('Amino acid sequence'), resolveFeatureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
+    appendSearchItems(items, t('Amino acid sequence'), featureSequencesOf(feature, sequences)?.aminoAcidSequence, { alphabet: 'amino-acid' });
     return items;
   }
 
@@ -590,9 +604,12 @@ const compileFeatureSearchMatcher = (query, useRegex) => {
   };
 };
 
-/** @param {FeatureLike | null | undefined} feature @param {string} field @param {unknown} popupMode @param {Map<string, SearchOrthogroup>} orthogroupsById */
-const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
-  featureSearchItems(feature, field, '', { popupMode, orthogroupsById }).map(prepareSearchItem)
+/**
+ * @param {FeatureLike | null | undefined} feature @param {string} field @param {unknown} popupMode
+ * @param {Map<string, SearchOrthogroup>} orthogroupsById @param {FeatureSearchSequences | null} sequences
+ */
+const preparedItemsForField = (feature, field, popupMode, orthogroupsById, sequences) => (
+  featureSearchItems(feature, field, '', { popupMode, orthogroupsById, sequences }).map(prepareSearchItem)
 );
 
 /**
@@ -604,6 +621,8 @@ const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
  * @property {Map<string, FeatureSearchDocument>} byId
  * @property {Map<string, string[]>} qualifierFeatureIdsByKey
  * @property {Map<string, SearchOrthogroup>} orthogroupsById
+ * @property {boolean} sequencesRead Whether the sequence fields hold the sequences Python read; without them they
+ *   hold no items.
  */
 
 /**
@@ -619,6 +638,7 @@ const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
  * @property {FeatureLike[]} [features]
  * @property {string} [popupMode]
  * @property {SearchOrthogroup[]} [orthogroups]
+ * @property {FeatureSearchSequences | null} [sequences] What Python read for the sequence fields, or null.
  */
 
 /**
@@ -628,7 +648,8 @@ const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
 export const buildFeatureSearchIndex = ({
   features = [],
   popupMode = 'rich',
-  orthogroups = []
+  orthogroups = [],
+  sequences = null
 } = {}) => {
   const normalizedPopupMode = normalizeFeatureSearchPopupMode(popupMode);
   const orthogroupsById = buildOrthogroupMap(orthogroups);
@@ -667,11 +688,11 @@ export const buildFeatureSearchIndex = ({
     ['label', 'type', 'record-id', 'location', 'strand', 'orthogroup', 'nucleotide', 'amino-acid']
       .forEach((field) => {
         if (normalizedPopupMode === 'simple' && isRichFeatureSearchField(field)) return;
-        itemsByField.set(field, preparedItemsForField(feature, field, normalizedPopupMode, orthogroupsById));
+        itemsByField.set(field, preparedItemsForField(feature, field, normalizedPopupMode, orthogroupsById, sequences));
       });
     itemsByField.set('qualifier-key', qualifierKeys);
     itemsByField.set('qualifier-value', Array.from(qualifierValuesByKey.values()).flat());
-    itemsByField.set('all', preparedItemsForField(feature, 'all', normalizedPopupMode, orthogroupsById));
+    itemsByField.set('all', preparedItemsForField(feature, 'all', normalizedPopupMode, orthogroupsById, null));
 
     featureOrder.push(svgId);
     byId.set(svgId, { feature, itemsByField, qualifierValuesByKey });
@@ -682,7 +703,8 @@ export const buildFeatureSearchIndex = ({
     featureOrder,
     byId,
     qualifierFeatureIdsByKey,
-    orthogroupsById
+    orthogroupsById,
+    sequencesRead: sequences !== null
   };
 };
 
@@ -720,6 +742,7 @@ const preparedFeatureSearchMatches = (document, matcher, field, qualifierKey) =>
  * @property {boolean} [useRegex]
  * @property {string} [popupMode]
  * @property {SearchOrthogroup[]} [orthogroups]
+ * @property {FeatureSearchSequences | null} [sequences] What Python read for the sequence fields, or null.
  * @property {FeatureSearchIndex | null} [searchIndex]
  * @property {string} [previousActiveId]
  */
@@ -736,6 +759,7 @@ export const runFeatureSearch = ({
   useRegex,
   popupMode = 'rich',
   orthogroups = [],
+  sequences = null,
   searchIndex = null,
   previousActiveId = ''
 } = {}) => {
@@ -760,7 +784,7 @@ export const runFeatureSearch = ({
 
   const preparedIndex = searchIndex?.byId instanceof Map
     ? searchIndex
-    : buildFeatureSearchIndex({ features, popupMode: normalizedPopupMode, orthogroups });
+    : buildFeatureSearchIndex({ features, popupMode: normalizedPopupMode, orthogroups, sequences });
   /** @type {string[]} */
   const matches = [];
   /** @type {Record<string, SearchMatchDetail[]>} */

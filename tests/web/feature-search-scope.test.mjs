@@ -7,8 +7,9 @@ import {
   formatSearchMatchLine,
   runFeatureSearch
 } from '../../gbdraw/web/js/app/feature-search/search-core.js';
-import { buildMatchPopupPayload } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
+import { buildMatchPopupPayload, matchSpanFasta } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
+import { featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
 import { numberText } from '../../gbdraw/web/js/utils/i18n.js';
 import {
   FEATURE_CATALOG_SCHEMA,
@@ -74,12 +75,28 @@ const features = [
   }
 ];
 const renderedFeatureIds = new Set(features.map((feature) => feature.svg_id));
+// The app's rows are catalog rows: an identity and no sequence. Its sequence fields search what Python reads for
+// them (D5), whose amino acid sequence is the /translation qualifier, else the CDS translation. The Interactive SVG
+// embeds the rows with their sequences (`features` above), and its in-file script reads them there.
+const appFeatures = features.map(({ nucleotide_sequence, amino_acid_sequence, ...row }) => ({
+  ...row, recordKey: 'REC', biologicalFeatureId: row.svg_id
+}));
+const appSequences = new Map(features.map((feature) => {
+  const identity = { recordKey: 'REC', biologicalFeatureId: feature.svg_id };
+  return [featureSequenceKey(identity), {
+    ...identity,
+    nucleotideSequence: feature.nucleotide_sequence || '',
+    aminoAcidSequence: feature.amino_acid_sequence || feature.qualifiers.translation?.[0] || '',
+    sequenceWarnings: []
+  }];
+}));
 const appSearch = (query, field, popupMode = 'rich', options = {}) => runFeatureSearch({
-  features,
+  features: appFeatures,
   renderedFeatureIds,
   query,
   field,
   popupMode,
+  sequences: appSequences,
   ...options
 });
 
@@ -466,21 +483,25 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
     'data-query-record-index': '0', 'data-subject-record-index': '1',
     'data-qstart': '1', 'data-qend': '4', 'data-sstart': '4', 'data-send': '1'
   };
-  const sequences = { 'linear:record:0': 'ACGTACGT', 'linear:record:1': 'TTGGCCAA' };
+  const matchSequenceRecords = { unitKeys: ['rec-0', 'rec-1'], comparisonSupplied: () => true };
   const payload = buildMatchPopupPayload(
     { ownerSVGElement: svg, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
-    { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
+    { matchSequenceRecords }
   );
   const rows = Object.fromEntries(payload.sections.flatMap((section) => section.rows).map((row) => [row.label, row.value]));
   const spans = payload.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`);
   assert.deepEqual(spans, [rows['Query interval'], rows['Subject interval']]);
   assert.deepEqual(spans, ['3000..3003', '11997..12000']);
-  // The bases and the FASTA headers are unchanged.
-  assert.match(payload.sequenceBundle.entries[0].fasta, /coords=3000\.\.3003\|strand=\+\nACGT\n$/);
+  // Python reads the span on the displayed record (D5); the FASTA header names the input-file coordinates.
+  assert.deepEqual(payload.sequenceBundle.entries.map(({ read }) => read), [
+    { kind: 'record', recordKey: 'rec-0', recordId: 'Q', start: 1, end: 4 }, { kind: 'record', recordKey: 'rec-1', recordId: 'S', start: 4, end: 1 }
+  ]);
+  const reply = { status: 'ok', reason: null, recordId: 'Q', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 12000 };
+  assert.match(matchSpanFasta(payload.sequenceBundle.entries[0], reply), /coords=3000\.\.3003\|strand=\+\nACGT\n$/);
   // A record shown as in its file (rotate only) keeps its coordinates.
   const plain = buildMatchPopupPayload(
     { ownerSVGElement: { querySelectorAll: () => [] }, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
-    { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
+    { matchSequenceRecords }
   );
   assert.deepEqual(plain.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`), ['1..4', '4..1']);
 });

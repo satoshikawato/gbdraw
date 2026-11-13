@@ -242,11 +242,12 @@ test('the selected group detail is built once per change of its inputs (OV-920)'
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]),
     biologicalFeatures: ref([
-      { record_idx: 0, stable_svg_id: 'stable-a', nucleotide_sequence: 'AAAA', amino_acid_sequence: 'MK' },
-      { record_idx: 1, stable_svg_id: 'stable-b', nucleotide_sequence: 'CCCC' }
+      // A member's sequences are read when asked (D5): one with a catalog identity has them to read.
+      { record_idx: 0, stable_svg_id: 'stable-a', recordKey: 'rec-a', biologicalFeatureId: 'a' },
+      { record_idx: 1, stable_svg_id: 'stable-b' }
     ])
   };
-  const editor = createOrthogroupEditor({ state: withDrawings(state) });
+  const editor = createOrthogroupEditor({ state: withDrawings(state), readFeatureSequences: async () => null });
   const group = state.orthogroups.value[0];
   const detail = editor.selectedOrthogroupDetail.value;
   assert.equal(detail.group, group);
@@ -254,21 +255,17 @@ test('the selected group detail is built once per change of its inputs (OV-920)'
   // The detail answers what the template asked the per-call helpers before.
   const expected = editor.groupOrthogroupMembersByRecord(editor.getEnrichedOrthogroupMembers(group));
   assert.deepEqual(detail.membersByRecord, expected);
-  assert.deepEqual(detail.hasSequence, {
-    nt: editor.getOrthogroupSequenceCount(group, 'nt') > 0,
-    aa: editor.getOrthogroupSequenceCount(group, 'aa') > 0
-  });
+  assert.equal(detail.hasSequence, editor.getOrthogroupSequenceCount(group) > 0);
   const shown = detail.membersByRecord.flatMap(({ members }) => members);
-  assert.deepEqual(shown.map((member) => [detail.hasMemberSequence(member, 'nt'), detail.hasMemberSequence(member, 'aa')]),
-    shown.map((member) => [editor.hasOrthogroupMemberSequence(member, 'nt'), editor.hasOrthogroupMemberSequence(member, 'aa')]));
-  assert.deepEqual(shown.map((member) => [detail.hasMemberSequence(member, 'nt'), detail.hasMemberSequence(member, 'aa')]),
-    [[true, true], [true, false]]);
+  assert.deepEqual(shown.map((member) => detail.hasMemberSequence(member)),
+    shown.map((member) => editor.hasOrthogroupMemberSequence(member)));
+  assert.deepEqual(shown.map((member) => detail.hasMemberSequence(member)), [true, false]);
 
   const afterBuild = memberReads;
   for (let render = 0; render < 20; render += 1) {
     const again = editor.selectedOrthogroupDetail.value;
     assert.equal(again, detail);
-    again.membersByRecord.forEach(({ members }) => members.forEach((member) => again.hasMemberSequence(member, 'nt')));
+    again.membersByRecord.forEach(({ members }) => members.forEach((member) => again.hasMemberSequence(member)));
   }
   state.showRightDrawer.value = true;
   state.orthogroupSearch.value = 'og';
@@ -276,8 +273,8 @@ test('the selected group detail is built once per change of its inputs (OV-920)'
   assert.equal(memberReads, afterBuild, 'no member is enriched again');
 
   // A new sequence source and another selected group build a new detail.
-  state.biologicalFeatures.value = [{ record_idx: 0, stable_svg_id: 'stable-a', amino_acid_sequence: 'MK' }];
-  assert.deepEqual(editor.selectedOrthogroupDetail.value.hasSequence, { nt: false, aa: true });
+  state.biologicalFeatures.value = [{ record_idx: 0, stable_svg_id: 'stable-a' }];
+  assert.equal(editor.selectedOrthogroupDetail.value.hasSequence, false);
   state.selectedOrthogroupId.value = 'og_2';
   assert.equal(editor.selectedOrthogroupDetail.value.id, 'og_2');
   assert.deepEqual(editor.selectedOrthogroupDetail.value.membersByRecord, []);

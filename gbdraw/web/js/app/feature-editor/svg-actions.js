@@ -4,12 +4,15 @@
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { FeaturePopup } from '../../services/feature-popup.js' */
+/** @import { FeatureCatalogItem } from '../../services/feature-catalog.js' */
+/** @import { CommittedCanonicalSession } from '../../services/session-request.js' */
 /** @import { MatchFramePopup, PreviewItem, PreviewItemPopup } from '../../services/match-frame-popup.js' */
 /** @import { MatchPopupPayload, PopupRow } from '../../services/pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 /** @import { PreviewTransformInteractionListener } from '../ui.js' */
 /** @import { RegionAxisRecord } from '../../services/region-axis.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
+import { toRaw } from '../../utils/vue-raw.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import { getSelectableFeatureTarget } from '../feature-selection.js';
@@ -28,6 +31,7 @@ import {
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
+import { matchSequenceRecordsOf } from '../../services/catalog-sequences.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import { attachRingHover, ringPopupShows } from './ring-hover.js';
 import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
@@ -190,6 +194,8 @@ export {
  * @property {ShownAxisRecordsPort} [shownAxisRecords]
  * @property {ShowElementSettings} [showElementSettings]
  * @property {() => unknown} [closeElementSettings] The pane's closing of the popup that holds a settings section.
+ * @property {() => CommittedCanonicalSession | null} [getCommittedSession] The request the shown Result was made
+ *   from: a match popup names its spans' records and supplied comparison FASTA files from it (D5).
  */
 
 /**
@@ -328,6 +334,17 @@ const placeLabel = (label, x, top, frameWidth) => {
   label.style.top = top + 'px';
 };
 
+/**
+ * The records the shown Result's match spans are read from (D5): its catalog item and its committed request.
+ * @param {{ value: { items?: FeatureCatalogItem[] } | null }} featureCatalog The admitted catalog of the committed Results.
+ * @param {{ value: unknown }} selectedResultIndex The shown Result.
+ * @param {() => CommittedCanonicalSession | null} getCommittedSession
+ */
+const shownMatchSequenceRecords = (featureCatalog, selectedResultIndex, getCommittedSession) => matchSequenceRecordsOf(
+  toRaw(featureCatalog.value)?.items?.find((item) => item.resultIndex === selectedResultIndex.value),
+  getCommittedSession()
+);
+
 /** @param {FeatureSvgActionsOptions} options */
 export const createFeatureSvgActions = ({
   state,
@@ -343,7 +360,7 @@ export const createFeatureSvgActions = ({
   subscribePreviewTransformChanges,
   previewPopupsHeld = () => false, shownAxisRecords = () => [],
   showElementSettings = () => false,
-  closeElementSettings = () => {}
+  closeElementSettings = () => {}, getCommittedSession = () => null
 }) => {
   const {
     orthogroups,
@@ -355,7 +372,6 @@ export const createFeatureSvgActions = ({
     clickedFeaturePos,
     clickedPairwiseMatch,
     clickedPairwiseMatchPos,
-    matchSequenceRegistry,
     selectedAnnotation,
     featurePopupSize,
     featureSelectionDrag
@@ -881,7 +897,7 @@ export const createFeatureSvgActions = ({
     orthogroups: groupsForMatch(),
     orthogroupNameOverrides: drawing.orthogroupNameOverrides,
     orthogroupDescriptionOverrides: drawing.orthogroupDescriptionOverrides,
-    resolveSequenceSource: matchSequenceRegistry?.resolve
+    matchSequenceRecords: shownMatchSequenceRecords(state.featureCatalog, state.selectedResultIndex, getCommittedSession)
   });
 
   // The summary builder reads a function as well as a list.

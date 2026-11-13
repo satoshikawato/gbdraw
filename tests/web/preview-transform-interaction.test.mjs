@@ -64,6 +64,9 @@ await copyModule('services/drawn-attributes.generated.js', 'services/drawn-attri
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
 await copyModule('services/json-clone.js', 'services/json-clone.js');
+await copyModule('utils/vue-raw.js', 'utils/vue-raw.js');
+// A match popup names its spans' records from the shown Result's catalog item (D5); this test opens none.
+await writeFile(join(tempDir, 'services', 'catalog-sequences.js'), 'export const matchSequenceRecordsOf = () => null;\n', 'utf8');
 for (const path of ['services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js',
   // feature-placement.js reads the record keys of a drawing from their owner.
   'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js',
@@ -676,7 +679,6 @@ const state = {
   clickedFeaturePos: { x: 0, y: 0 },
   clickedPairwiseMatch: ref(null),
   clickedPairwiseMatchPos: { x: 0, y: 0 },
-  matchSequenceRegistry: null,
   selectedAnnotation: ref(null),
   featurePopupSize: { width: 0, height: 0 },
   featureSelectionDrag: { active: false },

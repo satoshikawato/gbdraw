@@ -1,7 +1,9 @@
 // @ts-check
-/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { FeatureCatalog, FeatureCatalogItem } from './feature-catalog.js' */
+/** @import { StandaloneInteractivityOptions } from './standalone-interactivity.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } from './preview-affordances.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 /**
  * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
@@ -134,27 +136,47 @@ export const serializeCleanSvg = (svg, options = {}) => {
   return new XMLSerializer().serializeToString(clone);
 };
 
+/**
+ * The stored catalog item of the exported Result: the admitted catalog's item
+ * of its index and name, or null when the catalog holds none. It is the raw
+ * item, not the page's reactive view of it: the export sends it to the Worker.
+ * @param {SvgExportState} state
+ * @param {number} resultIndex
+ * @param {string} name
+ * @returns {FeatureCatalogItem | null}
+ */
+const exportedCatalogItem = (state, resultIndex, name) => {
+  const item = toRaw(state.featureCatalog?.value)?.items?.[resultIndex];
+  return item && item.resultIndex === resultIndex && String(item.resultName || '').trim() === name.trim() ? item : null;
+};
+
 // The standalone popup reads label text by rendered ID; each per-feature label
 // edit of the drawing of the Result's mode (identity-keyed, design Q4 6.4, R2)
 // is projected onto the rendered IDs of the exported Result's catalog item.
 /**
- * @param {SvgExportState} state
+ * @param {FeatureCatalogItem | null} item
  * @param {SvgExportDrawing} drawing
- * @param {number} resultIndex
  */
-const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
+const renderedLabelTextOverrides = (item, drawing) => {
   /** @type {Record<string, string>} */
   const overrides = {};
   const textByFeature = new Map(Object.values(drawing.featureOverrides || {})
     .filter((row) => typeof row?.labelText === 'string' && row.labelText)
     .map((row) => [`${row.recordKey}\u0000${row.biologicalFeatureId}`, row.labelText]));
-  const item = state.featureCatalog?.value?.items?.[resultIndex];
   (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
     const text = textByFeature.get(`${feature?.recordKey}\u0000${feature?.biologicalFeatureId}`);
     if (text) overrides[feature.svgId] = text;
   });
   return overrides;
 };
+
+/**
+ * What the capture of an Interactive SVG export holds: the popup mode and the
+ * drawing's edits, and the stored catalog item of the exported Result, which
+ * the export gives Python to read its sequences (`readEmbedJson`, D5) before
+ * it writes the file with them (`embeddedSequences`).
+ * @typedef {StandaloneInteractivityOptions & { catalogItem: FeatureCatalogItem | null }} ExportInteractivity
+ */
 
 // Capture the selected Result before any lazy export modules or libraries load.
 // Its popup settings and edits are those of the drawing the Result belongs to,
@@ -167,6 +189,7 @@ const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
 export const captureSvgExport = (state, drawing, { interactive = false } = {}) => {
   const resultIndex = Number(state.selectedResultIndex.value);
   const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
+  const catalogItem = interactive ? exportedCatalogItem(state, resultIndex, name) : null;
   return {
     // A deep clone of the preview's <svg> element is an <svg> element.
     svg: /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector('svg')?.cloneNode(true) || null),
@@ -174,20 +197,18 @@ export const captureSvgExport = (state, drawing, { interactive = false } = {}) =
     name,
     dpi: state.downloadDpi.value,
     whiteBackground: state.downloadWhiteBackground.value,
-    ...(interactive ? { interactivity: {
+    ...(interactive ? { interactivity: /** @satisfies {ExportInteractivity} */ ({
       popupMode: state.richFeaturePopup?.value === false ? 'simple' : 'rich',
-      featureCatalog: state.featureCatalog?.value,
-      catalogResultIndex: resultIndex,
-      catalogResultName: name,
+      catalogItem,
       requireFeatureCatalog: true,
       editableLabels: (state.editableLabels?.value || []).map(({ featureId, text, sourceText }) => ({
         featureId, text, sourceText
       })),
-      labelTextFeatureOverrides: renderedLabelTextOverrides(state, drawing, resultIndex),
+      labelTextFeatureOverrides: renderedLabelTextOverrides(catalogItem, drawing),
       labelTextBulkOverrides: { ...drawing.labelTextBulkOverrides },
       orthogroupNameOverrides: { ...drawing.orthogroupNameOverrides },
       orthogroupDescriptionOverrides: { ...drawing.orthogroupDescriptionOverrides }
-    } } : {})
+    }) } : {})
   };
 };
 

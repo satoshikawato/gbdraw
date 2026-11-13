@@ -4,7 +4,7 @@
 // hand-written checks of the input files and the committed Result sets repair
 // before the dialog what Save refuses.
 import assert from 'node:assert/strict';
-import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { drawingViewAt, savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
@@ -208,7 +208,7 @@ test('run notices that do not match their Results are dropped before the dialog 
   // The one-drawing view of the bundled Session 49, in the 46 layout this case builds `otherModeResult` on.
   const gallery = async (name) => {
     const saved = await readSavedSession(new Blob([readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url))]));
-    return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
+    return drawingViewAt(savedDrawingView(saved, saved.ui.activeDrawingId), 46);
   };
   const circular = await gallery('HmmtDNA_basic_circular.gbdraw');
   const linear = await gallery('lambda_basic_linear.gbdraw');
@@ -255,7 +255,7 @@ test('a Result set Load\'s composition transform could not compose is read again
   // The one-drawing view of the bundled Session 49, in the 46 layout this case builds `otherModeResult` on.
   const gallery = async (name) => {
     const saved = await readSavedSession(new Blob([readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url))]));
-    return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
+    return drawingViewAt(savedDrawingView(saved, saved.ui.activeDrawingId), 46);
   };
   const circular = await gallery('HmmtDNA_basic_circular.gbdraw');
   const linear = await gallery('lambda_basic_linear.gbdraw');

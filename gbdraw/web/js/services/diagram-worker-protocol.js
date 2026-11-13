@@ -3,6 +3,7 @@
 /** @import { FontIdentity } from './font-store.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { MATCH_SPAN_REASONS } from '../contracts/schema.generated.js' */
 
 /**
  * A font file the page sends a Worker (init `fonts`, and each font it
@@ -91,13 +92,17 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
+  READ_EMBED_SEQUENCES: 'readEmbedSequences',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
+  READ_FEATURE_SEQUENCES: 'readFeatureSequences',
+  READ_MATCH_SEQUENCES: 'readMatchSequences',
   READ_RECORD_SPAN_SEQUENCES: 'readRecordSpanSequences',
   READ_SEARCH_QUERIES: 'readSearchQueries',
   RESOLVE_FEATURE_ANCHOR: 'resolveFeatureAnchor',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
   SEARCH_HIT_ANNOTATION_SET: 'searchHitAnnotationSet',
+  SYNTHESIS_QUALIFIERS: 'synthesisQualifiers',
   SYNTHESIZE_COLOR_RULES: 'synthesizeColorRules',
   UPGRADE_LEGACY_SESSION: 'upgradeLegacySession',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'
@@ -134,6 +139,9 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_SEQUENCES]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.READ_MATCH_SEQUENCES]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.READ_EMBED_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource,
   [DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES]: (payload) => payload.canonicalRequest,
@@ -268,6 +276,149 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @typedef {object} RecordSpanSequencesReply
  * @property {readonly RecordSpanSequence[]} spans
  * @property {string} fasta
+ */
+
+// The sequences the feature catalog does not store (D5), read by Python from the committed request
+// (gbdraw/web_support/catalog_sequences.py; each typedef below is the twin of the TypedDict it names).
+
+/**
+ * One feature by identity (`FeatureSequenceInput`): the record key and the biological feature ID of its catalog row.
+ * @typedef {object} FeatureSequenceInput
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ */
+
+/**
+ * One feature's sequences with the identity asked (`FeatureSequencesOf`).
+ * @typedef {object} FeatureSequencesOf
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ * @property {string} nucleotideSequence
+ * @property {string} aminoAcidSequence
+ * @property {readonly string[]} sequenceWarnings
+ */
+
+/**
+ * The payload of `readFeatureSequences`: the committed request, its resources, and the features (each once).
+ * @typedef {object} FeatureSequencesPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {readonly FeatureSequenceInput[]} features
+ */
+
+/** The `readFeatureSequences` reply (`FeatureSequencesReply`): the features in the order asked. @typedef {{ features: readonly FeatureSequencesOf[] }} FeatureSequencesReply */
+
+/**
+ * A span coordinate (`SpanCoordinate`): a whole number, or null when the drawing's value is not a whole number
+ * (Python says so after it finds the record, as the match popup did before D5).
+ * @typedef {number | null} SpanCoordinate
+ */
+
+/**
+ * A span of a drawn record by the record key of its drawn unit (`RecordMatchSpan`), with the record ID or alias the
+ * match names ('' when none), which the unit must carry: displayed coordinates, 1-based and inclusive; a start after
+ * the end is the reverse strand.
+ * @typedef {object} RecordMatchSpan
+ * @property {'record'} kind
+ * @property {string} recordKey
+ * @property {string} recordId
+ * @property {SpanCoordinate} start
+ * @property {SpanCoordinate} end
+ */
+
+/**
+ * A span of a drawn record named by its record ID or an alias (`ReferenceMatchSpan`): a Circular comparison band
+ * names its reference by the ID its hit carries, and Python finds the record among the drawn records by ID, then by
+ * alias (name, accession), among every drawn unit or only the unit of `recordKey` (a band on a cropped or reversed
+ * reference carries its record index), which it reads when the span names no ID; coordinates as in `RecordMatchSpan`.
+ * @typedef {object} ReferenceMatchSpan
+ * @property {'reference'} kind
+ * @property {string} recordId
+ * @property {string | null} recordKey
+ * @property {SpanCoordinate} start
+ * @property {SpanCoordinate} end
+ */
+
+/**
+ * A span of a comparison FASTA record (`ComparisonMatchSpan`), by the index of its comparison source (null: the match
+ * names none, and every source is searched) and its record ID or alias; coordinates as in `RecordMatchSpan`.
+ * @typedef {object} ComparisonMatchSpan
+ * @property {'comparison'} kind
+ * @property {number | null} sourceIndex
+ * @property {string} recordId
+ * @property {SpanCoordinate} start
+ * @property {SpanCoordinate} end
+ */
+
+/** @typedef {RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan} MatchSpanInput */
+/** Why a span's bases cannot be read (`MatchSpanReason`, Python's list). @typedef {typeof MATCH_SPAN_REASONS[number]} MatchSpanReason */
+
+/**
+ * The bases of one span on its strand, or why they cannot be read (`MatchSpanSequence`), with the length of the
+ * record the span reads (0 when no record is found).
+ * @typedef {object} MatchSpanSequence
+ * @property {'ok' | 'unavailable'} status
+ * @property {MatchSpanReason | null} reason
+ * @property {string} recordId
+ * @property {'+' | '-'} orientation
+ * @property {number} length
+ * @property {string} sequence
+ * @property {number} sourceLength
+ */
+
+/**
+ * The payload of `readMatchSequences`: the committed request, its resources, and the spans.
+ * @typedef {object} MatchSequencesPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {readonly MatchSpanInput[]} spans
+ */
+
+/** The `readMatchSequences` reply (`MatchSequencesReply`): the spans in the order asked. @typedef {{ spans: readonly MatchSpanSequence[] }} MatchSequencesReply */
+
+/**
+ * The part of the stored catalog item an export read sends (`readEmbedSequences`): the item's drawn records and
+ * matches, and the biological rows of the part.
+ * @typedef {object} EmbedItemPart
+ * @property {readonly string[]} recordKeys
+ * @property {Readonly<Record<string, string>>} [windowOf]
+ * @property {readonly unknown[]} [comparisonMatches]
+ * @property {readonly Readonly<Record<string, unknown>>[]} biologicalFeatures
+ */
+
+/**
+ * Which whole-record sources a part returns (`EmbedPartInput`): those of the records named by record key, and, with
+ * `comparisonSources`, those of the comparison FASTA records.
+ * @typedef {{ sourcesOf: readonly string[], comparisonSources: boolean }} EmbedPartInput
+ */
+
+/**
+ * The file of an export read: the JSON of its `EmbedItemPart` as a Blob, like every helper file the Worker stages,
+ * which the Worker stages as a file for Python to read (a long JavaScript string handed to Python takes many times
+ * its size of Worker heap).
+ * @typedef {{ role: 'embedItem', blob: Blob }} EmbedItemFile
+ */
+
+/**
+ * The payload of `readEmbedSequences`: the committed request, its resources, and one part of the stored catalog
+ * item of the Result to export (`files`); the reply is that part in the export encoding as its text
+ * (`EmbedPartText`, `read_embed_sequences_json`).
+ * @typedef {object} EmbedSequencesPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {[EmbedItemFile]} files
+ * @property {EmbedPartInput} part
+ */
+
+/**
+ * The `readEmbedSequences` reply (`EmbedPartText`): the part's rows in the order sent, with their sequences, and the
+ * whole-record sources the part owns, each with its place among the item's `sourceCount` sources, all as the text the
+ * file embeds (`embed_json_text`), so neither the Worker nor the page parses them.
+ * @typedef {object} EmbedPartText
+ * @property {string} biologicalFeatures The rows' text joined by commas ('' for none).
+ * @property {number} rowCount
+ * @property {readonly { index: number, source: string }[]} sequenceSources
+ * @property {number} sourceCount
  */
 
 /** @type {readonly string[]} */

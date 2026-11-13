@@ -749,7 +749,8 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await expect(groupNtCopy).toHaveText(/Copy nt/);
   await expect(groupAaCopy).toHaveText(/Copy aa/);
   await groupAaCopy.click();
-  await expect(groupAaCopy).toHaveText(/Copied!/);
+  // The first read after Load starts Python in the diagram Worker (D5); the group is copied when it replies.
+  await expect(groupAaCopy).toHaveText(/Copied!/, { timeout: 60000 });
   await expect(groupAaCopy).toHaveAccessibleName('Copied!');
   await expect(groupAaCopy).toHaveAttribute('aria-live', 'polite');
   await expect(groupAaCopy).toHaveAttribute('aria-atomic', 'true');
@@ -792,11 +793,16 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
     document.execCommand = () => false;
   });
   await groupAaCopy.click();
-  await expect(groupAaCopy).toHaveText(/Copy failed/);
+  // A refused copy says so under the members, with Retry, through the read state the Similarity group popup of a
+  // match shows too (D5 review r1); the button keeps its label.
+  const drawerRead = drawer.locator('[data-sequence-read]');
+  await expect(drawerRead.getByRole('alert')).toHaveText('Copy failed');
+  await expect(drawerRead.getByRole('button', { name: 'Retry' })).toBeVisible();
   await expect(groupAaCopy).not.toHaveText(/Copied!/);
   await expect(groupNtCopy).toHaveText(/Copy nt/);
   await page.clock.fastForward(1500);
   await expect(groupAaCopy).toHaveText(/Copy aa/);
+  await expect(drawerRead).toBeVisible();
 
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'clipboard', {
@@ -807,6 +813,7 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   });
   await groupAaCopy.click();
   await expect(groupAaCopy).toHaveText(/Copied!/);
+  await expect(drawerRead).toHaveCount(0);
   await page.clock.fastForward(1500);
 
   await page.evaluate(() => {
@@ -876,6 +883,61 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await expect(featurePopup.locator(
     'button[title="Copy all member amino-acid FASTA"]'
   )).toHaveText(/Copy aa/);
+});
+
+// D5 review r1 (MEDIUM-4): a Similarity group read that fails in the feature popup shows why in place, with Details,
+// Copy diagnostics and Retry, through the read state the Similarity group popup of a match shows; Retry reads again.
+test('a Similarity group read that fails in the feature popup shows why, with Details and Retry, in place', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(180000);
+  // Python is asked for a feature no record has, while the test says so: the read fails as a wrong request would.
+  // The page is already open (beforeEach), so the Worker's postMessage is patched in place.
+  await page.evaluate(() => {
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function postMessage(message, ...rest) {
+      const failing = window.__failFeatureReads && message?.type === 'helper' && message.operation === 'readFeatureSequences';
+      return post.call(this, failing ? {
+        ...message, payload: { ...message.payload, features: [{ recordKey: 'no-such-record', biologicalFeatureId: 'none' }] }
+      } : message, ...rest);
+    };
+  });
+  const imported = await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw');
+  expect(imported.status).toBe('ok');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.orthogroupCount)).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    window.__copiedText = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (value) => { window.__copiedText = String(value); } }
+    });
+  });
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.extractedFeatures.find((candidate) => candidate?.orthogroupId && candidate?.type === 'CDS');
+    if (!feature) return false;
+    await app.openFeatureEditorFromList(feature, null);
+    return Boolean(app.clickedFeature);
+  })).toBe(true);
+  const featurePopup = page.locator('.feature-popup');
+  const similaritySection = featurePopup.locator('[data-feature-popup-group="similarity"]');
+  await page.evaluate(() => { window.__failFeatureReads = true; });
+  await similaritySection.locator('summary', { hasText: 'More' }).click();
+  const popupGroupAaCopy = featurePopup.locator('button[title="Copy all member amino-acid FASTA"]');
+  await popupGroupAaCopy.click();
+  const read = similaritySection.locator('[data-sequence-read]');
+  await expect(read.getByRole('alert')).toBeVisible({ timeout: 60000 });
+  await expect(popupGroupAaCopy).not.toHaveText(/Copied!/);
+  await read.locator('summary', { hasText: 'Details' }).click();
+  await expect(read.getByRole('button', { name: 'Copy diagnostics' })).toBeVisible();
+  await expect(read.getByRole('button', { name: 'Retry' })).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  await read.scrollIntoViewIfNeeded();
+  await similaritySection.screenshot({ path: testInfo.outputPath('medium4-popup-read-failure.png') });
+  await page.evaluate(() => { window.__failFeatureReads = false; });
+  await read.getByRole('button', { name: 'Retry' }).click();
+  await expect(read).toHaveCount(0, { timeout: 60000 });
+  expect(await page.evaluate(() => window.__copiedText)).toMatch(/^>/);
 });
 
 test('the feature popup names a record-specific similarity group', async ({ page }) => {

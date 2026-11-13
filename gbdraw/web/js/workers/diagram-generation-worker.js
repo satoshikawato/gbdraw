@@ -187,6 +187,9 @@ export class ReplyBuffer {
  * @param {ReplyBufferFiles} files
  */
 export const createReplyBuffer = (files) => new ReplyBuffer(files);
+/** @param {{ FS: ReplyBufferFiles }} pyodide The factory of reply buffers Python is handed. */
+const replyBuffersOf = (pyodide) => () => createReplyBuffer(pyodide.FS);
+const UTF8_DECODER = new TextDecoder();
 
 /**
  * Join the reply buffers of a converted Generate result in place: its
@@ -542,7 +545,8 @@ const HELPER_FILE_NAMES = Object.freeze({
   pairs: 'pairs.json',
   visibility: 'feature-visibility.tsv',
   featureOverrides: 'feature-overrides.tsv',
-  rawTsv: 'raw-losatp.tsv'
+  rawTsv: 'raw-losatp.tsv',
+  embedItem: 'embed-item.json'
 });
 
 const requirePayloadObject = (payload, operation) => {
@@ -844,7 +848,9 @@ export const callJsonHelper = (pyodide, helperName, args) => {
   try {
     if (typeof helper !== 'function') throw { code: 'HELPER_PROTOCOL', stage: 'helper' };
     try {
-      result = JSON.parse(String(helper(helperName, ...args) || 'null'));
+      const reply = helper(helperName, ...args);
+      // A helper that replies in UTF-8 (`_replied_in_utf8` in python-helpers.js) returns its reply buffer.
+      result = JSON.parse(reply instanceof ReplyBuffer ? UTF8_DECODER.decode(reply.finish()) : String(reply || 'null'));
     } catch (error) {
       throw normalizeUserFacingError(error, { code: 'RESULT_INVALID', stage: 'helper' });
     }
@@ -868,22 +874,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: {
     keys: ['request', 'projection'],
     fileRoles: [],
-    run: async (pyodide, payload, _paths, _operation, workspace) => {
-      let resourcePaths = {};
-      let identities = {};
-      if (payload.projection !== undefined) {
-        resourcePaths = await prepareCanonicalResources(
-          pyodide, `${workspace}/projection`, payload
-        );
-        identities = buildPreparedResourceIdentityMap(payload.resourceManifest);
-      } else if (payload.resourceManifest !== undefined || payload.stagedResources !== undefined) {
-        throw new TypeError('Alignment resources require a projection context.');
-      }
-      return callJsonHelper(pyodide, 'resolve_similarity_alignment_json', [
+    // The projection (the committed request and its orientations) is required: Python places each candidate as
+    // the renderer does (D5-13).
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'resolve_similarity_alignment_json', [
         jsonArgument(payload.request, null), jsonArgument(payload.projection, null),
-        jsonArgument(resourcePaths, {}), workspace, jsonArgument(identities, {})
-      ]);
-    }
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/projection`, payload), {}), workspace,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
   },
   // Align at feature: Python resolves the anchor on the committed request,
   // staged as Generate stages it, and returns the record translations.
@@ -921,6 +920,12 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     run: (pyodide, payload) => callJsonHelper(pyodide, 'evaluate_rules_json', [
       jsonArgument(payload.features, []), jsonArgument(payload.rules, []), String(payload.kind || 'color')
     ])
+  },
+  // The qualifiers the candidate conditions of a color edit read (D5): the page sends the synthesis those only.
+  [DIAGRAM_HELPER_OPERATIONS.SYNTHESIS_QUALIFIERS]: {
+    keys: ['request'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'synthesis_qualifiers_json', [jsonArgument(payload.request, null)])
   },
   // The rules of a group color edit (OV-244): Python writes them over the whole catalog.
   [DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES]: {
@@ -1309,6 +1314,22 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // The sequences of features by identity (the Sequence tab, member Copy, sequence-field search), read by Python
+  // from the request the shown Result was made from (D5).
+  [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_SEQUENCES]: {
+    keys: ['canonicalRequest', 'features'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'read_feature_sequences_json', [
+        replyBuffersOf(pyodide),
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.features, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   // A Circular Generate's ring searches pass the search space Python plans for the reference and each ring
   // (PD-OI-018 revision 6): the reference's record sources are staged under the ids the next Generate's request names
   // them by, so Python reads the parse that Generate renders; each ring comes as the ring reader's file lengths.
@@ -1323,6 +1344,40 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         // The file names a per-file warning names, as the input summary names them.
         jsonArgument(Object.fromEntries(payload.resourceManifest.map(({ resourceId, name }) => [resourceId, name])), {}),
         jsonArgument(payload.rings, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
+  // The bases of match spans of drawn or comparison records (the match popup's Copy and FASTA), on the displayed
+  // strand, read by Python from the shown Result's request (D5).
+  [DIAGRAM_HELPER_OPERATIONS.READ_MATCH_SEQUENCES]: {
+    keys: ['canonicalRequest', 'spans'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'read_match_sequences_json', [
+        replyBuffersOf(pyodide),
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.spans, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
+  // One part of the stored catalog item of the shown Result with every sequence an exported Interactive SVG embeds,
+  // in the export encoding, read from the shown Result's request (D5): the export reads it in parts of at most
+  // FEATURE_READ_BASES bases of rows. The part's rows come as a file (`embedItem`), not as a string argument.
+  [DIAGRAM_HELPER_OPERATIONS.READ_EMBED_SEQUENCES]: {
+    keys: ['files', 'canonicalRequest', 'part'],
+    fileRoles: ['embedItem'],
+    run: async (pyodide, payload, paths, operation, workspace) => callJsonHelper(
+      pyodide, 'read_embed_sequences_json', [
+        replyBuffersOf(pyodide),
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        requireHelperFile(paths, 'embedItem', operation),
+        jsonArgument(payload.part, {}),
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )
@@ -1567,7 +1622,7 @@ const runGeneration = async ({
       (/** @type {unknown} */ notice) => {
         self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(notice) });
       },
-      () => createReplyBuffer(pyodide.FS)
+      replyBuffersOf(pyodide)
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });

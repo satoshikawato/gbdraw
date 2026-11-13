@@ -36,7 +36,6 @@ const STRUCTURAL_METRICS = [
   'blobConstructionCount',
   'resourceTextReadCount',
   'resourceByteReadCount',
-  'sourceRecoveryCount',
   'workerConstructionCount',
   'workerInitializationCount'
 ];
@@ -256,7 +255,6 @@ const loadSyntheticSession = async (page, variant = 'normal') => evaluateWithRet
     });
     return {
       status: result?.status,
-      degradedRecovery: Boolean(result?.degradedRecovery),
       message: String(result?.error?.summary || '')
     };
   },
@@ -277,7 +275,7 @@ test('synthetic current session restores and exports without materializing resou
   await armHistoryCompletion(page);
 
   const imported = await loadSyntheticSession(page);
-  expect(imported).toEqual({ status: 'ok', degradedRecovery: false, message: '' });
+  expect(imported).toEqual({ status: 'ok', message: '' });
   const preview = await probeSnapshot(page);
   expect(preview.savedPreviewVisible).toBe(true);
   expect(preview.resultCount).toBe(1);
@@ -1000,8 +998,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   await openInstrumentedApp(page);
   await armHistoryCompletion(page);
   expect(await loadSyntheticSession(page)).toMatchObject({
-    status: 'ok',
-    degradedRecovery: false
+    status: 'ok'
   });
   const preview = await probeSnapshot(page);
   expect(preview.structural).toEqual(ZERO_PREVIEW_METRICS);
@@ -1251,8 +1248,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
   await openInstrumentedApp(page);
   await armHistoryCompletion(page);
   expect(await loadSyntheticSession(page)).toMatchObject({
-    status: 'ok',
-    degradedRecovery: false
+    status: 'ok'
   });
 
   const first = await evaluateWithRetainedPromise(page, async () => {
@@ -1384,8 +1380,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
   await openInstrumentedApp(page);
   await armHistoryCompletion(page);
   expect(await loadSyntheticSession(page)).toMatchObject({
-    status: 'ok',
-    degradedRecovery: false
+    status: 'ok'
   });
 
   await page.evaluate(() => {

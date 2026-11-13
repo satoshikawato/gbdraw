@@ -63,6 +63,10 @@ def test_the_contracts_directory_holds_only_the_generated_modules() -> None:
         ("CANONICAL_SESSION_MIN_VERSION", "gbdraw.session_io", "CANONICAL_SESSION_MIN_VERSION"),
         ("DISPLAY_PLACEMENT_SCHEMA", "gbdraw.session_request_codec", "DISPLAY_PLACEMENT_SCHEMA"),
         ("SIMILARITY_ALIGNMENT_PLAN_SCHEMA", "gbdraw.layout.similarity_alignment", "SIMILARITY_ALIGNMENT_PLAN_SCHEMA"),
+        # D5: the catalog schema older Sessions stored sequences in, and the schema an exported Interactive SVG
+        # embeds (the Web export writes it, not the stored FEATURE_CATALOG_SCHEMA).
+        ("SEQUENCE_FEATURE_CATALOG_SCHEMA", "gbdraw.session_io", "SEQUENCE_FEATURE_CATALOG_SCHEMA"),
+        ("INTERACTIVE_EMBED_SCHEMA", "gbdraw.web_support.feature_catalog", "INTERACTIVE_EMBED_SCHEMA"),
         ("LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA"),
         ("ORTHOGROUP_INFERENCE_VERSION", "gbdraw.analysis.protein_colinearity", "ORTHOGROUP_INFERENCE_VERSION"),
     ],

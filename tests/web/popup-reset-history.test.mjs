@@ -7,7 +7,7 @@ import { createRulePreparation, runWhenPrepared } from '../../gbdraw/web/js/app/
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
-import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { groupColorRulesOver, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
 const legendRowColorWrites = [];
@@ -57,7 +57,8 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     synthesize: (request) => {
       stages.push(`worker:synthesizeColorRules:${request.scope}`);
       return synthesizePythonColorRules(request);
-    }
+    },
+    synthesisQualifiers: synthesisPythonQualifiers
   });
   const history = createHistoryManager({
     buildIntent: () => { stages.push('history:buildIntent'); return { rules: JSON.parse(JSON.stringify(manualSpecificRules)) }; },

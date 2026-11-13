@@ -76,7 +76,7 @@ const loadPdfLibraries = () => {
   return pdfLibrariesPromise;
 };
 
-/** @import { StandaloneInteractivityOptions } from './standalone-interactivity.js' */
+/** @import { ExportInteractivity } from './svg-serialization.js' */
 
 /**
  * The fonts an exported SVG carries (custom fonts D-05, D-13): Python's
@@ -200,7 +200,8 @@ const refusedFontWarnings = (families) => families.map((family) => (
  * @property {string} name
  * @property {SVGSVGElement | null} [svg]
  * @property {string | null} [svgContent] `getSvgFromString` reads a null content as no SVG.
- * @property {StandaloneInteractivityOptions} [interactivity]
+ * @property {ExportInteractivity} [interactivity] An Interactive SVG's popup mode and edits, and the catalog item it
+ *   embeds with its sequences (`embeddedSequences`, which the export reads from Python before it builds the file).
  * @property {number | string} [dpi]
  * @property {boolean} [whiteBackground] the PNG paints the drawing's transparent background white
  */

@@ -12,6 +12,7 @@ import { buildMatchPopupPayload } from '../../gbdraw/web/js/services/pairwise-ma
 import { normalizeGenerationResponse, selectHeldRenderState } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { SEGMENTS } from '../../gbdraw/web/js/services/current-worker-result-source.js';
 import {
+  FEATURE_CATALOG_SCHEMA,
   admitFeatureCatalog,
   biologicalFeatureKey
 } from '../../gbdraw/web/js/services/feature-catalog.js';
@@ -188,7 +189,7 @@ class FakeDomParser {
 }
 
 const catalog = () => ({
-  schema: 5,
+  schema: FEATURE_CATALOG_SCHEMA,
   items: [{
     resultIndex: 0,
     resultName: 'diagram.svg',
@@ -215,8 +216,7 @@ const catalog = () => ({
     }],
     orthogroups: [],
     annotations: [],
-    comparisonMatches: [],
-    sequenceSources: []
+    comparisonMatches: []
   }]
 });
 

@@ -341,6 +341,7 @@ under "Cited ids without a record".
   - `tests/web/helpers/session-regeneration-contract.cjs`
   - `tests/web/hepatoplasmataceae-session-regeneration.performance.playwright.spec.js`
   - `tests/web/large-preview-transform-interaction.performance.playwright.spec.js`
+  - `tests/web/legacy-session-load.test.mjs`
   - `tests/web/preview-fit.playwright.spec.js`
   - `tests/web/record-display-options.test.mjs`
   - `tests/web/record-draw-selection.playwright.spec.js`
@@ -383,6 +384,7 @@ under "Cited ids without a record".
 - [PD-OI-055](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-055-valid-bindings-after-failed-generate): Valid bindings after failed Generate. ACCEPTED, concern `web.generate.failed-source-binding-continuation`, scenario revision 1.
 
 - [PD-OI-056](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-056-feature-search-all-field-scope): Feature search All-field scope. ACCEPTED, concern `web.feature-search.all-field-scope`, scenario revision 1.
+  - `tests/web/feature-search-sequence-read.test.mjs`
 
 - [PD-OI-057](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-057-keyboard--and-touch-reachable-help-tips): Keyboard- and touch-reachable help tips. ACCEPTED, concern `web.help-tip.reachability`, scenario revision 1.
   - `tests/test_web_ux_profile.py`
@@ -722,6 +724,7 @@ under "Cited ids without a record".
   - `tests/web/visual-state-regressions.playwright.spec.js`
 
 - [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup): A click on a drawn element shows its settings in a popup. ACCEPTED, concern `web.result.element-settings-entry`, scenario revision 1.
+  - `tests/web/legacy-session-load.test.mjs`
 
 - [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 7, supersedes scenario revision 6.
   - `tests/web/browser-preferences.test.mjs`
@@ -920,6 +923,9 @@ under "Cited ids without a record".
   - `tests/retired_sessions/refused/drawings-per-drawing-cards.v51.provenance.json`
   - `tests/test_api_session.py`
   - `tests/test_gzip_inputs.py`
+
+- [PD-OI-128](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-128-feature-sequences-read-from-python-on-demand): Feature sequences read from Python on demand. ACCEPTED, concern `web.feature-sequence.on-demand`, scenario revision 1.
+  - `tests/web/export-lazy-loading.playwright.spec.js`
 
 ### Cited ids without a record
 

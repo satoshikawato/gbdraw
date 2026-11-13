@@ -319,8 +319,13 @@ modes can use the same record key, so a request carries only the rows and
 targets of its own mode. A row keeps the record key of the view it was last
 drawn in; the next Generate that draws the record under another key moves the
 row to it, so a Session saved by 0.14.2 or earlier keeps its edits when the
-view changes. The feature catalog is schema 5. It records the
-selector values each drawn feature had (`drawnSelector`).
+view changes. The feature catalog is schema 6. It records the
+selector values each drawn feature had (`drawnSelector`) and holds no
+sequence: the Web app reads the bases of a feature or a comparison match
+from the Session's input files when it shows them. A Session 46 to 50 stores
+catalog schema 5 with the sequences; Load drops them and reads them again
+from the input files, and the next Save writes schema 6. An exported
+Interactive SVG still holds the sequences.
 
 When you load an older Session, the Web app moves its per-feature edits onto
 the features they name:
@@ -377,7 +382,7 @@ the features they name:
     source hash on every record.
   - A label whitelist row that the former **Whitelist only** action wrote for a feature without
     a unique qualifier holds its rendered ID and is not renamed either.
-- A catalog of schema 3 or 4 reads as schema 5 without selector values until
+- A catalog of schema 3 or 4 reads as schema 6 without selector values until
   the next Generate. A feature whose rendered ID carries its source hash was
   drawn with its source coordinates, so its source values serve until then.
 
@@ -456,11 +461,10 @@ with a default, not use, or read with another meaning:
   stored input files, the saved diagram of the other mode, or the settings of
   a drawing; and fields that a Session of that version never held, such as
   `modes` in a Session older than version 46 or an unknown top-level key;
-- feature information or comparison match sequences that cannot be restored.
+- feature information that cannot be restored.
 
-Rows of per-feature edits, Feature visibility edits, `hash=` values, feature
-information and comparison match sequences give a count or a statement, not a
-place in the file. Legend entry rows name the entry, and table rows name the
+Rows of per-feature edits, Feature visibility edits, `hash=` values, and
+feature information give a count or a statement, not a place in the file. Legend entry rows name the entry, and table rows name the
 table and its lines. A Session of version 44 or older keeps a setting that
 both diagram modes read in one place, so such a setting it cannot use is one
 row (`config.adv.label_rendering`); a Session of version 46 or later keeps each

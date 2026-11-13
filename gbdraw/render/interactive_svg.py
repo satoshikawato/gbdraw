@@ -10,8 +10,11 @@ import math
 import re
 import string
 from types import MappingProxyType
-from typing import Callable, Literal, TypeGuard, cast, overload
+from typing import TYPE_CHECKING, Callable, Literal, TypeGuard, cast, overload
 import xml.etree.ElementTree as ET
+
+if TYPE_CHECKING:
+    from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.numeric import (
     ASCII_NONNEGATIVE_INTEGER_PATTERN,
@@ -95,6 +98,18 @@ ET.register_namespace("ev", EV_NS)
 
 
 @dataclass(frozen=True)
+class CatalogSequenceRecords:
+    """The records whose bases an exported Interactive SVG embeds (D5): the drawn units, aligned with the catalog
+    item's record keys (``unit_keys``), and the records of each comparison FASTA. References to the records the
+    render holds, not copies of their sequences: the catalog stores none, ``embed_catalog_item`` reads them."""
+
+    mode: Literal["linear", "circular"]
+    records: tuple[SeqRecord, ...] = field(compare=False)
+    unit_keys: tuple[str, ...] = ()
+    comparison_records: tuple[tuple[SeqRecord, ...], ...] = field(default=(), compare=False)
+
+
+@dataclass(frozen=True)
 class InteractiveSvgContext:
     """Optional rich context for standalone interactive SVG export."""
 
@@ -104,7 +119,7 @@ class InteractiveSvgContext:
     legend_entries: Sequence[Mapping[str, object]] = ()
     current_colors: Mapping[str, str] = field(default_factory=dict)
     annotations: Sequence[Mapping[str, object]] = ()
-    sequence_sources: Sequence[Mapping[str, object]] = ()
+    sequence_records: CatalogSequenceRecords | None = None
     biological_features: Sequence[Mapping[str, object]] = ()
     # The key of each drawn unit (``gbdraw_record_key``), and of the record each unit draws (``record_identity_key``):
     # the windows of one record are units of that record (D-01); empty when every unit is its own record.
@@ -1689,8 +1704,9 @@ def enrich_svg(
         _remove_class_token(element, "gbdraw-interactive-feature--match")
         _remove_class_token(element, "gbdraw-interactive-feature--active-match")
     from gbdraw.web_support.feature_catalog import (
-        build_feature_catalog,
         build_feature_catalog_item,
+        embed_json_text,
+        interactive_embed_catalog,
         select_feature_catalog_item,
     )
 
@@ -1738,7 +1754,7 @@ def enrich_svg(
             result_index=result_index,
             result_name=result_name,
         )
-    catalog = build_feature_catalog([catalog_item])
+    catalog = interactive_embed_catalog(catalog_item, context.sequence_records)
 
     biological_by_key = {
         (
@@ -1814,11 +1830,7 @@ def enrich_svg(
             _add_class_token(element, "gbdraw-interactive-pairwise-match")
 
     try:
-        metadata_payload = json.dumps(
-            catalog,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        metadata_payload = embed_json_text(catalog)
     except (TypeError, ValueError) as exc:
         raise GbdrawError("Interactive SVG metadata payload could not be serialized.") from exc
 

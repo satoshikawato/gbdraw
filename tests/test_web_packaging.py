@@ -35,6 +35,7 @@ from gbdraw.session_io import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
 )
 from gbdraw.session_container import SESSION_DOCUMENT_ENTRY
+from gbdraw.web_support.feature_catalog import INTERACTIVE_EMBED_SCHEMA
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
 
@@ -846,7 +847,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] == FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[CURRENT_SESSION_VERSION]
+            assert payload["schema"] == INTERACTIVE_EMBED_SCHEMA
             assert len(payload["items"]) == 1
             item = payload["items"][0]
             biological_features = item["biologicalFeatures"]

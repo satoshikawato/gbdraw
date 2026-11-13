@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import csv
 from collections import defaultdict
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Literal, NamedTuple, overload
+from typing import Literal, NamedTuple, TypeVar, overload
 
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -188,6 +188,9 @@ class IdentityBinding:
 # unit has it, the one binding of the record's first unit says why.
 IdentityBindings = tuple[IdentityBinding, ...]
 
+# A feature a binder is asked for: an identity, or a record key with a source feature index.
+Wanted = TypeVar("Wanted", FeatureIdentity, tuple[str, int])
+
 
 def _record_key_indexes(
     records: Sequence[SeqRecord],
@@ -219,6 +222,13 @@ def _record_key_indexes(
     return {key: tuple(units) for key, units in indexes.items()}
 
 
+def drawn_source_features(record: SeqRecord) -> dict[int, SeqFeature]:
+    """The features a drawn record still has, by their source feature index (the ordinal of the input file)."""
+
+    source_indexes = _feature_source_index_map(record.features)
+    return {source_indexes[id(feature)]: feature for feature in _iter_source_features(record.features)}
+
+
 def resolve_feature_identities(
     *,
     records: Sequence[SeqRecord],
@@ -236,37 +246,68 @@ def resolve_feature_identities(
     key outside the request is an error.
     """
     indexes = _record_key_indexes(records, record_keys, source_catalogs)
-    wanted: dict[int, list[FeatureIdentity]] = defaultdict(list)
-    for identity in identities:
-        if identity.record_key not in indexes:
+    known: dict[int, dict[str, int]] = {}
+
+    def source_index(record_index: int, identity: FeatureIdentity) -> int | None:
+        if record_index not in known:
+            known[record_index] = {
+                entry.biological_feature_id: entry.source_feature_index for entry in source_catalogs[record_index]
+            }
+        return known[record_index].get(identity.biological_feature_id)
+
+    return _bind_drawn_features(records, indexes, ((item, item.record_key) for item in identities), source_index)
+
+
+def bind_source_feature_indexes(
+    *,
+    records: Sequence[SeqRecord],
+    record_keys: Sequence[str],
+    features: Iterable[tuple[str, int]],
+) -> Mapping[tuple[str, int], IdentityBindings]:
+    """Bind features named by record identity key and source feature index (the ordinal of the input file, which a
+    catalog row carries) to the drawn units of one request, as ``resolve_feature_identities`` binds an identity: in
+    every unit of the record that has the feature, the first one first. A record key outside the request is an
+    error."""
+
+    indexes = _record_key_indexes(records, record_keys)
+    return _bind_drawn_features(records, indexes, ((item, item[0]) for item in features), lambda _unit, item: item[1])
+
+
+def _bind_drawn_features(
+    records: Sequence[SeqRecord],
+    indexes: Mapping[str, tuple[int, ...]],
+    wanted: Iterable[tuple[Wanted, str]],
+    source_index: Callable[[int, Wanted], int | None],
+) -> dict[Wanted, IdentityBindings]:
+    """The one binder of features to drawn units: each wanted feature (with its record key) in every unit of its
+    record, by the source feature index ``source_index`` gives in that unit; the present units, else the first."""
+
+    by_record: dict[int, list[Wanted]] = defaultdict(list)
+    for item, record_key in wanted:
+        if record_key not in indexes:
             raise ValidationError(
-                f"Unknown feature identity record key {identity.record_key!r}.",
+                f"Unknown feature identity record key {record_key!r}.",
                 diagnostic={"code": "FEATURE_IDENTITY"},
             )
-        for record_index in indexes[identity.record_key]:
-            wanted[record_index].append(identity)
-    by_unit: dict[FeatureIdentity, list[IdentityBinding]] = defaultdict(list)
-    for record_index, items in sorted(wanted.items()):
+        for record_index in indexes[record_key]:
+            by_record[record_index].append(item)
+    by_unit: dict[Wanted, list[IdentityBinding]] = defaultdict(list)
+    for record_index, items in sorted(by_record.items()):
         record = records[record_index]
-        known = {
-            entry.biological_feature_id: entry.source_feature_index
-            for entry in source_catalogs[record_index]
-        }
-        source_indexes = _feature_source_index_map(record.features)
-        drawn = {source_indexes[id(feature)]: feature for feature in _iter_source_features(record.features)}
+        drawn = drawn_source_features(record)
         missing: Literal["crop_excluded", "absent"] = (
             "crop_excluded" if record.annotations.get("gbdraw_region_applied") else "absent"
         )
-        for identity in items:
-            index = known.get(identity.biological_feature_id)
+        for item in items:
+            index = source_index(record_index, item)
             feature = None if index is None else drawn.get(index)
             status: Literal["present", "crop_excluded", "absent", "unresolved"] = (
                 "unresolved" if index is None else "present" if feature is not None else missing
             )
-            by_unit[identity].append(IdentityBinding(record_index, index, status, feature))
+            by_unit[item].append(IdentityBinding(record_index, index, status, feature))
     return {
-        identity: tuple(item for item in units if item.status == "present") or (units[0],)
-        for identity, units in by_unit.items()
+        item: tuple(binding for binding in units if binding.status == "present") or (units[0],)
+        for item, units in by_unit.items()
     }
 
 

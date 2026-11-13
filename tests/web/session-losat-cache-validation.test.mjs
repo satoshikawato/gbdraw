@@ -634,7 +634,9 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   );
 });
 
-test('current session recovers files only when a sequence consumer is missing', async () => {
+// D5: the page keeps no match sequences, so Load reads no input file for
+// them, whether or not the catalog names a source for every match.
+test('a current session loads without reading its input files for match sequences', async () => {
   alerts.length = 0;
   restoredPrimaryReads = 0;
   restoredPrimaryArrayBufferReads = 0;
@@ -795,11 +797,6 @@ ORIGIN
   assert.equal(state.drawingOf('linear').linearSeqs[0].gb.name, 'catalog-primary.gbk');
   assert.equal(restoredPrimaryReads, 0);
   assert.equal(restoredPrimaryArrayBufferReads, 0);
-  assert.deepEqual(state.matchSequenceRegistry.values(), [{
-    ...sequenceSource,
-    aliases: ['CATALOG.1', 'CATALOG'],
-    sourceIndex: null
-  }]);
 
   const secondGenbank = genbank
     .replaceAll('CATALOG', 'SECOND')
@@ -840,10 +837,6 @@ ORIGIN
   assert.equal(sparseResult.status, 'ok');
   assert.equal(restoredPrimaryReads, 0);
   assert.equal(restoredPrimaryArrayBufferReads, 0);
-  assert.deepEqual(
-    state.matchSequenceRegistry.values().map((source) => source.recordId),
-    ['CATALOG.1']
-  );
 
   const missingPayload = structuredClone(sparsePayload);
   missingPayload.editorState.featureCatalog.items[0].comparisonMatches.push({
@@ -867,14 +860,10 @@ ORIGIN
   });
 
   assert.equal(missingResult.status, 'ok');
-  assert.equal(restoredPrimaryReads, 2);
-  assert.deepEqual(
-    state.matchSequenceRegistry.values().map((source) => source.recordId),
-    ['CATALOG.1', 'SECOND.1']
-  );
+  assert.equal(restoredPrimaryReads, 0);
 });
 
-test('current Circular sessions recover only supplied comparison FASTA sources', async () => {
+test('a current Circular session loads without reading its reference or comparison files', async () => {
   restoredReadsByName.clear();
   const optionalResult = await importSessionPayload(
     circularSequenceCoverageSession()
@@ -883,19 +872,6 @@ test('current Circular sessions recover only supplied comparison FASTA sources',
   assert.equal(optionalResult.status, 'ok');
   assert.equal(restoredReadsByName.get('reference.gbk') || 0, 0);
   assert.equal(restoredReadsByName.get('comparison.fna') || 0, 0);
-  assert.equal(
-    state.matchSequenceRegistry.resolve('', 'REFERENCE.1', {
-      origin: 'circular-reference'
-    }).source?.sequence,
-    'AACCGGTT'
-  );
-  assert.equal(
-    state.matchSequenceRegistry.resolve('', 'comparison', {
-      origin: 'homology-comparison',
-      sourceIndex: 0
-    }).source,
-    null
-  );
 
   restoredReadsByName.clear();
   const recoverableResult = await importSessionPayload(
@@ -903,15 +879,8 @@ test('current Circular sessions recover only supplied comparison FASTA sources',
   );
 
   assert.equal(recoverableResult.status, 'ok');
-  assert.equal(restoredReadsByName.get('reference.gbk'), 1);
-  assert.equal(restoredReadsByName.get('comparison.fna'), 1);
-  assert.equal(
-    state.matchSequenceRegistry.resolve('', 'comparison', {
-      origin: 'homology-comparison',
-      sourceIndex: 0
-    }).source?.sequence,
-    'AAAACCCC'
-  );
+  assert.equal(restoredReadsByName.get('reference.gbk') || 0, 0);
+  assert.equal(restoredReadsByName.get('comparison.fna') || 0, 0);
 
   restoredReadsByName.clear();
   const catalogResult = await importSessionPayload(
@@ -921,13 +890,6 @@ test('current Circular sessions recover only supplied comparison FASTA sources',
   assert.equal(catalogResult.status, 'ok');
   assert.equal(restoredReadsByName.get('reference.gbk') || 0, 0);
   assert.equal(restoredReadsByName.get('comparison.fna') || 0, 0);
-  assert.equal(
-    state.matchSequenceRegistry.resolve('', 'comparison', {
-      origin: 'homology-comparison',
-      sourceIndex: 0
-    }).source?.sequence,
-    'AAAACCCC'
-  );
 });
 
 test('fresh Circular LOSAT resources become session-owned live files', async () => {

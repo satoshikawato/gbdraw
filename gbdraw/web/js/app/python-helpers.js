@@ -19,7 +19,7 @@ from gbdraw.api.request_render import load_render_source_records
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
-from gbdraw.web_support.rule_matching import evaluate_rules_json, synthesize_color_rules_json
+from gbdraw.web_support.rule_matching import evaluate_rules_json, synthesis_qualifiers_json, synthesize_color_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
@@ -29,6 +29,11 @@ from gbdraw.web_support.feature_override_table import read_feature_override_tabl
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.locate import locate_web_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
+from gbdraw.web_support.catalog_sequences import (
+    read_embed_sequences_json,
+    read_feature_sequences_json,
+    read_match_sequences_json,
+)
 from gbdraw.web_support.linear_units import (
     plan_card_windows_json, plan_genome_scales_json, plan_linear_units_json, plan_record_places_json,
 )
@@ -1760,6 +1765,17 @@ def _with_prepared_input_lookup(helper, paths_argument=None, publish_inputs=Fals
     return run
 
 
+def _replied_in_utf8(helper):
+    """A helper whose reply can hold megabases replies in UTF-8 through a reply
+    buffer (gbdraw.web_support.reply_buffers), not as a str: Pyodide makes a
+    JavaScript string of a long str with many times its size of Worker heap.
+    The Worker passes its factory of reply buffers first; an error still
+    returns as a str (call_web_json_helper)."""
+    def run(new_reply_buffer, *arguments):
+        return write_reply_buffer(new_reply_buffer, text_utf8_chunks(helper(*arguments)))
+    return run
+
+
 _WEB_JSON_HELPERS = {
     "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
     "resolve_similarity_alignment_json": (
@@ -1770,6 +1786,7 @@ _WEB_JSON_HELPERS = {
     "clear_web_cancel": (clear_web_cancel, "generate"),
     # Its errors are rule errors: the error vocabulary has no operation of its own for it.
     "synthesize_color_rules_json": (synthesize_color_rules_json, "evaluateRules"),
+    "synthesis_qualifiers_json": (synthesis_qualifiers_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     # A PNG or PDF over its format's limit refuses before the browser draws it (EXPORT_LIMIT).
@@ -1827,6 +1844,20 @@ _WEB_JSON_HELPERS = {
     # the render (PD-OI-018 revision 6).
     "plan_genome_scales_json": (
         _with_prepared_input_lookup(plan_genome_scales_json, 1, publish_inputs=True), "planGenomeScales"
+    ),
+    # The sequences the catalog no longer stores (D5): the first read after a Session Load publishes the parsed
+    # inputs, so the next read and the next Generate parse nothing again. Their replies cross in UTF-8.
+    "read_feature_sequences_json": (
+        _replied_in_utf8(_with_prepared_input_lookup(read_feature_sequences_json, 1, publish_inputs=True)),
+        "readFeatureSequences",
+    ),
+    "read_match_sequences_json": (
+        _replied_in_utf8(_with_prepared_input_lookup(read_match_sequences_json, 1, publish_inputs=True)),
+        "readMatchSequences",
+    ),
+    "read_embed_sequences_json": (
+        _replied_in_utf8(_with_prepared_input_lookup(read_embed_sequences_json, 1, publish_inputs=True)),
+        "readEmbedSequences",
     ),
     # Generate's comparison searches run over the drawn units Python plans (D-01, D-37).
     "plan_linear_units_json": (plan_linear_units_json, "planLinearUnits"),

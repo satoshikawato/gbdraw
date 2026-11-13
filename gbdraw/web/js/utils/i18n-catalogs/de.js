@@ -533,7 +533,6 @@ export default Object.freeze({
   "Comparison {n}": "Vergleich {n}",
   "Comparisons must connect adjacent rows.": "Vergleiche müssen benachbarte Zeilen verbinden.",
   "Comparisons must connect records in different rows.": "Vergleiche müssen Datensätze in verschiedenen Zeilen verbinden.",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "Vergleiche: Die Sequenzen der Übereinstimmungen des gespeicherten Vergleichs konnten nicht erneut aus den Eingabedateien gelesen werden; die SVG-Vorschau bleibt erhalten, und beim nächsten Erzeugen werden sie gelesen.",
   "Composition metadata is invalid or unavailable.": "Die Kompositionsmetadaten sind ungültig oder nicht verfügbar.",
   "Compress": "Komprimieren",
   "Computing…": "Wird berechnet…",

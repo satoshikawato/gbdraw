@@ -25,8 +25,12 @@ for (const path of [
   await writeFile(join(tempDir, path), await readFile(`gbdraw/web/js/${path}`, 'utf8'), 'utf8');
 }
 
-const { buildFeatureSequenceFastas } = await import(
+const { buildFeatureSequenceFastas: buildFastas } = await import(
   pathToFileURL(join(tempDir, 'services', 'feature-sequence-fasta.js'))
+);
+// The cases name a feature's sequences beside its fields; the builder takes them as Python's reply (D5).
+const buildFeatureSequenceFastas = ({ nucleotide_sequence = '', amino_acid_sequence = '', ...feature }) => buildFastas(
+  feature, { nucleotideSequence: nucleotide_sequence, aminoAcidSequence: amino_acid_sequence }
 );
 const { getFeatureCaption } = await import(
   pathToFileURL(join(tempDir, 'services', 'feature-utils.js'))

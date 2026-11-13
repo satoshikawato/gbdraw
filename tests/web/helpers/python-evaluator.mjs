@@ -150,6 +150,16 @@ result = synthesize_color_rules_json(json.dumps(payload))
 `, request));
 
 /**
+ * The Worker's `synthesisQualifiers` helper (D5), for a rule preparation's `synthesisQualifiers`.
+ * @param {unknown} request
+ */
+export const synthesisPythonQualifiers = async (request) => JSON.parse(await evaluatePython(`
+import json
+from gbdraw.web_support.rule_matching import synthesis_qualifiers_json
+result = synthesis_qualifiers_json(json.dumps(payload))
+`, request));
+
+/**
  * The rule owner's `groupColorRules` (app/feature-editor/rule-actions.js) over
  * `preparation`, for a test that stands in for the rule owner; `rowRules` reads
  * the rules a Legend row draws by its key, as `getLegendRowRules` does. It

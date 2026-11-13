@@ -11,8 +11,8 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
   'planRecordPlaces', 'planRingScales',
-  'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
-  'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
+  'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readEmbedSequences', 'readFeatureOverrideTable', 'readFeatureSequences', 'readMatchSequences', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
+  'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesisQualifiers', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse', 'drawing-list']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
@@ -325,6 +325,9 @@ const DEFINITIONS = Object.freeze({
   WORKER_INIT: ['The diagram runtime could not start. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']],
   FEATURE_METADATA: ['The diagram engine returned incompatible feature metadata. Reload the page and Generate again.', ['reload', 'retry']],
   RESULT_INVALID: ['The generated result could not be accepted. Retry the operation.', ['retry', 'save-session']],
+  // A shown Result without the request it was made from (a Result-only Session 27-39): Python reads its sequences
+  // from the request the next Generate commits (D5).
+  SEQUENCE_REQUIRES_GENERATE: ['This Result was saved by an older gbdraw, so its sequences are read after the next Generate.', ['generate']],
   EXPORT_INPUT: ['The current diagram could not be prepared for export. Generate a diagram and retry.', ['generate', 'retry']],
   EXPORT_DIMENSIONS: ['The diagram has no usable export dimensions. Generate again or use SVG.', ['generate', 'use-svg']],
   PNG_DPI: ['The PNG DPI is invalid. Use a positive finite DPI and retry.', ['edit-dpi', 'retry']],
@@ -334,6 +337,14 @@ const DEFINITIONS = Object.freeze({
   // Python checks the size before anything is drawn or downloaded (gbdraw/render/export_limits.py).
   EXPORT_LIMIT: ['The figure is larger than this file format allows, so no file was made.', ['use-svg']],
   CLEANUP_FAILED: ['Temporary resource cleanup failed. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']]
+});
+
+// The sequence reads of a shown Result (D5) give their own meaning to a code that names another operation's failure.
+/** @type {Readonly<Record<string, Readonly<Record<string, readonly [string, readonly string[], string?]>>>>} */
+const OPERATION_DEFINITIONS = Object.freeze({
+  readFeatureSequences: Object.freeze(/** @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>} */ ({
+    FEATURE_IDENTITY: ['The request of the shown Result does not draw this feature, so its sequence cannot be read. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']]
+  }))
 });
 
 /** @type {Readonly<Record<string, string>>} */
@@ -1104,6 +1115,15 @@ export const comparisonCauseRepeats = (error) => losatFailureRepeats(error)
   || (error.code === 'COMPARISON_INPUT' && error.context.reason === 'GENETIC_CODE');
 
 /**
+ * The message and actions of a failure's code: the operation's own definition where it has one, else the code's.
+ * @param {{ code: string, operation: string }} error
+ * @returns {readonly [string, readonly string[], string?]}
+ */
+const definitionOf = (error) => (Object.hasOwn(OPERATION_DEFINITIONS, error.operation)
+  && Object.hasOwn(OPERATION_DEFINITIONS[error.operation], error.code)
+  ? OPERATION_DEFINITIONS[error.operation] : DEFINITIONS)[error.code];
+
+/**
  * The first sentence of a failure: the code's message for its operation where the code's own names a step that
  * operation does not have (`OPERATION_MESSAGES`), else for a threaded trap or a LOSAT failure that repeats the sentence
  * that says so, which also stands for the reason's sentence (`coversReason`), else the code's message.
@@ -1114,7 +1134,7 @@ const leadSentence = (error) => {
   const operationMessages = Object.hasOwn(OPERATION_MESSAGES, error.code) ? OPERATION_MESSAGES[error.code] : {};
   if (Object.hasOwn(operationMessages, error.operation)) return { text: operationMessages[error.operation], coversReason: false };
   if (error.code === 'LOSAT_RUNTIME' && error.context.reason === 'THREADED_TRAP') return { text: PHRASES.losatThreadedTrapped, coversReason: true };
-  if (!losatFailureRepeats(error)) return { text: DEFINITIONS[error.code][0], coversReason: false };
+  if (!losatFailureRepeats(error)) return { text: definitionOf(error)[0], coversReason: false };
   return { text: error.context.reason === 'TRAP' ? PHRASES.losatTrapped : PHRASES.losatRefused, coversReason: true };
 };
 
@@ -1144,7 +1164,7 @@ export const normalizeUserFacingError = (value, {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
-  const actions = DEFINITIONS[result.code][1];
+  const [, actions] = definitionOf(result);
   const lead = leadSentence(result);
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;

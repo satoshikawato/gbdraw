@@ -68,6 +68,7 @@ from tests.utils.session_files import (
 )
 from gbdraw.session_io import (
     CURRENT_FEATURE_CATALOG_SCHEMA,
+    SEQUENCE_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
     LOSAT_DERIVED_CACHE_SCHEMA,
@@ -501,7 +502,6 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
                 "svg_id": "feature-1",
                 "stable_feature_id": "feature-1",
                 "record_idx": 0,
-                "nucleotide_sequence": "ATGC",
                 "anchorProfile": {
                     "precision": "exact",
                     "operator": "single",
@@ -513,7 +513,6 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
                 "svg_id": "feature-2",
                 "stable_feature_id": "feature-2",
                 "record_idx": 1,
-                "nucleotide_sequence": "ATGA",
                 "anchorProfile": {
                     "precision": "exact",
                     "operator": "single",
@@ -685,7 +684,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
     tmp_path: Path,
 ) -> None:
     catalog = {
-        "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
+        "schema": SEQUENCE_FEATURE_CATALOG_SCHEMA,  # a Session 46-50 stores the sequences
         "items": [
             {
                 "resultIndex": 0,
@@ -1846,7 +1845,8 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
         assert linear["editorState"]["legend"] == source["editorState"]["legend"]
         assert "editorState" not in circular
         assert "legend" not in payload["editorState"]
-        assert payload["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
+        # The checked mode-scoped Session labels it as a Session 46-50 does.
+        assert payload["editorState"]["featureCatalog"]["schema"] == SEQUENCE_FEATURE_CATALOG_SCHEMA
         assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
         assert "features" not in circular and "features" not in linear
         assert (
@@ -5052,3 +5052,69 @@ def test_session_50_plan_edge_with_window_pair_names_is_refused() -> None:
     edge["windowLosatFilenames"] = {"a~w1->b": "mine.tsv"}
     with pytest.raises(ValidationError, match="unknown field\\(s\\): windowLosatFilenames"):
         validate_session(payload)
+
+
+def _catalog_rows(catalog: dict) -> list[dict]:
+    return [row for item in catalog["items"] for row in item["biologicalFeatures"]]
+
+
+def test_cli_saved_session_51_writes_catalog_schema_6_without_sequences(tmp_path: Path) -> None:
+    """D5: the stored catalog holds no sequence; the /translation qualifier stays as it was read."""
+
+    from Bio import SeqIO
+    from gbdraw.web_support.feature_catalog import STORED_SEQUENCE_KEYS
+
+    record = SeqRecord(Seq("ATGAAATAAGGG" * 30), id="saved", name="saved", annotations={"molecule_type": "DNA"})
+    record.features = [
+        SeqFeature(FeatureLocation(0, 9, strand=1), type="CDS", qualifiers={"translation": ["MK"]}),
+    ]
+    SeqIO.write(record, tmp_path / "saved.gb", "genbank")
+    session = tmp_path / "saved.gbdraw"
+    circular_main(["--gbk", str(tmp_path / "saved.gb"), "-o", str(tmp_path / "saved"), "--session_output", str(session)])
+
+    payload = read_session_payload(session)
+    assert payload["version"] == CURRENT_SESSION_VERSION
+    [drawing] = payload["drawings"]
+    catalog = drawing["editorState"]["featureCatalog"]
+    assert catalog["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA == 6
+    [row] = _catalog_rows(catalog)
+    assert not STORED_SEQUENCE_KEYS & set(row)
+    assert row["qualifiers"]["translation"] == ["MK"]
+    assert all("sequenceSources" not in item for item in catalog["items"])
+
+
+def test_session_47_catalog_schema_5_loads_without_its_stored_sequences() -> None:
+    """A Session 46-50 still loads; its stored sequences are not used: its move to drawings promotes the catalog to
+    schema 6, giving back each /translation qualifier a translation mark stood for."""
+
+    from gbdraw.web_support.feature_catalog import STORED_SEQUENCE_KEYS
+
+    path = Path(__file__).parent / "fixtures" / "sessions" / "BGC0000708-BGC0000713.v47.gbdraw-session.json.gz"
+    stored = read_session_payload(path)
+    stored_catalog = stored["editorState"]["featureCatalog"]
+    assert stored_catalog["schema"] == SEQUENCE_FEATURE_CATALOG_SCHEMA
+    marked = {
+        (row["recordKey"], row["biologicalFeatureId"]): row["amino_acid_sequence"]
+        for row in _catalog_rows(stored_catalog)
+        if row.get("translationFromAminoAcidSequence")
+    }
+    assert marked and any("sequenceSourceIndex" in row for row in _catalog_rows(stored_catalog))
+
+    from gbdraw.session_io import drawings_document_of_mode_scoped
+
+    document = load_session_document(path).to_dict()
+    # Python keeps the Session 47 as it was stored; its move to drawings (the Web's Load, a resave) promotes it.
+    assert document["editorState"]["featureCatalog"]["schema"] == SEQUENCE_FEATURE_CATALOG_SCHEMA
+    moved, _facts = drawings_document_of_mode_scoped(document)
+    loaded = drawing_view(dict(moved))["editorState"]["featureCatalog"]
+
+    assert loaded["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
+    assert all("sequenceSources" not in item for item in loaded["items"])
+    rows = _catalog_rows(loaded)
+    assert len(rows) == len(_catalog_rows(stored_catalog))
+    assert not any(STORED_SEQUENCE_KEYS & set(row) for row in rows)
+    assert {
+        (row["recordKey"], row["biologicalFeatureId"]): row["qualifiers"]["translation"][0]
+        for row in rows
+        if (row["recordKey"], row["biologicalFeatureId"]) in marked
+    } == marked

@@ -12,7 +12,7 @@ import test from 'node:test';
 
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
-import { admitFeatureCatalog } from '../../gbdraw/web/js/services/feature-catalog.js';
+import { FEATURE_CATALOG_SCHEMA, admitFeatureCatalog } from '../../gbdraw/web/js/services/feature-catalog.js';
 import { getAllFeatureLegendGroups } from '../../gbdraw/web/js/services/legend-svg.js';
 import { admitCurrentGeneratedResults, createEmptySvgMutationPlan } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
 
@@ -46,7 +46,7 @@ const legendGroupsOf = (svg) => getAllFeatureLegendGroups(svg).map((group) => {
 });
 
 const catalog = () => ({
-  schema: 5,
+  schema: FEATURE_CATALOG_SCHEMA,
   items: [{
     resultIndex: 0,
     resultName: 'diagram.svg',
@@ -55,8 +55,7 @@ const catalog = () => ({
     biologicalFeatures: [],
     orthogroups: [],
     annotations: [],
-    comparisonMatches: [],
-    sequenceSources: []
+    comparisonMatches: []
   }]
 });
 

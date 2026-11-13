@@ -1,7 +1,10 @@
-"""The byte buffers of a Generate reply, written in chunks.
+"""The byte buffers of a Generate reply or a sequence read's reply, written in chunks.
 
 A Generate reply carries UTF-8 buffers: the metadata JSON, the feature catalog
-JSON, and each Result's sent children texts. Python writes each one into a
+JSON, and each Result's sent children texts; a sequence read (the feature,
+match and export reads) replies with its JSON in one buffer, since Pyodide
+makes a JavaScript string of a long str with many times its size of Worker
+heap. Python writes each one into a
 buffer the Worker owns (``new_reply_buffer`` makes one) in chunks of about
 1 MiB, so the Python heap, whose WebAssembly memory never shrinks, never holds a
 whole text's bytes (or, for JSON, the whole text). Each chunk crosses through a

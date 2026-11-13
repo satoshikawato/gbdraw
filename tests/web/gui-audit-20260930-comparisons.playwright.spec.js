@@ -503,7 +503,34 @@ test('a CLI Session that draws one file record in two windows loads and regenera
   expect(await figure()).toEqual(loaded);
 });
 
+// Copy of each span of the open match popup, as the popup's Copy button does it (D5: Python reads the bases when
+// pressed): each span's availability, the copied FASTA ('' when none), and its reason.
+const COPY_SPAN_FASTAS = () => {
+  window.__copySpanFastas = async (app) => {
+    const bundle = app.clickedPairwiseMatch?.sequenceBundle;
+    if (!bundle) return [];
+    const copied = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        write: async ([item]) => { copied.push(await (await item.getType('text/plain')).text()); },
+        writeText: async (text) => { copied.push(text); }
+      }
+    });
+    const result = [];
+    for (const entry of bundle.entries) {
+      const before = copied.length;
+      if (entry.available) await app.sequenceReads.spanAction(bundle, [entry], 'copy');
+      if (bundle.read.status === 'failed') throw new Error(`span read failed: ${bundle.read.error?.summary} ${JSON.stringify(bundle.read.error?.details || [])}`);
+      result.push({ available: entry.available, fasta: copied.length > before ? copied[copied.length - 1] : '',
+        unavailableReason: entry.unavailableReason });
+    }
+    return result;
+  };
+};
+
 test('the match popup and its FASTA header report source coordinates of a cropped record', async ({ page }) => {
+  await page.addInitScript(COPY_SPAN_FASTAS);
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
   await useLosat(page, {
@@ -525,9 +552,11 @@ test('the match popup and its FASTA header report source coordinates of a croppe
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     const match = JSON.parse(JSON.stringify(app.clickedPairwiseMatch));
+    // Copy reads each span from Python when pressed (D5); the copied text is the span's FASTA.
+    const fastas = await window.__copySpanFastas(app);
     return {
       query: JSON.stringify(match.sections.find(({ title }) => title === 'Query') || null),
-      headers: (match.sequenceBundle?.entries || []).map(({ fasta }) => String(fasta || '').split('\n')[0])
+      headers: fastas.map(({ fasta }) => String(fasta || '').split('\n')[0])
     };
   });
   // The shared block is R2c source 2001..3000, which is 1001..2000 of the crop.
@@ -541,6 +570,7 @@ test('the match popup and its FASTA header report source coordinates of a croppe
 // Review S5 of PR #1734: after Load, a ribbon of the second window of a record drawn in two windows copies that
 // window's bases. The saved catalog names its sources by drawn unit; Load reads them by unit, not by card.
 test('after Load, Copy FASTA of a ribbon of a second window gives that window\'s bases', async ({ page }, testInfo) => {
+  await page.addInitScript(COPY_SPAN_FASTAS);
   test.setTimeout(600_000);
   const directory = testInfo.outputDir;
   mkdirSync(directory, { recursive: true });
@@ -564,10 +594,7 @@ test('after Load, Copy FASTA of a ribbon of a second window gives that window\'s
     for (let attempt = 0; attempt < 100 && !app.clickedPairwiseMatch; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    const match = JSON.parse(JSON.stringify(app.clickedPairwiseMatch));
-    return (match.sequenceBundle?.entries || []).map(({ available, fasta, unavailableReason }) => ({
-      available, fasta, unavailableReason
-    }));
+    return window.__copySpanFastas(app);
   });
   const generated = await copied();
   expect(generated.map(({ available }) => available)).toEqual([true, true]);

@@ -462,7 +462,7 @@
     },
     {
       "id": "vector:tests/fixtures/source-feature-index-alias-vectors.json",
-      "concern": "Feature catalog source index alias promotion (schema 3, OV-274)",
+      "concern": "Feature catalog promotion: the schema 3 source index alias (OV-274) and the schema 5 to 6 drop of stored sequences, with the restored /translation in one place (D5)",
       "pythonOwner": [
         "gbdraw/web_support/feature_catalog.py:promote_legacy_feature_catalog"
       ],
@@ -470,7 +470,7 @@
         "gbdraw/web/js/services/feature-catalog.js:migrateLegacyFeatureCatalog"
       ],
       "vector": "tests/fixtures/source-feature-index-alias-vectors.json",
-      "reason": "Both Load paths promote a legacy catalog; the vector pins the blank-alias case.",
+      "reason": "Both Load paths promote a legacy catalog; the vector pins the blank-alias case and the schema 5 promotion with its key order.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (feature catalog promotion; OV-274)"
     },
@@ -1394,13 +1394,13 @@
       "id": "concern:unit-coordinate-map-base",
       "concern": "Where a window's coordinate map starts (its start, or its end when the unit is reversed)",
       "pythonOwner": [
-        "gbdraw/web_support/similarity_alignment.py:_RecordFact._unit_offset"
+        "gbdraw/io/regions.py:_crop_record_to_region"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/record-display-model.js"
       ],
       "vector": null,
-      "reason": "Python's alignment offset follows the crop's coordinate-map base rule that the crop and the Web's windows share.",
+      "reason": "The crop writes a window's coordinate-map base (its start), and gbdraw/io/record_select.py:reverse_records moves a reversed unit's base to its end; the Web's windows compute both again (cropDisplayStart).",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
     },

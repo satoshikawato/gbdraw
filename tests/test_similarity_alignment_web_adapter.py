@@ -14,251 +14,6 @@ from gbdraw.web_support.similarity_alignment import (
 )
 
 
-def _anchor(record_key: str, feature_id: str, index: int) -> dict[str, object]:
-    return {
-        "recordKey": record_key,
-        "biologicalFeatureId": feature_id,
-        "sourceFeatureIndex": index,
-        "stableFeatureSvgId": f"stable-{feature_id}",
-    }
-
-
-def _member(
-    record_key: str,
-    feature_id: str,
-    index: int,
-    *,
-    start: int,
-    end: int,
-    strand: int = 1,
-) -> dict[str, object]:
-    return {
-        "groupId": "og-1",
-        "anchor": _anchor(record_key, feature_id, index),
-        "sourceStart": start,
-        "sourceEnd": end,
-        "sourceStrand": strand,
-        "identityIsUnique": True,
-        "hidden": False,
-        "representative": False,
-        "role": "inparalog",
-    }
-
-
-def _request() -> dict[str, object]:
-    reference = _anchor("record-a", "reference", 0)
-    return {
-        "schema": 2,
-        "groupId": "og-1",
-        "records": [
-            {
-                "recordKey": "record-a",
-                "recordLength": 1000,
-                "windows": [],
-                "presentation": {"reverseComplement": False},
-            },
-            {
-                "recordKey": "record-b",
-                "recordLength": 400,
-                "windows": [{"start": 101, "end": 300, "reverseComplement": True, "column": None}],
-                "presentation": {"reverseComplement": False},
-            },
-        ],
-        "reference": reference,
-        "members": [
-            _member("record-a", "reference", 0, start=10, end=40),
-            _member("record-b", "target", 1, start=140, end=170, strand=-1),
-        ],
-        "directEdges": [
-            {
-                "groupId": "og-1",
-                "query": reference,
-                "subject": _anchor("record-b", "target", 1),
-                "edgeKind": "rbh",
-            }
-        ],
-        "choices": [],
-    }
-
-
-def test_web_adapter_projects_crop_facts_and_returns_canonical_plan() -> None:
-    result = resolve_similarity_alignment_payload(_request())
-
-    assert result["status"] == "resolved"
-    assert result["plan"] == {
-        "schema": 2,
-        "groupId": "og-1",
-        "reference": _anchor("record-a", "reference", 0),
-        "records": [
-            {
-                "recordKey": "record-a",
-                "status": "reference",
-                "rationale": "reference",
-                "anchor": _anchor("record-a", "reference", 0),
-            },
-            {
-                "recordKey": "record-b",
-                "status": "aligned",
-                "rationale": "only_usable_candidate",
-                "anchor": _anchor("record-b", "target", 1),
-            },
-        ],
-    }
-    assert json.loads(resolve_similarity_alignment_json(json.dumps(_request()))) == result
-
-
-def test_web_adapter_returns_ambiguity_then_uses_explicit_skip() -> None:
-    request = _request()
-    request["directEdges"] = []
-    request["members"].append(  # type: ignore[union-attr]
-        _member("record-b", "other", 2, start=190, end=220)
-    )
-
-    ambiguous = resolve_similarity_alignment_payload(request)
-    assert ambiguous["status"] == "ambiguous"
-    assert ambiguous["plan"] is None
-    assert ambiguous["records"][1]["kind"] == "ambiguous"  # type: ignore[index]
-
-    request["choices"] = [
-        {"recordKey": "record-b", "kind": "skip", "anchor": None}
-    ]
-    resolved = resolve_similarity_alignment_payload(request)
-    assert resolved["status"] == "resolved"
-    assert resolved["plan"]["records"][1]["rationale"] == "skipped_by_user"  # type: ignore[index]
-
-
-def test_web_adapter_rejects_unknown_fields_and_unmappable_reference() -> None:
-    unknown = _request()
-    unknown["unexpected"] = True
-    with pytest.raises(ValidationError, match="invalid fields"):
-        resolve_similarity_alignment_payload(unknown)
-
-    cropped = _request()
-    cropped["records"][0]["windows"] = [{  # type: ignore[index]
-        "start": 500,
-        "end": 600,
-        "reverseComplement": False,
-        "column": None,
-    }]
-    with pytest.raises(ValidationError, match="exact reference.*current crop"):
-        resolve_similarity_alignment_payload(cropped)
-
-
-def test_web_adapter_reads_a_window_across_the_origin_and_places_a_record_of_several_windows() -> None:
-    request = _request()
-    # record-b (400 bp) drawn from 301 across the origin to 160: the target 140..170 centres at 155,
-    # which the window holds at 100 + 155 = 255, reversed at 160 - 155 = 5 (OV-2771).
-    window = {"start": 301, "end": 160, "reverseComplement": False, "column": None}
-    request["records"][1]["windows"] = [window]  # type: ignore[index]
-    assert resolve_similarity_alignment_payload(request)["records"][1]["candidates"][0]["displayCenter"] == 255.0  # type: ignore[index]
-    window["reverseComplement"] = True
-    assert resolve_similarity_alignment_payload(request)["records"][1]["candidates"][0]["displayCenter"] == 5.0  # type: ignore[index]
-    window["end"] = 150
-    outside = resolve_similarity_alignment_payload(request)["records"][1]  # type: ignore[index]
-    assert outside["candidates"][0]["displayCenter"] is None  # type: ignore[index]
-    assert outside["status"] == "skipped"  # type: ignore[index]
-
-    several = _request()
-    several["records"][1]["windows"] = [  # type: ignore[index]
-        {"start": 1, "end": 100, "reverseComplement": False, "column": None},
-        {"start": 131, "end": 200, "reverseComplement": False, "column": None},
-    ]
-    # The record is anchored in the window that holds the target (131..200 draws 155 at 25), and aligns (D-50).
-    row = resolve_similarity_alignment_payload(several)["records"][1]  # type: ignore[index]
-    assert (row["candidates"][0]["displayCenter"], row["candidates"][0]["displayedStrand"]) == (25.0, -1)  # type: ignore[index]
-    assert row["status"] == "aligned"  # type: ignore[index]
-
-
-def test_web_projection_discloses_candidate_evidence_and_strand_relation() -> None:
-    request = _request()
-    request["members"][1]["displayName"] = "target gene"  # type: ignore[index]
-    result = resolve_similarity_alignment_payload(request)
-    row = result["records"][1]
-    assert row["reviewReason"] == "only_usable_candidate"
-    assert row["anchor"] == _anchor("record-b", "target", 1)
-    candidate = row["candidates"][0]
-    assert candidate["displayName"] == "target gene"
-    assert (candidate["sourceStart"], candidate["sourceEnd"]) == (140, 170)
-    assert candidate["displayCenter"] == 145.0
-    assert candidate["displayedStrand"] == 1
-    assert candidate["representative"] is False
-    assert candidate["directEvidence"] == ["rbh"]
-    assert candidate["strandRelation"] == "same"
-    assert result["referenceDisplayedStrand"] == 1
-    assert result["referenceDisplayCenter"] == 25.0
-
-
-def test_web_recommendation_is_transient_and_explicit_select_is_validated() -> None:
-    request = _request()
-    request["directEdges"] = []
-    request["members"][1]["sourceStrand"] = 1  # type: ignore[index]
-    replacement = _member(
-        "record-b", "other", 2, start=190, end=220, strand=1
-    )
-    replacement["representative"] = True
-    request["members"].append(replacement)  # type: ignore[union-attr]
-    unresolved = resolve_similarity_alignment_payload(request)
-    row = unresolved["records"][1]
-    assert row["recommendationReason"] == "unique_representative"
-    assert row["recommendedAnchor"] == _anchor("record-b", "other", 2)
-    assert row["candidates"][0]["strandRelation"] == "opposite"
-    assert unresolved["plan"] is None
-
-    request["choices"] = [{
-        "recordKey": "record-b", "kind": "select",
-        "anchor": _anchor("record-b", "target", 1),
-    }]
-    selected = resolve_similarity_alignment_payload(request)
-    assert selected["plan"]["schema"] == 2
-    assert selected["plan"]["records"][1]["anchor"] == _anchor("record-b", "target", 1)
-    assert set(selected["plan"]["records"][1]) == {
-        "recordKey", "status", "rationale", "anchor"
-    }
-
-
-def test_web_rejects_removed_choice_field_and_invalid_crop() -> None:
-    request = _request()
-    request["choices"] = [{
-        "recordKey": "record-b", "kind": "skip", "anchor": None,
-    }]
-    request["choices"][0]["orientationPolicy"] = "match_reference"  # type: ignore[index]
-    with pytest.raises(ValidationError, match="invalid fields"):
-        resolve_similarity_alignment_payload(request)
-
-    # A window whose End runs past the record end is drawn clamped to the record end (the crop's
-    # `region_slice`), so record-b's window 101..300 of a 200-bp record draws 101..200, reversed: the
-    # target centre 155 is at 200 - 155 = 45, not at 300 - 155.
-    cropped = _request()
-    cropped["records"][1]["recordLength"] = 200  # type: ignore[index]
-    row = resolve_similarity_alignment_payload(cropped)["records"][1]  # type: ignore[index]
-    assert row["candidates"][0]["displayCenter"] == 45.0  # type: ignore[index]
-    assert row["status"] == "aligned"  # type: ignore[index]
-    # A window that starts past the record end is refused, as the crop refuses it.
-    cropped["records"][1]["recordLength"] = 100  # type: ignore[index]
-    with pytest.raises(ValidationError, match="starts after the end of record") as refused:
-        resolve_similarity_alignment_payload(cropped)
-    assert refused.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"}
-
-
-def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
-    request = _request()
-    target_record = request["records"][1]
-    target_record["presentation"]["reverseComplement"] = True
-    target_record["windows"][0]["reverseComplement"] = False
-    request["members"][1]["sourceStrand"] = 1
-    result = resolve_similarity_alignment_payload(request)
-    candidate = result["records"][1]["candidates"][0]
-    # Source center 155 maps to 245 after the 400-bp presentation reversal,
-    # then to 145 in the 101..300 crop.
-    assert candidate["displayCenter"] == 145.0
-    assert candidate["displayedStrand"] == -1
-    assert candidate["strandRelation"] == "opposite"
-
-    target_record["windows"][0]["reverseComplement"] = True
-    with pytest.raises(ValidationError, match="both window and presentation"):
-        resolve_similarity_alignment_payload(request)
-
-
 BGC_SESSION = (
     Path(__file__).resolve().parents[1]
     / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw"
@@ -289,7 +44,6 @@ def bgc_og18(tmp_path_factory):
     item = rendered["featureCatalog"]["items"][0]
     group = next(entry for entry in item["orthogroups"] if entry["id"] == "og_18")
     features = {(f["recordKey"], f["biologicalFeatureId"]): f for f in item["biologicalFeatures"]}
-    lengths = dict(zip(item["recordKeys"], (len(s["sequence"]) for s in item["sequenceSources"])))
     members, anchors = [], {}
     for member in group["members"]:
         feature = features[(member["recordKey"], member["biologicalFeatureId"])]
@@ -300,9 +54,7 @@ def bgc_og18(tmp_path_factory):
             "stableFeatureSvgId": feature.get("stableFeatureId") or member["biologicalFeatureId"],
         }
         members.append({
-            "groupId": "og_18", "anchor": anchor, "sourceStart": feature["start"],
-            "sourceEnd": feature["end"], "sourceStrand": {"+": 1, "-": -1}.get(feature["strand"], feature["strand"]),
-            "identityIsUnique": True, "hidden": bool(member.get("hidden")),
+            "groupId": "og_18", "anchor": anchor, "identityIsUnique": True, "hidden": bool(member.get("hidden")),
             "representative": bool(member.get("representative")), "role": str(member.get("role") or ""),
         })
         anchors[gene[feature["protein_id"]]] = anchor
@@ -311,7 +63,7 @@ def bgc_og18(tmp_path_factory):
         for rid, entry in session["resources"].items()
     }
     records = [{
-        "recordKey": record["recordKey"], "recordLength": lengths[record["recordKey"]],
+        "recordKey": record["recordKey"],
         "windows": record["windows"],
         "presentation": {"reverseComplement": bool(record["presentation"]["reverseComplement"])},
     } for record in session["renderRequest"]["records"]]
@@ -372,3 +124,155 @@ def test_resource_edges_are_the_only_authority_and_never_guessed(bgc_og18) -> No
     assert stale["status"] == "ambiguous"
     assert _record5(stale)["kind"] == "ambiguous"
     assert _record5(stale)["directRbhCandidates"] == []
+
+
+def test_a_payload_without_a_projection_is_refused(bgc_og18) -> None:
+    """Python places every candidate on the committed request it decodes (D5-13): a payload without one is
+    malformed and is refused as the helper refuses any malformed payload."""
+
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    _session, members, anchors, paths, records, tmp = bgc_og18
+    request = {"schema": 2, "groupId": "og_18", "records": records, "reference": anchors["livA"],
+               "members": members, "directEdges": [], "choices": []}
+    with pytest.raises(ValidationError, match="projection has invalid fields") as refused:
+        resolve_similarity_alignment_json(json.dumps(request), "null", json.dumps(paths), str(tmp / "helper"))
+    assert serialize_web_error(refused.value, operation="resolveSimilarityAlignment", stage="helper")["code"] \
+        == "VALIDATION_UNCLASSIFIED"
+    with pytest.raises(ValidationError, match="projection has invalid fields"):
+        resolve_similarity_alignment_payload(request, projection=None, resource_paths=paths)
+
+
+def test_web_adapter_refuses_unknown_and_removed_fields(bgc_og18) -> None:
+    _session, members, anchors, paths, records, tmp = bgc_og18
+
+    def resolve(request):
+        projection = {"canonicalRequest": bgc_og18[0]["renderRequest"], "orientations": None}
+        return resolve_similarity_alignment_payload(
+            request, projection=projection, resource_paths=paths, output_directory=str(tmp / "helper"))
+
+    def request():
+        return json.loads(json.dumps({"schema": 2, "groupId": "og_18", "records": records,
+                                      "reference": anchors["livA"], "members": members,
+                                      "directEdges": [], "choices": []}))
+
+    assert resolve(request())["status"] == "resolved"
+    unknown = request()
+    unknown["unexpected"] = True
+    with pytest.raises(ValidationError, match="request has invalid fields"):
+        resolve(unknown)
+    removed_choice = request()
+    removed_choice["choices"] = [{"recordKey": "record-5", "kind": "skip", "anchor": None,
+                                  "orientationPolicy": "match_reference"}]
+    with pytest.raises(ValidationError, match=r"choices\[0\] has invalid fields"):
+        resolve(removed_choice)
+    # The page sends no record length: Python reads it from the committed request (D5).
+    with_length = request()
+    with_length["records"][1]["recordLength"] = 400
+    with pytest.raises(ValidationError, match=r"records\[1\] has invalid fields"):
+        resolve(with_length)
+
+
+def _two_record_helper(tmp_path, *, target_strands=(1,), representative=None, reference_windows=()):
+    """A reference record ``a`` (one CDS) and a target record ``b`` (one CDS per strand in ``target_strands``) as
+    the page sends them, with the committed request that places them."""
+
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import SeqFeature, SimpleLocation
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api.options import LinearDiagramOptions, LinearOutputOptions
+    from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput
+    from gbdraw.features.source import capture_source_features
+    from gbdraw.session_request_codec import encode_canonical_request
+
+    inputs, members = [], []
+    for key, strands in (("a", (1,)), ("b", target_strands)):
+        record = SeqRecord(Seq("ACGT" * 100), id=key, description=key)
+        record.annotations.update(molecule_type="DNA", topology="linear")
+        record.features = [
+            SeqFeature(SimpleLocation(100 + 80 * index, 130 + 80 * index, strand=strand), type="CDS",
+                       qualifiers={"protein_id": [f"{key}-{index}"]})
+            for index, strand in enumerate(strands)
+        ]
+        path = tmp_path / f"{key}.gbk"
+        SeqIO.write(record, path, "genbank")
+        for index, identity in enumerate(capture_source_features(SeqIO.read(path, "genbank")).entries):
+            members.append({
+                "groupId": "og-1",
+                "anchor": {"recordKey": key, "biologicalFeatureId": identity.biological_feature_id,
+                           "sourceFeatureIndex": identity.source_feature_index,
+                           "stableFeatureSvgId": identity.stable_feature_id},
+                "identityIsUnique": True, "hidden": False,
+                "representative": (key, index) == ("b", representative), "role": "member",
+            })
+        inputs.append(RecordInput(GenBankInputSource(path), record_key=key,
+                                  windows=reference_windows if key == "a" else ()))
+    request = LinearDiagramRequest(records=tuple(inputs), options=LinearDiagramOptions(
+        selected_features_set=("CDS",), output=LinearOutputOptions(legend="none"),
+        config_overrides={"canvas.show_gc": False, "canvas.show_skew": False, "objects.scale.show": False}))
+    encoded = encode_canonical_request(request)
+    paths = {item.resource_id: str(item.source_path) for item in encoded.resources}
+    helper = {"schema": 2, "groupId": "og-1", "reference": members[0]["anchor"], "members": members,
+              "directEdges": [], "choices": [],
+              "records": [{"recordKey": stored["recordKey"], "windows": stored["windows"],
+                           "presentation": {"reverseComplement": stored["presentation"]["reverseComplement"]}}
+                          for stored in encoded.payload["records"]]}
+
+    def resolve(payload):
+        return resolve_similarity_alignment_payload(
+            payload, projection={"canonicalRequest": encoded.payload, "orientations": None},
+            resource_paths=paths, output_directory=str(tmp_path / "helper"))
+
+    return helper, resolve
+
+
+def test_web_adapter_discloses_candidate_facts_and_strand_relation(tmp_path) -> None:
+    helper, resolve = _two_record_helper(tmp_path, target_strands=(-1,))
+    helper["members"][1]["displayName"] = "target gene"
+    result = resolve(helper)
+    assert result["status"] == "resolved"
+    row = result["records"][1]
+    assert (row["status"], row["rationale"], row["reviewReason"]) == (
+        "aligned", "only_usable_candidate", "only_usable_candidate")
+    assert row["anchor"] == helper["members"][1]["anchor"]
+    (candidate,) = row["candidates"]
+    assert candidate["displayName"] == "target gene"
+    assert (candidate["sourceStart"], candidate["sourceEnd"]) == (100, 130)
+    assert (candidate["displayedStrand"], candidate["strandRelation"]) == (-1, "opposite")
+    assert candidate["directEvidence"] == []
+    assert (result["referenceDisplayedStrand"], result["referenceDisplayCenter"]) == (1, 115.0)
+    assert set(result["plan"]["records"][1]) == {"recordKey", "status", "rationale", "anchor"}
+
+
+def test_web_adapter_returns_ambiguity_then_uses_an_explicit_choice(tmp_path) -> None:
+    helper, resolve = _two_record_helper(tmp_path, target_strands=(1, 1))
+    ambiguous = resolve(helper)
+    assert (ambiguous["status"], ambiguous["plan"]) == ("ambiguous", None)
+    assert ambiguous["records"][1]["kind"] == "ambiguous"
+    helper["choices"] = [{"recordKey": "b", "kind": "skip", "anchor": None}]
+    skipped = resolve(helper)
+    assert skipped["status"] == "resolved"
+    assert skipped["plan"]["records"][1]["rationale"] == "skipped_by_user"
+
+
+def test_web_recommendation_is_transient_and_explicit_select_is_validated(tmp_path) -> None:
+    helper, resolve = _two_record_helper(tmp_path, target_strands=(-1, 1), representative=1)
+    unresolved = resolve(helper)
+    row = unresolved["records"][1]
+    assert (row["recommendationReason"], row["recommendedAnchor"]) == (
+        "unique_representative", helper["members"][2]["anchor"])
+    assert [candidate["strandRelation"] for candidate in row["candidates"]] == ["opposite", "same"]
+    assert unresolved["plan"] is None
+    helper["choices"] = [{"recordKey": "b", "kind": "select", "anchor": helper["members"][1]["anchor"]}]
+    selected = resolve(helper)
+    assert selected["plan"]["records"][1]["anchor"] == helper["members"][1]["anchor"]
+
+
+def test_web_adapter_refuses_a_reference_outside_the_committed_crop(tmp_path) -> None:
+    from gbdraw.io.regions import RecordWindow
+
+    helper, resolve = _two_record_helper(tmp_path, reference_windows=(RecordWindow(201, 300),))
+    with pytest.raises(ValidationError, match="exact reference.*current crop"):
+        resolve(helper)

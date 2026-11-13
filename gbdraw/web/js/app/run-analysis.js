@@ -1889,7 +1889,6 @@ export const createRunAnalysis = ({
     sessionImportRollbackInProgress,
     zoom,
     skipCaptureBaseConfig,
-    matchSequenceRegistry,
     appliedPaletteName,
     appliedPaletteColors,
     mode,
@@ -5365,9 +5364,6 @@ export const createRunAnalysis = ({
         losatDerivedCache:
           pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
         losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
-        matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
-          candidateCommit.featureState.sequenceSources
-        ) || currentOwnerSet.matchSequenceOwner,
         lastRunInfo: candidateRunInfo,
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],
@@ -5902,9 +5898,6 @@ export const createRunAnalysis = ({
         comparisonWarnings: execution.comparisonWarnings,
         labelFitReports: execution.labelFitReports,
         inputSummaries: drawnInputSummaries(execution.inputSummaries, drawnPaint.visibility),
-        matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
-          candidateCommit.featureState.sequenceSources
-        ) || currentOwnerSet.matchSequenceOwner,
         editableLabels: []
       };
       const preservedRuntimeState = captureGeneratedArtifactRuntimeState();

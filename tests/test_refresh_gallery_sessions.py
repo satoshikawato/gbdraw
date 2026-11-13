@@ -18,6 +18,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 import gbdraw.web_support.feature_catalog as feature_catalog_module
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.session_io import (
     CURRENT_FEATURE_CATALOG_SCHEMA,
@@ -46,6 +47,7 @@ from tools.prepare_interactive_gallery_assets import (
     _session_result_svg,
     _validate_interactive_svg_size,
     _validate_interactive_orthogroup_payload,
+    _validate_catalog_feature_ids,
     _validate_source_feature_ids,
 )
 from tools.refresh_gallery_sessions import (
@@ -1318,6 +1320,17 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
 
     _validate_staged_gallery_session(session_path, session)
 
+    # The catalog stores no sequence (D5): the Session check refuses a Gallery Session that stores one.
+    for key, value in (("nucleotide_sequence", "ATG"), ("sequenceSourceIndex", 0), ("sequenceSources", [])):
+        stored = json.loads(json.dumps(session))
+        item = stored["editorState"]["featureCatalog"]["items"][0]
+        if key == "sequenceSources":
+            item[key] = value
+        else:
+            item["biologicalFeatures"] = [{"recordKey": "record-1", "biologicalFeatureId": "f1", key: value}]
+        with pytest.raises(ValidationError, match="schema 6 stores no sequences"):
+            _validate_staged_gallery_session(session_path, stored)
+
     # A Gallery Session stores its protein comparison results; a pipeline that
     # the first Generate would run again is rejected (perf-014x D-17 /
     # docs-restructure D-20). A test input keeps its pipeline.
@@ -1566,6 +1579,15 @@ def test_gallery_source_rejects_feature_metadata_without_popup_details() -> None
         _validate_source_feature_ids(EXAMPLES[0], session, source)
 
 
+def _export_profile(item: dict[str, object]) -> dict[str, object]:
+    """A schema-4 item with its sequences, as the export profile (schema 5) that the validators read."""
+
+    return feature_catalog_module.promote_legacy_feature_catalog(
+        {"schema": 4, "items": [item]},
+        schema=feature_catalog_module.INTERACTIVE_EMBED_SCHEMA,
+    )["items"][0]
+
+
 def test_gallery_validators_materialize_catalog_sequence_references() -> None:
     feature = {
         "recordKey": "record-1",
@@ -1631,12 +1653,7 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
         '<svg><path id="f-iupac_record_1" '
         'data-gbdraw-feature-id="f-iupac_record_1" /></svg>'
     )
-    session = {
-        "results": [{"name": "result", "content": source}],
-        "editorState": {
-            "featureCatalog": {"schema": 4, "items": [item]}
-        },
-    }
+    item = _export_profile(item)
 
     assert _catalog_nucleotide_sequence(feature, item) == "ACGTNBDHVKMWSRY"
     assert _catalog_nucleotide_sequence(
@@ -1661,34 +1678,23 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
         },
         item,
     ) == ""
-    _validate_source_feature_ids(EXAMPLES[0], session, source)
+    # The validators read a catalog item in the export profile, as the producer embeds it (D5).
+    _validate_catalog_feature_ids(EXAMPLES[0], item, source)
     _validate_interactive_orthogroup_payload(EXAMPLES[0], item)
 
     simple_item = json.loads(json.dumps(item))
     simple_feature = simple_item["biologicalFeatures"][0]
     simple_feature.pop("location_parts")
     simple_feature["strand"] = "+"
-    simple_session = {
-        "results": [{"name": "result", "content": source}],
-        "editorState": {
-            "featureCatalog": {"schema": 4, "items": [simple_item]}
-        },
-    }
-    _validate_source_feature_ids(EXAMPLES[0], simple_session, source)
+    _validate_catalog_feature_ids(EXAMPLES[0], simple_item, source)
 
     broken_item = json.loads(json.dumps(item))
     broken_item["biologicalFeatures"][0]["location_parts"][1]["end"] = 16
-    broken_session = {
-        "results": [{"name": "result", "content": source}],
-        "editorState": {
-            "featureCatalog": {"schema": 4, "items": [broken_item]}
-        },
-    }
     with pytest.raises(
         ValueError,
         match="invalid nucleotide sequence source reference",
     ):
-        _validate_source_feature_ids(EXAMPLES[0], broken_session, source)
+        _validate_catalog_feature_ids(EXAMPLES[0], broken_item, source)
     with pytest.raises(ValueError, match="has no nucleotide sequence"):
         _validate_interactive_orthogroup_payload(EXAMPLES[0], broken_item)
 
@@ -1701,22 +1707,13 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
             "sequence": "ACGT RYSW",
         }
     )
-    unreferenced_invalid_session = {
-        "results": [{"name": "result", "content": source}],
-        "editorState": {
-            "featureCatalog": {
-                "schema": 4,
-                "items": [unreferenced_invalid_item],
-            }
-        },
-    }
     with pytest.raises(
         ValueError,
         match="invalid nucleotide sequence source reference",
     ):
-        _validate_source_feature_ids(
+        _validate_catalog_feature_ids(
             EXAMPLES[0],
-            unreferenced_invalid_session,
+            unreferenced_invalid_item,
             source,
         )
     with pytest.raises(
@@ -1798,12 +1795,7 @@ def test_gallery_sequence_source_validation_is_bounded_by_source_count(
         )
         for index in range(feature_count)
     ) + "</svg>"
-    session = {
-        "results": [{"name": "result", "content": source}],
-        "editorState": {
-            "featureCatalog": {"schema": 4, "items": [item]}
-        },
-    }
+    item = _export_profile(item)
     validation_calls = 0
     original = feature_catalog_module._canonical_sequence_source
 
@@ -1817,7 +1809,7 @@ def test_gallery_sequence_source_validation_is_bounded_by_source_count(
         "_canonical_sequence_source",
         counted,
     )
-    _validate_source_feature_ids(EXAMPLES[0], session, source)
+    _validate_catalog_feature_ids(EXAMPLES[0], item, source)
     assert validation_calls == 1
 
     validation_calls = 0
@@ -2034,13 +2026,15 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
         if element.get("id") == "gbdraw-interactive-feature-metadata"
     )
     payload = json.loads(metadata.text or "{}")
-    assert payload["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
+    assert payload["schema"] == feature_catalog_module.INTERACTIVE_EMBED_SCHEMA
     assert len(payload["items"]) == 1
     item = payload["items"][0]
     session_catalog = session["editorState"]["featureCatalog"]
     assert session_catalog["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     session_item = session_catalog["items"][0]
-    assert item == session_item
+    # The embed keeps the sequences (schema 5); without them it is the stored item.
+    promoted = feature_catalog_module.promote_legacy_feature_catalog({**payload, "items": [item]})
+    assert promoted["items"][0] == session_item
 
     features = item["features"]
     biological_features = item["biologicalFeatures"]

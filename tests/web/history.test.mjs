@@ -1977,19 +1977,6 @@ const createLayoutPreferences = () => ({
     losatCache: ref(new Map([['raw-a', rawCacheValueA]])),
     losatDerivedCache: ref(new Map([['derived-a', derivedCacheValueA]])),
     losatCacheInfo: ref(losatCacheInfoA),
-    matchSequenceRegistry: (() => {
-      let owner = Object.freeze({
-        sources: new Map([['record-a', {
-          key: 'record-a', recordId: 'record-a', aliases: [], sequence: 'ACGT'
-        }]]),
-        ambiguousKeys: new Set()
-      });
-      return {
-        captureTrustedOwner: () => owner,
-        replaceTrustedOwner: (nextOwner) => { owner = nextOwner; },
-        values: () => Array.from(owner.sources.values())
-      };
-    })(),
     skipCaptureBaseConfig: ref(false),
     skipExtractOnSvgChange: ref(false),
     trustedArtifactRestoreInProgress: ref(false),
@@ -2143,10 +2130,6 @@ const createLayoutPreferences = () => ({
   const poisonCache = new Proxy(new Map(), {
     get() { throw new Error('Cache properties and iterators must not be read during capture.'); }
   });
-  const poisonSequenceOwner = {};
-  Object.defineProperty(poisonSequenceOwner, 'sources', {
-    get() { throw new Error('Sequence owners must not be traversed during capture.'); }
-  });
   const poisonResource = { name: 'poison.gb', size: 123, type: 'text/plain' };
   Object.defineProperty(poisonResource, 'data', {
     get() { throw new Error('Resource payloads must not be read during capture.'); }
@@ -2163,7 +2146,6 @@ const createLayoutPreferences = () => ({
   state.featureCatalog.value = poisonCatalog;
   state.losatCache.value = poisonCache;
   state.losatDerivedCache.value = poisonCache;
-  state.matchSequenceRegistry.replaceTrustedOwner(poisonSequenceOwner);
   state.featureIdentityNotices.value = poisonNotices;
   state.circularSources[0].gb = poisonResource;
   snapshots.setGeneratedArtifactRuntimeOwner({
@@ -2181,7 +2163,8 @@ const createLayoutPreferences = () => ({
   assert.equal(poisonHandle.ownerSet.results[0], poisonResult);
   assert.equal(poisonHandle.ownerSet.featureCatalog, poisonCatalog);
   assert.equal(poisonHandle.ownerSet.losatCache, poisonCache);
-  assert.equal(poisonHandle.ownerSet.matchSequenceOwner, poisonSequenceOwner);
+  // D5: a History step holds no sequence; Python reads them again for the Result it restores.
+  assert.deepEqual(Object.keys(poisonHandle.ownerSet).filter((key) => /sequence/i.test(key)), []);
   assert.equal(poisonHandle.ownerSet.featureIdentityNotices, poisonNotices);
   assert.equal(
     poisonHandle.retainedBytes,

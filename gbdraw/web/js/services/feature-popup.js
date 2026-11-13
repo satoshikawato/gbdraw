@@ -12,7 +12,6 @@ import {
   normalizeStringArray,
   resolveFeatureProteinId
 } from './feature-utils.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 import { t } from '../utils/i18n.js';
 
 /**
@@ -27,6 +26,21 @@ import { t } from '../utils/i18n.js';
  * The feature popup's tabs (the rich popup shows all four).
  * @typedef {'edit' | 'details' | 'qualifiers' | 'sequence'} FeaturePopupTab
  */
+
+/**
+ * The Sequence tab's read (D5): nothing read yet (`idle`), Python reading it (`reading`), read (`ready`, with the
+ * FASTA texts and warnings), or failed (`failed`, with the error the tab shows with Details and Retry). The catalog
+ * stores no sequence; the popup opens without one and reads it when the tab is shown.
+ * @typedef {object} FeaturePopupSequence
+ * @property {'idle' | 'reading' | 'ready' | 'failed'} status
+ * @property {readonly string[]} warnings
+ * @property {string} nucleotideFasta
+ * @property {string} aminoAcidFasta
+ * @property {unknown} error The caught failure (`normalizeCaughtError` reads it), or null.
+ */
+
+/** @returns {FeaturePopupSequence} */
+export const unreadFeatureSequence = () => ({ status: 'idle', warnings: [], nucleotideFasta: '', aminoAcidFasta: '', error: null });
 
 /**
  * The open feature popup. The feature's own fields (`feat` and the values
@@ -53,11 +67,7 @@ import { t } from '../utils/i18n.js';
  * @property {string} strand
  * @property {object} qualifiers
  * @property {FeaturePopupQualifierRow[]} qualifierRows
- * @property {string[]} sequenceWarnings
- * @property {string} nucleotideSequence
- * @property {string} aminoAcidSequence
- * @property {string} nucleotideFasta
- * @property {string} aminoAcidFasta
+ * @property {FeaturePopupSequence} sequence
  * @property {FeaturePopupDetailRow[]} detailRows
  * @property {string} legendName The Legend name the popup's field holds.
  * @property {string} appliedLegendName The Legend name the drawing applies.
@@ -134,13 +144,6 @@ export const buildFeaturePopup = (feat, view) => {
   const locationText = formatFeatureLocation(feat);
   const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
   const qualifierRows = normalizeQualifierRows(feat.qualifiers);
-  const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
-  const nucleotideSequence = String(feat.nucleotide_sequence || '');
-  const aminoAcidSequence = String(feat.amino_acid_sequence || '');
-  const { nucleotideFasta, aminoAcidFasta } = buildFeatureSequenceFastas(feat, {
-    nucleotideSequence,
-    aminoAcidSequence
-  });
 
   return {
     id: feat.id,
@@ -163,11 +166,7 @@ export const buildFeaturePopup = (feat, view) => {
     strand: String(feat.strand || ''),
     qualifiers: feat.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {},
     qualifierRows,
-    sequenceWarnings,
-    nucleotideSequence,
-    aminoAcidSequence,
-    nucleotideFasta,
-    aminoAcidFasta,
+    sequence: unreadFeatureSequence(),
     detailRows: buildDetailRows(feat),
     legendName: view.legendName,
     appliedLegendName: view.legendName,

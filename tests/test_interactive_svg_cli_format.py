@@ -33,6 +33,7 @@ from gbdraw.render.formats import (
     resolve_format_output_path,
 )
 from gbdraw.render.interactive_svg import (
+    CatalogSequenceRecords,
     InteractiveSvgContext,
     _feature_coordinates,
     _feature_payloads,
@@ -41,7 +42,7 @@ from gbdraw.render.interactive_svg import (
     enrich_svg,
 )
 from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_parts
-from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
+from gbdraw.web_support.feature_catalog import INTERACTIVE_EMBED_SCHEMA
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.web_support.orthogroup_metadata import enrich_features_with_orthogroups
 from tests.utils.png_chunks import png_phys, tiny_png
@@ -64,9 +65,28 @@ def _metadata_payload(svg_source: str) -> dict[str, object]:
     return json.loads(metadata.text or "{}")
 
 
+def _cds_record(record_id: str, sequence: str, *spans: tuple[int, int], **qualifiers: list[str]) -> SeqRecord:
+    """A drawn record whose source features are CDSs on the plus strand, in ``spans`` order."""
+
+    return SeqRecord(
+        Seq(sequence),
+        id=record_id,
+        features=[
+            SeqFeature(SimpleLocation(start, end, strand=1), type="CDS", qualifiers=dict(qualifiers))
+            for start, end in spans
+        ],
+    )
+
+
+def _sequence_records(*records: SeqRecord, unit_keys: tuple[str, ...]) -> CatalogSequenceRecords:
+    """The records an exported Interactive SVG reads its sequences from (D5): the catalog stores none."""
+
+    return CatalogSequenceRecords(mode="linear", records=records, unit_keys=unit_keys)
+
+
 def _catalog_item(svg_source: str) -> dict[str, object]:
     payload = _metadata_payload(svg_source)
-    assert payload["schema"] == FEATURE_CATALOG_SCHEMA
+    assert payload["schema"] == INTERACTIVE_EMBED_SCHEMA
     items = payload["items"]
     assert isinstance(items, list) and len(items) == 1
     return items[0]
@@ -152,7 +172,7 @@ def test_enrich_svg_promotes_selected_schema_three_catalog_item_exactly() -> Non
         feature_catalog=catalog,
     )
 
-    assert _metadata_payload(enriched) == {"schema": FEATURE_CATALOG_SCHEMA, "items": [item]}
+    assert _metadata_payload(enriched) == {"schema": INTERACTIVE_EMBED_SCHEMA, "items": [item]}
     root = ET.fromstring(enriched)
     metadata = next(
         element
@@ -161,7 +181,7 @@ def test_enrich_svg_promotes_selected_schema_three_catalog_item_exactly() -> Non
     )
     assert metadata.get("data-result-index") == "1"
     assert metadata.get("data-result-name") == "selected.svg"
-    assert metadata.get("data-schema") == str(FEATURE_CATALOG_SCHEMA)
+    assert metadata.get("data-schema") == str(INTERACTIVE_EMBED_SCHEMA)
     feature = next(
         element
         for element in root.iter()
@@ -831,13 +851,15 @@ def test_enrich_svg_embeds_match_sequence_sources_once() -> None:
         data-qstart="2" data-qend="4" data-sstart="5" data-send="3"
         fill="#ff7272" d="M 1 1 L 2 2" />
     </svg>"""
-    sources = [
-        {"key": "linear:record:0", "recordId": "query", "sequence": "AACCGG", "origin": "linear-record", "recordIndex": 0},
-        {"key": "linear:record:1", "recordId": "subject", "sequence": "TTGGCC", "origin": "linear-record", "recordIndex": 1},
-        {"key": "linear:record:2", "recordId": "unused", "sequence": "NNNN", "origin": "linear-record", "recordIndex": 2},
-    ]
+    keys = ("query-key", "subject-key", "unused-key")
+    records = _sequence_records(
+        _cds_record("query", "AACCGG"),
+        _cds_record("subject", "TTGGCC"),
+        _cds_record("unused", "NNNN"),
+        unit_keys=keys,
+    )
 
-    enriched = enrich_svg(svg, InteractiveSvgContext(sequence_sources=sources))
+    enriched = enrich_svg(svg, InteractiveSvgContext(record_keys=keys, sequence_records=records))
     payload = _catalog_item(enriched)
 
     assert payload["comparisonMatches"][0]["id"] == "comparison1_match1"
@@ -881,19 +903,23 @@ def test_enrich_svg_v4_embeds_sequences_without_precomputed_fastas() -> None:
                     "start": 0,
                     "end": 9,
                     "strand": "+",
+                    "feature_index": 0,
                     "product": "protein A",
                     "qualifiers": {"protein_id": ["WP_000001.1"]},
-                    "nucleotide_sequence": "ATGAAATAA",
-                    "amino_acid_sequence": "MK",
                 }
-            ]
+            ],
+            record_keys=("rec1-key",),
+            sequence_records=_sequence_records(
+                _cds_record("rec1", "ATGAAATAA", (0, 9), protein_id=["WP_000001.1"]),
+                unit_keys=("rec1-key",),
+            ),
         ),
     )
 
     payload = _metadata_payload(enriched)
     feature = payload["items"][0]["biologicalFeatures"][0]
 
-    assert payload["schema"] == FEATURE_CATALOG_SCHEMA
+    assert payload["schema"] == INTERACTIVE_EMBED_SCHEMA
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
     assert "nucleotide_fasta" not in feature
@@ -912,11 +938,16 @@ def test_enrich_svg_v4_deduplicates_translation_sequence() -> None:
                     {
                         "svg_id": "fseq",
                         "record_idx": 0,
+                        "feature_index": 0,
                         "type": "CDS",
                         "qualifiers": {"translation": ["MPEPTIDE"]},
-                        "amino_acid_sequence": "MPEPTIDE",
                     }
-                ]
+                ],
+                record_keys=("rec1-key",),
+                sequence_records=_sequence_records(
+                    _cds_record("rec1", "ATGCCCGAACCCACCATCGACGAATAA", (0, 27), translation=["MPEPTIDE"]),
+                    unit_keys=("rec1-key",),
+                ),
             ),
         )
     )
@@ -965,7 +996,7 @@ def test_enrich_svg_v4_metadata_is_at_least_35_percent_smaller_than_v1_fixture()
     )
     v4_text = _metadata_text(enriched)
 
-    assert _metadata_payload(enriched)["schema"] == FEATURE_CATALOG_SCHEMA
+    assert _metadata_payload(enriched)["schema"] == INTERACTIVE_EMBED_SCHEMA
     assert len(v4_text.encode("utf-8")) <= len(v1_text.encode("utf-8")) * 0.65
 
 
@@ -988,11 +1019,12 @@ def test_enrich_svg_matches_record_suffixed_session_feature_ids() -> None:
                     "start": 0,
                     "end": 9,
                     "strand": "+",
+                    "feature_index": 0,
                     "product": "protein A",
-                    "nucleotide_sequence": "ATGAAATAA",
-                    "amino_acid_sequence": "MK",
                 }
-            ]
+            ],
+            record_keys=("rec1-key",),
+            sequence_records=_sequence_records(_cds_record("rec1", "ATGAAATAA", (0, 9)), unit_keys=("rec1-key",)),
         ),
     )
 
@@ -1260,8 +1292,6 @@ def test_enrich_svg_uses_stable_orthogroup_member_feature_ids() -> None:
                         "strand": "+",
                         "orthogroup_id": "og_1",
                         "orthogroup_member": member,
-                        "nucleotide_sequence": "ATGAAATAA",
-                        "amino_acid_sequence": "MK*",
                     }
                 ],
                 orthogroups=[
@@ -1338,8 +1368,6 @@ def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() ->
                         "feature_index": 0,
                         "record_id": "rec1",
                         "type": "CDS",
-                        "nucleotide_sequence": "ATGAAATAA",
-                        "amino_acid_sequence": "MK",
                     },
                     {
                         "svg_id": "fvisible",
@@ -1349,8 +1377,6 @@ def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() ->
                         "feature_index": 0,
                         "record_id": "rec2",
                         "type": "CDS",
-                        "nucleotide_sequence": "ATGCCCTAA",
-                        "amino_acid_sequence": "MP",
                     },
                     {
                         "svg_id": "fhiddenonly",
@@ -1360,8 +1386,6 @@ def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() ->
                         "feature_index": 1,
                         "record_id": "rec2",
                         "type": "CDS",
-                        "nucleotide_sequence": "ATGGGGTAA",
-                        "amino_acid_sequence": "MG",
                     },
                 ],
                 orthogroups=[
@@ -1378,6 +1402,11 @@ def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() ->
                         "members": [hidden_only_member],
                     },
                 ],
+                sequence_records=_sequence_records(
+                    _cds_record("rec1", "ATGAAATAA", (0, 9)),
+                    _cds_record("rec2", "ATGCCCTAAATGGGGTAA", (0, 9), (9, 18)),
+                    unit_keys=("record-1", "record-2"),
+                ),
             ),
         )
     )
@@ -1986,3 +2015,43 @@ def test_orthogroup_member_start_and_end_read_like_a_feature(case: dict[str, obj
     member = _normalize_orthogroup_member(json.loads(json.dumps(case["input"])))
     assert member is not None
     assert {"start": member.get("start"), "end": member.get("end")} == case["expected"]
+
+
+# The embedded metadata element of the CLI Interactive SVG of tests/test_inputs/BGC0000708-BGC0000713.gbdraw, written
+# by dev (c75daa1de) from the same Session when its catalog stored the sequences (schema 5). The Session now stores
+# none (schema 6); the export reads them from the records and writes the same bytes (D5-02).
+_DEV_BGC_EMBED_SHA256 = "5f2078d91be17ba5eed51fd6ff5d010d5c7a7a39d8ef006a501415dc03161856"
+
+
+def test_cli_interactive_svg_embed_is_byte_identical_to_dev(tmp_path: Path) -> None:
+    import hashlib
+    import re
+
+    from gbdraw.cli_utils.session import render_main
+
+    session = Path(__file__).resolve().parent / "test_inputs" / "BGC0000708-BGC0000713.gbdraw"
+    render_main(["--session", str(session), "-f", "interactive_svg", "-o", str(tmp_path / "pin")])
+
+    svg = (tmp_path / "pin.interactive.svg").read_text(encoding="utf-8")
+    [metadata] = re.findall(r'<metadata id="gbdraw-interactive-feature-metadata".*?</metadata>', svg, re.S)
+    assert 'data-schema="5"' in metadata
+    assert hashlib.sha256(metadata.encode("utf-8")).hexdigest() == _DEV_BGC_EMBED_SHA256
+
+
+def test_cli_interactive_svg_of_a_record_drawn_in_windows_embeds_every_feature_sequence(tmp_path: Path) -> None:
+    """A feature drawn only in a later window of its record keeps its sequence in the CLI export, as the catalog of
+    dev stored it: the export binds each row in the window that draws its feature."""
+
+    from gbdraw.web_support.feature_catalog import materialize_catalog_nucleotide_sequence
+
+    mito = Path(__file__).resolve().parent / "test_inputs" / "HmmtDNA.gbk"
+    linear_cli.linear_main([
+        "--gbk", str(mito), "--region", "NC_012920.1:100-900", "--region", "NC_012920.1:5000-7600",
+        "-f", "interactive_svg", "-o", str(tmp_path / "windows"),
+    ])
+
+    item = _catalog_item((tmp_path / "windows.interactive.svg").read_text(encoding="utf-8"))
+    rows = item["biologicalFeatures"]
+    sources = list(item.get("sequenceSources") or [])
+    assert len(item["recordKeys"]) == 2 and len(rows) == 25
+    assert [row["biologicalFeatureId"] for row in rows if not materialize_catalog_nucleotide_sequence(row, sources)] == []

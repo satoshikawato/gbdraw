@@ -110,13 +110,5 @@ const conservationSession = gunzipSync(await readFile(
 ));
 const importedConservation = await importSession(await sessionLoadEventOfBytes(conservationSession));
 assert.equal(importedConservation.status, 'ok');
-const comparisonSources = state.matchSequenceRegistry.values()
-  .filter((source) => source.origin === 'homology-comparison');
-assert.equal(comparisonSources.length, 3);
-assert.deepEqual(
-  comparisonSources.map((source) => source.sourceIndex),
-  [0, 1, 2]
-);
-assert.ok(comparisonSources.every((source) => source.sequence.length > 0));
 
 console.log('session definition resource rehydration tests passed');

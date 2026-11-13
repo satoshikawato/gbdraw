@@ -86,12 +86,6 @@ import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.
 import { ANNOTATION_TARGET_MIGRATION_NOTICE, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { buildSessionFeatureRecoveryPlan } from './session-feature-recovery.js';
 import {
-  analyzeCatalogSequenceSourceCoverage,
-  buildRestoredMatchSequenceSources,
-  catalogDrawnUnits,
-  resolveCircularComparisonSequenceAvailability
-} from './match-sequences.js';
-import {
   adoptPromotedPreservedOverrides,
   applyLiveSettingWrites,
   buildCanonicalRenderRequest,
@@ -3282,49 +3276,6 @@ const openedCommittedSession = (committed, openedWebFiles, sessionWebFiles) => {
   return opened;
 };
 
-// E1: the match-sequence sources one saved Result set (the top-level set or
-// `otherModeResult`) needs beyond its catalog's: when the catalog does not
-// cover the set's request, or a Session older than 40 has none, the sources
-// are read again from the restored files in the set's own mode.
-/**
- * @param {{ mode: 'circular' | 'linear', catalog: FeatureCatalog | null, renderRequest: Record<string, any> | undefined,
- *   olderSession: boolean, settingsOnly: boolean, cInputType: string, lInputType: string,
- *   files: Record<string, any>, linearSeqs: Record<string, any>[], circularSources: readonly RestoredCircularSource[],
- *   circularConservation: Record<string, any> }} set
- * @returns {Promise<{ restored: Record<string, any>[], error: unknown }>}
- */
-const restoreLoadedSetSequenceSources = async ({
-  mode, catalog, renderRequest, olderSession, settingsOnly, cInputType, lInputType, files, linearSeqs,
-  circularSources, circularConservation
-}) => {
-  const coverage = catalog
-    ? analyzeCatalogSequenceSourceCoverage({
-        mode,
-        catalogFeatureState: catalog,
-        // Load read every stored request to the current schema before (`readSessionRequests`).
-        renderRequest: /** @type {CanonicalRenderRequest | undefined} */ (renderRequest),
-        comparisonSourceAvailability: mode === 'circular'
-          ? resolveCircularComparisonSequenceAvailability({ files, circularConservation })
-          : undefined
-      })
-    : null;
-  if (settingsOnly || (!olderSession && coverage?.complete)) return { restored: [], error: null };
-  recordStructuralMetric('sourceRecoveryCount');
-  try {
-    return {
-      restored: await buildRestoredMatchSequenceSources({
-        mode, cInputType, lInputType, files, linearSeqs, circularSources, circularConservation,
-        // The drawn units the catalog names key the sources it lacks (review S5).
-        units: mode === 'linear' && catalog ? catalogDrawnUnits(catalog) : null
-      }),
-      error: null
-    };
-  } catch (sequenceError) {
-    console.warn('Session match sequence preparation failed.', normalizeUserFacingError(sequenceError));
-    return { restored: [], error: sequenceError };
-  }
-};
-
 // The stroke and color edits the saved Results of `mode` show (its Session 46
 // slice, else the flat draft) and the values the Session kept as Python's
 // (`setEditorState`: the set's own editor state). Load records Python's values
@@ -3426,14 +3377,14 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
  * @param {LoadedResultSet} set
  * @param {{ drawing: DrawingIdentity, at: ResultSetPath, featureCatalog: FeatureCatalog, admittedResults?: Record<string, any>[] | null,
  *   savedEdits?: SavedResultEdits | null, legacy?: LegacyResultNormalization | null,
- *   restoredSequenceSources: Record<string, any>[], resources: Record<string, any>,
+ *   resources: Record<string, any>,
  *   resourceTable: any, webFiles: any, retainedBytes: number,
  *   repairs: LoadRepair[] | null, conservationPairs: ConservationPairs }} options `drawing` is the Load's drawing of the set (its slot's ID);
  *   `at` is where the file holds the set, for its repair rows; `repairs` collects what Load cannot restore of the set's editor state;
  *   `conservationPairs` are the hash pairs of the set's request (those of the entries the file wrote into its drawing).
  */
 const buildLoadedArtifactSlot = (set, {
-  drawing, at, featureCatalog, admittedResults = null, savedEdits = null, legacy = null, restoredSequenceSources, resources, resourceTable,
+  drawing, at, featureCatalog, admittedResults = null, savedEdits = null, legacy = null, resources, resourceTable,
   webFiles, retainedBytes, repairs, conservationPairs
 }) => {
   const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
@@ -3477,9 +3428,6 @@ const buildLoadedArtifactSlot = (set, {
       proteinIdentityManifest: loadedProteinIdentityManifest(set.proteinIdentityManifest, { adoptCurrent: true })
     },
     legend: keptLegend,
-    matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
-      ...(features.sequenceSources || []), ...restoredSequenceSources
-    ]) || null,
     // The artifact's committed request, as `canonicalRenderArtifactOwner` restores it.
     runtimeState: { canonical: /** @satisfies {CanonicalArtifactState} */ ({
       committedCanonicalSession: adoptRuntimeCanonicalSession({
@@ -5638,7 +5586,6 @@ const captureSessionImportTransientState = () => ({
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   settingsPopup: state.settingsPopup.value && { ...state.settingsPopup.value },
   featureExtractionPending: Boolean(state.featureExtractionPending.value),
-  matchSequenceSources: cloneJsonData(state.matchSequenceRegistry?.values?.() || []),
   diagramElements: [...state.diagramElements.value],
   diagramElementIds: [...state.diagramElementIds.value],
   diagramElementOriginalTransforms: new Map(
@@ -5695,7 +5642,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   if (snapshot.settingsPopup) floatSettingsSection(state, snapshot.settingsPopup.section, snapshot.settingsPopup);
   else returnSettingsSection(state);
   state.featureExtractionPending.value = snapshot.featureExtractionPending;
-  state.matchSequenceRegistry?.reset?.(cloneJsonData(snapshot.matchSequenceSources));
   state.diagramElements.value = [...snapshot.diagramElements];
   state.diagramElementIds.value = [...snapshot.diagramElementIds];
   state.diagramElementOriginalTransforms.value = new Map(
@@ -6104,7 +6050,6 @@ const resetSessionProject = () => {
   state.comparisonWarnings.value = [];
   state.labelFitReports.value = [];
   state.inputSummaries.value = [];
-  state.matchSequenceRegistry?.reset?.();
   state.linearReorderNotice.value = '';
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -8131,46 +8076,6 @@ const importSessionDocument = async (e, options = {}) => {
       ? featureEditsOverProjection({ ...(currentCatalogFeatureState || {}), ...artifactFeatureState },
         projectionResult.renderState)
       : (data.features || {}));
-    const catalogSequenceSources = currentSchemaSession
-      ? (currentCatalogFeatureState?.sequenceSources || [])
-      : [];
-    recordSessionLifecycleEvent('session-candidate-sequences-start');
-    // E1: each Result set reads its sources in its own mode, from its drawing's files.
-    // The Results Python sets aside for a drawing without a request (a
-    // Session 27-39's, which Python's Session 51 holds without a catalog)
-    // read them again, as the file's own Results did (OV-2008).
-    const setAsideRequestLessId = legacyStoredResults !== undefined && settingsOnly ? projectedDrawingId : null;
-    /** @param {DrawingId} drawingId */
-    const sequenceSourceOptionsOf = (drawingId) => {
-      const { target, linearSeqs, circularSources } = filesOf(drawingId);
-      const setAside = drawingId === setAsideRequestLessId;
-      return {
-        olderSession: setAside || sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-        settingsOnly: settingsOnly && !setAside,
-        cInputType: target.cInputType.value,
-        lInputType: storedDrawingInputs.get(drawingId)?.inputType ?? inputTypes.lInputType,
-        files: target.files,
-        linearSeqs, circularSources,
-        circularConservation: draftConfigOf(drawingId)?.circularConservation || {}
-      };
-    };
-    const { restored: restoredFileSequenceSources, error: currentRecoveryError } = await restoreLoadedSetSequenceSources({
-      ...sequenceSourceOptionsOf(committedSetDrawingId),
-      mode: generatedMode,
-      catalog: currentSchemaSession ? validatedSessionCatalog : null,
-      renderRequest: data.renderRequest
-    });
-    // OV-712: listed, and reported as `degradedRecovery`; set-aside Results
-    // read the file's `files`.
-    if (currentRecoveryError) {
-      repairs.push(loadRepair({
-        code: 'match-sequences-unrestored',
-        path: currentSchemaSession && committedSetDrawingId !== setAsideRequestLessId ? 'resources' : 'files',
-        effect: 'dropped'
-      }));
-    }
-
-    recordSessionLifecycleEvent('session-candidate-sequences-end');
     // A saved Result is laid out at its committed legend and title sides.
     const committedLayout = canonicalProjection?.layoutPreferences
       ? resolveActiveLayoutPreference(
@@ -8302,13 +8207,6 @@ const importSessionDocument = async (e, options = {}) => {
       const savedEdits = savedResultEdits({ modes: { [mode]: draftPartOf(drawing.id).slice } }, mode, set.editorState,
         sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(drawing.id)?.rules);
       savedEditsOf.set(drawing.id, savedEdits);
-      const sequenceSources = await restoreLoadedSetSequenceSources({
-        ...sequenceSourceOptionsOf(drawing.id), mode, catalog, renderRequest: set.renderRequest
-      });
-      if (sequenceSources.error) {
-        repairs.push(loadRepair({ code: 'match-sequences-unrestored', path: 'resources', effect: 'dropped' }));
-        continue;
-      }
       storedSetSlots.push(buildLoadedArtifactSlot(set, {
         ...slotOptions,
         webFiles,
@@ -8318,7 +8216,6 @@ const importSessionDocument = async (e, options = {}) => {
         savedEdits,
         legacy: loadedResultNormalization(mode, null, at),
         repairs,
-        restoredSequenceSources: sequenceSources.restored,
         retainedBytes: setCharactersOf(set) * 2,
         conservationPairs: loadedConservationPairsOf(drawing.id)
       }));
@@ -8543,7 +8440,6 @@ const importSessionDocument = async (e, options = {}) => {
           ...slotOptions,
           featureCatalog: validatedSessionCatalog,
           admittedResults: committedImportedResults,
-          restoredSequenceSources: restoredFileSequenceSources,
           retainedBytes: topSetCharacters * 2,
           repairs: null,
           at: '',
@@ -8700,7 +8596,6 @@ const importSessionDocument = async (e, options = {}) => {
       }) });
     }
 
-    state.matchSequenceRegistry?.reset?.();
     /** @type {Map<LoadedFiles, { inputs: LiveFileState, bound: ReturnType<typeof bindLoadedInputs> }>} One state per set of files, so each binds once. */
     const liveFileStates = new Map();
     /** @param {LoadedFiles} loaded */
@@ -8788,10 +8683,6 @@ const importSessionDocument = async (e, options = {}) => {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
     }
     synchronizeRestoredFeatureSummaryStatus();
-    state.matchSequenceRegistry?.reset?.([
-      ...catalogSequenceSources,
-      ...restoredFileSequenceSources
-    ]);
 
     // The shown Result's groups; their names are the projected Session 51
     // drawing's, else the Linear drawing's (Session 46 `webEdits`; a file
@@ -8912,10 +8803,7 @@ const importSessionDocument = async (e, options = {}) => {
         slots: adv[`${shownMode}_track_slots_enabled`] ? cloneJsonData(adv[`${shownMode}_track_slots`]) : null
       });
     }
-    recordSessionLifecycleEvent('interactiveReady', {
-      status: 'success',
-      degradedRecovery: Boolean(currentRecoveryError)
-    });
+    recordSessionLifecycleEvent('interactiveReady', { status: 'success' });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     await options.afterImport?.({
       status: 'ok', ringSettingStored: Boolean(upgrade?.sourceFacts.ringSettingStored),
@@ -8937,7 +8825,6 @@ const importSessionDocument = async (e, options = {}) => {
       recordDiscoveryDeferred: currentSchemaSession,
       data,
       decompressedCharacters: candidate.characters,
-      degradedRecovery: Boolean(currentRecoveryError),
       // The Linear drawing's comparison disposition; null without a Linear drawing (D-15-120).
       comparisonDisposition: linearDrawing ? linearDrawing.importedComparisonIntent.disposition : null
     };

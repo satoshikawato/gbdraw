@@ -24,7 +24,6 @@ const vibrioSession = join(
 const PREVIEW_ZERO_METRICS = [
   'base64DecodeCount',
   'decodedByteCount',
-  'sourceRecoveryCount',
   'workerConstructionCount',
   'workerInitializationCount'
 ];
@@ -895,7 +894,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     disposition: 'EDITABLE',
     action: null
   });
-  expect(ready).toMatchObject({ status: 'success', degradedRecovery: false });
+  expect(ready).toMatchObject({ status: 'success' });
   expect(previewMetrics).toEqual(Object.fromEntries(
     PREVIEW_ZERO_METRICS.map((name) => [name, 0])
   ));

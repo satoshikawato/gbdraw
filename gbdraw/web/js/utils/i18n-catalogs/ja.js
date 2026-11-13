@@ -534,7 +534,6 @@ export default Object.freeze({
   "Comparison {n}": "配列比較{n}",
   "Comparisons must connect adjacent rows.": "比較元と比較先には、隣接する行のレコードを指定してください。",
   "Comparisons must connect records in different rows.": "比較元と比較先には、異なる行のレコードを指定してください。",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "比較：保存された配列比較のマッチの配列を、入力ファイルから再び読み取れませんでした。SVGプレビューは保持されます。配列は次の生成時に読み込まれます。",
   "Composition metadata is invalid or unavailable.": "図の構成のメタデータが不正か、利用できません。",
   "Compress": "圧縮",
   "Computing…": "計算中…",

@@ -675,12 +675,13 @@ const linearTopResavedSession = async (info) => {
     'import sys',
     'from pathlib import Path',
     'from gbdraw.cli_utils import session as cli_session',
-    'from gbdraw.session import load_session_document, session_drawing_artifacts',
+    'from gbdraw.session import load_session_document, session_drawing_artifacts, upgrade_session_document',
     'from gbdraw.session_drawings import write_session_drawings',
     'from tests.utils.session_files import write_session_file',
     'from tests.utils.two_mode_session import two_mode_session',
     'out = Path(sys.argv[1])',
-    'two = load_session_document(two_mode_session())',
+    // The Session 48 the helper builds, upgraded as a re-save does (its catalogs move to schema 6).
+    'two = upgrade_session_document(two_mode_session()).document',
     "views = {d.mode: dict(session_drawing_artifacts(two, d.id).fields) for d in two.drawings}",
     "write_session_file(out / 'two.gbdraw', write_session_drawings([views['linear'], views['circular']], active=1), two.resources.sources)",
     "assert cli_session.render_canonical_session_if_present(load_session_document(str(out / 'two.gbdraw')),"
@@ -781,10 +782,8 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
   const historyBefore = await counts();
   await page.evaluate(async () => {
     const config = await import('/gbdraw/web/js/services/config.js');
-    const { state } = await import('/gbdraw/web/js/state.js');
     window.__E1_BEFORE_LOAD__ = {
-      committed: config.getCommittedCanonicalSession(),
-      owner: state.matchSequenceRegistry.captureTrustedOwner()
+      committed: config.getCommittedCanonicalSession()
     };
     window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent = (event) => {
       if (event.name !== 'history-baseline-start') return;
@@ -798,12 +797,10 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
   await settleLive(page);
   expect(await page.evaluate(async () => {
     const config = await import('/gbdraw/web/js/services/config.js');
-    const { state } = await import('/gbdraw/web/js/state.js');
     return {
-      committed: config.getCommittedCanonicalSession() === window.__E1_BEFORE_LOAD__.committed,
-      owner: state.matchSequenceRegistry.captureTrustedOwner() === window.__E1_BEFORE_LOAD__.owner
+      committed: config.getCommittedCanonicalSession() === window.__E1_BEFORE_LOAD__.committed
     };
-  })).toEqual({ committed: true, owner: true });
+  })).toEqual({ committed: true });
   expect(await shown(page)).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', identity: circular.identity, mounted: true });
   expect(await counts()).toEqual(historyBefore);
   await showMode(page, 'linear');

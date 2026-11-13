@@ -450,7 +450,11 @@ def test_circular_companion_sequence_reaches_interactive_context() -> None:
     )._resolve_interactive_context()
     assert context is not None
 
-    assert [(source["origin"], source["recordId"]) for source in context.sequence_sources] == [
+    from gbdraw.web_support.feature_catalog import match_sequence_sources
+
+    assert context.sequence_records is not None
+    sources = match_sequence_sources(context.sequence_records)
+    assert [(source["origin"], source["recordId"]) for source in sources] == [
         ("circular-reference", "reference"),
         ("homology-comparison", "comparison"),
     ]

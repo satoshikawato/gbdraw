@@ -18,7 +18,6 @@ import {
   resolveActiveLayoutPreference,
   updateActiveLayoutPreference
 } from './services/layout-preferences.js';
-import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import { createInputFileStore } from './services/history-files.js';
 import { keepFileCopy, releaseFileCopy, residentBytesOf, useInputCopyStore } from './services/file-content-cache.js';
 import { createBrowserInputCopyStore } from './services/input-copies.js';
@@ -116,8 +115,6 @@ const labelFitReports = ref(/** @type {readonly ResultLabelFit[]} */ ([]));
 const inputSummaries = ref(/** @type {readonly DrawnInputSummary[]} */ ([]));
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = typedRef(/** @type {Record<string, number>} */ ({})); // { pathId: factor }
-// Analysis-scoped materialized nucleotide sources used by match span popups.
-const matchSequenceRegistry = createSequenceSourceRegistry();
 const svgContent = typedComputed(() => {
   if (results.value.length === 0) return null;
   return getCommittedSvgContent(results.value[selectedResultIndex.value]);
@@ -1291,7 +1288,6 @@ export const state = Object.freeze({
   labelFitReports,
   inputSummaries,
   pairwiseMatchFactors,
-  matchSequenceRegistry,
   svgContent,
   svgResultIdentity,
   zoom,

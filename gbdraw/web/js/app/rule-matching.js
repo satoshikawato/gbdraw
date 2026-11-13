@@ -14,7 +14,7 @@ import {
 /** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { RequestProgress } from '../services/diagram-generation.js' */
 /** @import { FeatureVisibilityRule } from '../services/feature-visibility.js' */
-/** @import { ColorRuleCondition, JoinedLegendRow, LabelRuleRow, RuleEvaluationResult, RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules, VisibilityRuleRow } from '../contracts/rule-synthesis.generated.js' */
+/** @import { ColorRuleCondition, JoinedLegendRow, LabelRuleRow, RuleEvaluationResult, RuleFeaturePayload, SynthesisQualifiers, SynthesisQualifiersRequest, SynthesizeColorRulesRequest, SynthesizedColorRules, VisibilityRuleRow } from '../contracts/rule-synthesis.generated.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -84,6 +84,65 @@ export const ruleFeaturePayload = (feature, label = '') => {
   const payload = buildRuleFeaturePayload(feature, label);
   if (label === '') payloads.set(source, payload);
   return payload;
+};
+/**
+ * The qualifier keys `rules` read, trimmed and lowercased: each rule's `field`
+ * (`qual` for a color rule, `qualifier` for a visibility or label rule).
+ * @param {readonly object[]} rules
+ * @param {'qual' | 'qualifier'} field
+ * @returns {ReadonlySet<string>}
+ */
+export const qualifiersRead = (rules, field) => new Set(rules.map((rule) => (
+  String(/** @type {Record<string, unknown>} */ (rule)[field] ?? '').trim().toLowerCase()
+)));
+/**
+ * The payload of `feature` for rules that read the qualifiers `read`
+ * (`qualifiersRead`): only those keep their names and values (D5-16), so a
+ * long `/translation` goes to Python only for a rule that reads it. Generate
+ * ranks a color rule by its key's place among the feature's keys, so every
+ * other key keeps its place under a short name of its own with no values:
+ * `-0`, `-1`, ... (not an array index, which an object would move first),
+ * skipping a name in `read`. Such a name equals its trimmed lowercase, so no
+ * rule reads it and it never stands before a key a rule reads; Python matches
+ * and ranks as on the whole payload. Keys compare trimmed and lowercased:
+ * Python reads a visibility or label rule's key in any case and a color
+ * rule's as written, and both are covered.
+ * @param {RuleMatchedFeature} feature
+ * @param {ReadonlySet<string>} read
+ * @param {string} [label]
+ * @returns {RuleFeaturePayload}
+ */
+export const ruleFeaturePayloadReading = (feature, read, label = '') => {
+  const payload = ruleFeaturePayload(feature, label);
+  const entries = Object.entries(payload.qualifiers);
+  const reads = (/** @type {string} */ key) => read.has(key.trim().toLowerCase());
+  if (entries.every(([key]) => reads(key))) return payload;
+  let unread = 0;
+  const placeholder = () => {
+    while (read.has(`-${unread}`)) unread += 1;
+    return `-${unread++}`;
+  };
+  return { ...payload, qualifiers: Object.fromEntries(entries.map(([key, values]) => (reads(key) ? [key, values] : [placeholder(), []]))) };
+};
+/**
+ * The payloads of `features` for `rules`, which read the key `field` names.
+ * @param {readonly RuleMatchedFeature[]} features
+ * @param {readonly object[]} rules
+ * @param {'qual' | 'qualifier'} field
+ */
+const payloadsReading = (features, rules, field) => {
+  const read = qualifiersRead(rules, field);
+  return features.map((feature) => ruleFeaturePayloadReading(feature, read));
+};
+/**
+ * The payloads of the features a label rule table is imported over, each with the label text it shows.
+ * @param {readonly object[]} rules
+ * @param {readonly { feature?: RuleMatchedFeature | null, featureId: string, sourceText: string }[]} targets
+ */
+export const labelRulePayloads = (rules, targets) => {
+  const read = qualifiersRead(rules, 'qualifier');
+  return targets.map((target) => ruleFeaturePayloadReading(
+    target.feature || /** @type {RuleMatchedFeature} */ ({ type: '', svg_id: target.featureId }), read, target.sourceText));
 };
 /** @param {unknown} value @returns {string | null} A catalog identity field, null where the feature has none. */
 const identityText = (value) => (typeof value === 'string' && value ? value : null);
@@ -219,6 +278,8 @@ export const visibilityTableError = (outcome) => (typeof outcome === 'object' ? 
  *   The diagram helper that matches rules against feature payloads (R7).
  * @property {(request: SynthesizeColorRulesRequest) => Promise<SynthesizedColorRules>} synthesize
  *   The diagram helper that writes the rules of a group color edit (OV-244, Owner R-07).
+ * @property {(request: SynthesisQualifiersRequest) => Promise<SynthesisQualifiers>} synthesisQualifiers
+ *   The diagram helper that names the qualifiers the candidate conditions of a color edit read (D5).
  * @property {{ value: boolean }} [pending] Receives whether a preparation is running.
  * @property {{ value: boolean }} [blocking] Receives whether an edit's preparation is running: one
  *   that is not a `view` preparation (OV-377). Save and Load wait for it.
@@ -290,11 +351,55 @@ export const visibilityTableError = (outcome) => (typeof outcome === 'object' ? 
 const inputAndMembers = (input) => (Array.isArray(input) ? [input, ...input.flatMap(inputAndMembers)] : [input]);
 
 /**
+ * Python's rules for one group color edit over the catalog features `targets`. Every catalog feature goes to
+ * Python, which refuses a condition that matches an unselected one, with the qualifiers the edit reads only (D5):
+ * its rules' keys and the keys Python names for its candidate conditions (`synthesisQualifiers`).
+ * @param {readonly RuleFeature[]} targets
+ * @param {GroupColorEdit} edit
+ * @param {readonly SpecificColorRule[]} rules
+ * @param {RulePreparationOptions['synthesize']} synthesize
+ * @param {RulePreparationOptions['synthesisQualifiers']} synthesisQualifiers
+ * @returns {Promise<SynthesizedColorRules>}
+ */
+const synthesizeGroupOver = async (targets, { scope, features: selected, labels, color, caption, joins, drawn }, rules,
+  synthesize, synthesisQualifiers) => {
+  /** @type {Map<object, number>} */
+  const indexOf = new Map(targets.map((feature, index) => [feature, index]));
+  /** @type {Map<string, string[]>} */
+  const labelsById = new Map();
+  selected.forEach((feature, index) => { if (feature.svg_id) labelsById.set(feature.svg_id, [...labels[index]]); });
+  const picked = targets.flatMap((feature, index) => {
+    const id = /** @type {{ svg_id?: unknown }} */ (feature).svg_id;
+    return typeof id === 'string' && labelsById.has(id) ? [index] : [];
+  });
+  const pickedLabels = picked.map((index) => labelsById.get(/** @type {{ svg_id: string }} */ (targets[index]).svg_id) || []);
+  const candidates = await synthesisQualifiers({
+    scope, features: picked.map((index) => ruleFeaturePayload(targets[index])), labels: pickedLabels
+  });
+  const read = new Set([...qualifiersRead(rules, 'qual'), ...candidates.qualifiers]);
+  return synthesize({
+    scope,
+    features: targets.map((feature) => ruleFeaturePayloadReading(feature, read)),
+    selected: picked,
+    labels: pickedLabels,
+    rules: rules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
+    color,
+    caption,
+    joins,
+    drawn: [...drawn].flatMap((feature) => {
+      const index = indexOf.get(feature);
+      return index === undefined ? [] : [index];
+    })
+  });
+};
+
+/**
  * @param {RulePreparationOptions} options
  * @returns {RulePreparation}
  */
 export const createRulePreparation = ({
-  state, evaluate, synthesize, pending = { value: false }, blocking = { value: false }, visibilityRules = () => []
+  state, evaluate, synthesize, synthesisQualifiers, pending = { value: false }, blocking = { value: false },
+  visibilityRules = () => []
 }) => {
   // The rule keys Python accepted: a key's syntax is a fact of its content.
   /** @type {Set<string>} */
@@ -416,7 +521,7 @@ export const createRulePreparation = ({
     const sent = draft.filter((rule) => pendingKeys.has(ruleKey(rule)) || !validated.has(ruleKey(rule)));
     const before = snapshot();
     const release = track(view);
-    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: sent, kind: 'color' }, options)
+    return evaluate({ features: payloadsReading(targets, sent, 'qual'), rules: sent, kind: 'color' }, options)
       .then((result) => {
         if (!isCurrent(before) || blocked()) return false;
         const keys = sent.map(ruleKey);
@@ -443,9 +548,7 @@ export const createRulePreparation = ({
     if (targets.length === 0) return true;
     const release = track(view);
     return Promise.resolve()
-      .then(() => evaluate({
-        features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'visibility'
-      }))
+      .then(() => evaluate({ features: payloadsReading(targets, draft, 'qualifier'), rules: draft, kind: 'visibility' }))
       .then((result) => {
         targets.forEach((feature, index) => {
           const matches = new Set(result.matches[index]);
@@ -483,35 +586,8 @@ export const createRulePreparation = ({
     const candidate = asGiven ? rules : rules.map(rule => normalizeSpecificRule(rule));
     return await prepare(candidate, options) && isCurrent(before) ? { rules: candidate, snapshot: before } : null;
   };
-  // Every catalog feature goes to Python, which refuses a condition that
-  // matches an unselected one.
   /** @type {RulePreparation['synthesizeGroup']} */
-  const synthesizeGroup = ({ scope, features: selected, labels, color, caption, joins, drawn }, rules) => {
-    const targets = features();
-    /** @type {Map<object, number>} */
-    const indexOf = new Map(targets.map((feature, index) => [feature, index]));
-    /** @type {Map<string, string[]>} */
-    const labelsById = new Map();
-    selected.forEach((feature, index) => { if (feature.svg_id) labelsById.set(feature.svg_id, [...labels[index]]); });
-    const picked = targets.flatMap((feature, index) => {
-      const id = /** @type {{ svg_id?: unknown }} */ (feature).svg_id;
-      return typeof id === 'string' && labelsById.has(id) ? [index] : [];
-    });
-    return synthesize({
-      scope,
-      features: targets.map((feature) => ruleFeaturePayload(feature)),
-      selected: picked,
-      labels: picked.map((index) => labelsById.get(/** @type {{ svg_id: string }} */ (targets[index]).svg_id) || []),
-      rules: rules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
-      color,
-      caption,
-      joins,
-      drawn: [...drawn].flatMap((feature) => {
-        const index = indexOf.get(feature);
-        return index === undefined ? [] : [index];
-      })
-    });
-  };
+  const synthesizeGroup = (edit, rules) => synthesizeGroupOver(features(), edit, rules, synthesize, synthesisQualifiers);
   return {
     prepare, retain, prepareDrawn, isPrepared, prepareCandidate, synthesizeGroup, snapshot,
     isCurrent, pending

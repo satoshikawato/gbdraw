@@ -1176,6 +1176,10 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        /* A failed sequence read: its reason and Details, with Retry beside it. */
+        .preview-feature-search .gfs-sequence-error {
+            flex: 1 1 12rem;
+        }
         .preview-feature-search input,
         .preview-feature-search select,
         .preview-feature-search button,
@@ -7093,9 +7097,16 @@
                                     :title="t('Hide feature search')"
                                     :aria-label="t('Hide feature search')"><i class="ph ph-x" aria-hidden="true"></i></button>
                         </div>
-                        <div class="gfs-status-line" :class="{ 'is-empty': !previewFeatureSearchStatusText && !previewFeatureSearchActiveDetail }">
+                        <div class="gfs-status-line" :class="{ 'is-empty': !previewFeatureSearchStatusText && !previewFeatureSearchActiveDetail && !previewFeatureSearchSequenceFailure }">
                             <span class="gfs-count" role="status" :aria-label="t('Feature search status')">{{ previewFeatureSearchStatusText }}</span>
                             <span v-if="previewFeatureSearchActiveDetail" class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">{{ previewFeatureSearchActiveDetail }}</span>
+                            <template v-if="previewFeatureSearchSequenceFailure">
+                                <operation-error compact :error="previewFeatureSearchSequenceFailure.error" class="gfs-sequence-error"></operation-error>
+                                <button type="button"
+                                        @click.stop="previewFeatureSearchSequenceFailure.retry()"
+                                        data-history-ignore
+                                        class="gfs-button">{{ t('Retry') }}</button>
+                            </template>
                         </div>
                     </div>
 
@@ -7367,7 +7378,7 @@
                                 <span class="truncate">{{ t('Qualifiers') }}</span>
                             </button>
                             <button type="button"
-                                    @click="clickedFeature.activeTab = 'sequence'"
+                                    @click="clickedFeature.activeTab = 'sequence'; sequenceReads.showFeatureSequence(clickedFeature)"
                                     :class="[
                                       'flex-auto min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -7569,10 +7580,10 @@
                                              { label: t('Clear highlight'), title: t('Clear similarity-group highlight'), icon: 'ph-eraser', run: clearOrthogroupHighlight }
                                            ] : []),
                                            ...(clickedOrthogroupDetail ? [
-                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', null, 'feature-popup'), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.ntSequenceCount, run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup') },
-                                           { label: t('Download nt'), title: t('Download all member nucleotide FASTA'), icon: 'ph-download-simple', disabled: !clickedOrthogroupDetail.ntSequenceCount, run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt') },
-                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', null, 'feature-popup'), title: t('Copy all member amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.aaSequenceCount, run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup') },
-                                           { label: t('Download aa'), title: t('Download all member amino-acid FASTA'), icon: 'ph-download-simple', disabled: !clickedOrthogroupDetail.aaSequenceCount, run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa') }
+                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', t('Copy nt'), null, 'feature-popup'), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.sequenceCount || orthogroupMemberRead('feature-popup').status === 'reading', run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup') },
+                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', t('Download nt'), null, 'feature-popup', 'download'), title: t('Download all member nucleotide FASTA'), icon: 'ph-download-simple', live: true, disabled: !clickedOrthogroupDetail.sequenceCount || orthogroupMemberRead('feature-popup').status === 'reading', run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup') },
+                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', t('Copy aa'), null, 'feature-popup'), title: t('Copy all member amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !clickedOrthogroupDetail.sequenceCount || orthogroupMemberRead('feature-popup').status === 'reading', run: () => copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup') },
+                                           { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', t('Download aa'), null, 'feature-popup', 'download'), title: t('Download all member amino-acid FASTA'), icon: 'ph-download-simple', live: true, disabled: !clickedOrthogroupDetail.sequenceCount || orthogroupMemberRead('feature-popup').status === 'reading', run: () => downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup') }
                                            ] : [])
                                          ]"></action-menu>
                             <details v-if="clickedOrthogroupDetail" class="match-disclosure" data-similarity-members>
@@ -7602,10 +7613,10 @@
                                                     <td>
                                                         <action-menu label="FASTA" :title="t('FASTA of {name}', { name: member.displayProteinId || member.recordId || t('this member') })" :aria-label="t('FASTA of {name}', { name: member.displayProteinId || member.recordId || t('this member') })"
                                                                      :items="[
-                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', member, 'feature-popup'), title: t('Copy nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member, 'nt'), run: () => copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup') },
-                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', member, 'feature-popup'), title: t('Copy amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member, 'aa'), run: () => copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup') },
-                                                                       { label: t('Download nt'), title: t('Download nucleotide FASTA'), icon: 'ph-download-simple', disabled: !hasOrthogroupMemberSequence(member, 'nt'), run: () => downloadOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id) },
-                                                                       { label: t('Download aa'), title: t('Download amino-acid FASTA'), icon: 'ph-download-simple', disabled: !hasOrthogroupMemberSequence(member, 'aa'), run: () => downloadOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id) }
+                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', t('Copy nt'), member, 'feature-popup'), title: t('Copy nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member) || orthogroupMemberRead('feature-popup').status === 'reading', run: () => copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup') },
+                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', t('Copy aa'), member, 'feature-popup'), title: t('Copy amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member) || orthogroupMemberRead('feature-popup').status === 'reading', run: () => copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup') },
+                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', t('Download nt'), member, 'feature-popup', 'download'), title: t('Download nucleotide FASTA'), icon: 'ph-download-simple', live: true, disabled: !hasOrthogroupMemberSequence(member) || orthogroupMemberRead('feature-popup').status === 'reading', run: () => downloadOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup') },
+                                                                       { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', t('Download aa'), member, 'feature-popup', 'download'), title: t('Download amino-acid FASTA'), icon: 'ph-download-simple', live: true, disabled: !hasOrthogroupMemberSequence(member) || orthogroupMemberRead('feature-popup').status === 'reading', run: () => downloadOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup') }
                                                                      ]"></action-menu>
                                                     </td>
                                                 </tr>
@@ -7614,6 +7625,7 @@
                                     </table>
                                 </div>
                             </details>
+                            <sequence-read-line :read="orthogroupMemberRead('feature-popup')"></sequence-read-line>
                         </section>
                         <section aria-labelledby="feature-popup-layout-heading" class="border-t border-slate-100 pt-3" data-feature-popup-group="layout" data-nodrag="true">
                             <h3 id="feature-popup-layout-heading" class="feature-popup-heading">{{ t('Layout') }}</h3>
@@ -7774,8 +7786,18 @@
                             </div>
                         </div>
                         <div v-else-if="richFeaturePopup && clickedFeature.activeTab === 'sequence'" class="space-y-3" data-nodrag="true">
-                            <div v-if="clickedFeature.sequenceWarnings.length > 0" class="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
-                                <div v-for="warning in clickedFeature.sequenceWarnings"
+                            <div v-if="clickedFeature.sequence.status === 'idle' || clickedFeature.sequence.status === 'reading'"
+                                 class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4" data-feature-sequence-reading>
+                                {{ t('Reading the sequence…') }}
+                            </div>
+                            <div v-else-if="clickedFeature.sequence.status === 'failed'" class="flex flex-wrap items-start gap-2" data-feature-sequence-failed>
+                                <operation-error compact :error="clickedFeature.sequence.error" class="flex-1"></operation-error>
+                                <button type="button" class="h-7 px-2 rounded-md text-xs text-slate-600 border border-slate-200 hover:bg-slate-50"
+                                        @click="sequenceReads.showFeatureSequence(clickedFeature)">{{ t('Retry') }}</button>
+                            </div>
+                            <template v-else>
+                            <div v-if="clickedFeature.sequence.warnings.length > 0" class="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
+                                <div v-for="warning in clickedFeature.sequence.warnings"
                                      :key="`feature-sequence-warning-${warning}`"
                                      class="text-xs text-amber-700">
                                     {{ warning }}
@@ -7785,18 +7807,18 @@
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">{{ t('Nucleotide') }}</div>
                                     <button :aria-label="t('Copy nucleotide sequence')" type="button"
-                                            @click="copyText(clickedFeature.nucleotideFasta)"
-                                            :disabled="!clickedFeature.nucleotideFasta"
+                                            @click="copyText(clickedFeature.sequence.nucleotideFasta)"
+                                            :disabled="!clickedFeature.sequence.nucleotideFasta"
                                             :class="[
                                               'w-7 h-7 rounded-md flex items-center justify-center',
-                                              clickedFeature.nucleotideFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                              clickedFeature.sequence.nucleotideFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             :title="t('Copy nucleotide sequence')">
                                         <i class="ph ph-copy" aria-hidden="true"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.nucleotideFasta"
-                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.nucleotideFasta }}</pre>
+                                <pre v-if="clickedFeature.sequence.nucleotideFasta"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.sequence.nucleotideFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     {{ t('No nucleotide sequence available.') }}
                                 </div>
@@ -7805,22 +7827,23 @@
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">{{ t('Amino acid') }}</div>
                                     <button :aria-label="t('Copy amino acid sequence')" type="button"
-                                            @click="copyText(clickedFeature.aminoAcidFasta)"
-                                            :disabled="!clickedFeature.aminoAcidFasta"
+                                            @click="copyText(clickedFeature.sequence.aminoAcidFasta)"
+                                            :disabled="!clickedFeature.sequence.aminoAcidFasta"
                                             :class="[
                                               'w-7 h-7 rounded-md flex items-center justify-center',
-                                              clickedFeature.aminoAcidFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                              clickedFeature.sequence.aminoAcidFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             :title="t('Copy amino acid sequence')">
                                         <i class="ph ph-copy" aria-hidden="true"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.aminoAcidFasta"
-                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.aminoAcidFasta }}</pre>
+                                <pre v-if="clickedFeature.sequence.aminoAcidFasta"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.sequence.aminoAcidFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     {{ t('No amino acid sequence available.') }}
                                 </div>
                             </div>
+                            </template>
                         </div>
                         </div>
                         <button type="button"
@@ -8013,18 +8036,19 @@
                                                      label="FASTA" icon="ph-download-simple" :title="t('Copy or download the block span sequences')"
                                                      :items="[
                                                        ...clickedPairwiseMatch.sequenceBundle.entries.flatMap((entry) => [
-                                                         { label: t('Copy {role} span', { role: entry.span.displayRole.toLowerCase() }), title: entry.available ? t('Copy {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason, icon: 'ph-copy', disabled: !entry.available, run: () => copyText(entry.fasta) },
-                                                         { label: t('Download {role} span', { role: entry.span.displayRole.toLowerCase() }), title: entry.available ? t('Download {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason, icon: 'ph-download-simple', disabled: !entry.available, run: () => downloadText(entry.filename, entry.fasta, 'text/plain;charset=utf-8') }
+                                                         { label: t('Copy {role} span', { role: entry.span.displayRole.toLowerCase() }), title: entry.available ? t('Copy {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason, icon: 'ph-copy', disabled: !entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'copy') },
+                                                         { label: t('Download {role} span', { role: entry.span.displayRole.toLowerCase() }), title: entry.available ? t('Download {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason, icon: 'ph-download-simple', disabled: !entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'download') }
                                                        ]),
                                                        ...(clickedPairwiseMatch.sequenceBundle.entries.length > 1 ? [
-                                                         { label: t('Copy both spans'), title: t('Copy both spans FASTA'), icon: 'ph-copy', disabled: !clickedPairwiseMatch.sequenceBundle.combinedFasta, run: () => copyText(clickedPairwiseMatch.sequenceBundle.combinedFasta) },
-                                                         { label: t('Download both spans'), title: t('Download both spans FASTA'), icon: 'ph-download-simple', disabled: !clickedPairwiseMatch.sequenceBundle.combinedFasta, run: () => downloadText(clickedPairwiseMatch.sequenceBundle.combinedFilename, clickedPairwiseMatch.sequenceBundle.combinedFasta, 'text/plain;charset=utf-8') }
+                                                         { label: t('Copy both spans'), title: t('Copy both spans FASTA'), icon: 'ph-copy', disabled: !sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'copy') },
+                                                         { label: t('Download both spans'), title: t('Download both spans FASTA'), icon: 'ph-download-simple', disabled: !sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'download') }
                                                        ] : [])
                                                      ]"></action-menu>
                                     </div>
                                     <div v-for="entry in (clickedPairwiseMatch.sequenceBundle?.entries || []).filter((item) => !item.available)"
                                          :key="`match-sequence-unavailable-${entry.span.role}`"
                                          class="mt-1 text-[11px] text-amber-800">{{ t('{role} span: {reason}', { role: entry.span.displayRole, reason: entry.unavailableReason }) }}</div>
+                                    <sequence-read-line :read="clickedPairwiseMatch.sequenceBundle?.read"></sequence-read-line>
                                 </section>
                                 <details class="match-disclosure" data-collinear-gene-pairs>
                                     <summary>{{ clickedPairwiseMatch.block.pairsLabel }}</summary>
@@ -8082,19 +8106,19 @@
                                                 <div class="text-xs font-semibold text-slate-700">{{ t('{role} span', { role: entry.span.displayRole }) }}</div>
                                                 <!-- OV-1264: a long record ID may break; a span or length stays whole. -->
                                                 <div class="text-[10px] font-mono text-slate-500 break-words" data-match-span-line>
-                                                    {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available"> · <span class="whitespace-nowrap">{{ numberText(entry.sequenceLength) }} bp</span></template>
+                                                    {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available && entry.sequenceLength"> · <span class="whitespace-nowrap">{{ numberText(entry.sequenceLength) }} bp</span></template>
                                                 </div>
                                             </div>
                                             <button type="button"
-                                                    @click="copyText(entry.fasta)"
-                                                    :disabled="!entry.available"
+                                                    @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'copy')"
+                                                    :disabled="!entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
                                                     :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
                                                     :title="entry.available ? t('Copy {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason">
                                                 <i class="ph ph-copy" aria-hidden="true"></i><span>{{ t('Copy') }}</span>
                                             </button>
                                             <button type="button"
-                                                    @click="downloadText(entry.filename, entry.fasta, 'text/plain;charset=utf-8')"
-                                                    :disabled="!entry.available"
+                                                    @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'download')"
+                                                    :disabled="!entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
                                                     :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
                                                     :title="entry.available ? t('Download {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason">
                                                 <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
@@ -8105,21 +8129,22 @@
                                         </div>
                                     </div>
                                     <div v-if="clickedPairwiseMatch.sequenceBundle.entries.length > 1"
-                                         class="flex items-center justify-end gap-1 pt-1">
+                                         class="flex items-center justify-end gap-1 pt-1" data-match-both-spans>
                                         <span class="mr-auto text-[10px] font-semibold uppercase text-slate-500">{{ t('Both spans') }}</span>
                                         <button type="button"
-                                                @click="copyText(clickedPairwiseMatch.sequenceBundle.combinedFasta)"
-                                                :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
-                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
+                                                @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'copy')"
+                                                :disabled="!sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
                                             <i class="ph ph-copy" aria-hidden="true"></i><span>{{ t('Copy') }}</span>
                                         </button>
                                         <button type="button"
-                                                @click="downloadText(clickedPairwiseMatch.sequenceBundle.combinedFilename, clickedPairwiseMatch.sequenceBundle.combinedFasta, 'text/plain;charset=utf-8')"
-                                                :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
-                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
+                                                @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'download')"
+                                                :disabled="!sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
                                             <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
                                         </button>
                                     </div>
+                                    <sequence-read-line :read="clickedPairwiseMatch.sequenceBundle?.read"></sequence-read-line>
                                 </div>
                                 <div v-for="section in clickedPairwiseMatch.sections"
                                      :key="`match-section-${section.id}`"
@@ -8194,10 +8219,10 @@
                                     <span class="pt-1 text-xs font-semibold text-slate-700" data-match-group-count>{{ pairwiseGroupView.countText }}</span>
                                     <action-menu :label="t('Copy')" icon="ph-copy" :title="t('Copy or download the members')"
                                                  :items="[
-                                                   { label: t('Copy nt FASTA'), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', disabled: !pairwiseGroupView.memberNtFasta, run: () => copyText(pairwiseGroupView.memberNtFasta) },
-                                                   { label: t('Download nt FASTA'), title: t('Download all member nucleotide FASTA'), icon: 'ph-download-simple', disabled: !pairwiseGroupView.memberNtFasta, run: () => downloadText(pairwiseGroupView.memberNtFilename, pairwiseGroupView.memberNtFasta) },
-                                                   { label: t('Copy aa FASTA'), title: t('Copy all member amino-acid FASTA'), icon: 'ph-copy', disabled: !pairwiseGroupView.memberAaFasta, run: () => copyText(pairwiseGroupView.memberAaFasta) },
-                                                   { label: t('Download aa FASTA'), title: t('Download all member amino-acid FASTA'), icon: 'ph-download-simple', disabled: !pairwiseGroupView.memberAaFasta, run: () => downloadText(pairwiseGroupView.memberAaFilename, pairwiseGroupView.memberAaFasta) },
+                                                   { label: t('Copy nt FASTA'), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', disabled: !pairwiseGroupView.memberSequenceCount || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, pairwiseGroupView.memberRows, 'nt', 'copy', pairwiseGroupView.memberNtFilename) },
+                                                   { label: t('Download nt FASTA'), title: t('Download all member nucleotide FASTA'), icon: 'ph-download-simple', disabled: !pairwiseGroupView.memberSequenceCount || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, pairwiseGroupView.memberRows, 'nt', 'download', pairwiseGroupView.memberNtFilename) },
+                                                   { label: t('Copy aa FASTA'), title: t('Copy all member amino-acid FASTA'), icon: 'ph-copy', disabled: !pairwiseGroupView.memberSequenceCount || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, pairwiseGroupView.memberRows, 'aa', 'copy', pairwiseGroupView.memberAaFilename) },
+                                                   { label: t('Download aa FASTA'), title: t('Download all member amino-acid FASTA'), icon: 'ph-download-simple', disabled: !pairwiseGroupView.memberSequenceCount || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, pairwiseGroupView.memberRows, 'aa', 'download', pairwiseGroupView.memberAaFilename) },
                                                    { label: t('Copy member table'), title: t('Copy member table'), icon: 'ph-table', disabled: !pairwiseGroupView.memberCopyText, run: () => copyText(pairwiseGroupView.memberCopyText) }
                                                  ]"></action-menu>
                                 </div>
@@ -8223,15 +8248,16 @@
                                                 <td>
                                                     <action-menu label="FASTA" :title="t('FASTA of {name}', { name: member.proteinId || member.record })" :aria-label="t('FASTA of {name}', { name: member.proteinId || member.record })"
                                                                  :items="[
-                                                                   { label: t('Copy nt'), title: t('Copy nucleotide FASTA'), icon: 'ph-copy', disabled: !member.ntFasta, run: () => copyText(member.ntFasta) },
-                                                                   { label: t('Copy aa'), title: t('Copy amino-acid FASTA'), icon: 'ph-copy', disabled: !member.aaFasta, run: () => copyText(member.aaFasta) },
-                                                                   { label: t('Download nt'), title: t('Download nucleotide FASTA'), icon: 'ph-download-simple', disabled: !member.ntFasta, run: () => downloadText(member.ntFilename, member.ntFasta) },
-                                                                   { label: t('Download aa'), title: t('Download amino-acid FASTA'), icon: 'ph-download-simple', disabled: !member.aaFasta, run: () => downloadText(member.aaFilename, member.aaFasta) }
+                                                                   { label: t('Copy nt'), title: t('Copy nucleotide FASTA'), icon: 'ph-copy', disabled: !member.read || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, [member], 'nt', 'copy', member.ntFilename) },
+                                                                   { label: t('Copy aa'), title: t('Copy amino-acid FASTA'), icon: 'ph-copy', disabled: !member.read || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, [member], 'aa', 'copy', member.aaFilename) },
+                                                                   { label: t('Download nt'), title: t('Download nucleotide FASTA'), icon: 'ph-download-simple', disabled: !member.read || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, [member], 'nt', 'download', member.ntFilename) },
+                                                                   { label: t('Download aa'), title: t('Download amino-acid FASTA'), icon: 'ph-download-simple', disabled: !member.read || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, [member], 'aa', 'download', member.aaFilename) }
                                                                  ]"></action-menu>
                                                 </td>
                                             </tr>
                                         </tbody>
                                     </table>
+                                    <sequence-read-line :read="pairwiseGroupView.memberRead"></sequence-read-line>
                                 </div>
                                 <details v-if="pairwiseGroupView.technicalRows.length" class="match-disclosure mt-2" data-match-group-technical>
                                     <summary>{{ t('Technical details') }}</summary>
@@ -9378,10 +9404,10 @@
                                     <div class="pt-1 text-xs font-semibold text-slate-600">{{ t('Members') }}</div>
                                     <action-menu :label="t('Copy')" icon="ph-copy" :title="t('Copy or download the members')"
                                                  :items="[
-                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Copy nt')), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence.nt, run: () => copyOrthogroupSequences(selectedOrthogroup, 'nt') },
-                                                   { label: t('Download nt'), title: t('Download all member nucleotide FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasSequence.nt, run: () => downloadOrthogroupSequences(selectedOrthogroup, 'nt') },
-                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Copy aa')), title: t('Copy all member amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence.aa, run: () => copyOrthogroupSequences(selectedOrthogroup, 'aa') },
-                                                   { label: t('Download aa'), title: t('Download all member amino-acid FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasSequence.aa, run: () => downloadOrthogroupSequences(selectedOrthogroup, 'aa') }
+                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Copy nt')), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence || orthogroupMemberRead('drawer').status === 'reading', run: () => copyOrthogroupSequences(selectedOrthogroup, 'nt') },
+                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Download nt'), null, 'drawer', 'download'), title: t('Download all member nucleotide FASTA'), icon: 'ph-download-simple', live: true, disabled: !selectedOrthogroupDetail.hasSequence || orthogroupMemberRead('drawer').status === 'reading', run: () => downloadOrthogroupSequences(selectedOrthogroup, 'nt') },
+                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Copy aa')), title: t('Copy all member amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence || orthogroupMemberRead('drawer').status === 'reading', run: () => copyOrthogroupSequences(selectedOrthogroup, 'aa') },
+                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Download aa'), null, 'drawer', 'download'), title: t('Download all member amino-acid FASTA'), icon: 'ph-download-simple', live: true, disabled: !selectedOrthogroupDetail.hasSequence || orthogroupMemberRead('drawer').status === 'reading', run: () => downloadOrthogroupSequences(selectedOrthogroup, 'aa') }
                                                  ]"></action-menu>
                                 </div>
                                 <!-- One block per member, so the drawer needs no horizontal scroll. -->
@@ -9399,14 +9425,15 @@
                                             </div>
                                             <action-menu class="shrink-0" label="FASTA" :title="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })" :aria-label="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })"
                                                          :items="[
-                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Copy nt'), member), title: t('Copy nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'nt'), run: () => copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
-                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Copy aa'), member), title: t('Copy amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'aa'), run: () => copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) },
-                                                           { label: t('Download nt'), title: t('Download nucleotide FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'nt'), run: () => downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
-                                                           { label: t('Download aa'), title: t('Download amino-acid FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'aa'), run: () => downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) }
+                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Copy nt'), member), title: t('Copy nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member) || orthogroupMemberRead('drawer').status === 'reading', run: () => copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
+                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Copy aa'), member), title: t('Copy amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member) || orthogroupMemberRead('drawer').status === 'reading', run: () => copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) },
+                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Download nt'), member, 'drawer', 'download'), title: t('Download nucleotide FASTA'), icon: 'ph-download-simple', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member) || orthogroupMemberRead('drawer').status === 'reading', run: () => downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
+                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Download aa'), member, 'drawer', 'download'), title: t('Download amino-acid FASTA'), icon: 'ph-download-simple', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member) || orthogroupMemberRead('drawer').status === 'reading', run: () => downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) }
                                                          ]"></action-menu>
                                         </li>
                                     </template>
                                 </ul>
+                                <sequence-read-line :read="orthogroupMemberRead('drawer')"></sequence-read-line>
                             </div>
                         </div>
 
@@ -10370,6 +10397,18 @@
   </div>
 </script>
 
+    <script type="text/x-template" id="sequence-read-line-template">
+        <div v-if="read && read.status" class="mt-1 flex flex-wrap items-start gap-2 text-[11px]" data-sequence-read>
+            <span v-if="read.status === 'reading'" class="text-slate-500">{{ t('Reading the sequence…') }}</span>
+            <span v-else-if="read.status === 'empty'" class="text-amber-800">{{ t('No sequence available') }}</span>
+            <template v-else-if="read.status === 'failed' || read.status === 'copy-failed'">
+                <operation-error v-if="read.status === 'failed'" compact :error="read.error" class="flex-1"></operation-error>
+                <span v-else role="alert" class="flex-1 text-red-700">{{ t('Copy failed') }}</span>
+                <button type="button" class="h-7 px-2 rounded-md text-[10px] text-slate-600 border border-slate-200 hover:bg-slate-50"
+                        @click="read.retry()">{{ t('Retry') }}</button>
+            </template>
+        </div>
+    </script>
     <script type="text/x-template" id="operation-error-template">
         <div v-if="model && compact" role="alert" :aria-label="title" class="min-w-0 break-words text-[11px] leading-snug text-red-700">
             <p>{{ errorText(model.summaryParts) }}</p>

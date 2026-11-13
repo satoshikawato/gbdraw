@@ -121,7 +121,6 @@ export const createDrawingReset = ({
  * @property {() => unknown} extractLegendEntries The Legend list follows the displayed Result.
  * @property {RunResetStep} runProjectStep A project step: one Undo from any drawing (R11).
  * @property {RunResetStep} runUndoable A step of the shown drawing.
- * @property {() => void} resetMatchSequences Empties the match sequence registry.
  * @property {(enabled: boolean) => void} storePaletteInstantPreview The Results owner's Instant Preview setter.
  */
 
@@ -134,7 +133,7 @@ export const createResetSettings = ({
   state, sessionOperationAvailability, askChoice, resetDrawing, holdAutomaticRerender, followRuleEdits, svgContainer,
   appliedPaletteColors, originalLegendOrder, projectMountedEditorIntent, drawReturningLegendRows, STROKE_DOMAINS,
   resetAllPositions, resetCanvasPadding, resetPreviewViewport, dismissNotice, closeSettingsPopup,
-  clearSpecificRulePatternDrafts, extractLegendEntries, runProjectStep, runUndoable, resetMatchSequences,
+  clearSpecificRulePatternDrafts, extractLegendEntries, runProjectStep, runUndoable,
   storePaletteInstantPreview
 }) => {
   // Reset Settings asks first (PD-OI-090 〔Reset〕): Reset this drawing resets
@@ -221,9 +220,6 @@ export const createResetSettings = ({
   const resetSettings = () => runReset((reset) => runProjectStep(msg('Reset settings'), reset), () => {
     resetProject(state);
     state.drawingList().forEach((drawing) => resetDrawing(drawing));
-    // As 0.14.0 Reset settings did; Reset this drawing keeps the shown
-    // Result's match sequences with the Result (OV-2203).
-    resetMatchSequences();
   });
   // Reset this drawing is a step of the shown drawing (R17-5): the other
   // drawings, their Histories, and the Session values stay.

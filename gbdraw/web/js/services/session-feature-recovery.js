@@ -1005,6 +1005,11 @@ const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResult
 const isClickReadyValidation = (validation) =>
   validation?.state === 'ready' || validation?.state === 'not-needed';
 
+// The plan reads the feature rows a Session 27-39 stored (its Results have no
+// catalog). Such a row stored its sequences and no catalog identity: the rows
+// are usable, and Load reads no feature again, when a row stored a sequence, as
+// before D5. The popup reads no stored sequence; an identity-less row's
+// sequences are read after the next Generate (SEQUENCE_REQUIRES_GENERATE).
 /** @param {RecoveryFeatureState | null | undefined} featureState */
 export const hasUsableBiologicalFeatureCatalog = (featureState) => {
   const features = featureState?.biologicalFeatures;

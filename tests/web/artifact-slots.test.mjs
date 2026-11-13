@@ -91,7 +91,6 @@ const fillCircularArtifact = async () => {
   Object.entries(kept).forEach(([key, value]) => { memberOf(key).value = value; });
   state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, { qual: 'product', val: 'x', color: '#333333', cap: 'X' });
   modeDrawing(state, 'linear').linearSeqs.splice(0, modeDrawing(state, 'linear').linearSeqs.length, { uid: 'seq-1', region_reverse: true, windows: [] });
-  state.matchSequenceRegistry.register({ origin: 'linear-record', sourceKey: 'k1', recordId: 'R1', sequence: 'ACGT' });
   return { values, kept, legend };
 };
 
@@ -103,11 +102,12 @@ test('the artifact slot names exactly the displayed-Result part of the generated
 test('an empty slot clears only the artifact, and the captured slot comes back by reference', async () => {
   const { values, kept, legend } = await fillCircularArtifact();
   const committed = canonicalRenderArtifactOwner.capture();
-  const registryOwner = state.matchSequenceRegistry.captureTrustedOwner();
   const rules = [...state.activeDrawing().manualSpecificRules];
 
   const circular = snapshots.captureArtifactSlot();
   assert.ok(Object.isFrozen(circular));
+  // The page holds no record sequences: Python reads them on demand (D5), so a slot keeps none.
+  assert.deepEqual(Object.keys(circular).sort(), ['drawingId', 'legend', 'retainedBytes', 'runtimeState', 'transportIdentity', 'values']);
   assert.deepEqual(circular.legend.originalOrder, ['CDS', 'tRNA']);
   assert.strictEqual(circular.legend.originalColors, legend.originalColors);
   snapshots.installArtifactSlot(createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: {} }), { drawing: modeDrawing(state, 'linear') });
@@ -119,7 +119,6 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.equal(state.generatedDrawingId.value, 'linear');
   assert.equal(canonicalRenderArtifactOwner.capture().committedCanonicalSession, null);
   assert.equal(canonicalRenderArtifactOwner.capture().conservationPairs.size, 0);
-  assert.equal(state.matchSequenceRegistry.values().length, 0);
   // An empty slot keeps the applied palette: it has no Result to project.
   assert.equal(state.appliedPaletteName.value, 'tableau');
   assert.strictEqual(state.appliedPaletteColors.value, values.appliedPaletteColors);
@@ -141,7 +140,6 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   // D-15-124: the request's conservation hash pairs wait in its slot with it.
   assert.strictEqual(canonicalRenderArtifactOwner.capture().conservationPairs, committed.conservationPairs);
   assert.deepEqual([...committed.conservationPairs], ['["s","q"]']);
-  assert.strictEqual(state.matchSequenceRegistry.captureTrustedOwner(), registryOwner);
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
 
   // The Linear slot captured while empty installs as empty again.

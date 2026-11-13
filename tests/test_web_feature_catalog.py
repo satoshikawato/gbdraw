@@ -8,10 +8,17 @@ import pytest
 
 import gbdraw.web_support.feature_catalog as feature_catalog_module
 from gbdraw.exceptions import GbdrawError
-from gbdraw.render.interactive_svg import InteractiveSvgContext
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
+
+from gbdraw.render.interactive_svg import CatalogSequenceRecords, InteractiveSvgContext
 from gbdraw.web_support.feature_catalog import (
+    INTERACTIVE_EMBED_SCHEMA,
+    STORED_SEQUENCE_KEYS,
     build_feature_catalog_item,
     canonical_catalog_sequence_sources,
+    embed_catalog_item,
     materialize_catalog_nucleotide_sequence,
     promote_legacy_feature_catalog,
     select_feature_catalog_item,
@@ -92,6 +99,24 @@ def test_schema_three_promotion_source_index_alias_vectors(case: dict) -> None:
     assert promoted.get("sourceFeatureIndex") == case["promotedSourceFeatureIndex"]
 
 
+SCHEMA_FIVE_PROMOTION_VECTORS = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "source-feature-index-alias-vectors.json")
+    .read_text(encoding="utf-8")
+)["schemaFiveCases"]
+
+
+@pytest.mark.parametrize(
+    "case", SCHEMA_FIVE_PROMOTION_VECTORS, ids=[case["name"] for case in SCHEMA_FIVE_PROMOTION_VECTORS]
+)
+def test_schema_five_promotion_vectors(case: dict) -> None:
+    """D5: shared with tests/web/feature-catalog.test.mjs, so both promotions give the same schema 6 catalog, with
+    its key order (the qualifier order ranks color rules, so a restored /translation has one place on both sides)."""
+
+    promoted = promote_legacy_feature_catalog(case["catalog"])
+    assert promoted == case["promoted"]
+    assert json.dumps(promoted) == json.dumps(case["promoted"])
+
+
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
     context = InteractiveSvgContext(
         record_keys=("record-a", "record-b"),
@@ -161,22 +186,6 @@ def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
                 "end": 8,
             },
         ),
-        sequence_sources=(
-            {
-                "key": "record:0",
-                "origin": "linear-record",
-                "recordIndex": 0,
-                "recordId": "record-a",
-                "sequence": "ATGAAATAACCC",
-            },
-            {
-                "key": "record:1",
-                "origin": "linear-record",
-                "recordIndex": 1,
-                "recordId": "record-b",
-                "sequence": "TTTGGGCCCAAA",
-            },
-        ),
     )
     svg = """\
 <svg xmlns="http://www.w3.org/2000/svg">
@@ -213,7 +222,7 @@ def test_feature_catalog_records_each_rendered_features_drawn_selector() -> None
         }
     catalog = {"schema": feature_catalog_module.FEATURE_CATALOG_SCHEMA, "items": [item]}
 
-    assert feature_catalog_module.FEATURE_CATALOG_SCHEMA == 5
+    assert feature_catalog_module.FEATURE_CATALOG_SCHEMA == 6
     assert [feature["drawnSelector"] for feature in item["features"]] == [drawn, None, None]
     assert select_feature_catalog_item(catalog, result_index=0, result_name="drawn.svg") is not None
     for invalid in ({"hash": "fdrawn"}, {**drawn, "hash": ""}):
@@ -419,22 +428,6 @@ def test_feature_catalog_uses_one_read_only_svg_index(
                 "subjectBiologicalFeatureId": "fallback",
             },
         ],
-        "sequenceSources": [
-            {
-                "key": "record:0",
-                "origin": "linear-record",
-                "recordIndex": 0,
-                "recordId": "record-a",
-                "sequence": "ATGAAATAACCC",
-            },
-            {
-                "key": "record:1",
-                "origin": "linear-record",
-                "recordIndex": 1,
-                "recordId": "record-b",
-                "sequence": "TTTGGGCCCAAA",
-            },
-        ],
     }
 
 
@@ -495,7 +488,7 @@ def test_sequence_source_deduplication_is_order_independent_and_fail_closed() ->
 
     identical = feature_catalog_module._deduplicated_sequence_sources(
         matches,
-        InteractiveSvgContext(sequence_sources=(source_a, dict(source_a))),
+        [source_a, dict(source_a)],
     )
     assert identical == [source_a]
 
@@ -503,15 +496,13 @@ def test_sequence_source_deduplication_is_order_independent_and_fail_closed() ->
         with pytest.raises(GbdrawError, match="duplicated with conflicting content"):
             feature_catalog_module._deduplicated_sequence_sources(
                 matches,
-                InteractiveSvgContext(sequence_sources=sources),
+                list(sources),
             )
 
     with pytest.raises(GbdrawError, match="require a non-empty key"):
         feature_catalog_module._deduplicated_sequence_sources(
             matches,
-            InteractiveSvgContext(
-                sequence_sources=({key: value for key, value in source_a.items() if key != "key"},)
-            ),
+            [{key: value for key, value in source_a.items() if key != "key"}],
         )
 
     item = {
@@ -618,8 +609,6 @@ def _sequence_ownership_case() -> tuple[InteractiveSvgContext, str]:
                     "locus_tag": ["LOCUS_001"],
                     "translation": ["MK"],
                 },
-                "nucleotide_sequence": "ATGAAATAA",
-                "amino_acid_sequence": "MK",
             },
         ),
         biological_features=(
@@ -631,7 +620,6 @@ def _sequence_ownership_case() -> tuple[InteractiveSvgContext, str]:
                 "feature_index": 0,
                 "type": "source",
                 "qualifiers": {"organism": ["Example organism"]},
-                "nucleotide_sequence": "ATGAAATAAGGG",
             },
             {
                 "id": "f1",
@@ -676,8 +664,6 @@ def _sequence_ownership_case() -> tuple[InteractiveSvgContext, str]:
                         "translation": ["MK"],
                     },
                 },
-                "nucleotide_sequence": "ATGAAATAA",
-                "amino_acid_sequence": "MK",
             },
         ),
         orthogroups=(
@@ -726,22 +712,6 @@ def _sequence_ownership_case() -> tuple[InteractiveSvgContext, str]:
                 ],
             },
         ),
-        sequence_sources=(
-            {
-                "key": "linear:record:0",
-                "recordId": "public-record-id",
-                "sequence": "ATGAAATAAGGG",
-                "origin": "linear-record",
-                "recordIndex": 0,
-            },
-            {
-                "key": "linear:record:1",
-                "recordId": "unused-record",
-                "sequence": "CCCC",
-                "origin": "linear-record",
-                "recordIndex": 1,
-            },
-        ),
     )
     svg = """\
 <svg xmlns="http://www.w3.org/2000/svg">
@@ -762,6 +732,24 @@ def _sequence_ownership_case() -> tuple[InteractiveSvgContext, str]:
 </svg>
 """
     return context, svg
+
+
+def _sequence_ownership_records() -> CatalogSequenceRecords:
+    """The drawn record of ``_sequence_ownership_case``: its source feature 0 and its CDS, feature 1."""
+
+    record = SeqRecord(
+        Seq("ATGAAATAAGGG"),
+        id="public-record-id",
+        features=[
+            SeqFeature(FeatureLocation(0, 12, strand=1), type="source"),
+            SeqFeature(
+                FeatureLocation(0, 9, strand=1),
+                type="CDS",
+                qualifiers={"locus_tag": ["LOCUS_001"], "translation": ["MK"]},
+            ),
+        ],
+    )
+    return CatalogSequenceRecords(mode="linear", records=(record,), unit_keys=("stable-record-key",))
 
 
 def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
@@ -785,7 +773,6 @@ def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
     assert biological_id == "stable-feature"
     assert "stableFeatureId" not in biological
     assert "record_idx" not in biological
-    assert "translation" not in biological["qualifiers"]
     assert "selector" not in biological
     assert "source_protein_id" not in biological
     assert "protein_id" not in biological
@@ -795,9 +782,10 @@ def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
     assert "product" not in biological
     assert "note" not in biological
     assert "location_parts" not in biological
-    assert biological["translationFromAminoAcidSequence"] is True
-    assert biological["sequenceSourceIndex"] == 0
-    assert "nucleotide_sequence" not in biological
+    # The stored catalog (schema 6) holds no sequence: /translation stays a qualifier.
+    assert biological["qualifiers"]["translation"] == ["MK"]
+    assert not STORED_SEQUENCE_KEYS & set(biological)
+    assert "translationFromAminoAcidSequence" not in biological
 
     assert item["features"] == [
         {
@@ -838,6 +826,16 @@ def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
     assert "subject_feature_svg_id" not in match
     assert "query_protein_id" not in match
     assert "subject_protein_id" not in match
+    assert "sequenceSources" not in item
+    assert json.dumps(item).count("ATGAAATAA") == 0
+
+    # The export profile reads the sequences from the drawn record and keeps the compact encoding.
+    item = embed_catalog_item(item, _sequence_ownership_records())
+    biological = item["biologicalFeatures"][0]
+    assert "translation" not in biological["qualifiers"]
+    assert biological["translationFromAminoAcidSequence"] is True
+    assert biological["sequenceSourceIndex"] == 0
+    assert "nucleotide_sequence" not in biological
     assert [source["key"] for source in item["sequenceSources"]] == [
         "linear:record:0"
     ]
@@ -972,7 +970,6 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
             "start": 0,
             "end": 4,
             "strand": "+",
-            "nucleotide_sequence": "AAAA",
         },
         {
             "stable_feature_id": "minus",
@@ -982,7 +979,6 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
             "start": 4,
             "end": 8,
             "strand": "-",
-            "nucleotide_sequence": "GGGG",
         },
         {
             "stable_feature_id": "multipart",
@@ -996,7 +992,6 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
                 {"start": 0, "end": 2, "strand": "+"},
                 {"start": 12, "end": 16, "strand": "-"},
             ],
-            "nucleotide_sequence": "AAAAAA",
         },
         {
             "stable_feature_id": "mismatch",
@@ -1006,8 +1001,6 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
             "start": 8,
             "end": 12,
             "strand": "+",
-            "nucleotide_sequence": "TTTT",
-            "amino_acid_sequence": "MK",
             "qualifiers": {"translation": ["DIFFERENT"]},
         },
     )
@@ -1015,16 +1008,23 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
         record_keys=("record-key",),
         features=(biological_features[0],),
         biological_features=biological_features,
-        sequence_sources=(
-            {
-                "key": "linear:record:0",
-                "recordId": "record-id",
-                "sequence": source_sequence,
-                "origin": "linear-record",
-                "recordIndex": 0,
-            },
-        ),
     )
+    sources = [
+        {
+            "key": "linear:record:0",
+            "recordId": "record-id",
+            "sequence": source_sequence,
+            "origin": "linear-record",
+            "recordIndex": 0,
+        },
+    ]
+    # The sequences the export reads for each row; the mismatch stands for one no source reconstructs.
+    sequences = {
+        "plus": "AAAA",
+        "minus": "GGGG",
+        "multipart": "AAAAAA",
+        "mismatch": "TTTT",
+    }
     svg = """\
 <svg xmlns="http://www.w3.org/2000/svg">
   <path id="plus" data-gbdraw-feature-id="plus"
@@ -1043,10 +1043,19 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
         result_name="diagram.svg",
     )
 
-    by_id = {
-        feature["biologicalFeatureId"]: feature
-        for feature in item["biologicalFeatures"]
-    }
+    rows = [
+        feature_catalog_module._row_with_sequences(
+            row,
+            {
+                "nucleotideSequence": sequences[row["biologicalFeatureId"]],
+                "aminoAcidSequence": "MK" if row["biologicalFeatureId"] == "mismatch" else "",
+                "sequenceWarnings": [],
+            },
+        )
+        for row in item["biologicalFeatures"]
+    ]
+    feature_catalog_module._reference_reconstructible_nucleotide_sequences(rows, ["record-key"], sources)
+    by_id = {feature["biologicalFeatureId"]: feature for feature in rows}
     for feature_id, expected in (
         ("plus", "AAAA"),
         ("minus", "GGGG"),
@@ -1058,7 +1067,7 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
         assert (
             materialize_catalog_nucleotide_sequence(
                 feature,
-                item["sequenceSources"],
+                sources,
             )
             == expected
         )
@@ -1695,8 +1704,6 @@ def test_feature_catalog_references_one_biological_payload_from_many_renderings(
                     "product": ["Repeated protein"],
                     "translation": [amino_acid],
                 },
-                "nucleotide_sequence": sequence,
-                "amino_acid_sequence": amino_acid,
             }
             for index in range(rendered_count)
         ),
@@ -1710,8 +1717,6 @@ def test_feature_catalog_references_one_biological_payload_from_many_renderings(
                     "product": ["Repeated protein"],
                     "translation": [amino_acid],
                 },
-                "nucleotide_sequence": sequence,
-                "amino_acid_sequence": amino_acid,
             },
         ),
     )
@@ -1748,9 +1753,10 @@ def test_feature_catalog_references_one_biological_payload_from_many_renderings(
         for feature in item["features"]
     )
     encoded = json.dumps(item)
-    assert encoded.count(sequence) == 1
+    # Stored once, as the one biological row's /translation qualifier; the catalog stores no sequence.
+    assert encoded.count(sequence) == 0
     assert encoded.count(amino_acid) == 1
-    assert encoded.count('"translation"') == 0
+    assert encoded.count('"translation"') == 1
 
 
 def test_sequence_source_validation_is_bounded_by_source_count(
@@ -1920,7 +1926,7 @@ def test_a_reused_catalog_normalization_starts_from_its_stored_features() -> Non
     from gbdraw.api.prepared import PreparedBiologicalInputCache, register_prepared_value_identity
 
     context, svg = _sequence_ownership_case()
-    # This render has no comparison, so the feature keeps its nucleotide sequence.
+    # The stored rows do not depend on the comparison: the catalog stores no sequence.
     plain_svg = svg[: svg.index("  <path id=\"comparison-match\"")] + "</svg>\n"
     expected = build_feature_catalog_item(plain_svg, context, result_index=0, result_name="r.svg")
     cache = PreparedBiologicalInputCache()
@@ -1939,8 +1945,8 @@ def test_a_reused_catalog_normalization_starts_from_its_stored_features() -> Non
         {"renderStageBuild:catalog_normalization": 1},
         {"renderStageHit:catalog_normalization": 1},
     ]
-    assert items[0]["biologicalFeatures"][0]["sequenceSourceIndex"] == 0
-    assert items[1]["biologicalFeatures"] == expected["biologicalFeatures"]
+    assert "sequenceSourceIndex" not in items[0]["biologicalFeatures"][0]
+    assert items[0]["biologicalFeatures"] == items[1]["biologicalFeatures"] == expected["biologicalFeatures"]
 
 
 def _catalog_reads_fixture() -> str:
@@ -1984,3 +1990,79 @@ def test_the_reads_of_sibling_trees_join_to_the_index_of_one_traversal() -> None
 
     assert len(parts) == 4
     assert feature_catalog_module._rendered_svg_catalog_index(parts) == whole
+
+
+def _stored_ownership_item() -> dict:
+    """The stored item of ``_sequence_ownership_case`` with the anchor profile a schema 5 or 6 item carries."""
+
+    context, svg = _sequence_ownership_case()
+    item = build_feature_catalog_item(svg, context, result_index=0, result_name="r.svg")
+    for row in item["biologicalFeatures"]:
+        row["anchorProfile"] = {
+            "precision": "unavailable",
+            "operator": "unknown",
+            "partOrder": "ambiguous",
+            "strand": "unstranded",
+        }
+    return item
+
+
+def test_schema6_rows_carry_none_of_the_sequence_keys_and_keep_translation() -> None:
+    item = _stored_ownership_item()
+
+    assert feature_catalog_module.FEATURE_CATALOG_SCHEMA == 6
+    assert "sequenceSources" not in item
+    for row in item["biologicalFeatures"]:
+        assert not STORED_SEQUENCE_KEYS & set(row)
+    assert item["biologicalFeatures"][0]["qualifiers"]["translation"] == ["MK"]
+
+
+def test_schema5_promotes_to_6_restoring_translation_and_dropping_sources() -> None:
+    """The export profile (schema 5: sequences, references, translation marks) promotes to the stored item it was
+    embedded from: the mark gives back the /translation qualifier, and the sources and sequences leave."""
+
+    stored = _stored_ownership_item()
+    embedded = embed_catalog_item(stored, _sequence_ownership_records())
+    assert embedded["biologicalFeatures"][0]["translationFromAminoAcidSequence"] is True
+    assert embedded["sequenceSources"]
+    five = {"schema": INTERACTIVE_EMBED_SCHEMA, "items": [embedded]}
+    before = json.dumps(five)
+
+    promoted = promote_legacy_feature_catalog(five)
+
+    assert json.dumps(five) == before
+    assert promoted == {"schema": 6, "items": [stored]}
+    assert select_feature_catalog_item(promoted, result_index=0, result_name="r.svg") == stored
+
+
+def test_schema6_validator_rejects_sequence_keys_marks_and_sources() -> None:
+    stored = _stored_ownership_item()
+    catalog = {"schema": 6, "items": [stored]}
+    select_feature_catalog_item(catalog, result_index=0, result_name="r.svg")
+
+    for key, value in (
+        ("nucleotide_sequence", "ATGAAATAA"),
+        ("amino_acid_sequence", "MK"),
+        ("sequence_warnings", []),
+        ("sequenceSourceIndex", 0),
+        ("translationFromAminoAcidSequence", True),
+    ):
+        broken = json.loads(json.dumps(catalog))
+        broken["items"][0]["biologicalFeatures"][0][key] = value
+        with pytest.raises(GbdrawError, match="stores no sequences"):
+            select_feature_catalog_item(broken, result_index=0, result_name="r.svg")
+    with_sources = json.loads(json.dumps(catalog))
+    with_sources["items"][0]["sequenceSources"] = []
+    with pytest.raises(GbdrawError, match="stores no sequences"):
+        select_feature_catalog_item(with_sources, result_index=0, result_name="r.svg")
+
+
+def test_schema5_invalid_reference_is_still_refused() -> None:
+    stored = _stored_ownership_item()
+    embedded = embed_catalog_item(stored, _sequence_ownership_records())
+    embedded["biologicalFeatures"][0]["end"] = 99
+
+    with pytest.raises(GbdrawError, match="invalid nucleotide sequence source reference"):
+        select_feature_catalog_item(
+            {"schema": INTERACTIVE_EMBED_SCHEMA, "items": [embedded]}, result_index=0, result_name="r.svg"
+        )

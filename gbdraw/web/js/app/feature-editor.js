@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { RulePreparation, RulePreparationOptions } from './rule-matching.js' */
 /** @import { EditDefaultColorsPort, PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
@@ -40,7 +41,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {() => ({ mode?: string, diagramOptions?: Record<string, any> } | null)} getCommittedRequest
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {ReadDrawnTracksPort} readDrawnTracks
- * @property {() => Record<string, any> | null} [getCommittedSession] The committed canonical Session.
+ * @property {() => CommittedCanonicalSession | null} [getCommittedSession] The committed canonical Session.
  * @property {((resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource.
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
@@ -168,7 +169,7 @@ export const createFeatureEditor = ({
     isPreviewTransformActive, subscribePreviewTransformChanges,
     previewPopupsHeld, shownAxisRecords,
     showElementSettings,
-    closeElementSettings
+    closeElementSettings, getCommittedSession
   });
   const colorActions = createFeatureColorActions({
     state, showEditorIntent,

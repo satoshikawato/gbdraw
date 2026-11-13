@@ -639,3 +639,53 @@ def test_the_answer_reads_only_the_drawn_features():
     assert _answer_legend(answer, table) == _generate_legend([_join_seqs()[1], _join_seqs()[3]], table) == [
         "gamma", "other proteins"]
     assert _synthesize(features, [1], rules=current, color=TEAL, caption="gamma")["legend"] is None
+
+
+def _qualifiers_read(features: list[dict], labels: list[list[str]], scope: str = "group") -> list[str]:
+    from gbdraw.web_support.rule_matching import synthesis_qualifiers_json
+
+    return json.loads(synthesis_qualifiers_json(json.dumps(dict(scope=scope, features=features, labels=labels))))["qualifiers"]
+
+
+def _reading(payload: dict, read: set[str]) -> dict:
+    """The payload as the Web sends it for qualifiers `read` (rule-matching.js `ruleFeaturePayloadReading`): every
+    other key keeps its place under a name no rule reads, with no values."""
+    names = iter(f"-{n}" for n in range(10_000) if f"-{n}" not in read)
+    return {**payload, "qualifiers": {
+        (key if key.strip().lower() in read else next(names)): (values if key.strip().lower() in read else [])
+        for key, values in payload["qualifiers"].items()}}
+
+
+def test_a_group_edit_reads_the_qualifiers_of_its_candidate_conditions_only() -> None:
+    """What a group color edit reads besides its rules' keys (D5): product, gene, and a qualifier of a selected
+    feature whose value is a label text it shows; a long /translation is read only when it is such a text."""
+
+    kinase = _payload(_cds(0, product="kinase", gene="kinA", note="shown", locus_tag="K1", translation="MKV"), "rec")
+    plain = _payload(_cds(1, locus_tag="P1", translation="MKL"), "rec")
+    assert _qualifiers_read([kinase, plain], [["shown"], ["MKL"]]) == ["gene", "note", "product", "translation"]
+    assert _qualifiers_read([kinase], [[]]) == ["gene", "product"]
+    assert _qualifiers_read([kinase], [["shown"]], scope="features") == []
+    assert _qualifiers_read([kinase], [["shown"]], scope="reset") == []
+    assert _qualifiers_read([kinase], [["shown"]], scope="row") == ["gene", "note", "product"]
+
+
+@pytest.mark.parametrize("scope", ["group", "row", "features", "reset"])
+def test_a_color_edit_on_the_payloads_reading_its_qualifiers_answers_as_on_the_whole_payloads(scope: str) -> None:
+    """The synthesis over payloads that keep only the rules' keys and the candidate conditions' keys gives the
+    answer it gives over the whole payloads, so the Web sends no other qualifier value (D5)."""
+
+    features = [
+        _payload(_cds(0, product="kinase", note="first", locus_tag="K1", translation="MKV"), "rec"),
+        _payload(_cds(1, product="kinase", note="second", locus_tag="K2", translation="MKA"), "rec"),
+        _payload(_cds(2, product="ligase", note="first", locus_tag="L1", translation="MKL"), "rec"),
+        _payload(_cds(3, gene="ligB", locus_tag="L2", translation="MKC"), "rec"),
+    ]
+    rules = [dict(feat="CDS", qual="locus_tag", val="^L1$", color="#00ff00", cap="L"),
+             dict(feat="CDS", qual="product", val="kinase", color="#0000ff", cap="K")]
+    selected, labels = [0, 3], [["first"], ["ligB"]]
+    whole = _synthesize(features, selected, rules=rules, labels=labels, scope=scope, drawn=[0, 1, 2, 3])
+    read = {rule["qual"].strip().lower() for rule in rules} | set(
+        _qualifiers_read([features[index] for index in selected], labels, scope=scope))
+    reduced = [_reading(payload, read) for payload in features]
+    assert all("translation" not in payload["qualifiers"] for payload in reduced)
+    assert _synthesize(reduced, selected, rules=rules, labels=labels, scope=scope, drawn=[0, 1, 2, 3]) == whole

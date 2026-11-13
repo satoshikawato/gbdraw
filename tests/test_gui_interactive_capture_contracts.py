@@ -8,7 +8,7 @@ from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
-from gbdraw.session_io import CURRENT_FEATURE_CATALOG_SCHEMA
+from gbdraw.web_support.feature_catalog import INTERACTIVE_EMBED_SCHEMA
 from tests.utils.web_markup import read_english_index
 
 pytestmark = pytest.mark.recipe
@@ -209,7 +209,8 @@ def test_h_gui_15_validates_every_actual_export() -> None:
         "assert_finished_circular_svg(report)",
         'root.attrib.get("data-gbdraw-interactive-svg") != "true"',
         "INTERACTIVE_ASSET_IDS.issubset(ids)",
-        f'payload.get("schema") != {CURRENT_FEATURE_CATALOG_SCHEMA}',
+        # An exported Interactive SVG embeds the catalog's export profile (D5-02).
+        f'payload.get("schema") != {INTERACTIVE_EMBED_SCHEMA}',
         'page.goto(path.resolve().as_uri(), wait_until="load")',
         'name="Expand feature search", exact=True',
         'fill("COX1")',

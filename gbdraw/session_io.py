@@ -94,6 +94,7 @@ from .session_contract import (
     SessionContainerResource,
     FlatDraftFields,
     GbdrawSession,
+    GbdrawSession51,
     LegacySessionFields,
     SessionOtherModeEditorState,
     SessionOtherModeLegend,
@@ -121,6 +122,7 @@ from .web_support.mode_scoped_settings import (
 if TYPE_CHECKING:
     from .analysis.protein_colinearity import ProteinIdentityManifest
     from .api.requests import DiagramRequest
+    from .session_drawings import ModeScopedSourceFacts
 
 SESSION_FORMAT = "gbdraw-session"
 # Version 44 is the first with the current active-config and record-display
@@ -167,11 +169,14 @@ LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
-CURRENT_FEATURE_CATALOG_SCHEMA = 5
+# Schema 6 stores no sequence: Python reads them when a reader needs them (D5). Schema 5, written by Sessions 46-50,
+# stored them; it is promoted when read, and it stays the form an exported Interactive SVG embeds.
+CURRENT_FEATURE_CATALOG_SCHEMA = 6
+SEQUENCE_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
     44: 4,
-    **{version: CURRENT_FEATURE_CATALOG_SCHEMA for version in MODE_SCOPED_SESSION_VERSIONS},
+    **{version: SEQUENCE_FEATURE_CATALOG_SCHEMA for version in MODE_SCOPED_SESSION_VERSIONS},
     DRAWINGS_SESSION_MIN_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
 # The fields of a record display draft row (Session 41+), the two that Session
@@ -2039,8 +2044,8 @@ def _validate_current_feature_catalog_authority(
         # A schema 3 catalog is read as promoted, which may infer what the
         # current rules require (OV-269); its promoted form is the one validated.
         if catalog_schema == 3:
-            catalog = promote_legacy_feature_catalog(catalog)
-            catalog_schema = CURRENT_FEATURE_CATALOG_SCHEMA
+            catalog = promote_legacy_feature_catalog(catalog, schema=SEQUENCE_FEATURE_CATALOG_SCHEMA)
+            catalog_schema = SEQUENCE_FEATURE_CATALOG_SCHEMA
         for result_index, result_name in enumerate(result_names):
             select_feature_catalog_item(
                 catalog,
@@ -6272,12 +6277,35 @@ def build_session_json(
     )
     # One check, of the Session 51 returned (OV-1815): the mode-scoped payload
     # is this builder's own and moves unchecked.
-    from .session_drawings import drawings_document_from_mode_scoped
-
-    drawings, _source_facts = drawings_document_from_mode_scoped(payload)
+    drawings, _source_facts = drawings_document_of_mode_scoped(payload)
     sources = {resource_id: sources[resource_id] for resource_id in drawings["resources"]}
     validate_session(drawings, resource_sources=sources)
     return dict(drawings), sources
+
+
+def drawings_document_of_mode_scoped(
+    data: Mapping[str, object],
+    *,
+    stored_result_modes: frozenset[str] = frozenset(),
+) -> tuple[GbdrawSession51, ModeScopedSourceFacts]:
+    """A Session 46-50 as the current Session: its move to drawings
+    (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`, which only restructures the document, as its
+    Web twin does), then each catalog promoted from schema 5, which stored the sequences, to the current schema, which
+    holds none (D5)."""
+
+    from .session_drawings import drawings_document_from_mode_scoped
+    from .web_support.feature_catalog import promote_legacy_feature_catalog
+
+    document, facts = drawings_document_from_mode_scoped(data, stored_result_modes=stored_result_modes)
+    drawings = document.get("drawings")
+    for drawing in drawings if isinstance(drawings, list) else ():
+        editor = drawing.get("editorState") if isinstance(drawing, dict) else None
+        if not isinstance(editor, dict):
+            continue
+        catalog = editor.get("featureCatalog")
+        if isinstance(catalog, Mapping) and catalog.get("schema") == SEQUENCE_FEATURE_CATALOG_SCHEMA:
+            editor["featureCatalog"] = promote_legacy_feature_catalog(catalog)
+    return document, facts
 
 
 JSON_SESSION_OUTPUT_SUFFIXES = (".json", ".json.gz")

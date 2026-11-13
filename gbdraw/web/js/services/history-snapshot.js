@@ -818,13 +818,11 @@ const buildFilesData = (drawing) => filesDataOf(drawing, drawing.mode === 'linea
 const inputBindingsOf = (state) => ({ drawingList: state.drawingList });
 
 /**
- * @param {Record<string, any>} state
  * @param {DrawingView} drawing
  * @param {Partial<FilesData>} filesData a step's (a field it leaves out binds nothing)
  * @param {HistorySnapshotFileStore} fileStore
  */
-const applyFilesData = (state, drawing, filesData, fileStore) => {
-  state.matchSequenceRegistry?.reset?.();
+const applyFilesData = (drawing, filesData, fileStore) => {
   // The drawing's inputs slice installs the step's capture: a binding holds
   // the step's refs, which History keeps stored (a ref whose file was released
   // binds nothing). An intent leaves out the comparisons a Generate wrote; a
@@ -1155,7 +1153,6 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.losatDerivedCache, null)
       ),
       losatCacheInfo: toRaw(getGeneratedArtifactRef(state.losatCacheInfo, null)),
-      matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
       lastRunInfo: toRaw(getGeneratedArtifactRef(state.lastRunInfo, null)),
       pairwiseMatchFactors: toRaw(
         getGeneratedArtifactRef(state.pairwiseMatchFactors, null)
@@ -1243,9 +1240,6 @@ export const createHistorySnapshotService = ({
     installLosatAfterStep({
       losatCacheInfo: state.losatCacheInfo, losatCache: state.losatCache, losatDerivedCache: state.losatDerivedCache
     }, ownerSet, drawing.id, commit);
-    if (ownerSet.matchSequenceOwner) {
-      state.matchSequenceRegistry?.replaceTrustedOwner?.(ownerSet.matchSequenceOwner);
-    }
     setGeneratedArtifactRef(state.lastRunInfo, ownerSet.lastRunInfo ?? null);
     setGeneratedArtifactRef(state.pairwiseMatchFactors, ownerSet.pairwiseMatchFactors || {});
     setGeneratedArtifactRef(state.editableLabels, ownerSet.editableLabels || []);
@@ -1301,7 +1295,6 @@ export const createHistorySnapshotService = ({
         originalOrder: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
         originalColors: toRaw(getGeneratedArtifactRef(state.originalLegendColors, {})) || {}
       },
-      matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
       runtimeState: generatedArtifactRuntimeOwner?.capture?.() || null,
       transportIdentity: currentGeneratedArtifactIdentity,
       retainedBytes: currentGeneratedArtifactRetainedBytes
@@ -1330,8 +1323,6 @@ export const createHistorySnapshotService = ({
     });
     installShownSetLegend(state, slot.legend);
     setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
-    if (slot.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
-    else state.matchSequenceRegistry?.reset?.();
     generatedArtifactRuntimeOwner?.restore?.(slot.runtimeState, { ui });
     currentGeneratedArtifactIdentity = /** @type {HistorySnapshotTransportIdentity | null} */ (slot.transportIdentity);
     currentGeneratedArtifactRetainedBytes = slot.retainedBytes;
@@ -1339,7 +1330,7 @@ export const createHistorySnapshotService = ({
 
   // OV-2212: the shown artifact is still the one the fingerprint names while
   // the drawing's own artifact values are the ones its Generate committed: these
-  // artifact slot values and the match-sequence owner, by reference. The project
+  // artifact slot values, by reference. The project
   // LOSAT values and the alignment draft are not the drawing's (a Generate in
   // another drawing replaces them), and Clear empties its protein manifest: the
   // fingerprint covers what of them the Result drew, and the compact
@@ -1373,10 +1364,9 @@ export const createHistorySnapshotService = ({
    * keeps no project cache alive.
    * @param {Readonly<Record<string, unknown>>} ownerSet
    */
-  const transportIdentityReferences = (ownerSet) => Object.freeze(Object.fromEntries([
-    ...TRANSPORT_IDENTITY_SLOT_KEYS.map((key) => [key, ownerSet[key]]),
-    ['matchSequenceOwner', ownerSet.matchSequenceOwner]
-  ]));
+  const transportIdentityReferences = (ownerSet) => Object.freeze(Object.fromEntries(
+    TRANSPORT_IDENTITY_SLOT_KEYS.map((key) => [key, ownerSet[key]])
+  ));
 
   /**
    * @param {any} identity
@@ -1946,7 +1936,7 @@ export const createHistorySnapshotService = ({
       }
 
       if (domains.has('files')) {
-        applyFilesData(state, drawing, intent.files || {}, fileStore);
+        applyFilesData(drawing, intent.files || {}, fileStore);
       }
       if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState, drawingId);
       if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
@@ -2014,7 +2004,7 @@ export const createHistorySnapshotService = ({
       }
       await nextTick();
 
-      applyFilesData(state, drawing, snapshot.files || {}, fileStore);
+      applyFilesData(drawing, snapshot.files || {}, fileStore);
       if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, drawingId);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;

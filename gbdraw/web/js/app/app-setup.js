@@ -76,6 +76,9 @@ import { createFindInOtherFiles } from './find-in-other-files.js';
 import { createRegionSelect } from './region-select.js';
 import { readRegionAxisRecords, shownAxisRecords as shownAxisRecordsOf } from '../services/region-axis.js';
 import { requestRecordSpanSequences } from '../services/record-span-sequences.js';
+import { catalogSequenceHelpers, createCatalogSequences } from '../services/catalog-sequences.js';
+import { createSequenceReads } from './sequence-reads.js';
+import { downloadTextFile } from '../services/text-download.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -150,7 +153,7 @@ import {
 } from '../services/linear-sources.js';
 import { LOSAT_GENETIC_CODE_TEXT } from '../contracts/schema.generated.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
-import { copyTextToClipboard } from '../utils/clipboard.js';
+import { copyPendingTextToClipboard, copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
 import { withNewDrawingDefaults } from '../services/reset.js';
@@ -443,6 +446,16 @@ const readShownRecordSpans = (spans) => requestRecordSpanSequences(
   (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
     resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
 );
+/** A rule synthesis helper of the diagram Worker: the `result` it answers for one `request`. @param {string} operation */
+const ruleSynthesisHelper = (operation) => async (/** @type {object} */ request) => (await runDiagramHelperOperation(operation, { request })).result;
+// The sequences the catalog does not store, read by Python from the committed request the shown Result was made from
+// (D5): the Sequence tab, member Copy and Download, the sequence fields of Feature search, the match popup's Copy and
+// FASTA, and Interactive SVG export. The one door keeps each reply while the same Result is shown.
+/** @type {Parameters<typeof catalogSequenceHelpers>[0]} */
+const runCatalogSequenceHelper = (operation, payload) => runDiagramHelperOperation(operation, { ...payload, resources: /** @type {GenerationPayload['resources']} */ (payload.resources) });
+const catalogSequences = createCatalogSequences({ getCommittedSession: getCommittedCanonicalSession, helpers: catalogSequenceHelpers(runCatalogSequenceHelper, DIAGRAM_HELPER_OPERATIONS) });
+const sequenceReads = createSequenceReads({ readFeatures: catalogSequences.readFeatures, readSpans: catalogSequences.readSpans,
+  copyPending: copyPendingTextToClipboard, downloadText: downloadTextFile, isShown: (popup) => state.clickedFeature.value === popup });
 // The annotation sets of the committed request the shown Result was made from (Sequence search names a new set apart).
 const shownCommittedSets = () => getCommittedCanonicalSession()?.renderRequest.diagramOptions.annotations?.sets ?? [];
 // The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
@@ -499,7 +512,6 @@ export const createAppSetup = () => {
     annotationWarnings,
     comparisonWarnings,
     labelFitReports,
-    matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
     zoom,
@@ -788,7 +800,7 @@ export const createAppSetup = () => {
   });
 
   // Before the History snapshot service, which clears its copy feedback (D-37).
-  const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest });
+  const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest, memberAction: sequenceReads.memberAction });
   const historySnapshots = createHistorySnapshotService({
     state,
     fileStore: state.inputFiles,
@@ -1019,7 +1031,7 @@ export const createAppSetup = () => {
     pending: ruleMatchingPending,
     blocking: ruleMatchingBlocking,
     evaluate: evaluateRules,
-    synthesize: async (request) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES, { request })).result,
+    synthesize: ruleSynthesisHelper(DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES), synthesisQualifiers: ruleSynthesisHelper(DIAGRAM_HELPER_OPERATIONS.SYNTHESIS_QUALIFIERS),
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
   });
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
@@ -1251,7 +1263,7 @@ export const createAppSetup = () => {
         description: orthogroupActions.resolveOrthogroupDescription(group, drawing)
       }));
     },
-    openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature,
+    openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature, readFeatureSequences: catalogSequences.readFeatures,
     focusSearchQuery: () => /** @type {HTMLElement | null} */ (document.querySelector('.preview-feature-search .gfs-query'))?.focus(),
     focusSearchToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('[data-preview-search-toggle]'))?.focus()
   });
@@ -2766,7 +2778,6 @@ export const createAppSetup = () => {
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
     selectedOrthogroupDetail: orthogroupActions.selectedOrthogroupDetail,
-    getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()),
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
     projectCommittedAlignment: /** @type {any} */ (projectCommittedSimilarityAlignment),
@@ -2973,7 +2984,8 @@ export const createAppSetup = () => {
   } = createResultExport({
     state, errorLog, showNotice, captureSvgExport, loadExportService, runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS,
     displayedArtifactDrawing: historySnapshots.displayedArtifactDrawing, embedInExports: fontSettings.embedInExports,
-    shownInputSummary, shownLinearWrapLeaf, shownCommittedRequest, awaitLinearRecordDiscovery, committedLinearRecordsOf
+    shownInputSummary, shownLinearWrapLeaf, shownCommittedRequest, awaitLinearRecordDiscovery, committedLinearRecordsOf,
+    readEmbedJson: catalogSequences.readEmbedJson
   });
 
   const { popupLegendGroups, featureVisibilityFeatureSuggestions } = createFeatureChoiceReaders({
@@ -3206,7 +3218,7 @@ export const createAppSetup = () => {
     closeSettingsPopup: settingsPaneActions.closeSettingsPopup,
     clearSpecificRulePatternDrafts: featureActions.clearSpecificRulePatternDrafts,
     extractLegendEntries: legendActions.extractLegendEntries, runProjectStep: history.runProjectStep,
-    runUndoable: history.runUndoable, resetMatchSequences: matchSequenceRegistry.reset,
+    runUndoable: history.runUndoable,
     storePaletteInstantPreview: resultsManager.setPaletteInstantPreview
   });
   const {
@@ -3865,7 +3877,7 @@ export const createAppSetup = () => {
     orthogroupRows: orthogroupActions.orthogroupRows,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
     hasOrthogroupMemberSequence: orthogroupActions.hasOrthogroupMemberSequence,
-    orthogroupCopyFeedbackLabel: orthogroupActions.orthogroupCopyFeedbackLabel,
+    orthogroupCopyFeedbackLabel: orthogroupActions.orthogroupCopyFeedbackLabel, orthogroupMemberRead: orthogroupActions.orthogroupMemberRead,
     orthogroupMemberRangeText: orthogroupActions.memberRangeText,
     copyOrthogroupSequences: orthogroupActions.copyOrthogroupSequences,
     downloadOrthogroupSequences: orthogroupActions.downloadOrthogroupSequences,
@@ -4063,6 +4075,7 @@ export const createAppSetup = () => {
     openPreviewFeatureSearchActiveMatch: previewFeatureSearch.openActiveMatch,
     previewFeatureSearchVisible: state.previewFeatureSearchVisible,
     previewFeatureSearchHiddenMatchCount: previewFeatureSearch.previewFeatureSearchHiddenMatchCount,
+    previewFeatureSearchSequenceFailure: previewFeatureSearch.previewFeatureSearchSequenceFailure,
     hidePreviewFeatureSearchBar: previewFeatureSearch.hideSearchBar,
     togglePreviewFeatureSearchBar: previewFeatureSearch.toggleSearchBar,
     selectedFeatureIds,
@@ -4143,7 +4156,7 @@ export const createAppSetup = () => {
     copyClickedFeatureDetails,
     copyClickedFeatureQualifiers,
       copyText: copyTextToClipboard,
-    downloadText,
+    downloadText, sequenceReads,
     canUseClickedOrthogroupActions,
     clickedOrthogroupDetail,
     alignByClickedOrthogroup,

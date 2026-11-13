@@ -409,7 +409,9 @@ test('standalone homology popup exports exact spans and keeps missing comparison
   const svgPath = testInfo.outputPath('interactive-homology-match.svg');
   const generator = String.raw`
 import sys
-from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from gbdraw.render.interactive_svg import CatalogSequenceRecords, InteractiveSvgContext, enrich_svg
 
 source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
 <path data-ring-background="true" fill="#eeeeee" d="M 5 5 L 115 5 L 115 15 L 5 15 Z" />
@@ -427,14 +429,15 @@ source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
  data-qstart="1" data-qend="4" data-sstart="1" data-send="4"
  fill="#3b82f6" d="M 10 45 L 110 45 L 110 55 L 10 55 Z" />
 </svg>'''
-sources = [
- {"key": "circular:record:0", "recordId": "ref", "aliases": ["REF"],
-  "sequence": "AACCGGTT", "origin": "circular-reference", "recordIndex": 0},
- {"key": "homology:comparison:0:cmp", "recordId": "cmp", "aliases": ["CMP"],
-  "sequence": "TTGCAACC", "origin": "homology-comparison", "sourceIndex": 0},
-]
+# The drawn record and each source's comparison FASTA records; source 1 (BLAST only) has no FASTA.
+records = CatalogSequenceRecords(
+    mode="circular",
+    records=(SeqRecord(Seq("AACCGGTT"), id="ref", name="REF"),),
+    unit_keys=("circular:record:0",),
+    comparison_records=((SeqRecord(Seq("TTGCAACC"), id="cmp", name="CMP"),), ()),
+)
 with open(sys.argv[1], 'w', encoding='utf-8') as handle:
-    handle.write(enrich_svg(source, InteractiveSvgContext(sequence_sources=sources)))
+    handle.write(enrich_svg(source, InteractiveSvgContext(record_keys=("circular:record:0",), sequence_records=records)))
 `;
   execFileSync('python', ['-c', generator, svgPath], { cwd: process.cwd(), stdio: 'inherit' });
   await page.addInitScript(() => {

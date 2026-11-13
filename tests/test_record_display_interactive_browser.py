@@ -69,12 +69,15 @@ def interactive_fixture(mode, reverse, start=41, manual=False):
     return ET.tostring(root, encoding="unicode"), standalone, catalog
 
 
-# Mounts the real Preview binder on a Result and its feature catalog; keeps its state on `window`.
+# Mounts the real Preview binder on a Result and its feature catalog; keeps its state on `window`. The catalog
+# stores no sequence (D5): the popups name the reads Python makes from the committed request, and the real
+# sequence actions read them through `fixtureReads`, whose stub replies stand in for Python's.
 MOUNT_PREVIEW_SCRIPT = """async ({source, catalog, mode}) => {
   const {createFeatureSvgActions} = await import('/gbdraw/web/js/app/feature-editor/svg-actions.js');
   const {admitFeatureCatalog} = await import('/gbdraw/web/js/services/feature-catalog.js');
-  const {createSequenceSourceRegistry} = await import('/gbdraw/web/js/services/match-sequences.js');
-  const {copyTextToClipboard} = await import('/gbdraw/web/js/utils/clipboard.js');
+  const {createSequenceReads} = await import('/gbdraw/web/js/app/sequence-reads.js');
+  const {featureSequenceKey} = await import('/gbdraw/web/js/services/catalog-sequences.js');
+  const {copyPendingTextToClipboard, copyTextToClipboard} = await import('/gbdraw/web/js/utils/clipboard.js');
   const {downloadTextFile} = await import('/gbdraw/web/js/services/text-download.js');
   const ref = value => ({value});
   const results = [{name: 'interactive.svg', content: source}];
@@ -88,16 +91,19 @@ MOUNT_PREVIEW_SCRIPT = """async ({source, catalog, mode}) => {
     extractedFeatures: ref(admission.featureState.extractedFeatures),
     biologicalFeatures: ref(admission.featureState.biologicalFeatures),
     featuresBySvgId: ref(new Map(admission.featureState.extractedFeatures.map(feature => [feature.svg_id, feature]))),
+    featureCatalog: ref(admission.catalog),
     featureColorOverrides: {}, featureVisibilityOverrides: {}, svgContainer: ref(host),
     clickedFeature: ref(null), clickedFeaturePos: {}, clickedPairwiseMatch: ref(null), clickedPairwiseMatchPos: {},
-    matchSequenceRegistry: createSequenceSourceRegistry(catalog.items[0].sequenceSources),
     selectedAnnotation: ref(null), featurePopupSize: {}, featureSelectionDrag: {active: false},
     skipCaptureBaseConfig: ref(false), richFeaturePopup: ref(true),
   };
   // The fixture is its own drawing (state.js: `state.drawings`, `state.activeDrawing()`).
   Object.defineProperties(state, {drawings: {value: {circular: state, linear: state}}, activeDrawing: {value: () => state}});
   window.fixtureState = state;
+  // The committed request the Result was drawn from: a Circular figure's comparison source supplies its FASTA.
+  const committed = {renderRequest: {diagramOptions: {conservationFastaFiles: mode === 'circular' ? [{name: 'subject.fasta'}] : []}}, resources: {}};
   window.fixtureActions = createFeatureSvgActions({state, getFeatureColor: () => '#123456', getEffectiveLegendCaption: () => '',
+    getCommittedSession: () => committed,
     isPreviewTransformActive: () => false, subscribePreviewTransformChanges: () => () => {},
     consumeSuppressNextClick: () => false, selectFeatureByClick: () => {}, markPlainFeatureClick: () => {},
     clearFeatureSelection: () => {}, startMarqueePointer: () => false, moveMarqueePointer: () => false,
@@ -107,6 +113,22 @@ MOUNT_PREVIEW_SCRIPT = """async ({source, catalog, mode}) => {
   Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => window.fixtureClipboard.push(text)}, configurable: true});
   window.fixtureCopy = copyTextToClipboard;
   window.fixtureDownload = downloadTextFile;
+  // The stub replies of Python's reads: span bases by the span read, feature sequences by the feature identity.
+  window.fixtureSpanBases = {};
+  window.fixtureFeatureSequences = {};
+  window.fixtureSpanReads = [];
+  window.fixtureReads = createSequenceReads({
+    readSpans: async spans => {
+      window.fixtureSpanReads.push(spans);
+      return spans.map(span => ({status: 'ok', reason: null, recordId: span.recordId ?? '', orientation: '+',
+        length: window.fixtureSpanBases[JSON.stringify(span)].length, sequence: window.fixtureSpanBases[JSON.stringify(span)]}));
+    },
+    readFeatures: async features => new Map(features.map(feature => [featureSequenceKey(feature), {
+      recordKey: feature.recordKey, biologicalFeatureId: feature.biologicalFeatureId,
+      aminoAcidSequence: '', sequenceWarnings: [], ...window.fixtureFeatureSequences[featureSequenceKey(feature)]
+    }])),
+    copyPending: copyPendingTextToClipboard, downloadText: downloadTextFile
+  });
   window.fixtureMount = content => {
     results[0].content = content;
     host.innerHTML = DOMPurify.sanitize(content, {USE_PROFILES: {svg: true, svgFilters: true}});
@@ -133,6 +155,17 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
     query_sequence = str(record().seq.reverse_complement() if reverse and mode == "circular"
                          else record().seq)[20:60]
     subject_sequence = str(record(120, "subject").seq)[30:90]
+    # The reads the match popup names (D5): the drawn unit by its record key with the record ID the match names, or
+    # a cropped Circular reference by that ID in its unit, and the span on the displayed record (a reversed Linear
+    # record shows the source 21..60 as 80..41), or a Circular comparison source's record; Python reads the bases
+    # above from them.
+    query_read = {**({"kind": "record", "recordKey": "record-1", "recordId": "reference"} if mode == "linear" else
+                     {"kind": "reference", "recordId": "reference", "recordKey": "record-1"}),
+                  "start": 80 if reverse and mode == "linear" else 21, "end": 41 if reverse and mode == "linear" else 60}
+    subject_read = ({"kind": "record", "recordKey": "record-2", "recordId": "subject", "start": 31, "end": 90}
+                    if mode == "linear" else
+                    {"kind": "comparison", "sourceIndex": 0, "recordId": "subject", "start": 31, "end": 90})
+    expected_reads = [query_read, subject_read]
     requests = []
     errors = []
     with sync_playwright() as playwright:
@@ -151,6 +184,10 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
         page.goto(source_server)
         page.add_script_tag(url=f"{source_server}/gbdraw/web/vendor/dompurify/purify.min.js")
         page.evaluate(MOUNT_PREVIEW_SCRIPT, {"source": source, "catalog": catalog, "mode": mode})
+        page.evaluate("bases => { fixtureSpanBases = bases; }", {
+            json.dumps(read, separators=(",", ":")): bases
+            for read, bases in zip(expected_reads, (query_sequence, subject_sequence))
+        })
         paths = page.locator('[data-gbdraw-match-id]')
         assert paths.count() == expected_count
         copied = []
@@ -164,15 +201,28 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
             bundle = payload["sequenceBundle"]
             assert len(bundle["entries"]) == 2
             assert all(entry["available"] for entry in bundle["entries"])
-            fasta = bundle["combinedFasta"]
+            # The popup opens without reading a base: it names the spans' reads, and no FASTA.
+            assert [entry["read"] for entry in bundle["entries"]] == expected_reads
+            assert "combinedFasta" not in bundle and not any("fasta" in entry for entry in bundle["entries"])
+            assert page.evaluate("fixtureSpanReads.length") == 2 * index
+            # The span rows show input-file coordinates (a Linear query is source 21..60 in every orientation), or
+            # the drawing's own text where a span maps to none, as before D5.
+            def shown(entry: dict) -> tuple[str, str]:
+                return str(entry["span"]["start"]), str(entry["span"]["end"])
+            assert shown(bundle["entries"][1]) == ("31", "90")
+            if mode == "linear":
+                assert shown(bundle["entries"][0]) == ("21", "60")
+            # Copy of both spans reads them from Python once and copies the FASTA of the bases replied.
+            copy_expression = ("fixtureReads.spanAction(fixtureState.clickedPairwiseMatch.value.sequenceBundle, "
+                               "fixtureState.clickedPairwiseMatch.value.sequenceBundle.entries, 'copy')")
+            assert page.evaluate(copy_expression) is True
+            assert page.evaluate("fixtureSpanReads.at(-1)") == expected_reads
+            fasta = page.evaluate("fixtureClipboard.at(-1)")
             assert fasta.count(">") == 2
             bodies = ["".join(part.splitlines()[1:]) for part in fasta.split(">")[1:]]
             assert bodies == [query_sequence, subject_sequence]
-            await_expression = "fixtureCopy(fixtureState.clickedPairwiseMatch.value.sequenceBundle.combinedFasta)"
-            page.evaluate(await_expression)
-            assert page.evaluate("fixtureClipboard.at(-1)") == fasta
             with page.expect_download() as download_info:
-                page.evaluate("fixtureDownload('match.fna', fixtureState.clickedPairwiseMatch.value.sequenceBundle.combinedFasta)")
+                page.evaluate(copy_expression.replace("'copy'", "'download'"))
             downloaded = download_info.value
             assert Path(downloaded.path()).read_text() == fasta
             copied.append(fasta)
@@ -184,16 +234,25 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
         feature_paths = page.locator(f'path[data-gbdraw-feature-id="{feature_id}"]:not([fill="none"])')
         assert feature_paths.count() == 2
         feature_payloads = []
+        feature_bases = str(record().features[0].extract(record().seq))
         for index in range(feature_paths.count()):
             feature_paths.nth(index).dispatch_event('click')
             payload = page.evaluate('fixtureState.clickedFeature.value')
-            fasta = payload['nucleotideFasta']
-            assert ''.join(fasta.splitlines()[1:]) == str(record().features[0].extract(record().seq))
+            # The popup opens without the feature's sequences; the Sequence tab reads them by the feature's identity.
+            assert payload['sequence'] == {
+                'status': 'idle', 'warnings': [], 'nucleotideFasta': '', 'aminoAcidFasta': '', 'error': None
+            }
+            assert payload['feat']['recordKey'] == 'record-1' and payload['feat']['biologicalFeatureId']
+            identity = json.dumps([payload['feat']['recordKey'], payload['feat']['biologicalFeatureId']], separators=(",", ":"))
+            page.evaluate("([key, bases]) => { fixtureFeatureSequences[key] = {nucleotideSequence: bases}; }", [identity, feature_bases])
+            page.evaluate('fixtureReads.showFeatureSequence(fixtureState.clickedFeature.value)')
+            fasta = page.evaluate('fixtureState.clickedFeature.value.sequence.nucleotideFasta')
+            assert ''.join(fasta.splitlines()[1:]) == feature_bases
             assert fasta.count('>') == 1
-            page.evaluate('fixtureCopy(fixtureState.clickedFeature.value.nucleotideFasta)')
+            page.evaluate('fixtureCopy(fixtureState.clickedFeature.value.sequence.nucleotideFasta)')
             assert page.evaluate('fixtureClipboard.at(-1)') == fasta
             with page.expect_download() as download_info:
-                page.evaluate("fixtureDownload('feature.fna', fixtureState.clickedFeature.value.nucleotideFasta)")
+                page.evaluate("fixtureDownload('feature.fna', fixtureState.clickedFeature.value.sequence.nucleotideFasta)")
             assert Path(download_info.value.path()).read_text() == fasta
             feature_payloads.append(payload)
         assert feature_payloads[0] == feature_payloads[1]
@@ -206,7 +265,9 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
                 current_paths.nth(index).dispatch_event('mouseover')
                 page.wait_for_function(HIGHLIGHTED_MATCH_COUNT, arg=current_paths.count())
                 current_paths.nth(index).dispatch_event('click')
-                assert page.evaluate('fixtureState.clickedPairwiseMatch.value.sequenceBundle.combinedFasta') == copied[0]
+                assert page.evaluate(
+                    'fixtureState.clickedPairwiseMatch.value.sequenceBundle.entries.map(entry => entry.read)'
+                ) == expected_reads
         assert page.locator('[data-gbdraw-match-id]').count() == expected_count
 
         # A separate document runs the exact packaged standalone runtime.

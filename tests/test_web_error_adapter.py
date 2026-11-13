@@ -181,24 +181,6 @@ def test_native_comparison_choice_corrections(validator, field, reason):
     assert result['context'] == {'field': field, 'reason': reason}
 
 
-# A window whose start is after its end runs across the origin (OV-2771). The helper reads a window's bounds as
-# the crop does (`region_slice`): an End past the record end is drawn clamped, and a window the crop refuses is
-# refused with the crop's diagnostic.
-@pytest.mark.parametrize('window', [
-    {'start': 11, 'end': 20, 'reverseComplement': False, 'column': None},
-    {'start': 11, 'end': 2, 'reverseComplement': False, 'column': None},
-])
-def test_native_alignment_region_correction(window):
-    from gbdraw.web_support.similarity_alignment import _record_fact
-    with pytest.raises(ValidationError) as caught:
-        _record_fact({'recordKey': 'PRIVATE_RECORD', 'recordLength': 10, 'windows': [window],
-                      'presentation': {'reverseComplement': False}}, 'records[0]')
-    result = serialize_web_error(caught.value, operation='resolveSimilarityAlignment', stage='helper')
-    assert result['code'] == 'REGION_INVALID'
-    assert result['context'] == {'field': 'region', 'reason': 'RECORD_BOUNDS'}
-    assert 'PRIVATE_' not in json.dumps(result)
-
-
 def test_missing_gff_fasta_match_keeps_correction_without_record_name():
     error = ParseError(
         "No matching FASTA record found for GFF record PRIVATE_RECORD. "

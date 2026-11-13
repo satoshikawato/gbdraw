@@ -31,6 +31,9 @@ from gbdraw.render.export_limits import DEFAULT_PNG_DPI
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.session_container import SessionResourceSource
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
+    SEQUENCE_FEATURE_CATALOG_SCHEMA,
+    drawings_document_of_mode_scoped,
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
     CANONICAL_SESSION_MIN_VERSION,
@@ -70,7 +73,6 @@ from gbdraw.session_drawings import (
     SessionDrawingParts,
     active_session_drawing,
     allocate_session_drawing,
-    drawings_document_from_mode_scoped,
     other_mode_fields,
     read_session_drawings,
     replace_session_drawings,
@@ -1860,7 +1862,7 @@ def _drawings_of_current(
     :class:`SessionConversionError`."""
 
     try:
-        drawings, _source_facts = drawings_document_from_mode_scoped(
+        drawings, _source_facts = drawings_document_of_mode_scoped(
             data, stored_result_modes=frozenset(stored_results or ())
         )
     except SessionError:
@@ -2214,7 +2216,12 @@ def _upgrade_to_current(
             else None
         )
         if isinstance(catalog, Mapping) and catalog.get("schema") in (3, 4):
-            catalog = promote_legacy_feature_catalog(catalog)
+            # To the Session 46-50 schema: the move to drawings drops the sequences it stored (D5).
+            catalog = promote_legacy_feature_catalog(catalog, schema=SEQUENCE_FEATURE_CATALOG_SCHEMA)
+        elif isinstance(catalog, Mapping) and catalog.get("schema") == CURRENT_FEATURE_CATALOG_SCHEMA:
+            # The Web's reader sends the catalog it promoted to the current schema; holding no sequence, it is a
+            # valid Session 46-50 catalog, which the move to drawings brings back to the current schema.
+            catalog = {**catalog, "schema": SEQUENCE_FEATURE_CATALOG_SCHEMA}
         warnings: list[str] = []
         if not isinstance(catalog, Mapping):
             catalog = None

@@ -8,6 +8,7 @@ const {
   buildPreparedInputRetention,
   buildPreparedResourceIdentityMap,
   buildGeneratedArtifactTransportIdentity,
+  callJsonHelper,
   collectGenerationResultTransferList,
   createReplyBuffer,
   resolveGeneratedFeatureCatalog,
@@ -124,6 +125,26 @@ const replyFiles = () => {
   assert.ok(joined instanceof ArrayBuffer);
   assert.deepEqual([...new Uint8Array(joined)], [1, 2, 3, 4, 5, 6, 7]);
   assert.equal(createReplyBuffer(fs).finish().byteLength, 0);
+}
+
+// A sequence read replies in UTF-8 through a reply buffer (`_replied_in_utf8` in python-helpers.js): the helper
+// returns the buffer, and its bytes are the reply's JSON.
+{
+  const fs = replyFiles();
+  const text = JSON.stringify({ spans: [{ sequence: 'ACGT', recordId: 'é\u2028' }] });
+  const helper = (name, newReplyBuffer, ...rest) => {
+    assert.equal(name, 'read_match_sequences_json');
+    assert.deepEqual(rest, ['{}']);
+    const buffer = newReplyBuffer();
+    fs.files.set(buffer.path, [...new TextEncoder().encode(text)]);
+    buffer.take();
+    return buffer;
+  };
+  helper.destroy = () => {};
+  assert.deepEqual(
+    callJsonHelper({ globals: { get: () => helper } }, 'read_match_sequences_json', [() => createReplyBuffer(fs), '{}']),
+    JSON.parse(text)
+  );
 }
 
 // The feature catalog and each Result's segments are their own transferred buffers.

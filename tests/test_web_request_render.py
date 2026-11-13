@@ -563,8 +563,9 @@ def test_web_request_returns_one_base_svg_and_compact_catalog(
     assert [feature["type"] for feature in item["biologicalFeatures"]] == ["CDS"]
     biological = item["biologicalFeatures"][0]
     assert biological["recordKey"] == "catalog-record-key"
-    assert biological["amino_acid_sequence"] == "MK"
-    assert "translation" not in biological["qualifiers"]
+    # The stored catalog holds no sequence (D5): /translation stays a qualifier.
+    assert not {"nucleotide_sequence", "amino_acid_sequence", "sequence_warnings"} & set(biological)
+    assert biological["qualifiers"]["translation"] == ["MK"]
 
     assert len(item["features"]) == 1
     rendered = item["features"][0]
@@ -778,8 +779,11 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # the prolog and the joined pieces, the reply has the earlier digest.
     # Updated again when every Linear slot group took its slot id and slot tags (OV-3012, OV-3083): only those
     # group ids and tags moved, in the SVG and in the document pieces' start tags.
-    "similarity_groups": "6cb08292c871b9fe4cc80c03087540814586792c298bb1fbf0959307d8421367",
-    "collinear": "4320d007be09018053eee7b3553d7c59fdcc5dec9f0d93de058dd58eec353a7b",
+    # Updated again when the stored catalog left its sequences (D5, catalog schema 6): with schema 5, each CDS row's
+    # amino_acid_sequence, sequenceSourceIndex and translationFromAminoAcidSequence in place of its /translation
+    # qualifier, and the item's sequenceSources put back, the reply has the earlier digest.
+    "similarity_groups": "fe8d72d1d2af12ce91f30fd1adcc555e723af2432944f5c04fba8fb9fa124f7e",
+    "collinear": "77882178861fac3e1b9b650149cc9a3092d203f03240e47f700520a766d359a3",
 }
 
 

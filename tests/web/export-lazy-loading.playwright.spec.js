@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
 const { CURRENT_FEATURE_CATALOG_SCHEMA } = require('./helpers/app-lifecycle.cjs');
 
 const EXPORT_MODULE_PATH = '/gbdraw/web/js/services/export.js';
@@ -23,6 +24,16 @@ const installRequestCounter = (page) => {
     if (asset) counts.set(asset, (counts.get(asset) || 0) + 1);
   });
   return (path) => counts.get(path) || 0;
+};
+
+// An Interactive SVG holds every sequence, which Python reads from the request the shown Result was made from
+// (PD-OI-128), so the cases that write one load a Gallery Session: its Result keeps its request.
+const loadGallerySession = async (page) => {
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
+    join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw')
+  );
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
+  return page.evaluate(() => `${window.__GBDRAW_APP__.results[0].name.replace(/\.svg$/, '')}.interactive.svg`);
 };
 
 const displayedErrorOperation = (page) => page.evaluate(
@@ -196,9 +207,11 @@ test('concurrent first PDF exports load each library once and repeated exports r
 test('interactive assets load only for interactive SVG export and the file is standalone', async ({
   page
 }) => {
+  test.setTimeout(180000);
   const requestCount = installRequestCounter(page);
   await page.goto('/gbdraw/web/index.html');
-  await mountExportFixture(page, { interactive: true });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const filename = await loadGallerySession(page);
 
   expect(requestCount(EXPORT_MODULE_PATH)).toBe(0);
   expectNoPdfOrInteractiveRequests(requestCount);
@@ -206,7 +219,7 @@ test('interactive assets load only for interactive SVG export and the file is st
   const downloadPromise = page.waitForEvent('download');
   await page.evaluate(async () => window.__GBDRAW_APP__.downloadInteractiveSVG());
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe('lazy-export.interactive.svg');
+  expect(download.suggestedFilename()).toBe(filename);
   const source = await download.createReadStream().then(async (stream) => {
     const chunks = [];
     for await (const chunk of stream) chunks.push(chunk);
@@ -222,6 +235,26 @@ test('interactive assets load only for interactive SVG export and the file is st
   expect(source).toContain('id="gbdraw-interactive-feature-style"');
   expect(source).toContain('id="gbdraw-interactive-feature-script"');
   expect(source).toContain('data-gbdraw-interactive-svg="true"');
+});
+
+// The legacy imported SVG has no request: there is no input to read its sequences from until a Generate, so the
+// export writes no file and says why (PD-OI-128).
+test('Interactive SVG export of a Result without its request writes no file and says why', async ({ page }) => {
+  const requestCount = installRequestCounter(page);
+  let downloads = 0;
+  page.on('download', () => { downloads += 1; });
+  await page.goto('/gbdraw/web/index.html');
+  await mountExportFixture(page, { interactive: true });
+  const outcome = await page.evaluate(async () => {
+    const result = await window.__GBDRAW_APP__.downloadInteractiveSVG();
+    return { result, summary: window.__GBDRAW_APP__.errorDisplay?.summary || '' };
+  });
+  expect(outcome.result).toMatchObject({ status: 'error', error: { code: 'SEQUENCE_REQUIRES_GENERATE' } });
+  expect(outcome.summary).toContain('its sequences are read after the next Generate');
+  await expect(page.getByRole('alert', { name: 'SVG export error' }))
+    .toContainText('its sequences are read after the next Generate');
+  expect(requestCount(STANDALONE_MODULE_PATH)).toBe(0);
+  expect(downloads).toBe(0);
 });
 
 test('PDF library load failures are shown to the user', async ({ page }) => {
@@ -265,18 +298,31 @@ test('export failures are shown to the user', async ({ page }) => {
 
 
 test('Interactive SVG retry keeps the actual standalone export operation',async({page})=>{
+  test.setTimeout(180000);
   await page.goto('/gbdraw/web/index.html');
-  await mountExportFixture(page);
+  await page.waitForFunction(()=>window.__GBDRAW_APP__);
+  const filename=await loadGallerySession(page);
+  // The first export finds no diagram: the loaded Result is taken off the page; the Session's request stays.
+  await page.evaluate(async()=>{
+    const {state}=await import('/gbdraw/web/js/state.js');
+    window.__HELD_EXPORT_RESULTS__=state.results.value;
+    state.results.value=[];
+  });
   const failure=await page.evaluate(()=>window.__GBDRAW_APP__.downloadInteractiveSVG());
   expect(failure).toMatchObject({status:'error',error:{code:'EXPORT_INPUT',operation:'export-svg',stage:'export-capture'}});
   const alert=page.getByRole('alert',{name:'SVG export error'});
   await expect(alert.getByRole('button',{name:'Retry Interactive SVG export',exact:true})).toBeVisible();
   await expect(alert.getByRole('button',{name:'Retry SVG export',exact:true})).toHaveCount(0);
-  await mountExportFixture(page,{interactive:true});
+  await page.evaluate(async()=>{
+    const {state}=await import('/gbdraw/web/js/state.js');
+    state.results.value=window.__HELD_EXPORT_RESULTS__;
+    state.selectedResultIndex.value=0;
+  });
+  await expect(page.locator('.origin-top svg')).toBeAttached();
   const pending=page.waitForEvent('download');
   await alert.getByRole('button',{name:'Retry Interactive SVG export',exact:true}).click();
   const downloaded=await pending;
-  expect(downloaded.suggestedFilename()).toBe('lazy-export.interactive.svg');
+  expect(downloaded.suggestedFilename()).toBe(filename);
   const stream=await downloaded.createReadStream();const chunks=[];
   for await(const chunk of stream)chunks.push(chunk);
   expect(Buffer.concat(chunks).toString()).toContain('id="gbdraw-interactive-feature-script"');

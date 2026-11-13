@@ -3783,13 +3783,27 @@ def _comparison_sequence_records(
     ):
         return ()
 
-    inputs = prepared.inputs
-    if inputs is not None and inputs.comparison_sequences is not None:
-        return require_interactive_svg_metadata(inputs.comparison_sequences.load)
-
     return require_interactive_svg_metadata(
-        _ComparisonSequenceSources(options.conservation_genome_files).load
+        lambda: load_comparison_sequence_records(prepared.request, prepared.inputs)
     )
+
+
+def load_comparison_sequence_records(
+    request: DiagramRequest,
+    inputs: PreparedDiagramInputs | None = None,
+) -> tuple[tuple[SeqRecord, ...], ...]:
+    """The records of each comparison FASTA a Circular request names (none for a source without one), by source.
+
+    The one loader: an interactive render and the sequence reads of a shown Result (D5) call it; ``inputs`` are the
+    request's prepared inputs when the caller holds them.
+    """
+
+    options = request.options
+    if not isinstance(options, CircularDiagramOptions):
+        return ()
+    if inputs is not None and inputs.comparison_sequences is not None:
+        return inputs.comparison_sequences.load()
+    return _ComparisonSequenceSources(options.conservation_genome_files).load()
 
 
 def _render_output_paths(output: RenderOutputRequest) -> tuple[Path, ...]:

@@ -12,7 +12,7 @@
 /** @import { LabelImportEdit, LabelImportTarget } from '../../services/label-import-plan.js' */
 /** @import { LabelFeature } from './label-actions.js' */
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
+import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, labelRulePayloads } from '../rule-matching.js';
 import { parseLabelOverrideTsv } from '../../services/label-override-table.js';
 import { labelImportNotice, labelIntentSignature, labelTableExportLines, planLabelImport } from '../../services/label-import-plan.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
@@ -181,12 +181,7 @@ export const createLabelTableActions = ({
       if (state.sessionOperationAvailability()) return state.sessionOperationAvailability();
       const rows = parseLabelOverrideTsv(text);
       const labels = sourceSvg ? labelImportTargets(targetReaders, drawing, sourceSvg) : [];
-      const evaluation = await evaluateLabelRules({
-        kind: 'label', rules: rows,
-        features: labels.map((entry) => ruleFeaturePayload(
-          entry.feature || { type: '', svg_id: entry.featureId }, entry.sourceText
-        ))
-      });
+      const evaluation = await evaluateLabelRules({ kind: 'label', rules: rows, features: labelRulePayloads(rows, labels) });
       if (state.sessionOperationAvailability()) return state.sessionOperationAvailability();
       if (revision !== labelImportRevision || input.files?.[0] !== file) return;
       const declined = labelIntent !== labelIntentSignature(drawing) ? 'label-intent'

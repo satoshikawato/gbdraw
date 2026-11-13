@@ -11,6 +11,7 @@ import {
   stableFeatureOverrideKey,
   validateFeatureCatalog
 } from '../../gbdraw/web/js/services/feature-catalog.js';
+import { SEQUENCE_FEATURE_CATALOG_SCHEMA, STORED_SEQUENCE_KEYS } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
 import { ruleFeaturePayload } from '../../gbdraw/web/js/app/rule-matching.js';
 
@@ -21,8 +22,10 @@ const featureCatalogSource = await readFile(
 );
 const fullNote = `${'x'.repeat(49)}😀tail`;
 const compactNote = `${'x'.repeat(49)}😀`;
+// A schema 5 catalog (Sessions 46-50) with the sequences it stored: admission promotes it to schema 6, which holds
+// none (D5).
 const catalog = {
-  schema: FEATURE_CATALOG_SCHEMA,
+  schema: SEQUENCE_FEATURE_CATALOG_SCHEMA,
   items: [{
     resultIndex: 0,
     resultName: 'diagram.svg',
@@ -80,8 +83,9 @@ const catalog = {
   }]
 };
 
-test('schema-4 catalog validates and expands stable biological identities', () => {
+test('a schema-5 catalog is promoted to schema 6 and expands stable biological identities', () => {
   const validated = validateFeatureCatalog(catalog, results);
+  assert.equal(validated.schema, FEATURE_CATALOG_SCHEMA);
   const state = featureStateFromCatalog(validated);
   const expectedKey = biologicalFeatureKey('record-instance-a', 'source-feature-a');
 
@@ -94,21 +98,22 @@ test('schema-4 catalog validates and expands stable biological identities', () =
   assert.equal(state.biologicalFeatures[0].svg_id, 'stable-source-a');
   assert.equal(state.biologicalFeatures[0].sourceFeatureIndex, 4);
   assert.equal(state.biologicalFeatures[0].feature_index, 4);
-  assert.equal(state.biologicalFeatures[0].nucleotide_sequence, 'CGGT');
+  // Python reads every sequence on demand (D5): the catalog holds none, nor the reference or sources.
+  for (const key of ['nucleotide_sequence', 'amino_acid_sequence', 'sequenceSourceIndex', 'translationFromAminoAcidSequence']) {
+    assert.equal(Object.hasOwn(state.biologicalFeatures[0], key), false, key);
+    assert.equal(Object.hasOwn(validated.items[0].biologicalFeatures[0], key), false, key);
+  }
+  assert.equal(Object.hasOwn(validated.items[0], 'sequenceSources'), false);
+  assert.equal(Object.hasOwn(state, 'sequenceSources'), false);
   assert.equal(state.biologicalFeatures[0].protein_id, 'public-protein');
   assert.equal(state.biologicalFeatures[0].locus_tag, 'LOCUS_001');
   assert.equal(state.biologicalFeatures[0].old_locus_tag, 'OLD_LOCUS_001');
   assert.equal(state.biologicalFeatures[0].gene, 'curated-gene');
   assert.equal(state.biologicalFeatures[0].product, 'enzyme');
   assert.equal(state.biologicalFeatures[0].note, compactNote);
-  assert.deepEqual(
-    state.biologicalFeatures[0].qualifiers.translation,
-    ['MPEPTIDE']
-  );
-  assert.equal(
-    state.biologicalFeatures[0].translationFromAminoAcidSequence,
-    undefined
-  );
+  // The translation mark gives back the /translation qualifier it stood for.
+  assert.deepEqual(state.biologicalFeatures[0].qualifiers.translation, ['MPEPTIDE']);
+  assert.deepEqual(validated.items[0].biologicalFeatures[0].qualifiers.translation, ['MPEPTIDE']);
   assert.deepEqual(state.biologicalFeatures[0].location_parts, [{
     start: 1,
     end: 5,
@@ -119,6 +124,41 @@ test('schema-4 catalog validates and expands stable biological identities', () =
   assert.equal(state.orthogroups[0].members[0].renderedFeatureSvgId, 'f0001');
   assert.equal(state.orthogroups[0].members[0].proteinId, 'public-protein');
   assert.equal(state.orthogroups[0].members[0].featureIndex, 4);
+});
+
+// D5: shared with tests/test_web_feature_catalog.py, so the two promotions give the same schema 6 catalog.
+test('schema-5 promotion gives the schema 6 catalog Python gives', async () => {
+  const { schemaFiveCases } = JSON.parse(await readFile(
+    new URL('../fixtures/source-feature-index-alias-vectors.json', import.meta.url), 'utf8'
+  ));
+  assert.ok(schemaFiveCases.length > 0);
+  for (const { name, catalog: stored, promoted } of schemaFiveCases) {
+    assert.deepEqual(migrateLegacyFeatureCatalog(structuredClone(stored)), promoted, name);
+    assert.deepEqual(validateFeatureCatalog(structuredClone(stored), results), promoted, name);
+    // With its key order, as Python's: the qualifier order ranks color rules.
+    assert.equal(JSON.stringify(migrateLegacyFeatureCatalog(structuredClone(stored))), JSON.stringify(promoted), name);
+  }
+});
+
+test('a schema-6 catalog is admitted as written and refused when it stores a sequence', () => {
+  const current = migrateLegacyFeatureCatalog(structuredClone(catalog));
+  assert.equal(current.schema, FEATURE_CATALOG_SCHEMA);
+  assert.deepEqual(validateFeatureCatalog(structuredClone(current), results), current);
+  // Python's list of what an older catalog stored (generated): the promotion drops each key, schema 6 refuses each.
+  const values = {
+    nucleotide_sequence: 'CGGT', nucleotideSequence: 'CGGT', amino_acid_sequence: 'MPEPTIDE', aminoAcidSequence: 'MPEPTIDE',
+    sequence_warnings: [], sequenceWarnings: [], sequenceSourceIndex: 0, translationFromAminoAcidSequence: true
+  };
+  assert.deepEqual([...STORED_SEQUENCE_KEYS].sort(), Object.keys(values).sort());
+  for (const key of STORED_SEQUENCE_KEYS) {
+    const value = values[key];
+    const invalid = structuredClone(current);
+    invalid.items[0].biologicalFeatures[0][key] = value;
+    assert.throws(() => validateFeatureCatalog(invalid, results), undefined, key);
+  }
+  const withSources = structuredClone(current);
+  withSources.items[0].sequenceSources = [];
+  assert.throws(() => validateFeatureCatalog(withSources, results));
 });
 
 // PD-OI-069 revision 2: a stored catalog holds no feature instance. Python
@@ -183,7 +223,7 @@ test('schema-3 migration proves only exact single-part anchors and disables ambi
     { precision: 'unavailable', operator: 'unknown', partOrder: 'ambiguous', strand: '-' }
   );
   for (const invalid of [
-    { ...catalog, schema: 6 },
+    { ...catalog, schema: FEATURE_CATALOG_SCHEMA + 1 },
     { ...catalog, schema: 4, items: [{ ...catalog.items[0], biologicalFeatures: [
       { ...catalog.items[0].biologicalFeatures[0], anchorProfile: null }
     ] }] },
@@ -527,7 +567,9 @@ test('catalog rejects duplicate match, member, and partial presentation metadata
   );
 });
 
-test('catalog rejects invalid sequence-source references', () => {
+// A schema 5 catalog's stored references are checked before its promotion drops them: an invalid one is refused, as
+// before D5.
+test('schema-5 promotion rejects invalid sequence-source references', () => {
   for (const invalidIndex of [-1, 1, 0.5, '0']) {
     const invalid = structuredClone(catalog);
     invalid.items[0].biologicalFeatures[0].sequenceSourceIndex = invalidIndex;
@@ -682,66 +724,12 @@ test('whole-record source validation is bounded by source count', () => {
     assert.equal(sourceScans, 1);
     const state = featureStateFromCatalog(validated);
     assert.equal(state.biologicalFeatures.length, featureCount);
-    assert.equal(state.biologicalFeatures[0].nucleotide_sequence, 'ATG');
+    assert.equal(Object.hasOwn(state.biologicalFeatures[0], 'nucleotide_sequence'), false);
+    assert.equal(Object.hasOwn(validated.items[0], 'sequenceSources'), false);
     assert.equal(sourceScans, 1);
   } finally {
     RegExp.prototype.test = nativeTest;
   }
-});
-
-test('admitted projections do not reread later catalog mutations', () => {
-  const initialSequence = `ATG${'A'.repeat(1_000_000)}`;
-  const updatedSequence = `CCC${'A'.repeat(1_000_000)}`;
-  const largeCatalog = {
-    schema: 3,
-    items: [{
-      resultIndex: 0,
-      resultName: 'diagram.svg',
-      recordKeys: ['record-key'],
-      features: [],
-      biologicalFeatures: [{
-        recordKey: 'record-key',
-        biologicalFeatureId: 'feature',
-        type: 'CDS',
-        start: 0,
-        end: 3,
-        strand: '+',
-        sequenceSourceIndex: 0
-      }],
-      orthogroups: [],
-      annotations: [],
-      comparisonMatches: [],
-      sequenceSources: [{
-        origin: 'linear-record',
-        recordIndex: 0,
-        sequence: initialSequence
-      }]
-    }]
-  };
-  const sourceSequences = new Set([initialSequence, updatedSequence]);
-  const nativeTest = RegExp.prototype.test;
-  let sourceScans = 0;
-  RegExp.prototype.test = function (value) {
-    if (this.source === '\\s' && sourceSequences.has(value)) sourceScans += 1;
-    return nativeTest.call(this, value);
-  };
-  try {
-    const validated = validateFeatureCatalog(largeCatalog, results);
-    assert.equal(
-      featureStateFromCatalog(validated)
-        .biologicalFeatures[0].nucleotide_sequence,
-      'ATG'
-    );
-    validated.items[0].sequenceSources[0].sequence = updatedSequence;
-    assert.equal(
-      featureStateFromCatalog(validated)
-        .biologicalFeatures[0].nucleotide_sequence,
-      'ATG'
-    );
-  } finally {
-    RegExp.prototype.test = nativeTest;
-  }
-  assert.equal(sourceScans, 1);
 });
 
 test('compound identity isolates duplicate accessions and positional indices', () => {
@@ -876,7 +864,7 @@ test('one catalog admission produces identities, indexes, scalar footprint, and 
     onSessionLifecycleEvent: (event) => events.push(event)
   };
   try {
-    const source = structuredClone(catalog);
+    const source = migrateLegacyFeatureCatalog(structuredClone(catalog));
     const beforeAdmission = structuredClone(source);
     const admission = admitFeatureCatalog(source, results, {
       adopt: true,
@@ -899,9 +887,7 @@ test('one catalog admission produces identities, indexes, scalar footprint, and 
       biologicalFeatureCount: 1,
       orthogroupRecordCount: 1,
       comparisonMatchCount: 0,
-      annotationCount: 0,
-      sequenceSourceCount: 1,
-      sequenceCharacters: 6
+      annotationCount: 0
     });
     assert.equal(
       metrics.filter((metric) => metric.name === 'featureCatalogAdmissionCount')
@@ -965,17 +951,6 @@ test('schema-3 migration writes the bounds its anchor profile read', () => {
   assert.equal(resolved.startCoordinate, 2);
 });
 
-// The reverse complement the catalog used before its lookup table; the table must give the same text for every input.
-const legacyReverseComplement = (sequence) => {
-  const complements = {
-    A: 'T', C: 'G', G: 'C', T: 'A', U: 'A', R: 'Y', Y: 'R',
-    S: 'S', W: 'W', K: 'M', M: 'K', B: 'V', D: 'H', H: 'D',
-    V: 'B', N: 'N', '-': '-'
-  };
-  const normalized = String(sequence || '').replace(/\s+/g, '').toUpperCase();
-  return [...normalized].reverse().map((base) => complements[base] || 'N').join('');
-};
-
 const sequenceCatalog = (sequence, features) => ({
   schema: 3,
   items: [{
@@ -993,39 +968,8 @@ const sequenceCatalog = (sequence, features) => ({
   }]
 });
 
-test('catalog nucleotide sequences keep the legacy reverse complement for every character', () => {
-  const sources = [
-    'ACGTUacgturyswkmbdhvnRYSWKMBDHVN-.*?XZxz0123456789',
-    'atg-NNN-ccc..gggTTT',
-    'ACGTſßéΩ漢😀ACGT',
-    // Sources hold no whitespace; these upper-case to other lengths or to ASCII (\u017f -> S, \ufb00 -> FF).
-    'ACG\u0000\u007f\u0085\u0130\ufb00\u017fTGA'
-  ];
-  for (const sequence of sources) {
-    const length = sequence.length;
-    const features = [
-      { start: 0, end: length, strand: -1 },
-      { start: 0, end: length, strand: '+' },
-      { start: 1, end: length - 1, strand: '-' },
-      // Ends inside the surrogate pair of the third source.
-      { start: 0, end: 10, strand: -1 },
-      { start: 2, end: 2, strand: -1, location_parts: [{ start: 2, end: 2, strand: '-' }, { start: 0, end: 3, strand: '-' }] },
-      { start: 0, end: length, location_parts: [{ start: 5, end: length, strand: '-' }, { start: 0, end: 5, strand: '+' }] },
-      { start: 0, end: length, strand: -1, location_parts: [] }
-    ];
-    const state = featureStateFromCatalog(validateFeatureCatalog(sequenceCatalog(sequence, features), results));
-    const expected = features.map(({ start, end, strand, location_parts: parts }) => (
-      (parts?.length ? parts : [{ start, end, strand }]).map((part) => {
-        const slice = sequence.slice(part.start, part.end);
-        const partStrand = part.strand ?? strand;
-        return partStrand === '-' || Number(partStrand) < 0 ? legacyReverseComplement(slice) : slice;
-      }).join('')
-    ));
-    assert.deepEqual(state.biologicalFeatures.map((feature) => feature.nucleotide_sequence), expected, sequence);
-  }
-});
-
-test('catalog admission slices each feature sequence once and rejects a feature whose sequence is empty', () => {
+// The promotion checks that each stored reference gives a sequence without building any (Python builds them, D5).
+test('schema-5 promotion slices no stored sequence and rejects a reference whose sequence is empty', () => {
   const sequence = `ATG${'C'.repeat(5000)}`;
   const nativeSlice = String.prototype.slice;
   let sourceSlices = 0;
@@ -1038,8 +982,8 @@ test('catalog admission slices each feature sequence once and rejects a feature 
       { start: 0, end: 3, strand: '+' },
       { start: 0, end: 9, location_parts: [{ start: 3, end: 6, strand: '-' }, { start: 6, end: 9, strand: '-' }] }
     ]), results));
-    assert.deepEqual(state.biologicalFeatures.map((feature) => feature.nucleotide_sequence), ['ATG', 'GGGGGG']);
-    assert.equal(sourceSlices, 3);
+    assert.deepEqual(state.biologicalFeatures.map((feature) => Object.hasOwn(feature, 'nucleotide_sequence')), [false, false]);
+    assert.equal(sourceSlices, 0);
   } finally {
     String.prototype.slice = nativeSlice;
   }

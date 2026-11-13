@@ -23,6 +23,7 @@ import {
   previewTransform,
   RecordName,
   resetLayoutState,
+  SequenceReadLine,
   SettingsSectionIndex,
   SettingNote,
   SettingsSectionTitle,
@@ -45,7 +46,7 @@ import { settingApplicationHelp, settingApplicationSentence } from './services/s
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, FileCard, RecordDisplayControl, AutoValueField, ColorSwatch, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
+  components: { ActionMenu, ChoiceDialog, OperationError, SequenceReadLine, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, FileCard, RecordDisplayControl, AutoValueField, ColorSwatch, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
   methods: { chooseUiLanguage, formatFeatureLocation, settingApplicationHelp, settingApplicationSentence, translationFeedbackUrl },
   setup: createAppSetup
 });

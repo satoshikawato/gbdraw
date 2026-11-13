@@ -56,6 +56,16 @@
  * @property {string} val
  */
 /**
+ * @typedef {object} SynthesisQualifiersRequest
+ * @property {'group' | 'row' | 'features' | 'reset'} scope
+ * @property {RuleFeaturePayload[]} features
+ * @property {string[][]} labels
+ */
+/**
+ * @typedef {object} SynthesisQualifiers
+ * @property {string[]} qualifiers
+ */
+/**
  * @typedef {object} ColorRuleCondition
  * @property {string} feat
  * @property {string} qual

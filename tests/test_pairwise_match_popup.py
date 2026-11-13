@@ -53,148 +53,31 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-utils.js", "./feature-utils.mjs"),
         encoding="utf-8",
     )
-    color_utils_path = tmp_path / "color-utils.mjs"
-    color_utils_path.write_text(
-        (WEB_ROOT / "js" / "utils" / "color-utils.js")
-        .read_text(encoding="utf-8")
-        .replace("./named-colors.js", "./named-colors.mjs")
-        .replace("./i18n.js", "./i18n.mjs")
-        .replace("../contracts/schema.generated.js", "./schema.generated.mjs"),
-        encoding="utf-8",
-    )
-    # color-utils.js reads the generated palette name aliases.
-    (tmp_path / "schema.generated.mjs").write_text(
-        (WEB_ROOT / "js" / "contracts" / "schema.generated.js").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-    (tmp_path / "named-colors.mjs").write_text(
-        (WEB_ROOT / "js" / "utils" / "named-colors.js").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-    conservation_series_path = tmp_path / "conservation-series.mjs"
-    conservation_series_path.write_text(
-        (WEB_ROOT / "js" / "services" / "conservation-series.js")
-        .read_text(encoding="utf-8")
-        .replace("../utils/color-utils.js", "./color-utils.mjs")
-        .replace("../utils/conservation-colors.generated.js", "./conservation-colors.generated.mjs")
-        .replace("./drawing/inputs.js", "./drawing-inputs.mjs"),
-        encoding="utf-8",
-    )
-    # conservation-series.js and match-sequences.js read a ring's files through drawing/inputs.js.
-    (tmp_path / "drawing-inputs.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "drawing" / "inputs.js")
-        .read_text(encoding="utf-8")
-        .replace("../history-files.js", "./history-files.mjs")
-        .replace("../../contracts/schema.generated.js", "./schema.generated.mjs")
-        .replace("../../utils/error-normalization.js", "./error-normalization.mjs")
-        .replace("../../utils/reactivity.js", "./reactivity.mjs")
-        .replace("./slice-handle.js", "./drawing-slice-handle.mjs"),
-        encoding="utf-8",
-    )
-    (tmp_path / "history-files.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "history-files.js").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-    # conservation-series.js reads the generated ring colours.
-    (tmp_path / "conservation-colors.generated.mjs").write_text(
-        (WEB_ROOT / "js" / "utils" / "conservation-colors.generated.js").read_text(encoding="utf-8"),
+    # The popup names the reads of member and span sequences through catalog-sequences.js (D5); it reads none.
+    catalog_sequences_source = (WEB_ROOT / "js" / "services" / "catalog-sequences.js").read_text(encoding="utf-8")
+    for specifier, copy in (
+        ("'../utils/error-normalization.js'", "'./error-normalization.mjs'"),
+        ("'./feature-sequence-fasta.js'", "'./feature-sequence-fasta.mjs'"),
+        ("'./feature-placement.js'", "'./feature-placement.mjs'"),
+        ("'../contracts/schema.generated.js'", "'./schema.generated.mjs'"),
+    ):
+        assert specifier in catalog_sequences_source, specifier
+        catalog_sequences_source = catalog_sequences_source.replace(specifier, copy)
+    catalog_sequences_path = tmp_path / "catalog-sequences.mjs"
+    catalog_sequences_path.write_text(catalog_sequences_source, encoding="utf-8")
+    # catalog-sequences.js keys a reply by the draft owner's identity key; the owner's other edits are not under test.
+    (tmp_path / "feature-placement.mjs").write_text(
+        "export const featureIdentityKey = (recordKey, biologicalFeatureId) => JSON.stringify([recordKey, biologicalFeatureId]);\n",
         encoding="utf-8",
     )
     (tmp_path / "record-source-coordinates.mjs").write_text(
         (WEB_ROOT / "js" / "services" / "record-source-coordinates.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    match_sequences_path = tmp_path / "match-sequences.mjs"
-    match_sequences_path.write_text(
-        (WEB_ROOT / "js" / "services" / "match-sequences.js")
-        .read_text(encoding="utf-8")
-        .replace("./record-source-coordinates.js", "./record-source-coordinates.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./conservation-series.js", "./conservation-series.mjs")
-        .replace("./record-discovery.js", "./record-discovery.mjs")
-        .replace("./input-types.js", "./input-types.mjs")
-        .replace("./file-content-cache.js", "./file-content-cache.mjs")
-        .replace("./record-options.js", "./record-options.mjs")
-        .replace("./linear-units.js", "./linear-units.mjs")
-        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
-        .replace("./drawing/inputs.js", "./drawing-inputs.mjs")
-        .replace("../utils/error-normalization.js", "./error-normalization.mjs")
-        .replace("../utils/i18n.js", "./i18n.mjs"),
-        encoding="utf-8",
-    )
-    # match-sequences.js reads a catalog's drawn units as their records (`unitRecordsOf`).
-    (tmp_path / "linear-units.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "linear-units.js")
-        .read_text(encoding="utf-8")
-        .replace("./linear-comparisons.js", "./linear-comparisons.mjs")
-        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
-        .replace("../utils/error-normalization.js", "./error-normalization.mjs")
-        .replace("../utils/i18n.js", "./i18n.mjs"),
-        encoding="utf-8",
-    )
-    (tmp_path / "linear-comparisons.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "linear-comparisons.js")
-        .read_text(encoding="utf-8")
-        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
-        .replace("../utils/i18n.js", "./i18n.mjs")
-        .replace("./linear-comparison-retained.js", "./linear-comparison-retained.mjs"),
-        encoding="utf-8",
-    )
-    (tmp_path / "linear-comparison-retained.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "linear-comparison-retained.js").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-    (tmp_path / "record-options.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "record-options.js")
-        .read_text(encoding="utf-8")
-        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
-        .replace("../utils/error-normalization.js", "./error-normalization.mjs")
-        .replace("../utils/i18n.js", "./i18n.mjs"),
-        encoding="utf-8",
-    )
-    (tmp_path / "record-draw-selection.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "record-draw-selection.js")
-        .read_text(encoding="utf-8")
-        .replace("../utils/download-names.js", "./download-names.mjs")
-        .replace("../contracts/schema.generated.js", "./schema.generated.mjs")
-        .replace("./drawing/feature-edits.js", "./drawing-feature-edits.mjs")
-        .replace("./drawing/paint.js", "./drawing-paint.mjs"),
-        encoding="utf-8",
-    )
-    # The drawing slices record-draw-selection.js deletes record edits through.
-    for name in ("feature-edits", "paint", "slice-handle"):
-        (tmp_path / f"drawing-{name}.mjs").write_text(
-            (WEB_ROOT / "js" / "services" / "drawing" / f"{name}.js")
-            .read_text(encoding="utf-8")
-            .replace("../../utils/reactivity.js", "./reactivity.mjs")
-            .replace("../json-clone.js", "./json-clone.mjs")
-            .replace("./slice-handle.js", "./drawing-slice-handle.mjs"),
-            encoding="utf-8",
-        )
-    for path in ("utils/reactivity.js", "services/json-clone.js"):
-        (tmp_path / path.split("/")[1].replace(".js", ".mjs")).write_text(
-            (WEB_ROOT / "js" / path).read_text(encoding="utf-8"), encoding="utf-8"
-        )
-    (tmp_path / "download-names.mjs").write_text(
-        (WEB_ROOT / "js" / "utils" / "download-names.js").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
     (tmp_path / "input-types.mjs").write_text(
         (WEB_ROOT / "js" / "services" / "input-types.js")
         .read_text(encoding="utf-8")
         .replace("../contracts/schema.generated.js", "./schema.generated.mjs"),
-        encoding="utf-8",
-    )
-    (tmp_path / "file-content-cache.mjs").write_text(
-        "export const readFileText = (file) => file.text();\n",
-        encoding="utf-8",
-    )
-    # match-sequences.js reads restored Session files through record-discovery.js, which this popup test does not use.
-    (tmp_path / "record-discovery.mjs").write_text(
-        "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };\n"
-        "export const gffFastaReaderSelector = unused;\n"
-        "export const readAllSequenceRecords = unused;\n"
-        "export const readComparisonSequenceRecords = unused;\n",
         encoding="utf-8",
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"
@@ -239,7 +122,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         ("'./record-source-coordinates.js'", "'./record-source-coordinates.mjs'"),
         ("'./feature-utils.js'", "'./feature-utils.mjs'"),
         ("'./feature-sequence-fasta.js'", "'./feature-sequence-fasta.mjs'"),
-        ("'./match-sequences.js'", "'./match-sequences.mjs'"),
+        ("'./catalog-sequences.js'", "'./catalog-sequences.mjs'"),
         ("'./losat-normalization.js'", "'./losat-normalization.mjs'"),
         ("'./feature-identity.js'", "'./feature-identity.mjs'"),
         ("'../utils/i18n.js'", "'./i18n.mjs'"),
@@ -261,9 +144,11 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           createPairwisePayloadContext,
           featureOrthogroupIdStatus,
           integerAttr,
+          matchSpanFasta,
           orthogroupIndexFor,
           orthogroupInIndex
         }} from {module_path.as_uri()!r};
+        import {{ featureSequenceKey, readRowsFasta }} from {catalog_sequences_path.as_uri()!r};
 
         const getOrthogroupById = (groups, id, scope = '') => (
           orthogroupInIndex(orthogroupIndexFor(groups), id, scope)
@@ -414,9 +299,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
             record_id: 'record_e',
             stable_feature_id: 'source-space-stable-id',
             source_protein_id: 'CAG34720.1',
-            qualifiers: {{ protein_id: ['CAG34720.1'] }},
-            nucleotide_sequence: 'ATGGGGTAA',
-            amino_acid_sequence: 'MG'
+            qualifiers: {{ protein_id: ['CAG34720.1'] }}
           }}],
           orthogroups: [{{
             id: 'og_1',
@@ -547,31 +430,52 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           'data-qstart': '1',
           'data-qend': '4'
         }}));
-        let invalidQueryResolverCalls = 0;
+        // A span whose record index is invalid names no read: it reaches none of the records the spans read.
+        let invalidQueryRecordLookups = 0;
+        const recordsFor = (unitKeys) => ({{
+          get unitKeys() {{ invalidQueryRecordLookups += 1; return unitKeys; }},
+          comparisonSupplied: () => {{ invalidQueryRecordLookups += 1; return true; }}
+        }});
         const invalidSequencePayload = buildMatchPopupPayload({{
           style: {{}},
           getAttribute: (name) => invalidSequenceAttrs.get(name) || ''
-        }}, {{
-          resolveSequenceSource: (_sourceKey, recordId) => {{
-            if (recordId !== 'recA') return null;
-            invalidQueryResolverCalls += 1;
-            return {{
-              key: 'linear:record:0',
-              recordId: 'recA',
-              sequence: 'AAAA',
-              origin: 'linear-record',
-              recordIndex: 0
-            }};
-          }}
+        }}, {{ matchSequenceRecords: recordsFor(['rec-key-a']) }});
+        const invalidEntry = invalidSequencePayload.sequenceBundle.entries[0];
+        assert(
+          invalidEntry.available === false && invalidEntry.read === null
+            && invalidEntry.unavailableReason === 'The sequence identifier metadata for this match is invalid.',
+          JSON.stringify(invalidEntry)
+        );
+        assert(
+          invalidQueryRecordLookups === 0,
+          'invalid record index reached the sequence records'
+        );
+        // The same span with a valid record index names its read by record key, with the record ID the match names,
+        // and the displayed coordinates; the FASTA is built from Python's reply, with the input-file coordinates in
+        // its header.
+        invalidSequenceAttrs.set('data-query-record-index', '0');
+        const validSequencePayload = buildMatchPopupPayload({{
+          style: {{}},
+          getAttribute: (name) => invalidSequenceAttrs.get(name) || ''
+        }}, {{ matchSequenceRecords: recordsFor(['rec-key-a']) }});
+        const validEntry = validSequencePayload.sequenceBundle.entries[0];
+        assert(
+          validEntry.available === true
+            && JSON.stringify(validEntry.read) === JSON.stringify({{ kind: 'record', recordKey: 'rec-key-a', recordId: 'recA', start: 1, end: 4 }}),
+          JSON.stringify(validEntry)
+        );
+        assert(!('fasta' in validEntry) && !('combinedFasta' in validSequencePayload.sequenceBundle), JSON.stringify(validSequencePayload.sequenceBundle));
+        const validFasta = matchSpanFasta(validEntry, {{
+          status: 'ok', reason: null, recordId: 'recA', orientation: '+', length: 4, sequence: 'AAAA'
         }});
-        assert(
-          invalidSequencePayload.sequenceBundle.entries[0].available === false,
-          JSON.stringify(invalidSequencePayload.sequenceBundle.entries[0])
-        );
-        assert(
-          invalidQueryResolverCalls === 0,
-          'invalid record index reached the sequence resolver'
-        );
+        assert(validFasta === '>invalid-sequence-identity_query|record=recA|coords=1..4|strand=+\\nAAAA\\n', validFasta);
+        // Without the shown Result's request the span names no read and says why.
+        const noRecordsEntry = buildMatchPopupPayload({{
+          style: {{}},
+          getAttribute: (name) => invalidSequenceAttrs.get(name) || ''
+        }}, {{ matchSequenceRecords: null }}).sequenceBundle.entries[0];
+        assert(noRecordsEntry.read === null && noRecordsEntry.unavailableReason, JSON.stringify(noRecordsEntry));
+        invalidSequenceAttrs.set('data-query-record-index', '-1');
 
         const endpointPayload = (role, overrides = {{}}) => {{
           const roleTitle = role === 'query' ? 'Query' : 'Subject';
@@ -899,10 +803,36 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(payload.blockOrthogroups[0].displayName === 'orthogroup display', JSON.stringify(payload.blockOrthogroups[0]));
         assert(payload.blockOrthogroups[0].technicalRows.some((row) => row.label === 'Similarity group ID' && row.value === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].technicalRows));
         const reverseMember = payload.blockOrthogroups[0].memberRows.find((row) => row.proteinId === 'CAG34720.1');
-        assert(reverseMember && reverseMember.aaFasta.includes('MG'), JSON.stringify(payload.blockOrthogroups[0].memberRows));
+        // A member row names the read of its sequences by its catalog identity; the popup builds no FASTA when it
+        // opens, and the FASTA built from Python's reply carries the member's header (D5).
+        assert(
+          reverseMember && reverseMember.read
+            && reverseMember.read.recordKey === 'record-key-e' && reverseMember.read.biologicalFeatureId === 'bio-e',
+          JSON.stringify(payload.blockOrthogroups[0].memberRows)
+        );
+        assert(!('aaFasta' in reverseMember) && !('ntFasta' in reverseMember), JSON.stringify(reverseMember));
         assert(reverseMember.canOpen, JSON.stringify(reverseMember));
         assert(reverseMember.feature.svg_id === 'display-space-rendered-id', JSON.stringify(reverseMember));
-        assert(payload.blockOrthogroups[0].memberAaFasta.includes('>CAG34720.1'), payload.blockOrthogroups[0].memberAaFasta);
+        const memberGroup = payload.blockOrthogroups[0];
+        assert(
+          memberGroup.memberSequenceCount === memberGroup.memberRows.filter((row) => row.read).length
+            && memberGroup.memberSequenceCount >= 1 && memberGroup.memberRead.status === '',
+          JSON.stringify(memberGroup)
+        );
+        assert(!('memberAaFasta' in memberGroup) && !('memberNtFasta' in memberGroup), JSON.stringify(Object.keys(memberGroup)));
+        const memberReads = [];
+        const memberAaFasta = await readRowsFasta(
+          memberGroup.memberRows.map((row) => ({{ read: row.read, feature: row.fastaFeature }})),
+          'aa',
+          async (features) => {{
+            memberReads.push(features);
+            return new Map(features.map((feature) => [featureSequenceKey(feature), {{
+              ...feature, nucleotideSequence: 'ATGGGGTAA', aminoAcidSequence: 'MG', sequenceWarnings: []
+            }}]));
+          }}
+        );
+        assert(memberReads.length === 1, JSON.stringify(memberReads));
+        assert(memberAaFasta.includes('>CAG34720.1') && memberAaFasta.includes('\\nMG\\n'), memberAaFasta);
         // The payload caches its Feature index per catalog identity, so each edit below
         // hands the popup replaced catalogs, as the app does.
         const replaceCatalogs = () => {{
@@ -922,7 +852,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         const wrongRecordPayload = buildMatchPopupPayload(element, popupOptions);
         const wrongRecordReverseMember = wrongRecordPayload.blockOrthogroups[0].memberRows
           .find((row) => row.proteinId === 'CAG34720.1');
-        assert(!wrongRecordReverseMember.aaFasta, JSON.stringify(wrongRecordReverseMember));
+        assert(!wrongRecordReverseMember.read, JSON.stringify(wrongRecordReverseMember));
         assert(!wrongRecordReverseMember.canOpen, JSON.stringify(wrongRecordReverseMember));
         popupOptions.orthogroups[0].members[2].recordIndex = 4;
         popupOptions.featureLookup.delete('source-space-stable-id');

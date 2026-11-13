@@ -16,7 +16,9 @@ import {
 import {
   ANCHOR_FEATURE_CATALOG_SCHEMA,
   FEATURE_CATALOG_SCHEMA,
-  LEGACY_FEATURE_CATALOG_SCHEMA
+  LEGACY_FEATURE_CATALOG_SCHEMA,
+  SEQUENCE_FEATURE_CATALOG_SCHEMA,
+  STORED_SEQUENCE_KEYS
 } from '../contracts/schema.generated.js';
 /** @import { OrthogroupFeatureIndex } from './orthogroup-feature-metadata.js' */
 /** @import { RenderedFeatureId } from './legend-svg.js' */
@@ -26,7 +28,9 @@ const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
 
 // Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
-// drawn selector values (`drawnSelector`), which live rule matching reads (R4).
+// drawn selector values (`drawnSelector`), which live rule matching reads (R4);
+// schema 6 stores no sequence: Python reads each one on demand from the request
+// the Result was made from (D5, `catalog-sequences.js`).
 export { FEATURE_CATALOG_SCHEMA };
 
 /**
@@ -44,7 +48,6 @@ export { FEATURE_CATALOG_SCHEMA };
  * @property {string[]} recordKeys The drawn records (units), in drawing order.
  * @property {Record<string, string>} [windowOf] Each unit that is a window of a record, by unit key, to the key of
  *   that record, which the item's rows name (OV-2717); written only when a record is drawn in windows.
- * @property {FeatureCatalogRow[]} [sequenceSources]
  * @property {FeatureCatalogRow[]} biologicalFeatures
  * @property {FeatureCatalogRow[]} features Rendered features, each with `drawnSelector`; a row of a record drawn in
  *   windows names its unit (`recordIndex`).
@@ -83,8 +86,6 @@ export { FEATURE_CATALOG_SCHEMA };
  * @property {number} orthogroupRecordCount
  * @property {number} comparisonMatchCount
  * @property {number} annotationCount
- * @property {number} sequenceSourceCount
- * @property {number} sequenceCharacters
  */
 
 /**
@@ -99,7 +100,6 @@ export { FEATURE_CATALOG_SCHEMA };
  * @property {OrthogroupFeatureIndex} featureOrthogroupIndex
  * @property {FeatureCatalogRow[]} annotations
  * @property {FeatureCatalogRow[]} comparisonMatches
- * @property {FeatureCatalogRow[]} sequenceSources Clones of the catalog rows; admission checks only `sequence`.
  * @property {RenderedIdentityCollection[]} renderedIdentitiesByResult
  * @property {Map<string, FeatureCatalogRow>[]} renderedFeaturesByResult Each Result's rendered features by rendered ID.
  * @property {FeatureCatalogRow[][]} biologicalFeaturesByResult
@@ -213,32 +213,114 @@ const legacyAnchorProfile = (feature) => {
   };
 };
 
+// What a catalog of schema 5 or older stored of the sequences is Python's
+// `STORED_SEQUENCE_KEYS` (generated): a schema 6 row holds none of it, and a
+// schema 6 item no `sequenceSources`.
+
+/**
+ * The amino acid sequence a row stored, by the alias the writer used.
+ * @param {FeatureCatalogRow} feature
+ */
+const storedAminoAcidSequence = (feature) => (
+  Object.prototype.hasOwnProperty.call(feature, 'amino_acid_sequence')
+    ? feature.amino_acid_sequence
+    : feature.aminoAcidSequence
+);
+
+/**
+ * Check what an older catalog item stored of the sequences, as admission
+ * checked it before D5, so a catalog whose references do not resolve is still
+ * refused: the whole-record sources hold sequences without whitespace, a
+ * `translationFromAminoAcidSequence` mark stands for a stored amino acid
+ * sequence and no `/translation` qualifier, and a `sequenceSourceIndex`
+ * gives a non-empty sequence from a source of its record (no inline sequence
+ * beside it). Python's validator (`select_feature_catalog_item`) checks the same.
+ * @param {FeatureCatalogRow} item
+ */
+const checkStoredSequences = (item) => {
+  const sequenceSources = item.sequenceSources === undefined ? [] : requireArray(item.sequenceSources);
+  const sourceSequences = canonicalSequenceSourceStrings(sequenceSources);
+  /** @type {Map<string, number[]> | null} */
+  let recordUnits = null;
+  requireArray(item.biologicalFeatures).forEach((feature) => {
+    if (!isObject(feature)) throw catalogError();
+    if (feature.translationFromAminoAcidSequence !== undefined) {
+      const qualifiers = isObject(feature.qualifiers) ? feature.qualifiers : {};
+      const aminoAcidSequence = storedAminoAcidSequence(feature);
+      if (
+        feature.translationFromAminoAcidSequence !== true
+        || typeof aminoAcidSequence !== 'string'
+        || !aminoAcidSequence.trim()
+        || Object.prototype.hasOwnProperty.call(qualifiers, 'translation')
+      ) {
+        throw catalogError();
+      }
+    }
+    if (feature.sequenceSourceIndex === undefined) return;
+    recordUnits ??= catalogRecordUnits(item, requireArray(item.recordKeys).map(text));
+    if (
+      Object.prototype.hasOwnProperty.call(feature, 'nucleotide_sequence')
+      || Object.prototype.hasOwnProperty.call(feature, 'nucleotideSequence')
+      || !hasCatalogNucleotideSequence(feature, sequenceSources, sourceSequences, recordUnits.get(text(feature.recordKey))?.[0])
+    ) {
+      throw catalogError();
+    }
+  });
+};
+
+/**
+ * Drop what an older catalog item stored of the sequences, giving back the
+ * `/translation` qualifier that a `translationFromAminoAcidSequence` mark
+ * stood for (Python's `_without_stored_sequences`).
+ * @param {FeatureCatalogRow} item
+ */
+const dropStoredSequences = (item) => {
+  delete item.sequenceSources;
+  requireArray(item.biologicalFeatures).forEach((feature) => {
+    if (feature.translationFromAminoAcidSequence === true) {
+      const qualifiers = isObject(feature.qualifiers) ? feature.qualifiers : {};
+      feature.qualifiers = { ...qualifiers, translation: [text(storedAminoAcidSequence(feature))] };
+    }
+    STORED_SEQUENCE_KEYS.forEach((key) => { delete feature[key]; });
+  });
+};
+
+// The twin of Python's `promote_legacy_feature_catalog`: schema 3, 4 or 5 to
+// the current schema, without inventing values (the shared vectors in
+// tests/fixtures/source-feature-index-alias-vectors.json).
+// Every older schema stored the sequences; the current one holds none, so the
+// promotion checks the stored references (`checkStoredSequences`) and drops
+// them (`dropStoredSequences`).
 // Schema 3 gains only safely inferred anchor profiles and source feature
 // indexes: its writer named a duplicated stable identity
 // `<stableFeatureId>~<source feature index>` and some writers stored no index
-// (OV-269; promote_legacy_feature_catalog). Rendered features of schemas 3 and
-// 4 gain `drawnSelector: null`: their drawn values are unknown until the next
-// Generate, so live rule matching declines them.
+// (OV-269). Rendered features of schemas 3 and 4 gain `drawnSelector: null`:
+// their drawn values are unknown until the next Generate, so live rule
+// matching declines them.
 /**
- * @param {Record<string, any>} catalog An unvalidated schema 3 or 4 catalog.
+ * @param {Record<string, any>} catalog An unvalidated schema 3, 4 or 5 catalog.
  * @returns {FeatureCatalog}
  */
 export const migrateLegacyFeatureCatalog = (catalog) => {
-  if (!isObject(catalog)
-    || ![LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA].includes(catalog.schema)) {
+  if (!isObject(catalog) || ![
+    LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA, SEQUENCE_FEATURE_CATALOG_SCHEMA
+  ].includes(catalog.schema)) {
     throw catalogError();
   }
   const sourceSchema = catalog.schema;
   const migrated = cloneJson(catalog);
   migrated.schema = FEATURE_CATALOG_SCHEMA;
   requireArray(migrated.items).forEach((item) => {
-    requireArray(item?.features).forEach((feature) => {
+    if (!isObject(item)) throw catalogError();
+    checkStoredSequences(item);
+    dropStoredSequences(item);
+    if (sourceSchema === SEQUENCE_FEATURE_CATALOG_SCHEMA) return;
+    requireArray(item.features).forEach((feature) => {
       if (!isObject(feature)) throw catalogError();
       feature.drawnSelector = null;
     });
     if (sourceSchema === ANCHOR_FEATURE_CATALOG_SCHEMA) return;
-    requireArray(item?.biologicalFeatures).forEach((feature) => {
-      if (!isObject(feature)) throw catalogError();
+    requireArray(item.biologicalFeatures).forEach((feature) => {
       const stableId = text(feature.stableFeatureId);
       const biologicalId = text(feature.biologicalFeatureId);
       const suffix = stableId && biologicalId.startsWith(`${stableId}~`)
@@ -501,16 +583,9 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     }
   });
   const recordUnits = catalogRecordUnits(item, recordKeys);
-  const itemRecordIndexByKey = itemRecordIndexes(recordUnits, recordKeys, context);
-  const sequenceSources = item.sequenceSources === undefined
-    ? []
-    : requireArray(item.sequenceSources);
-  const sourceSequences = canonicalSequenceSourceStrings(sequenceSources);
-  context.scalarMetrics.sequenceSourceCount += sequenceSources.length;
-  context.scalarMetrics.sequenceCharacters += sourceSequences.reduce(
-    (total, sequence) => total + sequence.length,
-    0
-  );
+  itemRecordIndexes(recordUnits, recordKeys, context);
+  // Schema 6 stores no sequence (a promoted older catalog dropped them).
+  if (Object.prototype.hasOwnProperty.call(item, 'sequenceSources')) throw catalogError();
   const biologicalFeatures = requireArray(item.biologicalFeatures);
   const knownFeatures = new Set();
   /** @type {Map<string, (number | null)[]>} */
@@ -520,6 +595,7 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   for (const feature of biologicalFeatures) {
     if (!isObject(feature)) throw catalogError();
     if (!validAnchorProfile(feature.anchorProfile)) throw catalogError();
+    if (STORED_SEQUENCE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(feature, key))) throw catalogError();
     const sourceFeatureIndex = nonnegativeIntegerAliasStatus(
       feature,
       SOURCE_FEATURE_INDEX_KEYS
@@ -552,43 +628,6 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     /** @type {(number | null)[]} */ (sourceIndexesByStableIdentity.get(stableIdentity)).push( // set just above
       sourceFeatureIndex.supplied ? sourceFeatureIndex.value : null
     );
-    if (feature.translationFromAminoAcidSequence !== undefined) {
-      const qualifiers = isObject(feature.qualifiers) ? feature.qualifiers : {};
-      const aminoAcidSequence = Object.prototype.hasOwnProperty.call(
-        feature,
-        'amino_acid_sequence'
-      )
-        ? feature.amino_acid_sequence
-        : feature.aminoAcidSequence;
-      if (
-        feature.translationFromAminoAcidSequence !== true
-        || typeof aminoAcidSequence !== 'string'
-        || !aminoAcidSequence.trim()
-        || Object.prototype.hasOwnProperty.call(qualifiers, 'translation')
-      ) {
-        throw catalogError();
-      }
-    }
-    if (feature.sequenceSourceIndex !== undefined) {
-      const sourceIndex = feature.sequenceSourceIndex;
-      const source = sequenceSources[sourceIndex];
-      const expectedRecordIndex = itemRecordIndexByKey.get(recordKey);
-      if (
-        !Number.isInteger(sourceIndex)
-        || sourceIndex < 0
-        || Object.prototype.hasOwnProperty.call(feature, 'nucleotide_sequence')
-        || Object.prototype.hasOwnProperty.call(feature, 'nucleotideSequence')
-        || !isObject(source)
-        || !hasCatalogNucleotideSequence(
-          feature,
-          sequenceSources,
-          sourceSequences,
-          expectedRecordIndex
-        )
-      ) {
-        throw catalogError();
-      }
-    }
     knownFeatures.add(key);
     const recordId = text(feature.record_id ?? feature.recordId);
     if (recordId && !context.publicRecordIdByKey.has(recordKey)) {
@@ -597,10 +636,7 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     const expanded = expandBiologicalFeature(
       feature,
       context.recordIndexByKey.get(recordKey) ?? 0,
-      recordKey,
-      sequenceSources,
-      sourceSequences,
-      itemRecordIndexByKey.get(recordKey) ?? -1
+      recordKey
     );
     context.orthogroupProjection.registerFeature(expanded);
     biologicalByKey.set(key, expanded);
@@ -849,7 +885,6 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   const annotations = requireArray(item.annotations);
   context.annotations.push(...cloneJson(annotations));
   context.comparisonMatches.push(...cloneJson(comparisonMatches));
-  context.sequenceSources.push(...cloneJson(sequenceSources));
   context.scalarMetrics.annotationCount += annotations.length;
   context.scalarMetrics.comparisonMatchCount += comparisonMatches.length;
 };
@@ -882,7 +917,7 @@ function* catalogAdmissionSteps(
 ) {
   const logicalResults = requireArray(results);
   if (!isObject(catalog) || ![
-    LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA, FEATURE_CATALOG_SCHEMA
+    LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA, SEQUENCE_FEATURE_CATALOG_SCHEMA, FEATURE_CATALOG_SCHEMA
   ].includes(catalog.schema)) {
     throw catalogError();
   }
@@ -913,7 +948,6 @@ function* catalogAdmissionSteps(
     collinearGroups: [],
     annotations: [],
     comparisonMatches: [],
-    sequenceSources: [],
     renderedIdentitiesByResult: [],
     renderedFeaturesByResult: [],
     biologicalFeaturesByResult: [],
@@ -929,9 +963,7 @@ function* catalogAdmissionSteps(
       biologicalFeatureCount: 0,
       orthogroupRecordCount: 0,
       comparisonMatchCount: 0,
-      annotationCount: 0,
-      sequenceSourceCount: 0,
-      sequenceCharacters: 0
+      annotationCount: 0
     }
   };
   recordSessionLifecycleEvent('catalog.admission-started', {
@@ -958,7 +990,6 @@ function* catalogAdmissionSteps(
     featureOrthogroupIndex,
     annotations: context.annotations,
     comparisonMatches: context.comparisonMatches,
-    sequenceSources: context.sequenceSources,
     renderedIdentitiesByResult: context.renderedIdentitiesByResult,
     // Each Result's rendered features by rendered ID, so a mounted label or
     // feature element reaches its source identity (CW-02).
@@ -1062,49 +1093,9 @@ const selectorForFeature = (feature, stableId) => {
   return selector;
 };
 
-// The complement of each IUPAC base and of the gap, as base/complement pairs. Any other character becomes `N`.
-const COMPLEMENT_PAIRS = 'ATCGGCTAUARYYRSSWWKMMKBVDHHDVBNN--';
-// The complement's code of each ASCII character: a lower-case base reads as its upper case, and 0 drops a JavaScript
-// `\s` whitespace character.
-const ASCII_COMPLEMENTS = (() => {
-  const table = new Uint8Array(128).fill('N'.charCodeAt(0));
-  for (let index = 0; index < COMPLEMENT_PAIRS.length; index += 2) {
-    const base = COMPLEMENT_PAIRS.charCodeAt(index);
-    const complement = COMPLEMENT_PAIRS.charCodeAt(index + 1);
-    table[base] = complement;
-    if (base >= 0x41 && base <= 0x5a) table[base + 0x20] = complement;
-  }
-  for (const space of [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20]) table[space] = 0;
-  return table;
-})();
-const ASCII_TEXT = new TextDecoder();
-
 /**
- * The reverse complement of `sequence` with whitespace removed and case ignored. An ASCII sequence is read through
- * the table; any other one is upper-cased first and read by code point, as Unicode upper-casing can change its length
- * or turn a character into an ASCII base.
- * @param {string} sequence
- * @returns {string}
- */
-const reverseComplementSequence = (sequence) => {
-  const output = new Uint8Array(sequence.length);
-  let length = 0;
-  for (let index = sequence.length - 1; index >= 0; index--) {
-    const code = sequence.charCodeAt(index);
-    if (code > 0x7f) {
-      return [...sequence.replace(/\s+/g, '').toUpperCase()]
-        .reverse()
-        .map((base) => (base.charCodeAt(0) <= 0x7f ? String.fromCharCode(ASCII_COMPLEMENTS[base.charCodeAt(0)]) : 'N'))
-        .join('');
-    }
-    if (ASCII_COMPLEMENTS[code]) output[length++] = ASCII_COMPLEMENTS[code];
-  }
-  return ASCII_TEXT.decode(output.subarray(0, length));
-};
-
-/**
- * The source text and the bounds of each part of a feature's nucleotide sequence, read once for validation and
- * expansion; null when the feature's source reference or a bound does not resolve.
+ * The source text and the bounds of each part of a schema 5 feature's nucleotide sequence, read to check its stored
+ * reference; null when the reference or a bound does not resolve.
  * @typedef {{ source: string, parts: { start: number, end: number, reverse: boolean }[] }} CatalogSequenceSlices
  */
 
@@ -1167,41 +1158,6 @@ const hasCatalogNucleotideSequence = (...args) => (
   catalogNucleotideSlices(...args)?.parts.some(({ start, end }) => end > start) === true
 );
 
-/**
- * @param {Parameters<typeof catalogNucleotideSlices>} args
- * @returns {string}
- */
-const reconstructCatalogNucleotideSequence = (...args) => {
-  const slices = catalogNucleotideSlices(...args);
-  if (!slices) return '';
-  return slices.parts.map(({ start, end, reverse }) => {
-    const sequence = slices.source.slice(start, end);
-    return reverse ? reverseComplementSequence(sequence) : sequence;
-  }).join('');
-};
-
-/**
- * @param {FeatureCatalogRow | null | undefined} feature
- * @param {readonly unknown[] | null | undefined} sequenceSources
- * @param {readonly string[] | null | undefined} sourceSequences
- * @param {number | undefined} expectedRecordIndex
- * @returns {string}
- */
-const deriveCatalogNucleotideSequence = (
-  feature,
-  sequenceSources,
-  sourceSequences,
-  expectedRecordIndex
-) => (
-  text(feature?.nucleotide_sequence ?? feature?.nucleotideSequence)
-  || reconstructCatalogNucleotideSequence(
-    feature,
-    sequenceSources,
-    sourceSequences,
-    expectedRecordIndex
-  )
-);
-
 /** @param {unknown} value */
 const firstQualifierValue = (value) => {
   const values = Array.isArray(value) ? value : [value];
@@ -1212,29 +1168,9 @@ const firstQualifierValue = (value) => {
 /** @param {FeatureCatalogRow} feature */
 const restoreCompactBiologicalDefaults = (feature) => {
   const restored = feature;
-  // The nested qualifiers belong to the admitted catalog; replace, never mutate.
-  let qualifiers = isObject(restored.qualifiers)
+  const qualifiers = isObject(restored.qualifiers)
     ? restored.qualifiers
     : {};
-  const hasSnakeAminoAcidSequence = Object.prototype.hasOwnProperty.call(
-    restored,
-    'amino_acid_sequence'
-  );
-  const rawAminoAcidSequence = hasSnakeAminoAcidSequence
-    ? restored.amino_acid_sequence
-    : restored.aminoAcidSequence;
-  const aminoAcidSequence = text(rawAminoAcidSequence);
-  if (restored.translationFromAminoAcidSequence === true) {
-    if (
-      typeof rawAminoAcidSequence !== 'string'
-      || !rawAminoAcidSequence.trim()
-    ) {
-      throw catalogError();
-    }
-    qualifiers = { ...qualifiers, translation: [aminoAcidSequence] };
-    restored.qualifiers = qualifiers;
-    delete restored.translationFromAminoAcidSequence;
-  }
   [
     'protein_id',
     'locus_tag',
@@ -1274,17 +1210,11 @@ const restoreCompactBiologicalDefaults = (feature) => {
  * @param {FeatureCatalogRow} feature
  * @param {number} recordIndex
  * @param {string} displayRecordId
- * @param {readonly unknown[]} sequenceSources
- * @param {readonly string[]} sourceSequences
- * @param {number} sequenceRecordIndex
  */
 const expandBiologicalFeature = (
   feature,
   recordIndex,
-  displayRecordId,
-  sequenceSources,
-  sourceSequences,
-  sequenceRecordIndex
+  displayRecordId
 ) => {
   const recordKey = text(feature.recordKey);
   const biologicalFeatureId = text(feature.biologicalFeatureId);
@@ -1316,27 +1246,6 @@ const expandBiologicalFeature = (
     expanded.source_feature_index = sourceFeatureIndex.value;
     expanded.featureIndex = sourceFeatureIndex.value;
     expanded.feature_index = sourceFeatureIndex.value;
-  }
-  const nucleotideSequence = deriveCatalogNucleotideSequence(
-    expanded,
-    sequenceSources,
-    sourceSequences,
-    sequenceRecordIndex
-  );
-  if (
-    expanded.sequenceSourceIndex !== undefined
-    && (
-      Object.prototype.hasOwnProperty.call(expanded, 'nucleotide_sequence')
-      || Object.prototype.hasOwnProperty.call(expanded, 'nucleotideSequence')
-    )
-  ) {
-    throw catalogError();
-  }
-  if (expanded.sequenceSourceIndex !== undefined && !nucleotideSequence) {
-    throw catalogError();
-  }
-  if (nucleotideSequence && !text(expanded.nucleotide_sequence)) {
-    expanded.nucleotide_sequence = nucleotideSequence;
   }
   return expanded;
 };

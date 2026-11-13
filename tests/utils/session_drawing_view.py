@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from gbdraw.session_drawings import _drawing_view
-from gbdraw.session_io import mode_slice_of_version
+from gbdraw.session_io import FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION, mode_slice_of_version
 
 
 def drawing_view(
@@ -37,7 +37,29 @@ def view_at(view: Mapping[str, Any], version: int) -> dict[str, Any]:
     """``view`` as a Session ``version`` holds it: no slice field a later Session added (``since``)."""
 
     modes = {mode: mode_slice_of_version(slice_, version) for mode, slice_ in view.get("modes", {}).items()}
-    return {**view, "version": version, **({"modes": modes} if "modes" in view else {})}
+    return catalogs_at({**view, "version": version, **({"modes": modes} if "modes" in view else {})}, version)
+
+
+def catalogs_at(session: Mapping[str, Any], version: int) -> dict[str, Any]:
+    """``session`` with each feature catalog (its own, the other mode's Result set's, each mode slice's) labelled
+    with the schema a Session ``version`` writes: a catalog with no sequence (schema 6, D5) is a valid schema 5
+    catalog. ``session`` is not changed."""
+
+    expected = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version)
+
+    def labelled(holder: Any) -> Any:
+        editor = holder.get("editorState") if isinstance(holder, Mapping) else None
+        catalog = editor.get("featureCatalog") if isinstance(editor, Mapping) else None
+        if expected is None or not isinstance(catalog, Mapping):
+            return holder
+        return {**holder, "editorState": {**editor, "featureCatalog": {**catalog, "schema": expected}}}
+
+    held = dict(labelled(session))
+    if isinstance(held.get("otherModeResult"), Mapping):
+        held["otherModeResult"] = labelled(held["otherModeResult"])
+    if isinstance(held.get("modes"), Mapping):
+        held["modes"] = {mode: labelled(slice_) for mode, slice_ in held["modes"].items()}
+    return held
 
 
 def build_mode_scoped_session_json(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -53,7 +75,7 @@ def build_mode_scoped_session_json(*args: Any, **kwargs: Any) -> dict[str, Any]:
     from tests.utils.session_files import build_session_payload
 
     def keep_mode_scoped(data: Mapping[str, Any], *_args: Any, **_kwargs: Any) -> tuple[Mapping[str, Any], None]:
-        return data, None
+        return catalogs_at(data, data["version"]), None
 
     with mock.patch.object(session_drawings, "drawings_document_from_mode_scoped", keep_mode_scoped):
         return build_session_payload(*args, **kwargs)

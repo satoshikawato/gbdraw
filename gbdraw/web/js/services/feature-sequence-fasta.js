@@ -2,8 +2,11 @@
 import {
   isInternalProteinDisplayId,
   locationPartBound,
-  normalizeStringArray
+  normalizeMemberStrand,
+  normalizeStringArray,
+  resolveDisplayProteinId
 } from './feature-utils.js';
+/** @import { FeatureLike } from './feature-utils.js' */
 
 const FASTA_LINE_WIDTH = 60;
 
@@ -15,12 +18,11 @@ const FASTA_LINE_WIDTH = 60;
  */
 
 /**
- * The sequences a caller already holds for a feature; they win over the feature's own fields.
+ * A feature's sequences as Python read them (`FeatureSequencesOf` of `diagram-worker-protocol.js`); the catalog
+ * stores none (D5).
  * @typedef {object} FastaSequences
- * @property {unknown} [nucleotideSequence]
- * @property {unknown} [nucleotide_sequence]
- * @property {unknown} [aminoAcidSequence]
- * @property {unknown} [amino_acid_sequence]
+ * @property {string} nucleotideSequence
+ * @property {string} aminoAcidSequence
  */
 
 /** @param {unknown} value */
@@ -210,16 +212,41 @@ const getProteinFastaId = (feature) =>
   ]) || getNucleotideFastaId(feature);
 
 /**
- * @param {FastaFeature | null | undefined} feature
- * @param {FastaSequences} [sequences]
+ * The header fields of a Similarity group member's FASTA entries, for the orthogroup panel and the match popup alike:
+ * the member's catalog row first, the member's own fields for what the row lacks, and the protein ID the popups show
+ * (`resolveDisplayProteinId`); the header skips an internal source protein ID. The bases are read from Python when a
+ * FASTA action is pressed.
+ * @param {FeatureLike | null | undefined} member
+ * @param {FeatureLike | null | undefined} row The member's catalog row, when it resolved to one.
+ * @param {string} locationText The member's location as its popup writes it: the protein ID's last fallback.
+ * @returns {FastaFeature}
  */
-export const buildFeatureSequenceFastas = (feature, sequences = {}) => {
-  const nucleotideSequence = sequenceText(
-    sequences.nucleotideSequence ?? sequences.nucleotide_sequence ?? feature?.nucleotide_sequence ?? feature?.nucleotideSequence
-  );
-  const aminoAcidSequence = sequenceText(
-    sequences.aminoAcidSequence ?? sequences.amino_acid_sequence ?? feature?.amino_acid_sequence ?? feature?.aminoAcidSequence
-  );
+export const memberFastaFeature = (member, row, locationText) => {
+  const sourceFeature = row && typeof row === 'object' ? row : {};
+  const displayProteinId = resolveDisplayProteinId(sourceFeature, member, locationText);
+  return {
+    ...sourceFeature,
+    record_id: sourceFeature.record_id || sourceFeature.recordId || member?.recordId || member?.record_id,
+    start: sourceFeature.start ?? member?.start,
+    end: sourceFeature.end ?? member?.end,
+    strand: sourceFeature.strand || normalizeMemberStrand(member?.strand),
+    source_protein_id: sourceFeature.source_protein_id || sourceFeature.sourceProteinId || member?.sourceProteinId || member?.source_protein_id,
+    protein_id: displayProteinId,
+    product: sourceFeature.product || member?.product,
+    note: sourceFeature.note || member?.note,
+    gene: sourceFeature.gene || member?.gene,
+    organism: sourceFeature.organism || member?.organism
+  };
+};
+
+/**
+ * The FASTA texts of a feature: the header from the feature's fields, the entries from its read sequences.
+ * @param {FastaFeature | null | undefined} feature
+ * @param {FastaSequences} sequences
+ */
+export const buildFeatureSequenceFastas = (feature, sequences) => {
+  const nucleotideSequence = sequenceText(sequences.nucleotideSequence);
+  const aminoAcidSequence = sequenceText(sequences.aminoAcidSequence);
   const description = getFeatureDescription(feature);
   return {
     nucleotideFasta: formatFastaEntry({

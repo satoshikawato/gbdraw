@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `150`
+- Contract revision: `151`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -45,7 +45,7 @@ Status: active Product authority
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
   `PD-OI-116`, `PD-OI-117`,
   `PD-OI-118`, `PD-OI-119`, `PD-OI-120`, `PD-OI-121`, `PD-OI-122`,
-  `PD-OI-123`, `PD-OI-124`, `PD-OI-125`, `PD-OI-126`, and `PD-OI-127`
+  `PD-OI-123`, `PD-OI-124`, `PD-OI-125`, `PD-OI-126`, `PD-OI-127`, and `PD-OI-128`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -5772,6 +5772,29 @@ Status: active Product authority
   - This change is authority for the later runtime change that adds the
     languages: this record changes no runtime by itself and supplies no runtime
     acceptance evidence, and the Review is `REQUIRED`.
+- Revision 151 changes: `PD-OI-128` is added (concern
+  `web.feature-sequence.on-demand`, scenario revision `1`; the outcome
+  `A FEATURE-SEQUENCE-ON-DEMAND`).
+  - The Product Decision Owner `satoshikawato` chose and approved the complete
+    receipt on `2026-11-08`, in the campaign `large-inputs-20261106` (SHA-256
+    `fe255773937c0d3878591849970a7af5ab6e9270210a064ecf45004955f5004a`).
+    Its Must preserve named the Session container record `PD-OI-122`, the
+    number that record was planned to take on that date.
+  - Revision 147 recorded the Session container as `PD-OI-127`. On
+    `2026-11-11` the Product Decision Owner `satoshikawato` answered question
+    Q2 of the same campaign (`DECISIONS.md` `D-73`) 「Q1=A Q2=A」 (`D-74`): a
+    record number in a receipt that changes only because another pull request
+    took the number first may be changed without asking again, with the
+    complete text and the difference shown in the pull request. The receipt
+    below is the approved receipt with that one reference changed to
+    `PD-OI-127`; no other character differs.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-128` scenario revision `1`
+    `8d22d59408e6068e5cba2ab939ee9da0d317f5c8d997bc6e3874d66ab44c8bce`.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -14467,6 +14490,67 @@ Decision date: 2026-11-08
   "mustPreserve": "Session の中身と版 51（drawing の一覧と drawing ごとの設定と Result、PD-OI-090）。保存した図、設定、入力ファイル、編集、cache を Load で取り戻せること。古い Session 27〜50 の読み込みと、読み込む前の確認（PD-OI-099）。Save と Load が、一つの整合した操作として終わり、主スレッドの応答を保つこと（PD-OI-045）。Generate してから Save（PD-OI-079）。保存済みの図を見るだけの Load が Python を起動しないこと（PD-OI-044）。失敗しても直前の Result、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。gzip 入力の展開の上限とその断り方（PD-OI-116）。ブラウザ内コピーが選んだ時点の中身で続けること（PD-OI-121）。大きすぎる描画結果の文（PD-OI-118）。入力ファイルをアップロードしないこと。",
   "mayRetire": "新しい Session を JSON（`.gbdraw-session.json`、`.gbdraw-session.json.gz`）で書くこと。新しい Session で入力を base64 にして埋め込むこと。新しい Session について、Web が入力を合計約 384 MiB まで、ファイルを 200 MB まで、展開後を 512 MB までとすること（設定と結果の 512 MiB だけが残る）。JSON の Session 51（main に出ていない形式）を読むこと。PD-OI-116 の「Session ファイルの扱いは今のまま」と PD-OI-099 の断る一覧の「大きすぎるファイル（200 MB、展開して 512 MB を超えるもの）」のうち、この器の Session に当たる部分（古い JSON の Session には今までどおり当たる）。PD-OI-118、PD-OI-121 の「Session の形式と上限」を、この器の Session について変えないとする部分。",
   "acceptedResidualRisk": "ブラウザで必要な保存領域は、まだ測っていない。Load は入力の合計がそのまま要り、Save は圧縮した一時的な領域が要る。その量は入力の合計以下としか言えず、「入力の約 1.25 倍」という見積りも測定していない。Save は、書き始めて時間がたってから「場所がない」と断られることがある（そのとき何も保存されない）。ブラウザでの 1〜2 GiB の Save と Load の時間とメモリは、実装の PR で測るまで分からない。Chromium のシークレットウィンドウでは保存領域がメモリ上にあるので、大きい Session は早く断られうる。確かめたのは Chromium と Firefox のブラウザ内コピーまでで、この器の Save と Load はまだ動かしていない。Safari は確かめていない。`.gbdraw` が自動で解凍されないことも、確かめていない。圧縮した出力のバイトは zlib の版で変わりうるので、同じ内容の Session でも、PC によって再生成するとファイルのバイトが違うことがある（図は変わらない）。0.14.5 以前の gbdraw は新しいファイルを「JSON として読めない」と答え、「新しい版」とは答えない。CRC-32 は壊れを見つける検査で、改ざんを防ぐものではない。JSON を手で書き換えるには、解凍して直し、ZIP に戻す必要がある。CLI で作った Session には、Web が Generate できない大きさの入力が入りうる（Load は保存済みの図を見せ、Generate すると PD-OI-118 の文が出る）。CLI と Python は、悪意のある Session が宣言する大きさにも上限がなく、一時フォルダのディスクの空きを使い切りうる（今の Python の読み込みと同じ）。ブラウザが保存領域を使わせないときの Load は、Session ファイルを選んだ後に変えると止まる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-08"
+}
+```
+
+### PD-OI-128: Feature sequences read from Python on demand
+
+- Concern key: `web.feature-sequence.on-demand`
+- Scenario revision: `1`
+- Supersedes: none.
+- Status: `ACCEPTED`
+- Selected outcome: `A FEATURE-SEQUENCE-ON-DEMAND`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's choice and approval of
+  `2026-11-08` and the answer of `2026-11-11` described in the Revision
+  151 entry above. The receipt and JSON below reproduce all nine fields
+  of the approved receipt without translation or additional terms. The
+  runtime that implements it merges with it (static Product Contract
+  co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `8d22d59408e6068e5cba2ab939ee9da0d317f5c8d997bc6e3874d66ab44c8bce`.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-sequence.on-demand（配列を必要なときに Python から取る）
+Scenario revision: 1
+Choice: A FEATURE-SEQUENCE-ON-DEMAND
+  - 次の配列を、feature catalog と Session から外す。feature ごとの塩基配列（`nucleotide_sequence`）、アミノ酸配列（`amino_acid_sequence`）、配列を取り出すときの警告（`sequence_warnings`）、そして match の popup が読む record 全体の塩基配列（catalog の項目の `sequenceSources`）。配列は Python が、描いた入力から作る。値は今と同じ。作る処理は 1 つだけにする。
+  - feature の配列は、feature の ID（record key と biological feature ID）で探す。名前や caption では探さない。match の配列は、描いた record の record key か、比較用の record の番号と ID で探す。
+  - Session の版は 51 のまま、catalog の版を 5 から 6 に上げる。版 6 の catalog は、上の配列と、配列を小さく持つための `sequenceSourceIndex` と `translationFromAminoAcidSequence` を持たない。GenBank の `/translation` は今までどおり qualifier として catalog に残る。Qualifiers の表示、qualifier の検索、色の規則は Python なしで今のまま動く。
+  - 配列が要るのは次の 5 か所だけ。(a) feature の popup の Sequence tab と、その Copy。(b) Similarity group と ortholog の popup にある member の Copy と Download。(c) feature 検索の Nucleotide sequence と Amino acid sequence の field（All は今までどおり配列を探さない。PD-OI-056）。(d) Collinear の block、Similarity、比較リングの帯をクリックした popup の「… span」の行の Copy と FASTA、FASTA メニューの Copy both spans と Download both spans。(e) Interactive SVG の書き出し。書き出すときに、すべての配列を Python から読み、ファイルの中に書き込む。
+  - Similarity group の alignment（整列の確認と適用）は、record の長さを Python が自分で読む。画面に配列を持たない。
+  - popup を開くことと図は、配列を使わず Python を起動しない。Save Session も配列を使わない。match の popup は、開いた時点で record、start..end、strand、length を出す（length は座標から数える）。
+  - 待ち。Generate した後は待たない（Worker が入力を持っている）。Session を Load した後で最初に配列が要ったときは、そこで Python を起動し、配列の場所に "Reading the sequence…" を示す。待ちの目安は PD-OI-044 の「約 8 秒」と同じで、測定した値ではない。popup のほかの内容と図は、その間も使える。2 回目以降は、同じ Result の間、待たない。Load と popup を開くことは Python を起動しない（PD-OI-044、PD-OI-105）。
+  - 失敗。Python が起動しない、入力が読めない、feature や record が Result の request にない、のとき、配列の場所に理由を示し、Details と Copy diagnostics（PD-OI-046）と Retry を出す。図、popup、Result、request、draft、History は変わらない。比較用の FASTA が渡されていない BLAST の source は、今までの文 "Comparison sequence was not supplied for this BLAST source." を、popup を開いた時点で出す。Interactive SVG の書き出しで配列が取れないときは、配列のないファイルを書かずに、理由を示して何も書かない。
+  - 古い Session（版 46〜50、catalog 版 5）。今までどおり開ける（読み込み前の確認と、次の Save で最新の形式になることは PD-OI-099 のとおり）。ファイルに入っている配列は使わず、新しい Session と同じに Python から取る（値は同じ）。次の Save は catalog 版 6 で、配列を含まない。
+  - 版 27〜39 の Session のうち、request を持たず Result だけが残るもの。その Result の配列は、次に Generate するまで出ず、理由を示す。
+  - Load は、match の配列を入力ファイルから読み直さない。Load の修復の一覧にある行 "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them." は、なくなる。
+  - 大きさ。Gallery の Session 10 本の合計は、PR1 の `.gbdraw` の 60.4 MiB から約 52.6 MiB になる（-12.9 %。配列を外して作った試作ファイルで測った。`/translation` は残した）。git の pack の増加は、Gallery を作り直す 2 回目の分で約 8.4 MiB（`git gc --aggressive` 後の測定）。Generate の reply の catalog は、GenBank 25.8 Mbp の例で 87.7 MB のうち塩基配列 44.7 MB（約 55 %）が減る。PD-OI-118 の「reply が大きすぎる」入力の限界が上がる（上がる量は測っていない）。
+  - Undo / History。配列を取ることは History の step にならない。History は配列のない小さな catalog を持ち、match の配列の写しも持たなくなる。Undo と Redo の後は、配列が要るときに取り直す。取った配列は画面の Result の間だけページのメモリに置き、Session にも History にも保存しない。Generate や Undo の後に届いた古い答えは捨てる。
+  - CLI と Python。配列を作る処理は Web と同じ 1 つ。`-f interactive_svg` の図は、popup の配列と検索と match の FASTA が今と同じ。`--save_session` と `save_session_document` は catalog 版 6 を書く。書き出した Interactive SVG の配列の書き方と、中の catalog の版の数字（5）は変えない。CLI で書き出した Gallery の 3 本（BGC0000708-BGC0000713、majanivirus_orthogroup、tobacco-chloroplast）のファイルは、今とバイトまで同じにする。
+  - Gallery の Session 10 本は、catalog 版 6 で作り直して公開する。作り直した Gallery を開いて描く図と、CLI の図は変わらない。
+  - 変えないもの。feature と match の配列の値、strand の扱い、FASTA の header と file 名、popup の内容（Gallery の 10 本で、今ファイルにある値と一致する）。match の popup と FASTA の header の座標が入力ファイルの座標であること（PD-OI-076）。図（CLI の図は今と同一）。ID や record key で探すこと。書き出した Interactive SVG（Web の書き出しと CLI の `-f interactive_svg`）は、今までどおり、すべての feature の配列と match の record 全体の配列をファイルの中に持つ。popup、Sequence tab、Copy、配列の検索、match の FASTA は、Python なしでファイルだけで動く。
+Rationale: catalog の配列は大きな部分を占め、Web の GenBank の入力の限界は、この catalog を含む reply の大きさで決まっている。25.8 Mbp の GenBank では catalog の約 55 % が塩基配列で、Gallery の tobacco-chloroplast の Session は 47 % 小さくなる。配列は、popup の Sequence tab、member と span の Copy、配列 field の検索、書き出しでしか要らない。Python は入力から同じ値をいつでも作れる。いまは match の record 全体の配列を、Python が catalog に入れ、ブラウザも入力ファイルから読み直して作っており、作る処理が 2 つある。それを Python の 1 つにする。Select region の Copy FASTA と配列検索（PD-OI-115、PD-OI-117）が、Python に頼んで配列を取る形をすでに持っているので、同じ形に揃える。Owner は 2026-10-25 に「catalog から塩基/アミノ酸配列を外し、必要時に Python から取る。v0.15.0 で Session の版 51 と一緒に。古い Session は読めるまま」と決めた（perf-audit D-13 の D5）。match の record 全体の配列も catalog にある塩基配列なので、この決定に含める（Owner 委任、2026-11-08）。版 51 はまだ main に出ていないので、利用者が出会う保存形式の変更は 1 回で済む。
+Must preserve: feature と match の塩基配列、アミノ酸配列、警告の値と、strand の扱い、FASTA の header と file 名、popup の内容。preview-only Load と popup を開くことが Python を起動しないこと（PD-OI-044、PD-OI-105）。Feature search の All が配列を探さないことと、配列 field の検索（IUPAC の展開を含む）と、Preview と Interactive SVG の検索結果の一致（PD-OI-056）。match の popup と FASTA の header が入力ファイルの座標であること（PD-OI-076）。古い Session 27〜50 の読み込みと読み込み前の確認（PD-OI-099）、Session の器と版 51（PD-OI-127）。Save と Load が整合した 1 つの操作であること（PD-OI-045）。旧形式の Session は Generate してから Save（PD-OI-079）。失敗しても直前の Result、draft、History を保つこと（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。Select region の Copy FASTA と配列検索（PD-OI-115、PD-OI-117）。大きすぎる描画結果の文（PD-OI-118）。ブラウザ内コピー（PD-OI-121）。CLI の図が今と同じこと。ID や record key で探すこと。入力ファイルをアップロードしないこと。
+May retire: 新しい catalog（版 6）と Generate の reply と Session と History に、feature の配列と警告と record 全体の配列が入っていること。新しい catalog に `sequenceSourceIndex` の参照と `translationFromAminoAcidSequence` の印があること。Session 51 の catalog 版 5 を読むこと（main に出ていない形式）。Load の直後に、Python なしで Sequence tab や match の span の配列が出ること（Session 46〜50 を含む）。popup を開いた時点で配列と FASTA が入っていること。match の popup が開いた時点で、読めない span の理由を出すこと（比較用の FASTA が渡されていない BLAST の source を除く）。Load が match の配列を入力ファイルから読み直すことと、その失敗を知らせる Load の修復の行。版 27〜39 の Session の Result が、Generate の前に配列を出すこと。
+Accepted residual risk: Session を Load した後の最初の配列の待ちは、静かな PC では測っていない。Pyodide の起動は、負荷のある PC で 13.0 s（最初の Generate は 16.7 s）、Pyodide の先読みが終わった後で 50 Mbit/s のとき最初の Generate が 9.8 s という測定しかなく、PD-OI-044 の「約 8 秒」も目安である。大きい入力（Vnig の 17.5 MB の GenBank、128 MiB の GenBank）を Load した後の、起動と読み込みの時間も測っていない。CLI で作った Session に、Web が Generate できない大きさの入力が入っているとき、今は Web の Load で保存済みの図と配列が見える。D5 の後は、最初の配列で Worker が入力を読み込むので、その Session の配列の場所には配列でなく理由が出ることがある。この入力の大きさの境目は測っていない。配列 field での検索と Interactive SVG の書き出しは、全 feature の配列を取るので、大きい GenBank での時間とメモリを測っていない（今より遅くなりうる）。Web で書き出す Interactive SVG の今のファイルの大きさと、書き出しにかかる時間は測っていない。Web の GenBank の限界がどれだけ上がるか、251.6 MiB の GenBank が描けるようになるかは測っていない。match の popup を開く時間と、ページと History のメモリが減る量も測っていない。`/translation` を catalog に残すので、アミノ酸のバイトは残る（Gallery で減る量の 4〜29 %）。Gallery の実際の大きさと git の増加は、PR の実ファイルで測るまで試作の値である。git の増加 8.4 MiB は、Gallery を作る書き込みが同じ入力で同じバイトになることを前提にしている（zlib の版が変わると、設定と結果の項目のバイトだけが変わる）。match の配列の読み込みで strand と IUPAC の文字が JS と Python で一致することは、PR のテストで確かめる前である。Chromium と Firefox では確かめる予定だが、まだ動かしていない。Safari は確かめていない。0.14.5 以前の gbdraw は版 51 の Session を開けない。
+Owner: satoshikawato
+Decision date: 2026-11-08
+```
+
+```json
+{
+  "concern": "web.feature-sequence.on-demand（配列を必要なときに Python から取る）",
+  "scenarioRevision": 1,
+  "choice": "A FEATURE-SEQUENCE-ON-DEMAND\n  - 次の配列を、feature catalog と Session から外す。feature ごとの塩基配列（`nucleotide_sequence`）、アミノ酸配列（`amino_acid_sequence`）、配列を取り出すときの警告（`sequence_warnings`）、そして match の popup が読む record 全体の塩基配列（catalog の項目の `sequenceSources`）。配列は Python が、描いた入力から作る。値は今と同じ。作る処理は 1 つだけにする。\n  - feature の配列は、feature の ID（record key と biological feature ID）で探す。名前や caption では探さない。match の配列は、描いた record の record key か、比較用の record の番号と ID で探す。\n  - Session の版は 51 のまま、catalog の版を 5 から 6 に上げる。版 6 の catalog は、上の配列と、配列を小さく持つための `sequenceSourceIndex` と `translationFromAminoAcidSequence` を持たない。GenBank の `/translation` は今までどおり qualifier として catalog に残る。Qualifiers の表示、qualifier の検索、色の規則は Python なしで今のまま動く。\n  - 配列が要るのは次の 5 か所だけ。(a) feature の popup の Sequence tab と、その Copy。(b) Similarity group と ortholog の popup にある member の Copy と Download。(c) feature 検索の Nucleotide sequence と Amino acid sequence の field（All は今までどおり配列を探さない。PD-OI-056）。(d) Collinear の block、Similarity、比較リングの帯をクリックした popup の「… span」の行の Copy と FASTA、FASTA メニューの Copy both spans と Download both spans。(e) Interactive SVG の書き出し。書き出すときに、すべての配列を Python から読み、ファイルの中に書き込む。\n  - Similarity group の alignment（整列の確認と適用）は、record の長さを Python が自分で読む。画面に配列を持たない。\n  - popup を開くことと図は、配列を使わず Python を起動しない。Save Session も配列を使わない。match の popup は、開いた時点で record、start..end、strand、length を出す（length は座標から数える）。\n  - 待ち。Generate した後は待たない（Worker が入力を持っている）。Session を Load した後で最初に配列が要ったときは、そこで Python を起動し、配列の場所に \"Reading the sequence…\" を示す。待ちの目安は PD-OI-044 の「約 8 秒」と同じで、測定した値ではない。popup のほかの内容と図は、その間も使える。2 回目以降は、同じ Result の間、待たない。Load と popup を開くことは Python を起動しない（PD-OI-044、PD-OI-105）。\n  - 失敗。Python が起動しない、入力が読めない、feature や record が Result の request にない、のとき、配列の場所に理由を示し、Details と Copy diagnostics（PD-OI-046）と Retry を出す。図、popup、Result、request、draft、History は変わらない。比較用の FASTA が渡されていない BLAST の source は、今までの文 \"Comparison sequence was not supplied for this BLAST source.\" を、popup を開いた時点で出す。Interactive SVG の書き出しで配列が取れないときは、配列のないファイルを書かずに、理由を示して何も書かない。\n  - 古い Session（版 46〜50、catalog 版 5）。今までどおり開ける（読み込み前の確認と、次の Save で最新の形式になることは PD-OI-099 のとおり）。ファイルに入っている配列は使わず、新しい Session と同じに Python から取る（値は同じ）。次の Save は catalog 版 6 で、配列を含まない。\n  - 版 27〜39 の Session のうち、request を持たず Result だけが残るもの。その Result の配列は、次に Generate するまで出ず、理由を示す。\n  - Load は、match の配列を入力ファイルから読み直さない。Load の修復の一覧にある行 \"Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.\" は、なくなる。\n  - 大きさ。Gallery の Session 10 本の合計は、PR1 の `.gbdraw` の 60.4 MiB から約 52.6 MiB になる（-12.9 %。配列を外して作った試作ファイルで測った。`/translation` は残した）。git の pack の増加は、Gallery を作り直す 2 回目の分で約 8.4 MiB（`git gc --aggressive` 後の測定）。Generate の reply の catalog は、GenBank 25.8 Mbp の例で 87.7 MB のうち塩基配列 44.7 MB（約 55 %）が減る。PD-OI-118 の「reply が大きすぎる」入力の限界が上がる（上がる量は測っていない）。\n  - Undo / History。配列を取ることは History の step にならない。History は配列のない小さな catalog を持ち、match の配列の写しも持たなくなる。Undo と Redo の後は、配列が要るときに取り直す。取った配列は画面の Result の間だけページのメモリに置き、Session にも History にも保存しない。Generate や Undo の後に届いた古い答えは捨てる。\n  - CLI と Python。配列を作る処理は Web と同じ 1 つ。`-f interactive_svg` の図は、popup の配列と検索と match の FASTA が今と同じ。`--save_session` と `save_session_document` は catalog 版 6 を書く。書き出した Interactive SVG の配列の書き方と、中の catalog の版の数字（5）は変えない。CLI で書き出した Gallery の 3 本（BGC0000708-BGC0000713、majanivirus_orthogroup、tobacco-chloroplast）のファイルは、今とバイトまで同じにする。\n  - Gallery の Session 10 本は、catalog 版 6 で作り直して公開する。作り直した Gallery を開いて描く図と、CLI の図は変わらない。\n  - 変えないもの。feature と match の配列の値、strand の扱い、FASTA の header と file 名、popup の内容（Gallery の 10 本で、今ファイルにある値と一致する）。match の popup と FASTA の header の座標が入力ファイルの座標であること（PD-OI-076）。図（CLI の図は今と同一）。ID や record key で探すこと。書き出した Interactive SVG（Web の書き出しと CLI の `-f interactive_svg`）は、今までどおり、すべての feature の配列と match の record 全体の配列をファイルの中に持つ。popup、Sequence tab、Copy、配列の検索、match の FASTA は、Python なしでファイルだけで動く。",
+  "rationale": "catalog の配列は大きな部分を占め、Web の GenBank の入力の限界は、この catalog を含む reply の大きさで決まっている。25.8 Mbp の GenBank では catalog の約 55 % が塩基配列で、Gallery の tobacco-chloroplast の Session は 47 % 小さくなる。配列は、popup の Sequence tab、member と span の Copy、配列 field の検索、書き出しでしか要らない。Python は入力から同じ値をいつでも作れる。いまは match の record 全体の配列を、Python が catalog に入れ、ブラウザも入力ファイルから読み直して作っており、作る処理が 2 つある。それを Python の 1 つにする。Select region の Copy FASTA と配列検索（PD-OI-115、PD-OI-117）が、Python に頼んで配列を取る形をすでに持っているので、同じ形に揃える。Owner は 2026-10-25 に「catalog から塩基/アミノ酸配列を外し、必要時に Python から取る。v0.15.0 で Session の版 51 と一緒に。古い Session は読めるまま」と決めた（perf-audit D-13 の D5）。match の record 全体の配列も catalog にある塩基配列なので、この決定に含める（Owner 委任、2026-11-08）。版 51 はまだ main に出ていないので、利用者が出会う保存形式の変更は 1 回で済む。",
+  "mustPreserve": "feature と match の塩基配列、アミノ酸配列、警告の値と、strand の扱い、FASTA の header と file 名、popup の内容。preview-only Load と popup を開くことが Python を起動しないこと（PD-OI-044、PD-OI-105）。Feature search の All が配列を探さないことと、配列 field の検索（IUPAC の展開を含む）と、Preview と Interactive SVG の検索結果の一致（PD-OI-056）。match の popup と FASTA の header が入力ファイルの座標であること（PD-OI-076）。古い Session 27〜50 の読み込みと読み込み前の確認（PD-OI-099）、Session の器と版 51（PD-OI-127）。Save と Load が整合した 1 つの操作であること（PD-OI-045）。旧形式の Session は Generate してから Save（PD-OI-079）。失敗しても直前の Result、draft、History を保つこと（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。Select region の Copy FASTA と配列検索（PD-OI-115、PD-OI-117）。大きすぎる描画結果の文（PD-OI-118）。ブラウザ内コピー（PD-OI-121）。CLI の図が今と同じこと。ID や record key で探すこと。入力ファイルをアップロードしないこと。",
+  "mayRetire": "新しい catalog（版 6）と Generate の reply と Session と History に、feature の配列と警告と record 全体の配列が入っていること。新しい catalog に `sequenceSourceIndex` の参照と `translationFromAminoAcidSequence` の印があること。Session 51 の catalog 版 5 を読むこと（main に出ていない形式）。Load の直後に、Python なしで Sequence tab や match の span の配列が出ること（Session 46〜50 を含む）。popup を開いた時点で配列と FASTA が入っていること。match の popup が開いた時点で、読めない span の理由を出すこと（比較用の FASTA が渡されていない BLAST の source を除く）。Load が match の配列を入力ファイルから読み直すことと、その失敗を知らせる Load の修復の行。版 27〜39 の Session の Result が、Generate の前に配列を出すこと。",
+  "acceptedResidualRisk": "Session を Load した後の最初の配列の待ちは、静かな PC では測っていない。Pyodide の起動は、負荷のある PC で 13.0 s（最初の Generate は 16.7 s）、Pyodide の先読みが終わった後で 50 Mbit/s のとき最初の Generate が 9.8 s という測定しかなく、PD-OI-044 の「約 8 秒」も目安である。大きい入力（Vnig の 17.5 MB の GenBank、128 MiB の GenBank）を Load した後の、起動と読み込みの時間も測っていない。CLI で作った Session に、Web が Generate できない大きさの入力が入っているとき、今は Web の Load で保存済みの図と配列が見える。D5 の後は、最初の配列で Worker が入力を読み込むので、その Session の配列の場所には配列でなく理由が出ることがある。この入力の大きさの境目は測っていない。配列 field での検索と Interactive SVG の書き出しは、全 feature の配列を取るので、大きい GenBank での時間とメモリを測っていない（今より遅くなりうる）。Web で書き出す Interactive SVG の今のファイルの大きさと、書き出しにかかる時間は測っていない。Web の GenBank の限界がどれだけ上がるか、251.6 MiB の GenBank が描けるようになるかは測っていない。match の popup を開く時間と、ページと History のメモリが減る量も測っていない。`/translation` を catalog に残すので、アミノ酸のバイトは残る（Gallery で減る量の 4〜29 %）。Gallery の実際の大きさと git の増加は、PR の実ファイルで測るまで試作の値である。git の増加 8.4 MiB は、Gallery を作る書き込みが同じ入力で同じバイトになることを前提にしている（zlib の版が変わると、設定と結果の項目のバイトだけが変わる）。match の配列の読み込みで strand と IUPAC の文字が JS と Python で一致することは、PR のテストで確かめる前である。Chromium と Firefox では確かめる予定だが、まだ動かしていない。Safari は確かめていない。0.14.5 以前の gbdraw は版 51 の Session を開けない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-08"
 }

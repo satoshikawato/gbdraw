@@ -1,11 +1,12 @@
 // @ts-check
-/** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+/** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+/** @import { EmbeddedSequencesJson } from './catalog-sequences.js' */
 /** @import { AliasSource } from './feature-identity.js' */
 /** @import { OrthogroupFeatureIndex, OrthogroupMetadataEntry } from './orthogroup-feature-metadata.js' */
 import { locationPartNumber, normalizeStringArray } from './feature-utils.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
-import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
+import { INTERACTIVE_EMBED_SCHEMA } from '../contracts/schema.generated.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
 import { ANNOTATION_SELECTOR } from './drawn-groups.js';
@@ -45,14 +46,20 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  */
 
 /**
- * What the caller of the Interactive SVG export hands over (`captureSvgExport`
- * in `svg-serialization.js`). Every field is optional and is normalized by
+ * What the caller of the Interactive SVG export hands over: the export
+ * (`result-actions.js`) gives the embed item it read, and the capture
+ * (`captureSvgExport` in `svg-serialization.js`) the popup mode and the
+ * drawing's edits. Every field is optional and is normalized by
  * `normalizeStandaloneContext`.
  * @typedef {object} StandaloneInteractivityOptions
  * @property {string} [popupMode] `simple` or `rich`; anything else is `rich`.
- * @property {FeatureCatalog | null} [featureCatalog]
- * @property {number | string | null} [catalogResultIndex]
- * @property {string} [catalogResultName]
+ * @property {FeatureCatalogItem | null} [catalogItem] The shown Result's stored catalog item, which the file
+ *   embeds with `embeddedSequences`; without both the export writes nothing when `requireFeatureCatalog` is set.
+ * @property {EmbeddedSequencesJson | null} [embeddedSequences] The item's sequences in the export encoding, as
+ *   Python's encoder writes them (`embed_catalog_part`, which the CLI export writes too), read through the Worker
+ *   (`CatalogSequences['readEmbedJson']`, D5): the biological rows with their sequences (inline, or as
+ *   `sequenceSourceIndex` and the `translationFromAminoAcidSequence` mark) and the whole-record sources the item's
+ *   matches read. The page derives none of these and writes them into the file as they are.
  * @property {boolean} [requireFeatureCatalog]
  * @property {AliasSource[]} [features] Source Feature rows of the legacy, catalog-free path.
  * @property {StandaloneEditableLabel[]} [editableLabels]
@@ -62,16 +69,14 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  * @property {AliasSource[]} [orthogroups]
  * @property {Record<string, unknown>} [orthogroupNameOverrides]
  * @property {Record<string, unknown>} [orthogroupDescriptionOverrides]
- * @property {AliasSource[]} [sequenceSources]
  */
 
 /**
  * The options after `normalizeStandaloneContext`: every field present.
  * @typedef {object} StandaloneContext
  * @property {'simple' | 'rich'} popupMode
- * @property {FeatureCatalog | null} featureCatalog
- * @property {number | string | null} catalogResultIndex
- * @property {string} catalogResultName
+ * @property {FeatureCatalogItem | null} catalogItem
+ * @property {EmbeddedSequencesJson | null} embeddedSequences
  * @property {boolean} requireFeatureCatalog
  * @property {AliasSource[]} features
  * @property {StandaloneEditableLabel[]} editableLabels
@@ -81,7 +86,6 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  * @property {AliasSource[]} orthogroups
  * @property {Record<string, unknown>} orthogroupNameOverrides
  * @property {Record<string, unknown>} orthogroupDescriptionOverrides
- * @property {AliasSource[]} sequenceSources
  */
 
 /**
@@ -444,12 +448,9 @@ const standaloneCanonicalIdentityStatus = (payload) => {
  */
 const normalizeStandaloneContext = (options = {}) => ({
   popupMode: normalizeStandalonePopupMode(options.popupMode),
-  featureCatalog:
-    options.featureCatalog && typeof options.featureCatalog === 'object'
-      ? options.featureCatalog
-      : null,
-  catalogResultIndex: options.catalogResultIndex ?? null,
-  catalogResultName: String(options.catalogResultName || '').trim(),
+  catalogItem: options.catalogItem && typeof options.catalogItem === 'object' ? options.catalogItem : null,
+  embeddedSequences: options.embeddedSequences && typeof options.embeddedSequences === 'object'
+    ? options.embeddedSequences : null,
   requireFeatureCatalog: options.requireFeatureCatalog === true,
   features: Array.isArray(options.features) ? options.features : [],
   editableLabels: Array.isArray(options.editableLabels) ? options.editableLabels : [],
@@ -472,41 +473,8 @@ const normalizeStandaloneContext = (options = {}) => ({
   orthogroupDescriptionOverrides:
     options.orthogroupDescriptionOverrides && typeof options.orthogroupDescriptionOverrides === 'object'
       ? options.orthogroupDescriptionOverrides
-      : {},
-  sequenceSources: Array.isArray(options.sequenceSources) ? options.sequenceSources : []
+      : {}
 });
-
-/**
- * @param {StandaloneContext} context
- * @returns {FeatureCatalogItem | null}
- */
-const selectStandaloneCatalogItem = (context) => {
-  const catalog = context?.featureCatalog;
-  if (
-    !catalog
-    || catalog.schema !== FEATURE_CATALOG_SCHEMA
-    || !Array.isArray(catalog.items)
-  ) {
-    return null;
-  }
-  const resultIndex = standaloneIntegerAlias([context.catalogResultIndex]);
-  const hasResultIndex = context.catalogResultIndex !== null
-    && context.catalogResultIndex !== undefined
-    && String(context.catalogResultIndex).trim() !== '';
-  if (hasResultIndex && (!resultIndex.valid || resultIndex.value === null)) {
-    return null;
-  }
-  const hasResultName = Boolean(context.catalogResultName);
-  if (!hasResultIndex && !hasResultName) {
-    return catalog.items.length === 1 ? catalog.items[0] : null;
-  }
-  const matches = catalog.items.filter((item) => (
-    item
-    && (!hasResultIndex || item.resultIndex === resultIndex.value)
-    && (!hasResultName || String(item.resultName || '').trim() === context.catalogResultName)
-  ));
-  return matches.length === 1 ? matches[0] : null;
-};
 
 /**
  * @param {FeatureCatalogItem} item
@@ -1329,11 +1297,6 @@ const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) =>
     orthogroup_representative: false,
     qualifiers: {},
     location_parts: [],
-    nucleotide_sequence: '',
-    amino_acid_sequence: '',
-    sequence_warnings: [],
-    nucleotide_fasta: '',
-    amino_acid_fasta: '',
     orthogroup_member: null
   };
 };
@@ -1365,7 +1328,6 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
   const fallbackLabel = getStandaloneFeatureLabel(feature);
   const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
   const qualifiers = normalizeQualifierMap(feature.qualifiers);
-  const translation = normalizeStringArray(qualifiers.translation).find((value) => value.trim()) || '';
   const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature, context);
   return /** @type {StandalonePayload | undefined} */ (compactWireValue({
     svg_id: stableSvgId,
@@ -1406,11 +1368,6 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
     orthogroup_representative: Boolean(orthogroupEntry?.orthogroupRepresentative),
     qualifiers,
     location_parts: normalizeLocationParts(feature.location_parts),
-    nucleotide_sequence: String(feature.nucleotide_sequence || feature.nucleotideSequence || ''),
-    amino_acid_sequence: String(
-      feature.amino_acid_sequence || feature.aminoAcidSequence || translation || ''
-    ),
-    sequence_warnings: normalizeStringArray(feature.sequence_warnings || feature.sequenceWarnings),
     orthogroup_member: normalizeStandaloneOrthogroupMember(
       orthogroupEntry?.orthogroupMember
     )
@@ -1492,8 +1449,6 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       svgId
     );
     const qualifiers = normalizeQualifierMap(feature?.qualifiers);
-    const aminoAcidSequence = String(feature?.amino_acid_sequence || '');
-    const translation = normalizeStringArray(qualifiers.translation).find((value) => value.trim()) || '';
     const stableSvgId = String(entry.stableId || standaloneFeatureStableSvgId(feature) || svgId).trim();
     const recordIndex = Number.isInteger(entry.recordIndex)
       ? entry.recordIndex
@@ -1537,11 +1492,6 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       Object.assign(payload, {
         qualifiers,
         location_parts: normalizeLocationParts(feature?.location_parts),
-        nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
-        amino_acid_sequence: aminoAcidSequence && aminoAcidSequence !== translation
-          ? aminoAcidSequence
-          : '',
-        sequence_warnings: normalizeStringArray(feature?.sequence_warnings),
         orthogroup_member: orthogroupMember
       });
     }
@@ -1716,92 +1666,6 @@ const buildStandaloneMatchPayloads = (svg) => {
       return true;
     }) && group.every((_entry, index) => fragments.has(String(index)));
   }).map((group) => group[0].payload);
-};
-
-/**
- * @param {AliasSource[]} matches
- * @param {AliasSource[] | null | undefined} sources
- * @returns {AliasSource[]}
- */
-const selectStandaloneSequenceSources = (matches, sources) => {
-  if (!Array.isArray(matches) || matches.length === 0) return [];
-  /** @type {{ recordIndex: number, recordId: string }[]} */
-  const linearReferences = [];
-  /** @type {Set<string>} */
-  const circularRecordIds = new Set();
-  /** @type {{ sourceIndex: number, recordId: string }[]} */
-  const comparisonReferences = [];
-  matches.forEach((match) => {
-    if (match?.match_kind === 'homology') {
-      const referenceSide = String(match.reference_side || '').trim();
-      const recordId = standaloneConsistentTextAlias(match, [
-        `${referenceSide}_record_id`,
-        `${referenceSide}RecordId`
-      ]);
-      if (!recordId.valid) return;
-      if (recordId.value) circularRecordIds.add(recordId.value);
-      const sourceIndex = standaloneIntegerAlias([match.source_index]);
-      if (sourceIndex.valid && sourceIndex.value !== null) {
-        const comparisonSide = referenceSide === 'query' ? 'subject' : 'query';
-        const comparisonRecordId = standaloneConsistentTextAlias(match, [
-          `${comparisonSide}_record_id`,
-          `${comparisonSide}RecordId`
-        ]);
-        if (comparisonRecordId.valid) {
-          comparisonReferences.push({
-            sourceIndex: sourceIndex.value,
-            recordId: comparisonRecordId.value
-          });
-        }
-      }
-      return;
-    }
-    ['query', 'subject'].forEach((role) => {
-      const recordIndex = standaloneIntegerAlias([
-        match?.[`${role}_record_index`]
-      ]);
-      const recordId = standaloneConsistentTextAlias(match, [
-        `${role}_record_id`,
-        `${role}RecordId`
-      ]);
-      if (recordIndex.valid && recordIndex.value !== null && recordId.valid) {
-        linearReferences.push({ recordIndex: recordIndex.value, recordId: recordId.value });
-      }
-    });
-  });
-  return (Array.isArray(sources) ? sources : []).filter((source) => {
-    const origin = String(source?.origin || '').trim();
-    const sourceRecordId = standaloneConsistentTextAlias(source, ['recordId', 'record_id']);
-    if (!sourceRecordId.valid) return false;
-    const sourceAliases = new Set([
-      sourceRecordId.value,
-      ...(Array.isArray(source?.aliases) ? source.aliases : [])
-    ].map((value) => String(value || '').trim()).filter(Boolean));
-    if (origin === 'linear-record') {
-      const recordIndex = standaloneIntegerAlias([
-        source.recordIndex,
-        source.record_index
-      ]);
-      return recordIndex.valid && recordIndex.value !== null && linearReferences.some((reference) => (
-        reference.recordIndex === recordIndex.value
-        && (!reference.recordId || sourceAliases.has(reference.recordId))
-      ));
-    }
-    if (origin === 'homology-comparison') {
-      const sourceIndex = standaloneIntegerAlias([
-        source.sourceIndex,
-        source.source_index
-      ]);
-      return sourceIndex.valid && sourceIndex.value !== null && comparisonReferences.some((reference) => (
-        reference.sourceIndex === sourceIndex.value
-        && (!reference.recordId || sourceAliases.has(reference.recordId))
-      ));
-    }
-    if (origin === 'circular-reference') {
-      return Array.from(sourceAliases).some((value) => circularRecordIds.has(value));
-    }
-    return false;
-  });
 };
 
 /**
@@ -1995,6 +1859,24 @@ const applyStandaloneViewportRoot = (svg) => {
 };
 
 /**
+ * The JSON text of the item an exported Interactive SVG embeds: `JSON.stringify` of the stored item with the
+ * drawing's edits, whose biological rows and whole-record sources are the export encoding Python wrote, taken as text
+ * (the item Python's `embed_catalog_item` writes: the rows in their place, the sources after every stored key).
+ * @param {FeatureCatalogItem} item
+ * @param {EmbeddedSequencesJson} sequences
+ * @returns {string}
+ */
+export const embeddedCatalogItemJson = (item, sequences) => {
+  /** @type {Record<string, unknown>} */
+  const fields = { ...item, biologicalFeatures: null, ...(sequences.sequenceSources === null ? {} : { sequenceSources: null }) };
+  const text = (/** @type {string} */ key, /** @type {unknown} */ value) => (key === 'biologicalFeatures'
+    ? sequences.biologicalFeatures
+    : key === 'sequenceSources' && sequences.sequenceSources !== null ? sequences.sequenceSources : JSON.stringify(value));
+  return `{${Object.entries(fields).filter(([, value]) => value !== undefined && typeof value !== 'function')
+    .map(([key, value]) => `${JSON.stringify(key)}:${text(key, value)}`).join(',')}}`;
+};
+
+/**
  * @param {SVGSVGElement | null | undefined} svg
  * @param {StandaloneInteractivityOptions} [options]
  * @returns {boolean}
@@ -2003,10 +1885,10 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   if (!svg) return false;
 
   const context = normalizeStandaloneContext(options);
-  const sourceCatalogItem = selectStandaloneCatalogItem(context);
-  if ((context.featureCatalog || context.requireFeatureCatalog) && !sourceCatalogItem) {
-    return false;
-  }
+  // The file embeds the stored item with the drawing's edits and the sequences Python encoded (D5).
+  const embeddedSequences = context.embeddedSequences;
+  const sourceCatalogItem = embeddedSequences ? context.catalogItem : null;
+  if (context.requireFeatureCatalog && !sourceCatalogItem) return false;
   const catalogItem = sourceCatalogItem
     ? catalogItemWithStandaloneOverrides(sourceCatalogItem, context)
     : null;
@@ -2041,9 +1923,6 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   const matches = catalogItem
     ? catalogItem.comparisonMatches
     : buildStandaloneMatchPayloads(svg);
-  const sequenceSources = catalogItem
-    ? (catalogItem.sequenceSources || [])
-    : selectStandaloneSequenceSources(matches, context.sequenceSources);
 
   const featureIds = new Set(features.map((feature) => (
     catalogItem ? feature.svgId : feature.svg_id
@@ -2075,13 +1954,12 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
   metadata.setAttribute('data-popup-mode', normalizedPopupMode);
   if (catalogItem) {
-    metadata.setAttribute('data-schema', String(FEATURE_CATALOG_SCHEMA));
+    // The export profile (D5-02): the embedded catalog's schema, which the CLI writes too, not the stored one.
+    metadata.setAttribute('data-schema', String(INTERACTIVE_EMBED_SCHEMA));
     metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
     metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
-    metadata.textContent = JSON.stringify(/** @satisfies {FeatureCatalog} */ ({
-      schema: FEATURE_CATALOG_SCHEMA,
-      items: [catalogItem]
-    }));
+    metadata.textContent = `{"schema":${INTERACTIVE_EMBED_SCHEMA},"items":[${
+      embeddedCatalogItemJson(catalogItem, /** @type {EmbeddedSequencesJson} */ (embeddedSequences))}]}`;
   } else {
     metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
     metadata.textContent = JSON.stringify(compactWireValue({
@@ -2090,8 +1968,7 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
       features,
       biological_features: biologicalFeatures,
       orthogroups,
-      matches,
-      sequence_sources: sequenceSources
+      matches
     }));
   }
 

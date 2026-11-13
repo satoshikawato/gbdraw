@@ -153,6 +153,16 @@ export const locationPartBound = (part, field) => (
 );
 
 /**
+ * A member's strand as a FASTA header and a location text write it: `+` or `-`, else the text it holds.
+ * @param {unknown} strand
+ */
+export const normalizeMemberStrand = (strand) => {
+  if (strand === -1 || String(strand).trim() === '-1') return '-';
+  if (strand === 1 || String(strand).trim() === '1') return '+';
+  return String(strand ?? '').trim();
+};
+
+/**
  * The 1-based `start..end` text of a Similarity group member (or any part),
  * read with `locationPartNumber`. A bound that does not read shows its stored
  * text, and when one side is empty the other shows alone, so a missing start
