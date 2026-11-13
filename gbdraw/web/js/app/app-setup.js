@@ -2650,7 +2650,7 @@ export const createAppSetup = () => {
     LEGEND_FILL_DOMAINS, STROKE_DOMAINS, addFeatureVisibilityRule, moveFeatureVisibilityRuleDown, moveFeatureVisibilityRuleUp,
     removeFeatureVisibilityRule, setFeatureVisibilityRuleField, setFeatureVisibility, updateClickedFeatureVisibility,
     handleFeatureVisibilityScopeChoice, requestFeatureColorChange, setFeatureColorValue, updateClickedFeatureColor,
-    updateLegendEntryColor, legendRowHasRules, setTypeDefaultColor: featureActions.setTypeDefaultColor,
+    updateLegendEntryColor, legendRowHasRules, setLegendRowDefaultColor: featureActions.setLegendRowDefaultColor,
     preparedLegendRowDefaultColorType: featureActions.preparedLegendRowDefaultColorType, setLegendEntryStrokeColorValue,
     cancelFeatureStyleScope, handleColorScopeChoice, handleFeatureStyleScopeChoice
   });

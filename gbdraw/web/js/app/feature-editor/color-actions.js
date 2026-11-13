@@ -590,10 +590,8 @@ export const createFeatureColorActions = ({
    */
   const getFeatureStyleScope = (feat, requestedLegendName = null) => {
     const requestedCaption = normalizeCaption(requestedLegendName);
-    const effectiveCaption = normalizeCaption(getEffectiveLegendCaption(feat));
-    const fallbackCaption = normalizeCaption(getFeatureCaption(feat));
-    const legendName = requestedCaption || effectiveCaption || fallbackCaption;
-    if (!legendName) return null;
+    // D-26: a feature that no Legend row draws has no Legend name (''), so no Legend item to share.
+    const legendName = requestedCaption || normalizeCaption(getEffectiveLegendCaption(feat));
 
     const matchingRule = findMatchingRegexRule(feat);
     const ruleMatchCount = matchingRule ? countFeaturesMatchingRule(matchingRule) : 0;
@@ -823,7 +821,8 @@ export const createFeatureColorActions = ({
   /** @param {PythonLegendKey} sourceKey @param {readonly ColorFeature[]} features */
   const takesWholeRow = (sourceKey, features) => {
     const selected = new Set(features.map(feature => feature.svg_id));
-    return getFeaturesForLegendCaption(sourceKey).every(feature => selected.has(feature.svg_id));
+    // A feature of no row (D-26, key '') takes no row: it splits off into a row of its own.
+    return Boolean(sourceKey) && getFeaturesForLegendCaption(sourceKey).every(feature => selected.has(feature.svg_id));
   };
 
   // The rename of a Legend row without rules or features writes the intent
@@ -935,7 +934,8 @@ export const createFeatureColorActions = ({
 
     const oldCaption = normalizeCaption(request.oldCaption);
     const newCaption = normalizeCaption(request.newCaption);
-    if (!oldCaption || !newCaption || newCaption === oldCaption) {
+    // A popup's feature that no Legend row draws has no old name (D-26).
+    if ((!oldCaption && request.source !== 'popup') || !newCaption || newCaption === oldCaption) {
       clearLegendRenameDialog(drawing, { restoreInput: true });
       return;
     }
@@ -1153,14 +1153,18 @@ export const createFeatureColorActions = ({
   };
 
   // OIC-029: a palette row's color is its type's default color; the rows merged into it (D-35) follow. The one
-  // route of both the scope choice and the Legend popup (`setTypeDefaultColor`): the row first releases its own
-  // Legend color through the Legend owner, so it follows its type's default color again.
-  /** @param {DrawingState} drawing @param {string} type @param {string} color */
-  const applyDefaultColorToLegendRow = async (drawing, type, color) => {
-    writeLegendRowColor(drawing, [], color, { inherit: [/** @type {PythonLegendKey} */ (type)] });
-    const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (type));
+  // route of both the scope choice and the Legend popup (`setLegendRowDefaultColor`): the row, by its key (a
+  // type's own row or its "other" row, OV-3497), first releases its own Legend color through the Legend owner,
+  // so it follows its type's default color again.
+  /**
+   * @param {DrawingState} drawing @param {PythonLegendKey} key The row's key.
+   * @param {string} type The type whose default color draws the row. @param {string} color
+   */
+  const applyDefaultColorToLegendRow = async (drawing, key, type, color) => {
+    writeLegendRowColor(drawing, [], color, { inherit: [key] });
+    const keys = legendRowKeys(getCurrentSvg(), key);
     setDefaultColor(drawing, type, color);
-    const merged = keys.filter((key) => key !== type);
+    const merged = keys.filter((each) => each !== key);
     if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(drawing, merged, color);
   };
 
@@ -1271,11 +1275,12 @@ export const createFeatureColorActions = ({
       return;
     }
 
-    if (!currentCaption || requestedCaption === currentCaption) {
-      clickedFeature.value.legendName = currentCaption || requestedCaption;
+    if (requestedCaption === currentCaption) {
+      clickedFeature.value.legendName = currentCaption;
       return;
     }
 
+    // D-26: a feature that no Legend row draws ('') is named by itself, This feature only; its key names no row.
     await continueLegendRenameRequest(drawing, {
       source: 'popup',
       feat,
@@ -1399,7 +1404,7 @@ export const createFeatureColorActions = ({
       const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (targetLegendName));
       // The choice does what the dialog showed: its default-color line, or rules.
       if (defaultColorType) {
-        await applyDefaultColorToLegendRow(drawing, defaultColorType, color);
+        await applyDefaultColorToLegendRow(drawing, /** @type {PythonLegendKey} */ (targetLegendName), defaultColorType, color);
         showClickedFeatureColor(feat, color);
       } else if (await applyColorToLegendSpecificRules(drawing, keys, color)) {
         showClickedFeatureColor(feat, color);
@@ -1860,6 +1865,6 @@ export const createFeatureColorActions = ({
     /** @param {string} key */
     legendRowDefaultColorType: (key) => legendRowDefaultColorType(state.activeDrawing(), key),
     preparedLegendRowDefaultColorType: colorAction(legendRowDefaultColorType, { targetRules: false }),
-    setTypeDefaultColor: colorAction(applyDefaultColorToLegendRow, { targetRules: false })
+    setLegendRowDefaultColor: colorAction(applyDefaultColorToLegendRow, { targetRules: false })
   };
 };

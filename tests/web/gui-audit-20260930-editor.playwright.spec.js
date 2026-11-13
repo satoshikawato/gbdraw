@@ -463,6 +463,7 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
 // whose type no rule colors, in "tRNA". D-23: the Legend editor's rename of
 // that "other proteins" row, a row the drawing names, changes its name only:
 // no rule is written and the row keeps its place, live and after Generate.
+// D-26: a feature that no Legend row draws has no Legend name.
 test('HMMT Session: the popup names the Legend row the figure draws a default feature in (OV-3461), and its rename keeps the row (D-23)', async ({ browser }) => {
   test.setTimeout(120_000);
   const page = await load(browser, HMMT_SESSION);
@@ -496,6 +497,25 @@ test('HMMT Session: the popup names the Legend row the figure draws a default fe
     expect(await featureRows('mounted'), 'live').toEqual(['ND1', 'other CDS']);
     await generate(page);
     expect(await featureRows('result'), 'after Generate').toEqual(['ND1', 'other CDS']);
+    // D-26: a CDS that an uncaptioned rule colors is in no Legend row: its popup names none, and its
+    // Color Change Scope dialog offers no Legend item.
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val: '^cytochrome b$', color: '#00aa00', cap: '' });
+      await app.addSpecificRule();
+    });
+    await settle(page);
+    await generate(page);
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === 'cytochrome b'), null);
+    });
+    await expect(page.getByLabel('Feature legend name', { exact: true }), 'no Legend row').toHaveValue('');
+    await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.updateClickedFeatureColor('#123456'); });
+    const scope = page.getByRole('dialog').filter({ has: page.locator('#feature-style-scope-title') });
+    await expect(scope.getByRole('button', { name: 'This feature only' })).toBeVisible();
+    await expect(scope.getByRole('button', { name: /^Legend item/ })).toHaveCount(0);
+    await scope.getByRole('button', { name: 'Cancel', exact: true }).click();
   } finally {
     await page.context().close();
   }

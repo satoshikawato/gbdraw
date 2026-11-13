@@ -760,23 +760,23 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
   const ref = (value) => ({ value });
   const cds = { id: 'c1', svg_id: 'c1', type: 'CDS', qualifiers: {} };
   // CDS renamed `Shared` in the color of the tRNA rule row `Shared`: one row.
-  const fixture = (defaultColorType) => {
+  const fixture = (defaultColorType, key = 'CDS') => {
     const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#445566', cap: 'Shared' };
     const state = {
       manualSpecificRules: [rule],
-      svgContainer: mounted([['CDS', '#445566'], ['Shared', '#445566', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+      svgContainer: mounted([[key, '#445566'], ['Shared', '#445566', { display: 'none', 'data-legend-merged': key }]]),
       results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#445566' }),
       extractedFeatures: ref([cds]), biologicalFeatures: ref([cds]), clickedFeature: ref(null),
       featureStyleScopeDialog: { show: true, kind: 'fill', feat: cds, color: '#ff0000', strokeColor: null, strokeWidth: null,
-        legendName: 'CDS', matchingRule: null, siblingCount: 1, ruleMatchCount: 0, defaultColorType },
+        legendName: key, matchingRule: null, siblingCount: 1, ruleMatchCount: 0, defaultColorType },
       resetColorDialog: {}, legendRenameDialog: {},
       legendEntries: ref([
-        { caption: 'Shared', originalCaption: 'CDS', color: '#445566' },
+        { caption: 'Shared', originalCaption: key, color: '#445566' },
         { caption: 'Shared', originalCaption: 'Shared', color: '#445566' }
       ]),
-      originalLegendOrder: ref(['CDS', 'Shared']), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+      originalLegendOrder: ref([key, 'Shared']), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
       originalLegendColors: ref({}), featureColorOverrides: {}, featureStrokeOverrides: {},
-      legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#445566' }, adv: {}
+      legendStrokeOverrides: {}, legendColorOverrides: { [key]: '#445566' }, adv: {}
     };
     const committed = [];
     const defaults = [];
@@ -794,7 +794,7 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
       },
       getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
       otherLegendRowType: () => null,
-      effectiveLegendCaptions: () => () => 'CDS',
+      effectiveLegendCaptions: () => () => key,
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
       findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), groupColorRules: () => assert.fail('a merged rule row is recolored through its rule'),
@@ -811,17 +811,21 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
     if (defaultColorType) assert.deepEqual(defaults, [['CDS', '#ff0000']], 'the palette row\'s default color');
     else assert.deepEqual(state.legendColorOverrides, { CDS: '#ff0000' }, 'the other key\'s Legend color, in the rule commit');
   }
-  // One route sets a type's default color: the Legend popup (`setTypeDefaultColor`) ends where the scope choice does,
-  // the row's own Legend color released through the Legend owner.
-  const viaScope = fixture('CDS');
-  await viaScope.popup.handleColorScopeChoice('caption');
-  const viaPopup = fixture('CDS');
-  await viaPopup.popup.setTypeDefaultColor('CDS', '#ff0000');
-  const outcome = ({ state, committed, defaults }) => ({
-    rules: state.manualSpecificRules, overrides: { ...state.legendColorOverrides }, committed, defaults
-  });
-  assert.deepEqual(outcome(viaPopup), outcome(viaScope));
-  assert.equal('CDS' in viaScope.state.legendColorOverrides, false, 'the row follows its type\'s default color again');
+  // One route sets a type's default color: the Legend popup (`setLegendRowDefaultColor`) ends where the scope choice
+  // does, the row's own Legend color released through the Legend owner by the row's key: a type's own row, or its
+  // "other" row, whose type's default color draws it too (OV-3497).
+  for (const key of ['CDS', 'other proteins']) {
+    const viaScope = fixture('CDS', key);
+    await viaScope.popup.handleColorScopeChoice('caption');
+    assert.equal(key in viaScope.state.legendColorOverrides, false, `${key}: the row follows its type's default color again`);
+    assert.deepEqual(viaScope.defaults, [['CDS', '#ff0000']], `${key}: the CDS default color`);
+    const viaPopup = fixture('CDS', key);
+    await viaPopup.popup.setLegendRowDefaultColor(key, 'CDS', '#ff0000');
+    const outcome = ({ state, committed, defaults }) => ({
+      rules: state.manualSpecificRules, overrides: { ...state.legendColorOverrides }, committed, defaults
+    });
+    assert.deepEqual(outcome(viaPopup), outcome(viaScope), key);
+  }
   const { state, popup } = fixture(null);
   Object.assign(state.featureStyleScopeDialog, { kind: 'stroke', color: null, strokeColor: '#00aa00', strokeWidth: 2 });
   assert.equal(await popup.handleFeatureStyleScopeChoice('caption'), true);

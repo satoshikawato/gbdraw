@@ -314,7 +314,7 @@ export const createFeatureEditor = ({
     setFeatureColor: colorActions.setFeatureColor,
     legendRowDefaultColorType: colorActions.legendRowDefaultColorType,
     preparedLegendRowDefaultColorType: colorActions.preparedLegendRowDefaultColorType,
-    setTypeDefaultColor: colorActions.setTypeDefaultColor,
+    setLegendRowDefaultColor: colorActions.setLegendRowDefaultColor,
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,

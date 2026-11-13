@@ -1146,6 +1146,30 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     'a rename onto the "other" row offers Keep both and Cancel');
   assert.equal(await otherRow().renameActions.preparedLegendRowDefaultColorType('other proteins'), 'CDS',
     'the "other" row is drawn in the CDS default color');
+  // D-26: a CDS that an uncaptioned rule colors while a captioned CDS rule is
+  // used is in no Legend row ('' from the rule owner). Its Color Change Scope
+  // dialog names no Legend item, and a popup rename from its empty name takes
+  // This feature only, from no row: one rule for it, the typed name.
+  const cytb = cds('b1', 'CYTB', '');
+  const greenRule = { feat: 'CDS', qual: 'product', val: '^CYTB$', color: '#00aa00', cap: '' };
+  const noRow = (clicked = null) => build({
+    entries: [{ caption: 'ND1', color: '#e63946' }, { caption: 'other proteins', color: '#54bcf8' }], order: ['ND1', 'other proteins'],
+    rules: [nd1Rule, greenRule], features: [cds('n1', 'ND1', 'ND1'), cds('c1', 'COX1', 'other proteins'), cytb],
+    otherRows: { 'other proteins': 'CDS' }, scopeDialog: {}, clicked,
+    ruleOverrides: { effectiveLegendCaptions: () => (feature) => feature.legendCaption,
+      findMatchingRegexRule: (feature) => (feature.svg_id === 'b1' ? greenRule : null), countFeaturesMatchingRule: () => 1,
+      findExistingColorForCaption: () => null }
+  });
+  const noRowScope = noRow();
+  await noRowScope.renameActions.requestFeatureColorChange(cytb, '#123456');
+  assert.equal(noRowScope.errorLog.value, null);
+  assert.deepEqual([noRowScope.scopeDialog.show, noRowScope.scopeDialog.legendName, noRowScope.scopeDialog.siblingCount], [true, '', 0],
+    'no Legend item for a feature of no row');
+  const renamedNoRow = noRow({ svg_id: 'b1', feat: cytb, legendName: 'Cytochrome', appliedLegendName: '' });
+  await renamedNoRow.renameActions.handleLegendNameCommit();
+  assert.notEqual(renamedNoRow.legendRenameDialog.show, true, 'no scope to ask: the feature alone');
+  assert.deepEqual(renamedNoRow.committed.map((rules) => rules.filter(({ cap }) => cap === 'Cytochrome').map(({ val }) => val)),
+    [['^CYTB$']], 'one rule names the feature');
   // OV-294 residual: a renamed row's rules are read by its Python key, not by
   // the caption it shows, so renaming a row that shows a rule's caption
   // renames the row and leaves that rule alone.

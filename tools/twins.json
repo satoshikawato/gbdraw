@@ -171,7 +171,8 @@
         "gbdraw/legend/table.py:_generated_legend_rows"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/track-legend-rows.js:trackLegendRows"
+        "gbdraw/web/js/services/track-legend-rows.js:trackLegendRows",
+        "gbdraw/web/js/services/specific-color-rules.js:legendRowType"
       ],
       "vector": "tests/fixtures/legend_generated_rows.json",
       "reason": "A live edit shows the Legend rows before Generate; the vector pins their keys to Python's.",

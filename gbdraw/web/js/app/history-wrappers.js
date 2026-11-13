@@ -18,6 +18,7 @@ import { msg } from '../utils/i18n.js';
 /** @import { UnresolvedNotice, VisibilityTarget } from '../services/feature-visibility.js' */
 /** @import { LegendRowName } from '../services/legend-row-names.js' */
 /** @import { ColorRuleLegendGroup } from '../services/specific-color-rules.js' */
+/** @import { PythonLegendKey } from '../services/legend-svg.js' */
 /** @import { PopupOrigin } from '../utils/popup-bounds.js' */
 /** @import { ColorFeature } from './feature-editor/color-actions.js' */
 /** @import { LabelTableInput } from './feature-editor/label-table.js' */
@@ -71,7 +72,8 @@ const { computed, reactive, ref } = window.Vue;
  * @property {(color: string) => unknown} updateClickedFeatureColor
  * @property {(index: number, color: string) => unknown} updateLegendEntryColor
  * @property {(index: number) => boolean} legendRowHasRules
- * @property {(type: string, color: string) => unknown} setTypeDefaultColor Sets a feature type's default color.
+ * @property {(key: PythonLegendKey, type: string, color: string) => unknown} setLegendRowDefaultColor Sets the default
+ *   color of the type whose default color draws the Legend row of `key`, which releases its own color.
  * @property {(key: string) => unknown} preparedLegendRowDefaultColorType
  *   The type whose default color draws a Legend row, null when none does, undefined when the matches went stale.
  * @property {(idx: number, value: string | null) => unknown} setLegendEntryStrokeColorValue
@@ -91,7 +93,7 @@ export const createFeatureEditHistory = ({
   addFeatureVisibilityRule, moveFeatureVisibilityRuleDown, moveFeatureVisibilityRuleUp, removeFeatureVisibilityRule,
   setFeatureVisibilityRuleField, setFeatureVisibility, updateClickedFeatureVisibility, handleFeatureVisibilityScopeChoice,
   requestFeatureColorChange, setFeatureColorValue, updateClickedFeatureColor, updateLegendEntryColor, legendRowHasRules,
-  setTypeDefaultColor, preparedLegendRowDefaultColorType, setLegendEntryStrokeColorValue, cancelFeatureStyleScope,
+  setLegendRowDefaultColor, preparedLegendRowDefaultColorType, setLegendEntryStrokeColorValue, cancelFeatureStyleScope,
   handleColorScopeChoice, handleFeatureStyleScopeChoice
 }) => {
   const { featureIdentityNotices, featureEditRemovalCount, featureStyleScopeDialog } = state;
@@ -150,7 +152,7 @@ export const createFeatureEditHistory = ({
   const updateLegendEntryColorShown = (index, color) => (
     legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
   );
-  const setTypeDefaultColorWithHistory = undoableAction(msg('Change feature color'), setTypeDefaultColor);
+  const setLegendRowDefaultColorWithHistory = undoableAction(msg('Change feature color'), setLegendRowDefaultColor);
   // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
   // The template hands the commit to its `v-committed-value` field, which shows the row's color once it has
   // settled: a refused edit leaves the view as it was.
@@ -158,7 +160,7 @@ export const createFeatureEditHistory = ({
   const updateLegendEntryColorInPopup = async (index, color) => {
     const entry = state.activeDrawing().legendEntries.value[index];
     const type = entry ? await preparedLegendRowDefaultColorType(legendEntryKey(entry)) : null;
-    if (typeof type === 'string') return setTypeDefaultColorWithHistory(type, color);
+    if (entry && typeof type === 'string') return setLegendRowDefaultColorWithHistory(legendEntryKey(entry), type, color);
     // null: no default color draws the row (the swatch only); undefined: the matches went stale, so do nothing.
     return type === null ? updateLegendEntryColorShown(index, color) : type;
   };
