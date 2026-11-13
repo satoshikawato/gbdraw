@@ -144,6 +144,30 @@ import {
  * @property {RevealSetting} [revealSetting] Without a settings pane, the field takes the focus where it is.
  */
 
+/** @param {unknown} caption A row whose key is its caption. */
+const captionKey = (caption) => /** @type {PythonLegendKey} */ (String(caption || '').trim());
+
+/**
+ * The row Generate draws a feature of no captioned rule in: its type's own
+ * row, its type's "other" row, or no row (''), as `featureLegendRows` says; a
+ * feature without a type, the row its label names. The drawn features' rows
+ * are read once, when the first typed feature asks.
+ * @param {Parameters<typeof drawnRuleMatches>[0]} context
+ * @param {(feat: ColorFeature) => string} labelOf
+ */
+const featureRowReader = (context, labelOf) => {
+  /** @type {FeatureLegendRows | null} */
+  let rows = null;
+  /** @param {ColorFeature} feat @param {Parameters<FeatureLegendRows['rowOf']>[1]} rule */
+  return (feat, rule) => {
+    const type = String(feat.type || '').trim();
+    if (!type) return captionKey(labelOf(feat));
+    rows ||= drawnRuleMatches(context).rows;
+    const row = rows.rowOf(type, rule);
+    return captionKey(typeof row === 'string' ? row : '');
+  };
+};
+
 /** @param {FeatureRuleActionsOptions} options */
 export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, isRuleInputCurrent, snapshotRuleInputs, isRulePrepared, prepareRuleCandidate, synthesizeGroupRules, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
@@ -774,14 +798,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
     const context = displayedLegendRowContext(state, drawing);
     const legendCaption = ruleLegendCaptions(context);
-    // The rows of the displayed Result's drawn features, read once a feature
-    // of no captioned rule asks.
-    /** @type {FeatureLegendRows | null} */
-    let rows = null;
-    /** @param {unknown} caption A row whose key is its caption. */
-    const rowOf = (caption) => /** @type {PythonLegendKey} */ (normalizeCaption(caption));
+    const featureRow = featureRowReader(context, getIndividualFeatureLabel);
     return (feat) => {
-      if (!feat) return rowOf('');
+      if (!feat) return captionKey('');
       const rule = ruleMatches.first(feat);
       if (rule && normalizeCaption(rule.cap)) return legendCaption(rule);
 
@@ -792,11 +811,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const overrideCaption = typeof override === 'object' && normalizeCaption(override.caption);
       if (overrideCaption) return legendCaption({ cap: overrideCaption, color: override.color });
 
-      const type = normalizeCaption(feat.type);
-      if (!type) return rowOf(getIndividualFeatureLabel(feat));
-      rows ||= drawnRuleMatches(context).rows;
-      const row = rows.rowOf(type, rule);
-      return rowOf(typeof row === 'string' ? row : '');
+      return featureRow(feat, rule);
     };
   };
   /** @param {ColorFeature | null | undefined} feat */
