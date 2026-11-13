@@ -1001,22 +1001,21 @@ const installLosatAfterStep = (state, ownerSet, drawingId, commit) => {
 };
 
 /**
- * Clear LOSAT results' reach into the drawings not shown (D-197): `clear` empties the protein identity manifest of each
- * drawing the slot store keeps and counts itself; a drawing History holds out of the store (a Delete, an undone New or
- * Duplicate) notes the `count` when it leaves and comes back through `putHeldSlot`, emptied after a Clear (OV-3274).
+ * Clear LOSAT results' reach into the drawings not shown (PD-OI-022 scenario revision 2): `begin` counts the Clear and
+ * returns the protein identity manifest of each drawing the slot store keeps (D-197), in which the protein searches the
+ * Clear keeps for that drawing resolve. A drawing History holds out of the store (a Delete, an undone New or Duplicate)
+ * is no drawing of the project, so a Clear keeps nothing for it: it notes the `count` when it leaves and comes back
+ * through `putHeldSlot` with an empty manifest and no rows after a Clear (OV-3274).
  * @param {{ kept: () => readonly Readonly<ArtifactSlot>[], putSlot: (slot: Readonly<ArtifactSlot>) => void }} artifactSlots
  * @param {(drawingId: DrawingId, values: { proteinIdentityManifest: unknown }) => void} writeArtifactValues
  *   Writes artifact slot values of a drawing the store holds.
  */
 const createLosatClearReach = (artifactSlots, writeArtifactValues) => {
   let clears = 0;
-  /** @param {DrawingId} drawingId */
-  const emptyManifestOf = (drawingId) => writeArtifactValues(drawingId, {
-    proteinIdentityManifest: ARTIFACT_SLOT_EMPTY.proteinIdentityManifest() });
   return {
-    clear: () => {
+    begin: () => {
       clears += 1;
-      artifactSlots.kept().forEach((slot) => emptyManifestOf(slot.drawingId));
+      return artifactSlots.kept().map(({ values }) => values.proteinIdentityManifest);
     },
     count: () => clears,
     /** Whether a Clear ran since `heldClears` (a `count`). @param {number} heldClears */
@@ -1028,7 +1027,9 @@ const createLosatClearReach = (artifactSlots, writeArtifactValues) => {
     putHeldSlot: (drawingId, slot, heldClears) => {
       if (slot) artifactSlots.putSlot(slot);
       const cleared = heldClears !== clears;
-      if (slot && cleared) emptyManifestOf(drawingId);
+      if (slot && cleared) {
+        writeArtifactValues(drawingId, { proteinIdentityManifest: ARTIFACT_SLOT_EMPTY.proteinIdentityManifest() });
+      }
       return cleared;
     }
   };
@@ -2185,7 +2186,7 @@ export const createHistorySnapshotService = ({
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,
     setGeneratedArtifactRuntimeOwner,
-    emptyKeptProteinIdentityManifests: losatClearReach.clear,
+    beginLosatClear: losatClearReach.begin,
     losatClearCount: losatClearReach.count,
     putHeldSlot: losatClearReach.putHeldSlot,
     setAfterApplyHistoryIntent,
