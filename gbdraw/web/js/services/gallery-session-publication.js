@@ -22,9 +22,11 @@ import {
 } from '../contracts/schema.generated.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
 /** @import { FileLike } from './session-resource-backing.js' */
+/** @import { CardRecordFacts } from './linear-card-windows.js' */
 import { storesDrawnFrameProteinResults } from './main-session-comparison-frame.js';
-import { readCircularSourceRecords } from './record-discovery.js';
-import { circularSourceInputs } from './input-types.js';
+import { discoverInputRecords, readCircularSourceRecords } from './record-discovery.js';
+import { circularSourceInputs, inputSourceFiles } from './input-types.js';
+import { cardFileRecordFacts } from './linear-card-windows.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritSavedComparison, inheritUnitPlans
@@ -67,9 +69,15 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  * @property {'circular' | 'linear'} mode
  * @property {PublicationConfig} [config]
  * @property {StoredLayoutPreferences | null} [layoutPreferences]
- * @property {{ linearSeqs: { cardinality?: unknown, depth?: unknown }[], c_depth?: unknown,
+ * @property {{ linearSeqs: PublicationLinearCard[], c_depth?: unknown,
  *   circularSources?: PublicationCircularSource[], [field: string]: unknown }} files The input files; a Circular
  *   projection names its File cards (`circularSources`).
+ */
+/**
+ * A Linear File card of a projection: the resource of each file it holds, the record it names, and what the rebuild
+ * sets before it builds the request (the committed record's `cardinality`, and `cardRecord`, its file's records).
+ * @typedef {{ gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null, region_record_id: string,
+ *   cardinality?: unknown, depth?: unknown, cardRecord?: CardRecordFacts }} PublicationLinearCard
  */
 /**
  * A Circular File card of a projection: its uid and the resource of each file it holds.
@@ -397,6 +405,14 @@ const rebuildIntent = async (session, owners) => {
     const failed = reads.find(({ error }) => error !== null);
     if (failed) throw failed.error;
     drawing.circularRecordList.value = reads.flatMap(({ records }) => records);
+  }
+  // It reads the records of each Linear card too, as Generate does (`catalogCardRecord`): the request names a card's
+  // record by the records its file holds (`cliRecordSelector`).
+  if (projection.mode === 'linear') {
+    await Promise.all(filesData.linearSeqs.map(async (sequence) => {
+      const { spec, primaryFile, pairedFile } = inputSourceFiles(drawing.inputType.value, sequence);
+      sequence.cardRecord = cardFileRecordFacts(await discoverInputRecords(spec, primaryFile, pairedFile), sequence.region_record_id);
+    }));
   }
   const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({
     plan: inherit ? noComparisonPlan() : drawing.linearComparisonPlan, sequences: filesData.linearSeqs,

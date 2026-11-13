@@ -113,9 +113,11 @@ test('Add window appends an empty window; Remove leaves the last window; one win
 
 test('an empty window draws the whole record for every reader of the card\'s windows (B1)', () => {
   const card = createLinearSeq({ uid: 'a', windows: [span(1, 50), span(null, null)] });
-  const catalog = { records: [{ sourceIndex: 0, recordLength: 3000, recordId: 'NC_1' }, { sourceIndex: 1, recordLength: 'x' }] };
-  assert.deepEqual(catalogCardRecord(catalog, 0), { length: 3000, id: 'NC_1', count: 1 });
-  assert.deepEqual(catalogCardRecord(catalog, 1), { length: null, id: '', count: 1 });
+  const catalog = { records: [{ sourceIndex: 0, recordLength: 3000, recordId: 'NC_1', sourceRecordCount: 1 },
+    { sourceIndex: 1, recordLength: 'x', sourceRecordCount: 3 }] };
+  // `fileCount`: the records of the card's file, by which the request names the record (`cliRecordSelector`).
+  assert.deepEqual(catalogCardRecord(catalog, 0), { length: 3000, id: 'NC_1', count: 1, fileCount: 1 });
+  assert.deepEqual(catalogCardRecord(catalog, 1), { length: null, id: '', count: 1, fileCount: 3 });
   assert.deepEqual(catalogCardRecord(null, 0), UNKNOWN_CARD_RECORD);
   // The request, the drawn-unit plan, the LOSAT estimate and the extraction all read the windows here.
   const record = catalogCardRecord(catalog, 0);
@@ -155,7 +157,7 @@ const shownWindows = async (cards, { length, topology = 'linear', entries = null
   const readers = createLinearCardWindowReaders({
     state: { activeDrawing: () => drawing }, shownDrawingOfMode: () => drawing,
     linearSeqRecord: (_drawing, card) => (drawnRecords(_drawing, card).length === 1 ? drawnRecords(_drawing, card)[0] : null),
-    linearCardRecord: (_drawing, card) => cardRecordFacts(drawnRecords(_drawing, card)),
+    linearCardRecord: (_drawing, card) => cardRecordFacts(drawnRecords(_drawing, card), null),
     planCardWindows: (payload) => { asked = pythonCardWindowPlan(payload); return asked; },
     cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => []
   });
