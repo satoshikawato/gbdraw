@@ -7,6 +7,7 @@
 import { cardCropWindow } from './drawing/inputs.js';
 import { cropFormReverseComplement, linearCardCropForm, orientedCropForm } from './record-display-model.js';
 import { cloneJsonData } from './json-clone.js';
+import { resolveDisambiguatedRecordSelection } from './record-options.js';
 /** @import { LinearSeq, LinearSeqWindow } from './drawing/inputs.js' */
 /** @import { LinearCardOrientation } from './record-display-model.js' */
 
@@ -176,31 +177,65 @@ export const wholeRecordWindow = (window, recordLength) => (
 /**
  * What the page knows of the records a card draws: `count`, how many (one for a chosen record or a file of one
  * record, every record of the file otherwise; null until read), and the `length` and `id` of the one record it draws
- * (null and '' until read, or while it draws several).
- * @typedef {{ length: number | null, id: string, count: number | null }} CardRecordFacts
+ * (null and '' until read, or while it draws several). `fileCount` is how many records the card's file holds (null
+ * until read): the request names the record of a file of one record as the CLI does, by no selector
+ * (`cliRecordSelector` in session-request.js).
+ * @typedef {{ length: number | null, id: string, count: number | null, fileCount: number | null }} CardRecordFacts
  */
 /**
- * The records of Generate's Linear record catalog, as this module reads them.
- * @typedef {{ records?: readonly { sourceIndex?: unknown, recordLength?: unknown, recordId?: unknown }[] } | null | undefined} LinearRecordCatalogRecords
+ * The records of Generate's Linear record catalog, as this module reads them: each with the number of records its
+ * card's file holds (`sourceRecordCount`).
+ * @typedef {{ records?: readonly { sourceIndex?: unknown, recordLength?: unknown, recordId?: unknown,
+ *   sourceRecordCount?: unknown }[] } | null | undefined} LinearRecordCatalogRecords
  */
 /** A record not read yet. @type {CardRecordFacts} */
-export const UNKNOWN_CARD_RECORD = Object.freeze({ length: null, id: '', count: null });
+export const UNKNOWN_CARD_RECORD = Object.freeze({ length: null, id: '', count: null, fileCount: null });
+
+/** @param {unknown} value @returns {number | null} */
+const positiveCount = (value) => {
+  const count = Number(value);
+  return Number.isSafeInteger(count) && count > 0 ? count : null;
+};
 
 /**
  * The facts of the records a card draws, as a record list or the catalog holds them: the one owner for Generate
- * (`catalogCardRecord`) and the card while editing (the record selector's records).
+ * (`catalogCardRecord`) and the card while editing (the record selector's records, `cardFileRecordFacts`).
  * @param {readonly ({ recordLength?: unknown, recordId?: unknown } | null | undefined)[]} records
+ * @param {number | null} fileCount The records of the card's file, null until read.
  * @returns {CardRecordFacts}
  */
-export const cardRecordFacts = (records) => {
-  if (records.length !== 1) return { ...UNKNOWN_CARD_RECORD, count: records.length || null };
-  const length = Number(records[0]?.recordLength);
+export const cardRecordFacts = (records, fileCount) => {
+  if (records.length !== 1) return { ...UNKNOWN_CARD_RECORD, count: records.length || null, fileCount };
   return {
-    length: Number.isSafeInteger(length) && length > 0 ? length : null,
+    length: positiveCount(records[0]?.recordLength),
     id: typeof records[0]?.recordId === 'string' ? records[0].recordId : '',
-    count: 1
+    count: 1,
+    fileCount
   };
 };
+
+/**
+ * The records a card draws of its file's `records`: the one its record selector names, else every record when it
+ * names none ([] when it names no single record of the file).
+ * @template {{ recordId?: unknown, selector?: unknown }} R
+ * @param {readonly R[]} records
+ * @param {unknown} selector The card's `region_record_id`.
+ * @returns {readonly R[]}
+ */
+export const cardDrawnRecords = (records, selector) => {
+  const selection = resolveDisambiguatedRecordSelection(records, selector);
+  return selection.record ? [selection.record] : selection.status === 'unspecified' ? records : [];
+};
+
+/**
+ * The facts of a card from its file's records as read (`[]` until read): the card while editing and a request
+ * rebuilt outside the app (a Gallery publication) read them so.
+ * @param {readonly { recordId?: unknown, selector?: unknown, recordLength?: unknown }[]} records
+ * @param {unknown} selector The card's `region_record_id`.
+ * @returns {CardRecordFacts}
+ */
+export const cardFileRecordFacts = (records, selector) => cardRecordFacts(cardDrawnRecords(records, selector),
+  records.length || null);
 
 /**
  * The records a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place among the
@@ -209,6 +244,7 @@ export const cardRecordFacts = (records) => {
  * @param {number} sourceIndex
  * @returns {CardRecordFacts}
  */
-export const catalogCardRecord = (catalog, sourceIndex) => cardRecordFacts(
-  (catalog?.records || []).filter((entry) => Number(entry?.sourceIndex) === sourceIndex)
-);
+export const catalogCardRecord = (catalog, sourceIndex) => {
+  const records = (catalog?.records || []).filter((entry) => Number(entry?.sourceIndex) === sourceIndex);
+  return cardRecordFacts(records, positiveCount(records[0]?.sourceRecordCount));
+};

@@ -3,6 +3,7 @@ import { webcrypto } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { gunzipSync } from 'node:zlib';
 import path from 'node:path';
 import { readSavedSession } from './helpers/session-documents.mjs';
 
@@ -665,6 +666,33 @@ assert.rejects(
   const { session, equivalence } = await prepareGallerySessionForPublication(saved);
   assert.deepEqual(equivalence.differences, []);
   assert.deepEqual(session.webFiles.bindings, { schema: 2, linearSeqs: cardRows });
+}
+
+// A Linear card that names the record of a file holding only that record (the Record select's choice) publishes: the
+// committed request, as the CLI writes it, has no selector for the record, and the rebuild reads each card's records,
+// as Generate does, and writes the same (`cliRecordSelector`, one rule with Circular).
+{
+  const source = await loadSession('BGC0000708-BGC0000713.gbdraw');
+  const saved = structuredClone(source);
+  const recordIdOf = (resourceId) => {
+    const bytes = Buffer.from(saved.resources[resourceId].data, 'base64');
+    const text = (bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8');
+    return /^VERSION\s+(\S+)/m.exec(text)[1];
+  };
+  const cardRows = saved.renderRequest.records.map((record, index) => ({
+    uid: record.recordKey,
+    gb: { resourceId: record.source.resourceId, name: `BGC-${index + 1}.gbk`, type: 'text/plain', lastModified: 0 },
+    gff: null, fasta: null, depth: null, losat_gencode: 1,
+    definition: '', record_subtitle: record.presentation.subtitle || '', file_definition: '', file_subtitle: '',
+    inferred_definition: record.presentation.label,
+    region_record_id: recordIdOf(record.source.resourceId), region_start: null, region_end: null,
+    region_reverse: Boolean(record.presentation.reverseComplement)
+  }));
+  assert.ok(saved.renderRequest.records.every((record) => record.selector === null));
+  saved.webFiles.bindings = { schema: 2, linearSeqs: cardRows };
+  const { session, equivalence } = await prepareGallerySessionForPublication(saved);
+  assert.deepEqual(equivalence.differences, []);
+  assert.deepEqual(session.renderRequest.records.map((record) => record.selector), cardRows.map(() => null));
 }
 
 // A Session the CLI writes publishes as the Gallery entry of its command: a

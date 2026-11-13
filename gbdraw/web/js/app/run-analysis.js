@@ -3840,7 +3840,8 @@ export const createRunAnalysis = ({
           recordSelectors.push(recordIdRaw || '');
           if (window) {
             viewTransformSpecs.push({ reverse: window.reverseComplement });
-            const isCircular = linearCardRequestedCircular({ drawing: requestDrawing, card, index: drawing.linearSeqs.indexOf(card),
+            const isCircular = linearCardRequestedCircular({ drawing: requestDrawing, card: { ...card, cardRecord: catalogRecordOf(card) },
+              index: drawing.linearSeqs.indexOf(card),
               recordDisplayRows: recordDisplayRows?.value || [], windows: linearDrawingWindowsOf(drawing, catalogRecordOf)(card) });
             return { file: window.searchRegion, acrossOrigin: window.start > window.end, isCircular };
           }

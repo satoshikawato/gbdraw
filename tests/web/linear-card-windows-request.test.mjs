@@ -38,6 +38,7 @@ const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/ser
 const { createLinearRecordEdits } = await import('../../gbdraw/web/js/app/linear-source-edits.js');
 const { moveLinearLayoutCell, setLinearRecordRow } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+const { liveSettingInputsOf, linearRecordCardIndexes } = await import('../../gbdraw/web/js/services/session-request.js');
 
 /** A linear GenBank record of 1,200 bp, or one file holding several. */
 const genbankRecord = (name) => {
@@ -260,8 +261,8 @@ test('a card that chose its record and lists an empty window draws the whole rec
   const drawing = arrangedDrawing([]);
   drawing.linearRecordLayoutEnabled.value = false;
   drawing.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'm', gb: fileOf('recx', 'recy'), region_record_id: 'recy.1' }));
-  // Without a window Generate builds no record catalog, as before.
-  assert.equal(await preparedCatalog(drawing), null);
+  // Without a window Generate reads the card's records too: the selector it writes depends on its file's records.
+  assert.ok(await preparedCatalog(drawing));
   // Add window on the Region block: the block's own window and the new one, both with Start and End empty.
   cardEditsOf(drawing).addLinearCardWindow(drawing.linearSeqs[0]);
   const catalog = await preparedCatalog(drawing);
@@ -273,4 +274,51 @@ test('a card that chose its record and lists an empty window draws the whole rec
     assert.match(normalizeUserFacingError(error, { stage: 'request-validation' }).summary, /Record: recy\.1\./);
     return true;
   });
+});
+
+/** The request of `drawing` built with `catalog` (Generate's record catalog), as Generate writes it. */
+const envelopeOf = async (drawing, catalog) => (await projectDraftRequest(state, drawing, {
+  linearRecordCatalog: catalog, recordDisplayRows: [], omittedAnnotationRecordKeys: []
+})).envelope;
+
+test('a card that names the record of a one-record file writes the CLI\'s selector, none, with or without windows', async () => {
+  // As the CLI writes it (`_encode_records` in gbdraw/session_request_codec.py): a record of a file that holds one
+  // record has no selector; a record of a file of several is named. One rule with Circular (`cliRecordSelector`).
+  const drawing = arrangedDrawing([]);
+  drawing.linearRecordLayoutEnabled.value = false;
+  drawing.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'one', gb: fileOf('recone'), region_record_id: 'recone.1' }),
+    createLinearSeq({ uid: 'two', gb: fileOf('recx', 'recy'), region_record_id: 'recy.1' }));
+  const selectorsOf = async () => {
+    const envelope = await envelopeOf(drawing, await preparedCatalog(drawing));
+    assert.equal(await pythonVerdict(envelope), 'drawn');
+    return envelope.renderRequest.records.map(({ cardinality, selector }) => [cardinality, selector]);
+  };
+  const expected = [['exactly_one', null], ['exactly_one', { kind: 'recordId', value: 'recy.1' }]];
+  assert.deepEqual(await selectorsOf(), expected);
+  // Drawn in windows, the record keeps the same selector (the CLI's `--region` form).
+  cardEditsOf(drawing).addLinearCardWindow(drawing.linearSeqs[0]);
+  drawing.linearSeqs[0].windows.splice(0, Infinity, ...[[1, 100], [201, 300]].map(([start, end]) => (
+    { start, end, reverseComplement: false, column: null, acrossOrigin: false })));
+  assert.deepEqual(await selectorsOf(), expected);
+});
+
+test('a card still draws a committed record of a one-record file, named (a Session saved before) or not', async () => {
+  // The live preview applies record names while the cards draw the committed records (`linearRecordCardIndexes`).
+  const drawing = arrangedDrawing([]);
+  drawing.linearRecordLayoutEnabled.value = false;
+  drawing.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'one', gb: fileOf('recone'), region_record_id: 'recone.1' }),
+    createLinearSeq({ uid: 'two', gb: fileOf('recx', 'recy'), region_record_id: 'recy.1' }));
+  const envelope = await envelopeOf(drawing, await preparedCatalog(drawing));
+  const inputs = liveSettingInputsOf(drawing, (ref) => state.inputFiles.fileOf(ref));
+  // The CLI's form (and Generate's now): the record of the one-record file has no selector.
+  const cli = structuredClone(envelope.renderRequest);
+  cli.records[0].selector = null;
+  assert.deepEqual(linearRecordCardIndexes(cli, inputs, envelope.resources), [0, 1]);
+  const named = structuredClone(envelope.renderRequest);
+  named.records[0].selector = { kind: 'recordId', value: 'recone.1' };
+  assert.deepEqual(linearRecordCardIndexes(named, inputs, envelope.resources), [0, 1]);
+  // A card that names another record of a file of several does not draw the committed one.
+  const other = structuredClone(envelope.renderRequest);
+  other.records[1].selector = { kind: 'recordId', value: 'recx.1' };
+  assert.equal(linearRecordCardIndexes(other, inputs, envelope.resources), null);
 });

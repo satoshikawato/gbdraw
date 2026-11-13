@@ -134,7 +134,7 @@ const circularDisplaySources = (drawing) => {
  */
 const linearCardRowCrop = (linearWindowsOf, drawing, seq, row) => {
   if (!(seq.region_start || seq.region_end || seq.windows.length)) return UNCROPPED;
-  const record = { length: row.recordLength ?? null, id: String(row.recordId ?? ''), count: null };
+  const record = { length: row.recordLength ?? null, id: String(row.recordId ?? ''), count: null, fileCount: null };
   try {
     const [first] = linearWindowsOf(drawing, () => record)(seq);
     return { cropped: true, crop: first === undefined ? null : recordDisplayCrop(first) };

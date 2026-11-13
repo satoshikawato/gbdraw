@@ -602,6 +602,14 @@ def test_a_cli_session_saves_a_record_with_its_windows_and_replays_the_figure(
     ]
     main(["render", "--session", "w.gbdraw", "-o", "replay", "-f", "svg"])
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "w.svg").read_bytes()
+    # A Session the Web saved before it wrote this form names the file's only record; it draws the same figure.
+    from tests.utils.session_files import read_session_payload, write_session_file
+
+    document = read_session_payload(tmp_path / "w.gbdraw")
+    document["drawings"][0]["renderRequest"]["records"][0]["selector"] = {"kind": "recordId", "value": "NC_012920.1"}
+    write_session_file(tmp_path / "named.gbdraw", document)
+    main(["render", "--session", "named.gbdraw", "-o", "named", "-f", "svg"])
+    assert (tmp_path / "named.svg").read_bytes() == (tmp_path / "w.svg").read_bytes()
 
 
 def test_a_cli_session_of_a_records_table_group_keeps_the_window_columns(

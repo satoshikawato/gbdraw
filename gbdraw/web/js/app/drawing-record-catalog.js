@@ -135,17 +135,16 @@ export const createDrawingRecordCatalog = ({
   async function prepareLinearRecordCatalog({ privateCandidate = false } = {}) {
     const drawing = state.activeDrawing();
     if (drawing.mode !== 'linear') return { catalog: null, error: '' };
-    const hasAutomaticSequence = drawing.linearSeqs.some((sequence) => {
-      if (String(sequence?.region_record_id || '').trim()) return false;
-      return inputSourceFiles(drawing.inputType.value, sequence).complete;
-    });
+    // Every card with its files reads its records: the request names a card's record by its file's records (none for
+    // the record of a file of one record, as the CLI writes it, `cliRecordSelector`), and an automatic card draws them.
+    const hasSequence = drawing.linearSeqs.some((sequence) => inputSourceFiles(drawing.inputType.value, sequence).complete);
     const hasRegionAnnotations = drawing.annotationSets.some((/** @type {{ annotations?: unknown } | null | undefined} */ set) => (
       Array.isArray(set?.annotations) && set.annotations.length > 0
     ));
     // A card that lists windows reads its record here: an empty window draws the whole record, and a refused window
     // names the record (PD-OI-124). Every reader of the request's windows reads the record from this catalog.
     const listsWindows = drawing.drawnLinearSeqs.value.some((sequence) => sequence.windows.length > 0);
-    if (!hasAutomaticSequence && !hasRegionAnnotations && !listsWindows) {
+    if (!hasSequence && !hasRegionAnnotations && !listsWindows) {
       return { catalog: null, error: '' };
     }
     if (privateCandidate) {

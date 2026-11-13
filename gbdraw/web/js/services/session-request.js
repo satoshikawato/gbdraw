@@ -1422,11 +1422,20 @@ const selectorPayload = (rawValue) => {
   return number === null ? { kind: 'recordId', value: raw } : { kind: 'recordIndex', index: number - 1 };
 };
 /**
- * The record a Linear card's Generate selects (`buildRecords`), also when it
- * draws windows of it.
- * @param {{ region_record_id?: unknown } | null | undefined} seq
+ * The record a Linear card names (its record selector), also when it draws
+ * windows of it; none when it draws its file whole.
+ * @param {{ region_record_id?: unknown }} seq
  */
-const linearCardSelector = (seq) => selectorPayload(seq?.region_record_id);
+const linearCardNamedSelector = (seq) => selectorPayload(seq.region_record_id);
+/**
+ * The selector a Linear card's request record carries (`buildRecords`): the
+ * CLI's form of the record it names (`cliRecordSelector`, one rule with
+ * Circular), none for the record of a file of one record, by the records its
+ * file holds (`CardRecordFacts.fileCount`; named while they are not read).
+ * @param {{ region_record_id?: unknown, cardRecord?: CardRecordFacts }} seq
+ */
+const linearCardSelector = (seq) => cliRecordSelector({ fileValue: String(seq.region_record_id ?? '') },
+  (seq.cardRecord ?? UNKNOWN_CARD_RECORD).fileCount);
 /**
  * The record a request record selects: a record names it in its own selector,
  * also when it draws windows of it (request schema 10).
@@ -1859,15 +1868,14 @@ const buildRecords = ({ drawing, filesData, resources }) => {
     const records = seqs.map((seq, index) => {
       const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
       const { windows, gridRow, gridColumn, reverseComplement } = placements[index];
-      const selector = linearCardSelector(seq);
       return {
         recordKey: linearSeqRecordKey(seq, index),
         // A card that draws its file whole is the file, placed or not: Python numbers the records it draws within
         // their row from its place (OV-3072).
         cardinality: canonicalCardinalityByUid.get(seq.uid) || seq.cardinality
-          || (selector || windows.length ? 'exactly_one' : 'all'),
+          || (linearCardNamedSelector(seq) || windows.length ? 'exactly_one' : 'all'),
         source,
-        selector,
+        selector: linearCardSelector(seq),
         windows,
         presentation: {
           ...presentationPayload({
@@ -1905,8 +1913,9 @@ const unreadCircularSelector = (selector, uid) => {
  * The selector of the CLI's form that a request record of a read card carries
  * (the committed request the CLI writes): none for the record of a file that
  * holds one record, else the record's name in its file (`fileValue`: its
- * record ID, or `#k` when the ID repeats in the file or is unsafe).
- * @param {{ fileValue: string }} entry @param {number} recordCount The records of its file.
+ * record ID, or `#k` when the ID repeats in the file or is unsafe). The one
+ * rule of both modes (`linearCardSelector`).
+ * @param {{ fileValue: string }} entry @param {number | null} recordCount The records of its file, null until read.
  */
 const cliRecordSelector = (entry, recordCount) => (recordCount === 1 ? null : selectorPayload(entry.fileValue));
 
@@ -2296,9 +2305,11 @@ const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key],
  * (`fileOf` of its refs) name the record's source (`recordSourceOwnedBy`, by
  * payload identity; a replaced File does not, whatever its definition says),
  * and the card's Generate selects the same record: the record under the
- * card's key the card's selector (`linearCardSelector`), a split member
- * (F-18) none. A changed selection applies on Generate (G3), and the card's
- * definition follows it.
+ * card's key the record the card names (`linearCardNamedSelector`), or the
+ * only record of its file when the record has the CLI's form of it (an
+ * `exactly_one` record without a selector, `cliRecordSelector`), a split
+ * member (F-18) none. A changed selection applies on Generate (G3), and the
+ * card's definition follows it.
  * @param {LiveSettingCard} seq @param {string} cardKey @param {CanonicalRecord} record
  * @param {LiveSettingResources} resources @param {LiveSettingInputs['fileOf']} fileOf
  */
@@ -2309,8 +2320,9 @@ const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
   return drawn !== null && drawn.kind === source.kind
     && recordSourceResourceIds(drawn).join('\n') === recordSourceResourceIds(source).join('\n')
     && (record.recordKey === cardKey
-      ? sameRecordSelector(linearCardSelector(seq), requestRecordSelector(record))
-      : linearCardSelector(seq) === null);
+      ? sameRecordSelector(linearCardNamedSelector(seq), requestRecordSelector(record))
+        || (record.selector === null && record.cardinality === 'exactly_one')
+      : linearCardNamedSelector(seq) === null);
 };
 /**
  * The draft card index of each committed Linear record: the card whose

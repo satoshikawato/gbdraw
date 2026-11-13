@@ -1898,7 +1898,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       error: ''
     }),
     linearCardRecord: (_drawing, card) => cardRecordFacts(unreadCards.has(card.uid) ? []
-      : card.region_record_id ? [{ recordId: card.region_record_id, recordLength: 8 }] : wholeFileRecords.get(card.uid) ?? []),
+      : card.region_record_id ? [{ recordId: card.region_record_id, recordLength: 8 }] : wholeFileRecords.get(card.uid) ?? [], null),
     readLinearCardRecords: async () => { unreadCards.clear(); },
     prepareCandidateCommit: ({
       generationResponse,
