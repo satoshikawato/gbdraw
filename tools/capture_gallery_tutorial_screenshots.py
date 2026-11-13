@@ -12,7 +12,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 try:
     from PIL import Image
@@ -96,6 +96,15 @@ CROP_EDGE_REACH = 160.0
 CROP_EDGE_MARGIN = 4.0
 CROP_EDGE_TOLERANCE = 0.1
 CROP_EDGE_ROUNDS = 8
+# The frame a capture draws around its highlightSelector never covers text or a control a reader
+# sees outside the highlighted element: an outline HIGHLIGHT_FRAME_WIDTH px wide, drawn
+# HIGHLIGHT_FRAME_OFFSET px outside the element, with a glow HIGHLIGHT_FRAME_GLOW px wide, moves in
+# (down to just inside the element's edge) where such text sits closer, and stays
+# HIGHLIGHT_FRAME_CLEARANCE px clear of it.
+HIGHLIGHT_FRAME_WIDTH = 3.0
+HIGHLIGHT_FRAME_OFFSET = 3.0
+HIGHLIGHT_FRAME_GLOW = 4.0
+HIGHLIGHT_FRAME_CLEARANCE = 1.0
 
 
 class QuietGalleryRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -1244,6 +1253,17 @@ def capture_multi_selector_clip(
 # trimmed to the part a reader sees: a hit test at points over it must find it, not a popup or
 # menu above it, the pane that scrolls it out of view, or nothing (hidden). Hit tests see every
 # element for the measure (pointer-events), and the parked pointer hovers nothing.
+class TextBox(TypedDict):
+    """A line of text or a control a reader sees, or the seen part of one, in page CSS px
+    (VISIBLE_TEXT_BOXES_SCRIPT). The edge rule, the crop guard and the highlight frame read it."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+    text: str
+
+
 VISIBLE_TEXT_BOXES_SCRIPT = """
 (region) => {
   const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
@@ -1251,99 +1271,184 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
   const top = region.y - window.scrollY;
   const right = left + region.width;
   const bottom = top + region.height;
-  const style = document.createElement('style');
-  style.textContent = '*, *::before, *::after { pointer-events: auto !important; }';
-  document.head.appendChild(style);
   const shown = (element) => element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  // What covers a point is what paints there (M1): hit testing with the page's own
+  // pointer-events, passing over layers that paint nothing (a clear full-cover overlay, an
+  // svg root, a group), plus the layers a capture draws without pointer events.
+  const OCCLUDERS = '.gbdraw-capture-select-menu';
+  const occluders = [...document.querySelectorAll(OCCLUDERS)].filter(shown)
+    .map((element) => ({ element, rect: element.getBoundingClientRect() }));
+  const SHAPES = new Set(['path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text',
+    'tspan', 'textPath', 'image', 'use', 'foreignObject']);
+  const REPLACED = new Set(['IMG', 'CANVAS', 'VIDEO', 'IFRAME', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON']);
+  const paintsCache = new Map();
+  const clearColor = (color) => color === 'transparent'
+    || (color.startsWith('rgba(') && parseFloat(color.slice(color.lastIndexOf(',') + 1)) === 0);
+  const paints = (element) => {
+    if (paintsCache.has(element)) return paintsCache.get(element);
+    const style = getComputedStyle(element);
+    let result;
+    if (style.opacity === '0') result = false;
+    else if (element instanceof SVGElement) result = SHAPES.has(element.tagName);
+    else result = REPLACED.has(element.tagName) || !clearColor(style.backgroundColor)
+      || style.backgroundImage !== 'none'
+      || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
+        && !clearColor(style[`border${side}Color`]));
+    paintsCache.set(element, result);
+    return result;
+  };
+  // The boxes of the ancestors that clip an owner (a scrolled list, an svg): its text outside
+  // them is not seen.
+  const clipsCache = new Map();
+  const clipsOf = (owner) => {
+    if (!clipsCache.has(owner)) {
+      const clips = [];
+      for (let element = owner.parentElement; element && element !== document.body; element = element.parentElement) {
+        const style = getComputedStyle(element);
+        if (style.overflowX !== 'visible' || style.overflowY !== 'visible') clips.push(element.getBoundingClientRect());
+      }
+      clipsCache.set(owner, clips);
+    }
+    return clipsCache.get(owner);
+  };
+  // Outside the viewport no hit test answers: count the point as seen.
+  const sees = (owner, x, y) => {
+    if (clipsOf(owner).some((rect) => x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom)) return false;
+    if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return true;
+    if (occluders.some(({ element, rect }) => !element.contains(owner) && x >= rect.left && x < rect.right
+        && y >= rect.top && y < rect.bottom)) return false;
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (hit === owner || owner.contains(hit) || hit.contains(owner)) return true;
+      if (paints(hit)) return false;
+    }
+    return true;
+  };
   const candidates = [];
+  const measured = new Set();
   const add = (owner, rect, text) => {
     if (rect.width > 0 && rect.height > 0 && rect.right > left && rect.left < right
         && rect.bottom > top && rect.top < bottom) {
       candidates.push({ owner, rect, text });
+      measured.add(owner);
     }
   };
-  try {
-    // A text node's lines, in HTML and in SVG (an SVG label's box holds its rotated glyphs).
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const owner = node.parentElement;
-      const text = normalize(node.nodeValue);
-      if (!text || !owner || owner.closest('script, style, template, noscript, select, textarea, title')) continue;
-      if (!shown(owner)) continue;
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      for (const rect of range.getClientRects()) add(owner, rect, text);
+  // A text node's lines, in HTML and in SVG (an SVG label's box holds its rotated glyphs).
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const owner = node.parentElement;
+    const text = normalize(node.nodeValue);
+    if (!text || !owner || owner.closest('script, style, template, noscript, select, textarea, title')) continue;
+    if (!shown(owner)) continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    for (const rect of range.getClientRects()) add(owner, rect, text);
+  }
+  const CONTROLS = 'input:not([type="hidden"]), select, textarea, button, '
+    + '[role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"]';
+  // A control's visible shape may be drawn by a wrapper (M2: the pill of a Palette clock note
+  // around its help button): the nearest ancestor within WRAP px that paints a border or a
+  // background and holds no other control.
+  const WRAP = 8;
+  const shapeOf = (control) => {
+    const own = control.getBoundingClientRect();
+    let element = control.parentElement;
+    for (let depth = 0; element && depth < 4; depth += 1, element = element.parentElement) {
+      const rect = element.getBoundingClientRect();
+      if (rect.left < own.left - WRAP || rect.top < own.top - WRAP || rect.right > own.right + WRAP
+          || rect.bottom > own.bottom + WRAP || element.querySelectorAll(CONTROLS).length > 1) break;
+      if (!(element instanceof SVGElement) && paints(element)) return { owner: element, rect: new DOMRect(
+        Math.min(own.left, rect.left), Math.min(own.top, rect.top),
+        Math.max(own.right, rect.right) - Math.min(own.left, rect.left),
+        Math.max(own.bottom, rect.bottom) - Math.min(own.top, rect.top)) };
     }
-    const controls = 'input:not([type="hidden"]), select, textarea, button, '
-      + '[role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"]';
-    for (const control of document.querySelectorAll(controls)) {
-      // A drawn group that opens settings (role="button") is figure: its labels count as text.
-      if (control instanceof SVGElement || !shown(control)) continue;
-      const name = normalize(control.getAttribute('aria-label') || control.textContent || control.value);
-      add(control, control.getBoundingClientRect(), `${control.tagName.toLowerCase()}: ${name}`);
-    }
-    // The part of each box a reader sees, as rectangles that keep its shape: a label half under
-    // a popup is an L, and one bounding box around it would cross edges the label does not reach.
-    // Each run of seen cells down a column, and along a row, becomes a box (neighbouring runs
-    // that match merge), so an edge between two cells of one run still crosses that run's box.
-    const runs = (cells) => {
-      const found = [];
-      let first = -1;
-      cells.forEach((value, index) => {
-        if (value && first < 0) first = index;
-        if (first >= 0 && (!value || index === cells.length - 1)) {
-          found.push([first, value ? index : index - 1]);
-          first = -1;
-        }
-      });
-      return found;
-    };
-    const strips = (lines, across) => {
-      const merged = [];
-      lines.forEach((line, index) => {
-        for (const [from, to] of runs(line)) {
-          const open = merged.find((strip) => strip.from === from && strip.to === to && strip.last === index - 1);
-          if (open) open.last = index;
-          else merged.push({ first: index, last: index, from, to });
-        }
-      });
-      return merged.map((strip) => (across
-        ? { minColumn: strip.first, maxColumn: strip.last, minRow: strip.from, maxRow: strip.to }
-        : { minRow: strip.first, maxRow: strip.last, minColumn: strip.from, maxColumn: strip.to }));
-    };
-    return candidates.flatMap(({ owner, rect, text }) => {
-      const columns = Math.min(24, Math.max(3, Math.ceil(rect.width / 12)));
-      const rows = Math.min(8, Math.max(3, Math.ceil(rect.height / 8)));
-      const cellWidth = rect.width / columns;
-      const cellHeight = rect.height / rows;
-      const seen = Array.from({ length: rows }, (_, row) => Array.from({ length: columns }, (__, column) => {
-        const hit = document.elementFromPoint(
-          rect.left + (column + 0.5) * cellWidth, rect.top + (row + 0.5) * cellHeight);
-        // Outside the viewport no hit test answers: count the point as seen.
-        return !hit || hit === owner || owner.contains(hit);
-      }));
-      const byColumn = Array.from({ length: columns }, (_, column) => seen.map((line) => line[column]));
-      const boxes = new Map();
-      for (const part of [...strips(seen, false), ...strips(byColumn, true)]) {
-        const box = {
-          x: rect.left + part.minColumn * cellWidth + window.scrollX,
-          y: rect.top + part.minRow * cellHeight + window.scrollY,
-          width: (part.maxColumn - part.minColumn + 1) * cellWidth,
-          height: (part.maxRow - part.minRow + 1) * cellHeight,
-          text,
-        };
-        boxes.set(`${box.x},${box.y},${box.width},${box.height}`, box);
+    return { owner: control, rect: own };
+  };
+  for (const control of document.querySelectorAll(CONTROLS)) {
+    // A drawn group that opens settings (role="button") is figure: its labels count as text.
+    if (control instanceof SVGElement || !shown(control)) continue;
+    const name = normalize(control.getAttribute('aria-label') || control.textContent || control.value);
+    const { owner, rect } = shapeOf(control);
+    add(owner, rect, `${control.tagName.toLowerCase()}: ${name}`);
+  }
+  // The part of each box a reader sees, as rectangles that keep its shape: a label half under
+  // a popup is an L, and one bounding box around it would cross edges the label does not reach.
+  // Each run of seen cells down a column, and along a row, becomes a box (neighbouring runs
+  // that match merge), so an edge between two cells of one run still crosses that run's box.
+  const runs = (cells) => {
+    const found = [];
+    let first = -1;
+    cells.forEach((value, index) => {
+      if (value && first < 0) first = index;
+      if (first >= 0 && (!value || index === cells.length - 1)) {
+        found.push([first, value ? index : index - 1]);
+        first = -1;
       }
-      return [...boxes.values()];
     });
+    return found;
+  };
+  const strips = (lines, across) => {
+    const merged = [];
+    lines.forEach((line, index) => {
+      for (const [from, to] of runs(line)) {
+        const open = merged.find((strip) => strip.from === from && strip.to === to && strip.last === index - 1);
+        if (open) open.last = index;
+        else merged.push({ first: index, last: index, from, to });
+      }
+    });
+    return merged.map((strip) => (across
+      ? { minColumn: strip.first, maxColumn: strip.last, minRow: strip.from, maxRow: strip.to }
+      : { minRow: strip.first, maxRow: strip.last, minColumn: strip.from, maxColumn: strip.to }));
+  };
+  const whole = (rect, text) => [{
+    x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height, text,
+  }];
+  // An owner the page leaves without pointer events (a figure label) is made hittable, so the
+  // hit list says what lies above it; nothing else changes its pointer events.
+  for (const owner of measured) owner.setAttribute('data-gbdraw-measured', '');
+  const style = document.createElement('style');
+  style.textContent = '[data-gbdraw-measured] { pointer-events: auto !important; }';
+  document.head.appendChild(style);
+  try {
+  return candidates.flatMap(({ owner, rect, text }) => {
+    // A box seen at the nine points of a coarse grid is seen whole. A box partly covered is
+    // sampled in cells of about 2 CSS px; a cell counts as seen when its centre or a corner is
+    // (L1), so a seen part keeps the cells its cover only starts in.
+    // Points stay half a CSS px inside the box, where its own hit test answers.
+    const at = (fx, fy) => sees(owner, rect.left + Math.min(Math.max(fx * rect.width, 0.5), rect.width - 0.5),
+      rect.top + Math.min(Math.max(fy * rect.height, 0.5), rect.height - 0.5));
+    if ([0, 0.5, 1].every((fx) => [0, 0.5, 1].every((fy) => at(fx, fy)))) return whole(rect, text);
+    const columns = Math.min(200, Math.max(3, Math.ceil(rect.width / 2)));
+    const rows = Math.min(40, Math.max(3, Math.ceil(rect.height / 2)));
+    const corner = Array.from({ length: rows + 1 }, (_, row) => Array.from({ length: columns + 1 },
+      (__, column) => at(column / columns, row / rows)));
+    const seen = Array.from({ length: rows }, (_, row) => Array.from({ length: columns }, (__, column) => (
+      corner[row][column] || corner[row][column + 1] || corner[row + 1][column] || corner[row + 1][column + 1]
+      || at((column + 0.5) / columns, (row + 0.5) / rows))));
+    const cellWidth = rect.width / columns;
+    const cellHeight = rect.height / rows;
+    const byColumn = Array.from({ length: columns }, (_, column) => seen.map((line) => line[column]));
+    const boxes = new Map();
+    for (const part of [...strips(seen, false), ...strips(byColumn, true)]) {
+      const box = {
+        x: rect.left + part.minColumn * cellWidth + window.scrollX,
+        y: rect.top + part.minRow * cellHeight + window.scrollY,
+        width: (part.maxColumn - part.minColumn + 1) * cellWidth,
+        height: (part.maxRow - part.minRow + 1) * cellHeight,
+        text,
+      };
+      boxes.set(`${box.x},${box.y},${box.width},${box.height}`, box);
+    }
+    return [...boxes.values()];
+  });
   } finally {
     style.remove();
+    for (const owner of measured) owner.removeAttribute('data-gbdraw-measured');
   }
 }
 """
 
 
-def visible_text_boxes(page, region: dict[str, float]) -> list[dict[str, Any]]:
+def visible_text_boxes(page, region: dict[str, float]) -> list[TextBox]:
     """The lines of text and the controls a reader sees in ``region`` (VISIBLE_TEXT_BOXES_SCRIPT)."""
 
     return page.evaluate(VISIBLE_TEXT_BOXES_SCRIPT, region)
@@ -1366,8 +1471,8 @@ def _crop_sides(clip: dict[str, float]) -> dict[str, float]:
 
 
 def _edge_crossings(
-    sides: dict[str, float], boxes: list[dict[str, Any]], dimensions: dict[str, float], side: str
-) -> list[dict[str, Any]]:
+    sides: dict[str, float], boxes: list[TextBox], dimensions: dict[str, float], side: str
+) -> list[TextBox]:
     """The boxes that ``side`` of the crop crosses; an edge at the page edge crosses none."""
 
     tolerance = CROP_EDGE_TOLERANCE
@@ -1389,7 +1494,7 @@ def _edge_crossings(
 
 def _cleared_edge(
     sides: dict[str, float],
-    boxes: list[dict[str, Any]],
+    boxes: list[TextBox],
     dimensions: dict[str, float],
     side: str,
     origin: float,
@@ -1422,7 +1527,7 @@ def _cleared_edge(
 
 def clear_crop_edges(
     clip: dict[str, float],
-    boxes: list[dict[str, Any]],
+    boxes: list[TextBox],
     padding: dict[str, float],
     dimensions: dict[str, float],
 ) -> dict[str, float]:
@@ -1456,8 +1561,8 @@ def clear_crop_edges(
 
 
 def crop_edge_cuts(
-    clip: dict[str, float], boxes: list[dict[str, Any]], dimensions: dict[str, float]
-) -> list[tuple[str, dict[str, Any]]]:
+    clip: dict[str, float], boxes: list[TextBox], dimensions: dict[str, float]
+) -> list[tuple[str, TextBox]]:
     """Each edge of the crop with each box of text or control it crosses."""
 
     sides = _crop_sides(clip)
@@ -1469,7 +1574,7 @@ def crop_edge_cuts(
 
 
 def assert_crop_edges_cut_no_text(
-    clip: dict[str, float], boxes: list[dict[str, Any]], dimensions: dict[str, float]
+    clip: dict[str, float], boxes: list[TextBox], dimensions: dict[str, float]
 ) -> None:
     """Refuse a crop whose edge still cuts text or a control a reader sees (OV-3410)."""
 
@@ -1477,8 +1582,76 @@ def assert_crop_edges_cut_no_text(
     if cuts:
         raise RuntimeError(
             "the crop cuts text: "
-            + "; ".join(f"{side} edge cuts {str(box.get('text'))[:60]!r}" for side, box in cuts)
+            + "; ".join(f"{side} edge cuts {box['text'][:60]!r}" for side, box in cuts)
         )
+
+
+def highlight_frame_room(element: dict[str, float], boxes: list[TextBox]) -> float:
+    """How far outside ``element`` a frame reaches before it meets a box of text or a control that
+    lies outside the element (a box that overlaps the element is the element's own)."""
+
+    left, top = float(element["x"]), float(element["y"])
+    right, bottom = left + float(element["width"]), top + float(element["height"])
+    room = float("inf")
+    for box in boxes:
+        box_left, box_top = float(box["x"]), float(box["y"])
+        box_right, box_bottom = box_left + float(box["width"]), box_top + float(box["height"])
+        if box_left < right and box_right > left and box_top < bottom and box_bottom > top:
+            continue
+        # A frame grown by d on every side meets the box once d reaches both gaps.
+        gap_x = max(box_left - right, left - box_right, 0.0)
+        gap_y = max(box_top - bottom, top - box_bottom, 0.0)
+        room = min(room, max(gap_x, gap_y))
+    return room
+
+
+def highlight_frame_style(room: float) -> dict[str, float]:
+    """The outline offset and glow of a highlight frame that ``room`` px outside its element
+    leaves clear (highlight_frame_room)."""
+
+    reach = room - HIGHLIGHT_FRAME_CLEARANCE
+    return {
+        "offset": max(-HIGHLIGHT_FRAME_WIDTH, min(HIGHLIGHT_FRAME_OFFSET, reach - HIGHLIGHT_FRAME_WIDTH)),
+        "glow": max(0.0, min(HIGHLIGHT_FRAME_GLOW, reach)),
+    }
+
+
+HIGHLIGHT_ELEMENT_BOXES_SCRIPT = """
+(selector) => [...document.querySelectorAll(selector)].map((element) => {
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height };
+})
+"""
+
+DRAW_HIGHLIGHT_FRAMES_SCRIPT = """
+([selector, styles]) => {
+  [...document.querySelectorAll(selector)].forEach((element, index) => {
+    const { offset, glow } = styles[index];
+    element.style.setProperty('outline', `${WIDTH}px solid #f59e0b`, 'important');
+    element.style.setProperty('outline-offset', `${offset}px`, 'important');
+    element.style.setProperty('box-shadow', `0 0 0 ${glow}px rgba(245, 158, 11, 0.18)`, 'important');
+    element.style.setProperty('border-radius', '4px', 'important');
+  });
+}
+"""
+
+
+def draw_highlight_frames(page, selector: str) -> None:
+    """Frame each element ``selector`` matches, clear of the text a reader sees around it."""
+
+    reach = HIGHLIGHT_FRAME_OFFSET + HIGHLIGHT_FRAME_WIDTH + HIGHLIGHT_FRAME_GLOW
+    styles = []
+    for element in page.evaluate(HIGHLIGHT_ELEMENT_BOXES_SCRIPT, selector):
+        around = {
+            "x": float(element["x"]) - reach,
+            "y": float(element["y"]) - reach,
+            "width": float(element["width"]) + 2 * reach,
+            "height": float(element["height"]) + 2 * reach,
+        }
+        styles.append(highlight_frame_style(highlight_frame_room(element, visible_text_boxes(page, around))))
+    page.evaluate(
+        DRAW_HIGHLIGHT_FRAMES_SCRIPT.replace("${WIDTH}", f"{HIGHLIGHT_FRAME_WIDTH:g}"), [selector, styles]
+    )
 
 
 def assert_capture_app_state(page, capture: dict[str, Any]) -> None:
@@ -1743,16 +1916,7 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
 
     highlight_selector = as_text(capture.get("highlightSelector"))
     if highlight_selector:
-        page.add_style_tag(
-            content=(
-                f"{highlight_selector} {{ "
-                "outline: 3px solid #f59e0b !important; "
-                "outline-offset: 3px !important; "
-                "box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18) !important; "
-                "border-radius: 4px !important; "
-                "}}"
-            )
-        )
+        draw_highlight_frames(page, highlight_selector)
         page.wait_for_timeout(100)
 
 

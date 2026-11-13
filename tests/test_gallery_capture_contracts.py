@@ -1362,8 +1362,12 @@ def test_capture_parks_the_pointer_then_moves_crop_edges_off_text(
     heading = _text_box(10, 95, 80, 10, "Palette")
     monkeypatch.setattr(capture_tool, "prepare_capture_page", lambda *args: events.append("prepare"))
     monkeypatch.setattr(capture_tool, "page_scroll_dimensions", lambda page: dict(_EDGE_PAGE))
+    # raising=False: on a tool without the measurement the test fails on what it checks.
     monkeypatch.setattr(
-        capture_tool, "visible_text_boxes", lambda page, region: events.append("measure text") or [heading]
+        capture_tool,
+        "visible_text_boxes",
+        lambda page, region: events.append("measure text") or [heading],
+        raising=False,
     )
     monkeypatch.setattr(capture_tool, "output_path_for_operation", lambda operation: tmp_path / "crop.webp")
     operation = {"capture": {"boundingBox": {"x": 0, "y": 100, "width": 200, "height": 100}}}
@@ -1373,5 +1377,36 @@ def test_capture_parks_the_pointer_then_moves_crop_edges_off_text(
     assert events[:3] == ["prepare", "park pointer", "measure text"]
     assert events[-1] == (
         "screenshot",
-        {"x": 0.0, "y": 95 - capture_tool.CROP_EDGE_MARGIN, "width": 200.0, "height": 105 + capture_tool.CROP_EDGE_MARGIN},
+        {"x": 0.0, "y": 95 - 4.0, "width": 200.0, "height": 105 + 4.0},
     )
+
+
+def test_highlight_frame_moves_in_where_text_sits_closer_than_its_reach() -> None:
+    """A highlight frame reaches HIGHLIGHT_FRAME_OFFSET + HIGHLIGHT_FRAME_WIDTH px outside its
+    element, less where a box of text outside the element sits closer, and never covers it."""
+
+    field = {"x": 100.0, "y": 100.0, "width": 120.0, "height": 24.0}
+    room = capture_tool.highlight_frame_room
+    style = capture_tool.highlight_frame_style
+    width = capture_tool.HIGHLIGHT_FRAME_WIDTH
+    clearance = capture_tool.HIGHLIGHT_FRAME_CLEARANCE
+
+    assert room(field, []) == float("inf")
+    assert style(float("inf")) == {
+        "offset": capture_tool.HIGHLIGHT_FRAME_OFFSET,
+        "glow": capture_tool.HIGHLIGHT_FRAME_GLOW,
+    }
+    # The field's own control and value overlap it: they do not limit the frame.
+    own = [{"x": 100.0, "y": 100.0, "width": 120.0, "height": 24.0, "text": "input: near"},
+           {"x": 108.0, "y": 104.0, "width": 30.0, "height": 16.0, "text": "0.4"}]
+    assert room(field, own) == float("inf")
+    # A label whose descenders end 3 px above the field: the frame stops 1 px short of them.
+    label = {"x": 100.0, "y": 79.0, "width": 140.0, "height": 18.0, "text": "Head Length Ratio"}
+    assert room(field, [label]) == 3.0
+    near = style(3.0)
+    assert near["offset"] + width == 3.0 - clearance and near["glow"] == 3.0 - clearance
+    # Text touching the field: the frame lies on the field's own edge, with no glow.
+    assert style(0.0) == {"offset": -width, "glow": 0.0}
+    # A box off a corner limits the frame by the larger of its two gaps.
+    corner = {"x": 230.0, "y": 60.0, "width": 40.0, "height": 20.0, "text": "x"}
+    assert room(field, [corner]) == 20.0
