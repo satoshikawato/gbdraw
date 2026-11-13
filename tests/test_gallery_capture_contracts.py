@@ -959,9 +959,16 @@ def test_capture_lets_css_transitions_end_before_the_crop(
 
     events: list[str] = []
 
+    class Mouse:
+        def move(self, x: float, y: float) -> None:
+            pass
+
     class FakePage:
-        def evaluate(self, script: str, *args: object) -> None:
+        mouse = Mouse()
+
+        def evaluate(self, script: str, *args: object) -> list[object]:
             events.append(script)
+            return []
 
         def screenshot(self, **kwargs: object) -> bytes:
             events.append("screenshot")
@@ -970,6 +977,7 @@ def test_capture_lets_css_transitions_end_before_the_crop(
             return buffer.getvalue()
 
     monkeypatch.setattr(capture_tool, "prepare_capture_page", lambda *args: None)
+    monkeypatch.setattr(capture_tool, "page_scroll_dimensions", lambda page: {"width": 2.0, "height": 2.0})
     monkeypatch.setattr(capture_tool, "output_path_for_operation", lambda operation: tmp_path / "crop.webp")
     operation = {"capture": {"boundingBox": {"x": 0, "y": 0, "width": 2, "height": 2}}}
 
@@ -1261,3 +1269,109 @@ def test_capture_finds_its_card_by_section_identity_not_by_text() -> None:
 
     assert [error.split(":")[0] for error in result.errors] == [_manual_context(2).label, _manual_context(4).label]
     assert "cardTitle" in result.errors[0] and "selectIndex" in result.errors[1]
+
+
+def _text_box(x: float, y: float, width: float, height: float, text: str = "text") -> dict[str, object]:
+    return {"x": x, "y": y, "width": width, "height": height, "text": text}
+
+
+_EDGE_PAGE = {"width": 2000.0, "height": 2000.0}
+_EDGE_PADDING = {"top": 20.0, "right": 20.0, "bottom": 20.0, "left": 20.0}
+# The crop of a subject at x 520..780, y 520..680 with 20 px of padding, far from the page edge.
+_EDGE_CLIP = {"x": 500.0, "y": 500.0, "width": 300.0, "height": 200.0}
+
+
+def test_crop_edge_moves_to_the_nearest_position_that_cuts_no_text() -> None:
+    """OV-3410: a crop edge that crosses a line of text or a control moves to the nearer position
+    that crosses none: outward within CROP_EDGE_REACH, or inward within the padding, never into the
+    subject; outward on a tie."""
+
+    margin = capture_tool.CROP_EDGE_MARGIN
+    reach = capture_tool.CROP_EDGE_REACH
+
+    def cleared(*boxes: dict[str, object]) -> dict[str, float]:
+        return capture_tool.clear_crop_edges(_EDGE_CLIP, list(boxes), _EDGE_PADDING, _EDGE_PAGE)
+
+    # A heading mostly outside the top edge: the edge moves up over it.
+    assert cleared(_text_box(510, 494, 120, 18, "DEFAULT COLORS")) == {
+        "x": 500.0, "y": 494 - margin, "width": 300.0, "height": 206 + margin,
+    }
+    # A heading mostly inside the padding: the edge moves down under it, the subject stays whole.
+    assert cleared(_text_box(510, 490, 120, 18, "DEFAULT COLORS"))["y"] == 508 + margin
+    # Equally near both ways: outward.
+    assert cleared(_text_box(510, 492, 120, 16, "Reset"))["y"] == 492 - margin
+    # A glyph 1 px over the edge is a cut too (the descenders of a label above a field).
+    assert cleared(_text_box(510, 483, 120, 18, "Max hits per protein"))["y"] == 501 + margin
+    # A row that reaches into the subject: the edge cannot move up into it, so it moves down.
+    assert cleared(_text_box(510, 676, 200, 30, "Ruler on Axis"))["height"] == 206 + margin
+    # Text beside the crop, and text inside it, are not cut.
+    assert cleared(_text_box(820, 490, 100, 18), _text_box(530, 530, 100, 18)) == _EDGE_CLIP
+    # Text taller than the reach: the edge moves in, under it, into the padding only.
+    assert cleared(_text_box(510, 508 - reach - 10, 120, reach + 10))["y"] == 508 + margin
+    # Labels that touch one another: the edge moves past each, as far as the first gap.
+    ticks = [_text_box(600, 676 + 12 * index, 20, 14, "3 kbp") for index in range(3)]
+    assert cleared(*ticks)["height"] == 214 + margin
+    # Moving the left edge out widens the top edge, which then meets text it did not cross before.
+    label = _text_box(480, 600, 40, 16, "kbp")
+    title = _text_box(460, 492, 30, 16, "Homo")
+    widened = cleared(label, title)
+    assert widened["x"] == 460 - margin and widened["y"] == 492 - margin
+    assert capture_tool.crop_edge_cuts(widened, [label, title], _EDGE_PAGE) == []
+    # The page edge cuts nothing: a crop at the page edge stays there.
+    at_edge = {"x": 0.0, "y": 0.0, "width": 300.0, "height": 200.0}
+    assert capture_tool.clear_crop_edges(at_edge, [_text_box(-5, -5, 50, 20)], _EDGE_PADDING, _EDGE_PAGE) == at_edge
+
+
+def test_crop_guard_refuses_an_edge_that_still_crosses_text() -> None:
+    """OV-3410: text the edge can neither take in (beyond the reach) nor leave out (it reaches into
+    the subject) leaves the crop as it was, and the capture refuses it, naming the text."""
+
+    reach = capture_tool.CROP_EDGE_REACH
+    blocked = _text_box(510, 500 - reach - 10, 120, reach + 40, "Homo sapiens")
+    cleared = capture_tool.clear_crop_edges(_EDGE_CLIP, [blocked], _EDGE_PADDING, _EDGE_PAGE)
+    assert cleared == _EDGE_CLIP
+    with pytest.raises(RuntimeError, match="top edge cuts .*Homo sapiens"):
+        capture_tool.assert_crop_edges_cut_no_text(cleared, [blocked], _EDGE_PAGE)
+    capture_tool.assert_crop_edges_cut_no_text(_EDGE_CLIP, [_text_box(530, 530, 100, 18)], _EDGE_PAGE)
+
+
+def test_capture_parks_the_pointer_then_moves_crop_edges_off_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-3411: the pointer is parked after the capture's actions, so no crop shows a hover the last
+    click left (BGC 7-2's Skip row); OV-3410: the screenshot takes the crop whose edges cut no text."""
+
+    events: list[object] = []
+
+    class Mouse:
+        def move(self, x: float, y: float) -> None:
+            events.append("park pointer")
+
+    class FakePage:
+        mouse = Mouse()
+
+        def evaluate(self, script: str, *args: object) -> list[object]:
+            return []
+
+        def screenshot(self, **kwargs: object) -> bytes:
+            events.append(("screenshot", kwargs["clip"]))
+            buffer = io.BytesIO()
+            Image.new("RGB", (2, 2)).save(buffer, "PNG")
+            return buffer.getvalue()
+
+    heading = _text_box(10, 95, 80, 10, "Palette")
+    monkeypatch.setattr(capture_tool, "prepare_capture_page", lambda *args: events.append("prepare"))
+    monkeypatch.setattr(capture_tool, "page_scroll_dimensions", lambda page: dict(_EDGE_PAGE))
+    monkeypatch.setattr(
+        capture_tool, "visible_text_boxes", lambda page, region: events.append("measure text") or [heading]
+    )
+    monkeypatch.setattr(capture_tool, "output_path_for_operation", lambda operation: tmp_path / "crop.webp")
+    operation = {"capture": {"boundingBox": {"x": 0, "y": 100, "width": 200, "height": 100}}}
+
+    capture_tool.capture_operation(FakePage(), {}, operation, "http://127.0.0.1", 90)
+
+    assert events[:3] == ["prepare", "park pointer", "measure text"]
+    assert events[-1] == (
+        "screenshot",
+        {"x": 0.0, "y": 95 - capture_tool.CROP_EDGE_MARGIN, "width": 200.0, "height": 105 + capture_tool.CROP_EDGE_MARGIN},
+    )

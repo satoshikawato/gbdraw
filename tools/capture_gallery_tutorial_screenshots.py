@@ -87,6 +87,15 @@ CAPTURE_RECORD_READS = (
     "Inspect source records",
     "Inspect records",
 )
+# A crop edge never cuts a line of text or a control a reader sees (OV-3410): an edge that
+# crosses one moves to the nearer position that crosses none, outward at most CROP_EDGE_REACH
+# CSS px from where the crop put it or inward within the crop's padding, never into what the
+# crop shows; it stops CROP_EDGE_MARGIN px clear of what it passes. CROP_EDGE_TOLERANCE only
+# absorbs rounding: a glyph or a border 1 CSS px over the edge is a visible cut.
+CROP_EDGE_REACH = 128.0
+CROP_EDGE_MARGIN = 4.0
+CROP_EDGE_TOLERANCE = 0.1
+CROP_EDGE_ROUNDS = 8
 
 
 class QuietGalleryRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -1231,6 +1240,247 @@ def capture_multi_selector_clip(
     return padded_clip_from_boxes(boxes, padding, page_scroll_dimensions(page))
 
 
+# The lines of text and the controls drawn in a region of the page, in page coordinates, each
+# trimmed to the part a reader sees: a hit test at points over it must find it, not a popup or
+# menu above it, the pane that scrolls it out of view, or nothing (hidden). Hit tests see every
+# element for the measure (pointer-events), and the parked pointer hovers nothing.
+VISIBLE_TEXT_BOXES_SCRIPT = """
+(region) => {
+  const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+  const left = region.x - window.scrollX;
+  const top = region.y - window.scrollY;
+  const right = left + region.width;
+  const bottom = top + region.height;
+  const style = document.createElement('style');
+  style.textContent = '*, *::before, *::after { pointer-events: auto !important; }';
+  document.head.appendChild(style);
+  const shown = (element) => element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  const candidates = [];
+  const add = (owner, rect, text) => {
+    if (rect.width > 0 && rect.height > 0 && rect.right > left && rect.left < right
+        && rect.bottom > top && rect.top < bottom) {
+      candidates.push({ owner, rect, text });
+    }
+  };
+  try {
+    // A text node's lines, in HTML and in SVG (an SVG label's box holds its rotated glyphs).
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const owner = node.parentElement;
+      const text = normalize(node.nodeValue);
+      if (!text || !owner || owner.closest('script, style, template, noscript, select, textarea, title')) continue;
+      if (!shown(owner)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) add(owner, rect, text);
+    }
+    const controls = 'input:not([type="hidden"]), select, textarea, button, '
+      + '[role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"]';
+    for (const control of document.querySelectorAll(controls)) {
+      // A drawn group that opens settings (role="button") is figure: its labels count as text.
+      if (control instanceof SVGElement || !shown(control)) continue;
+      const name = normalize(control.getAttribute('aria-label') || control.textContent || control.value);
+      add(control, control.getBoundingClientRect(), `${control.tagName.toLowerCase()}: ${name}`);
+    }
+    // The part of each box a reader sees, as rectangles that keep its shape: a label half under
+    // a popup is an L, and one bounding box around it would cross edges the label does not reach.
+    // Each run of seen cells down a column, and along a row, becomes a box (neighbouring runs
+    // that match merge), so an edge between two cells of one run still crosses that run's box.
+    const runs = (cells) => {
+      const found = [];
+      let first = -1;
+      cells.forEach((value, index) => {
+        if (value && first < 0) first = index;
+        if (first >= 0 && (!value || index === cells.length - 1)) {
+          found.push([first, value ? index : index - 1]);
+          first = -1;
+        }
+      });
+      return found;
+    };
+    const strips = (lines, across) => {
+      const merged = [];
+      lines.forEach((line, index) => {
+        for (const [from, to] of runs(line)) {
+          const open = merged.find((strip) => strip.from === from && strip.to === to && strip.last === index - 1);
+          if (open) open.last = index;
+          else merged.push({ first: index, last: index, from, to });
+        }
+      });
+      return merged.map((strip) => (across
+        ? { minColumn: strip.first, maxColumn: strip.last, minRow: strip.from, maxRow: strip.to }
+        : { minRow: strip.first, maxRow: strip.last, minColumn: strip.from, maxColumn: strip.to }));
+    };
+    return candidates.flatMap(({ owner, rect, text }) => {
+      const columns = Math.min(24, Math.max(3, Math.ceil(rect.width / 12)));
+      const rows = Math.min(8, Math.max(3, Math.ceil(rect.height / 8)));
+      const cellWidth = rect.width / columns;
+      const cellHeight = rect.height / rows;
+      const seen = Array.from({ length: rows }, (_, row) => Array.from({ length: columns }, (__, column) => {
+        const hit = document.elementFromPoint(
+          rect.left + (column + 0.5) * cellWidth, rect.top + (row + 0.5) * cellHeight);
+        // Outside the viewport no hit test answers: count the point as seen.
+        return !hit || hit === owner || owner.contains(hit);
+      }));
+      const byColumn = Array.from({ length: columns }, (_, column) => seen.map((line) => line[column]));
+      const boxes = new Map();
+      for (const part of [...strips(seen, false), ...strips(byColumn, true)]) {
+        const box = {
+          x: rect.left + part.minColumn * cellWidth + window.scrollX,
+          y: rect.top + part.minRow * cellHeight + window.scrollY,
+          width: (part.maxColumn - part.minColumn + 1) * cellWidth,
+          height: (part.maxRow - part.minRow + 1) * cellHeight,
+          text,
+        };
+        boxes.set(`${box.x},${box.y},${box.width},${box.height}`, box);
+      }
+      return [...boxes.values()];
+    });
+  } finally {
+    style.remove();
+  }
+}
+"""
+
+
+def visible_text_boxes(page, region: dict[str, float]) -> list[dict[str, Any]]:
+    """The lines of text and the controls a reader sees in ``region`` (VISIBLE_TEXT_BOXES_SCRIPT)."""
+
+    return page.evaluate(VISIBLE_TEXT_BOXES_SCRIPT, region)
+
+
+def park_pointer(page) -> None:
+    """Move the pointer off the page (OV-3411), so a crop shows no hover that the last click of
+    the replay or of the capture's actions left (BGC 7-2's Skip row)."""
+
+    page.mouse.move(-1, -1)
+
+
+def _crop_sides(clip: dict[str, float]) -> dict[str, float]:
+    return {
+        "left": clip["x"],
+        "top": clip["y"],
+        "right": clip["x"] + clip["width"],
+        "bottom": clip["y"] + clip["height"],
+    }
+
+
+def _edge_crossings(
+    sides: dict[str, float], boxes: list[dict[str, Any]], dimensions: dict[str, float], side: str
+) -> list[dict[str, Any]]:
+    """The boxes that ``side`` of the crop crosses; an edge at the page edge crosses none."""
+
+    tolerance = CROP_EDGE_TOLERANCE
+    vertical = side in {"left", "right"}
+    position = sides[side]
+    if position <= 0 or position >= dimensions["width" if vertical else "height"]:
+        return []
+    start, size, across_start, across_size = ("x", "width", "y", "height") if vertical else ("y", "height", "x", "width")
+    low, high = (sides["top"], sides["bottom"]) if vertical else (sides["left"], sides["right"])
+    return [
+        box
+        for box in boxes
+        if float(box[start]) < position - tolerance
+        and float(box[start]) + float(box[size]) > position + tolerance
+        and float(box[across_start]) < high - tolerance
+        and float(box[across_start]) + float(box[across_size]) > low + tolerance
+    ]
+
+
+def _cleared_edge(
+    sides: dict[str, float],
+    boxes: list[dict[str, Any]],
+    dimensions: dict[str, float],
+    side: str,
+    origin: float,
+    limit: float,
+) -> float:
+    """Where ``side`` crosses no box: the nearer of the first clear position outward, at most
+    CROP_EDGE_REACH from ``origin``, and the first one inward, never past ``limit`` (the
+    subject); outward on a tie; where it is when neither is free."""
+
+    start, size = ("x", "width") if side in {"left", "right"} else ("y", "height")
+    extent = dimensions["width" if side in {"left", "right"} else "height"]
+    outward = -1.0 if side in {"left", "top"} else 1.0
+    cleared: list[float] = []
+    for direction in (outward, -outward):
+        trial = dict(sides)
+        while crossings := _edge_crossings(trial, boxes, dimensions, side):
+            near = [float(box[start]) for box in crossings]
+            far = [float(box[start]) + float(box[size]) for box in crossings]
+            position = min(near) - CROP_EDGE_MARGIN if direction < 0 else max(far) + CROP_EDGE_MARGIN
+            position = min(max(position, 0.0), extent)
+            beyond_reach = abs(position - origin) > CROP_EDGE_REACH
+            into_subject = (position - limit) * outward < 0
+            if (direction == outward and beyond_reach) or (direction != outward and into_subject):
+                break
+            trial[side] = position
+        else:
+            cleared.append(trial[side])
+    return min(cleared, key=lambda position: abs(position - sides[side]), default=sides[side])
+
+
+def clear_crop_edges(
+    clip: dict[str, float],
+    boxes: list[dict[str, Any]],
+    padding: dict[str, float],
+    dimensions: dict[str, float],
+) -> dict[str, float]:
+    """The crop with each edge moved off the text and controls it cuts (OV-3410).
+
+    An edge moves inward only within its padding, so the crop keeps all of its subject.
+    """
+
+    origin = _crop_sides(clip)
+    limits = {
+        "left": origin["left"] + padding["left"],
+        "top": origin["top"] + padding["top"],
+        "right": origin["right"] - padding["right"],
+        "bottom": origin["bottom"] - padding["bottom"],
+    }
+    sides = dict(origin)
+    for _ in range(CROP_EDGE_ROUNDS):
+        moved = False
+        for side in ("top", "bottom", "left", "right"):
+            position = _cleared_edge(sides, boxes, dimensions, side, origin[side], limits[side])
+            moved = moved or position != sides[side]
+            sides[side] = position
+        if not moved:
+            break
+    return {
+        "x": sides["left"],
+        "y": sides["top"],
+        "width": sides["right"] - sides["left"],
+        "height": sides["bottom"] - sides["top"],
+    }
+
+
+def crop_edge_cuts(
+    clip: dict[str, float], boxes: list[dict[str, Any]], dimensions: dict[str, float]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Each edge of the crop with each box of text or control it crosses."""
+
+    sides = _crop_sides(clip)
+    return [
+        (side, box)
+        for side in ("top", "bottom", "left", "right")
+        for box in _edge_crossings(sides, boxes, dimensions, side)
+    ]
+
+
+def assert_crop_edges_cut_no_text(
+    clip: dict[str, float], boxes: list[dict[str, Any]], dimensions: dict[str, float]
+) -> None:
+    """Refuse a crop whose edge still cuts text or a control a reader sees (OV-3410)."""
+
+    cuts = crop_edge_cuts(clip, boxes, dimensions)
+    if cuts:
+        raise RuntimeError(
+            "the crop cuts text: "
+            + "; ".join(f"{side} edge cuts {str(box.get('text'))[:60]!r}" for side, box in cuts)
+        )
+
+
 def assert_capture_app_state(page, capture: dict[str, Any]) -> None:
     expectations = capture.get("assertAppState")
     if not isinstance(expectations, dict) or not expectations:
@@ -1582,6 +1832,7 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         raise RuntimeError("operation media must point at a local output path.")
 
     prepare_capture_page(page, base_url, sample, capture)
+    park_pointer(page)
     target_locator = resolve_capture_target(page, capture)
     if target_locator is not None:
         target_locator.scroll_into_view_if_needed()
@@ -1606,34 +1857,25 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
 
     clip_selectors = [as_text(selector) for selector in as_array(capture.get("clipSelectors")) if as_text(selector)]
 
+    no_padding = normalize_crop_padding(0, default=0)
     if as_text(capture.get("crop")) == "openSelect":
-        clip = capture_open_select_clip(
-            page,
-            normalize_crop_padding(capture.get("cropPadding"), default=14),
-            clip_selectors,
-        )
+        padding = normalize_crop_padding(capture.get("cropPadding"), default=14)
+        clip = capture_open_select_clip(page, padding, clip_selectors)
     elif clip_selectors:
-        clip = capture_multi_selector_clip(
-            page,
-            clip_selectors,
-            normalize_crop_padding(capture.get("cropPadding"), default=24),
-        )
-    elif target_locator is not None and capture.get("cropPadding") is not None:
-        clip = capture_selector_clip(
-            page,
-            target_locator,
-            normalize_crop_padding(capture.get("cropPadding"), default=12),
-        )
+        padding = normalize_crop_padding(capture.get("cropPadding"), default=24)
+        clip = capture_multi_selector_clip(page, clip_selectors, padding)
     elif target_locator is not None:
-        clip = capture_selector_clip(
-            page,
-            target_locator,
-            normalize_crop_padding(0, default=0),
+        padding = (
+            no_padding
+            if capture.get("cropPadding") is None
+            else normalize_crop_padding(capture.get("cropPadding"), default=12)
         )
+        clip = capture_selector_clip(page, target_locator, padding)
     else:
         box = capture.get("boundingBox")
         if not isinstance(box, dict):
             raise RuntimeError("capture metadata needs selector, crop=openSelect, or boundingBox.")
+        padding = no_padding
         clip = {
             "x": float(box["x"]),
             "y": float(box["y"]),
@@ -1641,6 +1883,27 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
             "height": float(box["height"]),
         }
 
+    dimensions = page_scroll_dimensions(page)
+    around = CROP_EDGE_REACH + CROP_EDGE_MARGIN
+    boxes = visible_text_boxes(
+        page,
+        {
+            "x": clip["x"] - around,
+            "y": clip["y"] - around,
+            "width": clip["width"] + 2 * around,
+            "height": clip["height"] + 2 * around,
+        },
+    )
+    cleared = clear_crop_edges(clip, boxes, padding, dimensions)
+    moves = {
+        side: round(cleared_side - _crop_sides(clip)[side], 1)
+        for side, cleared_side in _crop_sides(cleared).items()
+        if cleared_side != _crop_sides(clip)[side]
+    }
+    if moves:
+        print(f"crop edges moved off text (CSS px): {moves}", flush=True)
+    clip = cleared
+    assert_crop_edges_cut_no_text(clip, boxes, dimensions)
     if as_text(capture.get("source")).lower() in {"webapp", "web-app", "app"}:
         assert_capture_records_read(page)
     assert_capture_app_state(page, capture)
