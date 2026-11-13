@@ -160,9 +160,10 @@ nothing states that they are reviewed.
   RULES, LABEL FILTERING, QUALIFIER PRIORITY, LABEL GEOMETRY, ADD KEY) and
   letter spacing carry no meaning in CJK; translate them as ordinary
   headings. The same rules cover `th` (Thai has no letter case) and `vi`
-  (capitals with stacked tone marks collide). Outside the figure, the CJK,
-  `th` and `vi` rules in `gbdraw/web/index.html` turn off `uppercase` and
-  `tracking-*`.
+  (capitals with stacked tone marks collide). Outside the figure,
+  `gbdraw/web/index.html` turns off `uppercase` and `tracking-*` for every
+  locale whose `textStyle` in `UI_LOCALES` (`js/utils/i18n.js`) is `no-caps`
+  or `tall-marks`.
 - A word that the source capitalizes as a name of a control (Generate,
   Apply, Save Session) is written as that control's translated label, so a
   reader can find it: 「生成」をクリック / 点击“生成” / 點選「產生」.
@@ -643,7 +644,7 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
   headings: PRESET SCHEMES 프리셋 배색, DEFAULT COLORS 기본 색, SPECIFIC
   RULES 개별 규칙, LABEL FILTERING 레이블 필터링, QUALIFIER PRIORITY 한정자
   우선순위, LABEL GEOMETRY 레이블 치수, ADD KEY 키 추가. The CSS that turns
-  off `uppercase` and `tracking-*` for CJK must match `:lang(ko)` too.
+  off `uppercase` and `tracking-*` covers `ko` (its `textStyle` is `no-caps`).
 - Latin keeps its own case (gbdraw, LOSAT, orthogroup). Compounds reuse the
   glossary words: 레코드 레이블 (Record + Label), 트랙 프리셋 (Track + Preset).
 - One English word keeps one Korean word: Remove is always 제거, Delete 삭제,
@@ -1517,7 +1518,7 @@ typefaces.
   no ALL CAPS (stacked tone marks collide). The English capital headings
   become sentence case: Bộ màu đặt sẵn (PRESET SCHEMES), Màu mặc định, Quy tắc
   riêng, Lọc nhãn, Thứ tự ưu tiên qualifier, Vị trí nhãn (LABEL GEOMETRY),
-  Thêm khoá (ADD KEY). `:lang(vi)` turns off `uppercase` and `tracking-*`.
+  Thêm khoá (ADD KEY). The `no-caps` `textStyle` of `vi` turns off `uppercase` and `tracking-*`.
 - Names keep their capitals (GenBank, LOSAT); gbdraw stays lower case. A
   common noun kept in English is capitalized only at the start of a label
   (Feature, Track) and is lower case inside a sentence or phrase: Quy tắc màu
@@ -1717,8 +1718,8 @@ Linux without a Thai font shows missing-glyph boxes) at 12 px or more, with
 ### 11.4 Spelling of transliterations
 
 - Thai has no case: Title Case and ALL CAPS headings become ordinary text
-  (PRESET SCHEMES ชุดสีที่ตั้งไว้ล่วงหน้า); `:lang(th)` turns off `uppercase`
-  and `tracking-*`. Latin words keep their own case.
+  (PRESET SCHEMES ชุดสีที่ตั้งไว้ล่วงหน้า); the `tall-marks` `textStyle` of `th` turns
+  off `uppercase` and `tracking-*`. Latin words keep their own case.
 - **No tone marks** in transliterations, as Google spells them: เซสชัน,
   เวอร์ชัน, อัปโหลด, อัปเดต, แกลเลอรี, เลย์เอาต์, ไฮไลต์, รีเซ็ต, คลิก, ลิงก์,
   ไอคอน, อีเมล, อินเทอร์เฟซ. Never เซสชั่น, เวอร์ชั่น, อัพโหลด, อัพเดท,

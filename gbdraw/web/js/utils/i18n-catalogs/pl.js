@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "Opcja „Pokaż etykiety” ma wartość „Tylko pierwszy rekord”, więc etykiety są rysowane tylko w pierwszym rekordzie, chyba że dla cechy ustawienie Widoczność etykiety ma wartość „Włączone”.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "Opcja „Pokaż etykiety” ma wartość „Górny rekord grupy podobieństwa”, więc etykiety są rysowane tylko dla cech wybranych przez tę opcję, chyba że dla cechy ustawienie Widoczność etykiety ma wartość „Włączone”.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "Plik „{file}” został już pobrany. Przeglądarka może zastąpić ten plik albo zapisać nowy pod inną nazwą.",
+  "\"{label}\"": "„{label}”",
   "\"{label}\" (deleted)": "„{label}” (usunięto)",
   "\"{label}\" (not drawn)": "„{label}” (nie narysowano)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "Opcja „Pasek” rysuje prostą linię, a opcja „Linijka” rysuje linijkę ze znacznikami podziałki i etykietami.",

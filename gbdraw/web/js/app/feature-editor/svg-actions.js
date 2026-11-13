@@ -729,8 +729,8 @@ export const createFeatureSvgActions = ({
     const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
     const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
     const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    const heading = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-heading').text;
-    const subtitle = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-subtitle').text;
+    const heading = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-heading truncate').text;
+    const subtitle = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-subtitle truncate').text;
     title.appendChild(swatch);
     title.appendChild(titleTextWrap);
     element.appendChild(title);
@@ -1439,12 +1439,11 @@ export const createFeatureSvgActions = ({
         const referenceRing = document.createElement('span');
         referenceRing.className = 'gbdraw-alignment-ring is-reference is-chosen';
         const flag = document.createElement('span');
-        flag.className = 'gbdraw-alignment-flag';
-        const flagName = document.createElement('span');
-        flagName.textContent = reference.name;
+        flag.className = 'gbdraw-alignment-flag truncate';
+        const flagName = Object.assign(document.createElement('span'), { className: 'truncate', textContent: reference.name });
         flag.append(flagName, ' · reference');
         const tag = document.createElement('span');
-        tag.className = 'gbdraw-alignment-tag';
+        tag.className = 'gbdraw-alignment-tag truncate';
         [referenceRing, flag, tag].forEach((part) => part.setAttribute('aria-hidden', 'true'));
         element.append(drawing, referenceRing);
 

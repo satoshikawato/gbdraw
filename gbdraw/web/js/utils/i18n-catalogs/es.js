@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "Con “Mostrar etiquetas” en “Solo el primer registro”, las etiquetas se dibujan solo en el primer registro, salvo que una característica tenga Visibilidad de la etiqueta en “Activado”.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "Con “Mostrar etiquetas” en “Registro superior del grupo de similitud”, las etiquetas se dibujan solo para las características que esa opción selecciona, salvo que una característica tenga Visibilidad de la etiqueta en “Activado”.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "El archivo “{file}” ya se descargó. El navegador puede reemplazar ese archivo o guardar este con un nombre nuevo.",
+  "\"{label}\"": "“{label}”",
   "\"{label}\" (deleted)": "“{label}” (entrada eliminada)",
   "\"{label}\" (not drawn)": "“{label}” (entrada no dibujada)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "Con “Barra”, se dibuja una línea simple; con “Regla graduada”, una regla graduada con marcas de graduación y etiquetas.",

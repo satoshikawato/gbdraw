@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "「ラベルを表示」が「先頭のレコードのみ」のため、「ラベルの表示状態」が「オン」のフィーチャーを除き、ラベルは先頭のレコードにのみ描画されます。",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "「ラベルを表示」が「類似性グループの先頭レコード」のため、「ラベルの表示状態」が「オン」のフィーチャーを除き、この設定で選ばれるフィーチャーにだけラベルが描画されます。",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "「{file}」はすでにダウンロード済みです。ブラウザによって、そのファイルが置き換えられるか、新しい名前で保存される場合があります。",
+  "\"{label}\"": "「{label}」",
   "\"{label}\" (deleted)": "「{label}」（削除済み）",
   "\"{label}\" (not drawn)": "「{label}」（描画されていません）",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "「バー」は単純な線を、「ルーラー」は目盛りとラベル付きのルーラーを描きます。",

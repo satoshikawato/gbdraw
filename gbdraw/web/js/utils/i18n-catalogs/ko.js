@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "‘레이블 표시’가 ‘첫 번째 레코드만’이므로 레이블은 첫 번째 레코드에만 그려지며, feature의 ‘레이블 표시 여부’가 ‘켬’인 경우는 예외입니다.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "‘레이블 표시’가 ‘유사성 그룹 맨 위 레코드’이므로 이 설정으로 선택된 feature에만 레이블이 그려지며, feature의 ‘레이블 표시 여부’가 ‘켬’인 경우는 예외입니다.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "‘{file}’ 파일은 이미 다운로드되었습니다. 브라우저가 기존 파일을 덮어쓰거나 이 파일을 새 이름으로 저장할 수 있습니다.",
+  "\"{label}\"": "‘{label}’",
   "\"{label}\" (deleted)": "‘{label}’(삭제됨)",
   "\"{label}\" (not drawn)": "‘{label}’(그리지 않음)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "‘막대’는 단순한 선을 그리고, ‘눈금자’는 눈금과 레이블이 있는 눈금자를 그립니다.",

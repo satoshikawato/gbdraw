@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "Для параметра «Показать подписи» выбрано «Только первая запись», поэтому подписи отрисовываются только в первой записи, а также у элементов со значением «Вкл.» параметра Видимость подписи.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "Для параметра «Показать подписи» выбрано «Верхняя запись группы сходства», поэтому подписи отрисовываются только для элементов, которые выбирает этот параметр, а также для элементов со значением «Вкл.» параметра Видимость подписи.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "Файл «{file}» уже скачан. Браузер может заменить прежний файл или сохранить новый под другим именем.",
+  "\"{label}\"": "«{label}»",
   "\"{label}\" (deleted)": "«{label}» (удалено)",
   "\"{label}\" (not drawn)": "«{label}» (не отрисовано)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "Если выбран вариант «Отрезок», рисуется простая линия; если выбран вариант «Линейка» — линейка с делениями и подписями.",

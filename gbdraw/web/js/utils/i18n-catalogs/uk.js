@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "Параметр «Показати підписи» має значення «Лише перший запис», тому підписи малюються в першому записі, а в інших записах — лише для ознак, для яких параметр «Видимість підпису» має значення «Увімкнено».",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "Параметр «Показати підписи» має значення «Верхній запис групи подібності», тому підписи малюються для ознак, які вибирає це налаштування, а також для інших ознак, для яких параметр «Видимість підпису» має значення «Увімкнено».",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "Файл «{file}» уже звантажено. Браузер може замінити цей файл або зберегти поточний під новою назвою.",
+  "\"{label}\"": "«{label}»",
   "\"{label}\" (deleted)": "«{label}» (видалено)",
   "\"{label}\" (not drawn)": "«{label}» (не намальовано)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "«Відрізок» малює просту лінію, «Лінійка» — лінійку з поділками та підписами.",

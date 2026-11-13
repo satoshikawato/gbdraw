@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "Pengaturan \"Tampilkan label\" diatur ke \"Hanya record pertama\", sehingga label hanya digambar pada record pertama, kecuali fitur memiliki Visibilitas label \"Aktif\".",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "Pengaturan \"Tampilkan label\" diatur ke \"Record teratas kelompok kemiripan\", sehingga label hanya digambar untuk fitur yang dipilih oleh pengaturan tersebut, kecuali fitur memiliki Visibilitas label \"Aktif\".",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "File \"{file}\" sudah diunduh. Browser Anda mungkin mengganti file tersebut atau menyimpan file ini dengan nama baru.",
+  "\"{label}\"": "\"{label}\"",
   "\"{label}\" (deleted)": "\"{label}\" (dihapus)",
   "\"{label}\" (not drawn)": "\"{label}\" (tidak digambar)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "Opsi \"Garis\" menggambar satu garis sederhana, opsi \"Penggaris\" menggambar penggaris dengan tick dan label.",

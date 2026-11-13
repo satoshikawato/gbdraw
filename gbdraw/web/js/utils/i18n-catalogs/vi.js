@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "“Hiện nhãn” là “Chỉ bản ghi đầu tiên”, nên chỉ vẽ nhãn trong bản ghi đầu tiên, trừ khi feature có “Trạng thái hiển thị nhãn” là “Bật”.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "“Hiện nhãn” là “Bản ghi đầu của nhóm tương đồng”, nên chỉ vẽ nhãn cho các feature mà cài đặt này chọn, trừ khi feature có “Trạng thái hiển thị nhãn” là “Bật”.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "Đã tải xuống “{file}” trước đó. Trình duyệt có thể thay thế tệp đó hoặc lưu tệp này với tên mới.",
+  "\"{label}\"": "“{label}”",
   "\"{label}\" (deleted)": "“{label}” (đã xoá)",
   "\"{label}\" (not drawn)": "“{label}” (không vẽ)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "“Thanh” vẽ một đường đơn giản, “Thước” vẽ thước có vạch chia và nhãn.",

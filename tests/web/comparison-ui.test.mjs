@@ -71,6 +71,7 @@ const {
   createLinearComparisonEdge,
   resolveLinearComparisonPlan
 } = await import(pathToFileURL(join(tempRoot, 'js', 'services', 'linear-comparisons.js')));
+const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'js', 'utils', 'i18n.js')));
 const { comparisonStateForMode } = await import(
   pathToFileURL(join(tempRoot, 'js', 'mode-profiles.js'))
 );
@@ -571,6 +572,27 @@ test('a pair issue names its pair once in the list and marks the pair row', () =
   // The action's accessible name carries its pair (repeated buttons stay distinct).
   assert.deepEqual(projection.issues[0].actions.map(({ label, ariaLabel }) => [label, ariaLabel]),
     [['Choose file', 'Choose file for #1 → #2']]);
+});
+
+// OV-2782: the pair template ends the sentence with the locale's own mark; the
+// message inside it loses its full stop first, so the mark shows once (。 was
+// doubled, only a doubled ASCII period was collapsed).
+test('OV-2782: a pair issue ends with one full stop in English and Japanese', async () => {
+  const issueOf = () => projectLinearComparisonUi({
+    plan: { mode: 'selected', defaultSource: 'losat', edges: [createLinearComparisonEdge({ id: 'p', queryUid: 'a', subjectUid: 'b', source: 'losat' })] },
+    resolution: {
+      edges: [{ id: 'p', edgeKey: 'a->b', queryIndex: 0, subjectIndex: 1, source: 'losat' }],
+      errors: [{ code: 'self', edgeId: 'p', edgeKey: 'a->b', message: 'A pair compares a record with itself.' }]
+    },
+    filters: linearDefaults
+  }).issues[0].text;
+  assert.equal(issueOf(), '#1 → #2: A pair compares a record with itself.');
+  try {
+    await setUiLocale('ja', async () => ({ default: { '{pair}: {text}.': '{pair}：{text}。', 'A pair compares a record with itself.': 'ペアがレコードをそれ自身と比較しています。' } }));
+    assert.equal(issueOf(), '#1 → #2：ペアがレコードをそれ自身と比較しています。');
+  } finally {
+    await setUiLocale('en');
+  }
 });
 
 test('the LOSATP-mode issue names the pairs set to Upload BLAST TSV', () => {

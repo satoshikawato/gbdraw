@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "“Etiketleri göster” ayarı “Yalnızca ilk kayıt” olduğundan, bir özelliğin Etiket görünürlüğü “Açık” değilse etiketler yalnızca ilk kayıtta çizilir.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "“Etiketleri göster” ayarı “En üstteki benzerlik grubu kaydı” olduğundan, bir özelliğin Etiket görünürlüğü “Açık” değilse etiketler yalnızca bu ayarın seçtiği özellikler için çizilir.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "“{file}” dosyası zaten indirildi. Tarayıcınız önceden indirilen dosyanın üzerine yazabilir veya bu dosyayı yeni bir adla kaydedebilir.",
+  "\"{label}\"": "“{label}”",
   "\"{label}\" (deleted)": "“{label}” (silindi)",
   "\"{label}\" (not drawn)": "“{label}” (çizilmedi)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "“Çubuk” seçeneği basit bir çizgi, “Cetvel” seçeneği işaretli ve etiketli bir cetvel çizer.",

@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "Con “Mostra etichette” impostato su “Solo il primo record”, le etichette vengono disegnate solo nel primo record, a meno che per una feature Visibilità dell’etichetta non sia impostata su “Attivato”.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "Con “Mostra etichette” impostato su “Record in cima al gruppo di similarità”, le etichette vengono disegnate solo per le feature selezionate da questa impostazione, a meno che per una feature Visibilità dell’etichetta non sia impostata su “Attivato”.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "Il file “{file}” è già stato scaricato. Il browser può sostituire quel file o salvare questo con un nuovo nome.",
+  "\"{label}\"": "“{label}”",
   "\"{label}\" (deleted)": "“{label}” (eliminata)",
   "\"{label}\" (not drawn)": "“{label}” (non disegnata)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "Con “Barra”, si disegna una linea semplice; con “Righello”, un righello con tacche ed etichette.",
