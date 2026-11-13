@@ -20,8 +20,9 @@ _NO_NAMES = RecordSourceMetadata(organism="", strain="", replicon=None, organell
 def one_circle_definition_facts(circle: CircularOneCircle, *, definition_shown: bool) -> DefinitionRecordFacts:
     """The definition facts of a circle of records: the names every drawn record shares (none when they differ),
     without a replicon or organelle line, the drawn records' bases and their GC content, and a line that counts the
-    records. A hidden definition (``definition_shown`` false) keeps only that line when the circle leaves records
-    out (``DefinitionRecordFacts.summary_only``), so they never vanish without a word."""
+    records. A hidden definition (``definition_shown`` false) takes no GC content, so no base is counted for it, and
+    keeps only that line when the circle leaves records out (``DefinitionRecordFacts.summary_only``), so they never
+    vanish without a word."""
 
     facts = [definition_record_facts(unit.record.gb_record, gc_percent=False) for unit in circle.units]
     count = len(circle.units)
@@ -35,7 +36,9 @@ def one_circle_definition_facts(circle: CircularOneCircle, *, definition_shown: 
         record_id=first.record_id,
         metadata=first.metadata._replace(replicon=None, organelle=None) if len(shared) == 1 else _NO_NAMES,
         length=sum(fact.length for fact in facts),
-        gc_percent=gc_percent_of_sequences(unit.record.gb_record.seq for unit in circle.units),
+        gc_percent=(
+            gc_percent_of_sequences(unit.record.gb_record.seq for unit in circle.units) if definition_shown else None
+        ),
         summary=summary,
         summary_only=not definition_shown and bool(circle.hidden_count),
     )

@@ -699,16 +699,23 @@ def test_the_tick_labels_keep_their_margin_from_a_percent_gc_band_that_paints_it
 
 
 @pytest.mark.parametrize(
-    ("words", "drawn"),
-    [([], 1), (["--multi_record_canvas"], 3), (["--one_circle"], 3)],
-    ids=["one-record", "multi-record-canvas", "one-circle"],
+    ("words", "drawn", "shown"),
+    [
+        ([], 1, True),
+        (["--multi_record_canvas"], 3, True),
+        (["--one_circle"], 3, True),
+        (["--hide_definition"], 1, False),
+        (["--one_circle", "--hide_definition"], 3, False),
+    ],
+    ids=["one-record", "multi-record-canvas", "one-circle", "one-record-hidden", "one-circle-hidden"],
 )
 def test_a_cli_render_takes_the_gc_percent_of_each_drawn_record_once(
-    words: list[str], drawn: int, tmp_path, monkeypatch: pytest.MonkeyPatch
+    words: list[str], drawn: int, shown: bool, tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The definition's facts, GC % included, are built once per record (once per circle on one circle) and handed
     to every reader: the band the tracks keep clear, the fit probes, the centre text and the drawn group (OV-3043:
-    the GC % of a record was counted once per reader)."""
+    the GC % of a record was counted once per reader). A hidden definition counts no base for it (F2: one circle
+    summed every record's counts with the definition hidden)."""
 
     import gbdraw.analysis.gc as gc_module
     from Bio import SeqIO
@@ -729,4 +736,4 @@ def test_a_cli_render_takes_the_gc_percent_of_each_drawn_record_once(
     SeqIO.write(records if drawn > 1 else records[:1], source, "genbank")
     circular_main(["--gbk", str(source), *words, "-o", str(tmp_path / "out"), "-f", "svg"])
 
-    assert sorted(counted) == sorted(len(record.seq) for record in records[:drawn])
+    assert sorted(counted) == (sorted(len(record.seq) for record in records[:drawn]) if shown else [])

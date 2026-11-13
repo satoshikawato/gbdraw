@@ -2598,6 +2598,43 @@ def test_a_single_record_title_change_counts_no_base_for_the_gc_percent(
     assert _metrics(diagnostics).get("renderStageUncacheableCount", 0) == 0
 
 
+def test_a_region_crop_title_change_reads_no_edge_row_for_the_gc_percent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A warm Generate of a region crop reads no base for its GC percent: the prepared cache keeps the crop's view,
+    and the view keeps the counts its edge rows gave (F1: a warm Generate read both edge rows from the file again)."""
+
+    import gbdraw.io.record_sequences as record_sequences
+
+    calls, counted = _gc_percent_calls(monkeypatch)
+    edge_reads: list[int] = []
+    real_row_bases = record_sequences._SequenceTable.row_bases
+
+    def row_bases(self: object, row: int, size: int) -> bytes:
+        edge_reads.append(row)
+        return real_row_bases(self, row, size)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(record_sequences._SequenceTable, "row_bases", row_bases)
+    source = tmp_path / "record.gbk"
+    record = _record("gc-crop")
+    record.seq = Seq("ATGCGGCATT" * 4_000)
+    _write_genbank(source, (record,))
+    cache = PreparedBiologicalInputCache()
+    _render(tmp_path, cache, _document(source, title="Cold", region="1234-31111"), request_id=1)
+    assert len(calls) == 1
+    assert edge_reads  # the crop's edges fall inside rows
+
+    warm = _document(source, title="Warm", region="1234-31111")  # building the document parses the source itself
+    calls.clear()
+    counted.clear()
+    edge_reads.clear()
+    _warm, diagnostics = _render(tmp_path, cache, warm, request_id=2)
+    assert len(calls) == 1
+    assert counted == []
+    assert edge_reads == []
+    assert _metrics(diagnostics).get("renderStageUncacheableCount", 0) == 0
+
+
 def test_a_feature_stamp_has_one_entry_per_named_field() -> None:
     feature = SeqFeature(FeatureLocation(1, 9, strand=1), type="gene", qualifiers={"locus_tag": ["a"]})
     assert len(prepared_module._feature_hash_bytes(feature)) == 8 * len(prepared_module._FEATURE_STAMP_FIELDS)
