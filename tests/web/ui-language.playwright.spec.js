@@ -27,6 +27,9 @@
 //   (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
 //   the header's mode and Session names keep one line (OV-1515), and each
 //   footer item stays whole on one line, with spacing between items (OV-1517);
+// - in ja at 1280 and 390 px: no Japanese word of the settings pane (every
+//   section open, the color rule hint shown) or of the footer is split over
+//   two lines (OV-2448);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // - in every language, the "Suggest a translation fix" link beside the menu is
 //   named in that language (English where the catalog has no entry), opens a
@@ -564,6 +567,48 @@ test('rail names stay inside the rail and keep each word on one line, nothing co
     }
     await menu(page).selectOption('en');
     await page.setViewportSize(viewports[0]);
+  }
+  expect(errors).toEqual([]);
+});
+
+// The Japanese words in the settings pane and the footer that a line break splits (クオ / リファイア, OV-2448).
+const splitJapaneseWords = (page) => page.evaluate(() => {
+  const words = new Intl.Segmenter('ja', { granularity: 'word' });
+  const japanese = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+  const range = document.createRange();
+  const lineTop = (node, index) => {
+    range.setStart(node, index);
+    range.setEnd(node, index + 1);
+    return [...range.getClientRects()].find((rect) => rect.width > 0)?.top;
+  };
+  return [...document.querySelectorAll('.settings-pane, footer[data-app-footer]')].flatMap((root) => {
+    const split = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!japanese.test(node.data) || node.parentElement.getClientRects().length === 0) continue;
+      for (const word of words.segment(node.data)) {
+        if (!word.isWordLike || !japanese.test(word.segment)) continue;
+        const tops = Array.from(word.segment, (_, offset) => lineTop(node, word.index + offset)).filter((top) => top !== undefined);
+        if (tops.some((top) => Math.abs(top - tops[0]) > 3)) split.push(`${word.segment} (${node.data.trim().slice(0, 24)})`);
+      }
+    }
+    return split;
+  });
+});
+
+test('Japanese hints, paragraphs and the footer break between phrases, never inside a word, at desktop and phone widths', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await openApp(page);
+  await menu(page).selectOption('ja');
+  await expect.poll(() => pageLanguage(page)).toBe('ja');
+  await page.evaluate(() => document.querySelectorAll('.settings-pane details:not(.action-menu)').forEach((details) => { details.open = true; }));
+  // The color rule hint of OV-2448 shows while the new rule has no qualifier.
+  await page.locator('[data-specific-rule-add] input[list="specific-rule-qualifier-options"]').fill('');
+  await expect(page.locator('[data-specific-rule-qualifier-hint]')).toBeVisible();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect.poll(() => splitJapaneseWords(page), { message: `ja at ${width} px` }).toEqual([]);
   }
   expect(errors).toEqual([]);
 });

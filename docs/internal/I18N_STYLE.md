@@ -288,6 +288,10 @@ possible; rail short names within 5 (Features is the known exception).
 
 - フィーチャー on the rail keeps one line at every window size (never
   フィー / チャー, Owner 2026-10-22); no shorter rail form.
+- Japanese wraps between phrases: `:lang(ja)` gives body `word-break:
+  auto-phrase` (and `overflow-wrap: break-word`), so no hint, paragraph,
+  label or button splits a word over two lines (never クオ / リファイア,
+  OV-2448). Browsers without phrase breaking keep the normal Japanese breaks.
 
 ## 3. Simplified Chinese (`zh-Hans`, mainland usage)
 
