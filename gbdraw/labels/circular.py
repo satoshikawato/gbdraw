@@ -2994,7 +2994,7 @@ def _angle_unwrapped_from_start(label: CircularLabel, total_length: int) -> floa
 
 
 def _point_on_circle(radius: float, angle_deg: float) -> tuple[float, float]:
-    """The point at `radius` from the center and `angle_deg` degrees: a start point on the label's own circle."""
+    """The point at `radius` from the center and `angle_deg` degrees."""
     angle_rad = math.radians(angle_deg)
     return radius * math.cos(angle_rad), radius * math.sin(angle_rad)
 
@@ -5818,8 +5818,8 @@ def prepare_label_list(
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)
             label_start = label_middle - (label_as_feature_length / 2)
             label_end = label_middle + (label_as_feature_length / 2)
-            feature_middle_x: float = feature_center_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-            feature_middle_y: float = feature_center_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+            feature_angle_deg = angle_from_middle_unwrapped(label_middle, total_length)
+            feature_middle_x, feature_middle_y = _point_on_circle(feature_center_radius, feature_angle_deg)
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
             assignment = getattr(feature_object, "placement", None)
@@ -5850,12 +5850,7 @@ def prepare_label_list(
                 if lane_clearance and not is_short_directional_feature:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
-                    feature_anchor_x = feature_outer_radius * math.cos(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
-                    feature_anchor_y = feature_outer_radius * math.sin(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
+                    feature_anchor_x, feature_anchor_y = _point_on_circle(feature_outer_radius, feature_angle_deg)
                 # With an arena, its inner edge is the "anchor" radius for leader lines.
                 middle_radius = (
                     float(outer_arena[0]) if outer_arena is not None else radius_factor * radius
@@ -5869,20 +5864,13 @@ def prepare_label_list(
                             + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
                         ),
                     )
-                middle_x = middle_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-                middle_y = middle_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+                middle_x, middle_y = _point_on_circle(middle_radius, feature_angle_deg)
             else:
                 if lane_clearance and not is_short_directional_feature:
                     # For displaced inner features, anchor leaders on the inner edge so lines
                     # do not cross over raised feature bodies.
-                    feature_anchor_x = feature_inner_radius * math.cos(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
-                    feature_anchor_y = feature_inner_radius * math.sin(
-                        math.radians(360.0 * (label_middle / total_length) - 90)
-                    )
-                middle_x = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-                middle_y = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+                    feature_anchor_x, feature_anchor_y = _point_on_circle(feature_inner_radius, feature_angle_deg)
+                middle_x, middle_y = _point_on_circle(inner_radius_factor * radius, feature_angle_deg)
             is_embedded = _is_label_embedded_in_segment(
                 label_start,
                 label_end,
