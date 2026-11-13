@@ -1,0 +1,855 @@
+{
+  "id": "vibrio_parahaemolyticus_pva1",
+  "version": 1,
+  "title": "Find an AHPND plasmid in two more <i>Vibrio parahaemolyticus</i> genomes",
+  "summary": "Select the whole pVA1-type plasmid of V. parahaemolyticus 19-021-D1, find it in a complete plasmid and a draft assembly with Find in other files, and draw the windows as a new drawing: similarity groups, genes colored by function, and gene names on the reference row.",
+  "appMode": "Linear",
+  "primaryWorkflow": "Find in other files",
+  "downloads": [
+    {
+      "label": "NZ_CP046414.1",
+      "source": "NCBI Nucleotide",
+      "accession": "NZ_CP046414.1",
+      "targetName": "NZ_CP046414.1.gbk",
+      "note": "Download the record as a GenBank flat file."
+    },
+    {
+      "label": "NZ_CP065372.1",
+      "source": "NCBI Nucleotide",
+      "accession": "NZ_CP065372.1",
+      "targetName": "NZ_CP065372.1.gbk",
+      "note": "Download the record as a GenBank flat file."
+    },
+    {
+      "label": "GCF_019780985.1",
+      "source": "NCBI Assembly",
+      "accession": "GCF_019780985.1",
+      "targetName": "GCF_019780985.1_ASM1978098v1_genomic.gbff.gz",
+      "href": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/019/780/985/GCF_019780985.1_ASM1978098v1/GCF_019780985.1_ASM1978098v1_genomic.gbff.gz",
+      "note": "Download the assembly's GenBank file (all records, gzip-compressed); keep it compressed."
+    },
+    {
+      "label": "Default color table",
+      "source": "Gallery file",
+      "targetName": "cds_grey_default_colors.tsv",
+      "href": "./files/cds_grey_default_colors.tsv",
+      "note": "Colors every CDS grey."
+    },
+    {
+      "label": "Specific color rules",
+      "source": "Gallery file",
+      "targetName": "vibrio_parahaemolyticus_pva1_specific_colors.tsv",
+      "href": "./files/vibrio_parahaemolyticus_pva1_specific_colors.tsv",
+      "note": "Colors pirA and pirB by locus tag, and conjugative transfer, transposase and recombinase, and replication and mobilization genes by product name."
+    },
+    {
+      "label": "Label priority table",
+      "source": "Gallery file",
+      "targetName": "cds_gene_priority.tsv",
+      "href": "./files/cds_gene_priority.tsv",
+      "note": "Uses the gene qualifier for CDS labels."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Linear mode",
+      "body": "Open gbdraw.app and click + Linear before adding the GenBank files.",
+      "operations": [
+        {
+          "genericMedia": true,
+          "media": {
+            "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
+            "alt": "Drawing bar with the Circular and Linear tabs; the Linear drawing tab is selected.",
+            "caption": "After clicking + Linear, the Linear drawing tab is selected."
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "click",
+          "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"linear\"]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => window.__GBDRAW_APP__?.mode === 'linear'"
+        }
+      ]
+    },
+    {
+      "title": "Add the reference genome",
+      "body": "Download the three files listed under Files. In File 1, click Choose GenBank / DDBJ File and choose NZ_CP046414.1.gbk. This is the reference: the plasmid you select in it is searched for in the other files.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-02-01-reference-file.webp",
+            "alt": "The File 1 card with NZ_CP046414.1.gbk chosen.",
+            "caption": "Choose NZ_CP046414.1.gbk in File 1."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 2,
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const el = document.querySelector('[data-linear-source-card]'); if (!el) throw new Error('Capture target not found: g-file1'); el.dataset.capture = 'g-file1'; el.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "[data-capture='g-file1']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 1
+            },
+            "visibleText": [
+              "NZ_CP046414.1.gbk"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Draw the reference",
+      "body": "Click Generate Diagram. The plasmid, 68.8 kb, is one row.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-03-01-reference-preview.webp",
+            "alt": "The V. parahaemolyticus 19-021-D1 plasmid NZ_CP046414.1 drawn as one row of CDS arrows.",
+            "caption": "The reference plasmid NZ_CP046414.1 drawn whole."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 3,
+            "viewport": {
+              "width": 1900,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "NZ_CP046414.1"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "generate"
+        }
+      ]
+    },
+    {
+      "title": "Add the other two genomes",
+      "body": "Click Add sequence and choose NZ_CP065372.1.gbk in File 2. Click Add sequence again and choose GCF_019780985.1_ASM1978098v1_genomic.gbff.gz in File 3. GCF_019780985.1_ASM1978098v1_genomic.gbff.gz is a draft assembly of 97 records: the Choose records dialog opens, and all records stay selected; click Close. The figure does not change until the next Generate.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-04-01-other-files.webp",
+            "alt": "The File 3 card with the draft assembly GCF_019780985.1_ASM1978098v1_genomic.gbff.gz chosen and all its records drawn.",
+            "caption": "Choose the draft assembly GCF_019780985.1_ASM1978098v1_genomic.gbff.gz in File 3; all its records stay selected."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 4,
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const el = [...document.querySelectorAll('[data-linear-source-card]')].at(-1); if (!el) throw new Error('Capture target not found: g-file3'); el.dataset.capture = 'g-file3'; el.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "[data-capture='g-file3']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "GCF_019780985.1_ASM1978098v1_genomic.gbff.gz"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "click",
+          "selector": "[data-linear-file-add]"
+        },
+        {
+          "type": "upload",
+          "selector": ".upload-zone:has(input[data-testid=\"linear-genbank-2\"])",
+          "sessionFile": "NZ_CP065372.1.gbk"
+        },
+        {
+          "type": "click",
+          "selector": "[data-linear-file-add]"
+        },
+        {
+          "type": "upload",
+          "selector": ".upload-zone:has(input[data-testid=\"linear-genbank-3\"])",
+          "sessionFile": "GCF_019780985.1_ASM1978098v1_genomic.gbff.gz"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => Boolean(document.querySelector('[data-record-list-dialog]'))",
+          "timeout": 600000
+        },
+        {
+          "type": "click",
+          "selector": "[data-record-list-dialog] >> role=button[name='Close']"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => !document.querySelector('[data-record-list-dialog]')",
+          "timeout": 60000
+        }
+      ]
+    },
+    {
+      "title": "Select the region",
+      "body": "Below the preview, click Fit so the whole row shows, click Select region, then drag along the reference row from its first base to its last, so the whole plasmid is selected. A popup shows the selected span.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-05-01-region-popup.webp",
+            "alt": "The region popup over the plasmid row with the selected span and the Find in other files button.",
+            "caption": "The popup shows the whole plasmid selected; Find in other files starts from it."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 5,
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const el = (() => { document.querySelector('.preview-toolbar')?.style.setProperty('visibility', 'hidden', 'important'); return document.querySelector('[data-preview-item-popup=\"region\"]')?.closest('[role=\"dialog\"]'); })(); if (!el) throw new Error('Capture target not found: g-region'); el.dataset.capture = 'g-region'; el.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "[data-capture='g-region']",
+            "cropPadding": 0,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "Find in other files"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "click",
+          "selector": "button[aria-label='Fit to preview']"
+        },
+        {
+          "type": "click",
+          "selector": "[data-region-select-toggle]"
+        },
+        {
+          "type": "drag",
+          "record": "NZ_CP046414.1",
+          "from": 1,
+          "to": 68848
+        },
+        {
+          "type": "waitForSelector",
+          "selector": "[data-preview-item-popup=\"region\"]"
+        }
+      ]
+    },
+    {
+      "title": "Find the region in the other files",
+      "body": "In the popup, click Find in other files. Start the span in the gene-free gap after the last gene: type 63,090 in Start and 63,089 in End and select Across the origin, so the plasmid is searched as one piece; leave the search settings at their defaults. Click Search; the search runs in the browser and can take a few minutes. The proposal lists one window in 20-082A3 and the CAVP11 contigs that carry the plasmid's genes.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Record",
+            "NZ_CP046414.1"
+          ],
+          [
+            "Start",
+            "63,090"
+          ],
+          [
+            "End",
+            "63,089"
+          ],
+          [
+            "Across the origin",
+            "On"
+          ]
+        ]
+      },
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-06-01-proposal.webp",
+            "alt": "Find in other files proposal: one window in NZ_CP065372.1 and the ticked CAVP11 contig windows.",
+            "caption": "The plasmid's genes found in 20-082A3 and in CAVP11's contigs."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 6,
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const el = (() => { const overlay = document.querySelector('[data-find-files-dialog]'); overlay?.style.setProperty('background-color', '#fff', 'important'); return overlay?.querySelector('[role=\"dialog\"]'); })(); if (!el) throw new Error('Capture target not found: g-proposal'); el.dataset.capture = 'g-proposal'; el.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "[data-capture='g-proposal']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "Create new drawing",
+              "NZ_CP065372.1.gbk",
+              "GCF_019780985.1_ASM1978098v1_genomic.gbff.gz"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "click",
+          "selector": "[data-region-find-in-files]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => Boolean(document.querySelector('[data-find-files-genes]'))",
+          "timeout": 600000
+        },
+        {
+          "type": "fill",
+          "selector": "[data-find-files-row] [data-find-files-start]",
+          "value": 63090
+        },
+        {
+          "type": "fill",
+          "selector": "[data-find-files-row] [data-find-files-end]",
+          "value": 63089
+        },
+        {
+          "type": "check",
+          "selector": "[data-find-files-row] [data-find-files-origin]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => { const b = document.querySelector('[data-find-files-search]'); return Boolean(b) && !b.disabled; }",
+          "timeout": 300000
+        },
+        {
+          "type": "click",
+          "selector": "[data-find-files-search]"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => window.__GBDRAW_APP__.findInOtherFiles.dialog.status === 'proposal'",
+          "timeout": 1800000
+        }
+      ]
+    },
+    {
+      "title": "Create the new drawing",
+      "body": "Click Create new drawing. A new drawing tab, Linear 2, opens with one row per File, and Generate Diagram draws it: the reference plasmid, 20-082A3's plasmid, and the CAVP11 contigs side by side with circled numbers, bars at contig ends, and pairwise LOSATP ribbons between neighboring rows.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-07-01-windows.webp",
+            "alt": "Three rows: the 19-021-D1 plasmid, the 20-082A3 plasmid, and the CAVP11 contig windows with circled numbers, linked by pairwise ribbons.",
+            "caption": "The new drawing: one row per genome, windows numbered, pairwise ribbons."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 7,
+            "viewport": {
+              "width": 1900,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "NZ_CP046414.1",
+              "NZ_CP065372.1"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "click",
+          "selector": "[data-find-files-create]",
+          "timeout": 600000
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => !document.querySelector('[data-find-files-dialog]')",
+          "timeout": 120000
+        },
+        {
+          "type": "generate"
+        }
+      ]
+    },
+    {
+      "title": "Group similar proteins",
+      "body": "In Comparison, click Run LOSAT, open Settings, press LOSATP under LOSAT Mode, and set LOSATP mode to Similarity groups. Click Generate Diagram. Ribbons now link proteins of one similarity group in neighboring rows.",
+      "table": {
+        "columns": [
+          "Setting",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Comparison",
+            "Run LOSAT"
+          ],
+          [
+            "LOSAT Mode",
+            "LOSATP"
+          ],
+          [
+            "LOSATP mode",
+            "Similarity groups"
+          ]
+        ]
+      },
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-08-01-similarity-groups.webp",
+            "alt": "The three rows linked by similarity-group ribbons.",
+            "caption": "Similarity groups link one protein family per ribbon."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 8,
+            "viewport": {
+              "width": 1900,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "orthogroup"
+            },
+            "visibleText": [
+              "NZ_CP046414.1",
+              "NZ_CP065372.1"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"button[aria-label='Run LOSAT for all adjacent pairs']\"); if (!el) throw new Error('Not found: ' + \"button[aria-label='Run LOSAT for all adjacent pairs']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label='Run LOSAT for all adjacent pairs']"
+        },
+        {
+          "type": "waitForFunction",
+          "script": "() => document.querySelector(\"button[aria-label='Run LOSAT for all adjacent pairs']\")?.getAttribute('aria-pressed') === 'true'"
+        },
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"select[aria-label='LOSATP mode']\"); if (!el) throw new Error('Not found: ' + \"select[aria-label='LOSATP mode']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "click",
+          "selector": "[data-linear-comparison-losat-mode] >> role=button[name='LOSATP']"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='LOSATP mode']",
+          "value": "orthogroup"
+        },
+        {
+          "type": "generate"
+        }
+      ]
+    },
+    {
+      "title": "Color the genes by function",
+      "body": "In Colors, choose cds_grey_default_colors.tsv as the Default colors file (every CDS grey) and vibrio_parahaemolyticus_pva1_specific_colors.tsv as the Specific rules file. Generate Diagram. pirA and pirB are red, conjugative transfer genes blue, transposases and recombinases orange, replication and mobilization genes green. 20-082A3 has one red gene where the other two genomes have two.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-09-01-colors.webp",
+            "alt": "The rows with grey CDS arrows and colored pirAB, transfer, transposase and replication genes.",
+            "caption": "Colors by function: one red gene in 20-082A3, two in the others."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 9,
+            "viewport": {
+              "width": 1900,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "NZ_CP046414.1",
+              "NZ_CP065372.1"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"[aria-label='Choose Default colors file']\"); if (!el) throw new Error('Not found: ' + \"[aria-label='Choose Default colors file']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "upload",
+          "selector": "[aria-label='Choose Default colors file']",
+          "path": "gallery/files/cds_grey_default_colors.tsv"
+        },
+        {
+          "type": "upload",
+          "selector": "[aria-label='Choose Specific rules file']",
+          "path": "gallery/files/vibrio_parahaemolyticus_pva1_specific_colors.tsv"
+        },
+        {
+          "type": "generate"
+        }
+      ]
+    },
+    {
+      "title": "Name the rows and label the genes",
+      "body": "In each File card's Record options, type the Organism / strain and Subtitle / title from the table. In Labels, set Show Labels to First record only and choose cds_gene_priority.tsv as the Priority File, so CDS labels show gene names. Generate Diagram.",
+      "table": {
+        "columns": [
+          "File",
+          "Organism / strain",
+          "Subtitle / title"
+        ],
+        "rows": [
+          [
+            "1",
+            "<i>V. parahaemolyticus</i> 19-021-D1",
+            "AHPND plasmid pVp_Kor-D1-2 (pVA1 type), complete"
+          ],
+          [
+            "2",
+            "<i>V. parahaemolyticus</i> 20-082A3",
+            "Plasmid pVp-20-082A3B, complete"
+          ],
+          [
+            "3",
+            "<i>V. parahaemolyticus</i> CAVP11 (draft assembly)",
+            ""
+          ]
+        ]
+      },
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-10-01-names-labels.webp",
+            "alt": "The rows named 19-021-D1, 20-082A3 and CAVP11 (draft assembly), with gene names on the reference row.",
+            "caption": "Row names and gene names on the reference row."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 10,
+            "viewport": {
+              "width": 1900,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "19-021-D1",
+              "20-082A3",
+              "CAVP11 (draft assembly)"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"input[aria-label='Definition for sequence 1']\"); if (!el) throw new Error('Not found: ' + \"input[aria-label='Definition for sequence 1']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Definition for sequence 1']",
+          "value": "<i>V. parahaemolyticus</i> 19-021-D1"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Subtitle / title for sequence 1']",
+          "value": "AHPND plasmid pVp_Kor-D1-2 (pVA1 type), complete"
+        },
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"input[aria-label='Definition for sequence 2']\"); if (!el) throw new Error('Not found: ' + \"input[aria-label='Definition for sequence 2']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Definition for sequence 2']",
+          "value": "<i>V. parahaemolyticus</i> 20-082A3"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Subtitle / title for sequence 2']",
+          "value": "Plasmid pVp-20-082A3B, complete"
+        },
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"input[aria-label='Definition for sequence 3']\"); if (!el) throw new Error('Not found: ' + \"input[aria-label='Definition for sequence 3']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Definition for sequence 3']",
+          "value": "<i>V. parahaemolyticus</i> CAVP11 (draft assembly)"
+        },
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"#linear-show-labels\"); if (!el) throw new Error('Not found: ' + \"#linear-show-labels\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "select",
+          "selector": "#linear-show-labels",
+          "value": "first"
+        },
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"[aria-label='Choose Priority File (TSV)']\"); if (!el) throw new Error('Not found: ' + \"[aria-label='Choose Priority File (TSV)']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "upload",
+          "selector": "[aria-label='Choose Priority File (TSV)']",
+          "path": "gallery/files/cds_gene_priority.tsv"
+        },
+        {
+          "type": "generate"
+        }
+      ]
+    },
+    {
+      "title": "Finish the arrows",
+      "body": "In Features, under Arrow Geometry, set Head Length Ratio to 0.64 and Shaft Width Ratio to 0.6, and in Labels set Label Placement to Above Feature. Generate Diagram to get the Gallery figure.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/vibrio_parahaemolyticus_pva1/manual-11-01-final.webp",
+            "alt": "Finished figure: the AHPND plasmid in three V. parahaemolyticus genomes with colored genes and similarity-group ribbons.",
+            "caption": "The Gallery figure."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+            "replayThrough": 11,
+            "viewport": {
+              "width": 1900,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear"
+            },
+            "visibleText": [
+              "19-021-D1",
+              "20-082A3",
+              "CAVP11 (draft assembly)"
+            ]
+          }
+        }
+      ],
+      "replay": [
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"input[aria-label='Arrow head length ratio']\"); if (!el) throw new Error('Not found: ' + \"input[aria-label='Arrow head length ratio']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Arrow head length ratio']",
+          "value": 0.64
+        },
+        {
+          "type": "fill",
+          "selector": "input[aria-label='Arrow shaft width ratio']",
+          "value": 0.6
+        },
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"select[aria-label='Label Placement']\"); if (!el) throw new Error('Not found: ' + \"select[aria-label='Label Placement']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Label Placement']",
+          "value": "above_feature"
+        },
+        {
+          "type": "generate"
+        }
+      ]
+    }
+  ],
+  "createdDrawings": [
+    {
+      "id": "linear-2",
+      "step": 7
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "Color by what the records say",
+      "body": "PirA's product is \"hypothetical protein\" in these records, so pirA and pirB are matched by locus tag; the other rules match product names. Every other CDS stays grey."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "Search stays busy for minutes",
+      "body": "Find in other files searches every gene of the region in each other File in the browser. A draft assembly of many records takes longest; keep the tab open until the proposal appears."
+    },
+    {
+      "title": "A window is missing",
+      "body": "Windows that add too few genes are listed under Not selected. Tick one to draw it, or click Edit to change its span."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#vibrio_parahaemolyticus_pva1"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Find a locus in other genomes",
+      "href": "./#bacillus_velezensis_fengycin"
+    }
+  ]
+}

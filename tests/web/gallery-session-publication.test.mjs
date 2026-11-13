@@ -77,8 +77,8 @@ const examples = JSON.parse(
 );
 const sessionNames = examples.map((example) => String(example.session).split('/').pop());
 
-assert.equal(sessionNames.length, 12);
-assert.equal(new Set(sessionNames).size, 12);
+assert.equal(sessionNames.length, 14);
+assert.equal(new Set(sessionNames).size, 14);
 
 // A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 51's one
 // drawn drawing as its one-drawing view, an older Session as it is.

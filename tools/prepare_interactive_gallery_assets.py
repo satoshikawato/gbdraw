@@ -530,6 +530,44 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
         command=MAJANIVIRUS_COMMAND,
     ),
+    GallerySessionExample(
+        id="bacillus_velezensis_fengycin",
+        title="One locus found in three <i>Bacillus velezensis</i> genomes",
+        tags=("Linear", "Multi-record", "Similarity groups", "LOSAT", "Find in other files", "Interactive SVG"),
+        description=(
+            "A 77.7-kbp locus of <i>Bacillus velezensis</i> FZB42 with its five non-ribosomal peptide "
+            "synthetase genes, selected on the whole chromosome and found with Find in other files in the "
+            "complete genome of strain CBMB205 and in the 74-contig draft assembly of strain SK19.001. "
+            "CBMB205 holds the locus in one window on the reverse strand; SK19.001 holds it in pieces on four "
+            "contigs, which share its row as numbered windows listed under the row name. LOSATP similarity "
+            "groups link the genes, and a color table marks non-ribosomal peptide synthetases, transporters, "
+            "and transcriptional regulators by product name."
+        ),
+        workflow="Find a locus in other genomes",
+        input_summary="3 GenBank + 3 color/label TSV files",
+        display_order=100,
+        command_kind="runnable",
+        command_note="Download the three genomes and the three TSV files from Files.",
+    ),
+    GallerySessionExample(
+        id="vibrio_parahaemolyticus_pva1",
+        title="An AHPND plasmid found in two more <i>Vibrio parahaemolyticus</i> genomes",
+        tags=("Linear", "Multi-record", "Similarity groups", "LOSAT", "Find in other files", "Interactive SVG"),
+        description=(
+            "The 68.8-kbp AHPND plasmid of <i>Vibrio parahaemolyticus</i> 19-021-D1, found with Find in other "
+            "files in the plasmid of strain 20-082A3 and in the 97-contig draft assembly of strain CAVP11. The "
+            "search window starts at 63,090 and runs across the origin to 63,089, in an intergenic gap, so no "
+            "gene is cut. The 20-082A3 plasmid is one window across its own origin on the reverse strand; "
+            "CAVP11 holds the plasmid on three contigs. Colors mark the <i>pirA</i> and <i>pirB</i> toxin genes "
+            "by locus tag, and conjugative transfer, transposases and recombinases, and replication and "
+            "mobilization genes by product name; 20-082A3 lacks <i>pirA</i>."
+        ),
+        workflow="Find a plasmid in other genomes",
+        input_summary="3 GenBank + 3 color/label TSV files",
+        display_order=110,
+        command_kind="runnable",
+        command_note="Download the three genomes and the three TSV files from Files.",
+    ),
 )
 
 

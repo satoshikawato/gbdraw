@@ -383,5 +383,75 @@
     "displayOrder": 90,
     "tutorial": "./tutorials/majanivirus_orthogroup.json",
     "tutorialStatus": "ready"
+  },
+  {
+    "id": "bacillus_velezensis_fengycin",
+    "title": "One locus found in three <i>Bacillus velezensis</i> genomes",
+    "tags": [
+      "Linear",
+      "Multi-record",
+      "Similarity groups",
+      "LOSAT",
+      "Find in other files",
+      "Interactive SVG"
+    ],
+    "svg": "./examples/bacillus_velezensis_fengycin.svg",
+    "svgType": "interactive",
+    "session": "./sessions/bacillus_velezensis_fengycin.gbdraw",
+    "thumbnail": "./thumbnails/bacillus_velezensis_fengycin.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/bacillus_velezensis_fengycin.gbdraw",
+    "sourceOutput": "gbdraw/web/gallery/examples/bacillus_velezensis_fengycin.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/bacillus_velezensis_fengycin.svg",
+    "sourceNote": "The Session file and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "NC_009725.2.gbk",
+      "NZ_CP011937.1.gbk",
+      "GCF_000513755.1_SOAPdenovo_genomic.gbff.gz"
+    ],
+    "fileSizeLabel": "1.4 MB",
+    "command": "gbdraw linear --session session.gbdraw --drawing linear-2",
+    "commandKind": "runnable",
+    "commandNote": "Download the three genomes and the three TSV files from Files.",
+    "description": "A 77.7-kbp locus of <i>Bacillus velezensis</i> FZB42 with its five non-ribosomal peptide synthetase genes, selected on the whole chromosome and found with Find in other files in the complete genome of strain CBMB205 and in the 74-contig draft assembly of strain SK19.001. CBMB205 holds the locus in one window on the reverse strand; SK19.001 holds it in pieces on four contigs, which share its row as numbered windows listed under the row name. LOSATP similarity groups link the genes, and a color table marks non-ribosomal peptide synthetases, transporters, and transcriptional regulators by product name.",
+    "workflow": "Find a locus in other genomes",
+    "inputSummary": "3 GenBank + 3 color/label TSV files",
+    "displayOrder": 100,
+    "tutorial": "./tutorials/bacillus_velezensis_fengycin.json",
+    "tutorialStatus": "ready"
+  },
+  {
+    "id": "vibrio_parahaemolyticus_pva1",
+    "title": "An AHPND plasmid found in two more <i>Vibrio parahaemolyticus</i> genomes",
+    "tags": [
+      "Linear",
+      "Multi-record",
+      "Similarity groups",
+      "LOSAT",
+      "Find in other files",
+      "Interactive SVG"
+    ],
+    "svg": "./examples/vibrio_parahaemolyticus_pva1.svg",
+    "svgType": "interactive",
+    "session": "./sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+    "thumbnail": "./thumbnails/vibrio_parahaemolyticus_pva1.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/vibrio_parahaemolyticus_pva1.gbdraw",
+    "sourceOutput": "gbdraw/web/gallery/examples/vibrio_parahaemolyticus_pva1.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/vibrio_parahaemolyticus_pva1.svg",
+    "sourceNote": "The Session file and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "NZ_CP046414.1.gbk",
+      "NZ_CP065372.1.gbk",
+      "GCF_019780985.1_ASM1978098v1_genomic.gbff.gz"
+    ],
+    "fileSizeLabel": "1.8 MB",
+    "command": "gbdraw linear --session session.gbdraw --drawing linear-2",
+    "commandKind": "runnable",
+    "commandNote": "Download the three genomes and the three TSV files from Files.",
+    "description": "The 68.8-kbp AHPND plasmid of <i>Vibrio parahaemolyticus</i> 19-021-D1, found with Find in other files in the plasmid of strain 20-082A3 and in the 97-contig draft assembly of strain CAVP11. The search window starts at 63,090 and runs across the origin to 63,089, in an intergenic gap, so no gene is cut. The 20-082A3 plasmid is one window across its own origin on the reverse strand; CAVP11 holds the plasmid on three contigs. Colors mark the <i>pirA</i> and <i>pirB</i> toxin genes by locus tag, and conjugative transfer, transposases and recombinases, and replication and mobilization genes by product name; 20-082A3 lacks <i>pirA</i>.",
+    "workflow": "Find a plasmid in other genomes",
+    "inputSummary": "3 GenBank + 3 color/label TSV files",
+    "displayOrder": 110,
+    "tutorial": "./tutorials/vibrio_parahaemolyticus_pva1.json",
+    "tutorialStatus": "ready"
   }
 ]

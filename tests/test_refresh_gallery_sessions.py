@@ -82,8 +82,8 @@ BUNDLED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
     paths = _refresh_session_paths(None)
 
-    assert len(paths) == 13
-    assert len(_public_gallery_session_files()) == 12
+    assert len(paths) == 15
+    assert len(_public_gallery_session_files()) == 14
     assert len(TEST_INPUT_SESSION_FILES) == 1
     assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
 
@@ -556,7 +556,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
     )
     paths.extend(sorted((repo_root / "tests" / "test_inputs").glob("*.gbdraw")))
 
-    assert len(paths) == 13
+    assert len(paths) == 15
     for path in paths:
         session = session_view(load_cached_gallery_session(path))
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
@@ -995,7 +995,7 @@ def test_refresh_records_resolved_track_geometry(
     [
         pytest.param(example, id=example.id)
         for example in gallery_assets_module.EXAMPLES
-        if "Multi-record" in example.tags
+        if "Multi-record" in example.tags and example.session_from_command
     ],
 )
 def test_multi_record_gallery_sessions_are_built_from_their_declared_commands(
