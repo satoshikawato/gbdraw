@@ -254,6 +254,7 @@ const {
   buildLosatCachePayload,
   createRunAnalysis,
   executeCanonicalRenderCandidate,
+  requireLegacyProteinReferencesMigrate,
   showDiagramProgress
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
@@ -581,6 +582,35 @@ const watchLosatPreparation = async (generate) => {
   }
   return watched;
 };
+
+// The pre-run check of a Generate that resolves an older Session's protein references through the current
+// identity: it accepts or refuses as the rewrite it replaced did (OV-3352 follow-up; base answers recorded with
+// that rewrite), and reads the values without changing them.
+test('the legacy protein reference check answers as the rewrite it replaced', () => {
+  const A = 'p_rec1_1_100_1_0123456789ab';
+  const B = 'p_rec1_200_300_-1_0123456789ab';
+  const duplicate = "Protein reference migration produced duplicate key 'h1'.";
+  const remains = 'Legacy protein UI references remain after migration.';
+  const cases = [
+    ['every reference maps', { [A]: 'h1', [B]: 'h2' },
+      [[{ id: 'og1', members: [A, B] }], A, [{ feature_id: 'f1', protein_id: B, note: `see ${A} here` }], [{ [A]: { label: B } }]], null],
+    ['no reference', {}, [[], '', [{ feature_id: 'f1' }], null], null],
+    ['a key maps onto a key the object has', { [A]: 'h1' }, [[], '', [{ [A]: 1, h1: 2 }], null], duplicate],
+    ['a mapped handle reads as a legacy reference', { [A]: 'p_x_1_2_0_aaaaaaaaaaaa' }, [[A], '', [], null], remains],
+    ['a key holds a reference inside other text', { [A]: 'h1' }, [[], '', [{ [`x${A}`]: 1 }], null], remains],
+    ['a reference the map lacks', { [A]: 'h1' }, [[A, B], '', [], null], remains],
+    ['the map is a list', [A], [[A], '', [], null], remains],
+    ['a duplicate key deep in a list', { [A]: 'h1', [B]: 'h1' }, [[{ groups: [{ [A]: 1, [B]: 2 }] }], '', [], null], duplicate],
+    ['a duplicate after a leftover reference', { [A]: 'h1' }, [[B], '', [{ [A]: 1, h1: 2 }], null], duplicate]
+  ];
+  for (const [name, map, values, refusal] of cases) {
+    const before = structuredClone(values);
+    const check = () => requireLegacyProteinReferencesMigrate(map, ...values);
+    if (refusal) assert.throws(check, { message: refusal }, name);
+    else assert.doesNotThrow(check, name);
+    assert.deepEqual(values, before, `${name}: the check changes nothing`);
+  }
+});
 
 test('afterPaint crosses one completed frame before resolving', async () => {
   const frames = [];

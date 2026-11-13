@@ -939,40 +939,61 @@ const collectLegacyProteinReferences = (...values) => {
   return Array.from(references).sort();
 };
 
-// Rewrites strings and object keys and keeps the value's shape, so the result has the argument's type.
 /**
- * @template T
- * @param {T} value
- * @param {Record<string, unknown> | null | undefined} idMap
- * @returns {T}
+ * The resolved map of legacy protein references; anything else maps nothing.
+ * @param {unknown} idMap
+ * @returns {Record<string, unknown>}
  */
-const rewriteMappedProteinReferences = (value, idMap) => {
-  if (!idMap || typeof idMap !== 'object' || Array.isArray(idMap)) return cloneJsonData(value);
-  if (typeof value === 'string') {
-    if (Object.prototype.hasOwnProperty.call(idMap, value)) return /** @type {T} */ (String(idMap[value]));
-    return /** @type {T} */ (value.replace(
+const proteinReferenceMap = (idMap) => (
+  idMap && typeof idMap === 'object' && !Array.isArray(idMap) ? /** @type {Record<string, unknown>} */ (idMap) : {}
+);
+
+/**
+ * A text with its legacy protein references put through the resolved map: the whole text when the map names it,
+ * else each reference inside it.
+ * @param {string} text
+ * @param {Record<string, unknown>} idMap
+ */
+const mappedProteinReferenceText = (text, idMap) => (
+  Object.hasOwn(idMap, text)
+    ? String(idMap[text])
+    : text.replace(
       LEGACY_PROTEIN_REFERENCE_RE,
-      (reference) => (
-        Object.prototype.hasOwnProperty.call(idMap, reference)
-          ? String(idMap[reference])
-          : reference
-      )
-    ));
-  }
-  if (Array.isArray(value)) {
-    return /** @type {T} */ (value.map((item) => rewriteMappedProteinReferences(item, idMap)));
-  }
-  if (!value || typeof value !== 'object') return value;
-  /** @type {Record<string, unknown>} */
-  const rewritten = {};
-  Object.entries(value).forEach(([key, item]) => {
-    const nextKey = Object.prototype.hasOwnProperty.call(idMap, key) ? String(idMap[key]) : key;
-    if (Object.prototype.hasOwnProperty.call(rewritten, nextKey)) {
-      throw new Error(`Protein reference migration produced duplicate key '${nextKey}'.`);
+      (reference) => (Object.hasOwn(idMap, reference) ? String(idMap[reference]) : reference)
+    )
+);
+
+/**
+ * Refuses a resolved map that does not migrate every legacy protein reference of `values`: one that turns an
+ * object key into another key of the same object, or leaves a legacy reference in a mapped text or key (a key maps
+ * only as a whole). It reads the values and builds no copy of them: a Generate installs none of them but its
+ * selected alignment feature, and its orthogroups and features stay its own catalog's (OV-3352).
+ * @param {unknown} idMap
+ * @param {unknown[]} values
+ */
+export const requireLegacyProteinReferencesMigrate = (idMap, ...values) => {
+  const map = proteinReferenceMap(idMap);
+  let remains = false;
+  /** @param {string} text */
+  const read = (text) => { remains ||= text.search(LEGACY_PROTEIN_REFERENCE_RE) >= 0; };
+  /** @param {unknown} value */
+  const visit = (value) => {
+    if (typeof value === 'string') read(mappedProteinReferenceText(value, map));
+    else if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === 'object') {
+      /** @type {Set<string>} */
+      const keys = new Set();
+      Object.entries(value).forEach(([key, item]) => {
+        const nextKey = Object.hasOwn(map, key) ? String(map[key]) : key;
+        if (keys.has(nextKey)) throw new Error(`Protein reference migration produced duplicate key '${nextKey}'.`);
+        keys.add(nextKey);
+        read(nextKey);
+        visit(item);
+      });
     }
-    rewritten[nextKey] = rewriteMappedProteinReferences(item, idMap);
-  });
-  return /** @type {T} */ (rewritten);
+  };
+  values.forEach(visit);
+  if (remains) throw new Error('Legacy protein UI references remain after migration.');
 };
 
 /**
@@ -4376,33 +4397,19 @@ export const createRunAnalysis = ({
             if (result.status !== 'resolved' || !result.proteinIdMap) {
               throw result.error || new Error('Legacy protein UI reference migration failed.');
             }
-            const proteinIdMap = result.proteinIdMap;
-            workingOrthogroups = rewriteMappedProteinReferences(
-              workingOrthogroups,
-              proteinIdMap
-            );
-            workingSelectedOrthogroupAlignmentFeature = rewriteMappedProteinReferences(
-              workingSelectedOrthogroupAlignmentFeature,
-              proteinIdMap
-            );
-            workingExtractedFeatures = rewriteMappedProteinReferences(
-              workingExtractedFeatures,
-              proteinIdMap
-            );
-            if (workingBiologicalFeatures) {
-              workingBiologicalFeatures = rewriteMappedProteinReferences(
-                workingBiologicalFeatures,
-                proteinIdMap
-              );
-            }
-            if (collectLegacyProteinReferences(
+            requireLegacyProteinReferencesMigrate(
+              result.proteinIdMap,
               workingOrthogroups,
               workingSelectedOrthogroupAlignmentFeature,
               workingExtractedFeatures,
               workingBiologicalFeatures
-            ).length > 0) {
-              throw new Error('Legacy protein UI references remain after migration.');
-            }
+            );
+            // Only the selected alignment feature is installed from here; this Generate's orthogroups and features
+            // come from its own catalog and results (OV-3352).
+            workingSelectedOrthogroupAlignmentFeature = mappedProteinReferenceText(
+              workingSelectedOrthogroupAlignmentFeature,
+              proteinReferenceMap(result.proteinIdMap)
+            );
           }
         }
 
