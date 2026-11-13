@@ -1,23 +1,33 @@
-"""A Linear label drawn inside its feature keeps its letters inside the drawn outline (Owner D-161).
+"""A Linear label drawn inside its feature keeps its letters inside the drawn outline (Owner D-161; PD-OI-097
+scenario revision 29, EMB-OUTLINE-SLIDE).
 
-The label's ink box, widened by 0.125 em at each end, lies inside the outline of the block it sits on, as
-the block's path draws it; it stays at the middle where it fits there, else slides to the nearest x that
-fits, and goes outside (or is not drawn, inside-only) when no x fits. A part a later feature draws over the
-block is avoided too (OV-3380, OV-3397).
+The label's ink box, widened at each end by half the 0.25 em a label needs inside its feature (Owner D-20),
+lies inside the outline of the block it sits on, as the block's path draws it; it stays at the middle where
+it fits there, else slides to the nearest x that fits, and goes outside (or is not drawn, inside-only) when
+no x fits. A part a later feature draws over the block in the same lane and wrap row is avoided too
+(OV-3380, OV-3397).
 """
 
 from __future__ import annotations
 
 import re
+from xml.etree import ElementTree as ET
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.canvas.linear import LinearCanvasGeometry
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core.text import text_ink_offsets
+from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.request_render import plan_request
+from gbdraw.api.requests import InMemoryRecordSource, LinearDiagramRequest, RecordInput
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
+from gbdraw.labels import linear as linear_labels
 from gbdraw.labels.linear import linear_record_labels
 from gbdraw.render.drawers.linear.features import FeaturePathGenerator
 from gbdraw.svg.arrows import LinearBlockOutline, linear_block_glyph, linear_block_outline
@@ -158,8 +168,11 @@ def _inside_convex(polygon: list[tuple[float, float]], point: tuple[float, float
     return len(signs) <= 1
 
 
-def _box_inside_drawn_arrow(label: dict, anchor_x: float, start: int, end: int, strand: str, arrow_length: float) -> bool:
-    """Whether the widened ink box at ``anchor_x`` lies inside the arrow the feature's path draws."""
+def _box_inside_drawn_arrow(
+    label: dict, anchor_x: float, start: int, end: int, strand: str, arrow_length: float, margin_px: float = MARGIN_PX
+) -> bool:
+    """Whether the ink box widened by ``margin_px`` at each end at ``anchor_x`` lies inside the arrow the
+    feature's path draws."""
 
     y_positions = (label["feature_top_y"], label["feature_middle_y"], label["feature_bottom_y"])
     path = create_arrow_path_linear(
@@ -169,19 +182,27 @@ def _box_inside_drawn_arrow(label: dict, anchor_x: float, start: int, end: int, 
     polygon = _points(path)
     left, right, top, bottom = _ink(label["label_text"])
     middle_y = label["middle_y"]
-    corners = [(anchor_x + x, middle_y + y) for x in (left - MARGIN_PX, right + MARGIN_PX) for y in (top, bottom)]
+    corners = [(anchor_x + x, middle_y + y) for x in (left - margin_px, right + margin_px) for y in (top, bottom)]
     return all(_inside_convex(polygon, corner) for corner in corners)
 
 
 @pytest.mark.linear
 @pytest.mark.parametrize("strand", ["positive", "negative"])
-def test_a_label_that_touches_the_head_at_the_middle_slides_toward_the_tail(strand: str) -> None:
+@pytest.mark.parametrize("margin_em", [0.25, 0.5])
+def test_a_label_that_touches_the_head_at_the_middle_slides_toward_the_tail(
+    strand: str, margin_em: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ink keeps half the room a label needs inside its feature (Owner D-20) at each end: the one margin
+    sets both whether a label may go inside and where it fits."""
+
+    monkeypatch.setattr(linear_labels, "_EMBEDDED_LABEL_MARGIN_EM", margin_em)
+    margin_px = margin_em / 2 * FONT_SIZE
     text, head = "ea59", 30.0
     left, right, top, bottom = _ink(text)
     share = max(-top, bottom) / 10.0
-    width = right - left + 2 * MARGIN_PX
+    width = right - left + 2 * margin_px
     length = int(width + head * share) + 3
-    assert length < 2 * (max(right, -left) + MARGIN_PX + head * share) - 2, "the middle must not fit"
+    assert length < 2 * (max(right, -left) + margin_px + head * share) - 2, "the middle must not fit"
     start = 400
     end = start + length
     label = _labels({"f": _arrow("f", start, end, text, strand)}, head)[text]
@@ -190,10 +211,10 @@ def test_a_label_that_touches_the_head_at_the_middle_slides_toward_the_tail(stra
     middle = label["feature_anchor_x"]
     toward_tail = -1.0 if strand == "positive" else 1.0
     assert (label["middle_x"] - middle) * toward_tail > 0.5
-    assert not _box_inside_drawn_arrow(label, middle, start, end, strand, head)
-    assert _box_inside_drawn_arrow(label, label["middle_x"], start, end, strand, head)
+    assert not _box_inside_drawn_arrow(label, middle, start, end, strand, head, margin_px)
+    assert _box_inside_drawn_arrow(label, label["middle_x"], start, end, strand, head, margin_px)
     # The nearest x that fits: half a px nearer the middle touches the outline.
-    assert not _box_inside_drawn_arrow(label, label["middle_x"] - 0.5 * toward_tail, start, end, strand, head)
+    assert not _box_inside_drawn_arrow(label, label["middle_x"] - 0.5 * toward_tail, start, end, strand, head, margin_px)
 
 
 @pytest.mark.linear
@@ -247,3 +268,68 @@ def test_a_label_keeps_off_the_outline_of_a_feature_drawn_after_it() -> None:
     box = (after["middle_x"] + left - MARGIN_PX, after["middle_x"] + right + MARGIN_PX)
     assert box[1] <= 240.0 + 1e-6 or box[0] >= 262.0 - 1e-6
     assert after["middle_x"] != after["feature_anchor_x"]
+
+
+# A 10 kb record, one px per 5 bp at the default width: a long arrow labelled "C" and a short unlabelled one.
+_LONG = (1000, 4000, 1, "C")
+_OVER_ITS_MIDDLE = (2400, 2620, 1, "")
+
+
+def _figure(
+    features: list[tuple[int, int, int, str]], overrides: dict[str, object] | None = None
+) -> tuple[list[str], str, float]:
+    """The ids of the features in the order the figure draws them, and the feature id and x of label "C"."""
+
+    record = SeqRecord(Seq("AAAACCGTGG" * 1000), id="r", annotations={"topology": "linear", "molecule_type": "DNA"})
+    record.features = [
+        SeqFeature(SimpleLocation(start, end, strand=strand), type="CDS",
+                   qualifiers={"product": [product], "locus_tag": [f"t{index}"]})
+        for index, (start, end, strand, product) in enumerate(features)
+    ]
+    config_overrides = {"labels.linear.scope": "all", "canvas.show_gc": False, "canvas.show_skew": False,
+                        **(overrides or {})}
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(record)),),
+        options=LinearDiagramOptions(config_overrides=config_overrides),
+    )
+    root = ET.fromstring(plan_request(request).build().drawing.tostring())
+    drawn = [node.get("data-gbdraw-feature-id") for node in root.iter()
+             if node.tag.endswith("}path") and node.get("data-gbdraw-feature-part") == "block"]
+    (label,) = [node for node in root.iter() if node.tag.endswith("}text") and node.get("data-label-feature-id")]
+    assert "".join(label.itertext()) == "C"
+    return drawn, label.get("data-label-feature-id"), float(label.get("x"))
+
+
+@pytest.mark.linear
+def test_a_label_keeps_off_exactly_the_features_the_figure_draws_after_its_own() -> None:
+    """The "later" features a label keeps off are those the figure draws over its feature: the label code and
+    the drawer read one order (``feature_dict``). A drawer that changed its order fails here."""
+
+    _drawn, _feature_id, alone_x = _figure([_LONG])
+    outcomes = set()
+    for features in ([_LONG, _OVER_ITS_MIDDLE], [_OVER_ITS_MIDDLE, _LONG]):
+        drawn, feature_id, label_x = _figure(features)
+        (other_id,) = [drawn_id for drawn_id in drawn if drawn_id != feature_id]
+        drawn_over = drawn.index(other_id) > drawn.index(feature_id)
+        assert (label_x != alone_x) == drawn_over, features
+        outcomes.add(drawn_over)
+    assert outcomes == {True, False}, "both draw orders must be met"
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("overrides", "elsewhere"),
+    [
+        pytest.param({"canvas.strandedness": True}, (2400, 2620, -1, ""), id="another lane"),
+        pytest.param({"canvas.linear.wrap_length": 5000}, (7400, 7620, 1, ""), id="another wrap row"),
+    ],
+)
+def test_a_later_part_in_another_lane_or_wrap_row_does_not_move_a_label(
+    overrides: dict[str, object], elsewhere: tuple[int, int, int, str]
+) -> None:
+    """A later feature at the label's x moves it only when it is drawn in the label's lane and wrap row; the
+    other strand's lane, or the next row of a wrapped record at the same x, leaves it at the middle."""
+
+    _drawn, _feature_id, alone_x = _figure([_LONG], overrides)
+    assert _figure([_LONG, _OVER_ITS_MIDDLE], overrides)[2] != alone_x
+    assert _figure([_LONG, elsewhere], overrides)[2] == alone_x

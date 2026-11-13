@@ -1,8 +1,9 @@
 """Where a Linear label drawn inside its feature fits (Owner D-161, OV-3380, OV-3397).
 
-A label inside its feature fits where the ink of its letters, with ``EMBEDDED_LABEL_END_MARGIN_EM`` more at
-each end, lies inside the drawn outline of the block it sits on (``LinearBlockOutline``, the outline the
-block's path is drawn from) and clear of every part a later feature draws over it. It stays at the middle of
+A label inside its feature fits where the ink of its letters, with the caller's margin more at each end (half
+the room Owner D-20 gives a label inside its feature), lies inside the drawn outline of the block it sits on
+(``LinearBlockOutline``, the outline the block's path is drawn from) and clear of every part a later feature
+draws over it. It stays at the middle of
 its block when it fits there, else it takes the fitting x nearest to the middle; it has no x when none fits.
 """
 
@@ -14,8 +15,6 @@ from typing import NamedTuple, cast
 from ..layout.spatial import Interval, IntervalIndex
 from ..svg.arrows import LinearBlockOutline
 
-# Room the ink of a label inside its feature keeps at each end, in em: half the 0.25 em of Owner D-20.
-EMBEDDED_LABEL_END_MARGIN_EM = 0.125
 _EPSILON = 1e-9
 
 
@@ -139,7 +138,6 @@ def embedded_label_anchor_x(
 
 
 __all__ = [
-    "EMBEDDED_LABEL_END_MARGIN_EM",
     "DrawnPartSpans",
     "InkBox",
     "LaneRow",

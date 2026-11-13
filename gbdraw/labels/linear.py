@@ -14,7 +14,6 @@ from .coordinates import display_label_segment
 
 from .filtering import feature_label, label_filter_maps
 from .linear_embedded_fit import (
-    EMBEDDED_LABEL_END_MARGIN_EM,
     DrawnPartSpans,
     InkBox,
     LaneRow,
@@ -610,7 +609,7 @@ def _passes_orthogroup_label_eligibility(
 
 
 # Room a label needs inside its feature beyond its advance, in em (both ends together), so letters keep off
-# the feature's ends and arrowhead (Owner D-20).
+# the feature's ends and arrowhead (Owner D-20). Its ink keeps half of it at each end of the drawn outline.
 _EMBEDDED_LABEL_MARGIN_EM = 0.25
 
 
@@ -868,7 +867,7 @@ def _embedded_label_anchor_x(
     return embedded_label_anchor_x(
         outline,
         InkBox(*ink),
-        EMBEDDED_LABEL_END_MARGIN_EM * context.font_size,
+        _EMBEDDED_LABEL_MARGIN_EM / 2.0 * context.font_size,
         centre_x,
         drawn_after((position, segment.block_row), min(start_x, end_x), max(start_x, end_x)),
     )
