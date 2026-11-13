@@ -710,9 +710,9 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             feature_visibility_rules=feature_visibility_rules,
             feature_overrides=feature_overrides,
         )
+        # A record without a CDS protein extracts no proteins: it adds nothing to a search (OV-3493), and Python's
+        # analysis refuses only a comparison with nothing to compare (require_comparable_proteins).
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
-        if not proteins:
-            return json.dumps({'error': serialize_web_error(ValueError(f'No CDS proteins found in {record.id}'), operation='extractCdsProteinFasta', stage="helper")})
         view_hash_parts_index = _web_feature_view_hash_parts_index(record)
         protein_map = {
             protein.protein_id: _serialize_cds_protein(
@@ -1121,11 +1121,13 @@ def _web_search_frame_results(bindings, pairs, typed=None):
         stored.collinearity_blocks if collinear else stored.orthogroups,
     )
 
-def _build_web_protein_extraction(protein_maps, identity_manifest=None):
+def _build_web_protein_extraction(protein_maps, identity_manifest=None, record_count=0):
+    """The extraction of the proteins of protein_maps; it holds at least record_count records, as a record
+    without a CDS protein has none to count (OV-3493)."""
     from gbdraw.analysis.protein_colinearity import ProteinExtractionResult
 
     combined = {}
-    max_record_index = -1
+    max_record_index = int(record_count) - 1
     for protein_map in protein_maps:
         combined.update(protein_map)
         for protein in protein_map.values():
@@ -1186,6 +1188,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             convert_pair_protein_hits_to_genomic_links,
             filter_protein_hits_by_thresholds,
             parse_losatp_outfmt6,
+            require_comparable_proteins,
             select_rbh_orthogroup_edges_from_directional_hits,
             select_top_hits_per_query,
         )
@@ -1336,7 +1339,19 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         combined_protein_map = {}
         for protein_map in protein_maps_by_record.values():
             combined_protein_map.update(protein_map)
-        extraction = _build_web_protein_extraction(protein_maps_by_record.values())
+        extraction = _build_web_protein_extraction(
+            protein_maps_by_record.values(), record_count=max(protein_maps_by_record, default=-1) + 1
+        )
+        # The command line's refusal of a comparison with nothing to compare, from its one owner (OV-3493).
+        record_ids = [""] * len(extraction.proteins_by_record)
+        for record in record_payloads:
+            record_ids[int(record["record_index"])] = record["record_id"]
+        require_comparable_proteins(
+            record_ids,
+            extraction,
+            sorted({(item["query_index"], item["subject_index"]) for item in pair_payloads if item["display_pair"]}),
+            option_name=f"protein_blastp_mode='{normalized_mode}'",
+        )
 
         # The tables of the last conversion, by raw key: the parsed hits and the hits the last thresholds kept
         # (OV-1579). A threshold change filters again without reading or parsing a table, and only this
@@ -1420,13 +1435,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             return _web_losatp_payload_json(*cached_payload, canonical_resource_path)
 
         if normalized_mode == "collinear":
-            record_lengths = {
-                int(record["record_index"]): int(record["view_transform"]["length"]) for record in record_payloads
+            # Each record by its payload (its ID and length), also one without a CDS protein (OV-3493).
+            extents = {
+                int(record["record_index"]): RecordExtent(record["record_id"], int(record["view_transform"]["length"]))
+                for record in record_payloads
             }
-            records = [
-                RecordExtent(str(record_proteins[0].record_id) if record_proteins else "", record_lengths.get(index, 0))
-                for index, record_proteins in enumerate(extraction.proteins_by_record)
-            ]
+            records = [extents.get(index, RecordExtent("", 0)) for index in range(len(extraction.proteins_by_record))]
             anchor_mode = settings.anchor_mode
             search_scope = settings.search_scope
             max_paralog_links = settings.max_paralog_links

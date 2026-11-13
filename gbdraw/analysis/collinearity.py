@@ -45,6 +45,7 @@ from gbdraw.analysis.protein_colinearity import (
     extract_cds_proteins,
     filter_protein_hits_by_thresholds,
     normalize_orthogroup_membership_mode,
+    require_comparable_proteins,
     select_reciprocal_best_hit_edges,
     select_rbh_orthogroup_edges_from_directional_hits,
 )
@@ -1364,23 +1365,6 @@ def build_orthogroup_collinearity_blocks_from_hits(
     )
 
 
-def _validate_collinearity_extraction(
-    records: Sequence[SeqRecord],
-    extraction: ProteinExtractionResult,
-) -> None:
-    empty_record_ids = [
-        str(records[index].id)
-        for index, proteins in enumerate(extraction.proteins_by_record)
-        if not proteins
-    ]
-    if empty_record_ids:
-        raise ValidationError(
-            "protein_blastp_mode='collinear' requires at least one CDS protein in each record; "
-            "no CDS proteins were found in: "
-            + ", ".join(empty_record_ids)
-        )
-
-
 def build_orthogroup_collinearity_blocks(
     records: Sequence[SeqRecord],
     *,
@@ -1428,7 +1412,14 @@ def build_orthogroup_collinearity_blocks(
         records,
         feature_visibility_rules=feature_visibility_rules,
     )
-    _validate_collinearity_extraction(records, extraction)
+    require_comparable_proteins(
+        [str(record.id) for record in records],
+        extraction,
+        comparison_pairs
+        if comparison_pairs is not None
+        else ((index, index + 1) for index in range(len(records) - 1)),
+        option_name="protein_blastp_mode='collinear'",
+    )
 
     specs = losatp_job_specs(
         "collinear",
@@ -1768,6 +1759,12 @@ def convert_collinearity_blocks_to_pair_comparisons(
     return comparisons
 
 
+def empty_collinearity_comparison() -> DataFrame:
+    """The comparison frame of a record pair without a collinearity block."""
+
+    return pd.DataFrame(columns=COLLINEARITY_COMPARISON_COLUMNS)
+
+
 def convert_collinearity_blocks_to_comparisons(
     result: CollinearityResult,
     *,
@@ -1791,10 +1788,7 @@ def convert_collinearity_blocks_to_comparisons(
     if non_adjacent:
         raise ValidationError("Collinearity rendering supports adjacent record pairs only.")
     return [
-        pair_comparisons.get(
-            (record_index, record_index + 1),
-            pd.DataFrame(columns=COLLINEARITY_COMPARISON_COLUMNS),
-        )
+        pair_comparisons.get((record_index, record_index + 1), empty_collinearity_comparison())
         for record_index in range(max(0, record_count - 1))
     ]
 
@@ -1823,6 +1817,7 @@ __all__ = [
     "cluster_lossless_collinearity_anchors",
     "convert_collinearity_blocks_to_comparisons",
     "convert_collinearity_blocks_to_pair_comparisons",
+    "empty_collinearity_comparison",
     "iter_collinearity_search_pairs",
     "normalize_collinearity_anchor_mode",
     "normalize_collinearity_color_mode",

@@ -189,27 +189,31 @@ _GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losat_job_plan_cases.js
 
 
 @pytest.mark.parametrize(
-    ("mode", "rows", "display", "reversed_record"),
+    ("mode", "rows", "display", "reversed_record", "without_cds"),
     (
         # Similarity groups on the default chain: the edges number the pairs.
-        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, None),
+        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, None, None),
         # Collinear on a CLI row grid with search scope 'all': the grid
         # displays (0, 1) and (0, 2), each numbered by its own adjacent-row edge.
-        ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None),
+        ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None, None),
         # Similarity groups on the same grid displays the same adjacent-row
         # pairs (OV-2297).
-        ("similarity_groups", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None),
+        ("similarity_groups", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None, None),
         # A 2x2 grid: the search order and the numbers come from the vector
         # that the Web test checks too (tests/web/linear-comparisons.test.mjs).
-        ("collinear", None, None, None),
+        ("collinear", None, None, None, None),
         # A reverse-complemented record: both payloads hold its results in the
         # search frame (OV-1145).
-        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, 1),
-        ("collinear", None, {(0, 1): 0, (1, 2): 1}, 1),
+        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, 1, None),
+        ("collinear", None, {(0, 1): 0, (1, 2): 1}, 1, None),
+        # The last record has no CDS protein (OV-3493): both paths draw the
+        # first pair and give its pairs no rows.
+        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, None, 2),
+        ("collinear", None, {(0, 1): 0, (1, 2): 1}, None, 2),
     ),
     ids=(
         "orthogroup", "collinear-grid", "orthogroup-grid", "collinear-grid-2x2", "orthogroup-reversed",
-        "collinear-reversed",
+        "collinear-reversed", "orthogroup-without-cds", "collinear-without-cds",
     ),
 )
 def test_web_lookup_converter_and_api_build_one_derived_entry(
@@ -220,6 +224,7 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
     rows: tuple[int, ...] | None,
     display: dict[tuple[int, int], int] | None,
     reversed_record: int | None,
+    without_cds: int | None,
 ) -> None:
     import json
 
@@ -231,6 +236,10 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
     request, _identities = _request(mode, tmp_path)
+    if without_cds is not None:
+        contig = _record(without_cds)
+        contig.features = []
+        SeqIO.write(contig, tmp_path / f"rec{without_cds}.gbk", "genbank")
     vector = None
     if display is None:
         vector = json.loads(_GRID_2X2_VECTOR.read_text(encoding="utf-8"))["proteinGridCases"][0]
@@ -380,6 +389,11 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
     ]
     assert json.loads(canonical_path.read_text(encoding="utf-8")) == api_payload[typed_name]
     assert set(api_payload) == {"identity", "provenance", "pairs", typed_name}
+    if without_cds is not None:
+        rows_by_pair = {(pair["query_index"], pair["subject_index"]): pair["tsv"] for pair in api_payload["pairs"]}
+        assert all(not tsv for pair, tsv in rows_by_pair.items() if without_cds in pair)
+        assert all(entry["text"] == "" for (query, subject), entry in raw_by_pair.items()
+                   if f"record-{without_cds}" in (query, subject))
 
 
 def _derived_settings_key(options: LinearDiagramOptions, mode: str) -> str:
