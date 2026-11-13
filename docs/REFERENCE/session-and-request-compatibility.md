@@ -687,11 +687,14 @@ Which records Web draws from a CLI session depends on the request:
   text reads as that record number.
 - A Record Order entry (`#1@2`) whose row is not a whole number above zero,
   written with an optional `+`, leading zeros and spaces around it, is refused
-  as the CLI refuses it: `1.0`, `0x1` and `1e0` are no rows. Only a hand edit
-  stores one. Load leaves out the drawing's saved request and Results and names
-  the entry's place in its repair dialog; a drawing saved with its input files
-  keeps them and its Web settings. An older Linear request (schema 2 to 5)
-  reads each card's row the same way.
+  where the CLI reads the entry: `1.0`, `0x1` and `1e0` are no rows. Only a
+  hand edit stores one. Load leaves out the drawing's saved diagram, Results,
+  feature list and run metadata and names the entry's place in its repair
+  dialog; the drawing keeps its Web settings and the input files they name. A
+  one-circle drawing, which the CLI draws without reading its entries, loads as
+  saved. An older Linear request (schema 2 to 5) reads each card's row the same
+  way, and is refused, as the CLI refuses it, when some cards have a row and
+  some none.
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or

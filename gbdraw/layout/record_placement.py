@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import sys
 from typing import Literal, Sequence
 
 from Bio.SeqRecord import SeqRecord
@@ -17,9 +18,10 @@ _PlacementCompatibility = Literal["linear", "circular"]
 
 # The row of a ``<selector>@<row>`` Record Order token, the text after its last ``@``, as
 # :func:`parse_record_row_position` reads it: spaces (``str.strip``'s, which are ``\s``'s) around it, an optional
-# ``+``, and ASCII digits, leading zeros allowed; the row is that number when it is above zero. The Web reads every
-# token's row with this pattern from the generated contracts (``RECORD_ROW_PATTERN``, OV-3313).
-RECORD_ROW_PATTERN = r"\s*\+?([0-9]+)\s*"
+# ``+``, and ASCII digits, leading zeros allowed, at most as many as ``int()`` converts by default (4300, leading
+# zeros counted); the row is that number when it is above zero. The Web reads every token's row with this pattern from
+# the generated contracts (``RECORD_ROW_PATTERN``, OV-3313).
+RECORD_ROW_PATTERN = rf"\s*\+?([0-9]{{1,{sys.int_info.default_max_str_digits}}})\s*"
 _RECORD_ROW = re.compile(RECORD_ROW_PATTERN)
 
 

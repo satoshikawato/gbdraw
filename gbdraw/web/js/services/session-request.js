@@ -101,7 +101,7 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordOrderRow, recordRowNumber,
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordOrderRows, recordRowNumbers,
   recordSelectorNumber
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
@@ -2191,6 +2191,21 @@ const positionRecordIdentity = (records, token) => {
       return named?.kind === 'recordId' && named.value === token;
     });
   return typeof record?.recordKey === 'string' && record.recordKey ? record.recordKey : token;
+};
+/**
+ * The draft Record Order of a committed Circular request's tokens: each token's record (`positionRecordIdentity`) and
+ * row (`recordOrderRows`). A token whose row the renderer refuses is left out: only a one-circle layout keeps one at
+ * Load (`refusedRecordOrderToken`), and the renderer does not read it there (OV-3313).
+ * @param {readonly unknown[]} tokens
+ * @param {readonly { recordKey?: unknown, selector?: unknown }[]} records The committed request's records.
+ * @returns {{ selector: string, row: number }[]}
+ */
+const projectedRecordPositions = (tokens, records) => {
+  const rows = recordOrderRows(tokens);
+  return tokens.flatMap((token, index) => {
+    const row = rows[index];
+    return row === null ? [] : [{ selector: positionRecordIdentity(records, String(token).slice(0, String(token).lastIndexOf('@'))), row }];
+  });
 };
 // OV-1072: the identity of each record a committed Circular request draws, for
 // the live layout projector and the kept Depth parts: a committed request names
@@ -7589,10 +7604,7 @@ export const projectCanonicalSessionRequest = ({
     linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
     linear_track_slots_axis_index: renderRequest.mode === 'linear' ? linearStack.axisIndex : null,
     linear_track_slots: linearStack.slots,
-    multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
-      const split = String(token).lastIndexOf('@');
-      return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: recordOrderRow(token) };
-    })
+    multi_record_positions: projectedRecordPositions(renderRequest.layout?.multiRecordPositions || [], sourceRecords)
   };
   const presentationOwnsLinearRows = records.some(
     (record) => record.presentation?.gridRow != null
@@ -7615,9 +7627,9 @@ export const projectCanonicalSessionRequest = ({
             : {})
         };
       })
-    : (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token, /** @type {number} */ index) => ({
+    : recordOrderRows(renderRequest.layout?.multiRecordPositions || []).map((row, index) => ({
         uid: files.linearSeqs[index]?.uid || '',
-        row: recordOrderRow(token) ?? index + 1
+        row: row ?? index + 1
       }));
   const linearLayout = renderRequest.mode === 'linear'
     ? {
@@ -7951,6 +7963,20 @@ const promoteRecordRegionsToWindows = (records) => {
  * }} StoredRequestBeforeSchema8
  */
 /**
+ * The gridRow each card of a schema 2 to 5 Linear request takes from its `#<card>@<row>` token, as Python's promotion
+ * reads it (`_decode_canonical_request`): the row text after the token's last `@`, the whole token when it holds none
+ * (`rpartition`), read by `recordRowNumbers`; null where it names no row. Empty for any other request: from schema 6 on
+ * the tokens stay tokens, which the renderer reads.
+ * @param {StoredRequestBeforeSchema8} request
+ * @returns {(number | null)[]}
+ */
+const olderLinearCardRows = (request) => {
+  const layout = /** @type {UnvalidatedFields<'multiRecordPositions'> | undefined} */ (request.layout);
+  const tokens = request.mode === 'linear' && request.schema < 6 && Array.isArray(layout?.multiRecordPositions)
+    ? layout.multiRecordPositions : [];
+  return recordRowNumbers(tokens.map((/** @type {unknown} */ token) => String(token).slice(String(token).lastIndexOf('@') + 1)));
+};
+/**
  * @param {StoredRequestBeforeSchema8} promoted Edited in place.
  * @param {RequestPromotion} promotion
  */
@@ -7958,12 +7984,7 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
   const { featureCatalog = null, legacyOrthogroupState = null, unreadAlignment } = promotion;
   const sourceSchema = promoted.schema;
   const storedLayout = /** @type {UnvalidatedFields<'multiRecordPositions' | 'recordGapPx'>} */ (promoted.layout);
-  const linearRows = promoted.mode === 'linear'
-    // Each card's row text, the whole token when it holds no `@`, as Python's promotion reads it (`rpartition`).
-    ? (Array.isArray(storedLayout?.multiRecordPositions) ? storedLayout.multiRecordPositions : []).map(
-        (/** @type {unknown} */ token) => recordRowNumber(String(token).slice(String(token).lastIndexOf('@') + 1))
-      )
-    : [];
+  const linearRows = olderLinearCardRows(promoted);
   promoted.schema = 8;
   // A malformed record is left to the repair that follows the promotion.
   (promoted.records || []).forEach((value, index) => {
@@ -8019,7 +8040,8 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
       const recordGapPx = Number(storedLayout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX);
       promoted.layout = {
         recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : DEFAULT_LINEAR_RECORD_GAP_PX,
-        multiRecordPositions: null,
+        // Schemas 6 and 7 keep their tokens, which the renderer reads (`_decode_canonical_request`).
+        multiRecordPositions: sourceSchema < 6 ? null : (storedLayout?.multiRecordPositions ?? null),
         recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),
           x: 0,
@@ -8372,7 +8394,10 @@ export const readStoredRenderRequest = (value, context) => {
     if (!(error instanceof Error) || Object.getPrototypeOf(error) !== Error.prototype || Object.hasOwn(error, 'code')) throw error;
     return { kind: 'request-dropped', path: `${path}.layout`, reason: 'unknown-record' };
   }
-  const refusedToken = refusedRecordOrderToken(/** @type {Record<string, unknown>} */ (repaired.value).layout, path);
+  // The cast: the root was checked above (an integer schema, a `records` array).
+  const refusedToken = refusedRecordOrderToken(
+    /** @type {StoredRequestBeforeSchema8} */ (stored), /** @type {Record<string, unknown>} */ (repaired.value), path
+  );
   if (refusedToken !== null) return { kind: 'request-dropped', path: refusedToken, reason: 'pattern' };
   const rebound = keepConservationSlotsOnTheirRings(
     /** @type {Record<string, unknown>} */ (repaired.value), repaired.rows, path
@@ -8389,17 +8414,29 @@ export const readStoredRenderRequest = (value, context) => {
 };
 
 /**
- * The place of the first Record Order token whose row Python's renderer refuses (`recordOrderRow`), or null. The CLI
- * refuses such a request ("multi_record_position entry '#1@1.0' must use a positive integer row."), so a layout that
- * holds one leaves no request to draw, as a layout its owner refuses does (C-OD20, OV-3313).
- * @param {unknown} layout The read request's layout.
+ * Where the CLI refuses a request because of its Record Order (OV-3313): a schema 2 to 5 Linear request some of whose
+ * cards take a gridRow from their tokens and some none (`olderLinearCardRows`; "If one Linear record has grid_row, every
+ * record must have it."), at the first card without one; else the first token whose row the renderer refuses
+ * (`recordOrderRows`; "multi_record_position entry '#1@1.0' must use a positive integer row."), except in a one-circle
+ * layout, which the renderer draws without reading its tokens (`_assemble_one_circle`). Null where the CLI reads them.
+ * Such a request leaves nothing to draw, as a layout its owner refuses does (C-OD20).
+ * @param {StoredRequestBeforeSchema8} stored The request as stored.
+ * @param {Record<string, unknown>} read The request as read.
  * @param {string} path The request's place.
  * @returns {string | null}
  */
-const refusedRecordOrderToken = (layout, path) => {
-  const tokens = isPlainObject(layout) && Array.isArray(layout.multiRecordPositions) ? layout.multiRecordPositions : [];
-  const index = tokens.findIndex((/** @type {unknown} */ token) => recordOrderRow(token) === null);
-  return index < 0 ? null : `${path}.layout.multiRecordPositions[${index}]`;
+const refusedRecordOrderToken = (stored, read, path) => {
+  const cardRows = olderLinearCardRows(stored);
+  const at = `${path}.layout.multiRecordPositions`;
+  if (cardRows.length > 0) {
+    const rows = stored.records.map((_record, index) => cardRows[index] ?? null);
+    const unplaced = rows.indexOf(null);
+    return unplaced < 0 || rows.every((row) => row === null) ? null : unplaced < cardRows.length ? `${at}[${unplaced}]` : at;
+  }
+  const layout = isPlainObject(read.layout) ? read.layout : {};
+  const tokens = Array.isArray(layout.multiRecordPositions) && layout.recordLayout !== 'one_circle' ? layout.multiRecordPositions : [];
+  const index = recordOrderRows(tokens).indexOf(null);
+  return index < 0 ? null : `${at}[${index}]`;
 };
 
 /**

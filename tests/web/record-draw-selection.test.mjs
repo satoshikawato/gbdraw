@@ -16,7 +16,7 @@ import {
   pruneRecordsOff,
   recordIndexNumber,
   recordListRows,
-  recordOrderRow,
+  recordOrderRows,
   recordSelectorNumber
 } from '../../gbdraw/web/js/services/record-draw-selection.js';
 
@@ -121,11 +121,34 @@ test('a #N record selector names the record the renderer draws', () => {
 // renderer reads it (`parse_record_row_position` in gbdraw/layout/record_placement.py, whose pattern the generated
 // contracts carry; tests/fixtures/record_order_row_vectors.json holds the tokens, which
 // tests/test_web_contracts_generated.py checks in Python). `1.0`, `0x1` and `1e0`,
-// which `Number()` read as 1, are no rows.
+// which `Number()` read as 1, are no rows; a row is read from the token as stored (U+FEFF, which `trim()` strips and
+// Python's `strip()` does not, stays and refuses it).
 test('a Record Order token\'s row is the row the renderer reads', () => {
   /** @type {{ tokens: { token: string, row: number | null }[] }} */
   const vectors = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
   assert.ok(vectors.tokens.length > 20);
-  for (const { token, row } of vectors.tokens) assert.equal(recordOrderRow(token), row, JSON.stringify(token));
-  assert.equal(recordOrderRow(1), null);
+  for (const { token, row } of vectors.tokens) assert.deepEqual(recordOrderRows([token]), [row], JSON.stringify(token));
+  assert.deepEqual(recordOrderRows([1, '#1']), [null, null]);
+});
+
+// OV-3313 review 1 L1: the renderer reads rows of up to 4300 digits exactly and only their order (`resolve_record_row_positions`
+// ranks them; a longer row is refused). The rows of one list read as safe integers in the same order: each row's value
+// when every row is a safe integer, else each row's rank, so `9007199254740993` stays after `9007199254740992`.
+test('the rows of a Record Order list keep the order the renderer draws, beyond 2^53 and up to 4300 digits', () => {
+  /** @type {{ rowLists: { tokens: string[], order: number[] | null }[] }} */
+  const { rowLists } = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(rowLists.length >= 8);
+  for (const { tokens, order } of rowLists) {
+    const rows = recordOrderRows(tokens);
+    const at = tokens.map((token) => token.slice(0, 24)).join(' ');
+    if (order === null) {
+      assert.ok(rows.includes(null), at);
+      continue;
+    }
+    assert.ok(rows.every((row) => Number.isSafeInteger(row) && row >= 1), at);
+    const drawn = tokens.map((_token, index) => index).sort((left, right) => rows[left] - rows[right] || left - right);
+    assert.deepEqual(drawn, order, at);
+  }
+  assert.deepEqual(recordOrderRows(['#1@9007199254740991', '#2@3']), [9007199254740991, 3]);
+  assert.deepEqual(recordOrderRows(['#1@9007199254740993', '#2@3', '#3@3', '#4@x']), [2, 1, 1, null]);
 });

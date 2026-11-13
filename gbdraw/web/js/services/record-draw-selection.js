@@ -333,30 +333,39 @@ export const recordSelectorNumber = (key) => {
   return number !== null && Number.isSafeInteger(number) && number >= 1 ? number : null;
 };
 const RECORD_ROW = new RegExp(`^(?:${RECORD_ROW_PATTERN})$`);
+const MAX_SAFE_ROW = BigInt(Number.MAX_SAFE_INTEGER);
 /**
- * The row a Record Order token's row text (the text after its last `@`) names, as Python reads it
- * (`record_row_number`, gbdraw/layout/record_placement.py, whose pattern the generated contracts carry): spaces around
- * it, an optional `+` and leading zeros are allowed, so `+01` is row 1; null for a row of zero (`0`, `+00`) or any
- * other text (`1.0`, `0x1`, `1e0`). The schema 2 to 5 promotion reads a token's row text here, as Python's does.
- * @param {string} text
- * @returns {number | null}
+ * The rows that row texts name, as Python reads a Record Order row (`record_row_number`, gbdraw/layout/record_placement.py,
+ * whose pattern the generated contracts carry): spaces around it, an optional `+` and leading zeros are allowed, so
+ * `+01` is row 1; at most 4300 digits, as `int()` converts; null for a row of zero (`0`, `+00`), any other text (`1.0`,
+ * `0x1`, `1e0`) and a null text. The renderer reads only the order of the rows (`resolve_record_row_positions` ranks
+ * them), so the rows of one list read as numbers in that exact order: each row's value when every row is a safe
+ * integer, else each row's rank among the list's rows (OV-3313). The one Web reader of a row.
+ * @param {readonly (string | null)[]} texts One list's row texts.
+ * @returns {(number | null)[]}
  */
-export const recordRowNumber = (text) => {
-  const match = RECORD_ROW.exec(text);
-  const row = match ? Number(match[1]) : 0;
-  return row >= 1 ? row : null;
+export const recordRowNumbers = (texts) => {
+  const values = texts.map((text) => {
+    const match = text === null ? null : RECORD_ROW.exec(text);
+    const value = match ? BigInt(match[1]) : 0n;
+    return value > 0n ? value : null;
+  });
+  /** @type {bigint[]} */
+  const read = values.flatMap((value) => (value === null ? [] : [value]));
+  if (read.every((value) => value <= MAX_SAFE_ROW)) return values.map((value) => (value === null ? null : Number(value)));
+  const ranks = [...new Set(read)].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  return values.map((value) => (value === null ? null : ranks.indexOf(value) + 1));
 };
 /**
- * The row of a Record Order token `<selector>@<row>` (the text after its last `@`), as Python's renderer reads it
- * (`parse_record_row_position`, gbdraw/layout/record_placement.py, whose pattern the generated contracts carry):
- * spaces around it, an optional `+` and leading zeros are allowed, so `+01` is row 1; null for a row the renderer
- * refuses (`0`, `1.0`, `0x1`, `1e0`) and for a token without `@`. The one Web reader of a token's row (OV-3313).
- * @param {unknown} token
- * @returns {number | null}
+ * The rows of Record Order tokens `<selector>@<row>` (each row the text after the token's last `@`), as Python's
+ * renderer reads them (`parse_record_row_position`, `recordRowNumbers`); null for a row the renderer refuses and for a
+ * token that is no text or has no `@`.
+ * @param {readonly unknown[]} tokens One list's tokens.
+ * @returns {(number | null)[]}
  */
-export const recordOrderRow = (token) => (
-  typeof token === 'string' && token.includes('@') ? recordRowNumber(token.slice(token.lastIndexOf('@') + 1)) : null
-);
+export const recordOrderRows = (tokens) => recordRowNumbers(tokens.map((token) => (
+  typeof token === 'string' && token.includes('@') ? token.slice(token.lastIndexOf('@') + 1) : null
+)));
 /**
  * Whether a key is a record selector `#N` that a Session 46-50 Session move
  * kept as it was (OV-2869): the N-th record of all the drawing's records.

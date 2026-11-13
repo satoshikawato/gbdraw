@@ -56,6 +56,9 @@ import { listText, t, tm, tn } from './i18n.js';
  * @property {number} [count] When one record stands for several values.
  * @property {string} [label] The name the app shows for the place (a Legend caption), bounded.
  * @property {'circular' | 'linear'} [mode] The drawing a record names (`other-result-set-dropped`).
+ * @property {true} [drawingStays] `request-dropped`: the request is a Session 51 drawing's, which stays without it, with
+ *   its settings and the input files its settings name (`withStoredResultSet`); absent: the file loads as settings
+ *   only (a Session 27-50).
  * @property {number} [line] The line of a table.
  */
 /**
@@ -183,8 +186,9 @@ const tableLines = (repairs, describe) => [...new Set(repairs.map(({ path }) => 
  */
 const WORDING = {
   // A stored request (services/session-request.js `readStoredRenderRequest`).
-  'request-dropped': (repairs) => repairs.map(({ path }) => (
-    t('Saved diagram: the settings of the saved diagram ({path}) could not be read. The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.', { path }))),
+  'request-dropped': (repairs) => repairs.map(({ path, drawingStays }) => (drawingStays
+    ? t('Saved diagram: the settings of the saved diagram ({path}) could not be read. The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings and the input files they name.', { path })
+    : t('Saved diagram: the settings of the saved diagram ({path}) could not be read. The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.', { path }))),
   // The Session document (services/session-authority.js `readSessionDocument`).
   'session-part-dropped': (repairs) => repairs.map(({ path }) => (
     SESSION_PART_WORDING[path]?.(path)

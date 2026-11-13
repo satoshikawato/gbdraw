@@ -730,15 +730,17 @@ def test_the_web_owner_reads_every_bmp_character_in_a_record_selector_as_python_
 
 
 # Record Order tokens and the row the renderer reads (None where it refuses it); the Web test reads the same file.
-_RECORD_ROW_TOKENS = tuple(
-    (case["token"], case["row"])
-    for case in json.loads((REPO_ROOT / "tests" / "fixtures" / "record_order_row_vectors.json").read_text())["tokens"]
-)
+_RECORD_ROW_VECTORS = json.loads((REPO_ROOT / "tests" / "fixtures" / "record_order_row_vectors.json").read_text())
+_RECORD_ROW_TOKENS = tuple((case["token"], case["row"]) for case in _RECORD_ROW_VECTORS["tokens"])
+_RECORD_ROW_LISTS = _RECORD_ROW_VECTORS["rowLists"]
 
 
 def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
     # OV-3313: the Web reads the row of a Record Order token (`<selector>@<row>`) with the pattern Python's
     # `parse_record_row_position` reads it with; the generator writes the Python owner's pattern.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
     from gbdraw.exceptions import ValidationError
     from gbdraw.layout import record_placement
 
@@ -748,6 +750,15 @@ def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatc
                 record_placement.parse_record_row_position(token)
         else:
             assert record_placement.parse_record_row_position(token)[1] == row, token
+    # Lists: the order the renderer draws their records in (`resolve_record_row_positions`), None where it refuses a row;
+    # rows above 2^53 and up to `int()`'s 4300 digits are read exactly (review 1 L1). The Web test reads the same lists.
+    for case in _RECORD_ROW_LISTS:
+        records = [SeqRecord(Seq("A"), id=f"r{index}") for index in range(len(case["tokens"]))]
+        if case["order"] is None:
+            with pytest.raises(ValidationError):
+                record_placement.resolve_record_row_positions(records, case["tokens"])
+        else:
+            assert list(record_placement.resolve_record_row_positions(records, case["tokens"])[0]) == case["order"]
     generator = _generator()
     monkeypatch.setattr(record_placement, "RECORD_ROW_PATTERN", r"([0-9]+)")
 
@@ -756,11 +767,11 @@ def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatc
 
 # Each BMP character around and inside a token's row (a space before and after the row; a digit), read by the Web owner.
 _RECORD_ROW_TEXTS_SCRIPT = """
-const { recordOrderRow } = await import('./gbdraw/web/js/services/record-draw-selection.js');
+const { recordOrderRows } = await import('./gbdraw/web/js/services/record-draw-selection.js');
 const read = [];
 for (let code = 0; code < 0x10000; code += 1) {
   const c = String.fromCharCode(code);
-  read.push(recordOrderRow(`#1@${c}1${c}`), recordOrderRow(`#1@1${c}`));
+  read.push(...recordOrderRows([`#1@${c}1${c}`]), ...recordOrderRows([`#1@1${c}`]));
 }
 process.stdout.write(JSON.stringify(read));
 """
@@ -768,7 +779,7 @@ process.stdout.write(JSON.stringify(read));
 
 @pytest.mark.browser
 def test_the_web_owner_reads_every_bmp_character_in_a_record_order_row_as_python_does() -> None:
-    # OV-3313: `recordOrderRow` (services/record-draw-selection.js), run by Node over the BMP, gives the row Python's
+    # OV-3313: `recordOrderRows` (services/record-draw-selection.js), run by Node over the BMP, gives the row Python's
     # `parse_record_row_position` gives for each token, or none where Python refuses it.
     from gbdraw.exceptions import ValidationError
     from gbdraw.layout.record_placement import parse_record_row_position

@@ -84,6 +84,8 @@ const readRequest = (session, change = () => {}) => {
   return readStoredRenderRequest(request, contextOf(session));
 };
 const rows = (result) => result.repairs.map(({ code, path, used }) => ({ code, path, ...(used === undefined ? {} : { used }) }));
+// The dialog line of a Session 51 drawing whose request Load cannot read: the drawing stays without it (OV-3472).
+const DRAWING_REQUEST_DROPPED = (path) => `Saved diagram: the settings of the saved diagram (${path}) could not be read. The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings and the input files they name.`;
 
 const input = (session) => sessionLoadEvent(asSaved(session));
 /** Load with [Load] answered; the dialog lines and the result. */
@@ -206,7 +208,7 @@ test('a Linear layout that omits fields with a default is read as a Linear layou
 
 // OV-3313: Python's renderer refuses a Record Order token whose row is no positive integer (`parse_record_row_position`;
 // `gbdraw render` stops: "multi_record_position entry '#2@2.0' must use a positive integer row."). The reader reads the
-// row with the renderer's pattern (`recordOrderRow`), so such a layout leaves no request to draw, as a layout its owner
+// row with the renderer's pattern (`recordOrderRows`), so such a layout leaves no request to draw, as a layout its owner
 // refuses does (C-OD20); `Number()` read `2.0`, `0x2` and `2e0` as row 2. A row the renderer reads is kept as stored.
 test('a Record Order token whose row the renderer refuses leaves no request to draw (OV-3313)', async () => {
   const session = gallery('BGC0000708-BGC0000713');
@@ -223,26 +225,78 @@ test('a Record Order token whose row the renderer refuses leaves no request to d
     assert.deepEqual(rows(result), [], row);
     assert.equal(result.value.layout.multiRecordPositions[1], `#2@${row}`, row);
   }
-  // At Load the drawing keeps its settings only and the dialog names the token's place, as for C-OD20.
+  // At Load the drawing stays without its request and the dialog names the token's place, as for C-OD20. A Gallery
+  // publication names its input files only in its request, so its drawing keeps its settings and no input files; the
+  // sentence says the drawing keeps the input files its settings name, which are none (OV-3472).
   tokens('2.0')(session.renderRequest);
   const { result, dialogs } = await load(session);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
   assert.equal(state.results.value.length, 0);
   assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]),
     [['request-dropped', 'drawings[0].renderRequest.layout.multiRecordPositions[1]']]);
-  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.layout\.multiRecordPositions\[1\]\) could not be read\. The file loads as settings only/);
+  assert.deepEqual(dialogs[0], [DRAWING_REQUEST_DROPPED('drawings[0].renderRequest.layout.multiRecordPositions[1]')]);
+  assert.deepEqual(state.activeDrawing().linearSeqs.filter((card) => card.gb || card.gff || card.fasta), []);
   // A drawing that holds its input bindings (a Web or CLI Save) keeps its files and its Web settings; only the
-  // request and what it drew (Results, feature list, run metadata) are left out (`withStoredResultSet`).
+  // request and what it drew (Results, feature list, run metadata) are left out (`withStoredResultSet`), as the dialog
+  // says (OV-3472).
   const saved = await readSavedSession(new Blob([readFileSync(new URL('tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.gbdraw', REPO))]));
   saved.drawings[0].renderRequest.layout.multiRecordPositions = ['#1@1.0'];
-  const kept = await importSession(await sessionLoadEvent(saved), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const keptDialogs = [];
+  const kept = await importSession(await sessionLoadEvent(saved), {
+    transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { keptDialogs.push(dialog.items); return true; }
+  });
   assert.equal(kept.status, 'ok', JSON.stringify(kept.error));
+  assert.deepEqual(keptDialogs, [[DRAWING_REQUEST_DROPPED('drawings[0].renderRequest.layout.multiRecordPositions[0]')]]);
   assert.deepEqual(kept.repairs.map(({ code, path }) => [code, path]),
     [['request-dropped', 'drawings[0].renderRequest.layout.multiRecordPositions[0]']]);
   assert.equal(state.results.value.length, 0);
   const drawing = state.activeDrawing();
   assert.deepEqual(drawing.circularSources.map((card) => card.gb?.name), ['HmmtDNA.gbk']);
   assert.deepEqual(drawing.adv.multi_record_positions, [{ selector: 'record-1', row: 1 }]);
+});
+
+// OV-3313 review 1 (H1, M1, M2): Load refuses a request for its Record Order exactly where `gbdraw render --session`
+// refuses it, and nowhere else (probed with decode and render_request on 2026-11-14: logs/ov3313/fix-1/cli-shapes-*.log).
+// Schemas 6 and 7 keep their Linear tokens, which the renderer reads by selector: a row it refuses refuses the request,
+// and a token list it reads stays the request's (it was turned into each card's gridRow, by token place, and dropped).
+// A schema 2 to 5 Linear request turns its tokens into card rows; when some cards get a row and some none, the CLI
+// refuses it ("If one Linear record has grid_row, every record must have it."); when none gets one, it draws the order
+// of its cards. A one-circle layout draws without reading its tokens (`_assemble_one_circle`), so it keeps them.
+test('a Record Order token refuses a request where the command line reads it and nowhere else (OV-3313)', () => {
+  const linear = (name, tokens) => {
+    const session = fixture(name);
+    const request = clone(session.renderRequest);
+    request.layout = { ...request.layout, recordGapPx: 10, multiRecordPositions: tokens };
+    return readStoredRenderRequest(request, contextOf(session));
+  };
+  const dropped = (index) => ({
+    kind: 'request-dropped', path: `renderRequest.layout.multiRecordPositions${index === null ? '' : `[${index}]`}`, reason: 'pattern'
+  });
+  for (const [name, tokens] of [['cli-linear-tables.v40.gbdraw-session.json.gz', ['#1@1.0']],
+    ['q-frame-main-linear-reverse.v42.gbdraw-session.json.gz', ['#1@1', '#2@1.0']]]) {
+    assert.deepEqual(linear(name, tokens), dropped(tokens.length - 1), name);
+  }
+  for (const [name, tokens] of [['cli-linear-tables.v40.gbdraw-session.json.gz', ['#1@+1']],
+    ['q-frame-main-linear-reverse.v42.gbdraw-session.json.gz', ['#2@1', '#1@2']]]) {
+    const result = linear(name, tokens);
+    assert.deepEqual(result.value.layout.multiRecordPositions, tokens, name);
+    assert.deepEqual(result.value.records.map((record) => record.presentation.gridRow), tokens.map(() => null), name);
+  }
+  const bgc = 'BGC0000708-BGC0000713.v40-schema5.json';
+  assert.deepEqual(linear(bgc, ['#1@2.0', '#2@1', '#3@2', '#4@3', '#5@3']), dropped(0));
+  assert.deepEqual(linear(bgc, ['#1@1', '#2@1', '#3@2']), dropped(null));
+  const unplaced = linear(bgc, ['#1@2.0', '#2@1.0', '#3@x', '#4@', '#5']);
+  assert.deepEqual(unplaced.value.records.map((record) => record.presentation.gridRow), [null, null, null, null, null]);
+  assert.equal(unplaced.value.layout.multiRecordPositions, null);
+  const circular = (recordLayout) => readRequest(gallery('HmmtDNA_basic_circular'), (request) => {
+    request.grouping = 'grid';
+    request.layout = {
+      multiRecordSizeMode: 'equal', multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.1,
+      multiRecordPositions: ['#1@1.0'], recordLayout, oneCircleGapDegrees: 2.5, oneCircleMinLength: 0, oneCircleRecordBand: false
+    };
+  });
+  assert.deepEqual(circular('grid'), dropped(0));
+  assert.deepEqual(circular('one_circle').value.layout.multiRecordPositions, ['#1@1.0']);
 });
 
 test('the reader turns only the layout owner\'s refusal into a dropped request; a programming error there is thrown (N2)', () => {
@@ -365,7 +419,7 @@ test('a request that cannot be read at its root loads the Session as settings on
     assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error)}`);
     assert.equal(state.results.value.length, 0, name);
     assert.equal(dialogs.length, 1, name);
-    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest(\.mode)?\) could not be read\. The file loads as settings only/);
+    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest(\.mode)?\) could not be read\. The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings/);
     assert.ok(result.repairs.some((repair) => repair.code === 'request-dropped'), name);
   }
 });
@@ -378,7 +432,7 @@ test('a Session 42 to 47 with no stored request loads as settings only, listed; 
   assert.equal(state.results.value.length, 0);
   assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest']]);
   assert.equal(dialogs.length, 1);
-  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\) could not be read\. The file loads as settings only/);
+  assert.deepEqual(dialogs[0], [DRAWING_REQUEST_DROPPED('drawings[0].renderRequest')]);
 });
 
 test('a Linear layout whose record translations do not cover the drawn records drops the request at its root (vector 027, C-OD20)', async () => {
@@ -391,7 +445,7 @@ test('a Linear layout whose record translations do not cover the drawn records d
   assert.equal(state.results.value.length, 0);
   assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest.layout']]);
   assert.equal(dialogs.length, 1);
-  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.layout\) could not be read\. The file loads as settings only/);
+  assert.deepEqual(dialogs[0], [DRAWING_REQUEST_DROPPED('drawings[0].renderRequest.layout')]);
 });
 
 test('the other diagram\'s request is read at Load: its repairs are listed, and an unreadable one leaves only that set out (OV-670)', async () => {
@@ -703,7 +757,7 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
     assert.equal(result.status, 'ok', `${JSON.stringify(request)}: ${JSON.stringify(result.error)}`);
     assert.equal(state.results.value.length, 0);
     assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest.schema']]);
-    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.schema\) could not be read\. The file loads as settings only/);
+    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.schema\) could not be read\. The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings/);
     for (const name of ['se08-main-linear-cli.v42.gbdraw-session.json.gz', 'scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz']) {
       const cli = fixture(name);
       cli.renderRequest = clone(request);

@@ -1534,7 +1534,7 @@ test('a reordered Circular multi-record canvas keeps its order in the records ta
   assert.deepEqual(drawn, ['TESTB', 'TESTA']);
 });
 
-// OV-3313: the records table reads a Record Order token's row as the renderer reads it (`recordOrderRow`): `+1`,
+// OV-3313: the records table reads a Record Order token's row as the renderer reads it (`recordOrderRows`): `+1`,
 // `01` and ` 1 ` are row 1; `1.0`, `0x1` and `1e0`, which the CLI refuses, give no records table.
 test('the records table recipe reads a Record Order row as the renderer reads it', async () => {
   const text = await readFile(join(repoRoot, 'tests', 'fixtures', 'web_batch_two_records.gb'), 'utf8');
@@ -1557,12 +1557,14 @@ test('the records table recipe reads a Record Order row as the renderer reads it
   };
   const table = (recipe) => recipe.generatedFiles.find((file) => file.name === 'records.tsv').data;
   const expected = table(await recipeOf('1'));
-  for (const row of ['+1', '01', ' 1 ']) {
+  // The row is read from the token as stored (review 1 L2): Python's `strip()` takes U+001F and U+0085, which `trim()`
+  // leaves, and leaves U+FEFF, which `trim()` takes.
+  for (const row of ['+1', '01', ' 1 ', '1\u001f', '1\u0085']) {
     const recipe = await recipeOf(row);
     assert.equal(recipe.available, true, `${row}: ${recipe.unavailableReason}`);
     assert.equal(table(recipe), expected, row);
   }
-  for (const row of ['1.0', '0x1', '1e0']) assert.equal((await recipeOf(row)).available, false, row);
+  for (const row of ['1.0', '0x1', '1e0', '1\ufeff']) assert.equal((await recipeOf(row)).available, false, row);
 });
 
 test('placement recipe names one of two identical features and the CLI replays it', async () => {

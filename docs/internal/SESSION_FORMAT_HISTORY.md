@@ -456,24 +456,41 @@ and `circular-slot-gap-of-zero` in `requestTypes`, and the three `1e400` cases i
 No Session or request version changes, and no writer changes. `RECORD_ROW_PATTERN`
 (`gbdraw/layout/record_placement.py`, carried to the Web by `tools/generate_web_contracts.py` as the
 `schema.generated.js` export of the same name) is the row of a `layout.multiRecordPositions` token, the text after its
-last `@`, as `parse_record_row_position` reads it: spaces around it, an optional `+`, ASCII digits, and a value above
-zero. The Web read that row with `Number()`, so `#1@1.0`, `#1@0x1` and `#1@1e0` drew row 1 on the Web while
-`gbdraw render --session` refused them (OV-3313). Web Load now reads every token's row with this pattern
-(`recordOrderRow`, `services/record-draw-selection.js`); a request whose token has a row Python refuses (these three,
-and `0`, `-1` or text) leaves no request to draw, as a layout its owner refuses does: the drawing loads without its
-request and Results, and the Load repair dialog names the token's place
-(`renderRequest.layout.multiRecordPositions[<i>]`). A Session 51 drawing that holds its input bindings (a Web or CLI
-Save) keeps its input files and its Web settings; a drawing whose files only its request names (a Gallery
-publication) keeps neither files nor Results. On
-`dev`, a row of `0` or `-1` read as row 1 with a row naming `config.adv.multi_record_positions[<i>].row` when the
-drawing held no Web draft, and was not read when it held one. `#1@+1`, `#1@01` and `#1@ 1 ` read as row 1, as
-before. The promotion of a schema 2 to 5 Linear request, which turns each card's `#<card>@<row>` into its `gridRow`,
-reads the row text (the whole token when it holds no `@`) with the same pattern in Python and on the Web
-(`record_row_number`, `recordRowNumber`): Python read it as ASCII digits only, so a hand-edited `+2` or ` 2 ` gave no
-`gridRow` and now gives row 2, and the Web read it with `Number()`, so `2.0`, `0x2` and `2e0` gave row 2 and now give
-none, as in Python. No gbdraw writer writes another row; a file holds one only when it was edited by hand, and every stored token
-in the repository's fixtures, Gallery and documentation reads. Vector: `tests/fixtures/record_order_row_vectors.json`,
-run by `tests/test_web_contracts_generated.py`, `tests/test_canonical_request_shape.py`,
+last `@`, as `parse_record_row_position` reads it: spaces around it, an optional `+`, at most 4300 ASCII digits (the
+digits `int()` converts by default, leading zeros counted; the pattern carries the limit), and a value above zero. The
+Web read that row with `Number()`, so `#1@1.0`, `#1@0x1` and `#1@1e0` drew row 1 on the Web while
+`gbdraw render --session` refused them (OV-3313). The Web reads every row with this pattern (`recordOrderRows`,
+`services/record-draw-selection.js`), from the token as stored (JavaScript's `trim()` and Python's `strip()` take other
+characters). The renderer reads only the order of a list's rows, and reads rows above 2^53 exactly; the Web reads the
+rows of one list as numbers in that order: each row's value when every row is a safe integer, else each row's rank.
+
+Load refuses a request for its Record Order where the CLI refuses it, and nowhere else. A Circular grid request, or a
+Linear request of schema 6 or later, whose token has a row Python refuses (these three, and `0`, `-1`, text, or more
+than 4300 digits) leaves no request to draw, as a layout its owner refuses does, and the Load repair dialog names the
+token's place (`renderRequest.layout.multiRecordPositions[<i>]`). A one-circle Circular request keeps its tokens: the
+renderer draws one circle without reading them. A schema 2 to 5 Linear request turns each card's `#<card>@<row>` into
+its `gridRow`; Python and the Web read the row text (the whole token when it holds no `@`) with the same pattern
+(`record_row_number`, `recordRowNumbers`). Python read it as ASCII digits only, so a hand-edited `+2` or ` 2 ` gave no
+`gridRow` and now gives row 2; the Web read it with `Number()`, so `2.0`, `0x2` and `2e0` gave row 2 and now give none.
+When some cards take a row and some none, the CLI refuses the request ("If one Linear record has grid_row, every
+record must have it."), and Load now leaves it undrawn too, naming the first card's token without a row (or the token
+list when a card has no token); when no card takes a row, both draw the cards in their order. Schemas 6 and 7 keep
+their Linear tokens, which the renderer reads by their selectors: the Web promoted them to each card's `gridRow` by the
+token's place, so `#2@1`, `#1@2` drew record 1 first on the Web and record 2 first in the CLI, and a row the CLI
+refuses gave no row instead of refusing the request. No stored file in the repository holds a schema 6 or 7 Linear
+token.
+
+When Load leaves out a Session 51 drawing's request, the drawing stays: its saved diagram, Results, feature list and
+run metadata are left out, and it keeps its settings and the input files they name (`withStoredResultSet`). A drawing
+saved by the Web or the CLI names its input files in its bindings and keeps them; a Gallery publication names them only
+in its request and keeps none. The dialog said "The file loads as settings only; the saved Results, the GenBank, GFF
+and FASTA inputs, the feature list and the caches are left out", which is true of a Session 27 to 50 only; a Session 51
+drawing's row now says what it keeps (`drawingStays` on the `request-dropped` row, OV-3472). On `dev`, a row of `0` or
+`-1` read as row 1 with a row naming `config.adv.multi_record_positions[<i>].row` when the drawing held no Web draft,
+and was not read when it held one. `#1@+1`, `#1@01` and `#1@ 1 ` read as row 1, as before. No gbdraw writer writes
+another row; a file holds one only when it was edited by hand, and every stored token in the repository's fixtures,
+Gallery and documentation reads. Vector: `tests/fixtures/record_order_row_vectors.json`, run by
+`tests/test_web_contracts_generated.py`, `tests/test_canonical_request_shape.py`,
 `tests/web/record-draw-selection.test.mjs` and `tests/web/session-request.test.mjs`; Load test:
 `tests/web/stored-request-read.test.mjs`.
 

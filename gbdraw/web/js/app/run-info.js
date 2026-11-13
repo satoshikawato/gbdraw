@@ -22,7 +22,7 @@ import { base64ToBytes } from '../services/byte-utils.js';
 import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import {
-  cliRecordKey, expandedRecordKey, recordKeyExpansion, recordOrderRow, recordSelectorNumber
+  cliRecordKey, expandedRecordKey, recordKeyExpansion, recordOrderRows, recordSelectorNumber
 } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import {
@@ -941,11 +941,13 @@ const layoutRows = (request, records) => {
   const rows = Array(records.length).fill(null);
   /** @type {Map<number, number[]>} The records of each row, in position order. */
   const rowMembers = new Map();
-  positions.forEach((position) => {
+  // Each row as the renderer reads it: from the token as stored (Python strips other spaces than `trim()`, OV-3313).
+  const tokenRows = recordOrderRows(positions);
+  positions.forEach((position, index) => {
     const text = String(position || '').trim();
     const separator = text.lastIndexOf('@');
     const selector = separator > 0 ? text.slice(0, separator) : '';
-    const row = separator > 0 ? recordOrderRow(text) : null;
+    const row = separator > 0 ? tokenRows[index] : null;
     let recordIndex = -1;
     const number = recordSelectorNumber(selector);
     if (number !== null) {

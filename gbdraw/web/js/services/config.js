@@ -56,9 +56,7 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import {
-  cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, recordOrderRow
-} from './record-draw-selection.js';
+import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { readStoredRecordIdPlaces } from './record-discovery.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
@@ -589,59 +587,11 @@ const replaceQualifierPriorityRules = (drawing, rules) => {
   LABEL_TABLES_SLICE.install(drawing.slices.labelTables, { manualPriorityRules: readQualifierPriorityRules(rules).value });
 };
 
-/** @param {unknown} value */
-const parseMultiRecordPositionToken = (value) => {
-  const raw = String(value ?? '').trim();
-  const separatorIndex = raw.lastIndexOf('@');
-  if (separatorIndex <= 0 || separatorIndex === raw.length - 1) return null;
-
-  const selector = raw.slice(0, separatorIndex).trim();
-  const row = recordOrderRow(raw);
-  if (!selector || row === null) return null;
-  return { selector, row };
-};
-
 /**
  * One row of `adv.multi_record_positions`: a record selector and its 1-based row on the Multi-Record Canvas.
  * `applyConfigData` writes the checked rows.
  * @typedef {{ selector: string, row: number }} MultiRecordPosition
  */
-/** @param {{ args?: unknown } | null | undefined} cliInvocation */
-const multiRecordPositionsFromCliInvocation = (cliInvocation) => {
-  const args = Array.isArray(cliInvocation?.args) ? cliInvocation.args : [];
-  /** @type {MultiRecordPosition[]} */
-  const positions = [];
-  const seenSelectors = new Set();
-
-  args.forEach((arg, index) => {
-    if (arg !== '--multi_record_position') return;
-    const position = parseMultiRecordPositionToken(args[index + 1]);
-    if (!position || seenSelectors.has(position.selector)) return;
-    seenSelectors.add(position.selector);
-    positions.push(position);
-  });
-
-  return positions;
-};
-
-/**
- * @param {Record<string, unknown>} config A restored draft; its `adv` is written.
- * @param {{ args?: unknown } | null | undefined} cliInvocation
- */
-const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocation) => {
-  if (!isPlainObject(config) || !isPlainObject(config.form) || config.form.multi_record_canvas !== true) {
-    return;
-  }
-
-  const adv = isPlainObject(config.adv) ? config.adv : {};
-  if (Array.isArray(adv.multi_record_positions)) return;
-
-  const positions = multiRecordPositionsFromCliInvocation(cliInvocation);
-  if (positions.length === 0) return;
-
-  adv.multi_record_positions = positions;
-  config.adv = adv;
-};
 
 /**
  * @param {Record<string, any> | null | undefined} invocation
@@ -2565,7 +2515,7 @@ const readSessionRequests = (rawData, version, repairs) => {
         repairs.push(loadRepair({
           code: entry.id === openedId ? 'request-dropped' : 'other-result-set-dropped',
           path: `${drawingSetPath(index)}renderRequest`, effect: 'dropped',
-          ...(entry.id === openedId ? {} : { mode: entry.mode })
+          ...(entry.id === openedId ? { drawingStays: true } : { mode: entry.mode })
         }));
         data = withStoredResultSet(data, drawingSetPath(index), null);
       }
@@ -2592,7 +2542,10 @@ const readSessionRequests = (rawData, version, repairs) => {
   const { read: projectedRead, classification: comparisonClassification } = readResultSetRequest(projected, project);
   if ('kind' in projectedRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
-    repairs.push(loadRepair({ code: 'request-dropped', path: projectedRead.path, effect: 'dropped' }));
+    // A Session 51 drawing (`at`, its place in the drawings) stays without its request (OV-3472).
+    repairs.push(loadRepair({
+      code: 'request-dropped', path: projectedRead.path, effect: 'dropped', ...(projected.at === '' ? {} : { drawingStays: true })
+    }));
     // A Session 51 drawing whose request cannot be read stays, without its
     // set, as a stored drawing's does (`readStoredSetRequests`).
     if (projected.at !== '') {
@@ -3198,9 +3151,6 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     recordStructuralMetric('activeConfigCanonicalOverwriteCount', 0, { domains: restoredDomains });
   }
   recordSessionLifecycleEvent('current-draft-validation-end');
-  if (!canonicalProjection && restoredConfig) {
-    hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, /** @type {UnvalidatedFields<'args'>} */ (data.cliInvocation));
-  }
   restoredConfig = withSavedDefinitionAlignment(restoredConfig);
   const unmanagedConfigValidation = canonicalProjection
     ? unmanagedConfigValidationOf(canonicalProjection.mode, currentSession && hasStoredDraft ? runtimeStoredConfig : null, storedRequest)
