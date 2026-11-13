@@ -887,7 +887,10 @@ def apply_capture_action(page, action: dict[str, Any], session_path: Path | None
     value = action.get("value")
 
     if action_type == "click":
-        click_options = {"force": True} if action.get("force") is True else {}
+        # A click that starts long work (Create new drawing) names how long the page may keep it waiting.
+        click_options: dict[str, Any] = {"force": True} if action.get("force") is True else {}
+        if action.get("timeout") is not None:
+            click_options["timeout"] = int(action["timeout"])
         page.locator(selector).first.click(**click_options)
     elif action_type == "fill":
         page.locator(selector).fill("" if value is None else str(value))
@@ -1770,7 +1773,8 @@ def wait_for_css_transitions(page) -> None:
 
     The caret of a card or section turns over 200 ms after it opens. A transition inside a
     closed <details> never settles, because the browser skips that content, and the reader
-    never sees it: wait only for the transitions the page renders (OV-2450).
+    never sees it: wait only for the transitions the page renders (OV-2450). A busy page (a
+    dialog of many rows opening while a large File is read) may need more than a second or two.
     """
 
     unfinished = page.evaluate(
@@ -1790,13 +1794,13 @@ def wait_for_css_transitions(page) -> None:
           });
           return Promise.race([
             Promise.all(settled).then(() => []),
-            new Promise((resolve) => setTimeout(() => resolve(describe()), 5000)),
+            new Promise((resolve) => setTimeout(() => resolve(describe()), 15000)),
           ]);
         }
         """
     )
     if unfinished:
-        raise RuntimeError(f"CSS transitions did not finish in 5 s: {', '.join(unfinished)}")
+        raise RuntimeError(f"CSS transitions did not finish in 15 s: {', '.join(unfinished)}")
 
 
 def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], base_url: str, quality: int) -> Path:

@@ -856,6 +856,36 @@ def test_upload_action_chooses_the_file_through_the_named_button() -> None:
     ]
 
 
+def test_click_waits_as_long_as_the_action_names() -> None:
+    """A click that starts long work (Create new drawing) may wait past Playwright's default for the page."""
+
+    clicks: list[tuple[str, dict[str, object]]] = []
+
+    class FakeLocator:
+        def __init__(self, selector: str) -> None:
+            self.selector = selector
+
+        @property
+        def first(self) -> FakeLocator:
+            return self
+
+        def click(self, **options: object) -> None:
+            clicks.append((self.selector, options))
+
+    class FakePage:
+        def locator(self, selector: str) -> FakeLocator:
+            return FakeLocator(selector)
+
+        def evaluate(self, script: str) -> None:
+            pass
+
+    capture_tool.apply_capture_action(FakePage(), {"type": "click", "selector": "#a"})
+    capture_tool.apply_capture_action(FakePage(), {"type": "click", "selector": "#b", "timeout": 300000})
+    capture_tool.apply_capture_action(FakePage(), {"type": "click", "selector": "#c", "force": True, "timeout": 5})
+
+    assert clicks == [("#a", {}), ("#b", {"timeout": 300000}), ("#c", {"force": True, "timeout": 5})]
+
+
 def test_replay_resets_then_performs_steps_through_the_named_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
