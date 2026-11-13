@@ -211,7 +211,7 @@ import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
 import { rekeyLegendRecords } from './legend-svg.js';
 import { editorStateOfLegendEditLeaves, readLegendEditLeaves } from './legend-draft-rows.js';
-import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, legendEntryKey } from './drawing/paint.js';
+import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, legendEntryKey, ownLegendColor } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { SettingsSlice } from './drawing/settings.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
@@ -777,19 +777,24 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
 /** @param {unknown} value */
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
-// A stored entry color is read with the Default colors domain (D-41). An entry
-// whose color lies outside it is dropped and, when `repairs` is given, listed
-// there for the Load dialog (D-43) under `path`, the stored Legend. A list
-// holds one entry per row key (Session 47: two rows may show one name); a
-// Session 46 or older kept the first entry of each caption (OV-719). A later
-// entry of one row is dropped and listed, and so is an entry that is no object
-// or has no caption (TB8).
+// An entry keeps the color it owns (`ownLegendColor`, OV-282): a row of
+// Python's (a key of the stored inventory `inventory`) the user's Legend color
+// of its key (`overrides`, read already) and no other, so the swatch a Session
+// written before Session 51 recorded is not read; an editor row its stored
+// color, read with the Default colors domain (D-41). An entry without a color
+// is read; one whose color lies outside that domain and is no row of Python's
+// is dropped and, when `repairs` is given, listed there for the Load dialog
+// (D-43) under `path`, the stored Legend. A list holds one entry
+// per row key (Session 47: two rows may show one name); a Session 46 or older
+// kept the first entry of each caption (OV-719). A later entry of one row is
+// dropped and listed, and so is an entry that is no object or has no caption (TB8).
 /**
  * @param {unknown} entries
  * @param {'entries' | 'dormantEntries' | 'deletedEntries'} list
- * @param {{ repairs: LoadRepair[] | null, path: string, sessionVersion: number }} load
+ * @param {{ repairs: LoadRepair[] | null, path: string, sessionVersion: number,
+ *   inventory: ReadonlySet<string>, overrides: Readonly<Record<string, string>> }} load
  */
-const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVersion }) => {
+const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVersion, inventory, overrides }) => {
   /** @type {SettingLoss[]} */
   const losses = [];
   if (!Array.isArray(entries)) {
@@ -816,26 +821,37 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
     }
     const caption = String(entry.caption || '').trim();
     const key = rowOf(entry);
-    const color = normalizeDefaultColor(entry.color);
+    const python = inventory.has(legendEntryKey(entry));
+    const storedColor = normalizeDefaultColor(entry.color);
+    const color = ownLegendColor(legendEntryKey(entry), { python, overrides, color: storedColor });
+    // An entry without a color is a row of Python's as Session 51 writes it, also where Load reads it without the
+    // inventory (a drawing's paint apart from its set's); one whose color Load cannot read is not drawn.
+    const unreadColor = !isUnsetValue(entry.color) && !storedColor;
+    const readable = python || Boolean(color) || isUnsetValue(entry.color);
     const from = entry.dormant === true ? 'dormantEntries' : list;
     if (!caption && Object.values(entry).some((field) => !isUnsetValue(field))) countUnread(from);
-    if (caption && !color && !keys.has(key)) dropped.push({ list: from, caption, key });
-    if (caption && color && keys.has(key)) {
+    if (caption && !readable && !keys.has(key)) dropped.push({ list: from, caption, key });
+    // A kept entry whose stored color Load cannot read loses that value: it is listed too.
+    if (caption && readable && unreadColor && !keys.has(key)) {
+      repairs?.push(loadRepair({ code: 'legend-color-dropped', path: `${path}.${from}`, effect: 'dropped', label: caption }));
+    }
+    if (caption && readable && keys.has(key)) {
       repairs?.push(loadRepair({ code: 'legend-entry-duplicate', path: `${path}.${from}`, effect: 'dropped', label: caption }));
     }
-    if (!caption || !color || keys.has(key)) return;
+    if (!caption || !readable || keys.has(key)) return;
     keys.add(key);
     // `showStroke`, the Stroke options disclosure that earlier Sessions saved,
     // is view state (OV-157).
     const stored = cloneJsonData(entry);
     delete stored.showStroke;
+    delete stored.color;
     if (!Array.isArray(entry.featureIds) && !isUnsetValue(entry.featureIds)) {
       losses.push({ at: `${list}[${index}].featureIds`, stored: entry.featureIds, used: [] });
     }
     normalized.push({
       ...stored,
       caption,
-      color,
+      ...(color ? { color } : {}),
       featureIds: Array.isArray(entry.featureIds)
         ? entry.featureIds.map((/** @type {unknown} */ id) => String(id || '').trim()).filter(Boolean)
         : []
@@ -1167,14 +1183,6 @@ export const normalizeEditorStateData = (editorState = {}, {
   const legend = isPlainObject(source.legend) ? source.legend : {};
   const featureStrokes = isPlainObject(source.featureStrokes) ? source.featureStrokes : {};
   const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
-  // A Session 46 slice lists the renamed rows its Result does not draw
-  // (OV-120) after the shown rows, marked `dormant`.
-  const legendLoad = { repairs, path: `${path}.legend`, sessionVersion };
-  const entries = normalizeSessionLegendEntries(legend.entries, 'entries', legendLoad);
-  const dormantEntries = [
-    ...normalizeSessionLegendEntries(legend.dormantEntries, 'dormantEntries', legendLoad),
-    ...entries.filter((entry) => entry.dormant === true)
-  ].map(({ dormant: _dormant, ...entry }) => entry);
   // What Load cannot read of the edits is listed when `repairs` is given (TB9);
   // an edit that holds nothing (an empty override) is no row.
   /** @type {SettingLoss[] | null} */
@@ -1230,16 +1238,28 @@ export const normalizeEditorStateData = (editorState = {}, {
   if (!isPlainObject(source.originalSvgStroke) && !isUnsetValue(source.originalSvgStroke)) {
     losses?.push({ at: 'originalSvgStroke', stored: source.originalSvgStroke, used: defaults.originalSvgStroke });
   }
+  // A saved inventory is Python's keys of the rows it drew; the entries read
+  // the colors they own by it and by the color edits.
+  const originalOrder = /** @type {PythonLegendKey[]} */ (normalizeStringArray(legend.originalOrder, 'legend.originalOrder', losses));
+  const originalColors = readColors(legend.originalColors, 'legend.originalColors');
+  const colorOverrides = readColors(legend.colorOverrides, 'legend.colorOverrides');
+  // A Session 46 slice lists the renamed rows its Result does not draw
+  // (OV-120) after the shown rows, marked `dormant`.
+  const legendLoad = { repairs, path: `${path}.legend`, sessionVersion, inventory: new Set(originalOrder), overrides: colorOverrides };
+  const entries = normalizeSessionLegendEntries(legend.entries, 'entries', legendLoad);
+  const dormantEntries = [
+    ...normalizeSessionLegendEntries(legend.dormantEntries, 'dormantEntries', legendLoad),
+    ...entries.filter((entry) => entry.dormant === true)
+  ].map(({ dormant: _dormant, ...entry }) => entry);
 
   const read = {
     legend: {
       entries: entries.filter((entry) => entry.dormant !== true),
       deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries, 'deletedEntries', legendLoad),
       dormantEntries,
-      // A saved inventory is Python's keys of the rows it drew.
-      originalOrder: /** @type {PythonLegendKey[]} */ (normalizeStringArray(legend.originalOrder, 'legend.originalOrder', losses)),
-      originalColors: readColors(legend.originalColors, 'legend.originalColors'),
-      colorOverrides: readColors(legend.colorOverrides, 'legend.colorOverrides'),
+      originalOrder,
+      originalColors,
+      colorOverrides,
       strokeOverrides: readStrokeOverrides(legend.strokeOverrides, 'legend.strokeOverrides'),
       addedCaptions: normalizeStringArray(legend.addedCaptions, 'legend.addedCaptions', losses)
     },
