@@ -101,7 +101,8 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordOrderRow, recordSelectorNumber
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordOrderRow, recordRowNumber,
+  recordSelectorNumber
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
@@ -7958,7 +7959,10 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
   const sourceSchema = promoted.schema;
   const storedLayout = /** @type {UnvalidatedFields<'multiRecordPositions' | 'recordGapPx'>} */ (promoted.layout);
   const linearRows = promoted.mode === 'linear'
-    ? (Array.isArray(storedLayout?.multiRecordPositions) ? storedLayout.multiRecordPositions : []).map(recordOrderRow)
+    // Each card's row text, the whole token when it holds no `@`, as Python's promotion reads it (`rpartition`).
+    ? (Array.isArray(storedLayout?.multiRecordPositions) ? storedLayout.multiRecordPositions : []).map(
+        (/** @type {unknown} */ token) => recordRowNumber(String(token).slice(String(token).lastIndexOf('@') + 1))
+      )
     : [];
   promoted.schema = 8;
   // A malformed record is left to the repair that follows the promotion.

@@ -3410,6 +3410,12 @@ assert.deepEqual(promotedArranged.layout, {
   similarityAlignment: null
 });
 assert.equal(schema5Arranged.schema, 5, 'promotion must not mutate the imported request');
+// OV-3313: the promotion reads each card's row as Python's does (`record_row_number`), from the shared vector.
+for (const { token, gridRow } of JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'record_order_row_vectors.json'), 'utf8')).promotionRows) {
+  const stored = structuredClone(schema5Arranged);
+  stored.layout.multiRecordPositions = [token, '#2@1', '#3@2'];
+  assert.equal(promoteCanonicalRenderRequestToCurrent(stored).records[0].presentation.gridRow, gridRow, JSON.stringify(token));
+}
 
 state.losatProgram.value = 'blastp';
 state.losat.blastp.mode = 'pairwise';

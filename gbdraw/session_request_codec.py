@@ -84,7 +84,7 @@ from gbdraw.config.models.objects import DEFAULT_SCALAR_AXIS_LABELS
 from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.record_planning import _source_details
-from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
+from gbdraw.core.numeric import ascii_float
 from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
@@ -196,6 +196,7 @@ from .api.requests import (
     _LegacySimilarityAlignment,
     _with_legacy_similarity_alignment,
 )
+from .layout.record_placement import record_row_number
 from .layout.similarity_alignment import (
     SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     AlignmentAnchorIdentity,
@@ -997,15 +998,13 @@ def _decode_canonical_request(
             similarity_alignment = None
         if schema < 6 and linear_layout is not None and linear_layout.multi_record_positions:
             # Schemas 2-5 wrote one ``#<card>@<row>`` per record card; as Web
-            # Load promotes them, each card's row becomes its gridRow, which
-            # the records an ALL card expands to inherit.
-            rows = [
-                parse_ascii_nonnegative_integer(token.rpartition("@")[2])
-                for token in linear_layout.multi_record_positions
-            ]
+            # Load promotes them, each card's row, read as the renderer reads a
+            # row (OV-3313), becomes its gridRow, which the records an ALL card
+            # expands to inherit.
+            rows = [record_row_number(token.rpartition("@")[2]) for token in linear_layout.multi_record_positions]
             records = tuple(
                 replace(record, presentation=replace(record.presentation, grid_row=row))
-                if row is not None and row > 0
+                if row is not None
                 else record
                 for record, row in zip(records, [*rows, *[None] * len(records)])
             )

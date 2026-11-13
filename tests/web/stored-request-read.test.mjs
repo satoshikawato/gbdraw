@@ -231,6 +231,18 @@ test('a Record Order token whose row the renderer refuses leaves no request to d
   assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]),
     [['request-dropped', 'drawings[0].renderRequest.layout.multiRecordPositions[1]']]);
   assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.layout\.multiRecordPositions\[1\]\) could not be read\. The file loads as settings only/);
+  // A drawing that holds its input bindings (a Web or CLI Save) keeps its files and its Web settings; only the
+  // request and what it drew (Results, feature list, run metadata) are left out (`withStoredResultSet`).
+  const saved = await readSavedSession(new Blob([readFileSync(new URL('tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.gbdraw', REPO))]));
+  saved.drawings[0].renderRequest.layout.multiRecordPositions = ['#1@1.0'];
+  const kept = await importSession(await sessionLoadEvent(saved), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(kept.status, 'ok', JSON.stringify(kept.error));
+  assert.deepEqual(kept.repairs.map(({ code, path }) => [code, path]),
+    [['request-dropped', 'drawings[0].renderRequest.layout.multiRecordPositions[0]']]);
+  assert.equal(state.results.value.length, 0);
+  const drawing = state.activeDrawing();
+  assert.deepEqual(drawing.circularSources.map((card) => card.gb?.name), ['HmmtDNA.gbk']);
+  assert.deepEqual(drawing.adv.multi_record_positions, [{ selector: 'record-1', row: 1 }]);
 });
 
 test('the reader turns only the layout owner\'s refusal into a dropped request; a programming error there is thrown (N2)', () => {

@@ -22,6 +22,15 @@ _PlacementCompatibility = Literal["linear", "circular"]
 RECORD_ROW_PATTERN = r"\s*\+?([0-9]+)\s*"
 _RECORD_ROW = re.compile(RECORD_ROW_PATTERN)
 
+
+def record_row_number(text: str) -> int | None:
+    """The row a Record Order token's row text (the text after its last ``@``) names, as ``RECORD_ROW_PATTERN``
+    reads it; None for a row of zero or any other text. The one reader of the row: the renderer's placement token
+    (:func:`parse_record_row_position`) and the schema 2 to 5 promotion of Linear card rows read it here."""
+
+    match = _RECORD_ROW.fullmatch(text)
+    return (parse_ascii_nonnegative_integer(match.group(1)) or None) if match else None
+
 # What ``anchor_feature`` does to one record: ``rotated``, a complete circular record turned so that the feature
 # starts at its left end; ``aligned``, any other record moved sideways so that its feature starts below the
 # reference's; ``reference``, the record the others line up with when none is rotated, which keeps its place;
@@ -75,9 +84,8 @@ def parse_record_row_position(value: str) -> tuple[str, int]:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must include a selector before '@'."
         )
-    match = _RECORD_ROW.fullmatch(row_text)
-    row = parse_ascii_nonnegative_integer(match.group(1)) if match else None
-    if not row:
+    row = record_row_number(row_text)
+    if row is None:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must use a positive integer row."
         )

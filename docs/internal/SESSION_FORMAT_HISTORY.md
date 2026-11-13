@@ -460,13 +460,21 @@ last `@`, as `parse_record_row_position` reads it: spaces around it, an optional
 zero. The Web read that row with `Number()`, so `#1@1.0`, `#1@0x1` and `#1@1e0` drew row 1 on the Web while
 `gbdraw render --session` refused them (OV-3313). Web Load now reads every token's row with this pattern
 (`recordOrderRow`, `services/record-draw-selection.js`); a request whose token has a row Python refuses (these three,
-and `0`, `-1` or text) leaves no request to draw, as a layout its owner refuses does: the drawing loads as settings
-only, and the Load repair dialog names the token's place (`renderRequest.layout.multiRecordPositions[<i>]`). On
+and `0`, `-1` or text) leaves no request to draw, as a layout its owner refuses does: the drawing loads without its
+request and Results, and the Load repair dialog names the token's place
+(`renderRequest.layout.multiRecordPositions[<i>]`). A Session 51 drawing that holds its input bindings (a Web or CLI
+Save) keeps its input files and its Web settings; a drawing whose files only its request names (a Gallery
+publication) keeps neither files nor Results. On
 `dev`, a row of `0` or `-1` read as row 1 with a row naming `config.adv.multi_record_positions[<i>].row` when the
 drawing held no Web draft, and was not read when it held one. `#1@+1`, `#1@01` and `#1@ 1 ` read as row 1, as
-before. No gbdraw writer writes another row; a file holds one only when it was edited by hand, and every stored token
+before. The promotion of a schema 2 to 5 Linear request, which turns each card's `#<card>@<row>` into its `gridRow`,
+reads the row text (the whole token when it holds no `@`) with the same pattern in Python and on the Web
+(`record_row_number`, `recordRowNumber`): Python read it as ASCII digits only, so a hand-edited `+2` or ` 2 ` gave no
+`gridRow` and now gives row 2, and the Web read it with `Number()`, so `2.0`, `0x2` and `2e0` gave row 2 and now give
+none, as in Python. No gbdraw writer writes another row; a file holds one only when it was edited by hand, and every stored token
 in the repository's fixtures, Gallery and documentation reads. Vector: `tests/fixtures/record_order_row_vectors.json`,
-run by `tests/test_web_contracts_generated.py` and `tests/web/record-draw-selection.test.mjs`; Load test:
+run by `tests/test_web_contracts_generated.py`, `tests/test_canonical_request_shape.py`,
+`tests/web/record-draw-selection.test.mjs` and `tests/web/session-request.test.mjs`; Load test:
 `tests/web/stored-request-read.test.mjs`.
 
 ## Unreleased: a `#+N` record selector reads as record N

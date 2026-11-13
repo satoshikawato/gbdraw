@@ -334,6 +334,19 @@ export const recordSelectorNumber = (key) => {
 };
 const RECORD_ROW = new RegExp(`^(?:${RECORD_ROW_PATTERN})$`);
 /**
+ * The row a Record Order token's row text (the text after its last `@`) names, as Python reads it
+ * (`record_row_number`, gbdraw/layout/record_placement.py, whose pattern the generated contracts carry): spaces around
+ * it, an optional `+` and leading zeros are allowed, so `+01` is row 1; null for a row of zero (`0`, `+00`) or any
+ * other text (`1.0`, `0x1`, `1e0`). The schema 2 to 5 promotion reads a token's row text here, as Python's does.
+ * @param {string} text
+ * @returns {number | null}
+ */
+export const recordRowNumber = (text) => {
+  const match = RECORD_ROW.exec(text);
+  const row = match ? Number(match[1]) : 0;
+  return row >= 1 ? row : null;
+};
+/**
  * The row of a Record Order token `<selector>@<row>` (the text after its last `@`), as Python's renderer reads it
  * (`parse_record_row_position`, gbdraw/layout/record_placement.py, whose pattern the generated contracts carry):
  * spaces around it, an optional `+` and leading zeros are allowed, so `+01` is row 1; null for a row the renderer
@@ -341,12 +354,9 @@ const RECORD_ROW = new RegExp(`^(?:${RECORD_ROW_PATTERN})$`);
  * @param {unknown} token
  * @returns {number | null}
  */
-export const recordOrderRow = (token) => {
-  const text = typeof token === 'string' ? token : '';
-  const match = text.includes('@') ? RECORD_ROW.exec(text.slice(text.lastIndexOf('@') + 1)) : null;
-  const row = match ? Number(match[1]) : 0;
-  return row >= 1 ? row : null;
-};
+export const recordOrderRow = (token) => (
+  typeof token === 'string' && token.includes('@') ? recordRowNumber(token.slice(token.lastIndexOf('@') + 1)) : null
+);
 /**
  * Whether a key is a record selector `#N` that a Session 46-50 Session move
  * kept as it was (OV-2869): the N-th record of all the drawing's records.

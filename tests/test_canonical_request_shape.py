@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import fields
 import inspect
+import json
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -908,4 +909,26 @@ def test_older_linear_card_rows_are_read_as_ascii_integers_only(
         payload["layout"] = {"recordGapPx": 10, "multiRecordPositions": [f"#1@{row}"]}
 
     decoded = _decode_at(schema, _request("linear"), tmp_path, positions)
+    assert [record.presentation.grid_row for record in decoded.records] == [grid_row]
+
+
+_PROMOTION_ROWS = [
+    (case["token"], case["gridRow"])
+    for case in json.loads(
+        (Path(__file__).resolve().parent / "fixtures" / "record_order_row_vectors.json").read_text()
+    )["promotionRows"]
+]
+
+
+@pytest.mark.parametrize(("token", "grid_row"), _PROMOTION_ROWS)
+def test_older_linear_card_rows_are_read_as_the_renderer_reads_a_row(
+    token: str, grid_row: int | None, tmp_path: Path
+) -> None:
+    """OV-3313: the promotion reads a card's row as the renderer reads a Record Order row (`+2` and ` 2 ` are row 2;
+    `2.0`, `0x2` and `2e0` are no row); the Web promotion reads the same vector (tests/web/session-request.test.mjs)."""
+
+    def positions(payload: dict[str, Any]) -> None:
+        payload["layout"] = {"recordGapPx": 10, "multiRecordPositions": [token]}
+
+    decoded = _decode_at(5, _request("linear"), tmp_path, positions)
     assert [record.presentation.grid_row for record in decoded.records] == [grid_row]
