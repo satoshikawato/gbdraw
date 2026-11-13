@@ -493,7 +493,7 @@ export const createPreviewItemPopup = (options) => {
     legendRenameSettled
   } = options;
   /** @returns {readonly LegendRow[]} */
-  const legendEntries = () => state.activeDrawing().legendEntries.value || [];
+  const legendEntries = () => state.activeDrawing().legendEntries.value;
 
   /** @param {string} key @param {boolean} matchesReady */
   const legendView = (key, matchesReady) => {
