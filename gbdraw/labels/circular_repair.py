@@ -63,6 +63,7 @@ from .circular import (
     _label_bbox_rect,
     _label_fit_box,
     _leader_start_point,
+    _point_on_circle,
     _segment_intersects_rect_interior,
     _segments_through_rect_interior,
     assign_leader_start_points,
@@ -505,8 +506,7 @@ class _Repair:
             label = self.labels[index]
             x, y = float(label["start_x"]), float(label["start_y"])
             radius = math.hypot(x, y)
-            angle = math.radians(_angle(x, y) + delta)
-            moved[index] = self._with_start(index, radius * math.cos(angle), radius * math.sin(angle))
+            moved[index] = self._with_start(index, *_point_on_circle(radius, _angle(x, y) + delta))
         return moved
 
     def _radial(self, run: Sequence[int], delta: float) -> Moved:
@@ -568,8 +568,7 @@ class _Repair:
             ) -> bool:
                 if not turn:
                     return aabbs_touch(self.geometry[following].box, previous_box)
-                radians = math.radians(angle + turn)
-                turned["start_x"], turned["start_y"] = radius * math.cos(radians), radius * math.sin(radians)
+                turned["start_x"], turned["start_y"] = _point_on_circle(radius, angle + turn)
                 return aabbs_touch(self._fit_box(turned), previous_box)
 
             if not hits(0.0):
