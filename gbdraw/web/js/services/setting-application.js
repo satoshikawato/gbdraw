@@ -109,13 +109,17 @@ export const SETTING_APPLICATION = Object.freeze([
     'config.adv.plot_title_font_size': 'diagramOptions.plotTitleFontSize'
   } },
   // Circular multi-record canvas layout; Multi-Record Canvas itself and
-  // Reload Records change the record set and apply on Generate.
+  // Reload Records change the record set and apply on Generate. The grid's
+  // fields and One circle's are two rows: each applies live to a Result drawn
+  // in its own layout (`liveSettingApplies`; PD-OI-103 G1, PD-OI-019 rev 2).
   { id: 'multi-record-layout', application: /** @type {const} */ ('live'), requestPaths: {
     'config.adv.multi_record_size_mode': 'layout.multiRecordSizeMode',
     'config.adv.multi_record_min_radius_ratio': 'layout.multiRecordMinRadiusRatio',
     'config.adv.multi_record_column_gap_ratio': 'layout.multiRecordColumnGapRatio',
     'config.adv.multi_record_row_gap_ratio': 'layout.multiRecordRowGapRatio',
-    'config.adv.multi_record_positions': 'layout.multiRecordPositions',
+    'config.adv.multi_record_positions': 'layout.multiRecordPositions'
+  } },
+  { id: 'one-circle-layout', application: /** @type {const} */ ('live'), requestPaths: {
     'config.adv.one_circle_gap_degrees': 'layout.oneCircleGapDegrees',
     'config.adv.one_circle_min_length': 'layout.oneCircleMinLength',
     'config.adv.one_circle_record_band': 'layout.oneCircleRecordBand'

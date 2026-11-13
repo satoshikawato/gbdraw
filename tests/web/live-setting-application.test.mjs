@@ -83,7 +83,7 @@ const LIVE_LINEAR_KEYS = [...LEGEND_KEYS, LOCK_KEY];
 const pick = (object, keys) => Object.fromEntries(keys.filter((key) => Object.hasOwn(object, key)).map((key) => [key, object[key]]));
 
 test('the G1 rows are the live setting rows, and each request path has its projector', () => {
-  assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout', 'definition-column',
+  assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout', 'one-circle-layout', 'definition-column',
     'definition-text', 'species', 'dinucleotide-window', 'annotation-style', 'sequence-search', 'comparison-height', 'track-geometry',
     'record-names', 'track-visibility']);
   for (const row of liveRows()) assert.equal(row.application, 'live', row.id);
@@ -450,6 +450,33 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   assert.equal(note('legend', oneCircle, true).display, 'none', 'one circle to the grid keeps the canvas');
   // A row without request paths keeps its own note.
   assert.equal(owner.settingApplicationNote('depth-sources', () => false).text, owner.SETTING_APPLICATION.find((row) => row.id === 'depth-sources').note);
+});
+
+// OV-3490: the grid fields and the One circle fields are two rows. Each is
+// live while the committed request draws its layout (PD-OI-103 G1, PD-OI-019
+// rev 2), and waits for Generate while the Result draws the other layout or a
+// single canvas.
+test('the grid row is live on a grid Result and the One circle row on a one-circle Result', () => {
+  const generateNote = { application: 'generate', text: 'Applies on Generate', display: 'clock' };
+  const single = { mode: 'circular', grouping: 'single' };
+  const grid = { mode: 'circular', grouping: 'grid', layout: { recordLayout: 'grid' } };
+  const oneCircle = { mode: 'circular', grouping: 'grid', layout: { recordLayout: 'one_circle' } };
+  const draft = (layout) => ({ form: { multi_record_canvas: layout !== 'single' }, adv: { circular_record_layout: layout === 'single' ? 'grid' : layout } });
+  const note = (id, committed, layout) => owner.settingApplicationNote(
+    id, (path) => request.liveSettingApplies(committed, path, draft(layout)), request.canvasChangeIsOneCircle(committed, draft(layout))
+  );
+  const pathsOf = (id) => Object.values(owner.SETTING_APPLICATION.find((row) => row.id === id).requestPaths).flat();
+  assert.ok(pathsOf('multi-record-layout').every((path) => !path.startsWith('layout.oneCircle')), 'the grid row holds no One circle field');
+  assert.ok(pathsOf('one-circle-layout').length > 0);
+  assert.ok(pathsOf('one-circle-layout').every((path) => path.startsWith('layout.oneCircle')), 'the One circle row holds only its fields');
+  assert.equal(note('multi-record-layout', grid, 'grid').display, 'none');
+  assert.equal(note('multi-record-layout', grid, 'grid').text, '');
+  assert.equal(note('one-circle-layout', oneCircle, 'one_circle').display, 'none');
+  assert.equal(note('one-circle-layout', oneCircle, 'one_circle').text, '');
+  assert.deepEqual(note('multi-record-layout', oneCircle, 'grid'), generateNote);
+  assert.deepEqual(note('one-circle-layout', grid, 'one_circle'), generateNote);
+  assert.deepEqual(note('multi-record-layout', single, 'grid'), generateNote);
+  assert.deepEqual(note('one-circle-layout', single, 'one_circle'), generateNote);
 });
 
 test('no live note text is written outside the owner', async () => {

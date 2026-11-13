@@ -568,6 +568,8 @@ test('Session CLI one circle loads its layout, Generates the CLI figure, saves i
     expect(await settings()).toEqual({
       canvas: true, layout: 'one_circle', gap: 2.5, minLength: 1000, band: false, grid: false, oneCircle: true, shown: true
     });
+    // OV-3490: the One circle fields of a one-circle Result apply live, so their block shows no clock.
+    await expect(run.page.locator('[data-capture="one-circle-controls"] [data-timing-clock]')).toHaveCount(0);
     const stored = shownSavedDrawing(session).results[0].content;
     await generateAndWaitForResult(run.page);
     const generated = (await snapshot(run.page)).selected;

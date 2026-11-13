@@ -233,6 +233,7 @@ under "Cited ids without a record".
   - `tests/web/run-info.test.mjs`
 
 - [PD-OI-019](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-019-fresh-web-multi-record-layout-defaults): Fresh Web multi-record layout defaults. ACCEPTED, concern `diagram-generation.web-multi-record-layout-defaults`, scenario revision 2, supersedes scenario revision 1.
+  - `tests/web/live-setting-application.test.mjs`
   - `tests/web/one-circle-layout.test.mjs`
   - `tests/web/session-cli-compatibility.test.mjs`
 
