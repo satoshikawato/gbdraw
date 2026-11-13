@@ -31,6 +31,16 @@
  * @property {UiLocale} tag
  * @property {string} name The language's name in itself (an endonym); never translated.
  * @property {string} sentenceSeparator What separates two sentences shown one after the other.
+ * @property {UiTextStyle} textStyle How the page sets its small UI text (the page's `data-ui-text-style`).
+ */
+/**
+ * How the page sets the UI text of a locale; index.html reads it from the
+ * page's `data-ui-text-style`, and the figure is never affected.
+ * `cased`: as designed, with upper-casing and tracking.
+ * `no-caps`: no upper-casing or tracking (no letter case, or stacked diacritics).
+ * `tall-marks`: no-caps, and no text under 12px and tight line heights widened
+ * to 1.5, for the marks above and below the letters (Thai).
+ * @typedef {'cased' | 'no-caps' | 'tall-marks'} UiTextStyle
  */
 /**
  * The translation of the `other` form of a `tn` pair in a language whose
@@ -72,23 +82,23 @@ export const SOURCE_LOCALE = 'en';
  * @type {readonly Readonly<UiLocaleOption>[]}
  */
 export const UI_LOCALES = Object.freeze([
-  Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('id'), name: 'Bahasa Indonesia', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('de'), name: 'Deutsch', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('it'), name: 'Italiano', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('pl'), name: 'Polski', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('vi'), name: 'Tiếng Việt', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ko'), name: '한국어', sentenceSeparator: ' ' })
+  Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('id'), name: 'Bahasa Indonesia', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('de'), name: 'Deutsch', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('it'), name: 'Italiano', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pl'), name: 'Polski', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('vi'), name: 'Tiếng Việt', sentenceSeparator: ' ', textStyle: 'no-caps' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ', textStyle: 'cased' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ', textStyle: 'tall-marks' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '', textStyle: 'no-caps' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '', textStyle: 'no-caps' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '', textStyle: 'no-caps' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ko'), name: '한국어', sentenceSeparator: ' ', textStyle: 'no-caps' })
 ]);
 // Separates the context of `tx` from its text in a catalog key.
 export const CONTEXT_SEPARATOR = '\u0004';
@@ -272,6 +282,20 @@ export const tmx = (context, text) => lookup(context + CONTEXT_SEPARATOR + text,
  */
 export const sentenceSeparator = () => shownLocale().sentenceSeparator;
 
+// The full stops of the UI languages' scripts: . (Latin, Cyrillic, Korean)
+// and 。 (Japanese, Chinese). Thai ends a sentence with none.
+const FULL_STOP_END = /[.。]$/u;
+
+/**
+ * A shown sentence without its final full stop, for a template that ends the
+ * sentence with its own mark (`t('{pair}: {text}.', { text: sentenceBody(x) })`):
+ * the locale's mark then shows once, never 。。. Only a full stop goes;
+ * ?, ! and … keep their meaning and stay.
+ * @param {string} text a shown text
+ * @returns {string}
+ */
+export const sentenceBody = (text) => text.replace(FULL_STOP_END, '');
+
 /**
  * Sentences shown one after the other, each already a shown text.
  * @param {...string} sentences
@@ -359,7 +383,7 @@ let latestRequest = 0;
 
 /**
  * Shows the UI in `next`: loads its catalog, then switches, and sets the
- * page's `lang` (the one writer of `<html lang>`). `en` needs no catalog. When
+ * page's `lang` and `data-ui-text-style` (the one writer of both). `en` needs no catalog. When
  * calls overlap, only the latest one applies; a catalog that fails to load
  * rejects and changes nothing. The header Language menu and the stored
  * language at boot call it (app/ui-language.js).
@@ -378,6 +402,8 @@ export const setUiLocale = async (next, load = importCatalog) => {
   shownPlurals = tag === SOURCE_LOCALE ? ENGLISH_PLURALS : new Intl.PluralRules(tag);
   locale.value = tag;
   // A unit test without a page has no document.
-  globalThis.document?.documentElement.setAttribute('lang', tag);
+  const root = globalThis.document?.documentElement;
+  root?.setAttribute('lang', tag);
+  root?.setAttribute('data-ui-text-style', shownLocale().textStyle);
   return true;
 };

@@ -242,7 +242,7 @@ const buildPopupRows = (list, rings, sourceIndex) => {
     const swatch = document.createElement('span');
     swatch.className = 'gbdraw-ring-hover-swatch';
     const name = document.createElement('span');
-    name.className = 'gbdraw-ring-hover-name';
+    name.className = 'gbdraw-ring-hover-name truncate';
     name.append(...legendCaptionRuns(ring.name).map((run) => {
       if (!run.italic) return run.text;
       const italic = document.createElement('i');

@@ -637,7 +637,7 @@ export const AutoValueField = {
   props: ['visible', 'text'],
   template: `
     <div class="auto-value-field">
-      <span v-if="visible" class="auto-value-placeholder">{{ text }}</span>
+      <span v-if="visible" class="auto-value-placeholder truncate">{{ text }}</span>
       <slot></slot>
     </div>
   `
@@ -675,6 +675,8 @@ export const ActionMenu = {
     icon: { type: String, default: '' },
     title: { type: String, default: '' },
     ariaLabel: { type: String, default: '' },
+    // A class for the label, such as `truncate` where the label shrinks with an ellipsis.
+    labelClass: { type: String, default: '' },
     closeOnRun: { type: Boolean, default: false },
     /** @type {{ type: ArrayConstructor, default: () => (ActionMenuItem | ActionMenuSection)[] }} */
     items: { type: Array, default: () => [] }
@@ -733,7 +735,7 @@ export const ActionMenu = {
   template: `
     <details ref="root" class="action-menu" data-nodrag="true" :aria-label="ariaLabel || null" @keydown="onKeydown">
       <summary class="action-menu-toggle" :title="title || label" :aria-label="ariaLabel || null">
-        <i v-if="icon" :class="['ph', icon]" aria-hidden="true"></i><span>{{ label }}</span>
+        <i v-if="icon" :class="['ph', icon]" aria-hidden="true"></i><span :class="labelClass || null">{{ label }}</span>
         <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
       </summary>
       <div class="action-menu-items">
@@ -1116,7 +1118,7 @@ export const RecordName = {
     const title = computed(() => [props.prefix, [props.name, props.detail].filter(Boolean).join(' · ')].filter(Boolean).join(' '));
     return { title };
   },
-  template: `<span class="record-name" :title="title"><span v-if="prefix" class="record-name-part">{{ prefix + ' ' }}</span><span class="record-name-main">{{ name }}</span><span v-if="detail" class="record-name-part" data-record-name-detail>{{ ' · ' + detail }}</span></span>`
+  template: `<span class="record-name" :title="title"><span v-if="prefix" class="record-name-part">{{ prefix + ' ' }}</span><span class="record-name-main truncate">{{ name }}</span><span v-if="detail" class="record-name-part" data-record-name-detail>{{ ' · ' + detail }}</span></span>`
 };
 
 /**

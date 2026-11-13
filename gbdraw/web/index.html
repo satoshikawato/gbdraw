@@ -246,24 +246,25 @@
         /* A Korean field label whose one word is wider than its column breaks inside the word, so its help
            tip stays inside the column (다이뉴클레오타이드 in a three-column row, OV-1525). */
         :root:lang(ko) .input-label { overflow-wrap: anywhere; }
-        :root:lang(zh-Hans) svg, :root:lang(zh-Hant) svg, :root:lang(ko) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
-        /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. The figure keeps the English stack. */
+        /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
-        :root:lang(th) svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
-        /* Japanese, Chinese, Korean, Thai and Vietnamese: no upper-casing or tracking in the UI (no letter case, or stacked diacritics; the figure keeps its own). */
-        :root:lang(ja) :not(svg, svg *), :root:lang(zh-Hans) :not(svg, svg *), :root:lang(zh-Hant) :not(svg, svg *), :root:lang(ko) :not(svg, svg *), :root:lang(th) :not(svg, svg *), :root:lang(vi) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
-        /* Thai marks need room: no UI text under 12px, and tight line heights widened to 1.5 (the figure is exempt).
+        /* The figure keeps the English stack in every UI language. */
+        :root svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
+        /* The page's data-ui-text-style is the shown locale's textStyle (UI_LOCALES, js/utils/i18n.js); the figure is exempt.
+           no-caps and tall-marks: no upper-casing or tracking in the UI (no letter case, or stacked diacritics). */
+        :root:is([data-ui-text-style="no-caps"], [data-ui-text-style="tall-marks"]) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
+        /* tall-marks: the marks above and below the letters need room: no UI text under 12px, and tight line heights widened to 1.5.
            The floor is !important to win over the 11px !important rule for text-[9px] and text-[10px] below. */
-        :root:lang(th) :is(.text-\[9px\], .text-\[10px\], .text-\[11px\]):not(svg, svg *) { font-size: 12px !important; }
-        :root:lang(th) :is(.leading-none, .leading-tight, .leading-snug):not(svg, svg *) { line-height: 1.5; }
+        :root[data-ui-text-style="tall-marks"] :is(.text-\[9px\], .text-\[10px\], .text-\[11px\]):not(svg, svg *) { font-size: 12px !important; }
+        :root[data-ui-text-style="tall-marks"] :is(.leading-none, .leading-tight, .leading-snug):not(svg, svg *) { line-height: 1.5; }
         /* The same floor for the small text styles whose size their own rule sets (css/tailwind.input.css): hints, group
            headings, the apply note, the header buttons, the rail and its tooltip, and the choice-group labels. A rail name may take two lines; its entry grows to
            hold them, and the rail column scrolls when the entries do not fit. */
-        :root:lang(th) :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span) { font-size: 12px; }
-        :root:lang(th) .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { font-size: 12px; }
-        /* A wrapped Vietnamese or Thai rail name needs taller lines for its stacked marks (the wrap itself is every locale's, css/tailwind.input.css). */
+        :root[data-ui-text-style="tall-marks"] :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span) { font-size: 12px; }
+        :root[data-ui-text-style="tall-marks"] .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { font-size: 12px; }
+        /* A wrapped Vietnamese rail name, or one with tall marks, needs taller lines (the wrap itself is every locale's, css/tailwind.input.css). */
         :root:lang(vi) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.3; }
-        :root:lang(th) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.5; }
+        :root[data-ui-text-style="tall-marks"] [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.5; }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -306,9 +307,8 @@
             object-fit: cover;
             object-position: right;
         }
-        /* <record-name>: the name shrinks with an ellipsis; the prefix and the accession stay whole (OV-436). */
+        /* <record-name>: the name (`truncate`) shrinks with an ellipsis; the prefix and the accession stay whole (OV-436). */
         .record-name { display: inline-flex; max-width: 100%; min-width: 0; vertical-align: bottom; white-space: nowrap; }
-        .record-name-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .record-name-part { flex: none; white-space: pre; }
         #app-boot-splash .gbdraw-loader {
             width: calc(2.5rem * 115.2 / 109.2);
@@ -450,13 +450,9 @@
             inset: 0;
             display: block;
             align-content: center;
-            min-width: 0;
             color: var(--ui-muted);
             line-height: 1.2;
             pointer-events: none;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
         .auto-value-placeholder {
             padding: 0.2rem 0.5rem;
@@ -914,21 +910,14 @@
             min-width: 0;
         }
         .feature-hover-summary-heading {
-            min-width: 0;
             font-weight: 700;
             color: #0f172a;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
         .feature-hover-summary-subtitle {
             margin-top: 0.1rem;
             color: #64748b;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             font-size: 10px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
         .feature-hover-summary-row {
             display: grid;
@@ -1170,11 +1159,7 @@
         }
         .preview-feature-search .gfs-match-detail {
             display: block;
-            min-width: 0;
-            overflow: hidden;
             color: #334155;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
         /* A failed sequence read: its reason and Details, with Retry beside it. */
         .preview-feature-search .gfs-sequence-error {
@@ -1269,7 +1254,6 @@
         }
         .gbdraw-ring-hover-row[data-hovered] { background: #e8eef8; font-weight: 700; color: #1f2937; }
         .gbdraw-ring-hover-swatch { width: 0.75rem; height: 0.75rem; border: 1px solid rgba(15, 23, 42, 0.18); }
-        .gbdraw-ring-hover-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .gbdraw-ring-hover-value { text-align: right; font-variant-numeric: tabular-nums; }
         .gbdraw-ring-hover-value[data-no-hit] { color: #64748b; }
         @media print { .gbdraw-ring-hover-overlay { display: none !important; } }
@@ -1319,18 +1303,16 @@
             max-width: min(18rem, calc(100% - 8px));
             height: 18px;
             padding: 0 6px;
-            overflow: hidden;
             border-radius: 9px;
             font-size: 11px;
             font-weight: 600;
             line-height: 16px;
-            text-overflow: ellipsis;
-            white-space: nowrap;
             box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 1px 3px rgba(15, 23, 42, 0.25);
         }
         /* A long gene name gives way; "· reference" stays whole. */
         .gbdraw-alignment-flag:not([hidden]) { display: flex; white-space: pre; }
-        .gbdraw-alignment-flag span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        /* The name keeps every space it has (two in a row stay two); `truncate` gives it the ellipsis and the side-only clip. */
+        .gbdraw-alignment-flag > span { white-space: pre; }
         .gbdraw-alignment-flag { border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff; }
         .gbdraw-alignment-tag { border: 1.5px solid #1d4ed8; background: #dbeafe; color: #1e3a8a; line-height: 15px; }
         .preview-layout-off .gbdraw-preview-layout-target:hover {
@@ -1634,7 +1616,7 @@
            in every language (OV-1530: fr at 1280 px left it 25 px wide, and its caption ran under the mode switch).
            The title narrows first; the caption keeps 2rem for the pencil and, when the block is narrower still,
            ends with an ellipsis or shows nothing; the title button clips its own pencil and title. */
-        .app-session-label { flex: none; min-width: 0; max-width: calc(100% - 2rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .app-session-label { flex: none; max-width: calc(100% - 2rem); }
         .app-session-button { overflow: hidden; }
         /* #1383 (PD-OI-108): the way to the Gallery's tutorials stands out: the header link, the link in the notice
            of a loaded example, and the card of the empty Preview share one accent-filled style. */
@@ -1766,9 +1748,9 @@
             text-align: left; white-space: nowrap;
         }
         .history-list-row[aria-disabled="true"] { cursor: default; }
-        .history-list-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .history-list-name { flex: 0 1 auto; }
         .history-list-value {
-            flex: 1 1 0; min-width: 2.5rem; overflow: hidden; text-overflow: ellipsis; text-align: right;
+            flex: 1 1 0; min-width: 2.5rem; text-align: right;
             color: #64748b; font-variant-numeric: tabular-nums;
         }
         .history-list-swatch {
@@ -1868,10 +1850,6 @@
             }
             .drawing-picker > .action-menu-toggle > span {
                 flex: 1 1 auto;
-                min-width: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
             }
             .drawing-picker > .action-menu-items {
                 position: absolute;
@@ -2634,7 +2612,7 @@
                 </div>
                 <span id="session-save-help" class="sr-only">{{ t('Save stores the current Result and generation settings draft. It does not Generate.') }}</span>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
-                    <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{{ t('Session') }}</span>
+                    <span class="app-session-label truncate text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{{ t('Session') }}</span>
                     <button @click="editSessionTitle" class="app-session-button text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start" :disabled="!semanticMutationAvailable">
                         <i class="ph ph-pencil-simple" aria-hidden="true"></i>
                         <span class="truncate">{{ sessionTitleLabel }}</span>
@@ -2662,8 +2640,8 @@
                             :aria-disabled="historyList.rowDisabled(row) ? 'true' : null" @click="historyList.pick(row)"
                             @pointerenter="historyList.pointed.value = row.key" @pointerleave="historyList.pointed.value = null"
                             @focus="historyList.pointed.value = row.key" @blur="historyList.pointed.value = null">
-                        <span class="history-list-name">{{ row.text.name }}</span>
-                        <span class="history-list-value"><span v-if="row.text.color" class="history-list-swatch" :style="{ backgroundColor: row.text.color }"></span>{{ row.text.value }}</span>
+                        <span class="history-list-name truncate">{{ row.text.name }}</span>
+                        <span class="history-list-value truncate"><span v-if="row.text.color" class="history-list-swatch" :style="{ backgroundColor: row.text.color }"></span>{{ row.text.value }}</span>
                         <span v-if="row.place === 'current'" class="history-list-tag">{{ t('Current') }}</span>
                     </button>
                 </li>
@@ -2682,7 +2660,7 @@
     <div class="drawing-bar shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white/90">
         <!-- At <= 768 px the tabs give way to one picker: the shown drawing's name, opening a list of every drawing. -->
         <template v-for="tab in drawingBarTabs" :key="'picker-' + tab.id">
-            <action-menu v-if="tab.selected" :icon="tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler'" class="drawing-picker" close-on-run
+            <action-menu v-if="tab.selected" :icon="tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler'" class="drawing-picker" label-class="truncate" close-on-run
                          :label="tab.label" :aria-label="t('Shown drawing: {name}', { name: tab.label })" :title="drawingSwitchAvailable ? tab.label : drawingSwitchBusyReason"
                          :items="drawingBarTabs.map((item) => (item.kind === 'offer'
                              ? { label: item.label, icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing(item.mode) }
@@ -4905,7 +4883,7 @@
                                                         <div class="track-slot-field" data-setting="track-geometry">
                                                             <span class="track-slot-field-label">h <setting-note :id="`linear-slot-height-timing-${entry.slot.id}`" setting="track-geometry" :item="{ slotId: entry.slot.id }"></setting-note> <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.') : t('Linear track height in pixels (px optional; positive). Leave blank for the automatic height.')"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
-                                                                <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
+                                                                <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder truncate">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
                                                                 <input
                                                                     :aria-label="t('Linear track slot {id} Height', { id: entry.slot.id })"
                                                                     :aria-describedby="`help-linear-slot-height-${entry.index} linear-slot-height-timing-${entry.slot.id}`"
@@ -4921,7 +4899,7 @@
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">{{ t('spacing') }} <help-tip :id="`help-linear-slot-spacing-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.') : t('Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.')"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
-                                                                <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'spacing')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'spacing') }}</span>
+                                                                <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'spacing')" class="track-slot-auto-placeholder truncate">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'spacing') }}</span>
                                                                 <input v-model.trim="entry.slot.spacing" :aria-label="t('Linear track slot {id} Spacing', { id: entry.slot.id })" :aria-describedby="`help-linear-slot-spacing-${entry.index}`" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" :title="t('Spacing')" :placeholder="t('px optional')" :disabled="!semanticMutationAvailable">
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing') }}</span>
                                                             </div>
@@ -5459,7 +5437,7 @@
                                                                 <div class="track-slot-field">
                                                                     <span class="track-slot-field-label">{{ t('inner gap') }} <help-tip :id="`help-circular-slot-inner-gap-${entry.index}`" :text="t('Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto.')"></help-tip></span>
                                                                     <div class="track-slot-value-field track-slot-pixel-field">
-                                                                        <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
+                                                                        <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder truncate">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
                                                                         <input v-committed-value="entry.slot.inner_gap_px ?? ''" @change="updateCircularTrackSlotGap(entry.slot, 'inner_gap_px', $event.target.value)" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" :title="t('Inner gap')" :aria-label="t('Circular track slot {id} Inner gap', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" :placeholder="t('px optional')" :disabled="!semanticMutationAvailable">
                                                                         <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
                                                                     </div>
@@ -5467,7 +5445,7 @@
                                                                 <div class="track-slot-field">
                                                                     <span class="track-slot-field-label">{{ t('outer gap') }} <help-tip :id="`help-circular-slot-outer-gap-${entry.index}`" :text="t('Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto.')"></help-tip></span>
                                                                     <div class="track-slot-value-field track-slot-pixel-field">
-                                                                        <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
+                                                                        <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder truncate">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
                                                                         <input v-committed-value="entry.slot.outer_gap_px ?? ''" @change="updateCircularTrackSlotGap(entry.slot, 'outer_gap_px', $event.target.value)" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" :title="t('Outer gap')" :aria-label="t('Circular track slot {id} Outer gap', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" :placeholder="t('px optional')" :disabled="!semanticMutationAvailable">
                                                                         <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
                                                                     </div>
@@ -7099,7 +7077,7 @@
                         </div>
                         <div class="gfs-status-line" :class="{ 'is-empty': !previewFeatureSearchStatusText && !previewFeatureSearchActiveDetail && !previewFeatureSearchSequenceFailure }">
                             <span class="gfs-count" role="status" :aria-label="t('Feature search status')">{{ previewFeatureSearchStatusText }}</span>
-                            <span v-if="previewFeatureSearchActiveDetail" class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">{{ previewFeatureSearchActiveDetail }}</span>
+                            <span v-if="previewFeatureSearchActiveDetail" class="gfs-match-detail truncate" :title="previewFeatureSearchActiveDetail">{{ previewFeatureSearchActiveDetail }}</span>
                             <template v-if="previewFeatureSearchSequenceFailure">
                                 <operation-error compact :error="previewFeatureSearchSequenceFailure.error" class="gfs-sequence-error"></operation-error>
                                 <button type="button"

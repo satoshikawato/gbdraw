@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "“显示标签”为“仅第一条记录”，因此除“标签可见性”为“开”的特征外，仅在第一条记录中绘制标签。",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "“显示标签”为“相似性组最上方记录”，因此除“标签可见性”为“开”的特征外，仅为该设置所选的特征绘制标签。",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "“{file}”已下载过。浏览器可能会替换该文件，或以新名称保存此文件。",
+  "\"{label}\"": "“{label}”",
   "\"{label}\" (deleted)": "“{label}”（已删除）",
   "\"{label}\" (not drawn)": "“{label}”（未绘制）",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "“条形”绘制一条简单的线，“标尺”绘制带刻度和标签的标尺。",

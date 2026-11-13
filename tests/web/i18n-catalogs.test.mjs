@@ -17,7 +17,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import {
-  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, numberText, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
+  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, numberText, pluralTranslation, sentenceBody, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
@@ -311,11 +311,16 @@ test('catalog check: placeholder sets and non-string or empty values; a stale ke
   }), [
     '"{count} rows": placeholders {n} differ from the English {count}'
   ]);
-  const withUndo = new Map([...english, ...keysOf(['Undo'], ['Blank'])]);
-  assert.deepEqual(catalogProblems(withUndo, { Undo: 1, Blank: ' \n' }), [
+  const withUndo = new Map([...english, ...keysOf(['Undo'], ['Blank'], ['Café'], ['Arrow'])]);
+  assert.deepEqual(catalogProblems(withUndo, { Undo: 1, Blank: ' \n', 'Café': 'Cafe\u0301', Arrow: '\u200F→' }), [
     '"Undo": the value is not a string',
-    '"Blank": the translation is empty'
+    '"Blank": the translation is empty',
+    '"Café": the text is not in Unicode NFC',
+    '"Arrow": the text holds a bidirectional control character'
   ]);
+  for (const control of ['\u061C', '\u200E', '\u202A', '\u202E', '\u2066', '\u2069']) {
+    assert.equal(catalogProblems(withUndo, { Arrow: `a${control}b` }).length, 1, control.codePointAt(0).toString(16));
+  }
   assert.deepEqual(catalogStatus(english.keys(), { 'Save Session': 'x', 'Load Session': 'y' }).stale, ['Load Session']);
 });
 
@@ -703,6 +708,12 @@ test('the UI languages are the seventeen of the Language menu, Latin script firs
     ['pl', 'Polski'], ['pt', 'Português'], ['vi', 'Tiếng Việt'], ['tr', 'Türkçe'],
     ['ru', 'Русский'], ['uk', 'Українська'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
+  // Upper-casing and tracking stay only in the cased scripts; Thai also gets the 12 px floor (index.html).
+  const tagsOf = (style) => UI_LOCALES.filter(({ textStyle }) => textStyle === style).map(({ tag }) => tag);
+  assert.deepEqual(['cased', 'no-caps', 'tall-marks'].map(tagsOf), [
+    ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'tr', 'ru', 'uk'], ['vi', 'ja', 'zh-Hans', 'zh-Hant', 'ko'], ['th']
+  ]);
+  assert.equal(tagsOf('cased').length + tagsOf('no-caps').length + tagsOf('tall-marks').length, UI_LOCALES.length);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
   for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'xx', null, undefined, 3, '../x']) {
@@ -734,6 +745,12 @@ test('two sentences are joined with a space in English, the other Latin-script l
   }
 });
 
+// OV-2782: a sentence set inside a template that ends it loses its own full stop first.
+test('OV-2782: a sentence body drops one final full stop of any UI script and keeps every other end', () => {
+  assert.deepEqual(['Done.', '完了しました。', 'Готово.', 'Wait...', 'Done', 'Done?', 'Done!', 'Loading…', 'เสร็จแล้ว', '。', '']
+    .map(sentenceBody), ['Done', '完了しました', 'Готово', 'Wait..', 'Done', 'Done?', 'Done!', 'Loading…', 'เสร็จแล้ว', '', '']);
+});
+
 test('a list keeps today\'s English and uses the locale\'s list pattern in every other locale', async () => {
   assert.equal(listText([]), '');
   assert.equal(listText(['A']), 'A');
@@ -741,7 +758,7 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
   assert.equal(listText(['A', 'B', 'C']), 'A, B, and C');
   assert.equal(listText(['A', 'B', 'C', '2 more']), 'A, B, C, and 2 more');
   try {
-    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
+    for (const tag of CATALOG_LOCALES) {
       await setUiLocale(tag, async () => ({ default: {} }));
       const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
       assert.equal(listText(['A']), 'A', tag);
@@ -760,17 +777,20 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
 });
 
 test('the shown locale sets the page language, and only a switch that applies does', async () => {
-  const root = { lang: 'en', setAttribute(name, value) { assert.equal(name, 'lang'); this.lang = value; } };
+  const root = { lang: 'en', textStyle: 'cased', setAttribute(name, value) { this[{ lang: 'lang', 'data-ui-text-style': 'textStyle' }[name]] = value; } };
   const previous = globalThis.document;
   globalThis.document = { documentElement: root };
   try {
     await setUiLocale('zh-Hant', async () => ({ default: {} }));
-    assert.equal(root.lang, 'zh-Hant');
+    assert.deepEqual([root.lang, root.textStyle], ['zh-Hant', 'no-caps']);
+    await setUiLocale('th', async () => ({ default: {} }));
+    assert.deepEqual([root.lang, root.textStyle], ['th', 'tall-marks']);
+    await setUiLocale('zh-Hant', async () => ({ default: {} }));
     await assert.rejects(setUiLocale('ja', async () => { throw new Error('offline'); }), /offline/);
-    assert.equal(root.lang, 'zh-Hant', 'a catalog that fails to load changes nothing');
+    assert.deepEqual([root.lang, root.textStyle], ['zh-Hant', 'no-caps'], 'a catalog that fails to load changes nothing');
     assert.equal(uiLocale.value, 'zh-Hant');
     await setUiLocale(SOURCE_LOCALE);
-    assert.equal(root.lang, 'en');
+    assert.deepEqual([root.lang, root.textStyle], ['en', 'cased']);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
     globalThis.document = previous;
@@ -843,6 +863,85 @@ test('a language with few and many forms: the `one` form is the text for exactly
   assert.deepEqual(shown({ '{count} row': 'one:{count}', '{count} rows': 'rows:{count}' }, [1, 21, 2, 5]), ['one:{count}', 'one:{count}', 'rows:{count}', 'rows:{count}']);
   assert.deepEqual(shown({ '{count} rows': 'rows:{count}' }, [1, 2, 5]), [null, 'rows:{count}', 'rows:{count}'],
     'a string value shows for few and many; a missing key is null, and tn() shows the English');
+});
+
+// The plural forms a catalog must give the `other` form of a tn() pair. A
+// string value shows the `one` text for every count the locale's rule calls
+// `one` and the `other` text for every other count; plural forms (an object)
+// give each category its text for every count but exactly 1.
+// - PLURAL_FORMS_NEEDED: the categories, besides `other`, of each locale whose
+//   object holds them for every pair.
+// - `many` in es, fr, it and pt (exact multiples of a million) shows the
+//   `other` text: Owner decision of 2026-11-08.
+// - A pair whose English `one` text has no {count} is a sentence about exactly
+//   one; where the locale's rule calls another count `one` (0 and fractions in
+//   fr and pt), the value is an object, so that count shows a plural text
+//   (OV-2779).
+const PLURAL_FORMS_NEEDED = Object.freeze({ pl: ['few', 'many'], ru: ['one', 'few', 'many'], uk: ['one', 'few', 'many'] });
+const MANY_SHOWS_OTHER = Object.freeze(['es', 'fr', 'it', 'pt']);
+// Counts other than exactly 1 that reach every category of the UI languages' rules.
+const PLURAL_SAMPLE = [0, 0.5, 1.5, ...Array.from({ length: 119 }, (_, index) => index + 2), 1000, 1000000, 1000001, 2000000];
+const otherThanOneCategories = (locale) => {
+  const rules = new Intl.PluralRules(locale);
+  return new Set(PLURAL_SAMPLE.map((count) => rules.select(count)));
+};
+
+/**
+ * The plural-form problems of one locale's catalog for the tn() pairs of the sources.
+ * @param {string} locale
+ * @param {Iterable<{ one: string, other: string }>} pairs
+ * @param {Readonly<Record<string, unknown>>} catalog
+ * @returns {string[]}
+ */
+const pluralFormProblems = (locale, pairs, catalog) => {
+  const needed = PLURAL_FORMS_NEEDED[locale] ?? [];
+  const categories = new Set(new Intl.PluralRules(locale).resolvedOptions().pluralCategories);
+  const oneBeyondOne = otherThanOneCategories(locale).has('one');
+  return [...pairs].flatMap(({ one, other }) => {
+    if (!Object.hasOwn(catalog, other)) return [];
+    const value = catalog[other];
+    const countless = oneBeyondOne && !one.includes('{count}');
+    if (typeof value !== 'object' || value === null) {
+      if (needed.length) return [`${JSON.stringify(other)}: ${locale} needs plural forms ${[...needed, 'other'].join(', ')}`];
+      return countless ? [`${JSON.stringify(other)}: ${locale} calls 0 or a fraction \`one\` and the \`one\` text has no {count}; give plural forms`] : [];
+    }
+    const missing = needed.filter((category) => !Object.hasOwn(value, category));
+    const foreign = Object.keys(value).filter((category) => !categories.has(category));
+    return [
+      ...(missing.length ? [`${JSON.stringify(other)}: ${locale} plural forms lack ${missing.join(', ')}`] : []),
+      ...(foreign.length ? [`${JSON.stringify(other)}: ${foreign.join(', ')} are not plural categories of ${locale}`] : [])
+    ];
+  });
+};
+
+test('plural form check: a locale needs the forms its rule selects for counts other than 1, each pair whose `one` has no {count} needs an object where 0 is `one`', () => {
+  const pairs = [{ one: '{count} row', other: '{count} rows' }, { one: 'one more', other: '{count} more' }];
+  assert.deepEqual(pluralFormProblems('de', pairs, { '{count} rows': 'x', '{count} more': 'y' }), []);
+  assert.deepEqual(pluralFormProblems('fr', pairs, { '{count} rows': 'x', '{count} more': 'y' }),
+    ['"{count} more": fr calls 0 or a fraction `one` and the `one` text has no {count}; give plural forms']);
+  assert.deepEqual(pluralFormProblems('fr', pairs, { '{count} rows': 'x', '{count} more': { other: 'y' } }), []);
+  assert.deepEqual(pluralFormProblems('pl', pairs, { '{count} rows': 'x', '{count} more': { other: 'y' } }), [
+    '"{count} rows": pl needs plural forms few, many, other',
+    '"{count} more": pl plural forms lack few, many'
+  ]);
+  assert.deepEqual(pluralFormProblems('ru', pairs, { '{count} rows': { one: 'a', few: 'b', many: 'c', other: 'd' }, '{count} more': { few: 'b', other: 'd', two: 'e' } }), [
+    '"{count} more": ru plural forms lack one, many',
+    '"{count} more": two are not plural categories of ru'
+  ]);
+  assert.deepEqual(pluralFormProblems('ja', pairs, {}), [], 'an empty catalog passes');
+});
+
+test('every locale\'s plural rule is covered by the plural form table, and every catalog gives the forms its locale needs', async () => {
+  for (const locale of CATALOG_LOCALES) {
+    const uncovered = [...otherThanOneCategories(locale)].filter((category) => category !== 'other' && category !== 'one'
+      && !(PLURAL_FORMS_NEEDED[locale] ?? []).includes(category) && !(category === 'many' && MANY_SHOWS_OTHER.includes(locale)));
+    assert.deepEqual(uncovered, [], `${locale}: add its categories to PLURAL_FORMS_NEEDED`);
+  }
+  const pairs = new Map(sourceCalls().filter((call) => call.plural).map(({ plural }) => [plural.other, plural]));
+  for (const locale of CATALOG_LOCALES) {
+    const { default: catalog } = await import(pathToFileURL(join(CATALOG_ROOT, `${locale}.js`)).href);
+    assert.deepEqual(pluralFormProblems(locale, pairs.values(), catalog), [], locale);
+  }
 });
 
 test('every `one` text of a tn() call is a catalog key', () => {

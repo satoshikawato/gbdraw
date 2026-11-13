@@ -64,6 +64,7 @@ const spyOnPort = (onCapture, onRestore = () => {}) => ({
   restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); }
 });
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
+const { setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
 
@@ -475,6 +476,19 @@ test('the dialog words each code once, in area order, at most 12 lines (12.3)', 
   assert.equal(long.path.length, 200);
   assert.equal(long.label.length, 60);
   assert.equal(long.stored.length, 60);
+});
+
+// OV-2783: a shown Legend entry is quoted by its own key, as its (deleted) and
+// (not drawn) siblings are, so a locale writes its own quotes.
+test('OV-2783: a Legend entry dropped for its color is quoted in the UI language', async () => {
+  const legend = (path, label) => loadRepair({ code: 'legend-color-dropped', path: `editorState.legend.${path}`, effect: 'dropped', label });
+  try {
+    await setUiLocale('ja', async () => ({ default: { '"{label}"': '「{label}」', '"{label}" (deleted)': '「{label}」（削除済み）' } }));
+    assert.deepEqual(describeLoadRepairs([legend('entries', 'A'), legend('deletedEntries', 'B')]).items,
+      ['Legend: entries 「A」、「B」（削除済み） had a color the app does not accept and were dropped.']);
+  } finally {
+    await setUiLocale('en');
+  }
 });
 
 // G1: the lossy Load texts have one owner. No other module words a repair.

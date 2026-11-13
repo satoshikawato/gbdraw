@@ -19,6 +19,9 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
+// - in every text style (en cased, ja no-caps, th tall-marks): the page's
+//   text style, the figure's English stack, and a truncated text cut at its
+//   sides only;
 // - at 1024x768, 1280x800 and 1440x900, in all 17 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
@@ -392,6 +395,31 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
       inside: inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5
     };
   })).toEqual({ size: '12px', inside: true });
+  expect(errors).toEqual([]);
+});
+
+// Each locale row names its text style (UI_LOCALES textStyle), and the page
+// carries it as data-ui-text-style; the figure keeps the English stack in every
+// style. A one-line text that ends with an ellipsis is cut at its sides only, so
+// no mark above or below the line is cut (English draws the same pixels).
+test('every text style keeps the figure in English type, and a truncated text is cut at its sides only', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await openApp(page);
+  // The Session label takes the shared `truncate` rule, as the History list and a record name do.
+  const truncated = page.locator('header .app-session-label');
+  const clipOf = () => truncated.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.overflowX, style.overflowY, style.textOverflow, style.minWidth];
+  });
+  for (const [tag, textStyle] of [['en', 'cased'], ['ja', 'no-caps'], ['th', 'tall-marks'], ['en', 'cased']]) {
+    await menu(page).selectOption(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
+    expect(await page.evaluate(() => document.documentElement.dataset.uiTextStyle)).toBe(textStyle);
+    expect(await page.evaluate(() => [...document.querySelectorAll('svg')].map((svg) => getComputedStyle(svg).fontFamily)
+      .every((family) => family.startsWith('Inter')))).toBe(true);
+    expect(await clipOf()).toEqual(['clip', 'visible', 'ellipsis', '0px']);
+  }
   expect(errors).toEqual([]);
 });
 

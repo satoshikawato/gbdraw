@@ -146,7 +146,7 @@ const legendListEntry = (repair) => {
   const list = repair.path.split('.').pop();
   if (list === 'dormantEntries') return t('"{label}" (not drawn)', { label });
   if (list === 'deletedEntries') return t('"{label}" (deleted)', { label });
-  return `"${label}"`;
+  return t('"{label}"', { label });
 };
 
 /** @param {LoadRepair} repair The collection is the last part of the path. */

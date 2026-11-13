@@ -7,7 +7,7 @@ import {
   normalizeLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import { comparisonStateForMode } from '../mode-profiles.js';
-import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, listText, msg, sentenceBody, t, tm, tn } from '../utils/i18n.js';
 /** @import { ComparisonState } from '../mode-profiles.js' */
 /** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @import { ProteinBlastpMode } from '../services/current-option-values.js' */
@@ -487,7 +487,7 @@ const projectIssues = (errors, edges) => {
     const pairLabel = pairLabelOf(edgeByKey.get(edgeKey));
     const pairText = code === 'missing-upload' ? t('No BLAST file') : tm(String(issue?.message || ''));
     const text = code === 'selected-losat-requires-pairwise' ? selectedPairsText(edgeList)
-      : pairLabel ? t('{pair}: {text}.', { pair: pairLabel, text: pairText }).replace(/\.\.$/, '.') : tm(String(issue?.message || ''));
+      : pairLabel ? t('{pair}: {text}.', { pair: pairLabel, text: sentenceBody(pairText) }) : tm(String(issue?.message || ''));
     return [Object.freeze({
       key: `${index}-${code}`,
       issueCode: code,

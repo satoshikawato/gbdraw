@@ -99,6 +99,10 @@ export const catalogPath = (locale, root = CATALOG_ROOT) => {
 /** @param {string} locale @param {string} [root] @returns {CatalogFile} */
 export const readCatalog = (locale, root = CATALOG_ROOT) => parseCatalog(readFileSync(catalogPath(locale, root), 'utf8'));
 
+// The bidirectional controls: ALM, LRM, RLM, LRE..RLO, LRI..PDI. The page
+// sets the direction of a text by `dir`, never by a control inside it.
+const BIDI_CONTROL = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
+
 /**
  * The problem of one text against its English text, or null.
  * @param {string} where the key, quoted, and the plural category of a form
@@ -108,6 +112,8 @@ export const readCatalog = (locale, root = CATALOG_ROOT) => parseCatalog(readFil
 const textProblem = (where, english, value) => {
   if (typeof value !== 'string') return `${where}: the value is not a string`;
   if (!value.trim()) return `${where}: the translation is empty`;
+  if (value !== value.normalize('NFC')) return `${where}: the text is not in Unicode NFC`;
+  if (BIDI_CONTROL.test(value)) return `${where}: the text holds a bidirectional control character`;
   const expected = placeholdersOf(english);
   const actual = placeholdersOf(value);
   return expected.join() === actual.join() ? null
@@ -116,7 +122,8 @@ const textProblem = (where, english, value) => {
 
 /**
  * The problems of one translation against its source key: a value that is
- * not a string, empty, or with placeholders that differ from the English.
+ * not a string, empty, not in NFC, with a bidirectional control character, or
+ * with placeholders that differ from the English.
  * The value of the `other` form of a `tn()` pair (`plural.other`) may
  * instead be plural forms (`PluralForms`): an object of CLDR categories with
  * `other`, each form checked like a string. The `one` form's value is the

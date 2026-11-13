@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "“แสดงป้ายกำกับ” เป็น “ระเบียนแรกเท่านั้น” จึงวาดป้ายกำกับเฉพาะในระเบียนแรก เว้นแต่จะตั้งค่า “การมองเห็นป้ายกำกับ” ของฟีเจอร์เป็น “เปิด”",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "“แสดงป้ายกำกับ” เป็น “ระเบียนบนสุดของกลุ่มความคล้ายคลึง” จึงวาดป้ายกำกับเฉพาะฟีเจอร์ที่การตั้งค่านี้เลือก เว้นแต่จะตั้งค่า “การมองเห็นป้ายกำกับ” ของฟีเจอร์เป็น “เปิด”",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "ดาวน์โหลด “{file}” ไปแล้ว เบราว์เซอร์อาจแทนที่ไฟล์นั้นหรือบันทึกไฟล์นี้ด้วยชื่อใหม่",
+  "\"{label}\"": "“{label}”",
   "\"{label}\" (deleted)": "“{label}” (ลบแล้ว)",
   "\"{label}\" (not drawn)": "“{label}” (ไม่ได้วาด)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "“แถบ” วาดเส้นแบบง่าย “ไม้บรรทัด” วาดไม้บรรทัดพร้อมขีดและป้ายกำกับ",

@@ -6,6 +6,7 @@ export default Object.freeze({
   "\"Show Labels\" is \"First Record Only\", so labels are drawn only in the first record unless a feature has Label visibility \"On\".": "Bei „Beschriftungen anzeigen“ ist „Nur der erste Datensatz“ eingestellt; daher werden Beschriftungen nur im ersten Datensatz gezeichnet, es sei denn, bei einem Feature ist die Sichtbarkeit der Beschriftung auf „Ein“ gesetzt.",
   "\"Show Labels\" is \"Top Similarity Group Record\", so labels are drawn only for the features that setting selects, unless a feature has Label visibility \"On\".": "Bei „Beschriftungen anzeigen“ ist „Oberster Datensatz der Ähnlichkeitsgruppe“ eingestellt; daher werden Beschriftungen nur für die durch diese Einstellung ausgewählten Features gezeichnet, es sei denn, bei einem Feature ist die Sichtbarkeit der Beschriftung auf „Ein“ gesetzt.",
   "\"{file}\" was already downloaded. Your browser may replace that file or save this one under a new name.": "„{file}“ wurde bereits heruntergeladen. Ihr Browser ersetzt die vorhandene Datei möglicherweise oder speichert die neue Datei unter einem anderen Namen.",
+  "\"{label}\"": "„{label}“",
   "\"{label}\" (deleted)": "„{label}“ (gelöscht)",
   "\"{label}\" (not drawn)": "„{label}“ (nicht gezeichnet)",
   "'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels.": "Bei „Balken“ wird eine einfache Linie gezeichnet, bei „Lineal“ ein Lineal mit Teilstrichen und Beschriftungen.",
