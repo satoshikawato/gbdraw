@@ -9,6 +9,7 @@ import json
 import re
 import socketserver
 import sys
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,11 @@ except ImportError as exc:  # pragma: no cover - dependency guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from gbdraw.session_container import read_session_container  # noqa: E402
+
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 GALLERY_ROOT = WEB_ROOT / "gallery"
 GALLERY_TUTORIAL_ROOT = GALLERY_ROOT / "tutorials"
@@ -71,6 +77,7 @@ CAPTURE_ACTION_TYPES = frozenset(
         "resetSettings",
         "generate",
         "upload",
+        "drag",
     }
 )
 CAPTURE_SELECT_MENU_SELECTOR = ".gbdraw-capture-select-menu"
@@ -552,9 +559,97 @@ def add_step_replay_validation(
             )
         elif action_type == "upload":
             try:
-                resolve_upload_file(action)
+                session_upload_name(action) if "sessionFile" in action else resolve_upload_file(action)
             except ValueError as error:
                 result.errors.append(f"{context.label}: replay action {index} {error}")
+        elif action_type == "drag" and (problem := drag_action_problem(action)):
+            result.errors.append(f"{context.label}: replay action {index} {problem}")
+
+
+def drag_action_problem(action: dict[str, Any]) -> str | None:
+    """What a `drag` lacks: a record ID, two of its bases (1-based, in its file), and a window index if any."""
+
+    def whole(value: Any, low: int) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= low
+
+    if not as_text(action.get("record")):
+        return "drag needs the record ID it is made on."
+    if not (whole(action.get("from"), 1) and whole(action.get("to"), 1)):
+        return "drag needs `from` and `to`, bases of the record counted from 1."
+    if "window" in action and not whole(action.get("window"), 0):
+        return "drag `window` must be the index (from 0) of one window of the record."
+    return None
+
+
+def add_created_drawings_validation(result: ValidationResult, example_id: str, tutorial: dict[str, Any]) -> None:
+    """`createdDrawings`: each drawing a manual step's replay creates, by its drawing ID and that step.
+
+    The Gallery Session holds them; the replay starts without them (`replay_tutorial_steps`).
+    """
+
+    steps = as_array(tutorial.get("manualSteps"))
+    seen: set[str] = set()
+    for index, entry in enumerate(as_array(tutorial.get("createdDrawings")), start=1):
+        label = f"{example_id}: createdDrawings {index}"
+        drawing_id = as_text(entry.get("id")) if isinstance(entry, dict) else ""
+        step = entry.get("step") if isinstance(entry, dict) else None
+        if not drawing_id:
+            result.errors.append(f"{label} needs the drawing ID of the drawing a step creates.")
+        elif drawing_id in seen:
+            result.errors.append(f"{label} names {drawing_id} twice.")
+        elif not (isinstance(step, int) and not isinstance(step, bool) and 1 <= step <= len(steps)):
+            result.errors.append(f"{label} must name the manual step (1 to {len(steps)}) that creates {drawing_id}.")
+        elif not (isinstance(steps[step - 1], dict) and as_array(steps[step - 1].get("replay"))):
+            result.errors.append(f"{label} names manual step {step}, which has no replay to create {drawing_id}.")
+        seen.add(drawing_id)
+
+
+def session_upload_name(action: dict[str, Any]) -> str:
+    """The file an `upload` action chooses from the capture's Gallery Session, by the name it was uploaded as.
+
+    A reader downloads that file from Files (an input the Session holds, such as a genome too large for
+    gbdraw/web); the replay writes the Session's copy under that name and chooses it.
+    """
+
+    name = as_text(action.get("sessionFile"))
+    if not as_text(action.get("selector")):
+        raise ValueError("upload needs the selector of the button that opens the file chooser.")
+    if "path" in action:
+        raise ValueError("upload names a file by `path` or by `sessionFile`, not both.")
+    if not name or Path(name).name != name:
+        raise ValueError(f"upload sessionFile must be the file name an input of the Session was uploaded as: {name or '(none)'}")
+    return name
+
+
+def session_input_file_bytes(session_path: Path, name: str) -> bytes:
+    """The bytes of the input file of a Session container that was uploaded as `name`."""
+
+    container = read_session_container(session_path)
+    web_files = container.document.get("webFiles")
+    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, dict) else None
+    resource_ids = sorted(
+        resource_id for resource_id, original in (original_names or {}).items() if original == name
+    )
+    if not resource_ids:
+        raise RuntimeError(f"upload: {session_path.name} holds no input file named {name}.")
+    with container.resource(resource_ids[0]).open_bytes() as stream:
+        return stream.read()
+
+
+@contextlib.contextmanager
+def upload_file(action: dict[str, Any], session_path: Path | None):
+    """The local file an `upload` chooses: under gbdraw/web (`path`), or the Session's copy (`sessionFile`)."""
+
+    if "sessionFile" not in action:
+        yield resolve_upload_file(action)
+        return
+    name = session_upload_name(action)
+    if session_path is None:
+        raise RuntimeError(f"upload: {name} comes from the capture's Session, and this capture loads none.")
+    with tempfile.TemporaryDirectory(prefix="gbdraw-capture-upload-") as folder:
+        path = Path(folder) / name
+        path.write_bytes(session_input_file_bytes(session_path, name))
+        yield path
 
 
 def resolve_upload_file(action: dict[str, Any]) -> Path:
@@ -611,6 +706,7 @@ def validate_tutorial_media(
                     max_file_size_kb=max_file_size_kb,
                 )
 
+        add_created_drawings_validation(result, as_text(sample.get("id")), tutorial)
         for context, operation in iter_operation_contexts(sample, tutorial):
             result.operation_count += 1
             example_operation_count += 1
@@ -785,7 +881,7 @@ def assert_capture_records_read(page) -> None:
         )
 
 
-def apply_capture_action(page, action: dict[str, Any]) -> None:
+def apply_capture_action(page, action: dict[str, Any], session_path: Path | None = None) -> None:
     action_type = as_text(action.get("type")) or as_text(action.get("action"))
     selector = as_text(action.get("selector"))
     value = action.get("value")
@@ -834,15 +930,113 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
     elif action_type == "generate":
         generate_and_wait(page, int(action.get("timeout") or DEFAULT_GENERATE_TIMEOUT_MS))
     elif action_type == "upload":
-        path = resolve_upload_file(action)
-        with page.expect_file_chooser() as chooser:
-            page.locator(selector).first.click()
-        chooser.value.set_files(str(path))
+        with upload_file(action, session_path) as path:
+            with page.expect_file_chooser() as chooser:
+                page.locator(selector).first.click()
+            chooser.value.set_files(str(path))
+    elif action_type == "drag":
+        drag_between_bases(page, action)
     else:
         raise RuntimeError(f"Unsupported capture action: {action_type}")
     # The next action measures what this one moved: a zoom or pan moves the preview in a
     # 0.2 s transition, and a box read before it ends is the old one (OV-2280).
     wait_for_css_transitions(page)
+
+
+# The records of the shown Result whose axis Python wrote, read by the preview's own reader.
+SHOWN_AXIS_RECORDS_SCRIPT = """
+async () => {
+  const { state } = await import('./js/state.js');
+  const { shownAxisRecords } = await import('./js/services/region-axis.js');
+  return shownAxisRecords(state);
+}
+"""
+
+# Points of a record's axis frame on the screen. `sourceBaseAt`, the preview's map from a drawn
+# base to the file's, checks each display index `drag_frame_points` found.
+AXIS_POINTS_TO_SCREEN_SCRIPT = """
+async ({ recordIndex, points }) => {
+  const { state } = await import('./js/state.js');
+  const { shownAxisRecords, regionAxisFrame, sourceBaseAt } = await import('./js/services/region-axis.js');
+  const record = shownAxisRecords(state).find((entry) => entry.recordIndex === recordIndex);
+  const frame = regionAxisFrame(state.svgContainer.value?.querySelector('svg') ?? document, recordIndex);
+  if (!record || !frame) return { error: `the shown Result draws no record ${recordIndex}` };
+  const wrong = points.find((point) => sourceBaseAt(record.axis.source, point.index) !== point.base);
+  if (wrong) return { error: `display index ${wrong.index} shows base ${sourceBaseAt(record.axis.source, wrong.index)}, not ${wrong.base}` };
+  const matrix = frame.getScreenCTM();
+  if (!matrix) return { error: 'the record is not on the screen' };
+  const screen = points.map((point) => new DOMPoint(point.x, point.y).matrixTransform(matrix));
+  if (screen.some(({ x, y }) => x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight)) {
+    return { error: 'a drag end is outside the viewport' };
+  }
+  return { points: screen.map(({ x, y }) => ({ x, y })) };
+}
+"""
+
+
+def drag_frame_points(records: list[dict[str, Any]], action: dict[str, Any]) -> dict[str, Any]:
+    """Where a `drag` presses and releases, in the record's axis frame.
+
+    `records` are the shown Result's axis records (`shownAxisRecords` in services/region-axis.js).
+    The drag names a record by its ID (and a window by its index when the record is drawn in
+    several) and two of its bases, 1-based in the input file. Each end is the middle of the drawn
+    base on its Linear row, half way across the feature tracks, so the preview's
+    `linearRowPosition` reads it back as that base; a drag stays on one row.
+    """
+
+    record_id = as_text(action.get("record"))
+    matches = [record for record in records if record.get("recordId") == record_id]
+    if "window" in action:
+        matches = [record for record in matches if record.get("windowIndex") == action.get("window")]
+    if not matches:
+        raise ValueError(f"drag: the shown Result draws no record {record_id} (window {action.get('window', '-')})")
+    if len(matches) > 1:
+        raise ValueError(f"drag: {record_id} is drawn in {len(matches)} windows; name one with `window`.")
+    record = matches[0]
+    axis = record["axis"]
+    if axis.get("kind") != "linear":
+        raise ValueError("drag: only a Linear record's axis is supported.")
+    source = axis["source"]
+    points: list[dict[str, Any]] = []
+    rows: set[int] = set()
+    for base in (int(action["from"]), int(action["to"])):
+        # The inverse of `sourceBaseAt` (mod(anchorBase - 1 + step * index, length) + 1);
+        # the page checks it with `sourceBaseAt` itself.
+        index = (source["step"] * (base - source["anchorBase"])) % source["sourceLength"]
+        row = next(
+            (number for number, row in enumerate(axis["rows"]) if row["displayStart"] <= index < row["displayEnd"]),
+            None,
+        )
+        if row is None:
+            raise ValueError(f"drag: base {base} of {record_id} is not drawn.")
+        drawn = axis["rows"][row]
+        fraction = (index + 0.5 - drawn["displayStart"]) / (drawn["displayEnd"] - drawn["displayStart"])
+        points.append(
+            {
+                "base": base,
+                "index": index,
+                "x": drawn["xStartPx"] + fraction * (drawn["xEndPx"] - drawn["xStartPx"]),
+                "y": (drawn["bandTopPx"] + drawn["bandBottomPx"]) / 2,
+            }
+        )
+        rows.add(row)
+    if len(rows) > 1:
+        raise ValueError(f"drag: bases {action['from']} and {action['to']} of {record_id} are not on one row.")
+    return {"recordIndex": record["recordIndex"], "points": points}
+
+
+def drag_between_bases(page, action: dict[str, Any]) -> None:
+    """A reader's drag with Select region on, from one base of a record to another (real mouse events)."""
+
+    mapped = drag_frame_points(page.evaluate(SHOWN_AXIS_RECORDS_SCRIPT), action)
+    screen = page.evaluate(AXIS_POINTS_TO_SCREEN_SCRIPT, mapped)
+    if not isinstance(screen, dict) or "points" not in screen:
+        raise RuntimeError(f"drag: {screen.get('error') if isinstance(screen, dict) else screen}")
+    start, end = screen["points"]
+    page.mouse.move(start["x"], start["y"])
+    page.mouse.down()
+    page.mouse.move(end["x"], end["y"], steps=8)
+    page.mouse.up()
 
 
 def generate_and_wait(page, timeout_ms: int) -> None:
@@ -865,17 +1059,50 @@ def generate_and_wait(page, timeout_ms: int) -> None:
         raise RuntimeError(f"Generate Diagram failed: {error}")
 
 
-def replay_tutorial_steps(page, sample: dict[str, Any], through: int) -> None:
-    """Reset Settings, then perform the reader's actions of manual steps 1..through."""
+def replay_tutorial_steps(page, sample: dict[str, Any], through: int, session_path: Path | None = None) -> None:
+    """Start as the reader did, then perform the reader's actions of manual steps 1..through.
+
+    The start: the Session without the drawings its steps create (`createdDrawings`, by drawing
+    ID; a replay through the creating step creates each again), and Reset Settings.
+    """
 
     tutorial_path = resolve_gallery_reference(as_text(sample.get("tutorial")))
     if tutorial_path is None:
         raise RuntimeError(f"Tutorial path for {sample.get('id')} is not local.")
-    steps = as_array(read_json(tutorial_path).get("manualSteps"))[:through]
+    tutorial = read_json(tutorial_path)
+    steps = as_array(tutorial.get("manualSteps"))[:through]
+    for entry in as_array(tutorial.get("createdDrawings")):
+        remove_drawing(page, as_text(entry.get("id")))
     apply_capture_action(page, {"type": "resetSettings"})
     for step in steps:
         for action in as_array(step.get("replay") if isinstance(step, dict) else None):
-            apply_capture_action(page, action)
+            apply_capture_action(page, action, session_path)
+
+
+def remove_drawing(page, drawing_id: str) -> None:
+    """Delete a drawing by its ID through its tab's Drawing menu, confirming when the app asks."""
+
+    tab = page.locator(f'.drawing-bar [role="tab"][data-drawing-id="{drawing_id}"]')
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('.drawing-bar [role=\"tab\"]')].every((tab) => !tab.disabled)",
+        timeout=DEFAULT_GENERATE_TIMEOUT_MS,
+    )
+    tab.click()
+    menu = page.locator(".drawing-bar-menu")
+    menu.locator("summary").click()
+    menu.get_by_role("button", name="Delete drawing", exact=True).click()
+    # The app asks only for a drawing with a Result or edits.
+    confirm = page.get_by_role("dialog").filter(has=page.get_by_role("button", name="Delete drawing", exact=True))
+    page.wait_for_function(
+        """(id) => !document.querySelector(`.drawing-bar [role="tab"][data-drawing-id="${id}"]`)
+          || [...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes('Keep drawing'))""",
+        arg=drawing_id,
+        timeout=DEFAULT_GENERATE_TIMEOUT_MS,
+    )
+    if confirm.count():
+        confirm.get_by_role("button", name="Delete drawing", exact=True).click()
+    tab.wait_for(state="detached")
+    wait_for_css_transitions(page)
 
 
 def open_capture_details(page, titles: Any) -> None:
@@ -1472,7 +1699,7 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
             page.add_style_tag(content=f"{SESSION_FILE_CHOOSER_SELECTOR} {{ display: none !important; }}")
         replay_through = capture.get("replayThrough")
         if isinstance(replay_through, int):
-            replay_tutorial_steps(page, sample, replay_through)
+            replay_tutorial_steps(page, sample, replay_through, session_path)
         # After the replay, so the read meets the settings of the reader's step, as an upload
         # does: a read that finds one record opens the single-record panel only when those
         # settings allow it.

@@ -874,7 +874,7 @@ def test_replay_resets_then_performs_steps_through_the_named_one(
     )
     performed: list[dict[str, object]] = []
     monkeypatch.setattr(capture_tool, "resolve_gallery_reference", lambda reference: tutorial)
-    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action: performed.append(action))
+    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action, session_path=None: performed.append(action))
 
     capture_tool.replay_tutorial_steps(object(), {"tutorial": "./tutorials/x.json"}, 3)
 
@@ -883,6 +883,263 @@ def test_replay_resets_then_performs_steps_through_the_named_one(
         {"type": "fill", "value": "one"},
         {"type": "generate"},
     ]
+
+
+def test_replay_first_removes_the_drawings_the_tutorial_creates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Gallery Session holds the drawing a step creates; the replay starts without it, by its ID."""
+
+    tutorial = tmp_path / "tutorial.json"
+    tutorial.write_text(
+        json.dumps(
+            {
+                "createdDrawings": [{"id": "linear-2", "step": 2}],
+                "manualSteps": [
+                    {"replay": [{"type": "fill", "value": "one"}]},
+                    {"replay": [{"type": "click", "selector": "create"}]},
+                    {"replay": [{"type": "generate"}]},
+                ],
+            }
+        )
+    )
+    performed: list[object] = []
+    monkeypatch.setattr(capture_tool, "resolve_gallery_reference", lambda reference: tutorial)
+    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action, session_path=None: performed.append(action))
+    monkeypatch.setattr(capture_tool, "remove_drawing", lambda page, drawing_id: performed.append(("remove", drawing_id)))
+
+    capture_tool.replay_tutorial_steps(object(), {"tutorial": "./tutorials/x.json"}, 1)
+    before_creation = list(performed)
+    performed.clear()
+    capture_tool.replay_tutorial_steps(object(), {"tutorial": "./tutorials/x.json"}, 3)
+
+    assert before_creation == [("remove", "linear-2"), {"type": "resetSettings"}, {"type": "fill", "value": "one"}]
+    assert performed == [
+        ("remove", "linear-2"),
+        {"type": "resetSettings"},
+        {"type": "fill", "value": "one"},
+        {"type": "click", "selector": "create"},
+        {"type": "generate"},
+    ]
+
+
+def test_created_drawings_name_a_drawing_id_and_the_replayed_step_that_creates_it() -> None:
+    result = ValidationResult(errors=[], warnings=[])
+    tutorial = {
+        "createdDrawings": [
+            {"id": "linear-2", "step": 2},
+            {"id": "linear-2", "step": 2},
+            {"id": "", "step": 2},
+            {"id": "linear-3", "step": 1},
+            {"id": "linear-4", "step": 4},
+            "linear-5",
+        ],
+        "manualSteps": [{"title": "no replay"}, {"replay": [{"type": "generate"}]}],
+    }
+
+    capture_tool.add_created_drawings_validation(result, "current-example", tutorial)
+
+    assert [error.split(": ", 1)[1].split(" ")[1] for error in result.errors] == ["2", "3", "4", "5", "6"]
+    assert "twice" in result.errors[0]
+
+
+def _axis_record(record_index: int, record_id: str, *, step: int = 1, window: int | None = None, rows=None) -> dict:
+    return {
+        "resultIndex": 0,
+        "recordIndex": record_index,
+        "recordKey": f"key-{record_index}",
+        "recordId": record_id,
+        "windowIndex": window,
+        "axis": {
+            "kind": "linear",
+            "rows": rows
+            or [
+                {"xStartPx": 0, "xEndPx": 1000, "yPx": 20, "bandTopPx": 10, "bandBottomPx": 30,
+                 "displayStart": 0, "displayEnd": 1000}
+            ],
+            "source": {"anchorBase": 1 if step == 1 else 1000, "recordBase": 1, "step": step,
+                       "sourceLength": 1000, "drawnLength": 1000, "isCircular": False},
+        },
+    }
+
+
+def test_drag_maps_the_named_record_bases_to_the_middle_of_their_drawn_bases() -> None:
+    """A drag's ends are a record's bases in its file; the axis Python wrote places them."""
+
+    forward = capture_tool.drag_frame_points([_axis_record(0, "NC_1")], {"record": "NC_1", "from": 101, "to": 201})
+    reverse = capture_tool.drag_frame_points(
+        [_axis_record(0, "NC_0"), _axis_record(1, "NC_1", step=-1)], {"record": "NC_1", "from": 101, "to": 201}
+    )
+
+    assert forward == {
+        "recordIndex": 0,
+        "points": [{"base": 101, "index": 100, "x": 100.5, "y": 20.0}, {"base": 201, "index": 200, "x": 200.5, "y": 20.0}],
+    }
+    # Reverse-complemented: base 101 is drawn at display index 899 (1000 - 101).
+    assert reverse["recordIndex"] == 1
+    assert [(point["index"], point["x"]) for point in reverse["points"]] == [(899, 899.5), (799, 799.5)]
+
+
+def test_drag_names_one_window_of_a_record_drawn_in_several() -> None:
+    rows = [{"xStartPx": 0, "xEndPx": 100, "yPx": 20, "bandTopPx": 10, "bandBottomPx": 30,
+             "displayStart": 500, "displayEnd": 600}]
+    records = [_axis_record(0, "NC_1", window=0), _axis_record(1, "NC_1", window=1, rows=rows)]
+
+    with pytest.raises(ValueError, match="window"):
+        capture_tool.drag_frame_points(records, {"record": "NC_1", "from": 501, "to": 551})
+    mapped = capture_tool.drag_frame_points(records, {"record": "NC_1", "window": 1, "from": 501, "to": 551})
+    assert mapped["recordIndex"] == 1
+    assert [point["x"] for point in mapped["points"]] == [0.5, 50.5]
+    with pytest.raises(ValueError, match="not drawn"):
+        capture_tool.drag_frame_points(records, {"record": "NC_1", "window": 1, "from": 401, "to": 551})
+    with pytest.raises(ValueError, match="NC_9"):
+        capture_tool.drag_frame_points(records, {"record": "NC_9", "from": 1, "to": 2})
+
+
+def test_drag_stays_on_one_row_of_a_wrapped_record() -> None:
+    rows = [
+        {"xStartPx": 0, "xEndPx": 500, "yPx": 20, "bandTopPx": 10, "bandBottomPx": 30, "displayStart": 0, "displayEnd": 500},
+        {"xStartPx": 0, "xEndPx": 500, "yPx": 80, "bandTopPx": 70, "bandBottomPx": 90, "displayStart": 500, "displayEnd": 1000},
+    ]
+    records = [_axis_record(0, "NC_1", rows=rows)]
+
+    assert capture_tool.drag_frame_points(records, {"record": "NC_1", "from": 601, "to": 701})["points"][0]["y"] == 80.0
+    with pytest.raises(ValueError, match="one row"):
+        capture_tool.drag_frame_points(records, {"record": "NC_1", "from": 101, "to": 701})
+
+
+def test_drag_action_presses_and_moves_the_mouse_between_the_mapped_screen_points() -> None:
+    events: list[object] = []
+    records = [_axis_record(0, "NC_1")]
+
+    class FakeMouse:
+        def move(self, x: float, y: float, steps: int = 1) -> None:
+            events.append(("move", x, y, steps))
+
+        def down(self) -> None:
+            events.append("down")
+
+        def up(self) -> None:
+            events.append("up")
+
+    class FakePage:
+        mouse = FakeMouse()
+
+        def evaluate(self, script: str, arg: object = None) -> object:
+            if arg is None:
+                events.append("evaluate")
+                return records if "shownAxisRecords" in script and "getScreenCTM" not in script else None
+            events.append(("to screen", arg))
+            return {"points": [{"x": 10, "y": 20}, {"x": 30, "y": 20}]}
+
+    capture_tool.apply_capture_action(FakePage(), {"type": "drag", "record": "NC_1", "from": 101, "to": 201})
+
+    assert events[0] == "evaluate"
+    assert events[1] == (
+        "to screen",
+        capture_tool.drag_frame_points(records, {"record": "NC_1", "from": 101, "to": 201}),
+    )
+    assert events[2:6] == [("move", 10, 20, 1), "down", ("move", 30, 20, 8), "up"]
+
+
+def test_step_replay_checks_a_drag_names_a_record_and_two_bases() -> None:
+    result = ValidationResult(errors=[], warnings=[])
+    step = {
+        "replay": [
+            {"type": "drag", "record": "NC_1", "from": 1, "to": 2},
+            {"type": "drag", "record": "NC_1", "window": 0, "from": 1, "to": 2},
+            {"type": "drag", "from": 1, "to": 2},
+            {"type": "drag", "record": "NC_1", "from": 0, "to": 2},
+            {"type": "drag", "record": "NC_1", "from": 1, "to": "2"},
+            {"type": "drag", "record": "NC_1", "window": -1, "from": 1, "to": 2},
+        ]
+    }
+
+    add_step_replay_validation(result, _manual_context(1), step)
+
+    assert [error.split(": ", 1)[1].split(" ")[2] for error in result.errors] == ["3", "4", "5", "6"]
+    assert all("drag" in error for error in result.errors)
+
+
+def test_step_replay_checks_an_upload_from_the_session_names_one_file_and_a_chooser() -> None:
+    result = ValidationResult(errors=[], warnings=[])
+    step = {
+        "replay": [
+            {"type": "upload", "selector": "#add", "sessionFile": "NZ_CP011937.1.gbk"},
+            {"type": "upload", "selector": "#add", "sessionFile": "NZ_CP011937.1.gbk", "path": "gallery/files/x.tsv"},
+            {"type": "upload", "sessionFile": "NZ_CP011937.1.gbk"},
+            {"type": "upload", "selector": "#add", "sessionFile": "inputs/NZ_CP011937.1.gbk"},
+            {"type": "upload", "selector": "#add", "sessionFile": ""},
+        ]
+    }
+
+    add_step_replay_validation(result, _manual_context(1), step)
+
+    assert [error.split(": ", 1)[1].split(" ")[2] for error in result.errors] == ["2", "3", "4", "5"]
+    assert "not both" in result.errors[0]
+
+
+def test_upload_from_the_session_chooses_its_copy_of_the_named_input(tmp_path: Path) -> None:
+    """A reader downloads a genome from Files; the replay chooses the Session's bytes under that name."""
+
+    from gbdraw.session_container import BytesResourceSource, write_session_container
+    from gbdraw.session_contract import CURRENT_SESSION_VERSION
+
+    genbank = b"LOCUS       NZ_CP011937 10 bp DNA\n//\n"
+    session = tmp_path / "example.gbdraw"
+    write_session_container(
+        {
+            "version": CURRENT_SESSION_VERSION,
+            "resources": {"record-2-genbank": {"size": len(genbank)}},
+            "webFiles": {"resourceOriginalNames": {"record-2-genbank": "NZ_CP011937.1.gbk"}},
+        },
+        {"record-2-genbank": BytesResourceSource(genbank)},
+        session,
+    )
+    chosen: list[tuple[str, bytes]] = []
+
+    class FakeChooser:
+        def set_files(self, path: str) -> None:
+            chosen.append((Path(path).name, Path(path).read_bytes()))
+
+    class FakeChooserEvent:
+        value = FakeChooser()
+
+        def __enter__(self) -> "FakeChooserEvent":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    class FakeLocator:
+        first = None
+
+        def click(self) -> None:
+            chosen.append(("click", b""))
+
+    FakeLocator.first = FakeLocator()
+
+    class FakePage:
+        def expect_file_chooser(self) -> FakeChooserEvent:
+            return FakeChooserEvent()
+
+        def locator(self, selector: str) -> FakeLocator:
+            return FakeLocator()
+
+        def evaluate(self, script: str, arg: object = None) -> object:
+            return None
+
+        def wait_for_function(self, script: str, **kwargs: object) -> None:
+            return None
+
+    action = {"type": "upload", "selector": "#add", "sessionFile": "NZ_CP011937.1.gbk"}
+    capture_tool.apply_capture_action(FakePage(), action, session)
+
+    assert chosen == [("click", b""), ("NZ_CP011937.1.gbk", genbank)]
+    with pytest.raises(RuntimeError, match="holds no input file named other.gbk"):
+        capture_tool.apply_capture_action(FakePage(), {**action, "sessionFile": "other.gbk"}, session)
+    with pytest.raises(RuntimeError, match="loads none"):
+        capture_tool.apply_capture_action(FakePage(), action)
 
 
 def test_reset_settings_waits_for_the_diagram_update_to_finish() -> None:
@@ -1111,8 +1368,8 @@ def test_session_capture_reads_the_records_as_the_readers_upload_did(
     monkeypatch.setattr(capture_tool, "load_web_app_session", lambda page, path: events.append("load session"))
     monkeypatch.setattr(capture_tool, "dismiss_session_notice", lambda page: events.append("dismiss Session notice"))
     monkeypatch.setattr(capture_tool, "inspect_shown_records", lambda page: events.append("read records"))
-    monkeypatch.setattr(capture_tool, "replay_tutorial_steps", lambda page, sample, through: events.append("replay"))
-    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action: events.append("action"))
+    monkeypatch.setattr(capture_tool, "replay_tutorial_steps", lambda page, sample, through, session_path=None: events.append("replay"))
+    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action, session_path=None: events.append("action"))
     sample = load_ready_examples("HmmtDNA_ATskew")[0]
     capture: dict[str, object] = {"source": "webapp", "actions": [{"type": "wait"}]}
     if fresh_page:

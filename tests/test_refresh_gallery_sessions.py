@@ -2474,6 +2474,39 @@ def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> 
         _validate_staged_gallery_session_49(tmp_path / "two-drawn.gbdraw", two_drawn)
 
 
+def test_gallery_session_keeps_a_render_only_for_its_shown_drawing() -> None:
+    """A tutorial that creates its shown drawing from another keeps that one undrawn.
+
+    The refresh leaves every drawing but the one the Web app opens without a
+    render, as the Web leaves a drawing without a Result set, so the Session
+    meets the one-drawn-drawing rule; a Session that meets it is left as it is.
+    """
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = {
+        "createdAt": "2026-01-02T00:00:00Z",
+        **_staged_geometry_session(mode="linear", records=None),
+        "runMetadata": {"tool": "gbdraw"},
+        "cliInvocation": {"argv": ["gbdraw", "linear"]},
+    }
+    document = _drawings_document(
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=1, project_views=[view, view]
+    )
+    shown_before = copy.deepcopy(document["drawings"][1])
+
+    assert refresh_gallery_sessions_module._keep_render_of_shown_drawing(document) == 1
+
+    reference, shown = document["drawings"]
+    assert reference["renderRequest"] is None
+    assert reference["results"] == []
+    assert reference["editorState"]["featureCatalog"] is None
+    assert "runMetadata" not in reference and "cliInvocation" not in reference
+    assert shown == shown_before
+    assert refresh_gallery_sessions_module._gallery_view(document)[1] == "linear-2"
+    assert refresh_gallery_sessions_module._keep_render_of_shown_drawing(document) == 0
+
+
 def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_validate_session(
     tmp_path: Path,
 ) -> None:
