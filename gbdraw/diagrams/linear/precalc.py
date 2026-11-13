@@ -197,6 +197,7 @@ def _precalculate_label_dimensions(
     all_labels_by_record: list[list[LinearLabel]] = []
     record_label_heights: list[float] = []
     label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
+    canvas_geometry = canvas_config.geometry()
 
     for i, record in enumerate(records):
         if not profile.record_has_labels(i):
@@ -231,10 +232,9 @@ def _precalculate_label_dimensions(
             feature_dict,
             record_length,
             float(sequence_widths[i]),
-            canvas_config.cds_height,
+            canvas_geometry,
             profile.strandedness,
             render_context.feature_track_layout,
-            canvas_config.track_axis_gap,
             profile=profile,
             label_font_size=label_font_size,
             orthogroup_label_member_ids=member_ids,

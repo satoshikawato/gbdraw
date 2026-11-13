@@ -1782,7 +1782,7 @@ def test_final_svg_undefined_uses_negative_geometry_pool(mode, undefined, resolv
     overrides = {"canvas.strandedness": True, "canvas.resolve_overlaps": resolve,
         ("canvas.circular.track_type" if mode == "circular" else "canvas.linear.track_layout"): "middle",
         f"labels.{mode}.scope": "both" if mode == "circular" else "all"}
-    if not resolve:
+    if not resolve and mode == "circular":
         # Unresolved, the first two features are drawn on top of each other and so are
         # their labels: nothing is drawn, and the row separates the features (LP-D52).
         from gbdraw.exceptions import LabelsDoNotFitError
@@ -1810,6 +1810,13 @@ def test_final_svg_undefined_uses_negative_geometry_pool(mode, undefined, resolv
     values = [starts[compute_source_feature_hash(feature, record)] for feature in record.features]
     assert (abs(values[0] - values[1]) > 1) if resolve else (values[0] == pytest.approx(values[1]))
     assert (values[2] > values[0]) if mode == "circular" else (values[2] < values[0])
+    if mode == "linear" and not resolve:
+        # In Linear, the second feature covers the first one's label, so that label goes
+        # outside with a leader and the labels stay apart (EMB-OUTLINE-SLIDE, OV-3397).
+        hidden = compute_source_feature_hash(record.features[0], record)
+        leaders = [node for node in root.iter() if node.tag.endswith("line")
+                   and node.get("data-label-feature-id") == hidden]
+        assert leaders
 
 
 def test_conflicting_custom_slot_is_rejected_before_radial_reflow():

@@ -287,12 +287,31 @@ class RepeatObject(FeatureObject):
         return base_str + "\n" + "\n".join(additional_info) if additional_info else base_str
 
 
+class LinearDrawnPart(NamedTuple):
+    """One part a Linear feature draws: its location and the wrap row it is drawn in (0 when the record
+    does not wrap)."""
+
+    location: FeatureLocationPart
+    row: int
+
+
+def linear_drawn_parts(feature: FeatureObject) -> list[LinearDrawnPart]:
+    """The parts a Linear feature draws, in drawing order: its projected display parts when it has them,
+    else its location."""
+
+    if feature.display_parts is None:
+        return [LinearDrawnPart(part, 0) for part in feature.location]
+    return [LinearDrawnPart(part.location, part.fragment.row) for part in feature.display_parts]
+
+
 __all__ = [
     "FeatureLocation",
     "FeatureLocationPart",
     "FeatureObject",
     "FeatureSegmentKind",
     "GeneObject",
+    "LinearDrawnPart",
     "RepeatObject",
     "Strand",
+    "linear_drawn_parts",
 ]

@@ -17,6 +17,7 @@ class DisplayLabelSegment:
     source_span: tuple[int, int]
     part_index: int
     source_middle: float | None
+    anchor_part: FeatureDisplayPart
     row: int = 0
 
 
@@ -53,13 +54,13 @@ def display_label_segment(
     ))
     span = sum(p.fragment.display_end - p.fragment.display_start for p in group)
     remaining = span / 2.0
-    anchor = group[-1].fragment
-    for part in group:
-        anchor = part.fragment
-        size = anchor.display_end - anchor.display_start
+    anchor_part = group[-1]
+    for anchor_part in group:
+        size = anchor_part.fragment.display_end - anchor_part.fragment.display_start
         if remaining <= size:
             break
         remaining -= size
+    anchor = anchor_part.fragment
     middle = (anchor.display_start + remaining if anchor.orientation == 1
               else anchor.display_end - remaining)
     local_forward = anchor.orientation == 1
@@ -74,5 +75,5 @@ def display_label_segment(
     return DisplayLabelSegment(
         ordered[0].fragment.display_start, ordered[-1].fragment.display_end,
         middle, span, group[0].strand,
-        (anchor.source_start, anchor.source_end), anchor.part_index, source_middle, anchor.row,
+        (anchor.source_start, anchor.source_end), anchor.part_index, source_middle, anchor_part, anchor.row,
     )

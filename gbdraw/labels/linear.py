@@ -8,19 +8,33 @@ from bisect import bisect_left, bisect_right, insort
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, NamedTuple, TypeAlias, TypedDict, cast
 from .coordinates import display_label_segment
 
 from .filtering import feature_label, label_filter_maps
+from .linear_embedded_fit import (
+    EMBEDDED_LABEL_END_MARGIN_EM,
+    DrawnPartSpans,
+    InkBox,
+    LaneRow,
+    embedded_label_anchor_x,
+)
 from .label_style import LINEAR_LABEL_HEIGHT_MARGIN_EM, ROW_LABEL_GAP_EM, LabelFontStyle
 from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label, is_level_rotation
 from .policy import LabelRenderingPolicy
 from ..config.models import LinearRenderProfile
 from ..features.ids import compute_feature_object_hash
-from ..features.objects import FeatureObject
+from ..canvas.linear import LinearCanvasGeometry
+from ..features.objects import FeatureLocationPart, FeatureObject, linear_drawn_parts
 from ..core.record_metadata import _source_feature_index
-from ..core.text import drawn_text_box
+from ..core.text import drawn_text_box, text_ink_offsets
+from ..svg.arrows import (
+    ArrowHeadLengthRatio,
+    calculate_normalized_arrow_length,
+    linear_block_glyph,
+    linear_block_outline,
+)
 from ..auto_sizes import linear_label_font_size
 from ..layout.linear_coords import normalize_position_to_linear_track
 from ..layout.linear import (
@@ -649,7 +663,8 @@ class _LinearLabelContext(NamedTuple):
     """What every feature label of one record reads: its font, whether a label goes inside its feature
     or beside it (``label_rendering``), whether labels sit over their features (``above_feature``) and
     the turn of such a label, and the record's length, drawn width, strand separation and display
-    transform."""
+    transform; and what its features' arrows are drawn with: the canvas's automatic head in bp
+    (``LinearCanvasGeometry.arrow_length``), the head length ratio and the shaft width ratio."""
 
     font_family: str
     font_size: float
@@ -660,6 +675,9 @@ class _LinearLabelContext(NamedTuple):
     alignment_width: float
     strandedness: bool
     record_transform: RecordDisplayTransform | None
+    arrow_length: float
+    head_length_ratio: ArrowHeadLengthRatio
+    shaft_width_ratio: float
 
 
 def _linear_label_context(
@@ -669,6 +687,7 @@ def _linear_label_context(
     strandedness: bool,
     record_transform: RecordDisplayTransform | None,
     label_font_size: float | None,
+    arrow_length: float,
 ) -> _LinearLabelContext:
     cfg = profile.config
     # Both production callers pass the diagram's label size; a direct caller gets the size of this record.
@@ -678,9 +697,11 @@ def _linear_label_context(
         raise ValueError(
             "label_rendering embedded_only|external_only cannot be used with label_placement above_feature"
         )
+    arrow_geometry = cfg.objects.features.arrow_geometry
     return _LinearLabelContext(
         cfg.objects.text.font_family, font_size, profile.label_rendering, above_feature, profile.label_rotation,
         genome_length, alignment_width, strandedness, record_transform,
+        float(arrow_length), arrow_geometry.head_length_ratio, float(arrow_geometry.shaft_width_ratio),
     )
 
 
@@ -725,11 +746,20 @@ def _feature_track_positions(
 
 class _LabelSegment(NamedTuple):
     """The stretch of a feature that its label is centred on: its start and end x in the record's drawn
-    width, and its wrap row in a wrapped record (else None)."""
+    width, its wrap row in a wrapped record (else None), and the drawn block it is (``block``, in the row
+    ``block_row``; ``linear_drawn_parts``)."""
 
     start_x: float
     end_x: float
     wrap_row: int | None
+    block: FeatureLocationPart
+    block_row: int
+
+    @property
+    def middle_x(self) -> float:
+        """The x of the segment's middle, where its label is centred."""
+
+        return (self.start_x + self.end_x) / 2.0
 
 
 def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) -> _LabelSegment | None:
@@ -747,10 +777,12 @@ def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) 
         longest_segment_end: float = projected_segment.end
         if record_transform is not None and record_transform.wrap_length is not None:
             wrap_row = projected_segment.row
+        block, block_row = projected_segment.anchor_part.location, projected_segment.anchor_part.fragment.row
     else:
         longest_segment_length = 0
         longest_segment_start = longest_segment_end = 0
-        for coordinate in feature_object.coordinates:
+        longest_index = 0
+        for index, coordinate in enumerate(feature_object.coordinates):
             start = int(coordinate.start)
             end = int(coordinate.end)
             segment_length = abs(end - start + 1)
@@ -758,11 +790,87 @@ def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) 
                 longest_segment_start = start
                 longest_segment_end = end
                 longest_segment_length = segment_length
+                longest_index = index
+        # The location has one block per coordinate, in order (``get_exon_and_intron_coordinates``).
+        block = [part for part in feature_object.location if part.kind == "block"][longest_index]
+        block_row = 0
     alignment_width = context.alignment_width
     return _LabelSegment(
         normalize_position_to_linear_track(longest_segment_start, genome_length, alignment_width),
         normalize_position_to_linear_track(longest_segment_end, genome_length, alignment_width),
         wrap_row,
+        block,
+        block_row,
+    )
+
+
+# The x spans that the features drawn after a label's feature draw in a lane and row over a stretch of it.
+_DrawnAfter: TypeAlias = Callable[[LaneRow, float, float], list[tuple[float, float]]]
+
+
+def _drawn_part_spans(
+    feature_dict: Mapping[str, FeatureObject], positions: Mapping[str, _TrackPosition], context: _LinearLabelContext
+) -> tuple[DrawnPartSpans, dict[str, int]]:
+    """The parts every feature with a lane draws (``linear_drawn_parts``), by lane and row, and the order
+    the features are drawn in: the order of ``feature_dict`` (``SeqRecordGroup.draw_record``)."""
+
+    spans = DrawnPartSpans(_external_label_bucket_size(context.alignment_width))
+    order: dict[str, int] = {}
+    for feature_id, feature_object in feature_dict.items():
+        position = positions.get(feature_id)
+        if position is None:
+            continue
+        order[feature_id] = len(order)
+        for part in linear_drawn_parts(feature_object):
+            spans.add(
+                order[feature_id],
+                (position, part.row),
+                normalize_position_to_linear_track(int(part.location.start), context.genome_length, context.alignment_width),
+                normalize_position_to_linear_track(int(part.location.end), context.genome_length, context.alignment_width),
+            )
+    return spans, order
+
+
+def _embedded_label_anchor_x(
+    feature_object: FeatureObject,
+    segment: _LabelSegment,
+    label_text: str,
+    font_style: LabelFontStyle,
+    position: _TrackPosition,
+    context: _LinearLabelContext,
+    drawn_after: _DrawnAfter,
+) -> float | None:
+    """The anchor x of a label drawn inside its feature (``embedded_label_anchor_x``), or None when it
+    fits nowhere there. It reads the outline its block is drawn with (``linear_block_outline``); a label
+    whose ink cannot be measured stays at the middle of its block."""
+
+    centre_x = segment.middle_x
+    ink = text_ink_offsets(
+        label_text, context.font_family, context.font_size, dominant_baseline="central", text_anchor="middle",
+        font_style=font_style,
+    )
+    if ink is None:
+        return centre_x
+    block = segment.block
+    genome_length, alignment_width = context.genome_length, context.alignment_width
+    start_x = normalize_position_to_linear_track(int(block.start), genome_length, alignment_width)
+    end_x = normalize_position_to_linear_track(int(block.end), genome_length, alignment_width)
+    outline = linear_block_outline(
+        linear_block_glyph(feature_object.glyph_kind, block.strand, block.is_last, context.shaft_width_ratio),
+        start_x,
+        end_x,
+        block.strand,
+        position,
+        calculate_normalized_arrow_length(context.arrow_length, genome_length, alignment_width),
+        context.head_length_ratio,
+        context.shaft_width_ratio,
+    )
+    return embedded_label_anchor_x(
+        outline,
+        InkBox(*ink),
+        EMBEDDED_LABEL_END_MARGIN_EM * context.font_size,
+        centre_x,
+        drawn_after((position, segment.block_row), min(start_x, end_x), max(start_x, end_x)),
     )
 
 
@@ -860,12 +968,14 @@ def _linear_label_entry(
     height_px: float,
     position: _TrackPosition,
     context: _LinearLabelContext,
+    drawn_after: _DrawnAfter,
 ) -> LinearLabel | None:
     """A feature's measured label put on or beside its feature, or None when it is not drawn: its feature
     has no part shown, or ``label_rendering`` allows it neither inside nor beside its feature. An
     ``above_feature`` label sits beside its feature; otherwise a level label (auto mode keeps labels level
-    whatever the configured turn) goes inside its feature when it fits there with its margin, else
-    external, in a row placed later."""
+    whatever the configured turn) goes inside its feature when its advance fits there with its margin
+    (Owner D-20) and its ink fits inside the drawn block somewhere (``_embedded_label_anchor_x``, Owner
+    D-161), else external, in a row placed later."""
 
     segment = _label_segment(feature_object, context)
     if segment is None:
@@ -879,7 +989,7 @@ def _linear_label_entry(
         assignment is not None and assignment.side == "below"
         and assignment.level > 0 and assignment.strand_pool == "combined"
     )
-    feature_anchor_x = (feature_start_x + feature_end_x) / 2.0
+    feature_anchor_x = segment.middle_x
     feature_top_y, feature_y, feature_bottom_y = position
     pose: _AboveFeaturePose | None = None
     if context.above_feature:
@@ -889,14 +999,18 @@ def _linear_label_entry(
         label_anchor_x = feature_anchor_x - pose.label_keys["label_contact_x_offset"]
         is_embedded = True
     else:
-        rotation_deg, text_anchor, label_anchor_x = 0.0, "middle", feature_anchor_x
+        rotation_deg, text_anchor = 0.0, "middle"
         label_rendering = context.label_rendering
-        if (
-            label_rendering != "external_only"
+        inside_x = (
+            _embedded_label_anchor_x(feature_object, segment, label_text, font_style, position, context, drawn_after)
+            if label_rendering != "external_only"
             and width_px + _EMBEDDED_LABEL_MARGIN_EM * context.font_size < abs(feature_end_x - feature_start_x) + 1
-        ):
-            label_y, is_embedded = feature_y, True
+            else None
+        )
+        if inside_x is not None:
+            label_anchor_x, label_y, is_embedded = inside_x, feature_y, True
         elif label_rendering != "embedded_only":
+            label_anchor_x = feature_anchor_x
             label_y, is_embedded = 0, False
         else:
             return None
@@ -938,10 +1052,9 @@ def linear_record_labels(
     feature_dict,
     genome_length,
     alignment_width,
-    cds_height,
+    canvas_geometry: LinearCanvasGeometry,
     strandedness,
     track_layout,
-    track_axis_gap,
     profile: LinearRenderProfile,
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str | int] | None = None,
@@ -957,21 +1070,26 @@ def linear_record_labels(
     not selected by orthogroup eligibility) is labeled only by its per-feature
     override. ``label_filtering``: the compiled maps when the caller holds them.
     A label is as wide as its text's advance in SVG px, the box the renderer
-    anchors the text on (OV-1294).
+    anchors the text on (OV-1294). ``canvas_geometry`` gives the feature height,
+    the track's gap from the axis and the arrows' automatic head, as the
+    features are drawn with them.
     """
+    cds_height, track_axis_gap = canvas_geometry.cds_height, canvas_geometry.track_axis_gap
     axis_gap_factor = (
         (float(track_axis_gap) / float(cds_height))
         if (track_axis_gap is not None and float(cds_height) > 0.0)
         else None
     )
     context = _linear_label_context(
-        profile, genome_length, alignment_width, strandedness, record_transform, label_font_size
+        profile, genome_length, alignment_width, strandedness, record_transform, label_font_size,
+        canvas_geometry.arrow_length,
     )
     if label_filtering is None:
         label_filtering = label_filter_maps(profile.config.labels.filtering.as_dict())
     positions = _feature_track_positions(
         feature_dict, cds_height, strandedness, track_layout, axis_gap_factor, feature_lane_geometry
     )
+    drawn_parts, draw_order = _drawn_part_spans(feature_dict, positions, context)
     font_family, font_size = context.font_family, context.font_size
     height_margin_px = LINEAR_LABEL_HEIGHT_MARGIN_EM * float(font_size)
     font_style_of = profile.label_style.font_style
@@ -1001,7 +1119,10 @@ def linear_record_labels(
         # The row pitch counts every measured label, also one that is not drawn after all.
         if height_px > max_bbox_height:
             max_bbox_height = height_px
-        label_entry = _linear_label_entry(feature_object, label_text, font_style, width_px, height_px, position, context)
+        label_entry = _linear_label_entry(
+            feature_object, label_text, font_style, width_px, height_px, position, context,
+            partial(drawn_parts.drawn_after, draw_order[feature_id]),
+        )
         if label_entry is not None:
             labels.append(label_entry)
 
