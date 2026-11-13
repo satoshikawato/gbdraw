@@ -1,0 +1,24 @@
+id	regex	flags	message	severity
+bn-ascii-period	[\u0980-\u09FF][\u201D\u2019)]*\.(?=\s|$)	u	ASCII period after Bengali text: end the sentence with the dari । (U+0964) (STYLE 19.3).	error
+bn-latin-period	[A-Za-z0-9)}\u201D\u2019]\.(?=\s+[\u0980-\u09FF])|^(?=[\s\S]*[\u0980-\u09FF])[\s\S]*[A-Za-z0-9)}\u201D\u2019]\.$	u	ASCII period ending a Bengali sentence after Latin text, a number or a placeholder: write the dari । (STYLE 19.3).	warn
+bn-bengali-digit	[\u09E6-\u09EF]	u	Bengali digit: write ASCII digits 0-9 with English grouping (1,234,567.5) (PD-OI-106 rev 7, STYLE 19.3).	error
+bn-currency-dari	[\u09F4-\u09F9]	u	U+09F4-U+09F9 are currency numerators, not the dari: end a sentence with । (U+0964) (STYLE 19.3).	error
+bn-dari-double	\u0964\s*\u0964|\u0965|\.\u0964|\u0964\.	u	One dari ends a sentence: never ।।, ॥ (U+0965), or a dari beside a period (STYLE 19.3).	error
+bn-space-before-punct	[\u0980-\u09FF})]\s+[\u0964?!:;,]	u	Space before । ? ! : ; or a comma: delete the space (STYLE 19.3).	error
+bn-visarga-colon	\u0983(?=[\s{]|$)	u	Visarga ঃ used as a colon: write the ASCII colon : after a label (STYLE 19.3).	error
+bn-quotes	[\u0022\u0027](?=[\u0980-\u09FF{])|(?<=[\u0980-\u09FF}])[\u0022\u0027]|[\u00AB\u00BB\u201E\u201A]	u	Straight quotes or guillemets around Bengali text or a placeholder: write “ ” (nested ‘ ’) (STYLE 19.3).	error
+bn-three-dots	\.{3}|\u2026{2}	u	Three periods or two ellipses: write one ellipsis … (U+2026) (STYLE 19.3).	error
+bn-spaced-hyphen	\s-{1,2}\s	u	Spaced hyphen used as a dash: rephrase, or use a colon or an em dash — (STYLE 19.3).	error
+bn-placeholder-suffix	\}[\u201D\u2019\u0022]?-?(?!\u099F\u09BF)[\u0980-\u09FF]|\}[\u201D\u2019\u0022]?\s(?:এর|এ|কে|তে|র)(?![\u0980-\u09FF])	u	Case ending on a placeholder (-এর, -কে, -তে, -য়, -এ): put a class noun after it ({file} ফাইলে, “{name}” লেজেন্ড আইটেমের); only the counter টি may follow a count (STYLE 19.5).	error
+bn-informal-pronoun	(?<![\u0980-\u09FF])(?:তুমি|তোমার|তোমাকে|তোমায়|তোমরা|তুই|তোর|তোকে)(?![\u0980-\u09FF])	u	Familiar pronoun: address the user as আপনি (আপনার, আপনাকে) (STYLE 19.2).	error
+bn-informal-imperative	(?<![\u0980-\u09FF])(?:করো|দেখো|নাও|দাও|যাও|খোলো|চালাও|রাখো)(?![\u0980-\u09FF])	u	Familiar imperative: use the polite form (করুন, দেখুন, নিন, দিন, যান, খুলুন, চালান, রাখুন) (STYLE 19.2).	warn
+bn-banned-term	বংশাণু|কিংবদন্ত[িী]|(?<![\u0980-\u09FF])সত্র(?![\u0980-\u09FF])|অধিবেশন|অমনোনীত|গুপ্ত ভান্ডার|প্রতিলেপন	u	Banned term (STYLE 19.1): write জিন / জিনোম, not বংশাণু…; লেজেন্ড, not কিংবদন্তি; সেশন, not সত্র or অধিবেশন; ডিফল্ট, not অমনোনীত; ক্যাশ, not গুপ্ত ভান্ডার; পেস্ট করুন, not প্রতিলেপন.	error
+bn-feature-property	বৈশিষ্ট্য	u	বৈশিষ্ট্য means a property: an annotation feature is ফিচার; keep বৈশিষ্ট্য only for the property sense (STYLE 19.1).	warn
+bn-rong-spelling	রঙ(?![\u09BE-\u09CD\u09D7])|রং(?=[\u0980-\u09FF])	u	Bangla Academy spelling: রং alone, রঙ before a vowel sign (রঙের, রঙিন); never রঙ alone or রংয়ের (STYLE 19.4).	warn
+bn-loanword-spelling	গ্যালারী|লাইব্রেরী|এন্ট্রী|ক্যাটাগরী|ডিরেক্টরী|ব্যাটারী|পোষ্ট|লিষ্ট|টেষ্ট|ষ্টেশন	u	Loanword spelling (Bangla Academy): ি not ী, স্ট not ষ্ট (গ্যালারি, লাইব্রেরি, এন্ট্রি, লিস্ট) (STYLE 19.4).	warn
+bn-khanda-ta-zwj	\u09A4\u09CD\u200D	u	ত + virama + ZWJ: write khanda ta ৎ (U+09CE) (STYLE 19.4).	error
+bn-ta-sa	\u09A4\u09CD\u09B8	u	ত্স: write ৎস with khanda ta, as in উৎস (STYLE 19.4).	warn
+bn-nfc	[\u09DC\u09DD\u09DF]|\u09C7\u09BE|\u09C7\u09D7	u	Not NFC: write ড় ঢ় য় as consonant + nukta (U+09BC) and ো ৌ as one code point (STYLE 19.4).	error
+bn-stray-joiner	\u200C|(?<!\u09B0)\u200D|\u200D(?!\u09CD\u09AF)	u	Stray ZWJ or ZWNJ: delete it; the only joiner kept is ZWJ in র‍্য (ra + ZWJ + virama + ya) (STYLE 19.4).	warn
+bn-latin-touching	[A-Za-z][\u0980-\u09FF]|[\u0980-\u09FF][A-Za-z]	u	Latin text touching Bengali letters: put a space between them, or a hyphen before an ending (GC পরিমাণ, gbdraw-এর) (STYLE 19.4).	warn
+bn-indian-grouping	(?<![\d,])\d{1,2},\d{2},\d{3}(?!\d)	u	Indian digit grouping: group digits in threes (1,234,567), never 12,34,567 (PD-OI-106 rev 7, STYLE 19.3).	error
