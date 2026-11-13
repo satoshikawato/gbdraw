@@ -14,7 +14,7 @@ from Bio.Seq import Seq
 from gbdraw.core.base_counts import KNOWN, byte_counts, count_rows
 from gbdraw.io import record_sequences
 from gbdraw.io.genome import read_sequence_file_records
-from gbdraw.io.record_sequences import _SequenceFile, _SequenceTable, _index_lines, known_base_counts_at
+from gbdraw.io.record_sequences import _FileIndex, _SequenceFile, _SequenceTable, _index_lines, known_base_counts_at
 
 assert np.dtype(np.intp).itemsize == 4, "not a 32-bit platform: these checks would pass anywhere"
 CHUNK = record_sequences._CHUNK_BYTES
@@ -39,13 +39,14 @@ def chunk_offsets_past_two_gib() -> None:
         genbank = b"".join(f"{i * 60 + 1:>9} ".encode() + b" ".join([b"acgtacgtac"] * 6) + b"\n" for i in range(2000))
         for raw, fmt in ((fasta, "fasta"), (genbank, "genbank")):
             for offset in (2**31 - 1000, 2**31 + 5, 5 * 2**30):
-                table = _SequenceTable(source, key=source.table_key())
+                table = _SequenceTable(_FileIndex(source))
                 _index_lines(table, offset, raw, fmt)
-                ends = [start + size for start, size in zip(table.offsets, table.sizes)]
+                offsets, sizes = table.index.offsets[table.first:table.stop], table.index.sizes[table.first:table.stop]
+                ends = [start + size for start, size in zip(offsets, sizes)]
                 expected = [offset] + ends[:-1]  # each chunk begins where the one before it ends
-                assert list(table.offsets) == expected and ends[-1] == offset + len(raw), (
-                    fmt, offset, list(table.offsets[:3]), expected[:3])
-                assert max(table.sizes) <= CHUNK, (fmt, offset, max(table.sizes))
+                assert list(offsets) == expected and ends[-1] == offset + len(raw), (
+                    fmt, offset, list(offsets[:3]), expected[:3])
+                assert max(sizes) <= CHUNK, (fmt, offset, max(sizes))
 
 
 def counts_equal_a_copy() -> None:

@@ -49,7 +49,7 @@ import weakref
 from array import array
 from collections import OrderedDict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from os import PathLike, fspath
 from typing import IO, Literal, NamedTuple, TypeVar
 
@@ -509,13 +509,44 @@ class _SequenceFile:
         )
 
 
-@dataclass(eq=False)
-class _SequenceTable:
-    """Where one record's sequence lies in its file: chunks of whole lines, in order.
+class _FileIndex:
+    """Where the sequences of one parse pass lie in its file, every record's together, so a record holds no array
+    of its own: chunks of whole lines in file order, and the count rows of each record one after another.
 
-    ``starts[i]`` is the number of bases before chunk ``i``; ``offsets[i]`` and
-    ``sizes[i]`` its raw bytes in the file; ``kinds[i]`` how they become bases;
-    ``alphabets[i]`` what its bases hold (``gbdraw.core.base_counts``).
+    ``starts[i]`` is the number of bases of its record before chunk ``i``; ``offsets[i]`` and ``sizes[i]`` its raw
+    bytes in the file; ``kinds[i]`` how they become bases; ``alphabets[i]`` what its bases hold
+    (``gbdraw.core.base_counts``). ``counts[j]`` counts row ``j`` (A, C, G and T, ``uint16``) and
+    ``row_offsets[j]`` is where in its chunk the row's first base lies; both are joined once, when the pass has
+    added every line (``finish``), before any reader can ask for them.
+    """
+
+    __slots__ = ("source", "key", "offsets", "sizes", "starts", "kinds", "alphabets", "counts", "row_offsets",
+                 "_counts", "_row_offsets")
+
+    def __init__(self, source: _SequenceFile) -> None:
+        self.source = source
+        self.key = source.table_key()
+        self.offsets: array[int] = array("q")
+        self.sizes: array[int] = array("q")
+        self.starts: array[int] = array("q")
+        self.kinds = bytearray()
+        self.alphabets = bytearray()
+        self.counts: NDArray[np.uint16] | None = None
+        self.row_offsets: NDArray[np.uint16] | None = None
+        self._counts = RowCounts()
+        self._row_offsets: list[NDArray[np.uint16]] = []
+
+    def finish(self) -> None:
+        if self.counts is None:
+            self.counts = self._counts.joined()
+            self.row_offsets = (np.concatenate(self._row_offsets) if self._row_offsets
+                                else np.zeros(0, dtype=np.uint16))
+            self._row_offsets = []
+
+
+class _SequenceTable:
+    """Where one record's sequence lies in its file: its chunks ``first``..``stop - 1`` of its pass's index
+    (:class:`_FileIndex`), and its count rows from ``first_row``.
 
     The parse pass counts the bases as it indexes them (the one producer of a
     record's base counts), in rows of ``ROW_BASES`` bases from the first, and keeps
@@ -523,17 +554,14 @@ class _SequenceTable:
     whole rows summed and the bases of its edge rows read (:func:`known_base_counts_at`).
     """
 
-    source: _SequenceFile
-    key: int
-    offsets: array[int] = field(default_factory=lambda: array("q"))
-    sizes: array[int] = field(default_factory=lambda: array("q"))
-    starts: array[int] = field(default_factory=lambda: array("q"))
-    kinds: bytearray = field(default_factory=bytearray)
-    alphabets: bytearray = field(default_factory=bytearray)
-    length: int = 0
-    _counts: RowCounts = field(default_factory=RowCounts)
-    _row_offsets: list[NDArray[np.uint16]] = field(default_factory=list)
-    _rows: _Rows | None = None  # built once, when the parse pass has added every line (``finish``)
+    __slots__ = ("index", "source", "first", "stop", "first_row", "length", "__weakref__")
+
+    def __init__(self, index: _FileIndex) -> None:
+        self.index = index
+        self.source = index.source
+        self.first = self.stop = len(index.kinds)
+        self.first_row = index._counts.begin()
+        self.length = 0
 
     def add(self, offset: int, size: int, kind: int, counted: CountedRows) -> None:
         """Add ``size`` raw bytes from file offset ``offset``, of one kind, with what was counted in them
@@ -543,58 +571,68 @@ class _SequenceTable:
         up to the usual size.
         """
 
-        self._counts.add(counted.rows)
+        index = self.index
+        index._counts.add(counted.rows)
         run = kind in _RUN_MATRICES
         # Where each row's first base lies in its chunk; lines read line by line are decoded whole.
-        self._row_offsets.append(
+        index._row_offsets.append(
             (counted.starts % _CHUNK_BYTES).astype(np.uint16) if run else np.zeros(len(counted.starts), dtype=np.uint16))
         totals = counted.histograms @ (_RUN_MATRICES[kind] if run else BASES_MATRIX)
-        last = len(self.kinds) - 1
-        if (not run and last >= 0 and self.kinds[last] == kind
-                and self.offsets[last] + self.sizes[last] == offset and self.sizes[last] + size <= _CHUNK_BYTES):
-            self.sizes[last] += size  # lines read line by line stay in chunks of the usual size
-            self.alphabets[last] = max(self.alphabets[last], int(_alphabets(totals.sum(axis=0, keepdims=True))[0]))
+        last = self.stop - 1
+        if (not run and last >= self.first and index.kinds[last] == kind
+                and index.offsets[last] + index.sizes[last] == offset and index.sizes[last] + size <= _CHUNK_BYTES):
+            index.sizes[last] += size  # lines read line by line stay in chunks of the usual size
+            index.alphabets[last] = max(index.alphabets[last], int(_alphabets(totals.sum(axis=0, keepdims=True))[0]))
             self.length += counted.bases
             return
         if not run:
             totals = totals.sum(axis=0, keepdims=True)
         # File offsets stay Python ints: numpy's default integer is 32 bits in Pyodide, and a file passes 2 GiB.
         chunk_offsets = range(offset, offset + size, _CHUNK_BYTES) if run else range(offset, offset + 1)
-        self.offsets.extend(chunk_offsets)
-        self.sizes.extend(min(_CHUNK_BYTES, offset + size - start) if run else size for start in chunk_offsets)
-        self.starts.extend((self.length + np.cumsum(totals[:, BASES]) - totals[:, BASES]).tolist())
-        self.kinds.extend(bytes((kind,)) * len(chunk_offsets))
-        self.alphabets.extend(_alphabets(totals).tobytes())
+        index.offsets.extend(chunk_offsets)
+        index.sizes.extend(min(_CHUNK_BYTES, offset + size - start) if run else size for start in chunk_offsets)
+        index.starts.extend((self.length + np.cumsum(totals[:, BASES]) - totals[:, BASES]).tolist())
+        index.kinds.extend(bytes((kind,)) * len(chunk_offsets))
+        index.alphabets.extend(_alphabets(totals).tobytes())
+        self.stop = len(index.kinds)
         self.length += counted.bases
 
     def finish(self) -> None:
-        """Join the count rows, once the parse pass has added every line, before any reader can ask for them."""
+        """Join the count rows of the pass, once it has added every line, before any reader can ask for them."""
 
-        self._row_offsets = [np.concatenate(self._row_offsets) if self._row_offsets else np.zeros(0, np.uint16)]
-        self._rows = _Rows(self._counts.joined(), self.length)
+        self.index.finish()
 
     def rows(self) -> _Rows:
         """The count rows of the whole sequence."""
 
-        assert self._rows is not None, "a record's rows are read after its parse pass"
-        return self._rows
+        counts = self.index.counts
+        assert counts is not None, "a record's rows are read after its parse pass"
+        return _rows_in(counts, self.first_row, self.length)
+
+    def _chunk_at(self, position: int) -> int:
+        """The chunk that holds base ``position`` (``0 <= position < length``)."""
+
+        return bisect.bisect_right(self.index.starts, position, self.first, self.stop) - 1
 
     def row_bases(self, row: int, size: int) -> bytes:
         """The first ``size`` bases of count row ``row`` (fewer than a row), read from the file and decoded alone:
         from the row's first base up to the next row's at most."""
 
-        (row_offsets,) = self._row_offsets
+        file_index = self.index
+        row_offsets = file_index.row_offsets
+        assert row_offsets is not None, "a record's rows are read after its parse pass"
+        starts, offsets, sizes, kinds = file_index.starts, file_index.offsets, file_index.sizes, file_index.kinds
         position = row * ROW_BASES
         stop, following = min(position + size, self.length), position + ROW_BASES
-        index = bisect.bisect_right(self.starts, position) - 1
-        skip = int(row_offsets[row])
+        index = self._chunk_at(position)
+        skip = int(row_offsets[self.first_row + row])
         pieces: list[bytes] = []
         while position < stop:
-            kind, begin, offset = self.kinds[index], self.starts[index], self.offsets[index]
-            end = offset + self.sizes[index]
+            kind, begin, offset = kinds[index], starts[index], offsets[index]
+            end = offset + sizes[index]
             if kind in _RUN_MATRICES:
-                if following < (self.starts[index + 1] if index + 1 < len(self.starts) else self.length):
-                    end = offset + int(row_offsets[row + 1])  # the next row begins in this chunk
+                if following < (starts[index + 1] if index + 1 < self.stop else self.length):
+                    end = offset + int(row_offsets[self.first_row + row + 1])  # the next row begins in this chunk
                 raw = self.source.read_at(offset + skip, end - offset - skip)
                 bases = _decode_chunk(kind, raw, self.source.encoding, warn=False)[: stop - position]
             else:
@@ -608,14 +646,15 @@ class _SequenceTable:
     def _block(self, index: int) -> bytes:
         """Chunk ``index``'s bases, through the block cache."""
 
-        return _CACHE.get((self.source.key, self.key, index), lambda: self._decode(index, index + 1))
+        return _CACHE.get((self.source.key, self.index.key, index), lambda: self._decode(index, index + 1))
 
     def _decode(self, first: int, stop: int) -> bytes:
         """The bases of chunks ``first``..``stop - 1``, which are of one kind and adjacent in the file."""
 
-        start = self.offsets[first]
-        raw = self.source.read_at(start, self.offsets[stop - 1] + self.sizes[stop - 1] - start)
-        return _decode_chunk(self.kinds[first], raw, self.source.encoding, warn=False)
+        offsets, sizes = self.index.offsets, self.index.sizes
+        start = offsets[first]
+        raw = self.source.read_at(start, offsets[stop - 1] + sizes[stop - 1] - start)
+        return _decode_chunk(self.index.kinds[first], raw, self.source.encoding, warn=False)
 
     def read(self, start: int, stop: int) -> bytes:
         """Bases ``start``..``stop - 1`` (``0 <= start <= stop <= length``).
@@ -629,12 +668,13 @@ class _SequenceTable:
             return b""
         if stop - start >= _BLOCK_BYTES:
             return self._bulk(start, stop)
-        index = bisect.bisect_right(self.starts, start) - 1
+        index = self._chunk_at(start)
+        starts = self.index.starts
         pieces: list[bytes] = []
         position = start
         while position < stop:
             bases = self._block(index)
-            begin = self.starts[index]
+            begin = starts[index]
             pieces.append(bases[position - begin: stop - begin])
             position = begin + len(bases)
             index += 1
@@ -643,46 +683,61 @@ class _SequenceTable:
     def _bulk(self, start: int, stop: int) -> bytes:
         """Bases ``start``..``stop - 1``, adjacent chunks of one kind decoded together, around the cache."""
 
-        index = bisect.bisect_right(self.starts, start) - 1
+        file_index = self.index
+        starts, offsets, sizes, kinds = file_index.starts, file_index.offsets, file_index.sizes, file_index.kinds
+        index = self._chunk_at(start)
         pieces: list[bytes] = []
         position = start
         while position < stop:
             last = index + 1
-            while (last < len(self.starts) and self.starts[last] < stop and self.kinds[last] == self.kinds[index]
-                   and self.offsets[last] == self.offsets[last - 1] + self.sizes[last - 1]
-                   and self.offsets[last] + self.sizes[last] - self.offsets[index] <= _BLOCK_BYTES):
+            while (last < self.stop and starts[last] < stop and kinds[last] == kinds[index]
+                   and offsets[last] == offsets[last - 1] + sizes[last - 1]
+                   and offsets[last] + sizes[last] - offsets[index] <= _BLOCK_BYTES):
                 last += 1
             bases = self._decode(index, last)
-            begin = self.starts[index]
+            begin = starts[index]
             pieces.append(bases[position - begin: stop - begin] if position > begin or stop - begin < len(bases) else bases)
             position = begin + len(bases)
             index = last
         return pieces[0] if len(pieces) == 1 else b"".join(pieces)
 
 
+def _rows_in(counts: NDArray[np.uint16], first_row: int, length: int) -> _Rows:
+    """The count rows of a sequence of ``length`` bases whose first row is ``counts[first_row]``."""
+
+    return _Rows(counts[first_row: first_row - (-length // ROW_BASES)], length)
+
+
+_ROWS_LOCK = threading.Lock()  # bases in memory are counted once, however many threads ask first
+
+
 class _HeldBases:
     """Bases held in memory, read as a record's sequence table is read: their count rows are counted once, the
-    first time a count is asked for (``gbdraw.core.base_counts``, on the same rows as a parse pass)."""
+    first time a count is asked for (``gbdraw.core.base_counts``, on the same rows as a parse pass), or are the
+    rows a parse pass counted in them (``counts`` from ``first_row``)."""
 
-    __slots__ = ("bases", "length", "_rows", "_lock")
+    __slots__ = ("bases", "_counts", "_first_row")
 
-    def __init__(self, bases: bytes, rows: _Rows | None = None) -> None:
+    def __init__(self, bases: bytes, counts: NDArray[np.uint16] | None = None, first_row: int = 0) -> None:
         self.bases = bases
-        self.length = len(bases)
-        self._rows = rows  # given: the rows a parse pass counted in these bases
-        self._lock = threading.Lock()
+        self._counts = counts
+        self._first_row = first_row
+
+    @property
+    def length(self) -> int:
+        return len(self.bases)
 
     def read(self, start: int, stop: int) -> bytes:
         return self.bases[start:stop]
 
     def rows(self) -> _Rows:
-        with self._lock:
-            if self._rows is None:
-                self._rows = _sliced_rows(self.read, self.length)
-            return self._rows
+        with _ROWS_LOCK:
+            if self._counts is None:
+                self._counts = _sliced_counts(self.read, len(self.bases))
+            return _rows_in(self._counts, self._first_row, len(self.bases))
 
     def row_bases(self, row: int, size: int) -> bytes:
-        return self.bases[row * ROW_BASES: min(self.length, row * ROW_BASES + size)]
+        return self.bases[row * ROW_BASES: min(len(self.bases), row * ROW_BASES + size)]
 
 
 # What a record sequence reads: the sequence table of a record in its input file, or bases held in memory.
@@ -803,37 +858,39 @@ def _viewed(seq: Seq | MutableSeq) -> RecordSequence | None:
 # The holder of the bytes of each ``Seq`` a view or a count has read, by the identity of the bytes (a copy of a
 # ``Seq`` shares them): kept while the ``Seq`` that first read them lives, which keeps the bytes and so their
 # identity. The weakref callback takes no lock: it may run inside any allocation.
-_HELD: dict[int, tuple[_HeldRef, _HeldBases]] = {}
+_HELD: dict[int, _HeldRef] = {}
 _HELD_LOCK = threading.Lock()  # one holder per bytes object, so their rows are counted once
 
 
 class _HeldRef(weakref.ref[Seq]):
-    """The ``Seq`` that first read some bytes, with the key of their holder: one object per held record."""
+    """The ``Seq`` that first read some bytes, with the holder of those bytes (which keeps them, so their key,
+    ``id``, stays theirs): the one object per held record besides its holder."""
 
-    __slots__ = ("key",)
+    __slots__ = ("held",)
 
-    key: int
+    held: _HeldBases
 
-    def __new__(cls, seq: Seq, key: int) -> _HeldRef:
+    def __new__(cls, seq: Seq, held: _HeldBases) -> _HeldRef:
         ref = super().__new__(cls, seq, _forget)
-        ref.key = key
+        ref.held = held
         return ref
 
 
 def _forget(ref: weakref.ref[Seq]) -> None:  # takes no lock: it runs as a finalizer
     assert isinstance(ref, _HeldRef)
-    if _HELD.get(ref.key, (None,))[0] is ref:
-        del _HELD[ref.key]
+    key = id(ref.held.bases)
+    if _HELD.get(key) is ref:
+        del _HELD[key]
 
 
-def _held(seq: Seq, data: bytes, rows: _Rows | None = None) -> _HeldBases:
+def _held(seq: Seq, data: bytes, counts: NDArray[np.uint16] | None = None, first_row: int = 0) -> _HeldBases:
     key = id(data)
     with _HELD_LOCK:
         entry = _HELD.get(key)
-        if entry is not None and entry[1].bases is data:
-            return entry[1]
-        held = _HeldBases(data, rows)
-        _HELD[key] = (_HeldRef(seq, key), held)
+        if entry is not None and entry.held.bases is data:
+            return entry.held
+        held = _HeldBases(data, counts, first_row)
+        _HELD[key] = _HeldRef(seq, held)
         return held
 
 
@@ -941,14 +998,14 @@ def _counts_at(rows: _Rows, at: NDArray[np.int64], read: Callable[[int, int], by
     return result
 
 
-def _sliced_rows(read: Callable[[int, int], bytes], stop: int) -> _Rows:
+def _sliced_counts(read: Callable[[int, int], bytes], stop: int) -> NDArray[np.uint16]:
     """The count rows of the bases ``0..stop - 1`` that ``read`` gives (bases held in memory), counted now on the
     rows a record's parse pass counts."""
 
     counts = RowCounts()
     for low in range(0, stop, SLICE_BYTES):
         counts.add(count_rows(read(low, min(stop, low + SLICE_BYTES)), low).rows)
-    return _Rows(counts.joined(), stop)
+    return counts.joined()
 
 
 @functools.lru_cache(maxsize=8)
@@ -996,7 +1053,7 @@ def known_base_counts_at(seq: Seq | MutableSeq, positions: NDArray[np.int64]) ->
         def read(low: int, high: int) -> bytes:
             return bytes(seq[low:high])
 
-        return _counts_at(_sliced_rows(read, len(seq)), positions,
+        return _counts_at(_rows_in(_sliced_counts(read, len(seq)), 0, len(seq)), positions,
                           lambda row, size: read(row * ROW_BASES, min(len(seq), row * ROW_BASES + size)))
     length = len(data)
     # On the reverse strand the first p bases are the last p read forward: all of them less the first length - p.
@@ -1025,7 +1082,7 @@ def known_base_counts(seq: Seq | MutableSeq) -> NDArray[np.int64]:
     data = getattr(seq, "_data", None)
     if isinstance(data, RecordSequence) and data._counts is not None:
         return data._counts
-    counts = known_base_counts_at(seq, np.array([len(seq)], dtype=np.int64))[:, 0]
+    counts = known_base_counts_at(seq, np.array([len(seq)], dtype=np.int64))[:, 0].copy()  # kept without its base
     if isinstance(data, RecordSequence):
         counts.flags.writeable = False  # shared by every later caller
         data._counts = counts
@@ -1042,8 +1099,10 @@ def first_base_beyond(seq: Seq | MutableSeq, alphabet: int) -> int | None:
 
     table = _whole_table(seq)
     if table is not None:
-        beyond = np.flatnonzero(np.frombuffer(bytes(table.alphabets), dtype=np.uint8) > alphabet)
-        return int(table.starts[beyond[0]]) if len(beyond) else None
+        index = table.index
+        beyond = np.flatnonzero(np.frombuffer(index.alphabets, dtype=np.uint8, count=table.stop - table.first,
+                                              offset=table.first) > alphabet)
+        return int(index.starts[table.first + beyond[0]]) if len(beyond) else None
     column = BEYOND_NUCLEOTIDE if alphabet == NUCLEOTIDE else BEYOND_PROTEIN
     for start, span in zip(itertools.count(0, SLICE_BYTES), sequence_spans(seq, SLICE_BYTES)):
         if byte_counts(span)[column]:
@@ -1387,6 +1446,7 @@ class _Scan:
         self.slots: list[_Slot] = []
         self._lines = _Lines(blocks)
         self._first = True
+        self._index = _FileIndex(source)
 
     def _decode(self, line: bytes) -> str:
         text = line.decode(self.source.encoding)
@@ -1396,7 +1456,7 @@ class _Scan:
         return text
 
     def _table(self) -> _SequenceTable:
-        table = _SequenceTable(self.source, key=self.source.table_key())
+        table = _SequenceTable(self._index)
         self.slots[-1].table = table
         return table
 
@@ -1640,7 +1700,7 @@ def detached_records(records: Iterable[SeqRecord]) -> list[SeqRecord]:
             record = copy.copy(record)
             record.seq = Seq(bases)
             if table is not None:
-                _held(record.seq, bases, table.rows())
+                _held(record.seq, bases, table.index.counts, table.first_row)
         detached.append(record)
     return detached
 

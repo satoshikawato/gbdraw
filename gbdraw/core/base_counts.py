@@ -153,28 +153,40 @@ def count_rows(data: bytes | memoryview, before: int, deleted: bytes = b"") -> C
 
 
 class RowCounts:
-    """The count rows of one sequence, added in order (:func:`count_rows`): a row begun by some bytes is ended
-    by the next."""
+    """The count rows of sequences counted one after another (:func:`count_rows`), in one list: within a
+    sequence a row begun by some bytes is ended by the next, and :meth:`begin` starts the next sequence on a row
+    of its own."""
 
-    __slots__ = ("_rows",)  # one per record sequence
+    __slots__ = ("_rows", "_size", "_fresh")
 
     def __init__(self) -> None:
         self._rows: list[NDArray[np.uint16]] = []
+        self._size = 0  # rows added
+        self._fresh = True  # no row of the current sequence added yet
+
+    def begin(self) -> int:
+        """Start the next sequence, and return the index of its first row."""
+
+        self._fresh = True
+        return self._size
 
     def add(self, rows: NDArray[np.int64]) -> None:
-        if self._rows:
-            self._rows[-1][-1] += rows[0].astype(np.uint16)
-        else:
+        if self._fresh:
             assert not rows[0].any()  # bytes before the first base hold no letter
+        else:
+            self._rows[-1][-1] += rows[0].astype(np.uint16)
         if len(rows) > 1:
             self._rows.append(rows[1:].astype(np.uint16))
+            self._size += len(rows) - 1
+            self._fresh = False
 
     def joined(self) -> NDArray[np.uint16]:
-        """Row ``k``: the counts of A, C, G and T in bases ``k * ROW_BASES`` up to the next row (``uint16``)."""
+        """Row ``k``: the counts of A, C, G and T in bases ``k * ROW_BASES`` of its sequence up to the next row
+        (``uint16``)."""
 
-        joined = np.concatenate(self._rows) if self._rows else np.zeros((0, 4), dtype=np.uint16)
-        self._rows = [joined]
-        return joined
+        if len(self._rows) != 1:
+            self._rows = [np.concatenate(self._rows) if self._rows else np.zeros((0, 4), dtype=np.uint16)]
+        return self._rows[0]
 
 
 def byte_counts(data: bytes | memoryview, matrix: NDArray[np.int64] = BASES_MATRIX) -> NDArray[np.int64]:
