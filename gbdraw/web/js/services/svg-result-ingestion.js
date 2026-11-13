@@ -979,14 +979,14 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
       const rowsByKey = new Map();
       built.legendEntries = rowsByKey;
       built.legendGroups = getAllFeatureLegendGroups(svg);
-      // A row of Python's is found by Python's key, also once renamed or
-      // hidden; an editor row by its own key, unless a row of Python's has it.
+      // A row is found by its key (`pythonLegendKey`): Python's, also once
+      // renamed or hidden, or an editor row's own, unless a row of Python's has it.
       built.legendGroups.forEach((group) => {
-        /** @type {Map<string, Element>} */
+        /** @type {Map<PythonLegendKey, Element>} */
         const seen = new Map();
         const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
         [...rows.filter((entry) => !isEditorRow(entry)), ...rows.filter(isEditorRow)].forEach((entry) => {
-          const caption = isEditorRow(entry) ? text(entry.getAttribute('data-legend-key')) : pythonLegendKey(entry);
+          const caption = pythonLegendKey(entry);
           const other = seen.get(caption);
           if (other && !isEditorRow(other) && isEditorRow(entry)) return;
           if (!caption || other) {
@@ -1147,7 +1147,7 @@ const applyLegendOperations = (index, operations, {
       const later = new Set(operations.legendAdds.slice(addIndex + 1).map((add) => add.caption));
       const next = rows.find((entry) => (before
         ? pythonLegendKey(entry) === before
-        : !ifAbsent && isEditorRow(entry) && later.has(text(entry.getAttribute('data-legend-key')))));
+        : !ifAbsent && isEditorRow(entry) && later.has(pythonLegendKey(entry))));
       if (next?.parentElement) next.parentElement.insertBefore(row, next);
       else group.appendChild(row);
       return row;
@@ -1231,7 +1231,7 @@ const restoreLegendStructure = (index, operations, domains) => {
   if (domains.includes('legendAdds')) {
     const added = new Set(operations.legendAdds.map(({ caption }) => caption));
     groups.forEach((group) => Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
-      if (!isEditorRow(entry) || added.has(text(entry.getAttribute('data-legend-key')))) return;
+      if (!isEditorRow(entry) || added.has(pythonLegendKey(entry))) return;
       entry.remove();
       changed = true;
     }));
@@ -1585,7 +1585,7 @@ const nameSavedRuleRows = (svg, edits) => {
   const keyRecord = resultBaseAttribute('data-legend-key');
   let named = false;
   namedLegends(svg).flatMap((legend) => Array.from(legend.querySelectorAll('g[data-legend-key]'))).forEach((row) => {
-    const key = text(row.getAttribute('data-legend-key'));
+    const key = pythonLegendKey(row);
     const name = names.get(key);
     if (!name || name === key || row.hasAttribute('data-legend-name') || row.hasAttribute(keyRecord)) return;
     row.setAttribute('data-legend-name', name);

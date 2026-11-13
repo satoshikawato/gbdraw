@@ -40,7 +40,6 @@ const OWNER_GRAPH_BASELINE = {
   'heavy-derived.trigger-site.v2|rulePreparation|app/run-analysis.js': 1,
   // owner-graph.identity-from-display.v1 (a Legend row or a feature joined on
   // a fill or stroke, `paint-join`, or on a value a Result shows, `shown-join`)
-  'owner-graph.identity-from-display.v1|app/candidate-render.js|matchingRuleDerivedFill|paint-join': 1,
   'owner-graph.identity-from-display.v1|app/feature-editor/color-actions.js|findLegendRowNamed|paint-join': 1,
   'owner-graph.identity-from-display.v1|app/feature-editor/rule-actions.js|commitOnce|paint-join': 1,
   'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|findLegendRowNamed|paint-join': 1,
@@ -50,11 +49,7 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.identity-from-display.v1|services/legend-svg.js|legendRowFeatureIds|paint-join': 1,
   'owner-graph.identity-from-display.v1|services/specific-color-rules.js|captionFills|paint-join': 1,
   'owner-graph.identity-from-display.v1|services/specific-color-rules.js|createRuleLegendCaptions|paint-join': 1,
-  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|applyLegendOperations|shown-join': 1,
-  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|legends|shown-join': 1,
-  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|nameSavedRuleRows|shown-join': 1,
   'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|recordSavedLegendKeys|shown-join': 1,
-  'owner-graph.identity-from-display.v1|services/svg-result-ingestion.js|restoreLegendStructure|shown-join': 1
 };
 
 // Distinct call shapes per projection domain outside its owner (R3: one

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import { compileDirectEditorMutationPlan, namedLegendCaption } from '../../gbdraw/web/js/app/candidate-render.js';
 import { legendRowFeatureIds } from '../../gbdraw/web/js/services/legend-svg.js';
 import { biologicalFeatureKey } from '../../gbdraw/web/js/services/feature-catalog.js';
 
@@ -73,6 +73,32 @@ test('rule-derived fill residue is excluded without matching rules against Featu
     manualSpecificRules: [{ feat: 'CDS', cap: 'manual', color: '#abcdef' }]
   });
   assert.equal(plan.kind, 'EMPTY');
+});
+
+// A fill override is the rule's copy when it is in the rule's Legend group: the
+// same caption and the same fill, however the color is spelled (Python's row
+// identity, gbdraw/legend/table.py). An override saved with another spelling of
+// the rule's color is excluded as well, and names no Legend row.
+test('a rule-derived fill override in another spelling of the rule color is excluded', () => {
+  [['#ABC', '#aabbcc'], ['#AABBCC', '#aabbcc'], ['Red', '#ff0000'], ['#ff0000', 'red']].forEach(([overrideColor, ruleColor]) => {
+    const override = { color: overrideColor, caption: 'manual' };
+    const rules = [{ feat: 'CDS', cap: 'manual', color: ruleColor }];
+    const plan = compileDirectEditorMutationPlan({
+      catalogAdmission: admission(),
+      featureColorOverrides: { [stableKey]: override },
+      manualSpecificRules: rules
+    });
+    assert.equal(plan.kind, 'EMPTY', `${overrideColor} / ${ruleColor}`);
+    assert.equal(namedLegendCaption(override, rules), '', `${overrideColor} / ${ruleColor}`);
+  });
+  // Another caption or another fill is a standalone edit.
+  const other = compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    featureColorOverrides: { [stableKey]: { color: '#ABC', caption: 'manual' } },
+    manualSpecificRules: [{ feat: 'CDS', cap: 'other', color: '#aabbcc' }, { feat: 'CDS', cap: 'manual', color: '#aabbcd' }]
+  });
+  assert.equal(other.kind, 'MUTATING');
+  assert.equal(namedLegendCaption({ color: '#ABC', caption: 'manual' }, [{ cap: 'manual', color: '#aabbcd' }]), 'manual');
 });
 
 test('each direct editor domain and their combination compile to MUTATING', () => {
