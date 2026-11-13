@@ -652,7 +652,7 @@ under "Cited ids without a record".
 - [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load): Legend position of a diagram mode at Load. ACCEPTED, concern `web.legend.position-of-mode`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/legend-drawn-side.test.mjs`
 
-- [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit): Labels that do not fit. ACCEPTED, concern `product.circular-outer-label-fit`, scenario revision 28, supersedes scenario revision 27.
+- [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit): Labels that do not fit. ACCEPTED, concern `product.circular-outer-label-fit`, scenario revision 29, supersedes scenario revision 28.
   - `tests/test_annotation_lane_room.py`
   - `tests/test_circular_definition_over_track.py`
   - `tests/test_circular_label_capacity.py`
