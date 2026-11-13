@@ -3,7 +3,7 @@
 
 import math
 import re
-from typing import Literal
+from typing import Literal, NamedTuple
 
 
 ArrowHeadLengthRatio = Literal["auto"] | float
@@ -132,15 +132,113 @@ def calculate_arrow_shaft_bounds(
     )
 
 
+def get_arrow_strand_positions(normalized_start: float, normalized_end: float) -> dict[str, list[float]]:
+    """Get start and end positions for arrow based on strand."""
+    return {"positive": [normalized_start, normalized_end], "negative": [normalized_end, normalized_start]}
+
+
+def calculate_normalized_arrow_length(
+    arrow_length: float, genome_length: int, alignment_width: float
+) -> float:
+    return alignment_width * (arrow_length / genome_length)
+
+
+LinearBlockGlyph = Literal["arrow", "shaft", "rectangle"]
+
+
+def linear_block_glyph(glyph_kind: str, strand: str, is_last: bool, shaft_width_ratio: float) -> LinearBlockGlyph:
+    """The glyph one block of a Linear feature is drawn with: an arrow glyph on a defined strand draws its
+    head on the block that ends the feature (``is_last``) and a narrowed shaft on its other blocks when the
+    shaft is narrower than the head; every other block is a rectangle."""
+
+    if glyph_kind != "arrow" or strand not in {"positive", "negative"}:
+        return "rectangle"
+    if is_last:
+        return "arrow"
+    return "shaft" if float(shaft_width_ratio) < 1.0 else "rectangle"
+
+
+class LinearBlockOutline(NamedTuple):
+    """The outline of one drawn block of a Linear feature, in the record's drawn px.
+
+    ``tail_x`` is the end without a head, ``tip_x`` the end the head points to and ``shoulder_x`` where
+    the head begins; a block without a head has its shoulder at its tip, and an arrow too short for a
+    shaft (``triangle``) has its shoulder at its tail. ``top_y``, ``middle_y`` and ``bottom_y`` are the
+    block's lane; ``shaft_top_y`` and ``shaft_bottom_y`` bound its shaft (the lane's edges unless the shaft
+    is narrowed). The block's path and the fit of a label drawn inside it read this one outline.
+    """
+
+    glyph: LinearBlockGlyph
+    tail_x: float
+    shoulder_x: float
+    tip_x: float
+    top_y: float
+    middle_y: float
+    bottom_y: float
+    shaft_top_y: float
+    shaft_bottom_y: float
+    triangle: bool
+
+
+def linear_block_outline(
+    glyph: LinearBlockGlyph,
+    start_x: float,
+    end_x: float,
+    strand: str,
+    y_positions: tuple[float, float, float],
+    automatic_head_length_px: float,
+    head_length_ratio: ArrowHeadLengthRatio,
+    shaft_width_ratio: float,
+) -> LinearBlockOutline:
+    """The outline of a block from ``start_x`` to ``end_x`` drawn as ``glyph`` in the lane ``y_positions``.
+
+    An arrow's head is ``resolve_arrow_head_length_px`` of the record's automatic head; at full shaft width
+    it keeps the legacy five-vertex rule (a triangle only when the block is shorter than the head), and with
+    a narrowed shaft the head is capped at the block (a triangle when no shaft remains).
+    """
+
+    top_y, middle_y, bottom_y = (float(value) for value in y_positions)
+    full_width = float(shaft_width_ratio) == 1.0
+    shaft_top_y, shaft_bottom_y = (
+        (top_y, bottom_y)
+        if glyph == "rectangle" or full_width
+        else calculate_arrow_shaft_bounds(top_y, middle_y, bottom_y, shaft_width_ratio)
+    )
+    if glyph != "arrow":
+        return LinearBlockOutline(
+            glyph, start_x, end_x, end_x, top_y, middle_y, bottom_y, shaft_top_y, shaft_bottom_y, False
+        )
+    tail_x, tip_x = get_arrow_strand_positions(start_x, end_x)[strand]
+    block_length = end_x - start_x
+    head_length = resolve_arrow_head_length_px(
+        head_length_ratio, abs(bottom_y - top_y), automatic_head_length_px, shaft_width_ratio
+    )
+    if full_width:
+        triangle = is_legacy_arrow_short(block_length, head_length)
+    else:
+        head_length = cap_arrow_head_length(block_length, head_length)
+        triangle = not has_arrow_shaft(block_length, head_length)
+    shoulder_x = tail_x if triangle else set_arrow_shoulder(strand, tip_x, head_length)
+    return LinearBlockOutline(
+        glyph, tail_x, shoulder_x, tip_x, top_y, middle_y, bottom_y, shaft_top_y, shaft_bottom_y, triangle
+    )
+
+
 __all__ = [
     "ArrowHeadLengthRatio",
+    "LinearBlockGlyph",
+    "LinearBlockOutline",
     "calculate_arrow_shaft_bounds",
+    "calculate_normalized_arrow_length",
     "calculate_circular_arrow_length",
     "cap_arrow_head_length",
     "circular_head_length_bp_to_px",
     "circular_head_length_px_to_bp",
+    "get_arrow_strand_positions",
     "has_arrow_shaft",
     "is_legacy_arrow_short",
+    "linear_block_glyph",
+    "linear_block_outline",
     "resolve_arrow_head_length_px",
     "resolve_circular_arrow_head_length_bp",
     "set_arrow_shoulder",

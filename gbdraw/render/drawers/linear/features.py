@@ -11,7 +11,8 @@ from gbdraw.svg.elements import Group, Path
 from ....configurators import FeatureDrawingConfigurator
 from ....features.ids import SourceFeatureHash, make_linear_rendered_feature_id
 from ....layout.linear import LinearFeatureLaneGeometry
-from ....svg.arrows import ArrowHeadLengthRatio
+from ....features.objects import linear_drawn_parts
+from ....svg.arrows import ArrowHeadLengthRatio, linear_block_glyph
 from ....svg.ids import instance_svg_id
 from ....svg.linear_features import (
     create_arrow_path_linear,
@@ -163,11 +164,11 @@ class FeatureDrawer:
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
         block_index = 0
         line_index = 0
-        # The path generator keeps every display part of a projected feature, in order.
+        # The path generator draws every part of the feature, in order (``linear_drawn_parts``).
         targets = (
             [group] * len(gene_paths)
             if row_groups is None
-            else [row_groups[part.fragment.row] for part in feature_object.display_parts]
+            else [row_groups[part.row] for part in linear_drawn_parts(feature_object)]
         )
 
         for gene_path, target in zip(gene_paths, targets, strict=True):
@@ -258,8 +259,7 @@ class FeaturePathGenerator:
 
     def generate_linear_gene_path(self, gene_object):
         feature_track_id = gene_object.feature_track_id
-        coords = (gene_object.location if gene_object.display_parts is None
-                  else [part.location for part in gene_object.display_parts])
+        coords = [part.location for part in linear_drawn_parts(gene_object)]
         coordinates_paths = []
         feature_y_positions = None
         if self.feature_lane_geometry is not None:
@@ -294,13 +294,13 @@ class FeaturePathGenerator:
                     feature_y_positions=feature_y_positions,
                 )
             elif feat_type == "block":
-                glyph_kind = getattr(
-                    gene_object,
-                    "glyph_kind",
-                    "arrow" if gene_object.is_directional else "rectangle",
+                glyph = linear_block_glyph(
+                    getattr(gene_object, "glyph_kind", "arrow" if gene_object.is_directional else "rectangle"),
+                    coord.strand,
+                    coord.is_last,
+                    self.shaft_width_ratio,
                 )
-                has_defined_strand = coord.strand in {"positive", "negative"}
-                if coord.is_last and glyph_kind == "arrow" and has_defined_strand:
+                if glyph == "arrow":
                     coord_path = create_arrow_path_linear(
                         coord_dict=coord_dict,
                         arrow_length=self.arrow_length,
@@ -316,11 +316,7 @@ class FeaturePathGenerator:
                         head_length_ratio=self.head_length_ratio,
                         shaft_width_ratio=self.shaft_width_ratio,
                     )
-                elif (
-                    glyph_kind == "arrow"
-                    and has_defined_strand
-                    and self.shaft_width_ratio < 1.0
-                ):
+                elif glyph == "shaft":
                     coord_path = create_arrow_shaft_path_linear(
                         coord_dict=coord_dict,
                         genome_length=self.genome_length,

@@ -6,6 +6,7 @@ import pytest
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 from gbdraw import LinearOptions, draw_linear, read_genbank
+from gbdraw.canvas.linear import LinearCanvasGeometry
 from gbdraw.config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -20,6 +21,15 @@ from gbdraw.labels.linear import linear_record_labels, place_linear_label_row
 from gbdraw.linear import _get_args as get_linear_args
 
 circular_assemble_module
+
+
+def _canvas_geometry(alignment_width: float, arrow_length: float = 0.0) -> LinearCanvasGeometry:
+    """A 20 px tall feature track without an axis gap; heads of ``arrow_length`` bp (none by default)."""
+
+    return LinearCanvasGeometry(
+        alignment_width=alignment_width, longest_genome=1000, length_param="short", cds_height=20.0,
+        arrow_length=arrow_length, track_axis_gap=None, normalize_length=False,
+    )
 
 
 def _feature(feature_id: str, start: int, end: int, label: str, strand: str = "positive") -> FeatureObject:
@@ -57,7 +67,7 @@ def _linear_policy_labels(label_rendering: str) -> list[dict]:
         "external": _feature("external", 500, 510, "very long label that cannot fit inside a ten base feature"),
     }
     profile = LinearRenderProfile(cfg)
-    record_labels = linear_record_labels(features, 1000, 1000, 20, False, "middle", None, profile)
+    record_labels = linear_record_labels(features, 1000, 1000, _canvas_geometry(1000.0), False, "middle", profile)
     return place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout="middle")[0]
 
 
@@ -122,7 +132,7 @@ def test_linear_label_goes_inside_its_feature_only_with_a_quarter_em_to_spare() 
     }
     profile = LinearRenderProfile(cfg)
     record_labels = linear_record_labels(
-        features, 1000, 1000, 20, False, "middle", None, profile, label_font_size=font_size
+        features, 1000, 1000, _canvas_geometry(1000.0), False, "middle", profile, label_font_size=font_size
     )
     labels = place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout="middle")[0]
 

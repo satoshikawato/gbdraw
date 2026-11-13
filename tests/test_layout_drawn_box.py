@@ -27,7 +27,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
 
 from gbdraw.api.requests import RecordPresentation
-from gbdraw.canvas.linear import LinearCanvasConfigurator
+from gbdraw.canvas.linear import LinearCanvasConfigurator, LinearCanvasGeometry
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -72,6 +72,11 @@ CAPTIONS = (
     "hypothetical protein",
 )
 SIZES = (8.0, 14.0, 24.0)
+# A 20 px tall feature track without an axis gap and arrows without heads, 2000 px wide.
+_NO_HEAD_TRACK = LinearCanvasGeometry(
+    alignment_width=2000.0, longest_genome=1000, length_param="short", cds_height=20.0, arrow_length=0.0,
+    track_axis_gap=None, normalize_length=False,
+)
 
 
 def _config(overrides: dict[str, object]) -> GbdrawConfig:
@@ -296,7 +301,7 @@ def test_linear_definition_lines_are_a_line_box_tall_and_interval_apart() -> Non
 def test_linear_label_height_is_the_face_line_box_plus_the_row_margin() -> None:
     cfg = _config({"labels.linear.scope": "all"})
     record_labels = linear_record_labels(
-        _features(CAPTIONS), 1000 * len(CAPTIONS), 2000, 20, False, "middle", None, LinearRenderProfile(cfg),
+        _features(CAPTIONS), 1000 * len(CAPTIONS), 2000, _NO_HEAD_TRACK, False, "middle", LinearRenderProfile(cfg),
         label_font_size=14.0,
     )
     height = _line_box(cfg.objects.text.font_family, 14.0) + LINEAR_LABEL_HEIGHT_MARGIN_EM * 14.0
@@ -315,7 +320,7 @@ def test_every_label_and_tick_layout_width_holds_the_drawn_ink() -> None:
                     misses.append(("circular label", candidate.text, family, size))
             cfg = _config({"objects.text.font_family": family, "labels.linear.scope": "all"})
             linear = linear_record_labels(
-                _features(CAPTIONS), 1000 * len(CAPTIONS), 2000, 20, False, "middle", None,
+                _features(CAPTIONS), 1000 * len(CAPTIONS), 2000, _NO_HEAD_TRACK, False, "middle",
                 LinearRenderProfile(cfg), label_font_size=size,
             )
             for label in linear.labels:
