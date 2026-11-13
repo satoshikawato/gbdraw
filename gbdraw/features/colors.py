@@ -108,26 +108,31 @@ def get_color(
 # A color rule as a Legend reads the feature that takes it: its caption ("" for
 # none) and its color.
 RuleUse = tuple[str, str]
+# A captioned rule a drawn feature takes, as a Legend counts it: the feature's
+# type, the caption and the color.
+TypeRuleUse = tuple[str, str, str]
 
 
-def legend_rule_use(drawn: Iterable[tuple[str, Optional[RuleUse]]]) -> tuple[set[RuleUse], set[str]]:
-    """Which color rules a Legend counts as used, from each drawn feature's type
-    and the rule it takes (None: no rule, its type's color).
+def legend_rule_use(drawn: Iterable[tuple[str, Optional[RuleUse]]]) -> tuple[set[TypeRuleUse], set[str]]:
+    """Which color rules a Legend counts as used, per drawn type, from each drawn
+    feature's type and the rule it takes (None: no rule, its type's color).
 
     The one reading of the drawn features for the Legend (Generate's
     ``precompute_used_color_rules``, the Web's Legend order and the row of each
     feature, ``FeatureLegendRows``): the captioned rules features take, as
-    (caption, color), and the types of the features no rule colors. An
-    uncaptioned rule names no row.
+    (type, caption, color), and the types of the features no rule colors. A
+    rule is used for a type only when features of that type take it, so a
+    type it colors none of keeps its own row (Legend contract 05A4-04 L-C3,
+    OV-3465). An uncaptioned rule names no row.
     """
 
-    used: set[RuleUse] = set()
+    used: set[TypeRuleUse] = set()
     default_types: set[str] = set()
     for feature_type, winner in drawn:
         if winner is None:
             default_types.add(feature_type)
         elif winner[0]:
-            used.add(winner)
+            used.add((feature_type, *winner))
     return used, default_types
 
 
@@ -139,7 +144,7 @@ def precompute_used_color_rules(
     feature_visibility_rules: list[dict] | None = None,
     record_features=(),
     include_hidden: bool = False,
-) -> tuple[set, set]:
+) -> tuple[set[TypeRuleUse], set[str]]:
     """
     Pre-compute which color rules will be used for a set of records.
 
@@ -155,7 +160,8 @@ def precompute_used_color_rules(
 
     Returns:
         (used_rules, default_used_features)
-        used_rules: Set of (caption, color) tuples for rules that match features
+        used_rules: Set of (feature type, caption, color) tuples for the captioned
+            rules features of that type take (``legend_rule_use``)
         default_used_features: Set of feature types that fell back to default color
     """
     from Bio.SeqRecord import SeqRecord
@@ -192,6 +198,7 @@ def precompute_used_color_rules(
 
 __all__ = [
     "RuleUse",
+    "TypeRuleUse",
     "feature_matches_specific_color_rule",
     "find_specific_color_rule",
     "get_color",

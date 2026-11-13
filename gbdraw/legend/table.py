@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Hashable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, List, NamedTuple, NewType, Optional, Sequence, Set, Tuple, TypeVar
+from typing import TYPE_CHECKING, Iterable, List, NamedTuple, NewType, Optional, Sequence, Set, TypeVar
 
 from pandas import DataFrame
 
@@ -16,7 +16,13 @@ from gbdraw.core.color import (
     normalize_hex_color,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.colors import RuleUse, build_default_color_map, feature_type_color, legend_rule_use
+from gbdraw.features.colors import (
+    RuleUse,
+    TypeRuleUse,
+    build_default_color_map,
+    feature_type_color,
+    legend_rule_use,
+)
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
@@ -651,14 +657,15 @@ class FeatureLegendRows:
     are the drawn types in the order they first appear in the drawing; ``used``
     and ``default_types`` are what ``legend_rule_use`` reads of the drawn
     features (``used`` None: every captioned rule counts as used, for callers
-    that do not read the features). The Web's twin is ``featureLegendRows``
+    that do not read the features). A rule is used for a type when features of
+    that type take it (OV-3465), the same for explicit and ``*`` rules. The Web's twin is ``featureLegendRows``
     (gbdraw/web/js/services/specific-color-rules.js); both answer
     tests/fixtures/legend_generated_rows.json (``feature_rows``).
     """
 
     rules: tuple[LegendRule, ...]
     present: tuple[str, ...]
-    used: frozenset[RuleUse] | None
+    used: frozenset[TypeRuleUse] | None
     default_types: frozenset[str]
 
     @classmethod
@@ -678,13 +685,14 @@ class FeatureLegendRows:
 
         return [rule for rule in self.rules if rule[0] in (feature_type, "*") and str(rule[1] or "").strip()]
 
-    def _drawn(self, rule: LegendRule) -> bool:
-        return self.used is None or (rule[1], rule[2]) in self.used
+    def _drawn(self, feature_type: str, rule: LegendRule) -> bool:
+        return self.used is None or (feature_type, rule[1], rule[2]) in self.used
 
     def rules_draw(self, feature_type: str) -> bool:
-        """Whether a captioned rule of the type is used: its features of no rule then form an "other" row."""
+        """Whether features of the type take a captioned rule of the type: its features of no rule then form an
+        "other" row (Legend contract 05A4-04 L-C2); else the type keeps its own row (L-C3)."""
 
-        return any(self._drawn(rule) for rule in self.type_rules(feature_type))
+        return any(self._drawn(feature_type, rule) for rule in self.type_rules(feature_type))
 
     def type_row(self, feature_type: str) -> LegendRowKey | None:
         """The renderer's own row of a drawn type, if it has one: the type itself
@@ -724,7 +732,7 @@ class FeatureLegendRows:
         renderer_rows = {self.type_row(feature_type) for feature_type in self.present}
         placed: set[str] = set()
         for feature_type in self.present:
-            yield from (rule for rule in self.type_rules(feature_type) if self._drawn(rule))
+            yield from (rule for rule in self.type_rules(feature_type) if self._drawn(feature_type, rule))
             for key in (_key_of_name(feature_type), _other_feature_legend_key(feature_type)):
                 if key in renderer_rows and key not in placed:
                     placed.add(key)
@@ -774,7 +782,7 @@ def prepare_legend_table(
     features_present: List[str],
     *,
     comparison: ComparisonLegendSource | None = None,
-    used_color_rules: Optional[Set[Tuple[str, str]]] = None,
+    used_color_rules: Optional[Set[TypeRuleUse]] = None,
     default_used_features: Optional[Set[str]] = None,
     depth: DepthLegendSource | None = None,
     show_gc: bool,
@@ -787,9 +795,9 @@ def prepare_legend_table(
 
     Args:
         comparison: The pairwise identity gradient; ``None`` without comparisons.
-        used_color_rules: Optional set of (caption, color) tuples that were actually
-            matched during feature creation. If provided, only these rules will be
-            included in the legend. If None, all rules for present feature types
+        used_color_rules: Optional set of (feature type, caption, color) tuples
+            that features of that type actually took (``legend_rule_use``). If
+            provided, only these rules will be included in the legend. If None, all rules for present feature types
             will be included (legacy behavior).
         default_used_features: Optional set of feature types that fell back to
             default colors. Used to decide whether to include "other X" entries

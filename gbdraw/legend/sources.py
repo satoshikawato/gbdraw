@@ -18,7 +18,7 @@ from pandas import DataFrame
 
 from gbdraw.comparisons.identity_scale import IdentityColorDomain
 from gbdraw.core.sequence import check_feature_presence
-from gbdraw.features.colors import precompute_used_color_rules
+from gbdraw.features.colors import TypeRuleUse, precompute_used_color_rules
 from gbdraw.tracks.parsing import SlotView, slot_skew_colors, slots_draw_features
 
 if TYPE_CHECKING:
@@ -67,8 +67,8 @@ def feature_legend_presence(
     records: Sequence[SeqRecord],
     features: FeatureLegendSource,
     slots: Iterable[SlotView] | None,
-) -> tuple[list[str], set[tuple[str, str]], set[str]]:
-    """The feature types drawn, the color rules features took, and the types on default colors.
+) -> tuple[list[str], set[TypeRuleUse], set[str]]:
+    """The feature types drawn, the color rules features of each type took, and the types on default colors.
 
     ``slots`` is the drawing's track stack; without a features slot
     (:func:`slots_draw_features`) no feature is drawn, so none is named.

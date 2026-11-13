@@ -457,6 +457,35 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
   }
 });
 
+// OV-3461: the feature popup names the Legend row the figure draws the feature
+// in (featureLegendRows, the twin of Python's FeatureLegendRows): a CDS of no
+// rule beside a used captioned CDS rule is in "other proteins", and a tRNA,
+// whose type no rule colors, in "tRNA".
+test('HMMT Session: the popup names the Legend row the figure draws a default feature in (OV-3461)', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const page = await load(browser, HMMT_SESSION);
+  try {
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val: '^NADH dehydrogenase subunit 1$', color: '#e63946', cap: 'ND1' });
+      await app.addSpecificRule();
+    });
+    await settle(page);
+    await generate(page);
+    expect(await legendCaptions(page, { source: 'result' })).toEqual(expect.arrayContaining(['ND1', 'other proteins', 'tRNA']));
+    for (const [product, row] of [['cytochrome b', 'other proteins'], ['tRNA-Leu', 'tRNA']]) {
+      await evaluateWithRetainedPromise(page, async (name) => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === name), null);
+      }, product);
+      await expect(page.getByLabel('Feature legend name', { exact: true }), product).toHaveValue(row);
+      await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+    }
+  } finally {
+    await page.context().close();
+  }
+});
+
 // The Linear LAMBDA Gallery Session on one page. A page error anywhere in the
 // case fails the legend-free step.
 test('lambda: a Linear legend side change applies on Generate or at once, and a position change after a legend-free Generate raises no page error', async ({ browser }) => {

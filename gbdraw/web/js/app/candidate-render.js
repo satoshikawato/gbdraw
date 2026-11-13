@@ -243,7 +243,7 @@ export const namedLegendCaption = (override, rules) => (
 // The color Python gives a Legend row it draws by itself: a track's row by
 // the slot that draws it (`trackRowColor`: the slot's own color, else the
 // palette's; OV-484), else the palette color of the feature type the row
-// names (`generatedLegendRow`): a drawn type's color is its features'
+// names (`legendRowType`): a drawn type's color is its features'
 // (`paletteFeatureColor`, the palette's `default` for an unlisted type;
 // OV-3114).
 /**

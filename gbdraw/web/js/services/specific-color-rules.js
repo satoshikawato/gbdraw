@@ -209,8 +209,8 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
  * The feature rows of a Legend (`featureLegendRows`).
  * @typedef {object} FeatureLegendRows
  * @property {readonly string[]} present The drawn types, in the order they first appear.
- * @property {(type: string) => boolean} rulesDraw Whether a captioned rule of the type (or of every type) is
- *   used: its features of no rule then form its "other" row.
+ * @property {(type: string) => boolean} rulesDraw Whether features of the type take a captioned rule of the
+ *   type (or of every type): its features of no rule then form its "other" row.
  * @property {(type: string) => PythonLegendKey | null} typeRow The renderer's own row of a drawn type.
  * @property {(type: string, winner: SpecificRuleInput | null) => FeatureLegendRow} rowOf The row a feature of
  *   the type is in, by the rule it takes; a feature that is not drawn gets the row it would join.
@@ -234,10 +234,11 @@ export const legendRowType = (key, types) => typeOfRow(key, types) ?? key;
 // of Python's `FeatureLegendRows` (gbdraw/legend/table.py), whose rows Generate
 // draws: both answer tests/fixtures/legend_generated_rows.json (`feature_rows`).
 // A rule for every type (`*`) is read as the same rule written for each type
-// (OV-3460). The captioned rules the drawn features take, by caption and color,
-// are used (Python's `legend_rule_use`): a type with a used captioned rule
-// draws its "other" row for its features of no rule, and no row for its
-// features of an uncaptioned rule; any other type draws its own row.
+// (OV-3460). The captioned rules the drawn features take, by the features'
+// type, caption and color, are used (Python's `legend_rule_use`; OV-3465): a
+// type whose features take a captioned rule draws its "other" row for its
+// features of no rule, and no row for its features of an uncaptioned rule;
+// any other type draws its own row (Legend contract 05A4-04 L-C2, L-C3).
 /**
  * @param {readonly SpecificRuleInput[]} rules The rule table, in table order.
  * @param {Iterable<LegendRowUse>} drawn The drawn features.
@@ -247,7 +248,9 @@ export const featureLegendRows = (rules, drawn) => {
   const table = rules.map((rule) => normalizeSpecificRule(rule));
   /** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
   const use = (rule) => JSON.stringify([rule.cap, rule.color]);
-  /** @type {Set<string>} */
+  /** @param {string} type @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
+  const typeUse = (type, rule) => JSON.stringify([type, rule.cap, rule.color]);
+  /** @type {Set<string>} The captioned rules the drawn features take, by `typeUse`. */
   const used = new Set();
   /** @type {Set<string>} */
   const defaultTypes = new Set();
@@ -257,7 +260,7 @@ export const featureLegendRows = (rules, drawn) => {
     present.add(type);
     const rule = winner && normalizeSpecificRule(winner);
     if (!rule) defaultTypes.add(type);
-    else if (rule.cap) used.add(use(rule));
+    else if (rule.cap) used.add(typeUse(type, rule));
   }
   /** @param {string} type */
   const typeRules = (type) => table.filter((rule) => (rule.feat === type || rule.feat === '*') && rule.cap);
@@ -265,7 +268,7 @@ export const featureLegendRows = (rules, drawn) => {
   const drawsByType = new Map();
   /** @param {string} type */
   const rulesDraw = (type) => {
-    if (!drawsByType.has(type)) drawsByType.set(type, typeRules(type).some((rule) => used.has(use(rule))));
+    if (!drawsByType.has(type)) drawsByType.set(type, typeRules(type).some((rule) => used.has(typeUse(type, rule))));
     return /** @type {boolean} */ (drawsByType.get(type));
   };
   return {
@@ -283,8 +286,8 @@ export const featureLegendRows = (rules, drawn) => {
     },
     drawsRow: (rule) => {
       const group = normalizeSpecificRule(rule);
-      return Boolean(group.cap) && used.has(use(group))
-        && [...present].some((type) => typeRules(type).some((each) => use(each) === use(group)));
+      return Boolean(group.cap)
+        && [...present].some((type) => used.has(typeUse(type, group)) && typeRules(type).some((each) => use(each) === use(group)));
     }
   };
 };

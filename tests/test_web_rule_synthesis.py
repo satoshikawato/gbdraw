@@ -705,9 +705,10 @@ def _wildcard_seqs() -> list[SeqFeature]:
     # Every feature takes the rule: its row alone (OV-3460: it drew no row).
     ([dict(feat="*", qual="product", val=".*", color=TEAL, cap="Everything")], ["Everything"]),
     # Read as the same rule written for each drawn type: a type keeps an "other"
-    # row for its features the rule leaves, as with the rule written per type.
+    # row for its features the rule leaves, as with the rule written per type;
+    # a type the rule colors none of keeps its own row (OV-3465).
     ([dict(feat="*", qual="product", val="^alpha", color=TEAL, cap="Alpha")],
-     ["Alpha", "other proteins", "other rRNAs"]),
+     ["Alpha", "other proteins", "rRNA"]),
 ])
 def test_a_captioned_rule_for_every_type_draws_its_legend_row(table, rows):
     seqs = _wildcard_seqs()
@@ -717,3 +718,29 @@ def test_a_captioned_rule_for_every_type_draws_its_legend_row(table, rows):
     features = [_payload(f, "rec") for f in seqs]
     answer = _synthesize(features, [3], rules=table, color="#e63946", caption="small", drawn=[0, 1, 2, 3])
     assert _answer_legend(answer, _next_table(answer, table))[0] == rows[0]
+
+
+@pytest.mark.parametrize(("seqs", "table", "rows"), [
+    # One caption and color written for three types: rRNA takes none of it, so
+    # it keeps its own row, not "other rRNAs" (OV-3465).
+    (_wildcard_seqs(), [dict(feat=feature_type, qual="product", val="^alpha", color=TEAL, cap="Alpha")
+                        for feature_type in ("CDS", "tRNA", "rRNA")], ["Alpha", "other proteins", "rRNA"]),
+    # The rule row stands at the first type whose features take it, not at a
+    # type that only lists it (tRNA is drawn first; only the CDS takes it).
+    ([_feature(0, "tRNA", product="beta tRNA"), _feature(1, "CDS", product="alpha protein")],
+     [dict(feat=feature_type, qual="product", val="^alpha", color=TEAL, cap="Alpha") for feature_type in ("tRNA", "CDS")],
+     ["tRNA", "Alpha"]),
+])
+def test_a_rule_counts_as_used_only_for_the_types_whose_features_take_it(seqs, table, rows):
+    """Legend contract 05A4-04: "other <type>s" stands beside a caption the type's own features take (L-C2); a
+    rule that colors none of a type's features leaves the type's caption (L-C3)."""
+    assert _generate_legend(seqs, table) == rows
+    features = [_payload(f, "rec") for f in seqs]
+    # The Web's answer for an edit that leaves the colors as they are (an alpha
+    # feature given its own rule's caption and color) gives the same rows.
+    alpha = next(i for i, f in enumerate(seqs) if f.qualifiers["product"][0].startswith("alpha"))
+    answer = _synthesize(features, [alpha], rules=table, color=TEAL, caption="Alpha", drawn=list(range(len(seqs))))
+    # The answer names a rule row once per type whose features take it; the
+    # Legend draws rows of one caption and color as one row.
+    next_table = _next_table(answer, table)
+    assert list(dict.fromkeys(_answer_legend(answer, next_table))) == _generate_legend(seqs, next_table) == rows
