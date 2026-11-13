@@ -1695,10 +1695,17 @@ def _search_frame_extent(protein: CdsProtein, record: SeqRecord) -> tuple[int, i
     (PD-OI-073). A record analysis names its proteins there, so the drawn frame of the caller (the CLI extracts from
     the drawn records, the Web from the search frame) does not change its display binding."""
 
-    if _read_coord_map(record)[1] == 1:
-        return int(protein.start), int(protein.end)
-    length = len(record)
-    return length - int(protein.end), length - int(protein.start)
+    framed = protein if _read_coord_map(record)[1] == 1 else _reflected_protein(protein, len(record))
+    return int(framed.start), int(framed.end)
+
+
+def _reflected_protein(protein: CdsProtein, record_length: int) -> CdsProtein:
+    """``protein`` on the reverse complement of its record of ``record_length`` bases: its extent and strand there."""
+
+    strand = -protein.strand if protein.strand in {-1, 1} else protein.strand
+    return replace(
+        protein, start=record_length - int(protein.end), end=record_length - int(protein.start), strand=strand
+    )
 
 
 def _protein_binding_metadata(
@@ -2481,6 +2488,46 @@ def _legacy_fasta_and_id_map(
     return proteins_to_fasta(legacy), mapping
 
 
+def _legacy_writer_frames(proteins: Sequence[CdsProtein]) -> tuple[Sequence[CdsProtein], ...]:
+    """The protein lists a schema-2 writer may have hashed for one record, from its proteins in its search frame
+    (:func:`search_frame_proteins`), most likely first.
+
+    The 0.11.0-0.13.0 Web searched every record in its search frame: it never reversed a record before extracting its
+    proteins. The 0.13.0 CLI searched the drawn records, so for a record drawn reversed it listed the proteins on the
+    reverse complement, by start, as ``reverse_records`` lists a reversed record's features (a stable sort of the
+    source order). A record not drawn reversed was never written in that frame, so trying it promotes nothing new
+    except an entry a reversed drawing of the same record wrote: its hits name proteins and amino-acid positions,
+    which do not depend on the frame. An entry hashed in neither frame stays pending.
+    """
+
+    lengths = {protein.record_length for protein in proteins}
+    if len(lengths) != 1 or None in lengths:
+        return (proteins,)
+    record_length = int(cast(int, next(iter(lengths))))
+    drawn_reversed = sorted(
+        (_reflected_protein(protein, record_length) for protein in proteins),
+        key=lambda protein: int(protein.start),
+    )
+    return (proteins, drawn_reversed)
+
+
+def _legacy_frame_matching(
+    frames: Sequence[Sequence[CdsProtein]],
+    record_token: str,
+    canonical_hash: object,
+    *,
+    side: str,
+) -> tuple[str, dict[str, str]]:
+    """The legacy FASTA and legacy-to-current ID map of the first of ``frames`` whose FASTA hash is
+    ``canonical_hash``."""
+
+    for proteins in frames:
+        legacy_fasta, id_map = _legacy_fasta_and_id_map(proteins, record_token)
+        if _hash_text_sha256(legacy_fasta) == str(canonical_hash or ""):
+            return legacy_fasta, id_map
+    raise ValidationError(f"Legacy {side} FASTA hash does not match.")
+
+
 def _legacy_reverse_record_lengths(
     proteins: Sequence[CdsProtein],
     references: set[str],
@@ -2579,7 +2626,9 @@ def build_legacy_protein_reference_map(
     extraction: ProteinExtractionResult,
     reference_ids: Sequence[str],
 ) -> dict[str, str]:
-    """Resolve legacy ``p_r_`` artifact IDs through current protein identity."""
+    """Resolve legacy ``p_r_`` artifact IDs through current protein identity.
+
+    ``extraction`` lists each record's proteins in its search frame (:func:`search_frame_extraction`)."""
 
     if extraction.identity_manifest is None:
         raise ValidationError(
@@ -2695,8 +2744,12 @@ def promote_legacy_protein_raw_cache_entries(
 ) -> LegacyProteinRawCachePromotionScan:
     """Find and verify a legacy pair, then return a schema-4 copy.
 
-    No input object is mutated. A failed candidate contributes a pair-local
-    rejection diagnostic and never enters the current cache.
+    ``query_proteins`` and ``subject_proteins`` are each record's proteins in
+    its search frame (:func:`search_frame_proteins`), and ``query_fasta`` and
+    ``subject_fasta`` their FASTA. An entry is verified in each frame its writer
+    may have hashed (:func:`_legacy_writer_frames`). No input object is
+    mutated. A failed candidate contributes a pair-local rejection diagnostic
+    and never enters the current cache.
     """
 
     manifest = validate_protein_identity_manifest(identity_manifest)
@@ -2718,6 +2771,8 @@ def promote_legacy_protein_raw_cache_entries(
     expected_arg_tuple = tuple(str(arg) for arg in expected_args)
     rejections: list[LegacyProteinRawCacheRejection] = []
     token_evidence: dict[str, set[str]] | None = None
+    query_frames = _legacy_writer_frames(query_proteins)
+    subject_frames = _legacy_writer_frames(subject_proteins)
 
     for candidate_index, candidate in enumerate(entries):
         entry = _legacy_original_entry(candidate)
@@ -2755,18 +2810,12 @@ def promote_legacy_protein_raw_cache_entries(
                     )
                 query_token = next(iter(query_candidates))
                 subject_token = next(iter(subject_candidates))
-            legacy_query_fasta, query_id_map = _legacy_fasta_and_id_map(
-                query_proteins,
-                query_token,
+            legacy_query_fasta, query_id_map = _legacy_frame_matching(
+                query_frames, query_token, entry.get("queryCanonicalHash"), side="query"
             )
-            legacy_subject_fasta, subject_id_map = _legacy_fasta_and_id_map(
-                subject_proteins,
-                subject_token,
+            legacy_subject_fasta, subject_id_map = _legacy_frame_matching(
+                subject_frames, subject_token, entry.get("subjectCanonicalHash"), side="subject"
             )
-            if _hash_text_sha256(legacy_query_fasta) != str(entry.get("queryCanonicalHash") or ""):
-                raise ValidationError("Legacy query FASTA hash does not match.")
-            if _hash_text_sha256(legacy_subject_fasta) != str(entry.get("subjectCanonicalHash") or ""):
-                raise ValidationError("Legacy subject FASTA hash does not match.")
             rewritten_tsv = _rewrite_legacy_protein_tsv(
                 raw_text,
                 query_id_map,
@@ -2968,8 +3017,8 @@ class LosatpCacheManager(LosatRawCache):
             lambda entry: validate_protein_raw_entry_references(entry, authority)
         )
 
-    def set_protein_extraction(self, extraction: ProteinExtractionResult) -> None:
-        """Attach the current extraction needed to verify legacy cache candidates."""
+    def set_protein_extraction(self, extraction: ProteinExtractionResult, records: Sequence[SeqRecord]) -> None:
+        """Attach the current extraction of ``records`` needed to verify legacy cache candidates."""
 
         if extraction.identity_manifest is None:
             raise ValidationError(
@@ -2982,9 +3031,10 @@ class LosatpCacheManager(LosatRawCache):
 
         self.set_identity_manifest(extraction.identity_manifest)
         proteins_by_instance: dict[str, tuple[CdsProtein, ...]] = {}
+        # Legacy promotion reads each record in its search frame.
         for instance_key, proteins in zip(
             extraction.record_instance_keys,
-            extraction.proteins_by_record,
+            search_frame_extraction(records, extraction).proteins_by_record,
             strict=True,
         ):
             normalized_key = str(instance_key).strip()
@@ -3633,11 +3683,41 @@ def search_frame_protein_fasta(record: SeqRecord, proteins: Sequence[CdsProtein]
     records (OV-3457). The nucleotide twin is ``gbdraw.comparisons.losat_jobs.losat_search_frame_fasta``.
     """
 
+    return proteins_to_fasta(search_frame_proteins(record, proteins))
+
+
+def search_frame_proteins(record: SeqRecord, proteins: Sequence[CdsProtein]) -> list[CdsProtein]:
+    """``proteins``, extracted from ``record``, in its search frame: in the order its FASTA lists them, each with its
+    extent and strand there. The Web extracts the search frame itself; the CLI, which extracts from the drawn
+    records, reads a record drawn reversed through this. Legacy cache promotion takes proteins in this frame."""
+
     positions = [
         protein.feature_index if protein.source_feature_position is None else protein.source_feature_position
         for protein in proteins
     ]
-    return proteins_to_fasta([proteins[index] for index in _search_frame_order(record, positions)])
+    listed = [proteins[index] for index in _search_frame_order(record, positions)]
+    if _read_coord_map(record)[1] == 1:
+        return listed
+    return [_reflected_protein(protein, len(record)) for protein in listed]
+
+
+def search_frame_extraction(
+    records: Sequence[SeqRecord], extraction: ProteinExtractionResult
+) -> ProteinExtractionResult:
+    """``extraction``, of ``records``, with every record's proteins in its search frame
+    (:func:`search_frame_proteins`): the extraction the Web makes. The readers of legacy schema-2 artifacts
+    (:func:`promote_legacy_protein_raw_cache_entries`, :func:`build_legacy_protein_reference_map`) take this, so
+    the CLI, which extracts from the drawn records, reads them as the Web does (OV-3494)."""
+
+    proteins_by_record = [
+        search_frame_proteins(record, proteins)
+        for record, proteins in zip(records, extraction.proteins_by_record, strict=True)
+    ]
+    return replace(
+        extraction,
+        proteins_by_record=proteins_by_record,
+        protein_map={protein.protein_id: protein for proteins in proteins_by_record for protein in proteins},
+    )
 
 
 def source_protein_letters(
@@ -7347,6 +7427,8 @@ __all__ = [
     "percent_encode_losat_transport_field",
     "proteins_to_fasta",
     "search_frame_protein_fasta",
+    "search_frame_extraction",
+    "search_frame_proteins",
     "source_protein_letters",
     "promote_legacy_protein_raw_cache_entries",
     "raw_protein_tsv_matches_bindings",
