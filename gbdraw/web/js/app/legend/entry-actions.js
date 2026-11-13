@@ -20,8 +20,9 @@
  * @typedef {{ caption: PythonLegendKey, after: PythonLegendKey }} LegendRowPlacement
  */
 /**
- * The rows a Result lists (`listLegendRows`) and the keys of those that are Python's.
- * @typedef {{ entries: ListedEntry[], generatedCaptions: Set<PythonLegendKey> }} LegendRowListing
+ * The rows a Result lists (`listLegendRows`), the keys of those that are Python's, and Python's swatch of each of
+ * them as the Result draws it (`swatches`), which no listed row holds (OV-282).
+ * @typedef {{ entries: ListedEntry[], generatedCaptions: Set<PythonLegendKey>, swatches: Map<PythonLegendKey, string> }} LegendRowListing
  */
 import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
@@ -40,12 +41,14 @@ import {
 import {
   deleteLegendRow,
   legendEntryKey,
+  ownLegendColor,
   recolorLegendRows,
   rekeyLegendPaint,
   replaceDormantLegendRows,
   replaceLegendRows,
   restoreLegendRows,
-  setLegendColor
+  setLegendColor,
+  withOwnLegendColor
 } from '../../services/drawing/paint.js';
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
@@ -332,7 +335,9 @@ export const createLegendEntryActions = ({
     /** @type {readonly EntryRecord[]} */
     const restored = drawing.legendEntries.value;
     if (!svg || results.value.length < 2 || !Array.isArray(from)) return false;
-    const mounted = listLegendRows(svg, { entries: restored, dormant: drawing.dormantLegendEntries.value, asShown: true });
+    const mounted = listLegendRows(svg, {
+      entries: restored, dormant: drawing.dormantLegendEntries.value, overrides: drawing.legendColorOverrides, asShown: true
+    });
     if (!mounted) return false;
     // A row is its key and the name it shows: two rows may show one name.
     /** @param {EntryRecord} entry */
@@ -476,12 +481,16 @@ export const createLegendEntryActions = ({
         const removed = removedKeys;
         // An intent's `caption` is its row's key; its `name` is the rule's caption.
         const names = new Map(intents.map((intent) => [legendCaption(intent), intent.name]));
-        // A row the rules draw records their color, also one that already showed it (a palette row).
+        // A row the rules draw shows their color (`displayedLegendRowColors`): a row the
+        // commit adds, or an editor row it recolors (one an earlier commit added before
+        // a Generate drew it), holds it, as no other owner does (OV-282).
         const colors = new Map([...diff.update, ...diff.unchanged].map(({ caption, color }) => [caption, color]));
         const added = new Map(diff.add.map(({ caption, color }) => [caption, { caption, originalCaption: caption, color, featureIds: [] }]));
+        const inventory = new Set(originalLegendOrder.value);
         /** @type {EntryRecord[]} */
         let entries = drawing.legendEntries.value.map((/** @type {EntryRecord} */ entry) => (
-          colors.has(legendEntryKey(entry)) ? { ...entry, color: colors.get(legendEntryKey(entry)) } : entry
+          colors.has(legendEntryKey(entry)) && !inventory.has(legendEntryKey(entry))
+            ? { ...entry, color: colors.get(legendEntryKey(entry)) } : entry
         ));
         // A re-keyed row (OV-645) is the row the commit removes, added under
         // its new key: the row and every record stored under its key move to
@@ -605,7 +614,8 @@ export const createLegendEntryActions = ({
     dormant: drawing.dormantLegendEntries.value,
     deleted: drawing.deletedLegendEntries.value,
     inventory: originalLegendOrder.value,
-    hidden: readHiddenTrackRows(drawing)
+    hidden: readHiddenTrackRows(drawing),
+    overrides: drawing.legendColorOverrides
   });
 
   /**
@@ -621,12 +631,15 @@ export const createLegendEntryActions = ({
    * under the keys they show (B19 reads the list a Result showed). Also the
    * generated captions: the keys of the listed rows of Python's. A row of a
    * drawn track the intent hides (`hidden`) is not listed, as the live
-   * compile deletes it (OV-1198).
+   * compile deletes it (OV-1198). A listed row of Python's holds the user's
+   * Legend color of its key (`overrides`) and no other; an editor row, the
+   * color it shows (`ownLegendColor`, OV-282).
    * @param {SVGSVGElement} svg
    * @param {{ entries: readonly EntryRecord[], dormant?: readonly EntryRecord[], deleted?: readonly EntryRecord[],
-   *   inventory?: string[], hidden?: readonly string[], asShown?: boolean }} intent
+   *   inventory?: string[], hidden?: readonly string[], overrides: Readonly<Record<string, string>>, asShown?: boolean }} intent
+   * @returns {LegendRowListing | null}
    */
-  const listLegendRows = (svg, { entries, dormant = [], deleted = [], inventory = [], hidden = [], asShown = false }) => {
+  const listLegendRows = (svg, { entries, dormant = [], deleted = [], inventory = [], hidden = [], overrides, asShown = false }) => {
     const rows = resultLegendRows(svg);
     if (!rows) return null;
     const known = new Set(inventory);
@@ -650,6 +663,8 @@ export const createLegendEntryActions = ({
     const unshown = new Set();
     /** @type {Set<PythonLegendKey>} */
     const generatedCaptions = new Set();
+    /** @type {Map<PythonLegendKey, string>} */
+    const swatches = new Map();
     // A row without a key record (a rename saved before U3a) is the intent
     // entry with its caption, unless another row of the Result is Python's
     // row of that entry's key: then it is Python's own row, e.g. a deleted
@@ -682,8 +697,10 @@ export const createLegendEntryActions = ({
         const entry = intentEntry((each) => legendEntryKey(each) === key && legendCaption(each) === caption)
           || intentEntry((each) => legendEntryKey(each) === key);
         generatedCaptions.add(key);
+        swatches.set(key, row.color);
+        const own = ownLegendColor(key, { python: true, overrides });
         const item = {
-          caption, originalCaption: key, color: row.color, xPos: row.xPos, yPos: row.yPos, featureIds: entry?.featureIds || []
+          caption, originalCaption: key, ...(own ? { color: own } : {}), xPos: row.xPos, yPos: row.yPos, featureIds: entry?.featureIds || []
         };
         listed.push(item);
         if (!asShown && !row.shown && !row.merged && known.has(key)) unshown.add(item);
@@ -702,7 +719,7 @@ export const createLegendEntryActions = ({
     const keyOf = (item) => item.originalCaption;
     const placed = placeByInventory(listed.filter((item) => !unshown.has(item)),
       [...unshown].sort((a, b) => inventory.indexOf(keyOf(a)) - inventory.indexOf(keyOf(b))), inventory, keyOf);
-    return { entries: placed, generatedCaptions };
+    return { entries: placed, generatedCaptions, swatches };
   };
 
   // The inventory after a draw: while an edited order is replayed, the
@@ -941,11 +958,12 @@ export const createLegendEntryActions = ({
       inventoryByResult.set(identity, [...originalLegendOrder.value]);
     }
 
-    // Kept as a Session holds them, so a Save and Load round trip keeps them (B24).
-    if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
-      visuallySortedEntries.forEach((entry) => {
-        const color = normalizeOptionalHexColor(entry.color);
-        if (color) originalLegendColors.value[entry.originalCaption] = color;
+    // Python's swatch of each of its rows, the one owner of it (OV-282); kept as a
+    // Session holds them, so a Save and Load round trip keeps them (B24).
+    if (Object.keys(originalLegendColors.value).length === 0 && mounted.swatches.size > 0) {
+      mounted.swatches.forEach((swatch, key) => {
+        const color = normalizeOptionalHexColor(swatch);
+        if (color) originalLegendColors.value[key] = color;
       });
     }
   };
@@ -1022,16 +1040,14 @@ export const createLegendEntryActions = ({
     const returning = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => picked.has(index));
     if (!svgContainer.value?.querySelector?.('svg') || returning.length === 0) return false;
     const inventory = originalLegendOrder.value.map((/** @type {unknown} */ caption) => String(caption || '').trim());
-    const context = displayedLegendRowContext(state, drawing);
-    const shown = readLegendRowColors(drawing);
     /** @type {EntryRecord[]} */
     let entries = [...drawing.legendEntries.value];
     for (const entry of returning) {
+      // OV-282: a row of Python's returns holding only the user's Legend color, so it shows the color
+      // Generate gives it (`displayedLegendRowColors`); an editor row, its own.
       const key = legendEntryKey(entry);
-      const recorded = Object.hasOwn(drawing.legendColorOverrides, key) ? drawing.legendColorOverrides[key] : undefined;
-      // OV-282: a palette row returns in the palette's color it shows, never the swatch it recorded.
-      const color = String(recorded || legendRowRules(legendEntryKey(entry), context)[0]?.color || shown.deleted(entry));
-      entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
+      const own = withOwnLegendColor(entry, key, { python: inventory.includes(key), overrides: drawing.legendColorOverrides });
+      entries = withEntryAtDefaultPlace(entries, own, inventory);
     }
     restoreLegendRows(drawing.slices.paint, picked, listedRowsOf(entries));
     return returning.map(legendEntryKey).filter((key) => inventory.includes(key));

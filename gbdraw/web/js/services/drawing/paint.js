@@ -24,24 +24,24 @@ import { createSliceHandle, sliceMembers } from './slice-handle.js';
 
 /** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
 /**
- * The color a Legend row records, never its identity (OV-288): one the user
- * set (a Legend color, an editor row's color, the color of a rule's row), or,
- * for a row the palette colors, the swatch the displayed Result showed when
- * its Legend list was last extracted (a Generate, a Result display, Settings
- * Reset). That can be a draft palette color, not Python's swatch, and a
- * palette, Default colors or Reset edit does not refresh it by itself. A row
- * shows `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
- * @typedef {string & { readonly __brand: 'RecordedLegendColor' }} RecordedLegendColor
+ * The color a Legend row record holds, never its identity (OV-288): an editor
+ * row's own color, or the Legend color the user gave a row of Python's (the
+ * one `legendColorOverrides` holds under its key). A row of Python's the user
+ * did not color holds none: its swatch is the Result's (`originalLegendColors`),
+ * and the palette, the rules and the slots derive what it shows
+ * (`displayedLegendRowColors` in app/candidate-render.js; OV-282, D-26).
+ * @typedef {string & { readonly __brand: 'UserLegendColor' }} UserLegendColor
  */
 /**
- * A row of a drawing's Legend list. Its identity is Python's key
- * (`originalCaption`; an editor row's own caption); the caption and the
- * recorded color are display values their writers own (rename, Legend color),
- * never a row's identity or the features it reaches (OV-288).
+ * A row of a drawing's Legend list, as the drawing lists it and a Session
+ * saves it (`editorState.legend.entries`). Its identity is Python's key
+ * (`originalCaption`; an editor row's own caption); the caption and the color
+ * are display values their writers own (rename, Legend color), never a row's
+ * identity or the features it reaches (OV-288).
  * @typedef {object} LegendEntry
  * @property {LegendCaption} caption
  * @property {PythonLegendKey} originalCaption
- * @property {RecordedLegendColor} color
+ * @property {UserLegendColor} [color] Only on an editor row and a row the user colored (`ownLegendColor`).
  * @property {number} xPos
  * @property {number} yPos
  * @property {RenderedFeatureId[]} featureIds The features the row lists (older Sessions); empty: Python's row decides.
@@ -88,6 +88,35 @@ import { createSliceHandle, sliceMembers } from './slice-handle.js';
 // its caption (a row saved before U3a has no record).
 /** @param {{ readonly caption?: unknown, readonly originalCaption?: unknown }} entry @returns {PythonLegendKey} */
 export const legendEntryKey = (entry) => /** @type {PythonLegendKey} */ (String(entry.originalCaption || entry.caption || '').trim());
+
+// The color a row record of key `key` holds (OV-282, D-26): the user's
+// Legend color of its key, else, for an editor row, its own `color`; a row of
+// Python's (`python`) holds no other, since the Result owns its swatch. The
+// one rule of the writers of a row's color and of Load; '' when it holds none.
+/**
+ * @param {PythonLegendKey} key
+ * @param {{ python: boolean, overrides: Readonly<Record<string, string>>, color?: unknown }} row
+ * @returns {UserLegendColor | ''}
+ */
+export const ownLegendColor = (key, { python, overrides, color }) => {
+  const own = Object.hasOwn(overrides, key) ? overrides[key] : python ? '' : color;
+  // A color a user or an editor row owns is a user color (the cast).
+  return typeof own === 'string' ? /** @type {UserLegendColor | ''} */ (own.trim()) : '';
+};
+
+/**
+ * `entry` holding the color `ownLegendColor` gives it, and no `color` field when it holds none.
+ * @template {{ readonly color?: unknown }} T
+ * @param {T} entry
+ * @param {PythonLegendKey} key
+ * @param {{ python: boolean, overrides: Readonly<Record<string, string>> }} row
+ * @returns {Omit<T, 'color'> & { color?: UserLegendColor }}
+ */
+export const withOwnLegendColor = (entry, key, { python, overrides }) => {
+  const { color, ...rest } = entry;
+  const own = ownLegendColor(key, { python, overrides, color });
+  return own ? { ...rest, color: own } : rest;
+};
 
 // A feature color edit as a record: an older Session's bare color has no
 // caption and reads as no record, as the editors read it.
@@ -281,7 +310,7 @@ export const renameListedLegendRow = (slice, row, { caption, originalCaption }) 
 
 /**
  * The Legend color of the rows of `keys`: each key's color edit and the
- * recorded color of each listed row of them.
+ * color each listed row of them holds.
  * @param {PaintSlice} slice
  * @param {readonly PythonLegendKey[]} keys
  * @param {string} color The color the user set.
@@ -289,9 +318,9 @@ export const renameListedLegendRow = (slice, row, { caption, originalCaption }) 
 export const recolorLegendRows = (slice, keys, color) => {
   const { legendEntries, legendColorOverrides } = membersOf(slice);
   const recolored = new Set(keys);
-  // A color the user set is what the row records (`RecordedLegendColor`).
-  const recorded = /** @type {RecordedLegendColor} */ (color);
-  legendEntries.value.forEach((entry) => { if (recolored.has(legendEntryKey(entry))) entry.color = recorded; });
+  // A color the user set is a user color (the cast).
+  const own = /** @type {UserLegendColor} */ (color);
+  legendEntries.value.forEach((entry) => { if (recolored.has(legendEntryKey(entry))) entry.color = own; });
   keys.forEach((key) => { legendColorOverrides[key] = color; });
 };
 
