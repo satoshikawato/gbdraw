@@ -291,9 +291,12 @@ def test_the_cli_and_the_web_search_one_side_fasta_for_a_reversed_window_of_a_mu
 ) -> None:
     """Parity (OV-3457): a LOSATP side of several records of one File, one of them a window drawn reversed, is the
     same FASTA on the CLI as on the Web: each record's proteins in its search frame (the crop before its reverse
-    complement, as the Web helper extracts them), so the CLI's batches carry the searchContext keys the Web stored."""
+    complement, as the Web helper extracts them), so the CLI's batches carry the searchContext keys the Web stored.
+    The CDS of the reversed window have no name, so their FASTA IDs and labels are the synthetic ones, numbered in
+    the search frame too."""
 
     import pandas as pd
+    from Bio import SeqIO
 
     import gbdraw.analysis.protein_colinearity as protein_colinearity
     from gbdraw.api.request_render import _extract_linear_request_proteins, plan_linear_request
@@ -303,8 +306,19 @@ def test_the_cli_and_the_web_search_one_side_fasta_for_a_reversed_window_of_a_mu
 
     other = _two_record_genbank(tmp_path)
     windows = (RecordWindow(3000, 6000), RecordWindow(7000, 12000, True))
+    mito = SeqIO.read(MITO, "genbank")
+    unnamed = [
+        feature for feature in mito.features
+        if feature.type == "CDS" and 7000 <= int(feature.location.start) and int(feature.location.end) <= 12000
+    ]
+    assert len(unnamed) > 1
+    for feature in unnamed:
+        for name in ("locus_tag", "protein_id", "gene", "product"):
+            feature.qualifiers.pop(name, None)
+    mito_path = tmp_path / "mito.gb"
+    SeqIO.write(mito, mito_path, "genbank")
     plan = plan_linear_request(LinearDiagramRequest(records=(
-        RecordInput(GenBankInputSource(MITO), windows=windows, record_key="mito"),
+        RecordInput(GenBankInputSource(mito_path), windows=windows, record_key="mito"),
         RecordInput(GenBankInputSource(other), selector=parse_record_selector("#2"), record_key="other"),
     )))
     extraction = _extract_linear_request_proteins(plan.request, plan.records, plan.inputs, plan.provenance)
@@ -318,7 +332,7 @@ def test_the_cli_and_the_web_search_one_side_fasta_for_a_reversed_window_of_a_mu
     web_fasta: dict[str, str] = {}
     for index, unit in enumerate(units):
         window = unit["window"]
-        path, selector = (MITO, None) if unit["windowOf"] else (other, "#2")
+        path, selector = (mito_path, None) if unit["windowOf"] else (other, "#2")
         web = json.loads(str(helpers["extract_cds_protein_fasta"](
             str(path), "genbank", None, None if window is None else window["searchRegion"], selector, "0", index,
             unit["unitKey"], None, None, unit["windowOf"],
