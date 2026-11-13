@@ -4,6 +4,7 @@ import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.j
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { appliedFeatureColors } from '../utils/color-utils.js';
 import { featureVisibilityRows } from '../services/feature-visibility.js';
 import {
   recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
@@ -214,7 +215,9 @@ export const visibilityTableError = (outcome) => (typeof outcome === 'object' ? 
 /**
  * @typedef {object} RulePreparationOptions
  * @property {Pick<WebState, 'activeDrawing' | 'biologicalFeatures' | 'extractedFeatures' | 'mode' | 'results'
- *   | 'selectedResultIndex' | 'sessionOperationAvailability' | 'svgResultIdentity'>} state
+ *   | 'selectedResultIndex' | 'sessionOperationAvailability' | 'svgResultIdentity' | 'paletteDefinitions'
+ *   | 'appliedPaletteName' | 'appliedPaletteColors'>} state The applied palette gives each feature type's color
+ *   to the Legend order Python answers (`synthesizeGroup`).
  * @property {(payload: RuleEvaluationRequest, options?: RuleEvaluationOptions) => Promise<RuleEvaluationResult>} evaluate
  *   The diagram helper that matches rules against feature payloads (R7).
  * @property {(request: SynthesizeColorRulesRequest) => Promise<SynthesizedColorRules>} synthesize
@@ -509,7 +512,8 @@ export const createRulePreparation = ({
       drawn: [...drawn].flatMap((feature) => {
         const index = indexOf.get(feature);
         return index === undefined ? [] : [index];
-      })
+      }),
+      palette: appliedFeatureColors(state)
     });
   };
   return {

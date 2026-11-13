@@ -236,6 +236,12 @@ restores it. Other feature types use `other <feature type>s` for the same remain
 (for example, `other genes`). The same rule applies to Web regeneration after
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
+**Reset fill color** in the Web app gives a feature its palette color back; when
+another rule still colors that feature, the reset writes a rule named
+`other <feature type>s` in the palette color. Such a rule counts as the default
+color: while no other specific rule of the type is used, the legend keeps the
+plain caption (`rRNA`), and once one is, the feature belongs to the
+`other rRNAs` row.
 
 Legend rows that have one name follow one rule in the CLI, the Python API, and
 the Web app:

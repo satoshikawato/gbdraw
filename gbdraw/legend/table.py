@@ -16,7 +16,7 @@ from gbdraw.core.color import (
     normalize_hex_color,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.colors import build_default_color_map, feature_type_color
+from gbdraw.features.colors import build_default_color_map, feature_type_color, other_feature_row_name
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
@@ -630,7 +630,7 @@ def pairwise_identity_legend_from_comparisons(
 
 
 def _other_feature_legend_key(feature_type: str) -> LegendRowKey:
-    return _key_of_name("other proteins" if feature_type == "CDS" else f"other {feature_type}s")
+    return _key_of_name(other_feature_row_name(feature_type))
 
 
 def _solid_legend_entry(fill: object, stroke: object, width: object) -> dict[str, object]:

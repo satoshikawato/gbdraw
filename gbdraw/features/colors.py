@@ -2,10 +2,13 @@
 # coding: utf-8
 
 import re
+from collections.abc import Iterable
 from typing import Any, Mapping, Optional, Tuple, cast
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
+
+from gbdraw.core.color import normalize_hex_color
 
 from .ids import compute_feature_hash as compute_feature_hash
 from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
@@ -54,6 +57,54 @@ def feature_type_color(default_color_map: Mapping[str, str], feature_type: str) 
     if feature_type in default_color_map:
         return default_color_map[feature_type]
     return default_color_map.get("default", "#d3d3d3")
+
+
+def other_feature_row_name(feature_type: str) -> str:
+    """The Legend name of the features of a type drawn in the type's color
+    while a captioned rule draws other features of the type: "other proteins"
+    for CDS, else "other <type>s". A Reset fill color writes it as the caption
+    of the rule that takes a feature back to the type's color."""
+
+    return "other proteins" if feature_type == "CDS" else f"other {feature_type}s"
+
+
+def _same_color(left: str, right: str) -> bool:
+    try:
+        return normalize_hex_color(left) == normalize_hex_color(right)
+    except ValueError:
+        return str(left).strip().lower() == str(right).strip().lower()
+
+
+def legend_rule_use(
+    drawn: Iterable[tuple[str, str, Optional[str]]], default_color_map: Mapping[str, str]
+) -> tuple[set[tuple[str, str]], set[str]]:
+    """The color rules the drawn features take, as ``(caption, color)``, and the
+    types drawn in their own color, from the type, color and caption (None
+    without a rule) of each drawn feature; an uncaptioned rule names neither.
+
+    A rule named like its type's remainder row (:func:`other_feature_row_name`)
+    in the type's color draws the features that row would: while no other
+    captioned rule draws a feature of the type, its features count as drawn in
+    the type's color, so the Legend keeps the type's own caption (OV-3350,
+    Owner 2026-11-11).
+    """
+
+    used: dict[str, set[tuple[str, str]]] = {}
+    remainder: dict[str, set[tuple[str, str]]] = {}
+    default_used: set[str] = set()
+    for feature_type, color, caption in drawn:
+        if caption is None:
+            default_used.add(feature_type)
+        elif caption:
+            row = caption == other_feature_row_name(feature_type) and _same_color(
+                color, feature_type_color(default_color_map, feature_type))
+            (remainder if row else used).setdefault(feature_type, set()).add((caption, color))
+    for feature_type, rules in remainder.items():
+        if feature_type in used:
+            used[feature_type] |= rules
+        else:
+            default_used.add(feature_type)
+    return {rule for rules in used.values() for rule in rules}, default_used
 
 
 def get_color_with_info(
@@ -139,8 +190,7 @@ def precompute_used_color_rules(
     if isinstance(records, SeqRecord):
         records = [records]
 
-    used_rules: set = set()
-    default_used_features: set = set()
+    drawn: list[tuple[str, str, Optional[str]]] = []
     for index, record in enumerate(records):
         override_of = feature_override_lookup(
             record, record_features[index].overrides if record_features else None
@@ -161,11 +211,8 @@ def precompute_used_color_rules(
             color, caption = get_color_with_info(
                 feature, color_map, default_color_map, record_id=record.id, instance=instance
             )
-            if caption is None:
-                default_used_features.add(feature.type)
-            elif caption:
-                used_rules.add((caption, color))
-    return used_rules, default_used_features
+            drawn.append((feature.type, color, caption))
+    return legend_rule_use(drawn, default_color_map)
 
 
 __all__ = [
@@ -173,6 +220,8 @@ __all__ = [
     "find_specific_color_rule",
     "get_color",
     "get_color_with_info",
+    "legend_rule_use",
+    "other_feature_row_name",
     "precompute_used_color_rules",
     "build_default_color_map",
     "build_specific_color_rules",

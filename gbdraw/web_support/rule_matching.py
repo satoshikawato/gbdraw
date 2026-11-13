@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from pandas import DataFrame
 
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape, violations
-from gbdraw.features.colors import build_specific_color_rules
+from gbdraw.features.colors import build_specific_color_rules, feature_type_color, legend_rule_use, other_feature_row_name
 from gbdraw.features.ids import feature_instance
 from gbdraw.features.selector_values import ColorRuleList, iter_specific_color_rules
 from gbdraw.features.visibility import (
@@ -164,7 +164,8 @@ class SynthesizeColorRulesRequest(TypedDict):
     in the place of the rule that colored them (OV-2192); "features" colors each by itself (a `hash` rule naming the
     feature instance, as "This feature only" does); "reset" takes back the
     `hash` rows that name them and, when another rule still colors one and
-    `color` is not empty, gives it `color` and `caption` by itself. `labels`
+    `color` is not empty, gives it `color` by itself, named like its type's
+    remainder row (``other_feature_row_name``; `caption` is not read). `labels`
     holds, for each selected feature in the same order, the label texts it
     shows (its displayed and its annotation label). `rules` is the rule table
     at the write's turn, in order, with each row's color and caption.
@@ -173,7 +174,9 @@ class SynthesizeColorRulesRequest(TypedDict):
     so the joined row keeps its place in the Legend (OV-2193). `drawn` holds
     the features one Result draws, by index in `features`, in the order it
     draws them; with it, the answer gives that Result's Legend order of the
-    next table (else None).
+    next table (else None). `palette` maps each feature type, and `default`,
+    to the color a feature of the type takes without a rule, as the drawing
+    applies it (``feature_type_color``).
     """
 
     scope: Literal["group", "row", "features", "reset"]
@@ -185,6 +188,7 @@ class SynthesizeColorRulesRequest(TypedDict):
     caption: str
     joins: JoinedLegendRow | None
     drawn: list[int] | None
+    palette: dict[str, str]
 
 
 class RetargetedColorRule(TypedDict):
@@ -441,9 +445,15 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
     them) gives way to a copy per instance of each of those features, with its
     color and caption, so they and the Legend keep it; a feature that another
     row colors takes no copy. A target that another rule still colors
-    then takes `color` and `caption` by itself, unless `color` is empty. A
+    then takes `color` by itself, unless `color` is empty, named like its
+    type's remainder row (``other_feature_row_name``): the Legend then draws it
+    in that row, or in the type's own row while no other rule draws a feature
+    of the type (``legend_rule_use``). The targets are of one type. A
     table that would change the winner of any other feature is refused."""
     rules = request["rules"]
+    types = {features[i]["type"] for i in request["selected"]}
+    if len(types) > 1:
+        raise ValueError("The rule synthesis resets the color of features of one type at a time.")
     hash_of, targets, holders = _hash_targets(features, request["selected"])
     old_winners = _winners(features, rules)
     own: set[tuple[str, str]] = set()
@@ -483,13 +493,13 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
         return table, winners
     colored, colored_winners = _colored_table(SynthesizeColorRulesRequest(
         scope="features", features=request["features"], selected=request["selected"],
-        labels=[[] for _ in request["selected"]], rules=rows, color=request["color"], caption=request["caption"],
-        joins=None, drawn=None), features)
+        labels=[[] for _ in request["selected"]], rules=rows, color=request["color"],
+        caption=other_feature_row_name(types.pop()), joins=None, drawn=None, palette=request["palette"]), features)
     return [table[entry] if isinstance(entry, int) else entry for entry in colored], colored_winners
 
 
 def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeature], winners: Sequence[int],
-                  drawn: Sequence[int]) -> list[int | str]:
+                  drawn: Sequence[int], palette: dict[str, str]) -> list[int | str]:
     """The feature rows of the Legend of the Result that draws the features
     `drawn`, in Generate's order (``feature_legend_row_order``, the order
     ``prepare_legend_table`` adds them), from what ``feature_legend_presence``
@@ -498,9 +508,12 @@ def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeatur
     from an uncaptioned one), and the types of the drawn features no rule
     colors. A rule row is the index of its first rule of its type, caption and
     color, once (rules of one caption and color draw one row). `winners` are
-    the rules of `rules` that color each feature of `features` (-1 for none)."""
-    used = {(rules[w]["cap"], rules[w]["color"]) for w in (winners[i] for i in drawn) if w >= 0 and rules[w]["cap"]}
-    default_used = {features[i]["type"] for i in drawn if winners[i] < 0}
+    the rules of `rules` that color each feature of `features` (-1 for none),
+    and `palette` the colors of the types (``legend_rule_use``)."""
+    used, default_used = legend_rule_use(
+        ((features[i]["type"], rules[w]["color"], rules[w]["cap"]) if w >= 0
+         else (features[i]["type"], feature_type_color(palette, features[i]["type"]), None)
+         for i, w in ((i, winners[i]) for i in drawn)), palette)
     present = list(dict.fromkeys(features[i]["type"] for i in drawn))
     specific: dict[str, list[tuple[str, str]]] = {}
     first: dict[tuple[str, str, str], int] = {}
@@ -521,7 +534,7 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
                       else _colored_table(request, features))
     drawn = request["drawn"]
     legend = None if drawn is None else _legend_order(
-        [_table_row(row, request["rules"]) for row in table], features, winners, drawn)
+        [_table_row(row, request["rules"]) for row in table], features, winners, drawn, request["palette"])
     return SynthesizedColorRules(table=table, legend=legend)
 
 

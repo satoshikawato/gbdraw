@@ -1636,11 +1636,12 @@ export const createFeatureColorActions = ({
     const rowRules = new Set(getLegendRowRules(caption));
     // "This feature only" takes back the `hash` rules that name the feature, in
     // Python: a rule another copy of it shares keeps coloring that copy. A
-    // feature that another rule still colors takes its palette color by itself.
+    // feature that another rule still colors takes its palette color by itself,
+    // under the name Python gives it (OV-3350: the type's own Legend row).
     /** @type {SpecificRuleBuild} */
     const reset = choice === 'all'
       ? (current) => current.filter(rule => !rowRules.has(rule))
-      : groupColorRules([feature], color || '', feature.type === 'CDS' ? 'other proteins' : `other ${feature.type}s`, 'reset');
+      : groupColorRules([feature], color || '', '', 'reset');
     const applied = await commitRuleWrite(reset, msg('Reset feature color'), { drawing });
     if (applied) clickedFeature.value = null;
     return applied;
