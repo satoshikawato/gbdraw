@@ -17,7 +17,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import {
-  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
+  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, numberText, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
@@ -1016,4 +1016,68 @@ test('sentences with a count or a qualifier are whole keys, and none is built fr
     '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”'
   ]) assert.ok(!keys.has(key), key);
   assert.deepEqual([...keys.keys()].filter((key) => /file\(s\)/.test(key)), []);
+});
+
+// OV-2777: numberText (utils/i18n.js) is the one owner of number text. A number reads alike in every UI language
+// and whatever the browser's language (PD-OI-106): Western digits, the English decimal point and grouping.
+test('numberText writes English digits and grouping whatever the UI or browser language', async () => {
+  assert.equal(numberText(4641652), '4,641,652');
+  assert.equal(numberText(1234567.5), '1,234,567.5');
+  assert.equal(numberText(0.125), '0.125');
+  assert.equal(numberText(-1234), '-1,234');
+  assert.equal(numberText(72.25, 1), '72.3');
+  assert.equal(numberText(100, 1), '100.0');
+  try {
+    await setUiLocale('de', async () => ({ default: {} }));
+    assert.equal(numberText(4641652), '4,641,652');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// Every other place that writes a number calls numberText: a `toLocaleString()` without a locale follows the
+// browser's language (4.641.652 in a German browser, ৪৬,৪১,৬৫২ in a Bengali one), and a second formatter is a
+// second owner. The viewer script of an exported interactive file cannot import modules and keeps one copy,
+// `function numberText` in services/standalone-interactivity-assets.js, pinned to the owner by
+// tests/web/feature-search-scope.test.mjs.
+const NUMBER_FORMATTER = /\.toLocaleString\(|\bIntl\.NumberFormat\(/g;
+const NUMBER_TEXT_OWNER = 'js/utils/i18n.js';
+const VIEWER_COPY = 'js/services/standalone-interactivity-assets.js';
+
+/**
+ * `path:line: text` of each number formatter call in a Web source outside the owner and the viewer's copy.
+ * @param {string} source
+ * @param {string} path under gbdraw/web
+ */
+const numberFormatterProblems = (source, path) => {
+  if (path === NUMBER_TEXT_OWNER) return [];
+  let text = source;
+  if (path === VIEWER_COPY) {
+    const start = text.indexOf('function numberText(');
+    const end = text.indexOf('\n  }\n', start);
+    if (start !== -1 && end !== -1) text = text.slice(0, start) + text.slice(end);
+  }
+  return text.split('\n').flatMap((line, index) => (line.match(NUMBER_FORMATTER)
+    ? [`${path}:${index + 1}: ${line.trim().slice(0, 160)} (write numbers with numberText from utils/i18n.js)`] : []));
+};
+
+/** The Web sources: index.html and the scripts of gbdraw/web, without the Gallery, vendored and generated files. */
+const webNumberSources = () => [
+  'index.html',
+  ...readdirSync(webRoot, { recursive: true }).map((path) => String(path).split(sep).join('/'))
+    .filter((path) => path.endsWith('.js') && !path.endsWith('.generated.js'))
+    .filter((path) => !/^(gallery|vendor|node_modules)\//.test(path) && !path.startsWith('js/utils/i18n-catalogs/'))
+];
+
+test('numberText is the only number formatter of the Web app', () => {
+  assert.equal(numberFormatterProblems('const a = (1).toLocaleString();', 'js/x.js').length, 1);
+  assert.equal(numberFormatterProblems("const f = new Intl.NumberFormat('en-US');", 'js/x.js').length, 1);
+  assert.deepEqual(numberFormatterProblems("const f = new Intl.NumberFormat('en-US');", NUMBER_TEXT_OWNER), []);
+  const viewer = readFileSync(join(webRoot, VIEWER_COPY), 'utf8');
+  assert.equal(viewer.match(NUMBER_FORMATTER)?.length, 1, 'the viewer keeps exactly one copy, its numberText');
+  assert.deepEqual(numberFormatterProblems(viewer, VIEWER_COPY), []);
+  assert.equal(numberFormatterProblems(`${viewer}\nx.toLocaleString();`, VIEWER_COPY).length, 1);
+  const sources = webNumberSources();
+  assert.ok(sources.includes('index.html') && sources.includes('js/state.js') && sources.includes(VIEWER_COPY));
+  assert.deepEqual(sources.flatMap((path) => numberFormatterProblems(readFileSync(join(webRoot, path), 'utf8'), path)), []);
 });

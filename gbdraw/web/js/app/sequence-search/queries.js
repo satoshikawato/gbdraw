@@ -4,7 +4,7 @@
 // values: not in the Session and no History step.
 import { readFileText } from '../../services/file-content-cache.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { t } from '../../utils/i18n.js';
+import { numberText, t } from '../../utils/i18n.js';
 import { panelQueries, readSearchQueriesReply } from '../../services/sequence-search.js';
 
 /** @import { SearchProgram, SearchQuery } from '../../services/sequence-search.js' */
@@ -30,8 +30,8 @@ import { panelQueries, readSearchQueriesReply } from '../../services/sequence-se
  * @param {{ length: number, program: SearchProgram }} query
  */
 export const queryLengthText = ({ length, program }) => (program === 'tblastn'
-  ? t('{length} aa', { length: length.toLocaleString() })
-  : t('{length} bp', { length: length.toLocaleString() }));
+  ? t('{length} aa', { length: numberText(length) })
+  : t('{length} bp', { length: numberText(length) }));
 
 /**
  * @param {SearchQueryState} panel

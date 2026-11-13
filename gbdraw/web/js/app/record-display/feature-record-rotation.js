@@ -1,7 +1,7 @@
 // @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
-import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
+import { joinSentences, msg, numberText, t, tm } from '../../utils/i18n.js';
 /** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
 /** @import { AnchorIntent } from './feature-anchor.js' */
 /** @import { SessionBusy } from '../../state.js' */
@@ -307,7 +307,7 @@ const startSentence = ({ recordLabel, startCoordinate, reverseComplement, commit
     : reverseComplement
       ? t('reverse-complemented')
       : t('no longer reverse-complemented');
-  return `${t('{record} will start at {start}', { record: recordLabel, start: startCoordinate.toLocaleString('en-US') })} · ${orientation}`;
+  return `${t('{record} will start at {start}', { record: recordLabel, start: numberText(startCoordinate) })} · ${orientation}`;
 };
 
 /**

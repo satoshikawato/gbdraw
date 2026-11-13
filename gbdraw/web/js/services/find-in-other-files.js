@@ -6,7 +6,7 @@
 import { LOCATE_DESCRIPTION } from '../contracts/locate.generated.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { formatGroupedNumber } from './record-options.js';
+import { numberText } from '../utils/i18n.js';
 import { windowSpanOf } from './linear-card-windows.js';
 
 /** @import { LosatJob, LosatJobResult } from './losat.js' */
@@ -136,7 +136,7 @@ export const referenceWindowOf = (row) => {
  * A window's span as the dialog shows it: thousands separators, and "(−)" when it is reverse-complemented.
  * @param {{ start: number, end: number, reverse_complement: boolean }} window
  */
-export const windowSpanText = (window) => `${formatGroupedNumber(window.start)}–${formatGroupedNumber(window.end)}${
+export const windowSpanText = (window) => `${numberText(window.start)}–${numberText(window.end)}${
   window.reverse_complement ? ' (−)' : ''}`;
 
 /** A window's number in the drawing as a circled number (①..⑳, then "(21)"). @param {number} number */
