@@ -87,7 +87,10 @@ def test_the_label_fit_reads_the_outline_the_block_is_drawn_with(glyph, start, e
         path = create_rectangle_path_linear(**arguments)[1]
     outline = linear_block_outline(glyph, start * 0.8, end * 0.8, strand, _Y, 40.0, head_ratio, shaft_ratio)
 
-    assert _points(path) == pytest.approx(_outline_points(outline, shaft_ratio == 1.0), abs=5e-4)
+    drawn, expected = _points(path), _outline_points(outline, shaft_ratio == 1.0)
+    assert len(drawn) == len(expected)
+    # pytest.approx compares flat sequences only (pytest 9.2 rejects nested tuples).
+    assert [c for point in drawn for c in point] == pytest.approx([c for point in expected for c in point], abs=5e-4)
 
 
 def test_every_block_of_a_multipart_arrow_is_drawn_as_its_glyph_says() -> None:
