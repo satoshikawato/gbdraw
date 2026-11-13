@@ -8,7 +8,7 @@ import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors } from '../../gbdraw/web/js/app/candidate-render.js';
 import { readFileSync } from 'node:fs';
 import {
-  createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
+  createRuleLegendCaptions, diffLegendIntents, legendRowRules, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules, specificRuleHasQualifier
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
@@ -692,22 +692,6 @@ test('a rule captioned with a track row draws its own row, and the commit leaves
   assert.equal(ruleLegendCaptions(context)(live), 'GC content [#ff0000]', 'Python\'s key for the rule');
   assert.deepEqual(legendRowRules('GC content', context), [], 'the GC content row is the track\'s');
   assert.deepEqual([...ruleCommitLegendRows({ ...context, rules: [live, next] }).takenKeys], []);
-});
-
-// The Python rows the Web app reads from their keys are those Python
-// generates (tests/test_legend_row_facts.py): a present type's row with the
-// palette key of its fill, or a track's row, whose fill the track rows of the
-// request give (tests/web/track-legend-row-colors.test.mjs).
-test('the generated Legend rows read from their keys are Python\'s', () => {
-  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
-  for (const { name, features_present: types, rows } of cases) {
-    for (const [key, paletteKey] of rows) {
-      const row = generatedLegendRow(key);
-      assert.equal(row.track, !types.includes(paletteKey), `${name}: ${key} is a track row or a present type's row`);
-      assert.equal(row.paletteKey, row.track ? '' : paletteKey, `${name}: ${key}`);
-    }
-  }
-  assert.deepEqual(generatedLegendRow('Group'), { track: false, paletteKey: 'Group' }, 'any other key names a type\'s row');
 });
 
 test('the Legend editor recolors the rule of a suffixed row, and only that row', () => {
@@ -1694,4 +1678,22 @@ test('rule evaluation sends only the qualifier values the rules read and matches
   // A visibility or label rule reads its key in any case.
   assert.deepEqual(ruleFeaturePayloadReading(translated, qualifiersRead([{ qualifier: ' Translation ' }], 'qualifier'))
     .qualifiers.translation, ['MKVLAAGIVAL']);
+});
+
+// OV-3461: a feature of no captioned rule is in the row Generate draws for it:
+// its type's "other" row while a captioned rule of its type is used, no row
+// for a feature of an uncaptioned rule then, and its type's row otherwise.
+test('the popup reads a feature of no captioned rule in the row Generate draws for it (OV-3461)', () => {
+  const s=setup();
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Alpha'});
+  const [a,b]=s.state.extractedFeatures.value;
+  recordRuleMatches([a,b],s.state.manualSpecificRules.map(ruleKey),index=>({matched:index===0?[0]:[],priorities:index===0?[0]:[],declined:[]}));
+  const captionOf=s.actions.effectiveLegendCaptions();
+  assert.equal(captionOf(a),'Alpha');
+  assert.equal(captionOf(b),'other proteins','the default CDS is in the "other proteins" row');
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''});
+  recordRuleMatches([a,b],s.state.manualSpecificRules.map(ruleKey),index=>({matched:[index],priorities:[0],declined:[]}));
+  assert.equal(s.actions.effectiveLegendCaptions()(b),'','a feature of an uncaptioned rule is in no row');
+  s.state.manualSpecificRules.splice(0,1);
+  assert.equal(s.actions.effectiveLegendCaptions()(b),'CDS','without a used captioned rule the type keeps its row');
 });

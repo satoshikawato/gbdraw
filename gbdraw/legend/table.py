@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Container, Hashable, Iterator, Mapping, MutableMapping
+from collections.abc import Callable, Hashable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterable, List, NamedTuple, NewType, Optional, Sequence, Set, Tuple, TypeVar
 
@@ -16,7 +16,7 @@ from gbdraw.core.color import (
     normalize_hex_color,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.colors import build_default_color_map, feature_type_color
+from gbdraw.features.colors import RuleUse, build_default_color_map, feature_type_color, legend_rule_use
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
@@ -637,70 +637,104 @@ def _solid_legend_entry(fill: object, stroke: object, width: object) -> dict[str
     return {"type": "solid", "fill": fill, "stroke": stroke, "width": width}
 
 
-def feature_type_rows(
-    feature_specific_colors: Mapping[str, Sequence[tuple[str, str]]],
-    features_present: Sequence[str],
-    used_color_rules: Optional[Set[Tuple[str, str]]],
-    default_used_features: Set[str],
-) -> list[tuple[str, LegendRowKey]]:
-    """The renderer's own row of each drawn feature type that has one, by type:
-    the type itself without rules of its type, else "other ..." while some of
-    its features keep the default color (always without the used rules), and
-    the type again when none of its captioned rules is used."""
-
-    keys: list[tuple[str, LegendRowKey]] = []
-    for feature_type in features_present:
-        captioned = [
-            (caption, color)
-            for caption, color in feature_specific_colors.get(feature_type, ())
-            if str(caption or "").strip()
-        ]
-        if feature_type not in feature_specific_colors:
-            key: LegendRowKey | None = _key_of_name(feature_type)
-        elif used_color_rules is None:
-            key = _other_feature_legend_key(feature_type)
-        elif any(rule in used_color_rules for rule in captioned):
-            key = _other_feature_legend_key(feature_type) if feature_type in default_used_features else None
-        else:
-            key = _key_of_name(feature_type)
-        if key is not None:
-            keys.append((feature_type, key))
-    return keys
+# A color table row as the Legend reads it: the feature type it is for (``*``:
+# every type), its caption, and its color.
+LegendRule = tuple[str, str, str]
 
 
-def feature_legend_row_order(
-    feature_specific_colors: Mapping[str, Sequence[tuple[str, str]]],
-    features_present: Sequence[str],
-    used_color_rules: Optional[Set[Tuple[str, str]]],
-    renderer_rows: Container[str],
-) -> Iterator[tuple[str, str, str] | LegendRowKey]:
-    """THE order of the feature rows of a legend: for each drawn feature type,
-    in the order the types first appear in the drawing (``features_present``),
-    the captioned rules of that type in table order, each as its type, caption
-    and color (a rule the features did not take has no row, unless the used
-    rules are not given), then the renderer's own row of the type (its type,
-    or "other ...") when ``renderer_rows`` holds it. Each renderer row comes
-    once. The legend adds the rows in this order; rows of one name and one
-    swatch are one row, at the first (``LegendTable``)."""
+@dataclass(frozen=True)
+class FeatureLegendRows:
+    """THE owner of the feature rows of a Legend and of the row each drawn feature is in.
 
-    placed: set[str] = set()
-    for feature_type in features_present:
-        for caption, color in feature_specific_colors.get(feature_type, ()):
-            if str(caption or "").strip() and (used_color_rules is None or (caption, color) in used_color_rules):
-                yield feature_type, str(caption), color
-        for key in (_key_of_name(feature_type), _other_feature_legend_key(feature_type)):
-            if key in renderer_rows and key not in placed:
-                placed.add(key)
-                yield key
+    ``rules`` are the color table rows, in table order. A rule for every type
+    (``*``) is read as the same rule written for each type (OV-3460). ``present``
+    are the drawn types in the order they first appear in the drawing; ``used``
+    and ``default_types`` are what ``legend_rule_use`` reads of the drawn
+    features (``used`` None: every captioned rule counts as used, for callers
+    that do not read the features). The Web's twin is ``featureLegendRows``
+    (gbdraw/web/js/services/specific-color-rules.js); both answer
+    tests/fixtures/legend_generated_rows.json (``feature_rows``).
+    """
+
+    rules: tuple[LegendRule, ...]
+    present: tuple[str, ...]
+    used: frozenset[RuleUse] | None
+    default_types: frozenset[str]
+
+    @classmethod
+    def of(cls, rules: Iterable[LegendRule], drawn: Sequence[tuple[str, RuleUse | None]]) -> FeatureLegendRows:
+        """The rows of the drawn features, each given by its type and the rule it takes (None: no rule)."""
+
+        used, default_types = legend_rule_use(drawn)
+        return cls(
+            tuple(rules),
+            tuple(dict.fromkeys(feature_type for feature_type, _ in drawn)),
+            frozenset(used),
+            frozenset(default_types),
+        )
+
+    def type_rules(self, feature_type: str) -> list[LegendRule]:
+        """The captioned rules of a type, its own and those for every type, in table order."""
+
+        return [rule for rule in self.rules if rule[0] in (feature_type, "*") and str(rule[1] or "").strip()]
+
+    def _drawn(self, rule: LegendRule) -> bool:
+        return self.used is None or (rule[1], rule[2]) in self.used
+
+    def rules_draw(self, feature_type: str) -> bool:
+        """Whether a captioned rule of the type is used: its features of no rule then form an "other" row."""
+
+        return any(self._drawn(rule) for rule in self.type_rules(feature_type))
+
+    def type_row(self, feature_type: str) -> LegendRowKey | None:
+        """The renderer's own row of a drawn type, if it has one: the type itself
+        without rules of its type; else "other ..." while some of its features
+        keep the type's color (always without the used rules); and the type
+        again when none of its captioned rules is used."""
+
+        if not any(rule[0] in (feature_type, "*") for rule in self.rules):
+            return _key_of_name(feature_type)
+        if self.used is None:
+            return _other_feature_legend_key(feature_type)
+        if self.rules_draw(feature_type):
+            return _other_feature_legend_key(feature_type) if feature_type in self.default_types else None
+        return _key_of_name(feature_type)
+
+    def row_of(self, feature_type: str, winner: RuleUse | None) -> LegendRowKey | RuleUse | None:
+        """The row a feature of the type is in, by the rule it takes (None: no
+        rule): a captioned rule's row, as (caption, color), whose key the whole
+        table allocates (``rule_legend_keys``); else its type's row or its
+        "other" row; no row for an uncaptioned rule once captioned rules of the
+        type are used. A feature that is not drawn gets the row it would join."""
+
+        if winner is not None and str(winner[0] or "").strip():
+            return winner
+        if not self.rules_draw(feature_type):
+            return _key_of_name(feature_type)
+        return _other_feature_legend_key(feature_type) if winner is None else None
+
+    def rows(self) -> Iterator[LegendRule | LegendRowKey]:
+        """THE order of the feature rows of a legend: for each drawn type, in
+        ``present`` order, its captioned rules in table order (a rule the
+        features did not take has no row), then its renderer row. A rule row
+        comes as its rule; each renderer row comes once. The legend adds the
+        rows in this order; rows of one name and one swatch are one row, at the
+        first (``LegendTable``)."""
+
+        renderer_rows = {self.type_row(feature_type) for feature_type in self.present}
+        placed: set[str] = set()
+        for feature_type in self.present:
+            yield from (rule for rule in self.type_rules(feature_type) if self._drawn(rule))
+            for key in (_key_of_name(feature_type), _other_feature_legend_key(feature_type)):
+                if key in renderer_rows and key not in placed:
+                    placed.add(key)
+                    yield key
 
 
 def _generated_legend_rows(
-    feature_specific_colors: dict,
-    features_present: Sequence[str],
+    feature_rows: FeatureLegendRows,
     default_colors: DataFrame,
     *,
-    used_color_rules: Optional[Set[Tuple[str, str]]],
-    default_used_features: Set[str],
     gc: NumericLegendSource,
     skew: NumericLegendSource,
     depth: DepthLegendSource | None,
@@ -713,12 +747,11 @@ def _generated_legend_rows(
 
     # A type's row shows the color its features are drawn in (one owner, OV-3114).
     type_colors = build_default_color_map(default_colors)
-    rows: dict[str, dict[str, object]] = {
-        key: _solid_legend_entry(feature_type_color(type_colors, feature_type), *block_stroke)
-        for feature_type, key in feature_type_rows(
-            feature_specific_colors, features_present, used_color_rules, default_used_features
-        )
-    }
+    rows: dict[str, dict[str, object]] = {}
+    for feature_type in feature_rows.present:
+        key = feature_rows.type_row(feature_type)
+        if key is not None:
+            rows[key] = _solid_legend_entry(feature_type_color(type_colors, feature_type), *block_stroke)
     dinucleotide = gc.dinucleotide
     if show_depth and depth is not None:
         rows["Depth"] = _solid_legend_entry(depth.fill_color, depth.stroke_color, depth.stroke_width)
@@ -765,19 +798,21 @@ def prepare_legend_table(
     legend_table = LegendTable()
     color_table: Optional[DataFrame] = features.color_table
     block_stroke = (features.block_stroke_color, features.block_stroke_width)
-    feature_specific_colors: dict[str, list[tuple[str, str]]] = {}
+    rules: list[LegendRule] = []
     if color_table is not None and not color_table.empty:
-        for _, row in color_table.iterrows():
-            feature_specific_colors.setdefault(row["feature_type"], []).append((row["caption"], row["color"]))
+        rules = [(row["feature_type"], row["caption"], row["color"]) for _, row in color_table.iterrows()]
+    feature_rows = FeatureLegendRows(
+        tuple(rules),
+        tuple(features_present),
+        None if used_color_rules is None else frozenset(used_color_rules),
+        frozenset(default_used_features or ()),
+    )
     # The renderer's own rows (feature types, "other ..." and numeric tracks)
     # keep their keys; a rule row takes its key from the whole color table and
     # these rows (``rule_legend_keys``). The legend draws names, never keys.
     generated = _generated_legend_rows(
-        feature_specific_colors,
-        features_present,
+        feature_rows,
         features.default_colors,
-        used_color_rules=used_color_rules,
-        default_used_features=default_used_features or set(),
         gc=gc,
         skew=skew,
         depth=depth,
@@ -787,11 +822,11 @@ def prepare_legend_table(
         block_stroke=block_stroke,
     )
     rule_keys = rule_legend_keys(
-        (entry for entries in feature_specific_colors.values() for entry in entries),
+        ((caption, color) for _, caption, color in rules),
         {key: legend_swatch(entry) for key, entry in generated.items()},
         lambda fill: legend_swatch(_solid_legend_entry(fill, *block_stroke)),
     )
-    for row in feature_legend_row_order(feature_specific_colors, features_present, used_color_rules, generated):
+    for row in feature_rows.rows():
         if isinstance(row, tuple):
             _, caption, fill = row
             legend_table.add(
@@ -881,8 +916,8 @@ __all__ = [
     "as_legend_table",
     "collect_comparison_collinearity_color_modes",
     "drawn_legend_names",
-    "feature_legend_row_order",
-    "feature_type_rows",
+    "FeatureLegendRows",
+    "LegendRule",
     "legend_row_names",
     "legend_swatch",
     "pairwise_identity_legend_from_comparisons",

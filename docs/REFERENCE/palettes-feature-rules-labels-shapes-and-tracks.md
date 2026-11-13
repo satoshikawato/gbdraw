@@ -233,7 +233,9 @@ CDS rule is used. When a specific CDS rule is used and default-colored CDS remai
 the legend contains the specific caption and `other proteins` for the remainder.
 An unused rule does not change `CDS`; removing the used rule and regenerating
 restores it. Other feature types use `other <feature type>s` for the same remainder
-(for example, `other genes`). The same rule applies to Web regeneration after
+(for example, `other genes`). A rule written for every feature type (`*`) reads
+as the same rule written for each type: its caption is a legend row, and each
+type it colors in part keeps its remainder row. The same rule applies to Web regeneration after
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
 

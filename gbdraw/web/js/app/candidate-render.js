@@ -15,7 +15,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { drawnRuleMatches, featureColorEditColor, generatedLegendRow, inRuleGroup, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -253,8 +253,8 @@ export const namedLegendCaption = (override, rules) => (
 const paletteLegendColor = (key, palette, trackRows, drawnTypes) => {
   const track = trackRows.get(key);
   if (track) return trackRowColor(track, palette);
-  const { paletteKey } = generatedLegendRow(key);
-  return (drawnTypes.has(paletteKey) ? paletteFeatureColor(palette, paletteKey) : palette[paletteKey]) || '';
+  const type = legendRowType(key, [...drawnTypes, ...Object.keys(palette)]);
+  return (drawnTypes.has(type) ? paletteFeatureColor(palette, type) : palette[type]) || '';
 };
 
 // The color the draft gives the features of a Legend row (its Python key)
@@ -290,7 +290,7 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   // unknown, every captioned rule colors its row, as before: an unknown match
   // is never read as a miss.
   /** @type {(rule: Partial<SpecificColorRule>) => boolean} */
-  const draws = ruleMatches ? (rule) => !ruleMatches.known || ruleMatches.groupTaken(rule) : () => false;
+  const draws = ruleMatches ? (rule) => !ruleMatches.known || ruleMatches.rows.drawsRow(rule) : () => false;
   rules.forEach((rule) => {
     const key = text(rule?.cap) && draws(rule) ? rowOf(rule) : null;
     if (key && !ruleColors.has(key)) ruleColors.set(key, text(rule.color));

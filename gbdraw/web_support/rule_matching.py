@@ -19,7 +19,7 @@ from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
 )
 from gbdraw.labels.filtering import DEFAULT_LABEL_PRIORITY, _build_label_override_rules, _resolve_label_override
-from gbdraw.legend.table import feature_legend_row_order, feature_type_rows
+from gbdraw.legend.table import FeatureLegendRows
 
 
 class VisibilityRuleRow(TypedDict):
@@ -216,7 +216,7 @@ class SynthesizedColorRules(TypedDict):
     new row. A selected feature without a hash and without an exact condition
     takes no rule. `legend` is the order of the feature rows in the Legend of
     the Result the request's `drawn` names, as Generate draws it from the next
-    table (``feature_legend_row_order``): a number is a rule row, by the index
+    table (``FeatureLegendRows.rows``): a number is a rule row, by the index
     in `table` of a rule that draws it (its first of that caption and color
     among the rules of its feature type); a text is the key of the renderer's
     own row of a feature type ("CDS", "other proteins"). None without `drawn`."""
@@ -507,7 +507,7 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
 def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeature], winners: Sequence[int],
                   drawn: Sequence[int]) -> list[int | str]:
     """The feature rows of the Legend of the Result that draws the features
-    `drawn`, in Generate's order (``feature_legend_row_order``, the order
+    `drawn`, in Generate's order (``FeatureLegendRows.rows``, the order
     ``prepare_legend_table`` adds them), from what ``feature_legend_presence``
     reads of the drawing: the drawn types in the order they first appear, the
     caption and color each drawn feature takes from its winning rule (none
@@ -515,17 +515,16 @@ def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeatur
     colors. A rule row is the index of its first rule of its type, caption and
     color, once (rules of one caption and color draw one row). `winners` are
     the rules of `rules` that color each feature of `features` (-1 for none)."""
-    used = {(rules[w]["cap"], rules[w]["color"]) for w in (winners[i] for i in drawn) if w >= 0 and rules[w]["cap"]}
-    default_used = {features[i]["type"] for i in drawn if winners[i] < 0}
-    present = list(dict.fromkeys(features[i]["type"] for i in drawn))
-    specific: dict[str, list[tuple[str, str]]] = {}
+    rows = FeatureLegendRows.of(
+        [(rule["feat"], rule["cap"], rule["color"]) for rule in rules],
+        [(features[i]["type"], None if winners[i] < 0 else (rules[winners[i]]["cap"], rules[winners[i]]["color"]))
+         for i in drawn],
+    )
     first: dict[tuple[str, str, str], int] = {}
     for index, rule in enumerate(rules):
-        specific.setdefault(rule["feat"], []).append((rule["cap"], rule["color"]))
         first.setdefault((rule["feat"], str(rule["cap"]), rule["color"]), index)
-    renderer_rows = {key for _, key in feature_type_rows(specific, present, used, default_used)}
-    return list(dict.fromkeys(first[row] if isinstance(row, tuple) else row
-                              for row in feature_legend_row_order(specific, present, used, renderer_rows)))
+    return list(dict.fromkeys(first[(row[0], str(row[1]), row[2])] if isinstance(row, tuple) else row
+                              for row in rows.rows()))
 
 
 def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedColorRules:

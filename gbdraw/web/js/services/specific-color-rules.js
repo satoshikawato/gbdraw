@@ -188,35 +188,119 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
  *   unknown match means to it.
  * @property {ReadonlyMap<Partial<SpecificColorRule>, readonly LegendRowFeature[]>} takenBy Each captioned
  *   rule of `rules` that some drawn feature with a known match takes as its first rule, and those features.
- * @property {(rule: Partial<SpecificColorRule>) => boolean} groupTaken Whether a rule of `takenBy` has
- *   `rule`'s Legend group, its caption and fill (`legendGroupKey`).
- * @property {ReadonlySet<string>} types The drawn features' types.
+ * @property {FeatureLegendRows} rows The feature rows Generate draws for them, a feature of an unknown
+ *   match read as one no rule colors.
  */
 
-// Python's own Legend rows (gbdraw/legend/table.py::_generated_legend_rows),
-// read from a key: a default track's row ("<NT> content" and "<NT> skew", each
-// also as "(+)" and "(-)", and "Depth"), else the row of the feature type it
-// names, the type's own row or its "other" row, which the type's palette key
-// colors. A track row has no palette key here: the track rows of the request
-// that drew the Result give its fill (track-legend-rows.js, OV-484).
-// tests/fixtures/legend_generated_rows.json holds Python's keys.
-const TRACK_ROW = /^[ACGTU]{2} (content|skew)(?: \([+-]\))?$/;
 /**
- * @param {string} key
- * @returns {{ track: boolean, paletteKey: string }}
+ * A drawn feature as the feature rows read it: its type, and the rule it takes (null: no rule; it is drawn
+ * in its type's color).
+ * @typedef {{ type: string, winner: SpecificRuleInput | null }} LegendRowUse
  */
-export const generatedLegendRow = (key) => {
-  if (key === 'Depth' || TRACK_ROW.test(key)) return { track: true, paletteKey: '' };
-  if (!key.toLowerCase().startsWith('other ')) return { track: false, paletteKey: key };
-  const type = key.slice(6).trim();
-  if (type.toLowerCase() === 'proteins') return { track: false, paletteKey: 'CDS' };
-  return { track: false, paletteKey: type.endsWith('s') ? type.slice(0, -1) : type };
+
+/**
+ * The row a feature is in: a type's own row or its "other" row, by its key; a captioned rule's row, as the
+ * caption and color of its rules (its key: `ruleLegendCaptions`, tests/fixtures/legend_rule_keys.json); null
+ * for none.
+ * @typedef {PythonLegendKey | Pick<SpecificColorRule, 'cap' | 'color'> | null} FeatureLegendRow
+ */
+
+/**
+ * The feature rows of a Legend (`featureLegendRows`).
+ * @typedef {object} FeatureLegendRows
+ * @property {readonly string[]} present The drawn types, in the order they first appear.
+ * @property {(type: string) => boolean} rulesDraw Whether a captioned rule of the type (or of every type) is
+ *   used: its features of no rule then form its "other" row.
+ * @property {(type: string) => PythonLegendKey | null} typeRow The renderer's own row of a drawn type.
+ * @property {(type: string, winner: SpecificRuleInput | null) => FeatureLegendRow} rowOf The row a feature of
+ *   the type is in, by the rule it takes; a feature that is not drawn gets the row it would join.
+ * @property {(rule: SpecificRuleInput) => boolean} drawsRow Whether the rules of a captioned rule's caption
+ *   and color draw a row.
+ */
+
+// The key of a feature type's "other" row: Python's `_other_feature_legend_key`.
+/** @param {string} type @returns {PythonLegendKey} */
+const otherFeatureRowKey = (type) => captionRowKey(type === 'CDS' ? 'other proteins' : `other ${type}s`);
+
+// The type among `types` whose own row or "other" row `key` is.
+/** @param {string} key @param {Iterable<string>} types @returns {string | undefined} */
+const typeOfRow = (key, types) => [...types].find((type) => key === type || key === otherFeatureRowKey(type));
+// The type whose row `key` is, among `types`; else the key itself, a key that
+// names a type's row.
+/** @param {PythonLegendKey} key @param {Iterable<string>} types @returns {string} */
+export const legendRowType = (key, types) => typeOfRow(key, types) ?? key;
+
+// THE feature rows of a Legend and the row each drawn feature is in, the twin
+// of Python's `FeatureLegendRows` (gbdraw/legend/table.py), whose rows Generate
+// draws: both answer tests/fixtures/legend_generated_rows.json (`feature_rows`).
+// A rule for every type (`*`) is read as the same rule written for each type
+// (OV-3460). The captioned rules the drawn features take, by caption and color,
+// are used (Python's `legend_rule_use`): a type with a used captioned rule
+// draws its "other" row for its features of no rule, and no row for its
+// features of an uncaptioned rule; any other type draws its own row.
+/**
+ * @param {readonly SpecificRuleInput[]} rules The rule table, in table order.
+ * @param {Iterable<LegendRowUse>} drawn The drawn features.
+ * @returns {FeatureLegendRows}
+ */
+export const featureLegendRows = (rules, drawn) => {
+  const table = rules.map((rule) => normalizeSpecificRule(rule));
+  /** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
+  const use = (rule) => JSON.stringify([rule.cap, rule.color]);
+  /** @type {Set<string>} */
+  const used = new Set();
+  /** @type {Set<string>} */
+  const defaultTypes = new Set();
+  /** @type {Set<string>} */
+  const present = new Set();
+  for (const { type, winner } of drawn) {
+    present.add(type);
+    const rule = winner && normalizeSpecificRule(winner);
+    if (!rule) defaultTypes.add(type);
+    else if (rule.cap) used.add(use(rule));
+  }
+  /** @param {string} type */
+  const typeRules = (type) => table.filter((rule) => (rule.feat === type || rule.feat === '*') && rule.cap);
+  /** @type {Map<string, boolean>} */
+  const drawsByType = new Map();
+  /** @param {string} type */
+  const rulesDraw = (type) => {
+    if (!drawsByType.has(type)) drawsByType.set(type, typeRules(type).some((rule) => used.has(use(rule))));
+    return /** @type {boolean} */ (drawsByType.get(type));
+  };
+  return {
+    present: [...present],
+    rulesDraw,
+    typeRow: (type) => {
+      if (!table.some((rule) => rule.feat === type || rule.feat === '*') || !rulesDraw(type)) return captionRowKey(type);
+      return defaultTypes.has(type) ? otherFeatureRowKey(type) : null;
+    },
+    rowOf: (type, winner) => {
+      const rule = winner && normalizeSpecificRule(winner);
+      if (rule?.cap) return { cap: rule.cap, color: rule.color };
+      if (!rulesDraw(type)) return captionRowKey(type);
+      return rule ? null : otherFeatureRowKey(type);
+    },
+    drawsRow: (rule) => {
+      const group = normalizeSpecificRule(rule);
+      return Boolean(group.cap) && used.has(use(group))
+        && [...present].some((type) => typeRules(type).some((each) => use(each) === use(group)));
+    }
+  };
 };
 
+// Whether a key is the row of a default track: "<NT> content" and "<NT> skew",
+// each also as "(+)" and "(-)", and "Depth" (gbdraw/legend/table.py::
+// _generated_legend_rows; tests/fixtures/legend_generated_rows.json holds
+// Python's keys). The track rows of the request that drew the Result give its
+// fill (track-legend-rows.js, OV-484).
+const TRACK_ROW = /^[ACGTU]{2} (content|skew)(?: \([+-]\))?$/;
+/** @param {string} key */
+export const isTrackLegendKey = (key) => key === 'Depth' || TRACK_ROW.test(key);
+
 // The one owner of which rules the displayed Result's drawn features take as
-// their first rule (Python's `precompute_used_color_rules`: the caption and
-// color of the rule each drawn feature takes), and whether every match is
-// known (`ruleMatcher().firstIfKnown`).
+// their first rule, whether every match is known (`ruleMatcher().firstIfKnown`),
+// and the feature rows Generate draws for them (`featureLegendRows`).
 /**
  * @param {Pick<LegendRowContext, 'rules' | 'features'>} context
  * @returns {DrawnRuleMatches}
@@ -226,41 +310,30 @@ export const drawnRuleMatches = ({ rules = [], features = [] }) => {
   let known = true;
   /** @type {Map<Partial<SpecificColorRule>, LegendRowFeature[]>} */
   const takenBy = new Map();
-  /** @type {Set<string>} */
-  const types = new Set();
+  /** @type {LegendRowUse[]} */
+  const drawn = [];
   for (const feature of features) {
-    types.add(normalizeText(feature.type));
     const rule = winnerOf(feature);
     if (rule === undefined) known = false;
+    drawn.push({ type: normalizeText(feature.type), winner: rule ?? null });
     if (!rule || !normalizeText(rule.cap)) continue;
     const colored = takenBy.get(rule);
     if (colored) colored.push(feature);
     else takenBy.set(rule, [feature]);
   }
-  /** @type {Set<string> | null} */
-  let groups = null;
-  return {
-    known,
-    takenBy,
-    groupTaken: (rule) => {
-      groups ||= new Set([...takenBy.keys()].map((each) => legendGroupKey(normalizeSpecificRule(each))));
-      return groups.has(legendGroupKey(normalizeSpecificRule(rule)));
-    },
-    types
-  };
+  return { known, takenBy, rows: featureLegendRows(rules, drawn) };
 };
 
 // The Python rows N-06 does not compare a rule with, read from the displayed
 // features and their known rule matches (`drawnRuleMatches`; a match not
 // known yet colors no feature), only when a captioned rule may need them:
 // - OV-306: Python draws no row under a feature type's name once a captioned
-//   rule of that type colors a feature (`_generated_legend_rows`: the type
-//   has a rule whose caption and color a feature took).
+//   rule of that type, or of every type, colors a feature (`rulesDraw`).
 // - OV-307: a row Python drew for a rule is no row of the renderer, also when
 //   a live edit of the rule's color leaves the row in the color Python drew it
 //   in until Generate: a feature Python drew in the row's color takes a rule
-//   of the row's caption, and the caption names no row Python generates
-//   (`generatedLegendRow`: a track's row, or a displayed type's row).
+//   of the row's caption, and the caption names no row Python generates (a
+//   track's row, or a displayed type's own or "other" row).
 // `ruleMatches` is `drawnRuleMatches` of the same `context.rules` and
 // `context.features`, when the caller read it already, so one compile reads
 // the features once; it is an argument, not a context field, so a context
@@ -273,21 +346,15 @@ export const drawnRuleMatches = ({ rules = [], features = [] }) => {
 const rowsLeftOut = (context, ruleMatches) => {
   const { rules = [], pythonRows, features = [] } = context;
   const captioned = rules.map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
-  const typed = captioned.filter((rule) => pythonRows.has(captionRowKey(rule.feat)));
+  const typed = new Set(captioned.map((rule) => rule.feat).filter((feat) => feat === '*' || pythonRows.has(captionRowKey(feat))));
   /** @type {Map<string, string>} A caption naming a Python row of another color, and that row's fill. */
   const recolored = new Map();
   captioned.forEach((rule) => {
     const color = fillIdentity(pythonRows.get(captionRowKey(rule.cap))?.color);
     if (color && color !== fillIdentity(rule.color)) recolored.set(rule.cap, color);
   });
-  if (typed.length === 0 && recolored.size === 0) return new Set();
-  const { takenBy, types } = ruleMatches ?? drawnRuleMatches({ rules, features });
-  // `pair` keys a rule by its caption and `normalizeColor`, as before one
-  // owner read the matches: unlike the Legend group key it keeps #abc and
-  // #aabbcc apart, so it stays until that difference is settled.
-  /** @param {Partial<SpecificColorRule>} rule */
-  const pair = (rule) => JSON.stringify([normalizeText(rule.cap), normalizeColor(rule.color)]);
-  const takenPairs = new Set([...takenBy.keys()].map(pair));
+  if (typed.size === 0 && recolored.size === 0) return new Set();
+  const { takenBy, rows } = ruleMatches ?? drawnRuleMatches({ rules, features });
   /** @type {Set<string>} */
   const drawnForRules = new Set();
   for (const [rule, colored] of takenBy) {
@@ -297,12 +364,10 @@ const rowsLeftOut = (context, ruleMatches) => {
     }
   }
   /** @param {string} caption */
-  const generated = (caption) => {
-    const row = generatedLegendRow(caption);
-    return row.track || types.has(row.paletteKey);
-  };
+  const generated = (caption) => isTrackLegendKey(caption) || typeOfRow(caption, rows.present) !== undefined;
+  const types = [...typed].flatMap((feat) => (feat === '*' ? rows.present : [feat]));
   return new Set([
-    ...typed.filter((rule) => takenPairs.has(pair(rule))).map((rule) => rule.feat),
+    ...types.filter((type) => pythonRows.has(captionRowKey(type)) && rows.rulesDraw(type)),
     ...[...drawnForRules].filter((caption) => !generated(caption))
   ].map(captionRowKey));
 };

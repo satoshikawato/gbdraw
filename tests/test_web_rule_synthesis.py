@@ -689,3 +689,31 @@ def test_a_color_edit_on_the_payloads_reading_its_qualifiers_answers_as_on_the_w
     reduced = [_reading(payload, read) for payload in features]
     assert all("translation" not in payload["qualifiers"] for payload in reduced)
     assert _synthesize(reduced, selected, rules=rules, labels=labels, scope=scope, drawn=[0, 1, 2, 3]) == whole
+
+
+def _feature(index: int, feature_type: str, **qualifiers: str) -> SeqFeature:
+    return SeqFeature(SimpleLocation(index * 100, index * 100 + 60, strand=1), type=feature_type,
+                      qualifiers={key: [value] for key, value in qualifiers.items()})
+
+
+def _wildcard_seqs() -> list[SeqFeature]:
+    return [_feature(0, "CDS", product="alpha protein"), _feature(1, "CDS", product="beta protein"),
+            _feature(2, "tRNA", product="alpha tRNA"), _feature(3, "rRNA", product="16S")]
+
+
+@pytest.mark.parametrize(("table", "rows"), [
+    # Every feature takes the rule: its row alone (OV-3460: it drew no row).
+    ([dict(feat="*", qual="product", val=".*", color=TEAL, cap="Everything")], ["Everything"]),
+    # Read as the same rule written for each drawn type: a type keeps an "other"
+    # row for its features the rule leaves, as with the rule written per type.
+    ([dict(feat="*", qual="product", val="^alpha", color=TEAL, cap="Alpha")],
+     ["Alpha", "other proteins", "other rRNAs"]),
+])
+def test_a_captioned_rule_for_every_type_draws_its_legend_row(table, rows):
+    seqs = _wildcard_seqs()
+    per_type = [dict(rule, feat=feature_type) for rule in table for feature_type in ("CDS", "tRNA", "rRNA")]
+    assert _generate_legend(seqs, table) == rows
+    assert _generate_legend(seqs, per_type) == rows
+    features = [_payload(f, "rec") for f in seqs]
+    answer = _synthesize(features, [3], rules=table, color="#e63946", caption="small", drawn=[0, 1, 2, 3])
+    assert _answer_legend(answer, _next_table(answer, table))[0] == rows[0]

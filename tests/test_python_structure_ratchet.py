@@ -375,7 +375,7 @@ FUNCTION_PARAMETERS: dict[str, int] = {
     "gbdraw/labels/circular.py::rearrange_labels_fc": 13,
     "gbdraw/labels/label_ink.py::feature_label_ink": 13,
     "gbdraw/labels/linear.py::linear_record_labels": 14,
-    "gbdraw/legend/table.py::_generated_legend_rows": 12,
+    "gbdraw/legend/table.py::_generated_legend_rows": 9,
     "gbdraw/legend/table.py::prepare_legend_table": 12,
     "gbdraw/render/composition.py::apply_composition_plan": 13,
     "gbdraw/render/drawers/circular/annotations.py::_label_at": 12,

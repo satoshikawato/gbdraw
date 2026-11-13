@@ -2,7 +2,7 @@
 /** @import { DrawingState, WebState } from '../../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
-/** @import { RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { FeatureLegendRows, RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
@@ -232,7 +232,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       return Object.hasOwn(overrides, row.caption) && current && resolveColorToHex(current.color) === resolveColorToHex(row.color)
         ? { ...row, color: overrides[row.caption] } : row;
     };
-    const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows).map(shownRow);
+    const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.rows.drawsRow).map(rowOf) : ruleRows).map(shownRow);
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value;
     // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
@@ -762,7 +762,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const getLegendRowRules = (key) => legendRowRules(key, displayedLegendRowContext(state, state.activeDrawing()));
 
   // Resolve the effective legend item label used by current SVG coloring
-  // priority: a rule's feature belongs to the row Generate draws for it (N-06).
+  // priority: a rule's feature belongs to the row Generate draws for it (N-06);
+  // a feature of no captioned rule to its type's own or "other" row, or to no
+  // row, as Generate draws the displayed Result's features (`featureLegendRows`).
   // One reader serves a pass over many features (OV-193). It answers "which
   // row" with the row's key; a caption written from it is the row's name
   // (the Legend owner's `legendRowName`, OV-640).
@@ -770,7 +772,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const effectiveLegendCaptions = () => {
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
-    const legendCaption = ruleLegendCaptions(displayedLegendRowContext(state, drawing));
+    const context = displayedLegendRowContext(state, drawing);
+    const legendCaption = ruleLegendCaptions(context);
+    // The rows of the displayed Result's drawn features, read once a feature
+    // of no captioned rule asks.
+    /** @type {FeatureLegendRows | null} */
+    let rows = null;
     /** @param {unknown} caption A row whose key is its caption. */
     const rowOf = (caption) => /** @type {PythonLegendKey} */ (normalizeCaption(caption));
     return (feat) => {
@@ -785,7 +792,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const overrideCaption = typeof override === 'object' && normalizeCaption(override.caption);
       if (overrideCaption) return legendCaption({ cap: overrideCaption, color: override.color });
 
-      return rowOf(normalizeCaption(feat.type) || getIndividualFeatureLabel(feat));
+      const type = normalizeCaption(feat.type);
+      if (!type) return rowOf(getIndividualFeatureLabel(feat));
+      rows ||= drawnRuleMatches(context).rows;
+      const row = rows.rowOf(type, rule);
+      return rowOf(typeof row === 'string' ? row : '');
     };
   };
   /** @param {ColorFeature | null | undefined} feat */

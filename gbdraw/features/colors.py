@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import re
-from typing import Any, Mapping, Optional, Tuple, cast
+from typing import Any, Iterable, Mapping, Optional, Tuple, cast
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
@@ -105,6 +105,32 @@ def get_color(
     return color
 
 
+# A color rule as a Legend reads the feature that takes it: its caption ("" for
+# none) and its color.
+RuleUse = tuple[str, str]
+
+
+def legend_rule_use(drawn: Iterable[tuple[str, Optional[RuleUse]]]) -> tuple[set[RuleUse], set[str]]:
+    """Which color rules a Legend counts as used, from each drawn feature's type
+    and the rule it takes (None: no rule, its type's color).
+
+    The one reading of the drawn features for the Legend (Generate's
+    ``precompute_used_color_rules``, the Web's Legend order and the row of each
+    feature, ``FeatureLegendRows``): the captioned rules features take, as
+    (caption, color), and the types of the features no rule colors. An
+    uncaptioned rule names no row.
+    """
+
+    used: set[RuleUse] = set()
+    default_types: set[str] = set()
+    for feature_type, winner in drawn:
+        if winner is None:
+            default_types.add(feature_type)
+        elif winner[0]:
+            used.add(winner)
+    return used, default_types
+
+
 def precompute_used_color_rules(
     records,
     color_map: Mapping[str, Any],
@@ -139,8 +165,7 @@ def precompute_used_color_rules(
     if isinstance(records, SeqRecord):
         records = [records]
 
-    used_rules: set = set()
-    default_used_features: set = set()
+    drawn: list[tuple[str, RuleUse | None]] = []
     for index, record in enumerate(records):
         override_of = feature_override_lookup(
             record, record_features[index].overrides if record_features else None
@@ -161,18 +186,17 @@ def precompute_used_color_rules(
             color, caption = get_color_with_info(
                 feature, color_map, default_color_map, record_id=record.id, instance=instance
             )
-            if caption is None:
-                default_used_features.add(feature.type)
-            elif caption:
-                used_rules.add((caption, color))
-    return used_rules, default_used_features
+            drawn.append((feature.type, None if caption is None else (caption, color)))
+    return legend_rule_use(drawn)
 
 
 __all__ = [
+    "RuleUse",
     "feature_matches_specific_color_rule",
     "find_specific_color_rule",
     "get_color",
     "get_color_with_info",
+    "legend_rule_use",
     "precompute_used_color_rules",
     "build_default_color_map",
     "build_specific_color_rules",

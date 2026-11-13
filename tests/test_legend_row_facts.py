@@ -37,7 +37,7 @@ from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.legend.sources import DepthLegendSource, NumericLegendSource, legend_slot_sources
 from gbdraw.diagrams.circular.assemble import _circular_legend_slots, _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
-from gbdraw.legend.table import LegendTable, _generated_legend_rows
+from gbdraw.legend.table import FeatureLegendRows, LegendTable, _generated_legend_rows
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
 from gbdraw.tracks.circular import normalize_circular_track_slots, parse_circular_track_slots
 from gbdraw.tracks.linear import default_linear_track_slots, normalize_linear_track_slots, parse_linear_track_slots
@@ -352,11 +352,14 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
         )]
     )
     fills = _generated_legend_rows(
-        {key: [tuple(row) for row in rows] for key, rows in case["feature_specific_colors"].items()},
-        case["features_present"],
+        FeatureLegendRows(
+            tuple((feature_type, caption, color) for feature_type, rows in case["feature_specific_colors"].items()
+                  for caption, color in rows),
+            tuple(case["features_present"]),
+            frozenset(tuple(row) for row in case["used_color_rules"]),
+            frozenset(case["default_used_features"]),
+        ),
         default_colors,
-        used_color_rules={tuple(row) for row in case["used_color_rules"]},
-        default_used_features=set(case["default_used_features"]),
         gc=track(case["gc"]),
         skew=track(case["skew"]),
         depth=DepthLegendSource("", case["depth"], "none", 0),
@@ -370,11 +373,37 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
 def test_generated_legend_rows_take_no_input_the_web_pin_lacks():
     """A new kind of generated row arrives as a new input; add it to the fixture and the Web reader."""
     assert list(inspect.signature(_generated_legend_rows).parameters) == [
-        "feature_specific_colors", "features_present", "default_colors", "used_color_rules",
-        "default_used_features", "gc", "skew", "depth", "show_gc", "show_skew", "show_depth",
+        "feature_rows", "default_colors", "gc", "skew", "depth", "show_gc", "show_skew", "show_depth",
         "block_stroke",
     ]
 
+
+FEATURE_ROWS = json.loads(
+    (Path(__file__).parent / "fixtures" / "legend_generated_rows.json").read_text(encoding="utf-8")
+)["feature_rows"]
+
+
+@pytest.mark.parametrize("case", FEATURE_ROWS, ids=[case["name"] for case in FEATURE_ROWS])
+def test_each_drawn_feature_is_in_a_row_generate_draws(case):
+    """The one owner of the feature rows answers the vector the Web's twin answers (featureLegendRows), and
+    Generate's rows are the rows of the drawn features: each feature's row is drawn, and each drawn row has one."""
+    rules = [tuple(rule) for rule in case["rules"]]
+    drawn = [(feature_type, None if winner is None else rules[winner][1:]) for feature_type, winner in case["drawn"]]
+    rows = FeatureLegendRows.of(rules, drawn)
+
+    def answer(row):
+        return list(row) if isinstance(row, tuple) else row
+
+    assert [answer(rows.row_of(*feature)) for feature in drawn] == case["feature_rows"]
+    assert {feature_type: rows.type_row(feature_type) for feature_type in rows.present} == case["type_rows"]
+    drawn_rows = list(rows.rows())
+    assert [rules.index(row) if isinstance(row, tuple) else row for row in drawn_rows] == case["rows"]
+    grouped = {row for row in (rows.row_of(*feature) for feature in drawn) if row is not None}
+    assert grouped == {row[1:] if isinstance(row, tuple) else row for row in drawn_rows}
+
+
+# No feature drawn: the rows of the tracks alone.
+NO_FEATURE_ROWS = FeatureLegendRows((), (), None, frozenset())
 
 TRACK_SLOT_ROWS = json.loads(
     (Path(__file__).parent / "fixtures" / "legend_track_slot_rows.json").read_text(encoding="utf-8")
@@ -404,7 +433,7 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
         # Circular without explicit slots draws the default tracks, whose rows the Depth series' rows join in
         # the order of the default stack the rings are drawn in (circular assemble, OV-2823).
         defaults = _generated_legend_rows(
-            {}, [], pd.DataFrame(columns=["feature_type", "color"]), used_color_rules=None, default_used_features=set(),
+            NO_FEATURE_ROWS, pd.DataFrame(columns=["feature_type", "color"]),
             gc=gc_config, skew=skew_config, depth=None,
             show_gc=True, show_skew=True, show_depth=False,
         )
@@ -434,7 +463,7 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
         )
     else:
         defaults = _generated_legend_rows(
-            {}, [], pd.DataFrame(columns=["feature_type", "color"]), used_color_rules=None, default_used_features=set(),
+            NO_FEATURE_ROWS, pd.DataFrame(columns=["feature_type", "color"]),
             gc=gc_config, skew=skew_config, depth=None,
             show_gc=True, show_skew=True, show_depth=False,
         )

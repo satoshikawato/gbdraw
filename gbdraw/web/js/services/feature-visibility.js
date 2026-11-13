@@ -19,7 +19,7 @@ import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from '.
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
 import { replaceAnnotationTarget } from './drawing/annotation-sets.js';
 import { featureOverrideKey } from './feature-override-identity.js';
-import { createRuleLegendCaptions } from './specific-color-rules.js';
+import { createRuleLegendCaptions, featureLegendRows } from './specific-color-rules.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
@@ -1037,17 +1037,16 @@ export const sameLegendSources = (left, right) => left.length === right.length
   && left.every((source, index) => source !== null && source === right[index]);
 
 // U3a 1d (R14-8): the Legend row of each feature a Result draws, as Python
-// keys it (prepare_legend_table): the key the whole rule table allocates to
-// the row of the captioned rule that wins it (`<caption> [<fill>]` for a
-// caption written in several colors, OV-1235); else the "other <type>s" row of
-// a type whose drawn features use a captioned rule, or no row when an
-// uncaptioned rule colors it; else its type's row. This tells which rows a
-// rule change regroups; Python still derives the rows and their order. Null
-// while a match is unknown, when a wildcard rule has a caption, or when a used
-// caption names a row Python generates (it suffixes the caption by color,
-// PD-OI-042). Without `byColor`, a rule row is keyed by its caption (a History
-// restore, D-15-38: a restored table whose caption is written in several
-// colors shows its rows live, accepted residual OV-357).
+// keys it (prepare_legend_table): its row (`featureLegendRows`), a captioned
+// rule's row by the key the whole rule table allocates to it (`<caption>
+// [<fill>]` for a caption written in several colors, OV-1235). This tells
+// which rows a rule change regroups; Python still derives the rows and their
+// order. Null while a match is unknown, when a wildcard rule has a caption
+// (its row is shown by the automatic rerender), or when a used caption names
+// a type's row it draws (it suffixes the caption by color, PD-OI-042).
+// Without `byColor`, a rule row is keyed by its caption (a History restore,
+// D-15-38: a restored table whose caption is written in several colors shows
+// its rows live, accepted residual OV-357).
 /**
  * @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context
  * @param {{ byColor: boolean }} options
@@ -1055,19 +1054,16 @@ export const sameLegendSources = (left, right) => left.length === right.length
 const legendRowKeysOf = (catalogFeatures, context, { byColor }) => {
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
   if (!drawn || context.colorRules.some((rule) => rule?.feat === '*' && legendRuleCaption(rule))) return null;
-  const ruleTypes = new Set(drawn.filter(({ winner }) => legendRuleCaption(winner)).map(({ type }) => type));
+  // A feature whose match was not read is of a type no captioned rule is for: its row is its type's.
+  const rows = featureLegendRows(context.colorRules, drawn.map(({ type, winner }) => ({ type, winner: winner ?? null })));
   const ruleRowKey = byColor ? createRuleLegendCaptions(context.colorRules) : legendRuleCaption;
   /** @type {Map<string, string | null>} */
   const keys = new Map();
   const generated = new Set();
   for (const { feature, type, winner } of drawn) {
-    const caption = legendRuleCaption(winner);
-    /** @type {string | null} */
-    let key = caption ? ruleRowKey(winner) : null;
-    if (!caption && !ruleTypes.has(type)) key = type;
-    else if (!caption && !winner) key = type === 'CDS' ? 'other proteins' : `other ${type}s`;
-    if (key && !caption) generated.add(key);
-    keys.set(stableKeyOf(feature), key);
+    const row = rows.rowOf(type, winner ?? null);
+    if (typeof row === 'string') generated.add(row);
+    keys.set(stableKeyOf(feature), row === null || typeof row === 'string' ? row : ruleRowKey(row));
   }
   return drawn.some(({ winner }) => generated.has(legendRuleCaption(winner))) ? null : keys;
 };
