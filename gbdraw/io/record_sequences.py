@@ -702,7 +702,7 @@ class RecordSequence(SequenceDataAbstractBaseClass):
     Views are made by :func:`sequence_view` and :func:`two_turns`, never here.
     """
 
-    __slots__ = ("_bases", "_pieces", "_ends", "_reverse", "_translate")
+    __slots__ = ("_bases", "_pieces", "_ends", "_reverse", "_translate", "_counts")
 
     def __init__(
         self, bases: _Bases, pieces: tuple[tuple[int, int], ...] | None = None, *,
@@ -713,6 +713,7 @@ class RecordSequence(SequenceDataAbstractBaseClass):
         self._ends = tuple(itertools.accumulate(stop - start for start, stop in self._pieces))
         self._reverse = reverse
         self._translate = translate
+        self._counts: NDArray[np.int64] | None = None  # its whole counts, once asked for (:func:`known_base_counts`)
         super().__init__()
 
     def __len__(self) -> int:
@@ -1015,9 +1016,20 @@ def known_base_counts_at(seq: Seq | MutableSeq, positions: NDArray[np.int64]) ->
 
 
 def known_base_counts(seq: Seq | MutableSeq) -> NDArray[np.int64]:
-    """The counts of A, C, G and T in the whole of ``seq`` (:func:`known_base_counts_at`)."""
+    """The counts of A, C, G and T in the whole of ``seq`` (:func:`known_base_counts_at`).
 
-    return known_base_counts_at(seq, np.array([len(seq)], dtype=np.int64))[:, 0]
+    A record sequence keeps them once counted (its bases never change), so a view, a crop kept across
+    requests or one circle's record, reads its edge rows once.
+    """
+
+    data = getattr(seq, "_data", None)
+    if isinstance(data, RecordSequence) and data._counts is not None:
+        return data._counts
+    counts = known_base_counts_at(seq, np.array([len(seq)], dtype=np.int64))[:, 0]
+    if isinstance(data, RecordSequence):
+        counts.flags.writeable = False  # shared by every later caller
+        data._counts = counts
+    return counts
 
 
 def first_base_beyond(seq: Seq | MutableSeq, alphabet: int) -> int | None:

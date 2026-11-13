@@ -391,8 +391,8 @@ def test_blocks_made_ahead_come_in_order_at_most_the_bound_ahead_with_an_error_a
                 time.sleep(0.001)
             taken.append(block[0])
     assert taken == list(range(40))
-    # One block in the reader's hands, the bound waiting, and the one the maker is making.
-    assert max(ahead) <= record_sequences._AHEAD_BLOCKS + 2
+    # One block in the reader's hands, fewer than the bound waiting, and the one the maker is making.
+    assert max(ahead) <= record_sequences._AHEAD_BLOCKS + 1
     assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
 
 

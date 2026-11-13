@@ -318,6 +318,30 @@ def test_the_auto_windows_of_a_record_of_1_mbp_or_more_read_no_bases(
     assert sum(edges) == 0 if topology == "linear" else len(edges) <= 12 and sum(edges) <= 12 * base_counts.ROW_BASES
 
 
+@pytest.mark.parametrize("strand", [1, -1])
+def test_a_view_reads_its_edge_rows_once_for_its_whole_counts(
+    strand: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A record sequence keeps its whole counts (its bases never change): the same crop, or a copy of it, counted
+    again reads no edge row (review 5, F1: a warm Generate of a crop read both edge rows from the file each time)."""
+
+    import copy
+
+    bases = _random_bases(31, 40_000, b"ACGTNacgt")
+    seq = read_sequence_file_records(str(_fasta(tmp_path / "v.fasta", bases, width=70)), "fasta")[0].seq
+    edges: list[int] = []
+    row_bases = record_sequences._SequenceTable.row_bases
+    monkeypatch.setattr(record_sequences._SequenceTable, "row_bases",
+                        lambda self, *args: edges.append(len(data := row_bases(self, *args))) or data)
+    view = sequence_view(seq, 1_233, 31_111, strand=strand)
+    first = known_base_counts(view)
+    assert edges
+    edges.clear()
+    assert known_base_counts(view).tolist() == known_base_counts(copy.copy(view)).tolist() == first.tolist()
+    assert edges == []
+    assert first.tolist() == known_base_counts(Seq(bytes(view))).tolist()
+
+
 # The holders of count rows (review of G1b part 2: S-A, S-B, S-C).
 
 
