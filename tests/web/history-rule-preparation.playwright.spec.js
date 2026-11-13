@@ -177,6 +177,26 @@ test('A color rule added after the Undo of feature edits shows what Generate dra
   await expectLiveEqualsGenerate(page, { label: 'Color rule after the Undo of feature edits' });
 });
 
+// What a Generate that promotes legacy protein cache entries installs: the
+// catalog's own feature objects, its orthogroups and the selected alignment feature.
+const migratedFeatureState = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  const { featureStateFromCatalog } = await import('./js/services/feature-catalog.js');
+  const raw = (value) => window.Vue.toRaw(value);
+  const catalog = featureStateFromCatalog(raw(state.featureCatalog.value), { mode: 'linear' });
+  return {
+    promoted: state.legacyProteinRawCandidates.value.entries.filter((entry) => entry.state === 'promoted').length > 0,
+    catalogFeaturesInstalled: raw(state.extractedFeatures.value).every((feature, index) => feature === catalog.extractedFeatures[index])
+      && (raw(state.biologicalFeatures.value) || []).every((feature, index) => feature === catalog.biologicalFeatures[index]),
+    orthogroups: JSON.stringify(state.orthogroups.value),
+    selectedAlignmentFeature: state.selectedOrthogroupAlignmentFeature.value,
+    // The Generate draws from current protein handles only: no legacy `p_r_` protein ID is left to rewrite.
+    legacyProteinIds: JSON.stringify([
+      state.orthogroups.value, state.selectedOrthogroupAlignmentFeature.value, state.extractedFeatures.value
+    ]).match(/p_r_[0-9a-f]+_\d+_\d+_/g)?.length ?? 0
+  };
+});
+
 // OV-3352: a Generate that promotes legacy protein cache entries installs the
 // catalog's own features, as every other Generate does, so a rule added after
 // it shows live what Generate draws. The v33 Session's Web draft says Pairwise
@@ -197,20 +217,11 @@ test('A visibility rule added after a Generate that migrates legacy protein cach
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.mode = 'orthogroup'; });
   await generateAndWaitForResult(page, { timeout: 300_000 });
-  expect(await page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    const { featureStateFromCatalog } = await import('./js/services/feature-catalog.js');
-    const raw = (value) => window.Vue.toRaw(value);
-    const catalog = featureStateFromCatalog(raw(state.featureCatalog.value), { mode: 'linear' });
-    return {
-      promoted: state.legacyProteinRawCandidates.value.entries.filter((entry) => entry.state === 'promoted').length > 0,
-      catalogFeaturesInstalled: raw(state.extractedFeatures.value).every((feature, index) => feature === catalog.extractedFeatures[index]),
-      // The Generate draws from current protein handles only: no legacy `p_r_` protein ID is left to rewrite.
-      legacyProteinIds: JSON.stringify([
-        state.orthogroups.value, state.selectedOrthogroupAlignmentFeature.value, state.extractedFeatures.value
-      ]).match(/p_r_[0-9a-f]+_\d+_\d+_/g)?.length ?? 0
-    };
-  })).toEqual({ promoted: true, catalogFeaturesInstalled: true, legacyProteinIds: 0 });
+  const generated = await migratedFeatureState(page);
+  expect(generated).toMatchObject({ promoted: true, catalogFeaturesInstalled: true, legacyProteinIds: 0 });
+  // The History step of this Generate: the newest step before the rule edits (`timeline().undo` lists the steps
+  // newest first).
+  const generateStep = await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo.at(0).sequence);
   await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.addFeatureVisibilityRule();
@@ -219,4 +230,10 @@ test('A visibility rule added after a Generate that migrates legacy protein cach
     for (const [field, value] of Object.entries(rule)) await app.setFeatureVisibilityRuleField(index, field, value);
   });
   await expectLiveEqualsGenerate(page, { label: 'Visibility rule after a migrating Generate' });
+  await test.step('OV-3352: going back in History to the migrating Generate keeps its features', async () => {
+    await page.evaluate((sequence) => window.__GBDRAW_HISTORY__.travelTo(sequence), generateStep);
+    await settleLive(page);
+    // The restored step holds the catalog's own feature objects, not copies of them.
+    expect(await migratedFeatureState(page)).toEqual({ ...generated, catalogFeaturesInstalled: true });
+  });
 });
