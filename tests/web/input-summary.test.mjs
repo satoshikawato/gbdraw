@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { drawnInputSummaries, inputSummaryOf, validateInputSummaries } from '../../gbdraw/web/js/services/input-summary.js';
+import { NOTICE_LINE_LIMIT, drawnInputSummaries, inputSummaryOf, validateInputSummaries } from '../../gbdraw/web/js/services/input-summary.js';
 import { visibilityPaintState } from '../../gbdraw/web/js/app/result-paint-record.js';
 
 const results = [{ name: 'a.svg' }, { name: 'b.svg' }];
@@ -94,7 +94,8 @@ test('each summary keeps the Feature visibility its render drew', () => {
   const drawn = drawnInputSummaries(validateInputSummaries([summary()], results), visibilityPaintState(drawing));
   assert.ok(Object.isFrozen(drawn) && Object.isFrozen(drawn[0]));
   assert.deepEqual(drawn[0], {
-    ...summary(), drawnVisibility: visibilityPaintState(drawing), leftOutWarnings: summary().warnings, drawnInWarnings: []
+    ...summary(), drawnVisibility: visibilityPaintState(drawing),
+    warningGroups: [{ kind: 'left-out', shown: summary().warnings, rest: [] }]
   });
   assert.equal(inputSummaryOf(drawn, 1, 'b.svg'), drawn[0]);
   const hidden = { ...drawing, featureOverrides: { k: { recordKey: 'r', biologicalFeatureId: 'f1', featureVisibility: 'off' } } };
@@ -111,7 +112,29 @@ test('a warning of an input drawn in full does not say part of the input was not
     summary({ resultIndex: 0, resultName: 'a.svg', warnings: [repeated] }),
     summary({ warnings: [repeated, ...summary().warnings] })
   ], results), '');
-  assert.deepEqual([alone.leftOutWarnings, alone.drawnInWarnings], [[], [repeated]]);
+  assert.deepEqual(alone.warningGroups, [{ kind: 'drawn-in', shown: [repeated], rest: [] }]);
   // #1777 review 2, LOW 3: the "not drawn" heading sits over the warnings that leave input out only.
-  assert.deepEqual([both.leftOutWarnings, both.drawnInWarnings], [summary().warnings, [repeated]]);
+  assert.deepEqual(both.warningGroups, [
+    { kind: 'left-out', shown: summary().warnings, rest: [] }, { kind: 'drawn-in', shown: [repeated], rest: [] }
+  ]);
+});
+
+// OV-3495: a Linear LOSATP run of one record against 60 contigs warned of 56 record pairs without a match, and the
+// notice listed every one above the figure and pushed it out of view (this case gives 59). Each group shows at most NOTICE_LINE_LIMIT lines:
+// the first warnings and an "and {count} more" line that opens the rest.
+test('a group of many warnings shows the first few and sets the rest apart', () => {
+  const pairs = Array.from({ length: 59 }, (_, index) => ({
+    code: 'comparison_table_empty',
+    message: `Comparison of record #1 NZ_CP065372.1 and record #${index + 2} C${index}.1 has no rows, so no match is drawn.`
+  }));
+  const repeated = { code: 'comparison_record_id_repeated', message: 'Comparison sequence file a.fna: record ID X names more than one record.' };
+  const [drawn] = drawnInputSummaries(validateInputSummaries([summary({ warnings: [...pairs, repeated] })], results), '');
+  assert.ok(NOTICE_LINE_LIMIT >= 2 && NOTICE_LINE_LIMIT <= 5, 'a few lines, not the list');
+  assert.deepEqual(drawn.warningGroups, [
+    { kind: 'left-out', shown: pairs.slice(0, NOTICE_LINE_LIMIT - 1), rest: pairs.slice(NOTICE_LINE_LIMIT - 1) },
+    { kind: 'drawn-in', shown: [repeated], rest: [] }
+  ]);
+  const fit = pairs.slice(0, NOTICE_LINE_LIMIT);
+  const [fits] = drawnInputSummaries(validateInputSummaries([summary({ warnings: fit })], results), '');
+  assert.deepEqual(fits.warningGroups, [{ kind: 'left-out', shown: fit, rest: [] }], 'a list that fits is shown whole');
 });

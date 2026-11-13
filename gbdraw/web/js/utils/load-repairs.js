@@ -2,6 +2,7 @@
 
 import { SESSION_TABLE_LABELS } from './error-normalization.js';
 import { listText, t, tm, tn } from './i18n.js';
+import { limitedList, moreLine } from './limited-list.js';
 
 /**
  * What Load did with a value it could not restore as stored. `kept`: the
@@ -355,9 +356,8 @@ export const describeLoadRepairs = (repairs) => {
       const ofCode = listed.filter((repair) => repair.code === code);
       return ofCode.length ? describe(ofCode) : [];
     });
-  const items = lines.length > LINE_LIMIT
-    ? [...lines.slice(0, LINE_LIMIT - 1), tn(lines.length - (LINE_LIMIT - 1), 'and one more', 'and {count} more')]
-    : lines;
+  const { shown, rest } = limitedList(lines, LINE_LIMIT);
+  const items = rest.length ? [...shown, moreLine(rest.length)] : [...shown];
   return {
     title: t('Load this file?'),
     description: t('Some parts of this file cannot be fully restored:'),
