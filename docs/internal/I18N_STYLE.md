@@ -3038,9 +3038,10 @@ and Google write loans (ফাইল, ফিচার, সেশন).
   are nouns (সেটিংস, লেজেন্ড). Dialog headings are noun phrases (প্যালেট পরিবর্তন, X নির্বাচন). An option in a select is
   a noun or adjective, or a verbal noun when it names an action (কেটে ফেলা, সংকুচিত করা). History step labels are verbal
   nouns (রং পরিবর্তন, ফিচার সম্পাদনা, X অপসারণ).
-- Work in progress: X করা হচ্ছে… or X হচ্ছে… (লোড হচ্ছে…, ডায়াগ্রাম তৈরি হচ্ছে…). Done: X করা হয়েছে। Failure: X করা
-  যায়নি। then what to do (আবার চেষ্টা করুন।). A rule that forbids: X করা যাবে না। A dialog question uses the polite
-  future or আপনি কি … চান? (ফাইলটি সরাবেন?).
+- Work in progress: X করা হচ্ছে… or X হচ্ছে… (লোড হচ্ছে…, ডায়াগ্রাম তৈরি হচ্ছে…). Done: X করা হয়েছে। Failure
+  (could not X, X failed): X করা যায়নি। then what to do (আবার চেষ্টা করুন।). A state that names what was not done
+  (was not saved, was not loaded) is X করা হয়নি।, not যায়নি. A rule that forbids: X করা যাবে না। A dialog question
+  uses the polite future or আপনি কি … চান? (ফাইলটি সরাবেন?).
 - Required আবশ্যক, Optional (ঐচ্ছিক) after the field name, Recommended প্রস্তাবিত, Invalid অবৈধ, Unavailable উপলভ্য
   নয়, Unsupported সমর্থিত নয়, Auto স্বয়ংক্রিয়, Default ডিফল্ট, On / Off চালু / বন্ধ.
 - Generate: the button is তৈরি করুন (ডায়াগ্রাম তৈরি করুন); the event in a sentence is তৈরির সময় / আগে / পরে. A control
