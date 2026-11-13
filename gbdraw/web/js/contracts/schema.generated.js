@@ -291,6 +291,10 @@ export const LABEL_FIT_FIELDS = Object.freeze(['overlap_pairs', 'crossing_pairs'
 /** @type {readonly ['region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out']} */
 export const LABEL_FIT_REGION_WARNING_FIELDS = Object.freeze(['region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out']);
 
+// gbdraw/labels/fit.py: NOTE_FIELDS
+/** @type {readonly ['crossing_pairs', 'definition_overlaps', 'definition_track_overlaps']} */
+export const LABEL_FIT_NOTE_FIELDS = Object.freeze(['crossing_pairs', 'definition_overlaps', 'definition_track_overlaps']);
+
 // gbdraw/labels/fit.py: LIMIT_REASON_KINDS
 /** @type {readonly ['y_offset_limit', 'x_offset_limit', 'xy_offset_limit', 'font_limit', 'spacing_limit', 'search_bound']} */
 export const LABEL_FIT_LIMIT_REASON_KINDS = Object.freeze(['y_offset_limit', 'x_offset_limit', 'xy_offset_limit', 'font_limit', 'spacing_limit', 'search_bound']);

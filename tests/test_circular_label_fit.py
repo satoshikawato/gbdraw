@@ -54,6 +54,7 @@ from gbdraw.labels.fit import (
     LabelFitRow,
     LabelFitVerification,
     LabelShape,
+    CombinationLimitReason,
     LimitReason,
     PlainReason,
     UnfitReason,
@@ -203,6 +204,44 @@ def test_overlaps_raise_with_six_verified_rows() -> None:
         Y_OFFSET_PATH: 1.075,
     }
     assert not raised.value.report.drawn
+
+
+def _fractional_font_rows(fits_at_or_below: float) -> dict[str, LabelFitRow]:
+    """The rows of an 8.2 pt map whose labels fit only at or below a font size; no offset helps."""
+
+    def fits(values: Mapping[str, float]) -> bool:
+        return values.get(FONT_SIZE_PATHS[0], 8.2) <= fits_at_or_below + 1e-9
+
+    def probe(values: Mapping[str, float]) -> LabelFit:
+        return FITS if fits(values) else OVERLAPS
+
+    def verify(values: Mapping[str, float]) -> LabelFitVerification:
+        return LabelFitVerification(outcome="fits" if fits(values) else "stop", canvas_size=(1000.0, 1000.0))
+
+    layout = dataclasses.replace(_layout("P1", _p1_like), font_size=8.2, probe=probe)
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([layout], verify)
+    return {row.kind: row for row in raised.value.report.rows}
+
+
+def test_the_combination_font_is_rounded_as_the_font_grid_rounds_it() -> None:
+    """OV-3516 (and OV-3109 H1): from 8.2 pt the Combination row drops 0.5 pt to 7.7 pt, not 7.699999999999999 pt, both
+    in the font it sets and in the reason the Web words when it does not fit."""
+
+    fitting = _fractional_font_rows(7.7)
+    assert fitting["smaller_font"].values == {path: 7.7 for path in FONT_SIZE_PATHS}
+    assert fitting["combination"].values == {path: 7.7 for path in FONT_SIZE_PATHS}
+    # The font row finds 7.2 pt: half its 1 pt drop is 0.5 pt, and 7.7 pt does not fit at any Y offset.
+    unfit = _fractional_font_rows(7.2)
+    assert unfit["smaller_font"].values == {path: 7.2 for path in FONT_SIZE_PATHS}
+    assert unfit["combination"].status == "not_found"
+    assert unfit["combination"].reason == CombinationLimitReason(7.7, 2.0)
+    # The Web words the payload's number as given ("Does not fit at 7.7 pt up to Y offset 2").
+    from gbdraw.web_support.label_fit import label_fit_row_payload
+
+    assert label_fit_row_payload(unfit["combination"], "circular")["reason"] == {
+        "kind": "combination_limit", "fontSize": 7.7, "limit": 2.0
+    }
 
 
 def test_a_requested_size_reaches_the_report_with_or_without_an_estimate() -> None:

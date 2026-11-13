@@ -136,6 +136,8 @@ test('a row that leaves crossing leaders carries its settings and what it leaves
   assert.throws(() => normalizeLabelFitRow(row('x', 'found_with_notice')), invalid);
   assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: 14 }), invalid);
   assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: [{ field: 'crossings', count: 14 }] }), invalid);
+  // A count Python's note never names (neither a note field nor a region label warning) is no row (OV-3109 L1).
+  assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: [{ field: 'overlap_pairs', count: 1 }] }), invalid);
   assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: [{ field: 'crossing_pairs', count: -1 }] }), invalid);
   assert.throws(() => normalizeLabelFitRow({ ...noticeRow(), remaining: undefined }), invalid);
 });
@@ -310,9 +312,9 @@ test('the dialog words each row reason and note from Python\'s kinds and counts 
     'Does not fit at 13.5 pt up to Y offset 2',
     'Labels still do not fit (0 label pairs overlap and 1 leader pair crosses)',
     'The labels cannot be placed with this setting',
-    '1 leader pair still crosses, 2 labels still cover the definition text, and the figure is drawn with 1 region '
-      + 'label overlap and 3 region labels cut',
-    '2 definition lines still overlap a track',
+    '1 leader pair still crosses. 2 labels still cover the definition text. The figure is drawn with 1 region '
+      + 'label overlap and 3 region labels cut.',
+    '2 definition lines still overlap a track.',
     'No value found within 30 seconds.'
   ]);
   const words = (reason) => {
@@ -335,15 +337,15 @@ test('the dialog words each row reason and note from Python\'s kinds and counts 
 test('the row reasons and notes follow the shown language and its plural forms (OV-3109)', async () => {
   const japanese = {
     'Does not fit down to {size} pt': '{size} pt まで小さくしても収まりません',
-    '{count} leader pair still crosses': '引き出し線 {count} 組がまだ交差しています',
-    '{count} leader pairs still cross': '引き出し線 {count} 組がまだ交差しています',
+    '{count} leader pair still crosses.': '引き出し線 {count} 組がまだ交差しています。',
+    '{count} leader pairs still cross.': '引き出し線 {count} 組がまだ交差しています。',
     '{count} region label overlap': '領域ラベルの重なり {count} 件',
     '{count} region label overlaps': '領域ラベルの重なり {count} 件',
-    'the figure is drawn with {warnings}': '図は{warnings}のまま描かれます'
+    'The figure is drawn with {warnings}.': '図は{warnings}のまま描かれます。'
   };
   const french = {
-    '{count} leader pair still crosses': '{count} paire de lignes de rappel se croise encore',
-    '{count} leader pairs still cross': '{count} paires de lignes de rappel se croisent encore'
+    '{count} leader pair still crosses.': '{count} paire de lignes de rappel se croise encore.',
+    '{count} leader pairs still cross.': '{count} paires de lignes de rappel se croisent encore.'
   };
   const page = globalThis.document;
   globalThis.document = undefined;
@@ -361,15 +363,43 @@ test('the row reasons and notes follow the shown language and its plural forms (
       row('radial', 'found_with_notice', { values: { 'labels.circular.placement': 'radial' },
         canvasSize: { width: 900, height: 900 },
         remaining: [{ field: 'crossing_pairs', count: 3 }, { field: 'region_overlaps', count: 1 }] })
-    ]), ['6 pt まで小さくしても収まりません', '引き出し線 3 組がまだ交差しています、図は領域ラベルの重なり 1 件のまま描かれます']);
+    ]), ['6 pt まで小さくしても収まりません', '引き出し線 3 組がまだ交差しています。図は領域ラベルの重なり 1 件のまま描かれます。']);
     // French takes the singular for 0 and 1, the plural from 2.
     assert.deepEqual(await shown('fr', french, [crossing(0), crossing(1), crossing(2)]), [
-      '0 paire de lignes de rappel se croise encore', '1 paire de lignes de rappel se croise encore',
-      '2 paires de lignes de rappel se croisent encore'
+      '0 paire de lignes de rappel se croise encore.', '1 paire de lignes de rappel se croise encore.',
+      '2 paires de lignes de rappel se croisent encore.'
     ]);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
     globalThis.document = page;
+  }
+});
+
+test('the Web\'s English for each count and note equals the CLI\'s words in gbdraw/labels/fit.py (OV-3109)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const fit = await readFile(new URL('../../gbdraw/labels/fit.py', import.meta.url), 'utf8');
+  /** @param {string} name */
+  const pythonWords = (name) => {
+    const block = fit.match(new RegExp(`^${name}: Mapping\\[.*\\] = \\{\\n([\\s\\S]*?)^\\}`, 'm'))?.[1] || '';
+    return [...block.matchAll(/"([a-z_]+)": \(\s*"([^"]+)",\s*"([^"]+)",?\s*\)/g)]
+      .map(([, field, one, other]) => ({ field, one, other }));
+  };
+  const counts = pythonWords('_FIT_COUNT_WORDS');
+  assert.equal(counts.length, 10);
+  for (const { field, one, other } of counts) {
+    for (const [count, words] of [[1, one], [2, other]]) {
+      const reason = normalizeLabelFitRow(row('radial', 'not_found',
+        { reason: { kind: 'labels_do_not_fit', counts: [{ field, count }] } })).reason;
+      assert.equal(labelFitRowReasonText(/** @type {NonNullable<typeof reason>} */ (reason)),
+        `Labels still do not fit (${count} ${words})`, field);
+    }
+  }
+  const notes = pythonWords('_NOTE_WORDS');
+  assert.deepEqual(notes.map(({ field }) => field), ['crossing_pairs', 'definition_overlaps', 'definition_track_overlaps']);
+  // The CLI joins the clauses with "and"; the Web writes each as a sentence.
+  for (const { field, one, other } of notes) {
+    assert.equal(labelFitRowNoteText([{ field, count: 1 }]), `1 ${one}.`, field);
+    assert.equal(labelFitRowNoteText([{ field, count: 2 }]), `2 ${other}.`, field);
   }
 });
 
@@ -523,7 +553,7 @@ test('a row that leaves crossing leaders is offered after the rows that fit, and
     { drawing });
   const rows = dialog.labelFitDialog.rows;
   assert.deepEqual(rows.map((item) => [item.kind, item.offered]), [['radial', false], ['separate_features', true]]);
-  assert.equal(rows[1].note, '14 leader pairs still cross');
+  assert.equal(rows[1].note, '14 leader pairs still cross.');
   // The only offered row is preselected.
   assert.equal(dialog.labelFitDialog.selectedKind, 'separate_features');
   await dialog.resolveLabelFitChoice('apply');
@@ -560,7 +590,7 @@ test('rows Generate did not search are computed one after another when the dialo
 // draws with the notice. The first row that fits is selected until the user chooses a row; a choice stays for
 // that opening of the dialog.
 test('a row that fits is selected over a row with the notice, until the user chooses a row', async () => {
-  const regionNote = 'the figure is drawn with 1 region label overlap';
+  const regionNote = 'The figure is drawn with 1 region label overlap.';
   const notice = (kind) => row(kind, 'found_with_notice', { values: { [Y_OFFSET]: 1.025 },
     remaining: [{ field: 'region_overlaps', count: 1 }],
     canvasSize: { width: 1693, height: 939 } });

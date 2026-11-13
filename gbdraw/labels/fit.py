@@ -843,13 +843,25 @@ def fit_counts(fit: LabelFit) -> str:
     return ", ".join(_counted(count, *_FIT_COUNT_WORDS[name]) for name, count in fit_count_items(fit))
 
 
-# What a row that draws with the notice still leaves, in its note's words (singular, plural); region label warnings
-# take their count words after "the figure is drawn with".
-_NOTE_WORDS: Mapping[LabelFitField, tuple[str, str]] = {
+# What a row that draws with the notice leaves is these counts, each a clause of its own, and region label warnings,
+# named together after "the figure is drawn with" (``row_remaining`` gives no other field). The Web reads both sets
+# from the generated contracts (OV-3109).
+NoteField: TypeAlias = Literal["crossing_pairs", "definition_overlaps", "definition_track_overlaps"]
+NOTE_FIELDS: tuple[NoteField, ...] = get_args(NoteField)
+# Each note clause's words (singular, plural).
+_NOTE_WORDS: Mapping[NoteField, tuple[str, str]] = {
     "crossing_pairs": ("leader pair still crosses", "leader pairs still cross"),
     "definition_overlaps": ("label still covers the definition text", "labels still cover the definition text"),
     "definition_track_overlaps": ("definition line still overlaps a track", "definition lines still overlap a track"),
 }
+
+
+def is_note_field(name: LabelFitField) -> TypeGuard[NoteField]:
+    return name in NOTE_FIELDS
+
+
+def is_region_warning_field(name: LabelFitField) -> TypeGuard[RegionWarningField]:
+    return name in REGION_WARNING_FIELDS
 
 
 def row_remaining(row: LabelFitRow) -> LabelFitCounts:
@@ -860,7 +872,7 @@ def row_remaining(row: LabelFitRow) -> LabelFitCounts:
     remaining = row.remaining
     if row.status != "found_with_notice" or remaining is None:
         return ()
-    fields: tuple[LabelFitField, ...] = (
+    fields: tuple[NoteField | RegionWarningField, ...] = (
         ("definition_track_overlaps",)
         if row.kind in DEFINITION_ROW_KINDS
         # Region label warnings are named the same whether the figure had them or the row's values add them (D-115).
@@ -872,9 +884,15 @@ def row_remaining(row: LabelFitRow) -> LabelFitCounts:
 def row_note(row: LabelFitRow) -> str | None:
     """The CLI's words for what a row leaves (``row_remaining``)."""
 
-    items = row_remaining(row)
-    notes = [_counted(count, *_NOTE_WORDS[name]) for name, count in items if name in _NOTE_WORDS]
-    regions = [_counted(count, *_FIT_COUNT_WORDS[name]) for name, count in items if name not in _NOTE_WORDS]
+    notes: list[str] = []
+    regions: list[str] = []
+    for name, count in row_remaining(row):
+        if is_note_field(name):
+            notes.append(_counted(count, *_NOTE_WORDS[name]))
+        elif is_region_warning_field(name):
+            regions.append(_counted(count, *_FIT_COUNT_WORDS[name]))
+        else:
+            raise AssertionError(f"row_remaining gave {name}, neither a note clause nor a region label warning")
     if regions:
         notes.append("the figure is drawn with " + ", ".join(regions))
     return " and ".join(notes) or None
@@ -1191,6 +1209,8 @@ __all__ = [
     "Y_OFFSET_PATH",
     "LABEL_FIT_FIELDS",
     "LIMIT_REASON_KINDS",
+    "NOTE_FIELDS",
+    "NoteField",
     "PLAIN_REASON_KINDS",
     "LabelCapacityRecord",
     "LabelCapacityRemedy",

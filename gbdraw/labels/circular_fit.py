@@ -747,7 +747,8 @@ class CircularLabelFitSearch:
             # The font row is still walking: its value decides this row's font, so this row waits (D-118).
             raise _RowDeferred
         drop = max(FONT_STEP_PT, _round_half_pt((self._font_size - (font_value or FONT_LIMIT_PT)) / 2.0))
-        combined_font = max(FONT_LIMIT_PT, self._font_size - drop)
+        # Rounded as `_font_grid` rounds: the value the row sets and its reason state (OV-3516).
+        combined_font = round(max(FONT_LIMIT_PT, self._font_size - drop), 3)
 
         def combined_values(value: float) -> dict[str, LabelFitValue]:
             values = _font_values(combined_font)

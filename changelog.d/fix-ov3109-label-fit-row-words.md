@@ -5,3 +5,11 @@
   their translations are in the catalogs; before, they were English in every
   language. A choice whose radial labels cannot be placed now says so in plain
   words instead of an internal message.
+- Changed: in the Python API, `LabelFitRow.reason` holds typed data instead of
+  an English sentence: a `LimitReason`, `CombinationLimitReason`,
+  `UnfitReason` or `PlainReason`, each exported from `gbdraw.api` with the
+  union `LabelFitRowReason`. Read its `kind` and numbers to word a reason
+  yourself.
+- Fixed: From a label font size with a fraction (8.2 pt), the **Labels do not
+  fit** dialog's combination choice sets and shows 7.7 pt instead of
+  7.699999999999999 pt.

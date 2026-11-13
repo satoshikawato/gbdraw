@@ -150,6 +150,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # A label fit's counts by field name, and the kinds of why a row has no value: the dialog words each (OV-3109).
     ("LABEL_FIT_FIELDS", "gbdraw.labels.fit", "LABEL_FIT_FIELDS"),
     ("LABEL_FIT_REGION_WARNING_FIELDS", "gbdraw.labels.fit", "REGION_WARNING_FIELDS"),
+    ("LABEL_FIT_NOTE_FIELDS", "gbdraw.labels.fit", "NOTE_FIELDS"),
     ("LABEL_FIT_LIMIT_REASON_KINDS", "gbdraw.labels.fit", "LIMIT_REASON_KINDS"),
     ("LABEL_FIT_PLAIN_REASON_KINDS", "gbdraw.labels.fit", "PLAIN_REASON_KINDS"),
     ("LINEAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.linear", "LINEAR_SLOT_UNREAD_PARAM_KEYS"),

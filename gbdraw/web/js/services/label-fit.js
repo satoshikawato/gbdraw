@@ -15,10 +15,10 @@
 // Python's data, which the Web words in the shown language: each reason kind
 // with its numbers, each count by its field name (OV-3109).
 import { diagnosticError, isFigureLengthText } from '../utils/error-normalization.js';
-import { listText, msg, numberText, t, tn } from '../utils/i18n.js';
+import { joinSentences, listText, msg, numberText, t, tn } from '../utils/i18n.js';
 import {
-  LABEL_FIT_FIELDS, LABEL_FIT_LIMIT_REASON_KINDS, LABEL_FIT_OFFERED_ROW_STATUSES, LABEL_FIT_PLAIN_REASON_KINDS,
-  LABEL_FIT_REGION_WARNING_FIELDS
+  LABEL_FIT_FIELDS, LABEL_FIT_LIMIT_REASON_KINDS, LABEL_FIT_NOTE_FIELDS, LABEL_FIT_OFFERED_ROW_STATUSES,
+  LABEL_FIT_PLAIN_REASON_KINDS, LABEL_FIT_REGION_WARNING_FIELDS
 } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
 
@@ -52,6 +52,17 @@ import {
  * @property {number} count
  */
 /**
+ * @typedef {typeof LABEL_FIT_NOTE_FIELDS[number]} LabelFitNoteField What a row that draws with the notice leaves that
+ *   its note states in a sentence of its own.
+ */
+/** @typedef {typeof LABEL_FIT_REGION_WARNING_FIELDS[number]} LabelFitRegionField A region label warning. */
+/**
+ * @typedef {object} LabelFitRemainingCount One count a row that draws with the notice leaves: a note field or a region
+ *   label warning (Python's `row_remaining` gives no other field).
+ * @property {LabelFitNoteField | LabelFitRegionField} field
+ * @property {number} count
+ */
+/**
  * @typedef {typeof LABEL_FIT_LIMIT_REASON_KINDS[number]} LabelFitLimitReasonKind A lever's limit (an offset, a font
  *   size in pt, a label spacing in px), or `search_bound`: the Worker's search for the row stopped after `limit` seconds.
  */
@@ -77,7 +88,7 @@ import {
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
  * @property {LabelFitRowReason | null} reason Why the row has no value; worded by `labelFitRowReasonText`.
- * @property {readonly LabelFitCount[]} remaining What a `found_with_notice` row leaves, in its note's order (empty for
+ * @property {readonly LabelFitRemainingCount[]} remaining What a `found_with_notice` row leaves, in its note's order (empty for
  *   another row); worded by `labelFitRowNoteText`.
  */
 /**
@@ -288,33 +299,41 @@ const LABEL_FIT_COUNT_WORDS = Object.freeze({
     '{count} region labels left out: no letter fits their circles')
 });
 /**
- * What a row that draws with the notice still leaves, other than region label warnings, by field name.
- * @type {Readonly<Partial<Record<LabelFitField, (count: number) => string>>>}
+ * The sentence of each note field (Python's `NOTE_FIELDS`): what a row that draws with the notice still leaves.
+ * @type {Readonly<Record<LabelFitNoteField, (count: number) => string>>}
  */
 const LABEL_FIT_NOTE_WORDS = Object.freeze({
-  crossing_pairs: (count) => tn(count, '{count} leader pair still crosses', '{count} leader pairs still cross'),
-  definition_overlaps: (count) => tn(count, '{count} label still covers the definition text',
-    '{count} labels still cover the definition text'),
-  definition_track_overlaps: (count) => tn(count, '{count} definition line still overlaps a track',
-    '{count} definition lines still overlap a track')
+  crossing_pairs: (count) => tn(count, '{count} leader pair still crosses.', '{count} leader pairs still cross.'),
+  definition_overlaps: (count) => tn(count, '{count} label still covers the definition text.',
+    '{count} labels still cover the definition text.'),
+  definition_track_overlaps: (count) => tn(count, '{count} definition line still overlaps a track.',
+    '{count} definition lines still overlap a track.')
 });
 /** @type {ReadonlySet<string>} */
-const REGION_WARNING_FIELDS = new Set(LABEL_FIT_REGION_WARNING_FIELDS);
+const NOTE_FIELDS = new Set(LABEL_FIT_NOTE_FIELDS);
+/** @type {ReadonlySet<string>} */
+const REMAINING_FIELDS = new Set([...LABEL_FIT_NOTE_FIELDS, ...LABEL_FIT_REGION_WARNING_FIELDS]);
+/** @param {string} field @returns {field is LabelFitNoteField} */
+const isNoteField = (field) => NOTE_FIELDS.has(field);
 
 /**
- * The note of a row that draws with the notice: what it still leaves, with the region label warnings the figure is
- * drawn with; null when it leaves nothing.
- * @param {readonly LabelFitCount[]} remaining
+ * The note of a row that draws with the notice: a sentence for each count it still leaves, then one naming the region
+ * label warnings the figure is drawn with (I18N_STYLE 1.3: sentences, joined as the language joins them); null when it
+ * leaves nothing.
+ * @param {readonly LabelFitRemainingCount[]} remaining
  * @returns {string | null}
  */
 export const labelFitRowNoteText = (remaining) => {
-  const regions = remaining.filter(({ field }) => REGION_WARNING_FIELDS.has(field));
-  const clauses = remaining.flatMap(({ field, count }) => LABEL_FIT_NOTE_WORDS[field]?.(count) ?? []);
-  if (regions.length) {
-    clauses.push(t('the figure is drawn with {warnings}',
-      { warnings: listText(regions.map(({ field, count }) => LABEL_FIT_COUNT_WORDS[field](count))) }));
+  /** @type {string[]} */
+  const sentences = [];
+  /** @type {string[]} */
+  const regions = [];
+  for (const { field, count } of remaining) {
+    if (isNoteField(field)) sentences.push(LABEL_FIT_NOTE_WORDS[field](count));
+    else regions.push(LABEL_FIT_COUNT_WORDS[field](count));
   }
-  return clauses.length ? listText(clauses) : null;
+  if (regions.length) sentences.push(t('The figure is drawn with {warnings}.', { warnings: listText(regions) }));
+  return sentences.length ? joinSentences(...sentences) : null;
 };
 
 /**
@@ -388,15 +407,17 @@ const LIMIT_REASON_KINDS = new Set(LABEL_FIT_LIMIT_REASON_KINDS);
 const PLAIN_REASON_KINDS = new Set(LABEL_FIT_PLAIN_REASON_KINDS);
 
 /**
- * Counts of a label fit, each a field Python names with its count.
+ * Counts of a label fit, each a field of `fields` with its count; another field is invalid. The caller names the
+ * field type `fields` holds.
  * @param {unknown} value
- * @returns {readonly LabelFitCount[]}
+ * @param {ReadonlySet<string>} fields
+ * @returns {readonly { field: string, count: number }[]}
  */
-const normalizeCounts = (value) => {
+const normalizeCounts = (value, fields) => {
   if (!Array.isArray(value)) throw invalid();
   return Object.freeze(value.map((item) => {
-    if (!isObject(item) || typeof item.field !== 'string' || !FIELDS.has(item.field) || !isCount(item.count)) throw invalid();
-    return Object.freeze({ field: /** @type {LabelFitField} */ (item.field), count: item.count });
+    if (!isObject(item) || typeof item.field !== 'string' || !fields.has(item.field) || !isCount(item.count)) throw invalid();
+    return Object.freeze({ field: item.field, count: item.count });
   }));
 };
 
@@ -415,7 +436,7 @@ const normalizeReason = (value) => {
   if (kind === 'combination_limit' && isNumber(value.fontSize) && isNumber(value.limit)) {
     return Object.freeze({ kind, fontSize: value.fontSize, limit: value.limit });
   }
-  if (kind === 'labels_do_not_fit') return Object.freeze({ kind, counts: normalizeCounts(value.counts) });
+  if (kind === 'labels_do_not_fit') return Object.freeze({ kind, counts: /** @type {readonly LabelFitCount[]} */ (normalizeCounts(value.counts, FIELDS)) });
   if (PLAIN_REASON_KINDS.has(kind)) return Object.freeze({ kind: /** @type {LabelFitPlainReasonKind} */ (kind) });
   throw invalid();
 };
@@ -455,7 +476,7 @@ export const normalizeLabelFitRow = (value) => {
     canvasSize: offered && isObject(size)
       ? Object.freeze({ width: Number(size.width), height: Number(size.height) }) : null,
     reason: normalizeReason(value.reason),
-    remaining: normalizeCounts(value.remaining)
+    remaining: /** @type {readonly LabelFitRemainingCount[]} */ (normalizeCounts(value.remaining, REMAINING_FIELDS))
   });
 };
 
