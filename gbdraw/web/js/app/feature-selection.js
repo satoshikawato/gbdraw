@@ -1,6 +1,7 @@
 // @ts-check
 import { setClassToken } from '../services/preview-affordances.js';
 import { featureParts, onTheWay, partsMidpoint } from '../services/region-axis.js';
+import { numberText } from '../utils/i18n.js';
 import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 
 // createFeatureSelection reads `window.Vue` when it runs, not when the module loads: other modules import this
@@ -638,7 +639,7 @@ export const createFeatureSelection = ({
     const firstNewId = Array.from(nextIds).find(Boolean) || '';
     replaceSelectedFeatureIds(nextIds, {
       anchorId: firstNewId || selectedFeatureAnchorId.value,
-      status: nextIds.size > 0 ? `${nextIds.size.toLocaleString()} features selected.` : 'No rendered features in selection.'
+      status: nextIds.size > 0 ? `${numberText(nextIds.size)} features selected.` : 'No rendered features in selection.'
     });
     closePreviewPopups();
   };

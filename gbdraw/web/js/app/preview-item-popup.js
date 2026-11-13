@@ -25,7 +25,7 @@ import {
 } from '../services/record-display-model.js';
 import { orientLinearCard } from '../services/linear-card-windows.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
-import { msg, t, tn, tm, tx } from '../utils/i18n.js';
+import { msg, numberText, t, tn, tm, tx } from '../utils/i18n.js';
 
 /**
  * @typedef {{ label: string, value: string }} PreviewItemFact
@@ -109,7 +109,6 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
  *   Resolves once the rename's choice dialog, if one is open, is answered.
  */
 
-const NUMBER = new Intl.NumberFormat('en-US');
 /** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
 /** @param {unknown} value */
@@ -195,7 +194,7 @@ const buildLegendEntryView = ({
       ? tm(TRACK_ROW_SUBTITLE[trackKind])
       : featureCount == null
         ? t('Counting features…')
-        : tn(featureCount, '{count} feature', '{count} features', { count: NUMBER.format(featureCount) }),
+        : tn(featureCount, '{count} feature', '{count} features', { count: numberText(featureCount) }),
     colorSource,
     defaultColorLine,
     ruleLines
@@ -204,7 +203,7 @@ const buildLegendEntryView = ({
 
 /** @param {readonly RequestRecordWindow[]} windows the request record's windows (request schema 10), none for the whole record */
 const regionText = (windows) => (windows.length
-  ? windows.map(({ start, end }) => `${NUMBER.format(start)}..${NUMBER.format(end)}`).join(', ')
+  ? windows.map(({ start, end }) => `${numberText(start)}..${numberText(end)}`).join(', ')
   : t('Whole record'));
 
 /** @param {AlignmentDecisionLike | null | undefined} decision */
@@ -245,7 +244,7 @@ const buildRecordDefinitionView = ({
     ...(scope === 'linear' && named ? [{ label: t('Organism'), value: name }] : []),
     { label: t('Length'), value: text(drawn.length) || '—' },
     { label: t('Reverse complement'), value: reversed ? t('Yes') : t('No') },
-    { label: t('Display start'), value: start == null ? t('Record start') : NUMBER.format(start) },
+    { label: t('Display start'), value: start == null ? t('Record start') : numberText(start) },
     { label: t('Region'), value: regionText(record?.windows ?? []) }
   ];
   // The record's place in a similarity alignment, not a sequence alignment

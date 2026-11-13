@@ -5,8 +5,7 @@
 // Points are in the frame of the record's drawn group (`regionAxisFrame`):
 // the Circular centre is (0, 0), a Linear row starts at x 0 on its axis line.
 import { ANNOTATION_SELECTOR } from './drawn-groups.js';
-import { formatGroupedNumber } from './record-options.js';
-import { t } from '../utils/i18n.js';
+import { numberText, t } from '../utils/i18n.js';
 
 /**
  * Which source base a drawn base shows. Display index `i` (0 to `drawnLength - 1` along the axis) shows source base
@@ -449,7 +448,7 @@ export const regionBandPath = (axis, span) => {
  * @param {SourceSpan} source
  */
 export const regionSpanText = (source) => ({
-  start: formatGroupedNumber(source.start), end: formatGroupedNumber(source.end), length: formatGroupedNumber(source.length)
+  start: numberText(source.start), end: numberText(source.end), length: numberText(source.length)
 });
 
 /**

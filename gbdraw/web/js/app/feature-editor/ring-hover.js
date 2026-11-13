@@ -24,9 +24,8 @@ import { HIT_DISPLAY_SPAN_ATTRIBUTES, RING_LEGEND_NAME_ATTRIBUTE, RING_RADIUS_AT
 import { legendCaptionRuns } from '../../services/legend-layout.js';
 import { drawnLegendRowName } from '../../services/legend-svg.js';
 import { axisPosition, framePoint, regionAxisFrame, sourceBaseAt } from '../../services/region-axis.js';
-import { formatGroupedNumber } from '../../services/record-options.js';
 import { hexToRgb, resolveColorToHex } from '../../utils/color-utils.js';
-import { t } from '../../utils/i18n.js';
+import { numberText, t } from '../../utils/i18n.js';
 
 /** A similarity ring's group in a Result. */
 export const RING_SELECTOR = 'g[data-gbdraw-slot-renderer="sequence_conservation"]';
@@ -36,7 +35,6 @@ export const RING_LEGEND_ROW_SELECTOR = '#conservation_identity_legend g[data-so
 export const DIMMED_RING_OPACITY = 0.35;
 /** The surface the preview mounts the Result in; the hover's rules apply only there. */
 const PREVIEW_SURFACE = '.gbdraw-preview-surface';
-const IDENTITY_FORMAT = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /**
  * One drawn ring of a record, as Python drew it.
@@ -153,7 +151,7 @@ export const ringHitAt = (ring, position) => {
 export const identityText = (identity) => {
   if (identity === null) return t('No hit');
   const shown = identity < 100 ? Math.min(Math.round(identity * 10) / 10, 99.9) : identity;
-  return `${IDENTITY_FORMAT.format(shown)}%`;
+  return `${numberText(shown, 1)}%`;
 };
 
 /**
@@ -360,7 +358,7 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
     if (!source || !point) return;
     const { rings } = source;
     Object.entries(point.line).forEach(([name, value]) => shown.line.setAttribute(name, value.toFixed(1)));
-    shown.heading.textContent = t('{position} bp', { position: formatGroupedNumber(point.base) });
+    shown.heading.textContent = t('{position} bp', { position: numberText(point.base) });
     if (shownRows.sourceIndex !== target.sourceIndex || shownRows.rings.length !== rings.length
       || shownRows.rings.some((ring, index) => ring.element !== rings[index].element || ring.name !== rings[index].name)) {
       shownRows = { rings, sourceIndex: target.sourceIndex, cells: buildPopupRows(shown.list, rings, target.sourceIndex) };

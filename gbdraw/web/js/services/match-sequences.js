@@ -12,7 +12,7 @@ import {
 import { linearCardRegion } from './record-options.js';
 import { catalogUnitRecords, unitRecordsOf } from './linear-units.js';
 import { linearSeqRecordKey, recordSelectorNumber } from './record-draw-selection.js';
-import { t } from '../utils/i18n.js';
+import { numberText, t } from '../utils/i18n.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
@@ -231,7 +231,7 @@ export const validateMatchCoordinates = (startRaw, endRaw, sequenceLength) => {
     return { valid: false, reason: t('The sequence source is empty.') };
   }
   if (start > length || end > length) {
-    return { valid: false, reason: t('Coordinates exceed the sequence length ({length} bp).', { length: length.toLocaleString() }) };
+    return { valid: false, reason: t('Coordinates exceed the sequence length ({length} bp).', { length: numberText(length) }) };
   }
   return { valid: true, start, end, orientation: start <= end ? '+' : '-' };
 };

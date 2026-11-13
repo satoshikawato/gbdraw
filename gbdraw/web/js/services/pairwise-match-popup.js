@@ -23,7 +23,7 @@ import {
   textAliasStatus,
   orthogroupIdStatus
 } from './feature-identity.js';
-import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
+import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
@@ -1819,9 +1819,6 @@ const shownMatchValue = (table, value) => {
 };
 const COLLINEAR_BLOCK_NOTE = msg('Block envelopes may include intergenic sequence and genes that are not anchors.');
 
-/** @param {number} value */
-const groupedInteger = (value) => value.toLocaleString('en-US');
-
 /** @param {unknown} value */
 const finiteNumber = (value) => {
   const text = normalizeText(value);
@@ -1841,7 +1838,7 @@ const blockSpanView = (recordId, interval, tableInterval) => {
   const end = match ? Number(match[2]) : 0;
   const length = match ? Math.abs(end - start) + 1 : 0;
   const lengthText = length >= 1000 ? `${(length / 1000).toFixed(1)} kb` : (length ? `${length} bp` : '');
-  const intervalText = match ? `${groupedInteger(start)}..${groupedInteger(end)}` : normalizeText(interval);
+  const intervalText = match ? `${numberText(start)}..${numberText(end)}` : normalizeText(interval);
   return {
     recordId: normalizeText(recordId),
     interval: normalizeText(interval),
@@ -1869,7 +1866,7 @@ const collinearDetailRows = (element, descriptor) => {
   if (descriptor.matchKind === 'collinear') {
     addRow(rows, msg('Average identity'), identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
     // LOSATP anchors: the summed protein alignment length.
-    addRow(rows, msg('Aligned length'), alignedLength === null ? '' : `${groupedInteger(alignedLength)} aa`);
+    addRow(rows, msg('Aligned length'), alignedLength === null ? '' : `${numberText(alignedLength)} aa`);
   }
   addRow(rows, msg('Block score'), attr(element, 'data-collinearity-block-score'));
   // The count only: every block row has anchor index 1 (OV-2302).

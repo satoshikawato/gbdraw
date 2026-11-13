@@ -5786,7 +5786,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (!bundle || !Array.isArray(bundle.entries)) return '';
     var entries = bundle.entries.map(function (entry) {
       var coordinates = String(entry.recordId || '') + ' · ' + entry.start + '..' + entry.end + ' · ' + entry.orientation +
-        (entry.available ? ' · ' + Number(entry.length || 0).toLocaleString() + ' bp' : '');
+        (entry.available ? ' · ' + numberText(Number(entry.length || 0)) + ' bp' : '');
       var actions = entry.available
         ? copyButton(entry.fasta, 'Copy') + downloadButton(entry.filename, entry.fasta, 'FASTA')
         : '';
@@ -5949,7 +5949,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
       length += end - start;
     }
-    return String(Math.round(length).toLocaleString()) + ' bp';
+    return numberText(Math.round(length)) + ' bp';
+  }
+
+  // A number in every language as the Web app writes it (numberText in utils/i18n.js, which this script cannot
+  // import): English digits, decimal point and grouping by thousands, every fraction digit kept.
+  function numberText(value) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: 20 });
   }
 
   function getFeatureDisplayColor(feature, svgId) {

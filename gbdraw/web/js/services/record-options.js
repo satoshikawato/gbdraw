@@ -3,6 +3,7 @@
 import { circularRecordsToDraw } from './record-draw-selection.js';
 /** @import { CircularListRecord } from './record-discovery.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
+import { numberText } from '../utils/i18n.js';
 
 /** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
@@ -22,18 +23,11 @@ const isSafeRecordId = (value) => {
   return !isUnspecifiedRecordSelectorValue(recordId) && !recordId.startsWith('#');
 };
 
-/**
- * A number as the UI shows lengths and sizes: grouped by thousands
- * (`280,452`), every fraction digit kept.
- * @param {number} value
- */
-export const formatGroupedNumber = (value) => value.toLocaleString('en-US', { maximumFractionDigits: 20 });
-
 /** @param {unknown} value */
 export const formatRecordLength = (value) => {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || numeric <= 0) return 'length unavailable';
-  return `${formatGroupedNumber(numeric)} bp`;
+  return `${numberText(numeric)} bp`;
 };
 
 /**
@@ -319,8 +313,8 @@ export const linearRecordWindowRows = (windows, recordLength) => windows
     const bases = stated ? windowBases(start, end, recordLength) : null;
     return {
       number: order + 1,
-      span: stated ? `${formatGroupedNumber(start)}\u2013${formatGroupedNumber(end)}` : '',
-      length: bases === null ? '' : `${formatGroupedNumber(bases)} bp`,
+      span: stated ? `${numberText(start)}\u2013${numberText(end)}` : '',
+      length: bases === null ? '' : `${numberText(bases)} bp`,
       reverseComplement: window.reverseComplement
     };
   });
@@ -360,8 +354,8 @@ export const linearCardRegion = (seq, ordinal, recordLength) => {
  * @param {RecordRegion | null} region
  */
 export const regionClampNote = (region) => (
-  region?.recordLength === undefined ? '' : `Region reaches ${region.end.toLocaleString('en-US')}, past the record end`
-    + ` (${formatRecordLength(region.recordLength)}); Generate draws to ${region.drawnEnd.toLocaleString('en-US')}.`
+  region?.recordLength === undefined ? '' : `Region reaches ${numberText(region.end)}, past the record end`
+    + ` (${formatRecordLength(region.recordLength)}); Generate draws to ${numberText(region.drawnEnd)}.`
 );
 
 /**

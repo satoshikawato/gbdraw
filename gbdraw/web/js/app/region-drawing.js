@@ -1,9 +1,8 @@
 // @ts-check
 import { diagnosticError, normalizeUserFacingError, reasonText } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
-import { msg, t, tm } from '../utils/i18n.js';
+import { msg, numberText, t, tm } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
-import { formatGroupedNumber } from '../services/record-options.js';
 import { drawnRecordIdentities } from '../services/record-draw-selection.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
@@ -190,7 +189,7 @@ export const notCarriedLine = (mode, kind) => {
 /** A returned size's value: Auto, or a number grouped as the row's length is. @param {unknown} value */
 const shownValue = (value) => {
   if (value === null || value === undefined) return t('Auto');
-  return typeof value === 'number' ? formatGroupedNumber(value) : String(value);
+  return typeof value === 'number' ? numberText(value) : String(value);
 };
 
 /**

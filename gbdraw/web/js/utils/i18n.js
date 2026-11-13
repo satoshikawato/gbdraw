@@ -292,6 +292,34 @@ export const listText = (items) => {
   return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
 };
 
+// Every number of the UI and of an exported interactive file reads alike in every
+// language: Western digits, the English decimal point and grouping by thousands.
+const NUMBER_TEXT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });
+/** @type {Map<number, Intl.NumberFormat>} */
+const fixedNumberTexts = new Map();
+
+/**
+ * A number as the UI writes it in every language (PD-OI-106: "Numbers keep the
+ * English decimal point and digit grouping in every language"): `4,641,652`,
+ * `0.25`, never the browser's or the shown locale's digits and grouping. Every
+ * fraction digit is kept, or exactly `fractionDigits` of them. The one owner of
+ * number text; the exported interactive file's viewer keeps a copy
+ * (`numberText` in services/standalone-interactivity-assets.js), pinned to this
+ * one by tests/web/feature-search-scope.test.mjs.
+ * @param {number} value
+ * @param {number} [fractionDigits]
+ * @returns {string}
+ */
+export const numberText = (value, fractionDigits) => {
+  if (fractionDigits === undefined) return NUMBER_TEXT.format(value);
+  let format = fixedNumberTexts.get(fractionDigits);
+  if (!format) {
+    format = new Intl.NumberFormat('en-US', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+    fixedNumberTexts.set(fractionDigits, format);
+  }
+  return format.format(value);
+};
+
 /**
  * Splits a shown text at the placeholders that `slots` names. Another
  * placeholder takes its value from `params`, or stays as written. The values

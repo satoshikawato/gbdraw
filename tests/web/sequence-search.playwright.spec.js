@@ -147,6 +147,42 @@ test('Circular: a search draws its hits at once in one History step, across the 
   }
 });
 
+// OV-2777: a number keeps the English digits and grouping in every language (PD-OI-106), whatever the browser's
+// language: here a German and a Bengali browser (4.641.652 and ৪৬,৪১,৬৫২ before) with the UI in English. The query's
+// length, a hit's Start–End and a feature's Length are three of the displays that read the browser's language before.
+for (const locale of ['de-DE', 'bn-BD']) {
+  test(`a ${locale} browser shows the query length, a hit's Start–End and a feature's Length with English digits and grouping`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await load(browser, seeds.circular, undefined, { locale });
+    try {
+      expect(await page.evaluate(() => [navigator.language, (1300).toLocaleString()])).toEqual([locale, expect.not.stringMatching(/^1,300$/)]);
+      const query = fasta([{ name: 'plus3001', bases: span(MT, 3001, 4300) }]);
+      const section = page.locator('[data-settings-section="sequence-search"]');
+      // The panel lists the read queries until a search ends.
+      await page.getByRole('button', { name: 'Go to Sequence search', exact: true }).click();
+      const unfold = page.locator('[data-sequence-search-unfold]');
+      if (await unfold.count()) await unfold.click();
+      await page.locator('#sequence-search-query').fill(query);
+      await page.locator('#sequence-search-query').dispatchEvent('change');
+      // Soft: each of the three displays reports its own text.
+      await expect.soft(section.locator('[data-sequence-search-query]', { hasText: 'plus3001' })).toContainText('1,300 bp', { timeout: 60_000 });
+      await searchFromPanel(page, query, { task: 'blastn' });
+      expect((await searchOutcome(page)).searchError).toBeNull();
+      await expect.soft(section.locator('[data-sequence-search-hit]', { hasText: 'plus3001' }).first()).toContainText('3,001–4,300');
+      // COX1 is 5904..7445: 1,542 bp.
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.type === 'CDS' && feature.gene === 'COX1'), null);
+      });
+      const details = page.getByRole('dialog', { name: /^Feature details:/ });
+      await details.getByRole('button', { name: 'Details', exact: true }).click();
+      await expect.soft(details.locator('[data-feature-popup-details] dt', { hasText: 'Length' }).locator('xpath=following-sibling::dd[1]')).toHaveText('1,542 bp');
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
 test('Linear: a search of a circular record drawn whole draws a hit across the origin as one hit at both ends', async ({ page }, testInfo) => {
   test.setTimeout(600_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank: readFileSync(HMMT, 'utf8') });

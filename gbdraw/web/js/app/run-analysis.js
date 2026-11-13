@@ -17,7 +17,7 @@
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
 /** @import { GenerationPayload, RequestProgress } from '../services/diagram-generation.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
-import { msg, t, tm, tn } from '../utils/i18n.js';
+import { msg, numberText, t, tm, tn } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { drawnInputSummaries, validateInputSummaries } from '../services/input-summary.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
@@ -5016,7 +5016,7 @@ export const createRunAnalysis = ({
               `runtime wait=${formatDuration(losatTiming.runtimeWaitMs)}`,
               `execution=${formatDuration(losatTiming.executionMs)}`,
               `BLAST FS write=${formatDuration(losatTiming.blastWriteMs)}`,
-              `FASTA chars=${losatTiming.totalFastaChars.toLocaleString()}`
+              `FASTA chars=${numberText(losatTiming.totalFastaChars)}`
             ].join(', ')
           );
         }
