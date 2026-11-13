@@ -722,7 +722,7 @@ under "Cited ids without a record".
 
 - [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup): A click on a drawn element shows its settings in a popup. ACCEPTED, concern `web.result.element-settings-entry`, scenario revision 1.
 
-- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 6, supersedes scenario revision 5.
+- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 7, supersedes scenario revision 6.
   - `tests/web/browser-preferences.test.mjs`
   - `tests/web/ui-language.playwright.spec.js`
 
