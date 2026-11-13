@@ -1668,12 +1668,13 @@ test('a ring comparison genome of two files is one read of both, kept for those 
 });
 
 // #1777 review 9 and round 12 (OV-3203, OV-3204): Save Raw LOSAT TSV reads the shown drawing's results; both
-// panels' "Clear N LOSAT results" count the searches Clear removes, the whole cache (PD-OI-022), a search only a
-// deleted drawing names included (round 15, OV-3211).
+// panels' "Clear the project's N LOSAT results" count the searches Clear removes, the whole cache (PD-OI-022), a
+// search only a deleted drawing names included (round 15, OV-3211).
 test('Save Raw LOSAT TSV reads the shown drawing\'s results and both Clear buttons count the project\'s searches', () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   assert.equal(html.includes('losatCacheInfo'), false);
-  assert.equal(html.match(/tn\(clearableLosatResultCount, 'Clear \{count\} LOSAT result'/g)?.length, 2);
+  // The count is the project's, and the button says so (Owner Q2=A, 2026-11-10): one wording in both panels.
+  assert.equal(html.match(/tn\(clearableLosatResultCount, 'Clear the project\\'s \{count\} LOSAT result', 'Clear the project\\'s \{count\} LOSAT results'\)/g)?.length, 2);
   assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="!semanticMutationAvailable \|\| \(clearableLosatResultCount === 0\)"/g)?.length, 2);
   assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0" :aria-describedby="losatResultRows\.length === 0 \? 'circular-losat-cache-reason' : null"/);
   // Round 13 (OV-3206): each reason is true. The Circular hint gives Save Raw's reason: dev's hint while the project
