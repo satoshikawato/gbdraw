@@ -828,10 +828,9 @@ def linear_comparison_rows(
         *(
             ComparisonTableTally(
                 item.source_name, item.query_record_index, item.subject_record_index,
-                comparison_row_tally(item.matches, thresholds), protein_matches=protein,
+                comparison_row_tally(item.matches, thresholds), protein_matches=item.protein_matches,
             )
-            for items, protein in ((linear_comparisons, False), (proteins.pairs, True))
-            for item in items
+            for item in (*linear_comparisons, *proteins.pairs)
         ),
     )
     normalized = search_frame_linear_comparisons(

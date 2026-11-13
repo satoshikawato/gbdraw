@@ -98,6 +98,14 @@ def _fake_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> object:
     return parse_losatp_outfmt6(text)
 
 
+def _no_hit_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> object:
+    """A search that finds no protein match."""
+
+    kwargs["raw_output_callback"]("")
+    kwargs["runtime_callback"]({"kind": "losat", "version": "test", "program": "blastp"})
+    return parse_losatp_outfmt6("")
+
+
 def _no_search(*_args, **_kwargs):
     raise AssertionError("stored raw results answer every pair")
 

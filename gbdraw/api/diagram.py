@@ -2032,7 +2032,7 @@ def project_collinearity_frames(
     allowed_pairs = set(comparison_pairs)
     return ProteinComparisonFrames(
         pairs=tuple(
-            LinearComparison(query_index, subject_index, matches)
+            LinearComparison(query_index, subject_index, matches, protein_matches=True)
             for (query_index, subject_index), matches in pair_comparisons.items()
             if (query_index, subject_index) in allowed_pairs
         )
@@ -2064,7 +2064,7 @@ def _protein_comparison_frames(
         return ProteinComparisonFrames(ordered=tuple(comparisons))
     return ProteinComparisonFrames(
         pairs=tuple(
-            LinearComparison(query_index, subject_index, matches)
+            LinearComparison(query_index, subject_index, matches, protein_matches=True)
             for (query_index, subject_index), matches in zip(pairs, comparisons, strict=True)
         )
     )

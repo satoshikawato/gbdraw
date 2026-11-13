@@ -100,6 +100,10 @@ class LinearComparison:
 
     ``source_name`` is the name of the file the decoder read the rows from.
 
+    ``protein_matches`` marks the rows of a LOSATP protein comparison: the
+    protein analysis or the Session decoder of a ``precomputedProteinComparison``
+    sets it, and the input summary words the comparison by it (OV-3512).
+
     ``drawn_feature_ids`` marks a table of a Session up to 40 without
     ``*_view_feature_svg_id`` columns: main's writers before ``3bca0e8d9``
     stored the drawn-frame feature ID there in ``*_feature_svg_id``, which is
@@ -114,6 +118,7 @@ class LinearComparison:
     drawn_feature_ids: bool = field(default=False, repr=False, compare=False)
     # The file the rows were read from, when they were (the input summary names it).
     source_name: str | None = field(default=None, repr=False, compare=False)
+    protein_matches: bool = field(default=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("query_record_index", "subject_record_index"):

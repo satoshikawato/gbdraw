@@ -699,6 +699,63 @@ def test_a_cli_similarity_groups_session_on_a_row_layout_replays_its_links(
     assert stored_pairs(read_session_payload(resaved)) == [(0, 2), (1, 2)]
 
 
+def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-3511: with every record in one row, Pairwise compares no pair. The
+    Session stores that empty result, so its replay draws the same figure and
+    searches nothing."""
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _no_search
+
+    rows = ("#1@1", "#2@1", "#3@1")
+    sidecar = _fresh_protein_session(
+        tmp_path, monkeypatch, "pairwise",
+        *(argument for position in rows for argument in ("--multi_record_position", position)),
+    )
+    session = drawing_view(read_session_payload(sidecar), mode="linear")
+    assert _protein_comparison_kinds(session) == [("generatedProteinComparison", "none")]
+    fresh = (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+    assert "data-query-record-index=" not in fresh
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    resaved = tmp_path / "replayed.gbdraw"
+    _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"),
+         "-f", "svg", "--session_output", str(resaved))
+    assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == fresh
+    replayed = drawing_view(read_session_payload(resaved), mode="linear")
+    assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "none")]
+
+
+@pytest.mark.parametrize("mode", ["pairwise", "similarity_groups"])
+def test_a_session_replay_words_a_protein_pair_without_a_match_as_its_cli_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, mode: str
+) -> None:
+    """OV-3512: the Session stores each LOSATP pair's table as a protein
+    comparison, and its replay says so: a pair without a match has no protein
+    match to draw, as the fresh `gbdraw linear` render says."""
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.api.input_summary import input_warnings
+    from tests.test_render_stage_protein_analysis import _no_hit_losatp, _no_search, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_hit_losatp)
+    request, _identities = _request(mode, tmp_path)
+    sidecar = tmp_path / "nohit.gbdraw"
+    caplog.clear()
+    _cli(monkeypatch, "linear", "--gbk", *(str(record.source.path) for record in request.records),
+         "--losat", "losatp", "--losatp_mode", mode,
+         "-o", str(tmp_path / "nohit"), "-f", "svg", "--session_output", str(sidecar))
+    fresh = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert fresh and all(message.endswith("has no protein match to draw.") for message in fresh), fresh
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "replay") as materialized:
+        replayed = render_session(materialized)
+    assert [warning.message for warning in input_warnings(replayed.input_summary)] == fresh
+
+
 def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
