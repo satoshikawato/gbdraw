@@ -543,7 +543,8 @@ const controlFit = (page) => page.evaluate(() => {
     return read;
   };
   const placeholders = [...document.querySelectorAll('.auto-value-placeholder')].filter((span) => span.getClientRects().length > 0);
-  const slot = probe('span', 'track-slot-auto-placeholder');
+  // The classes a track slot's Auto hint has in the markup: its ellipsis comes from the shared `truncate` rule.
+  const slot = probe('span', 'track-slot-auto-placeholder truncate');
   const select = getComputedStyle(document.querySelector('header select[data-ui-language]'));
   return {
     buttons: buttons.length,
