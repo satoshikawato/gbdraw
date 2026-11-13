@@ -119,7 +119,9 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     "feature_visibility_table": _FEATURE_EDIT | {"visibility_rules"},
     "annotation_table": _LEGEND | {"catalog_normalization", "interactive_context"},
     # The depth range label prints both bounds and the log scale, and the definition column keeps its gap from it.
-    **dict.fromkeys(("depth_min", "depth_log_scale"), _DEPTH_FRAME | _LEGEND_LAYOUT),
+    # The minimum clips the window means; the log scale is the drawers' (OV-3107) and keeps the frame.
+    "depth_min": _DEPTH_FRAME | _LEGEND_LAYOUT,
+    "depth_log_scale": _DEPTH_DATA | _LEGEND_LAYOUT,
     # The definition column keeps its gap from the depth tick labels, so these move the content width.
     **dict.fromkeys(("depth_window", "depth_step", "depth_max"), _DEPTH_FRAME | _LEGEND_LAYOUT),
     "show_depth_axis": _DEPTH_DATA | _LEGEND_LAYOUT,

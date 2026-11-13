@@ -8,6 +8,7 @@ from typing import Any, NamedTuple, TypeVar, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from pandas import DataFrame
 
 from gbdraw.auto_sizes import scalar_axis_tick_font_size
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
@@ -370,7 +371,7 @@ def scalar_axis_range_label(axis_min: float, axis_max: float, unit: str, *, log_
     return f"[{_format_scalar_number(axis_min)}\u2013{_format_scalar_number(axis_max)}{unit}{scale}]"
 
 
-def _depth_axis_bounds(depth_df: Any, min_depth: float | None, max_depth: float | None) -> tuple[float, float]:
+def _depth_axis_bounds(depth_df: DataFrame, min_depth: float | None, max_depth: float | None) -> tuple[float, float]:
     axis_min = float(min_depth) if min_depth is not None else 0.0
     if max_depth is not None:
         axis_max = float(max_depth)
@@ -384,6 +385,9 @@ def _depth_axis_bounds(depth_df: Any, min_depth: float | None, max_depth: float 
 
 
 def _scale_depth_value(value: float, *, normalize: bool) -> float:
+    """A depth on the track's scale: itself, or on the log scale ``log10(depth) + 1`` (0 at 0x), so 1x, 10x and
+    100x take evenly spaced heights."""
+
     value = 0.0 if not math.isfinite(value) else float(value)
     if not normalize:
         return value
@@ -405,12 +409,12 @@ def _scaled_depth_fraction(
 
 
 def _prepare_depth_plot_dataframe(
-    depth_df: Any,
+    depth_df: DataFrame,
     min_depth: float | None,
     max_depth: float | None,
     *,
     normalize: bool,
-) -> Any:
+) -> DataFrame:
     plot_df = depth_df.copy()
     axis_min, axis_max = _depth_axis_bounds(plot_df, min_depth, max_depth)
     if axis_max <= axis_min:

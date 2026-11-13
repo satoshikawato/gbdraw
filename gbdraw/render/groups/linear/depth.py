@@ -47,7 +47,7 @@ class DepthGroup:
         if depth_df is not None:
             self.depth_df = depth_df
         else:
-            self.depth_df = DataFrame(columns=["position", "depth", "depth_normalized"])
+            self.depth_df = DataFrame(columns=["position", "depth"])
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
