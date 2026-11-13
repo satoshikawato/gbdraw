@@ -37,8 +37,8 @@ const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDef
 // The Feature overlap tolerance of a new drawing, in bp.
 export const DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP = 0;
 /**
- * The Feature overlap tolerance a draft draws and saves with: a blank (the
- * cleared number input stores '') or an unset value is the default, as R7
+ * The Feature overlap tolerance a draft draws and saves with: a blank (a
+ * cleared field holds null) or an unset value is the default, as R7
  * reads a blank (OV-826, BA-OD112). Any other value is the draft's own, which
  * `validateCurrentWriterActiveConfig` and Python check.
  * @param {{ feature_overlap_tolerance_bp?: unknown }} adv
@@ -157,14 +157,15 @@ export const createDefaultLosatExecution = () => ({
   executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined
 });
 /**
- * A drawing's LOSAT search settings. A count is `''` when its `v-model.number` input is cleared; `null` is Unbounded.
+ * A drawing's LOSAT search settings. A count is `null` when its field is cleared (`v-blank-null`), which reads as its
+ * default; a cleared limit is Unbounded.
  * `hitLimitsByMode` keeps each mode's two limits while another mode is shown. A choice holds a value Python reads.
- * @typedef {{ mode: ProteinBlastpMode, maxHits: number | '', candidateLimit: number | '' | null,
+ * @typedef {{ mode: ProteinBlastpMode, maxHits: number | null, candidateLimit: number | null,
  *   hitLimitsByMode: Record<ProteinBlastpMode, Pick<LosatBlastpSettings, keyof LosatpHitLimits>>,
  *   orthogroupMembershipMode: CanonicalProteinComparisonSettings['orthogroupMembershipMode'],
- *   orthogroupMemberMaxHits: number | '' | null, collinearInferOrthogroups: boolean, collinearMinAnchors: number | '',
- *   collinearMaxUnitGap: number | '', collinearMaxDiagonalDrift: number | '', collinearMaxConflictsInMergeGap: number | '',
- *   collinearMaxParalogLinksPerOrthogroup: number | '',
+ *   orthogroupMemberMaxHits: number | null, collinearInferOrthogroups: boolean, collinearMinAnchors: number | null,
+ *   collinearMaxUnitGap: number | null, collinearMaxDiagonalDrift: number | null, collinearMaxConflictsInMergeGap: number | null,
+ *   collinearMaxParalogLinksPerOrthogroup: number | null,
  *   collinearColorMode: CanonicalProteinComparisonSettings['collinearityColorMode'],
  *   collinearUnitMode: CanonicalProteinComparisonSettings['collinearityUnitMode'],
  *   collinearAnchorMode: CanonicalProteinComparisonSettings['collinearityAnchorMode'],

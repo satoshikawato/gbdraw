@@ -36,6 +36,7 @@ import { createAppSetup } from './app/app-setup.js';
 import { chooseUiLanguage, showStoredUiLanguage, translationFeedbackUrl } from './app/ui-language.js';
 import { headerFit } from './app/header-fit.js';
 import { committedValue, settleCommittedField } from './app/committed-value.js';
+import { blankNull } from './app/blank-number.js';
 import { keepsListFocus } from './app/list-focus.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, numberText, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
@@ -71,6 +72,8 @@ app.directive('preview-markup', previewMarkup);
 app.directive('header-fit', headerFit);
 // A field the user types into shows its model's value through `v-committed-value`, not `:value`.
 app.directive('committed-value', committedValue);
+// A number field bound with `v-model` writes null when it is blank, never '' (app/blank-number.js).
+app.directive('blank-null', blankNull);
 // A keyed list whose rows move keeps the focus in the row it was in (app/list-focus.js).
 app.directive('keeps-list-focus', keepsListFocus);
 // Vue's production build only logs an error raised in a render, watcher,

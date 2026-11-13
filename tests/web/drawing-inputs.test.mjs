@@ -233,6 +233,15 @@ test('inputs: install(capture(x)) gives back x, also after reset, and a capture 
   if (joinedFiles) assert.equal(INPUTS_SLICE.capture(handle).circularSources[0].gb, view.circularSources[0].gb, 'refs are kept by reference');
 });
 
+test('inputs: a cleared Linear card gencode stays null through capture and install; a stored blank text reads as 1 (OV-3463)', () => {
+  const gencodes = (handle) => INPUTS_SLICE.capture(handle).linearSeqs.map(({ losat_gencode: gencode }) => gencode);
+  const { handle } = INPUTS_SLICE.create();
+  replaceLinearSeqs(handle, [11, null, ''].map((gencode, index) => createLinearSeq({ uid: `g${index}`, losat_gencode: gencode })));
+  assert.deepEqual(gencodes(handle), [11, null, 1]);
+  INPUTS_SLICE.install(handle, INPUTS_SLICE.capture(handle));
+  assert.deepEqual(gencodes(handle), [11, null, 1], 'History installs the captured cleared field as it was');
+});
+
 test('inputs: the row writers find a row by its uid and refuse an unknown one', () => {
   const { handle, view } = filledInputs();
   const first = view.linearSeqs[0].uid;

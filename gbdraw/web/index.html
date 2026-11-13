@@ -2885,11 +2885,11 @@
                                         <div v-else class="grid grid-cols-2 gap-2">
                                             <div>
                                                 <label class="text-[9px] block">{{ t('Start') }}</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" :aria-label="t('Circular region start')" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" :placeholder="t('Start (1)')" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" v-blank-null :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" :aria-label="t('Circular region start')" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" :placeholder="t('Start (1)')" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] block">{{ t('End') }}</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" :aria-label="t('Circular region end')" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}${circularRegionNote ? ' circular-region-note' : ''}`" :placeholder="t('Record end')" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" v-blank-null :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" :aria-label="t('Circular region end')" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}${circularRegionNote ? ' circular-region-note' : ''}`" :placeholder="t('Record end')" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                         </div>
                                         <p v-if="circularRegionNote" id="circular-region-note" data-region-clamp-note class="mt-1 text-[9px] text-amber-700">{{ circularRegionNote }}</p>
@@ -2961,13 +2961,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Window') }} <help-tip id="help-circular-depth-window" :text="t('Window size for depth aggregation. Blank: a tenth of the GC window, at least 100 bp.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_window_size, 'depthWindow')" :text="autoValueText('depthWindow')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" :aria-label="t('Depth Window')" aria-describedby="help-circular-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" v-blank-null :aria-label="t('Depth Window')" aria-describedby="help-circular-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Step') }} <help-tip id="help-circular-depth-step" :text="t('Step size for depth aggregation. Blank: a tenth of the GC step, at least 1 bp.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_step_size, 'depthStep')" :text="autoValueText('depthStep')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" :aria-label="t('Depth Step')" aria-describedby="help-circular-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" v-blank-null :aria-label="t('Depth Step')" aria-describedby="help-circular-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -2975,20 +2975,20 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Min') }} <help-tip id="help-circular-depth-min" :text="t('Minimum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_min, 'depthMin')" :text="autoValueText('depthMin')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" :aria-label="t('Depth Min')" aria-describedby="help-circular-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" v-blank-null :aria-label="t('Depth Min')" aria-describedby="help-circular-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Max') }} <help-tip id="help-circular-depth-max" :text="t('Maximum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_max, 'depthMax')" :text="autoValueText('depthMax')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" :aria-label="t('Depth Max')" aria-describedby="help-circular-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" v-blank-null :aria-label="t('Depth Max')" aria-describedby="help-circular-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Depth Width') }} <help-tip id="help-circular-depth-width" :text="t('Depth track width in px.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.depth_width_circular, 'circularDepthWidth')" :text="autoValueText('circularDepthWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use each Depth row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('Depth Width')" aria-describedby="help-circular-depth-width" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" v-blank-null :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use each Depth row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('Depth Width')" aria-describedby="help-circular-depth-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -3031,17 +3031,17 @@
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Large Tick') }} <help-tip :id="`help-circular-depth-large-tick-${track.index}`" :text="t('Large tick interval in x coverage units. Leave blank for min/max ticks.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.large_tick_interval, 'depthLargeTick')" :text="autoValueText('depthLargeTick')">
-                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" :aria-label="track.index === 0 ? t('Depth large tick') : t('Depth {n} large tick', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-large-tick-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth large tick') : t('Depth {n} large tick', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-large-tick-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Small Tick') }} <help-tip :id="`help-circular-depth-small-tick-${track.index}`" :text="t('Small tick interval in x coverage units. Leave blank to hide small ticks.')"></help-tip></span>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-circular-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track)" :text="autoValueText('depthTickFont', track)">
-                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" v-blank-null :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -3427,7 +3427,7 @@
                             </div>
                             <div v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="linear-primary-label mb-1">{{ t('LOSAT Gencode') }}</div>
-                                <input type="number" v-model.number="seq.losat_gencode" :data-linear-gencode-input="seq.uid" :aria-invalid="linearRecordGencodeProblem(seq) === 'unread' ? 'true' : undefined" :aria-describedby="linearRecordGencodeProblem(seq) ? `linear-record-gencode-${seq.uid}` : undefined" :aria-label="t('TLOSATX gencode for sequence {n}', { n: idx + 1 })" :placeholder="t('Gencode (this entry)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                <input type="number" v-model.number="seq.losat_gencode" v-blank-null :data-linear-gencode-input="seq.uid" :aria-invalid="linearRecordGencodeProblem(seq) === 'unread' ? 'true' : undefined" :aria-describedby="linearRecordGencodeProblem(seq) ? `linear-record-gencode-${seq.uid}` : undefined" :aria-label="t('TLOSATX gencode for sequence {n}', { n: idx + 1 })" :placeholder="t('Gencode (this entry)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                             </div>
                                 </div>
                             </details>
@@ -3490,13 +3490,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Window') }} <help-tip id="help-linear-depth-window" :text="t('Window size for depth aggregation. Blank: a tenth of the GC window, at least 100 bp.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_window_size, 'depthWindow')" :text="autoValueText('depthWindow')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" :aria-label="t('Depth Window')" aria-describedby="help-linear-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" v-blank-null :aria-label="t('Depth Window')" aria-describedby="help-linear-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Step') }} <help-tip id="help-linear-depth-step" :text="t('Step size for depth aggregation. Blank: a tenth of the GC step, at least 1 bp.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_step_size, 'depthStep')" :text="autoValueText('depthStep')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" :aria-label="t('Depth Step')" aria-describedby="help-linear-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" v-blank-null :aria-label="t('Depth Step')" aria-describedby="help-linear-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -3504,20 +3504,20 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Min') }} <help-tip id="help-linear-depth-min" :text="t('Minimum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_min, 'depthMin')" :text="autoValueText('depthMin')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" :aria-label="t('Depth Min')" aria-describedby="help-linear-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" v-blank-null :aria-label="t('Depth Min')" aria-describedby="help-linear-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Max') }} <help-tip id="help-linear-depth-max" :text="t('Maximum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_max, 'depthMax')" :text="autoValueText('depthMax')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" :aria-label="t('Depth Max')" aria-describedby="help-linear-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" v-blank-null :aria-label="t('Depth Max')" aria-describedby="help-linear-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Default Depth Height') }} <help-tip id="help-linear-default-depth-height" :text="t('Fallback height for linear depth tracks that leave per-track Height blank.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.depth_height, 'linearDepthHeight')" :text="autoValueText('linearDepthHeight')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" :aria-label="t('Default Depth Height')" aria-describedby="help-linear-default-depth-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" v-blank-null :aria-label="t('Default Depth Height')" aria-describedby="help-linear-default-depth-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -3554,7 +3554,7 @@
                                                     type="number"
                                                     min="0.01"
                                                     step="0.5"
-                                                    v-model.number="track.config.height"
+                                                    v-model.number="track.config.height" v-blank-null
                                                     @input="syncLinearDepthSlotHeightsFromDepthTracks(track.index)"
                                                     class="form-input form-input-compact auto-value-input"
                                                  :disabled="!semanticMutationAvailable">
@@ -3578,17 +3578,17 @@
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Large Tick') }} <help-tip :id="`help-linear-depth-large-tick-${track.index}`" :text="t('Large tick interval in x coverage units. Leave blank for min/max ticks.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.large_tick_interval, 'depthLargeTick')" :text="autoValueText('depthLargeTick')">
-                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" :aria-label="track.index === 0 ? t('Depth large tick') : t('Depth {n} large tick', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-large-tick-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth large tick') : t('Depth {n} large tick', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-large-tick-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Small Tick') }} <help-tip :id="`help-linear-depth-small-tick-${track.index}`" :text="t('Small tick interval in x coverage units. Leave blank to hide small ticks.')"></help-tip></span>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" v-blank-null :aria-label="track.index === 0 ? t('Depth small tick') : t('Depth {n} small tick', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-small-tick-${track.index}`" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-linear-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track)" :text="autoValueText('depthTickFont', track)">
-                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" v-blank-null :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -3727,7 +3727,7 @@
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
                                         <span class="linear-primary-label mb-1">{{ t('Pairwise display max hits') }} <help-tip id="help-comparison-pairwise-display-max-hits" :text="t('Maximum filtered matches displayed per query protein in Pairwise mode. This does not limit LOSATP candidates or Similarity/Collinear member evidence.')"></help-tip></span>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" :aria-label="t('Pairwise display max hits per protein')" aria-describedby="help-comparison-pairwise-display-max-hits" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" v-blank-null :aria-label="t('Pairwise display max hits per protein')" aria-describedby="help-comparison-pairwise-display-max-hits" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="flex items-start text-xs">
@@ -3741,11 +3741,11 @@
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                         <div>
                                             <span class="linear-primary-label mb-1">{{ t('Max unit gap') }} <help-tip id="help-comparison-max-unit-gap" :text="t('Maximum number of units (loci, or CDSs without a locus identifier; see Unit mode) between neighboring anchors of one block, on both records. 0 joins adjacent units only. With Diagonal drift 0, a gap is bridged only when both records skip the same number of units.')"></help-tip></span>
-                                            <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" :aria-label="t('Collinear max unit gap')" aria-describedby="help-comparison-max-unit-gap" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" v-blank-null :aria-label="t('Collinear max unit gap')" aria-describedby="help-comparison-max-unit-gap" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <span class="linear-primary-label mb-1">{{ t('Min block genes') }} <help-tip id="help-comparison-min-block-genes" :text="t('Minimum connected genes required for a Collinear ribbon.')"></help-tip></span>
-                                            <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" :aria-label="t('Collinear minimum block genes')" aria-describedby="help-comparison-min-block-genes" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" v-blank-null :aria-label="t('Collinear minimum block genes')" aria-describedby="help-comparison-min-block-genes" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-search-scope')">
                                             <label class="linear-primary-label mb-1">{{ t('Search between') }}</label>
@@ -3767,7 +3767,7 @@
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
                                                 <label class="linear-primary-label mb-1">{{ t('Bitscore') }}</label>
-                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" :aria-label="t('Linear comparison minimum bitscore')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" v-model.number="adv.min_bitscore" v-blank-null @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" :aria-label="t('Linear comparison minimum bitscore')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
                                                 <label class="linear-primary-label mb-1">{{ t('E-value') }}</label>
@@ -3775,11 +3775,11 @@
                                             </div>
                                             <div>
                                                 <label class="linear-primary-label mb-1">{{ t('Min identity (%)') }}</label>
-                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" :aria-label="t('Linear comparison minimum identity')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" v-model.number="adv.identity" v-blank-null @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" :aria-label="t('Linear comparison minimum identity')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
                                                 <label class="linear-primary-label mb-1">{{ t('Min length') }}</label>
-                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" :aria-label="t('Linear comparison minimum alignment length')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" v-model.number="adv.alignment_length" v-blank-null @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" :aria-label="t('Linear comparison minimum alignment length')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
                                                 <span class="linear-primary-label mb-1"><label for="linear-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-linear-identity-scale" :text="t('Fix the identity color scale so figures with different thresholds share colors and Legend labels. Leave the minimum blank to color from the minimum identity to 100%.')"></help-tip></span>
@@ -3814,7 +3814,7 @@
                                             <div data-setting="comparison-height">
                                                 <span class="linear-primary-label mb-1">{{ t('Match height') }} <setting-note id="comparison-height-timing" setting="comparison-height"></setting-note></span>
                                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
-                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" :aria-label="t('Comparison match height')" aria-describedby="comparison-height-timing" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" v-blank-null :aria-label="t('Comparison match height')" aria-describedby="comparison-height-timing" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                                 <p v-if="comparisonHeightValidationError" class="mt-1 text-[10px] text-red-600">{{ comparisonHeightValidationError }}</p>
                                             </div>
@@ -3826,11 +3826,11 @@
                                         <div class="grid min-w-0 grid-cols-1 gap-2">
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
                                         <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.')"></help-tip></span>
-                                        <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.candidateLimit" :aria-label="t('LOSATP Max target seqs')" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.candidateLimit" v-blank-null :aria-label="t('LOSATP Max target seqs')" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
                                         <span class="linear-primary-label mb-1">{{ t('Max hits per protein for groups') }} <help-tip id="help-comparison-member-hits-per-protein" :text="t('Maximum distinct subject proteins, not counting the protein itself, kept per query protein in each directed record-pair search to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches.')"></help-tip></span>
-                                        <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.orthogroupMemberMaxHits" :aria-label="t('Max hits per protein for groups')" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.orthogroupMemberMaxHits" v-blank-null :aria-label="t('Max hits per protein for groups')" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                         </div>
                                     </section>
@@ -4097,7 +4097,7 @@
                                         </div>
                                     </template>
                                     <label class="linear-primary-label block">{{ t('Record gap (px)') }}
-                                        <input type="number" min="0" step="1" v-model.number="linearRecordGap" :aria-label="t('Linear record gap')" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" step="1" v-model.number="linearRecordGap" v-blank-null :aria-label="t('Linear record gap')" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </label>
                                 </div>
                                 <div class="min-w-0 space-y-1.5 border-t border-slate-200 pt-2" data-feature-anchor>
@@ -4153,16 +4153,16 @@
                                     </div>
                                     <div>
                                         <label class="linear-primary-label mb-1">{{ t('Diagonal drift') }}</label>
-                                        <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" :aria-label="t('Collinear diagonal drift')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" v-blank-null :aria-label="t('Collinear diagonal drift')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <label class="linear-primary-label mb-1">{{ t('Merge conflicts') }}</label>
-                                        <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" :aria-label="t('Collinear merge conflicts')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" v-blank-null :aria-label="t('Collinear merge conflicts')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     </template>
                                     <div v-if="linearComparisonUi.sectionKeys.advanced.includes('paralog-links')">
                                         <label class="linear-primary-label mb-1">{{ t('Paralog links per group') }}</label>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMaxParalogLinksPerOrthogroup" :aria-label="t('Paralog links per group')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMaxParalogLinksPerOrthogroup" v-blank-null :aria-label="t('Paralog links per group')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                 </div>
                             </section>
@@ -4302,7 +4302,7 @@
                                     </div>
                                     <div>
                                         <label for="sequence-search-bitscore" class="input-label text-[10px]">{{ t('Bitscore') }}</label>
-                                        <input id="sequence-search-bitscore" type="number" min="0" v-model="sequenceSearch.panel.thresholds[mode].min_bitscore" class="form-input px-1 py-0.5 text-xs">
+                                        <input id="sequence-search-bitscore" type="number" min="0" v-model="sequenceSearch.panel.thresholds[mode].min_bitscore" v-blank-null class="form-input px-1 py-0.5 text-xs">
                                     </div>
                                     <div>
                                         <label for="sequence-search-evalue" class="input-label text-[10px]">{{ t('E-value') }}</label>
@@ -4310,11 +4310,11 @@
                                     </div>
                                     <div>
                                         <label for="sequence-search-identity" class="input-label text-[10px]">{{ t('Minimum Identity') }}</label>
-                                        <input id="sequence-search-identity" type="number" min="0" max="100" v-model="sequenceSearch.panel.thresholds[mode].identity" class="form-input px-1 py-0.5 text-xs">
+                                        <input id="sequence-search-identity" type="number" min="0" max="100" v-model="sequenceSearch.panel.thresholds[mode].identity" v-blank-null class="form-input px-1 py-0.5 text-xs">
                                     </div>
                                     <div>
                                         <label for="sequence-search-length" class="input-label text-[10px]">{{ t('Minimum Length') }}</label>
-                                        <input id="sequence-search-length" type="number" min="0" step="1" v-model="sequenceSearch.panel.thresholds[mode].alignment_length" class="form-input px-1 py-0.5 text-xs">
+                                        <input id="sequence-search-length" type="number" min="0" step="1" v-model="sequenceSearch.panel.thresholds[mode].alignment_length" v-blank-null class="form-input px-1 py-0.5 text-xs">
                                     </div>
                                 </div>
                                 <div>
@@ -4495,7 +4495,7 @@
                                     <div v-else class="grid grid-cols-1 gap-1.5">
                                         <div>
                                             <span class="text-[9px] flex items-center">{{ t('Reference gencode') }} <help-tip id="help-circular-comparison-reference-gencode" :text="t('Translation table for the displayed circular sequence used by TLOSATX.')"></help-tip></span>
-                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" :aria-label="t('Circular reference gencode')" aria-describedby="help-circular-comparison-reference-gencode" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" v-blank-null :aria-label="t('Circular reference gencode')" aria-describedby="help-circular-comparison-reference-gencode" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
                                 </div>
@@ -4521,7 +4521,7 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Bitscore') }}</label>
-                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('circular', 'min_bitscore') : Number($event.target.value)" :aria-label="t('Circular comparison minimum bitscore')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'min_bitscore'))" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" v-model.number="adv.min_bitscore" v-blank-null @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('circular', 'min_bitscore') : Number($event.target.value)" :aria-label="t('Circular comparison minimum bitscore')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'min_bitscore'))" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('E-value') }}</label>
@@ -4529,11 +4529,11 @@
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Minimum Identity') }}</label>
-                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('circular', 'identity') : Number($event.target.value)" :aria-label="t('Circular comparison minimum identity')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'identity'))" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" v-model.number="adv.identity" v-blank-null @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('circular', 'identity') : Number($event.target.value)" :aria-label="t('Circular comparison minimum identity')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'identity'))" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Minimum Length') }}</label>
-                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" :aria-label="t('Circular comparison minimum alignment length')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" v-model.number="adv.alignment_length" v-blank-null @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" :aria-label="t('Circular comparison minimum alignment length')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]"><label for="circular-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-circular-identity-scale" :text="t('Fix the identity color scale so figures with different thresholds share colors and Legend labels. Leave the minimum blank to color from the minimum identity to 100%.')"></help-tip></span>
@@ -4551,13 +4551,13 @@
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Ring Width') }}</label>
                                         <auto-value-field :visible="autoValueVisible(circularConservation.ring_width, 'conservationRingWidth')" :text="autoValueText('conservationRingWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" :aria-label="t('Circular comparison ring width')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" v-blank-null :aria-label="t('Circular comparison ring width')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Ring Gap') }}</label>
                                         <auto-value-field :visible="autoValueVisible(circularConservation.ring_gap, 'conservationRingGap')" :text="autoValueText('conservationRingGap')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" :aria-label="t('Circular comparison ring gap')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" v-blank-null :aria-label="t('Circular comparison ring gap')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -4598,7 +4598,7 @@
                                         </div>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
                                             <label class="text-[9px] text-slate-500 truncate">{{ t('Comparison gencode') }}</label>
-                                            <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" v-blank-null :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
                                     <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). They sit beside the ring's name, apart from its file controls. -->
@@ -4727,7 +4727,7 @@
                                         <help-tip id="help-linear-resolve-feature-overlaps" :text="t('Overlapping genomic features are assigned to additional lanes; other tracks are repacked automatically.')"></help-tip>
                                     </div>
                                     <label class="ml-6 flex items-center gap-2 text-[11px] text-slate-600">{{ t('Feature overlap tolerance (bp)') }}
-                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" :aria-label="t('Feature overlap tolerance (bp)')" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" v-blank-null :aria-label="t('Feature overlap tolerance (bp)')" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
                                     </label>
 
                                     <div class="flex items-center text-xs">
@@ -5139,7 +5139,7 @@
                                         <span>{{ t('Resolve Overlaps') }}</span>
                                     </label>
                                     <label class="ml-6 flex items-center gap-2 text-[11px] text-slate-600">{{ t('Feature overlap tolerance (bp)') }}
-                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" :aria-label="t('Feature overlap tolerance (bp)')" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" v-blank-null :aria-label="t('Feature overlap tolerance (bp)')" class="form-input form-input-compact w-20" :disabled="!semanticMutationAvailable">
                                     </label>
 
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Place multiple records on one shared circular canvas.')">
@@ -5243,7 +5243,7 @@
                                         <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
                                             <div data-setting="track-geometry">
                                                 <span class="input-label text-[10px]">{{ t('Center Reserved Radius') }} <setting-note id="circular-center-reserved-radius-timing" setting="track-geometry"></setting-note> <help-tip id="help-circular-center-reserved-radius" :text="t('Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center, where they may overlap the label.')"></help-tip></span>
-                                                <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" :aria-label="t('Center Reserved Radius')" aria-describedby="help-circular-center-reserved-radius circular-center-reserved-radius-timing" class="form-input form-input-compact" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" v-blank-null :aria-label="t('Center Reserved Radius')" aria-describedby="help-circular-center-reserved-radius circular-center-reserved-radius-timing" class="form-input form-input-compact" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
                                             </div>
                                         </div>
                                         <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
@@ -5543,11 +5543,11 @@
                                 <div v-if="circularRecordLayout === 'one_circle'" data-capture="one-circle-controls" data-setting="multi-record-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
                                     <div>
                                         <span class="input-label text-[10px] mb-1">{{ t('Gap between records (degrees)') }} <setting-note id="one-circle-gap-timing" setting="multi-record-layout"></setting-note></span>
-                                        <input type="number" :min="ONE_CIRCLE_LIMITS.gapDegrees.minimum" :max="ONE_CIRCLE_LIMITS.gapDegrees.maximum" step="0.1" v-model.number="adv.one_circle_gap_degrees" class="form-input py-1 text-xs" :aria-label="t('Gap between records (degrees)')" aria-describedby="one-circle-gap-timing" :disabled="!semanticMutationAvailable">
+                                        <input type="number" :min="ONE_CIRCLE_LIMITS.gapDegrees.minimum" :max="ONE_CIRCLE_LIMITS.gapDegrees.maximum" step="0.1" v-model.number="adv.one_circle_gap_degrees" v-blank-null class="form-input py-1 text-xs" :aria-label="t('Gap between records (degrees)')" aria-describedby="one-circle-gap-timing" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px] mb-1">{{ t('Shortest record drawn (bp)') }} <help-tip id="help-one-circle-min-length" :text="t('Shorter records are counted in the figure, not drawn.')"></help-tip></span>
-                                        <input type="number" :min="ONE_CIRCLE_LIMITS.minLength.minimum" step="1" v-model.number="adv.one_circle_min_length" class="form-input py-1 text-xs" :aria-label="t('Shortest record drawn (bp)')" aria-describedby="help-one-circle-min-length" :disabled="!semanticMutationAvailable">
+                                        <input type="number" :min="ONE_CIRCLE_LIMITS.minLength.minimum" step="1" v-model.number="adv.one_circle_min_length" v-blank-null class="form-input py-1 text-xs" :aria-label="t('Shortest record drawn (bp)')" aria-describedby="help-one-circle-min-length" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <label class="col-span-2 flex items-center gap-2 text-xs select-none">
                                         <input type="checkbox" v-model="adv.one_circle_record_band" class="form-checkbox" :disabled="!semanticMutationAvailable">
@@ -5566,15 +5566,15 @@
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px] mb-1">{{ t('Min Radius Ratio') }} <help-tip id="help-multi-record-min-radius-ratio" :text="t('Lower bound for short records (0-1).')"></help-tip></span>
-                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs" :aria-label="t('Min Radius Ratio')" aria-describedby="help-multi-record-min-radius-ratio" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" v-blank-null class="form-input py-1 text-xs" :aria-label="t('Min Radius Ratio')" aria-describedby="help-multi-record-min-radius-ratio" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px] mb-1">{{ t('Column Gap Ratio') }} <help-tip id="help-multi-record-column-gap-ratio" :text="t('Additional horizontal gap ratio between visible content bounds in each row on multi-record canvas. 0 makes row content touch. Default: 0.10 (horizontal only).')"></help-tip></span>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" class="form-input py-1 text-xs" :aria-label="t('Column Gap Ratio')" aria-describedby="help-multi-record-column-gap-ratio" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" v-blank-null class="form-input py-1 text-xs" :aria-label="t('Column Gap Ratio')" aria-describedby="help-multi-record-column-gap-ratio" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px] mb-1">{{ t('Row Gap Ratio') }} <help-tip id="help-multi-record-row-gap-ratio" :text="t('Additional visible gap ratio between row content bounds in multi-record canvas. 0 makes rows touch by content bounds. Default: 0.05 (vertical only).')"></help-tip></span>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs" :aria-label="t('Row Gap Ratio')" aria-describedby="help-multi-record-row-gap-ratio" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" v-blank-null class="form-input py-1 text-xs" :aria-label="t('Row Gap Ratio')" aria-describedby="help-multi-record-row-gap-ratio" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="col-span-2" data-capture="multi-record-order">
                                         <div class="flex items-center justify-between mb-1">
@@ -5787,13 +5787,13 @@
                                 <div>
                                     <span class="input-label text-[10px]">{{ t('Swatch size') }} <help-tip id="help-legend-swatch-size" :text="t('Size of the color boxes in the legend.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.legend_box_size, 'legendBoxSize')" :text="autoValueText('legendBoxSize')">
-                                        <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact auto-value-input" :aria-label="t('Legend swatch size')" aria-describedby="help-legend-swatch-size" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.legend_box_size" v-blank-null class="form-input form-input-compact auto-value-input" :aria-label="t('Legend swatch size')" aria-describedby="help-legend-swatch-size" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px]">{{ t('Font size') }} <help-tip id="help-legend-font-size" :text="t('Font size for the legend text.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.legend_font_size, 'legendFontSize')" :text="autoValueText('legendFontSize')">
-                                        <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact auto-value-input" :aria-label="t('Legend font size')" aria-describedby="help-legend-font-size" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.legend_font_size" v-blank-null class="form-input form-input-compact auto-value-input" :aria-label="t('Legend font size')" aria-describedby="help-legend-font-size" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </div>
@@ -5986,7 +5986,7 @@
                                             type="number"
                                             min="0.05"
                                             step="0.05"
-                                            v-model.number="adv.arrow_head_length_ratio"
+                                            v-model.number="adv.arrow_head_length_ratio" v-blank-null
                                             :placeholder="t('Auto')"
                                             :aria-label="t('Arrow head length ratio')"
                                             aria-describedby="help-feature-head-length-ratio"
@@ -6000,7 +6000,7 @@
                                             min="0.05"
                                             max="1"
                                             step="0.05"
-                                            v-model.number="adv.arrow_shaft_width_ratio"
+                                            v-model.number="adv.arrow_shaft_width_ratio" v-blank-null
                                             :aria-label="t('Arrow shaft width ratio')"
                                             aria-describedby="help-feature-shaft-width-ratio"
                                             class="form-input form-input-compact"
@@ -6086,7 +6086,7 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Feature Height') }} <help-tip id="help-feature-feature-height" :text="t('Height of the feature blocks.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.feature_height, 'linearFeatureHeight')" :text="autoValueText('linearFeatureHeight')">
-                                                <input type="number" v-model.number="adv.feature_height" :aria-label="t('Feature Height')" aria-describedby="help-feature-feature-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.feature_height" v-blank-null :aria-label="t('Feature Height')" aria-describedby="help-feature-feature-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
@@ -6107,7 +6107,7 @@
                                     <div v-if="mode === 'circular'">
                                         <span class="input-label text-[10px]">{{ t('Feature Track Width') }} <help-tip id="help-feature-feature-track-width" :text="t('Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.feature_width_circular, 'circularFeatureWidth')" :text="autoValueText('circularFeatureWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('Feature Track Width')" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" v-blank-null :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('Feature Track Width')" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                     <div data-setting="stroke" class="space-y-2">
@@ -6124,7 +6124,7 @@
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Block Stroke Width') }} <help-tip id="help-feature-block-stroke-width" :text="t('Width of the outline for feature blocks.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(adv.block_stroke_width, 'blockStrokeWidth')" :text="autoValueText('blockStrokeWidth')">
-                                                    <input type="number" v-model.number="adv.block_stroke_width" :aria-label="t('Block Stroke Width')" aria-describedby="help-feature-block-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" v-model.number="adv.block_stroke_width" v-blank-null :aria-label="t('Block Stroke Width')" aria-describedby="help-feature-block-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -6141,7 +6141,7 @@
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Line Stroke Width') }} <help-tip id="help-feature-line-stroke-width" :text="t('Width of the lines representing introns.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(adv.line_stroke_width, 'lineStrokeWidth')" :text="autoValueText('lineStrokeWidth')">
-                                                    <input type="number" v-model.number="adv.line_stroke_width" :aria-label="t('Line Stroke Width')" aria-describedby="help-feature-line-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" v-model.number="adv.line_stroke_width" v-blank-null :aria-label="t('Line Stroke Width')" aria-describedby="help-feature-line-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -6231,7 +6231,7 @@
                                         <div>
                                             <span class="input-label text-[10px] mb-0">{{ t('Label Font Size') }} <help-tip id="help-label-label-font-size" :text="t('Font size for feature labels.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.label_font_size, 'labelFontSize')" :text="autoValueText('labelFontSize')">
-                                                <input type="number" v-model.number="adv.label_font_size" :aria-label="t('Label Font Size')" aria-describedby="help-label-label-font-size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.label_font_size" v-blank-null :aria-label="t('Label Font Size')" aria-describedby="help-label-label-font-size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div v-if="!(mode === 'linear' && adv.label_placement === 'above_feature')">
@@ -6365,26 +6365,26 @@
                                         <div>
                                             <label class="input-label text-[10px]">{{ t('Outer X Offset') }}</label>
                                             <auto-value-field :visible="autoValueVisible(adv.outer_label_x_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" :aria-label="t('Outer X Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" v-blank-null :aria-label="t('Outer X Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">{{ t('Outer Y Offset') }}</label>
                                             <auto-value-field :visible="autoValueVisible(adv.outer_label_y_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" :aria-label="t('Outer Y Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" v-blank-null :aria-label="t('Outer Y Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <template v-if="form.labels_mode === 'both'">
                                             <div>
                                                 <label class="input-label text-[10px]">{{ t('Inner X Offset') }}</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.inner_label_x_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" :aria-label="t('Inner X Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" v-blank-null :aria-label="t('Inner X Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">{{ t('Inner Y Offset') }}</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.inner_label_y_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" :aria-label="t('Inner Y Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" v-blank-null :aria-label="t('Inner Y Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </template>
@@ -6426,7 +6426,7 @@
                                 <div>
                                     <span class="input-label text-[10px]">{{ t('Axis Stroke Width') }} <help-tip id="help-linear-axis-axis-stroke-width" :text="t('Width of the main axis line.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                        <input type="number" v-model.number="adv.axis_stroke_width" :aria-label="t('Axis Stroke Width')" aria-describedby="help-linear-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.axis_stroke_width" v-blank-null :aria-label="t('Axis Stroke Width')" aria-describedby="help-linear-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </div>
@@ -6447,7 +6447,7 @@
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Line Width') }} <help-tip id="help-linear-axis-line-width" :text="t('Line width of the scale bar or ruler.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_stroke_width, 'scaleStrokeWidth')" :text="autoValueText('scaleStrokeWidth')">
-                                            <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input" :aria-label="t('Linear scale line width')" aria-describedby="help-linear-axis-line-width" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.scale_stroke_width" v-blank-null class="form-input form-input-compact auto-value-input" :aria-label="t('Linear scale line width')" aria-describedby="help-linear-axis-line-width" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
@@ -6519,7 +6519,7 @@
                                     <div v-if="form.scale_style === 'ruler'">
                                         <span class="input-label text-[10px]">{{ t('Interval') }} <help-tip id="help-linear-axis-interval" :text="t('Manual tick interval for Ruler scale style in bp (must be > 0). Leave blank to calculate automatically.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" :aria-label="t('Linear ruler interval')" aria-describedby="help-linear-axis-interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" v-blank-null class="form-input form-input-compact auto-value-input" :aria-label="t('Linear ruler interval')" aria-describedby="help-linear-axis-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
@@ -6582,7 +6582,7 @@
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Axis Stroke Width') }} <help-tip id="help-circular-axis-axis-stroke-width" :text="t('Width of the main axis line.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                            <input type="number" v-model.number="adv.axis_stroke_width" :aria-label="t('Axis Stroke Width')" aria-describedby="help-circular-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.axis_stroke_width" v-blank-null :aria-label="t('Axis Stroke Width')" aria-describedby="help-circular-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -6593,13 +6593,13 @@
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Scale Interval') }} <help-tip id="help-circular-axis-scale-interval" :text="t('Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" :aria-label="t('Circular scale interval')" aria-describedby="help-circular-axis-scale-interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" v-blank-null class="form-input form-input-compact auto-value-input" :aria-label="t('Circular scale interval')" aria-describedby="help-circular-axis-scale-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Tick Label Font Size') }} <help-tip id="help-circular-axis-tick-label-font-size" :text="t('Font size for circular tick labels. Leave blank to use the default size.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.tick_label_font_size, 'tickLabelFontSize')" :text="autoValueText('tickLabelFontSize')">
-                                            <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input" :aria-label="t('Circular tick label font size')" aria-describedby="help-circular-axis-tick-label-font-size" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.tick_label_font_size" v-blank-null class="form-input form-input-compact auto-value-input" :aria-label="t('Circular tick label font size')" aria-describedby="help-circular-axis-tick-label-font-size" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </fieldset>
@@ -6618,13 +6618,13 @@
                                 <div data-setting="dinucleotide-window">
                                     <span class="input-label text-[10px]">{{ t('Window') }} <setting-note id="gc-window-timing" setting="dinucleotide-window"></setting-note> <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1 kb (<1 Mb), 10 kb (<10 Mb), 100 kb (<100 Mb), 1 Mb (>=100 Mb), and at most a tenth of the drawn length.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
-                                        <input type="number" min="1" step="1" v-model.number="adv.window_size" :aria-label="t('Window')" aria-describedby="help-gc-window gc-window-timing" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.window_size" v-blank-null :aria-label="t('Window')" aria-describedby="help-gc-window gc-window-timing" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100 bp (<1 Mb), 1 kb (<10 Mb), 10 kb (<100 Mb), 100 kb (>=100 Mb), and at most a tenth of the Auto window.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
-                                        <input type="number" min="1" step="1" v-model.number="adv.step_size" :aria-label="t('Step')" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.step_size" v-blank-null :aria-label="t('Step')" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
@@ -6645,11 +6645,11 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('GC Min %') }} <help-tip id="help-gc-gc-min-percent" :text="t('Minimum GC percentage for percent-mode clipping and axis scaling.')"></help-tip></span>
-                                        <input type="number" step="0.1" v-model.number="adv.gc_content_min_percent" :aria-label="t('GC Min %')" aria-describedby="help-gc-gc-min-percent" class="form-input form-input-compact" placeholder="0" :disabled="!semanticMutationAvailable">
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_min_percent" v-blank-null :aria-label="t('GC Min %')" aria-describedby="help-gc-gc-min-percent" class="form-input form-input-compact" placeholder="0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('GC Max %') }} <help-tip id="help-gc-gc-max-percent" :text="t('Maximum GC percentage for percent-mode clipping and axis scaling.')"></help-tip></span>
-                                        <input type="number" step="0.1" v-model.number="adv.gc_content_max_percent" :aria-label="t('GC Max %')" aria-describedby="help-gc-gc-max-percent" class="form-input form-input-compact" placeholder="100" :disabled="!semanticMutationAvailable">
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_max_percent" v-blank-null :aria-label="t('GC Max %')" aria-describedby="help-gc-gc-max-percent" class="form-input form-input-compact" placeholder="100" :disabled="!semanticMutationAvailable">
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
@@ -6678,16 +6678,16 @@
                                 <div class="grid grid-cols-3 gap-1.5">
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Large Tick') }} <help-tip id="help-gc-large-tick" :text="t('GC content percent-mode large tick interval.')"></help-tip></span>
-                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_tick_interval" :aria-label="t('Large Tick')" aria-describedby="help-gc-large-tick" class="form-input form-input-compact" placeholder="20" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_tick_interval" v-blank-null :aria-label="t('Large Tick')" aria-describedby="help-gc-large-tick" class="form-input form-input-compact" placeholder="20" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Small Tick') }} <help-tip id="help-gc-small-tick" :text="t('GC content percent-mode small tick interval. Leave blank to hide small ticks.')"></help-tip></span>
-                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" :aria-label="t('Small Tick')" aria-describedby="help-gc-small-tick" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" v-blank-null :aria-label="t('Small Tick')" aria-describedby="help-gc-small-tick" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip id="help-gc-tick-font" :text="t('Font size for GC content percent tick labels. Leave blank for auto.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.gc_content_tick_font_size, 'gcTickFont')" :text="autoValueText('gcTickFont')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" :aria-label="t('Tick Font Size')" aria-describedby="help-gc-tick-font" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" v-blank-null :aria-label="t('Tick Font Size')" aria-describedby="help-gc-tick-font" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -6697,7 +6697,7 @@
                                 <div>
                                     <span class="input-label text-[10px]">{{ t('GC Height') }} <help-tip id="help-gc-gc-height" :text="t('Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.gc_height, 'linearGcHeight')" :text="autoValueText('linearGcHeight')">
-                                        <input type="number" v-model.number="adv.gc_height" :aria-label="t('GC Height')" aria-describedby="help-gc-gc-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.gc_height" v-blank-null :aria-label="t('GC Height')" aria-describedby="help-gc-gc-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </template>
@@ -6708,13 +6708,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Content Width') }} <help-tip id="help-gc-gc-content-width" :text="t('GC content track width in px.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_width_circular, 'circularGcWidth')" :text="autoValueText('circularGcWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide content row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Width')" aria-describedby="help-gc-gc-content-width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" v-blank-null :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide content row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Width')" aria-describedby="help-gc-gc-content-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Content Radius') }} <help-tip id="help-gc-gc-content-radius" :text="t('GC content center radius as a ratio of the base circular radius (1.0 = base radius).')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_radius_circular, 'circularGcRadius')" :text="autoValueText('circularGcRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide content row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Radius')" aria-describedby="help-gc-gc-content-radius" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" v-blank-null :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide content row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Radius')" aria-describedby="help-gc-gc-content-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
@@ -6722,13 +6722,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Skew Width') }} <help-tip id="help-gc-gc-skew-width" :text="t('GC skew track width in px.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_width_circular, 'circularSkewWidth')" :text="autoValueText('circularSkewWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide skew row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Width')" aria-describedby="help-gc-gc-skew-width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" v-blank-null :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide skew row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Width')" aria-describedby="help-gc-gc-skew-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('GC Skew Radius') }} <help-tip id="help-gc-gc-skew-radius" :text="t('GC skew center radius as a ratio of the base circular radius (1.0 = base radius).')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_radius_circular, 'circularSkewRadius')" :text="autoValueText('circularSkewRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide skew row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Radius')" aria-describedby="help-gc-gc-skew-radius" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" v-blank-null :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Dinucleotide skew row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Radius')" aria-describedby="help-gc-gc-skew-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
@@ -7216,7 +7216,7 @@
                                        class="w-8 h-8 border border-slate-200 rounded cursor-pointer"
                                        :aria-label="t('Selected feature stroke color')">
                                 <input type="number"
-                                       v-model.number="selectedFeatureBulkStrokeWidth"
+                                       v-model.number="selectedFeatureBulkStrokeWidth" v-blank-null
                                        data-history-ignore
                                        min="0"
                                        step="0.1"

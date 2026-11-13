@@ -213,8 +213,12 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
  * Rings (`circularConservation.enabled`) as a setting; the writers of the
  * Sessions before it turned the rings on by the ring files, so Load reads
  * theirs from the files (OV-2818). Python reads no Web ring setting.
+ * `depthTicksUnsetAsNull` is the Web's own too: the writers before Session 51
+ * stored a Depth series tick never set as null (the drawing's tick) and a
+ * cleared one as '' (Auto); a Session 51 leaves the first out and stores the
+ * second as null (`seriesTicksOfOlderWriter` in depth-track-state.js).
  * @typedef {{ cardRowsAreFileRows: boolean, proteinResultsInDrawnFrame: boolean,
- *   resultsRecordPythonPaint: boolean, ringSettingStored: boolean }} SourceFacts
+ *   resultsRecordPythonPaint: boolean, ringSettingStored: boolean, depthTicksUnsetAsNull: boolean }} SourceFacts
  */
 /**
  * The one reading of a Session file's source facts by its version, for the
@@ -231,7 +235,8 @@ export const sessionSourceFactsOf = (version, hasDraft) => ({
   cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,
   proteinResultsInDrawnFrame: version >= MODE_SCOPED_SESSION_VERSION && version < FILE_IMPORT_ORIGIN_SESSION_VERSION,
   resultsRecordPythonPaint: version >= MODE_SCOPED_SESSION_VERSION,
-  ringSettingStored: version >= LAYOUT.version
+  ringSettingStored: version >= LAYOUT.version,
+  depthTicksUnsetAsNull: version < LAYOUT.version
 });
 /**
  * One drawing of a Session 51 (`SessionDrawing`, gbdraw/session_contract.py).

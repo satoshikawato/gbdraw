@@ -44,7 +44,7 @@ for (const [domain, key, first, second] of [
   assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
-// OV-3351: an emptied number field holds '' (v-model.number). Undo of the
+// OV-3351: an emptied number field holds null (`v-blank-null`). Undo of the
 // emptying restores the number, and Redo empties the field again, whether the
 // field's default is Auto (null) or a number, in every settings container.
 for (const [domain, key, value] of [
@@ -59,15 +59,33 @@ for (const [domain, key, value] of [
   const original = container()[key];
   await history.initializeIntentBaseline();
   await history.runUndoable('Set value', () => { container()[key] = value; });
-  await history.runUndoable('Empty the field', () => { container()[key] = ''; });
+  await history.runUndoable('Empty the field', () => { container()[key] = null; });
   await history.undo();
   assert.equal(container()[key], value, `${domain}.${key}: Undo of the emptying`);
   await history.redo();
-  // A field with a row reads its blank as Auto (null); both show an empty field.
-  assert.ok(['', null].includes(container()[key]), `${domain}.${key}: Redo of the emptying, ${JSON.stringify(container()[key])}`);
+  assert.equal(container()[key], null, `${domain}.${key}: Redo of the emptying`);
   await history.undo();
   await history.undo();
   assert.equal(container()[key], original, `${domain}.${key}: Undo of the value`);
+}
+
+// OV-3462: a cleared Depth series tick is null (Auto), and History gives it
+// back as null, not as the drawing's tick; a tick the series never set stays
+// absent (it takes the drawing's tick).
+{
+  const adv = () => state.activeDrawing().adv;
+  const original = { tick: adv().depth_large_tick_interval, tracks: structuredClone(adv().depth_tracks) };
+  adv().depth_large_tick_interval = 5000;
+  adv().depth_tracks = [{ label: '', color: '#4A90E2', height: null, large_tick_interval: null }];
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Set the series tick', () => { adv().depth_tracks[0].large_tick_interval = 200; });
+  await history.undo();
+  assert.equal(adv().depth_tracks[0].large_tick_interval, null, 'Undo gives back the cleared tick');
+  assert.equal(Object.hasOwn(adv().depth_tracks[0], 'small_tick_interval'), false, 'a tick never set stays absent');
+  await history.redo();
+  assert.equal(adv().depth_tracks[0].large_tick_interval, 200);
+  adv().depth_large_tick_interval = original.tick;
+  adv().depth_tracks = original.tracks;
 }
 
 // R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so

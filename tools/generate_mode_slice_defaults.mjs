@@ -77,6 +77,12 @@ const EARLIER_DEFAULTS = [
     value: [{"label": "Depth", "color": "#4A90E2", "height": null, "large_tick_interval": null, "small_tick_interval": null, "tick_font_size": null}]
   },
   {
+    domain: 'config.adv',
+    path: 'depth_tracks',
+    reason: 'Sessions up to 50 saved the default Depth series with its ticks never set as null; a Session 51 leaves them out.',
+    value: [{"label": "", "color": "#4A90E2", "height": null, "large_tick_interval": null, "small_tick_interval": null, "tick_font_size": null}]
+  },
+  {
     domain: 'config',
     path: 'colors',
     reason: 'gbdraw 0.14.5 and earlier saved the default palette with one color for repeat_region, misc_feature and every unlisted type (OV-3114).',

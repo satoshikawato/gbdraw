@@ -39,7 +39,8 @@ import {
 } from './linear-track-slot-model.js';
 import {
   DEPTH_FILES_CHANGE, depthFileSlotsFromValue, fitDepthStateToSources, isDepthSeriesAutoLabel,
-  isRecordMajorDepthFileMatrix, normalizeRecordMajorDepthFileRows, padDepthFileSlots, shownAfterSourceChange, syncDepthSlotLabels
+  isRecordMajorDepthFileMatrix, normalizeRecordMajorDepthFileRows, padDepthFileSlots, seriesTicksOfOlderWriter, shownAfterSourceChange,
+  syncDepthSlotLabels
 } from './depth-track-state.js';
 import { draftDrawsDepth } from './track-legend-rows.js';
 import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
@@ -2165,6 +2166,31 @@ const isLegacyConfigPayload = (data) =>
   isPlainObject(data) &&
   !Object.prototype.hasOwnProperty.call(data, 'format') &&
   Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
+
+/**
+ * A file Load reads, with the Depth series an older writer stored (a
+ * configuration file, a Session 50 and earlier: the source fact
+ * `depthTicksUnsetAsNull`) in the current form (`seriesTicksOfOlderWriter`):
+ * the flat draft of a configuration file or a Session 27-44, and each slice's
+ * of a Session 46-50. Called once, before any reader of the file.
+ * @param {unknown} data The parsed file.
+ * @returns {unknown}
+ */
+const withCurrentDepthSeries = (data) => {
+  /** @param {unknown} draft */
+  const current = (draft) => (isPlainObject(draft) && isPlainObject(draft.adv) && Object.hasOwn(draft.adv, 'depth_tracks')
+    ? { ...draft, adv: { ...draft.adv, depth_tracks: seriesTicksOfOlderWriter(draft.adv.depth_tracks) } } : draft);
+  if (isLegacyConfigPayload(data)) return current(data);
+  if (!isPlainObject(data) || typeof data.version !== 'number'
+    || !sessionSourceFactsOf(data.version, false).depthTicksUnsetAsNull) return data;
+  const modes = isPlainObject(data.modes) ? data.modes : null;
+  return {
+    ...data,
+    ...(Object.hasOwn(data, 'config') ? { config: current(data.config) } : {}),
+    ...(modes ? { modes: Object.fromEntries(Object.entries(modes).map(([mode, slice]) => [mode,
+      isPlainObject(slice) && Object.hasOwn(slice, 'config') ? { ...slice, config: current(slice.config) } : slice])) } : {})
+  };
+};
 
 // A legacy configuration file, read into the configuration Load applies
 // before anything changes (OV-710). Malformed record display settings are
@@ -7573,7 +7599,7 @@ const importSessionDocument = async (e, options = {}) => {
   try {
     const candidate = await readSessionFileForLoad(file, { signal: options.signal, isCurrent: options.isCurrent }, loadCopies);
     if (!candidate) return { status: 'canceled' };
-    const parsed = candidate.data;
+    const parsed = withCurrentDepthSeries(candidate.data);
     if (isLegacyConfigPayload(parsed)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure

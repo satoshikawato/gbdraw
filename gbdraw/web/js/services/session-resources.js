@@ -607,7 +607,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
       gff: await bindFile(sequence?.gff),
       fasta: await bindFile(sequence?.fasta),
       depth: await bindFileValue(sequence?.depth),
-      losat_gencode: sequence?.losat_gencode ?? 1,
+      losat_gencode: sequence?.losat_gencode === undefined ? 1 : sequence.losat_gencode,
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
       file_definition: String(sequence?.file_definition || ''),

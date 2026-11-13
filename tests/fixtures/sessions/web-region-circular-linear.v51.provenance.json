@@ -23,5 +23,6 @@
   "sessionVersion": 51,
   "rewritten": "circular-multi-file-20261108 PR-A (2026-11-09): the Circular drawing's c_gb, c_gff and c_fasta bindings replaced by circularSources (one File card, uid record-1) by scripts/rewrite_v51_circular_sources.py in that task folder, which applies gbdraw.session_drawings.circular_sources_of_mode_scoped; nothing else changed",
   "rewrittenRingColors": "conservation-ring-colors-impl-20261028 PR-B fix round 1 (2026-11-10): each drawing's config.circularConservation gained colorScheme and reassignOnReorder with their defaults by scripts/rewrite_v51_ring_colors.py in that task folder; nothing else changed",
-  "rewrittenCatalog": "large-inputs d5 PR2 S1 (2026-11-09): each drawing's editorState.featureCatalog promoted from schema 5 to 6 (sequences dropped, /translation restored) by d5/impl/rewrite_v51_catalogs.py in that task folder, which applies gbdraw.web_support.feature_catalog.promote_legacy_feature_catalog; resources copied unchanged"
+  "rewrittenCatalog": "large-inputs d5 PR2 S1 (2026-11-09): each drawing's editorState.featureCatalog promoted from schema 5 to 6 (sequences dropped, /translation restored) by d5/impl/rewrite_v51_catalogs.py in that task folder, which applies gbdraw.web_support.feature_catalog.promote_legacy_feature_catalog; resources copied unchanged",
+  "rewrittenDepthTicks": "ci-review-20261110 D FU-B3 (2026-11-14): each Depth series tick stored as null (never set) left out, the form the Web writer now writes, by scripts/rewrite_v51_depth_ticks.py in that task folder; nothing else changed"
 }

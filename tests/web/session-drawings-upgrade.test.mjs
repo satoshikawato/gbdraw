@@ -54,9 +54,11 @@ for (const vector of vectors.upgrades) {
     );
     assert.equal(document.ui.activeDrawingId, vector.activeDrawingId);
     // The vectors hold the facts Python's twin writes; every Session 46-48
-    // also saved records of Python's paint with its Results, and stored no
-    // rings setting (the Web's own facts).
-    assert.deepEqual(sourceFacts, { ...vector.sourceFacts, resultsRecordPythonPaint: true, ringSettingStored: false });
+    // also saved records of Python's paint with its Results, stored no rings
+    // setting, and stored a Depth series tick never set as null (the Web's own
+    // facts).
+    assert.deepEqual(sourceFacts,
+      { ...vector.sourceFacts, resultsRecordPythonPaint: true, ringSettingStored: false, depthTicksUnsetAsNull: true });
   });
 }
 
@@ -185,7 +187,8 @@ test('source facts name a Session 48 without a Web draft', () => {
   const data = settingsOnly();
   delete data.modes;
   assert.deepEqual(upgradeModeScopedSession(data, data.version).sourceFacts,
-    { cardRowsAreFileRows: true, proteinResultsInDrawnFrame: false, resultsRecordPythonPaint: true, ringSettingStored: false });
+    { cardRowsAreFileRows: true, proteinResultsInDrawnFrame: false, resultsRecordPythonPaint: true, ringSettingStored: false,
+      depthTicksUnsetAsNull: true });
 });
 
 for (const version of [44, 51]) {

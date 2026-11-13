@@ -1397,12 +1397,12 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
 });
 
 // OV-3351: a configuration file installs over the shown drawing, so a number
-// field the user emptied ('' in the draft) takes the file's value, with no
-// row, whether its default is Auto (null) or a number.
+// field the user emptied (null in the draft, `v-blank-null`) takes the file's
+// value, with no row, whether its default is Auto (null) or a number.
 test('a configuration file applies its numbers over emptied number fields, with no row (OV-3351)', async () => {
   await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
   const drawing = () => modeDrawing(state, state.mode.value);
-  Object.assign(drawing().adv, { legend_font_size: '', gc_content_tick_interval: '' });
+  Object.assign(drawing().adv, { legend_font_size: null, gc_content_tick_interval: null });
   const loaded = await importSession(await input({ adv: { legend_font_size: 21, gc_content_tick_interval: 50 } }),
     { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
@@ -1997,5 +1997,37 @@ test('a table repair line shows the table label in the UI language', async () =>
       'unknown-table: line 2 lacked a required column and was dropped.']);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// OV-3351: a released Session 50 (v0.14.5) stored a Depth series tick never
+// set as null and a cleared number field as ''. Load reads the never-set tick
+// as absent (a series shows the drawing's tick, as before), a cleared series
+// tick as null (Auto, the blank the field showed when it was saved), a blank
+// over an Auto number field as null and a blank over a number default as the
+// default, with no row; no field holds ''.
+test('a Session 50 Depth series and blank number fields read as one blank, with no row (OV-3351)', async () => {
+  const session = fixture('HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz');
+  const unset = { large_tick_interval: null, small_tick_interval: null, tick_font_size: null };
+  for (const mode of ['circular', 'linear']) {
+    Object.assign(session.modes[mode].config.adv, {
+      depth_large_tick_interval: 5000, legend_font_size: '', gc_content_tick_interval: '',
+      depth_tracks: [
+        { label: '', color: '#4A90E2', height: null, ...unset },
+        { label: 'B', color: '#E45756', height: null, ...unset, large_tick_interval: '', tick_font_size: 9 },
+        { label: 'C', color: '#54A24B', height: null, ...unset }
+      ]
+    });
+  }
+  const { items } = await loadAnswering(session);
+  assert.deepEqual(items, []);
+  for (const mode of ['circular', 'linear']) {
+    const { adv } = modeDrawing(state, mode);
+    // A Circular series without its own large tick shows the drawing's, a Linear one after the first does not,
+    // as before.
+    const inherited = mode === 'circular' ? 5000 : undefined;
+    assert.deepEqual(adv.depth_tracks.map((track) => [track.large_tick_interval, track.small_tick_interval, track.tick_font_size]),
+      [[5000, undefined, undefined], [null, undefined, 9], [inherited, undefined, undefined]], mode);
+    assert.deepEqual([adv.depth_large_tick_interval, adv.legend_font_size, adv.gc_content_tick_interval], [5000, null, 20], mode);
   }
 });

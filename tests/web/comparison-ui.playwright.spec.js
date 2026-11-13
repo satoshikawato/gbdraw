@@ -1283,6 +1283,87 @@ const configureLinearRecords = (page, records) => page.evaluate((contents) => {
   ));
 }, records);
 
+// OV-3351, OV-3462, OV-3463: a cleared number field holds one blank, null, through History, Save and Load: a
+// drawing setting, a Depth series tick and a card's TLOSATX gencode stay blank, and the gencode keeps its mark.
+test('cleared number fields stay blank through Undo, Redo, Save and Load', async ({ page }) => {
+  test.setTimeout(300000);
+  // Tall enough that the card's options, with the gencode field, show whole in the screenshot.
+  await page.setViewportSize({ width: 1280, height: 1600 });
+  await openLinear(page);
+  await configureLinearRecords(page, [makeGenbank('BlankA'), makeGenbank('BlankB')]);
+  const cardUid = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('tblastx');
+    app.setLinearSourceDepthFile(app.linearSourceGroups[0], 0,
+      new File(['position\tdepth\n1\t10\n'], 'blank-depth.tsv', { type: 'text/tab-separated-values', lastModified: 3 }));
+    return app.linearSeqs[1].uid;
+  });
+  const options = page.locator(`details[data-linear-record-options="${cardUid}"]`);
+  const mark = options.locator(':scope > summary');
+  const gencode = page.getByRole('spinbutton', { name: 'TLOSATX gencode for sequence 2', exact: true });
+  const tick = page.locator('[data-linear-depth-settings]').getByRole('spinbutton', { name: 'Depth large tick', exact: true });
+  const legendFont = page.getByRole('spinbutton', { name: 'Legend font size', exact: true });
+  const fields = [gencode, tick, legendFont];
+  /** Each field shows, in the order of `fields`. */
+  const shown = () => Promise.all(fields.map((field) => field.inputValue()));
+  const held = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return [app.linearSeqs[1].losat_gencode, app.adv.depth_tracks[0].large_tick_interval, app.adv.legend_font_size];
+  });
+  // Opens the disclosures that hold the fields (a closed one hides them from their role).
+  const reveal = () => page.evaluate(() => {
+    const selectors = ['[data-linear-gencode-input]', '[data-linear-depth-settings] input[aria-label="Depth large tick"]',
+      'input[aria-label="Legend font size"]'];
+    for (const field of document.querySelectorAll(selectors.join(','))) {
+      for (let node = field.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true;
+    }
+  });
+  const type = async (field, text) => { await field.fill(text); await field.blur(); };
+  const undo = () => evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  const redo = () => evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+
+  await reveal();
+  for (const [field, text] of [[gencode, '11'], [tick, '500'], [legendFont, '21']]) await type(field, text);
+  for (const field of fields) await type(field, '');
+  await expect.poll(shown).toEqual(['', '', '']);
+  await expect(mark).toContainText('Gencode required');
+  // Undo of a later edit of the other card installs the cards as they were: the cleared gencode stays blank.
+  await type(page.getByRole('spinbutton', { name: 'TLOSATX gencode for sequence 1', exact: true }), '4');
+  await undo();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].losat_gencode)).toBe(1);
+  await gencode.scrollIntoViewIfNeeded();
+  await options.screenshot({ path: test.info().outputPath('card-after-undo.png') });
+  await expect.poll(shown).toEqual(['', '', '']);
+  await expect(mark).toContainText('Gencode required');
+  expect(await held()).toEqual([null, null, null]);
+  await undo();
+  await undo();
+  await undo();
+  await expect.poll(shown).toEqual(['11', '500', '21']);
+  await redo();
+  await redo();
+  await redo();
+  await expect.poll(shown).toEqual(['', '', '']);
+  expect(await held()).toEqual([null, null, null]);
+
+  const download = page.waitForEvent('download', { timeout: 60000 });
+  await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'cleared-number-fields';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const savedPath = await (await download).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
+  await expectSessionLoadedWithoutWarnings(page);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await reveal();
+  await expect.poll(shown).toEqual(['', '', '']);
+  expect(await held()).toEqual([null, null, null]);
+  await expect(mark).toContainText('Gencode required');
+});
+
 test('structured comparison errors open and focus their owning disclosure', async ({ page }) => {
   test.setTimeout(300000);
   await openLinear(page);

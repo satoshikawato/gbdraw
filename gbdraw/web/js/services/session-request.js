@@ -91,7 +91,8 @@ import {
   importedDepthSeriesColor,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
-  parseDepthTrackIndexIdentity
+  parseDepthTrackIndexIdentity,
+  SERIES_TICKS
 } from './depth-track-state.js';
 import {
   circularDrawingRecordSet,
@@ -362,7 +363,7 @@ const requestDrawingMode = (drawing) => {
  * @property {ResourceEntry | null} [gff]
  * @property {ResourceEntry | null} [fasta]
  * @property {DepthFileSlots} [depth]
- * @property {number | ''} [losat_gencode]
+ * @property {number | null} [losat_gencode]
  * @property {string} [definition]
  * @property {string} [record_subtitle]
  * @property {string} [file_definition]
@@ -5941,18 +5942,12 @@ const projectCanonicalDepthTracks = ({
       height: mode === 'linear'
         ? canonicalDepthNumber(track.height, `${fieldName}.height`)
         : null,
-      large_tick_interval: canonicalDepthNumber(
-        track.largeTickInterval,
-        `${fieldName}.largeTickInterval`
-      ),
-      small_tick_interval: canonicalDepthNumber(
-        track.smallTickInterval,
-        `${fieldName}.smallTickInterval`
-      ),
-      tick_font_size: canonicalDepthNumber(
-        track.tickFontSize,
-        `${fieldName}.tickFontSize`
-      )
+      // A series tick the request leaves null is drawn with the drawing's tick (Python), so the draft series leaves
+      // it unset (absent), and the field shows the drawing's tick (`readDepthTrackConfig`).
+      ...Object.fromEntries(SERIES_TICKS.flatMap(([field, requestField]) => {
+        const tick = canonicalDepthNumber(track[requestField], `${fieldName}.${requestField}`);
+        return tick === null ? [] : [[field, tick]];
+      }))
     };
   });
   return { sourceRows, fileRows, tracks };

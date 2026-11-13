@@ -6219,25 +6219,12 @@ if (projectSessionIndex >= 0) {
       projectedSession.files.linearSeqs.map((sequence) => sequence.depth.map(Boolean)),
       [[true, true], [true, false]]
     );
+    // A tick the request leaves unset (null) is a tick the series never set: absent from the draft.
     assert.deepEqual(
       projectedSession.config.adv.depth_tracks,
       [
-        {
-          label: 'Shared',
-          color: '#112233',
-          height: 18,
-          large_tick_interval: 10,
-          small_tick_interval: null,
-          tick_font_size: null
-        },
-        {
-          label: 'Sparse',
-          color: '#445566',
-          height: 24,
-          large_tick_interval: null,
-          small_tick_interval: 5,
-          tick_font_size: 9
-        }
+        { label: 'Shared', color: '#112233', height: 18, large_tick_interval: 10 },
+        { label: 'Sparse', color: '#445566', height: 24, small_tick_interval: 5, tick_font_size: 9 }
       ]
     );
   }

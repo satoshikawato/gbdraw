@@ -5,7 +5,7 @@ import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.genera
 import { normalizeOptionalHexColor, readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { CONSERVATION_COLOR_SCHEMES, CONSERVATION_DEFAULT_COLOR_SCHEME } from '../utils/conservation-colors.generated.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
-import { readLinearSeqWindows } from './drawing/inputs.js';
+import { readCardGencode, readLinearSeqWindows } from './drawing/inputs.js';
 import { readCanonicalRecordTranslations, readCanonicalSimilarityAlignmentPlan } from './linear-record-layout.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
@@ -283,7 +283,7 @@ const readCardWindows = (value) => (Array.isArray(value)
   ? { value, lost: false } : { value: [], lost: !isUnsetValue(value) });
 /** A Linear card's genetic code, crop, windows and texts. @type {readonly FieldRow[]} */
 const LINEAR_SEQ_ROWS = Object.freeze([
-  row('losat_gencode', readGencode),
+  row('losat_gencode', readCardGencode),
   row('region_start', readRegionEndpoint),
   row('region_end', readRegionEndpoint),
   row('region_reverse', readRegionReverse),
@@ -297,7 +297,7 @@ export const LINEAR_SEQ_READ_FIELDS = Object.freeze(LINEAR_SEQ_ROWS.map(({ field
  * A Linear card's genetic code, crop and texts as the Files read them
  * (`files.linearSeqs[i]` of a Session 27-30, `webFiles.bindings.linearSeqs[i]`
  * after), with the rows of what they cannot restore at `path` (OV-568).
- * @typedef {{ losat_gencode: number, region_start: number | null, region_end: number | null, region_reverse: boolean,
+ * @typedef {{ losat_gencode: number | null, region_start: number | null, region_end: number | null, region_reverse: boolean,
  *   windows: unknown[], definition: string, record_subtitle: string, file_definition: string, file_subtitle: string,
  *   inferred_definition: string, region_record_id: string }} LinearSeqFields
  * @param {Record<string, unknown>} seq
@@ -1247,23 +1247,22 @@ const READ_ELSEWHERE = new Set([
  * returned as a loss unless a gbdraw writer wrote it and later retired or
  * moved it (`RETIRED_STORED_FIELDS`, E-OD03; TB19, TB32). An object merges
  * into an object, and `null` over an object merges nothing; a list replaces
- * a list; a value of `target`'s kind, or `null` on either side, is copied. A
- * blank in `target` (a cleared number input writes '') holds no value of its
- * own: a value of its default's kind, or any value where the default is
- * `null`, is copied over it (OV-3351). An empty text of another kind over a
- * number (a cleared number input) is the field's value in `defaults`, without
- * a loss: a blank is the default (R7, OV-827); in `captured` settings it stays
- * blank, as the app wrote it (R11). Any other value of another kind (a list
- * for an object included) is not used; it is returned as a loss at `at`, and
- * `target` keeps its value.
+ * a list; a value of `target`'s kind, or `null` on either side, is copied.
+ * The app holds a blank number field as `null` (`v-blank-null`, OV-3351);
+ * files of Session 50 and earlier hold some as the empty text. An empty text
+ * where the default is `null` installs `null`, which every field with that
+ * default reads as the empty text (the text fields of this kind read a blank
+ * as unset). An empty text of another kind over a number is the field's
+ * value in `defaults`, without a loss: a blank is the default (R7, OV-827).
+ * Any other value of another kind (a list for an object included) is not
+ * used; it is returned as a loss at `at`, and `target` keeps its value.
  * @param {Record<string, unknown>} target
  * @param {unknown} source
  * @param {string} at
  * @param {Record<string, unknown> | null} defaults The fresh settings of the same place (`defaultSettingsContainers`).
- * @param {boolean} captured Settings the app wrote (History Undo and Redo, the Load rollback).
  * @returns {SettingLoss[]}
  */
-const mergeStoredSettings = (target, source, at, defaults, captured) => {
+const mergeStoredSettings = (target, source, at, defaults) => {
   if (!source || typeof source !== 'object') return [];
   const stored = /** @type {Record<string, unknown>} */ (source);
   return Object.keys(stored).flatMap((key) => {
@@ -1279,21 +1278,22 @@ const mergeStoredSettings = (target, source, at, defaults, captured) => {
     const fresh = defaults && Object.hasOwn(defaults, key) ? defaults[key] : undefined;
     // A null over a settings group holds nothing and merges nothing (OV-822, E-OD06).
     if (isPlainObject(targetValue) && (isPlainObject(sourceValue) || sourceValue === null)) {
-      return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null, captured);
+      return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null);
     }
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
       targetValue.splice(0, targetValue.length, ...sourceValue);
       return [];
     }
-    const sourceKind = kindOf(sourceValue, keyAt);
-    const blankTarget = targetValue === '' && (fresh === null || (fresh !== undefined && kindOf(fresh, keyAt) === sourceKind));
-    if (kindOf(targetValue, keyAt) === sourceKind || targetValue === null || sourceValue === null || blankTarget) {
+    if (sourceValue === '' && fresh === null) {
+      target[key] = null;
+      return [];
+    }
+    if (kindOf(targetValue, keyAt) === kindOf(sourceValue, keyAt) || targetValue === null || sourceValue === null) {
       target[key] = sourceValue;
       return [];
     }
     if (sourceValue === '' && typeof targetValue === 'number') {
-      if (captured) target[key] = sourceValue;
-      else if (fresh !== undefined) target[key] = copied(fresh);
+      if (fresh !== undefined) target[key] = copied(fresh);
       return [];
     }
     return [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
@@ -1351,7 +1351,7 @@ export const installStoredSettings = (targets, stored, mode, { captured = false 
    * @param {'form' | 'adv' | 'losat' | 'circularConservation'} at
    */
   const merged = (at) => (isPlainObject(config[at]) || isUnsetValue(config[at])
-    ? mergeStoredSettings(targets[at], config[at], at, defaults[at], captured) : [{ at, stored: config[at], used: targets[at], kept: true }]);
+    ? mergeStoredSettings(targets[at], config[at], at, defaults[at]) : [{ at, stored: config[at], used: targets[at], kept: true }]);
   const losses = [
     ...merged('form'),
     ...merged('adv'),
@@ -1787,7 +1787,7 @@ export const unreadFieldRepairs = (stored, path, mode, { slice = false } = {}) =
       const stored = config[at];
       if (!isPlainObject(stored)) return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
       const target = /** @type {Record<string, unknown>} */ (targets[/** @type {keyof SettingsContainers} */ (at)]);
-      return mergeStoredSettings(target, stored, at, null, false).filter(({ used }) => used === undefined);
+      return mergeStoredSettings(target, stored, at, null).filter(({ used }) => used === undefined);
     }),
     ...unknownDomainLosses(config, slice ? SLICE_READ_DOMAINS : READ_DOMAINS),
     // A domain the reading replaces whole (one of another kind).
