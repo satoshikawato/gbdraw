@@ -73,7 +73,7 @@ const MAX_FUNCTION_STATEMENTS = 85;
 const FUNCTION_STATEMENTS = {
   'app/align-at-feature.js::createFeatureAnchorAction': 94,
   'app/annotations.js::createAnnotationEditor': 218,
-  'app/app-setup.js::createAppSetup': 1100,
+  'app/app-setup.js::createAppSetup': 1098,
   'app/candidate-render.js::compilePlanBundle': 227,
   'app/circular-record-controls.js::createCircularSourceEdits': 86,
   'app/circular-track-slots.js::createCircularTrackSlotEditor': 857,
@@ -129,7 +129,7 @@ const FUNCTION_STATEMENTS = {
   'services/diagram-resource-staging.js::createDiagramResourceTransport': 87,
   'services/feature-catalog.js::validateAndProjectCatalogItem': 191,
   'services/feature-override-identity.js::migrateLegacyFeatureOverrides': 94,
-  'services/history-snapshot.js::createHistorySnapshotService': 395,
+  'services/history-snapshot.js::createHistorySnapshotService': 390,
   'services/history.js::createHistoryManager': 897,
   'services/history.js::createHistoryRouter': 449,
   'services/legend-layout.js::buildCircularLegendLayout': 97,
