@@ -658,6 +658,7 @@ under "Cited ids without a record".
   - `tests/test_circular_label_capacity.py`
   - `tests/test_circular_track_narrowing.py`
   - `tests/test_linear_annotation_tracks.py`
+  - `tests/test_linear_embedded_label_fit.py`
   - `tests/test_web_label_fit.py`
   - `tests/web/helpers/live-random-walk.mjs`
   - `tests/web/label-fit.playwright.spec.js`
