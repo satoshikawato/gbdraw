@@ -24,3 +24,4 @@ hi-latin-glued	[A-Za-z0-9][\u0900-\u097F]|[\u0900-\u097F][A-Za-z0-9]	u	Latin let
 hi-symbol-space	\(\s|\s\)(?=$|[,;:?!])|[\u0900-\u097F]\(|[0-9}]\s%	u	Spacing around parentheses or %: one space before (, none inside the parentheses, and no space between a number and % (5 मील (8 किमी), 50%) (Microsoft 4.1.12).	warn
 hi-zwj	[\u200C\u200D]	u	ZWNJ or ZWJ in a Hindi value: write the plain conjunct (कंप्यूटर, not कंप्<ZWJ>यूटर); Standard Hindi needs neither (STYLE 18.4).	error
 hi-whitespace	^\s|\s$|\s{2,}|[\u00A0\u200B\u2060\uFEFF]	u	Leading, trailing or doubled space, or an invisible character (NBSP, ZWSP, WJ, BOM): use single ordinary spaces only.	warn
+hi-comma-before-conjunction	,\s+(?:और|या)(?=\s)	u	Comma before और or या between two parts: write none (glossary rows on and/or, STYLE 18.3).	error
