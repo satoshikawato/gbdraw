@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,6 +27,7 @@ from tests.utils.session_drawing_view import drawing_view
 from PIL import Image
 from tests.utils.web_markup import read_english_index
 
+from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
@@ -914,6 +916,41 @@ def test_interactive_gallery_examples_are_wired() -> None:
         entry for entry in examples if entry["id"] == "hepatoplasmataceae_collinear"
     )
     assert collinear["command"].count("--losat_threads") == 1
+
+
+def _embedded_viewer(svg_source: str) -> dict[str, str]:
+    """The interactive viewer (its style and script) that an interactive SVG embeds, by element id."""
+    viewer_ids = {"gbdraw-interactive-feature-style", "gbdraw-interactive-feature-script"}
+    return {
+        element.attrib["id"]: element.text or ""
+        for element in ET.fromstring(svg_source).iter()
+        if element.get("id") in viewer_ids
+    }
+
+
+_CURRENT_VIEWER = _embedded_viewer(
+    enrich_svg('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"/>')
+)
+
+
+@pytest.mark.gallery
+@pytest.mark.parametrize(
+    "entry",
+    [
+        entry
+        for entry in json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
+        if entry.get("svgType") != "static"
+    ],
+    ids=lambda entry: entry["id"],
+)
+def test_interactive_gallery_svg_embeds_the_current_viewer(entry: dict[str, object]) -> None:
+    # A change to the viewer (standalone-interactivity-assets.js or what enrich_svg adds) reaches the published
+    # Gallery figures only when they are regenerated: run tools/prepare_interactive_gallery_assets.py, which
+    # re-embeds the viewer and leaves each drawing as its source SVG has it (OV-2777: lengths kept the browser's
+    # number format after the viewer moved to the English format).
+    assert len(_CURRENT_VIEWER) == 2
+    svg_path = GALLERY_ROOT / str(entry["svg"]).removeprefix("./")
+    assert _embedded_viewer(svg_path.read_text(encoding="utf-8")) == _CURRENT_VIEWER
 
 
 @pytest.mark.gallery

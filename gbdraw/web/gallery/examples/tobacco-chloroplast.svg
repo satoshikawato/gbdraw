@@ -121,22 +121,32 @@
 .gfhs-text {
   min-width: 0;
 }
-.gfhs-heading {
+/* A one-line text that ends with an ellipsis is cut at its sides only. Its top and bottom stay open, so a mark above
+   or below the letters (Devanagari, Bengali, Thai, Vietnamese) is never cut where the font draws it outside the line
+   box. clip, unlike hidden, allows a visible other axis; it makes no scroll container, so the zero minimum size that a
+   scroll container had is set here. */
+.gfhs-heading,
+.gfhs-subtitle,
+.gfi-title,
+.gfi-tab,
+.gfs-count,
+.gfs-match-detail {
   min-width: 0;
-  overflow: hidden;
-  color: #0f172a;
-  font-weight: 700;
+  min-height: 0;
+  overflow-x: clip;
+  overflow-y: visible;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.gfhs-heading {
+  color: #0f172a;
+  font-weight: 700;
+}
 .gfhs-subtitle {
   margin-top: 2px;
-  overflow: hidden;
   color: #64748b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .gfhs-row {
   display: grid;
@@ -196,12 +206,8 @@
   cursor: grabbing;
 }
 .gfi-title {
-  min-width: 0;
   font-weight: 700;
   color: #1e293b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .gfi-subtitle {
   margin-top: 2px;
@@ -242,13 +248,9 @@
   background: #f1f5f9;
 }
 .gfi-tab {
-  min-width: 0;
   padding: 6px 8px;
   font-size: 11px;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .gfi-tab.is-active {
   background: #ffffff;
@@ -718,24 +720,16 @@
   color: #ffffff;
 }
 .gfs-count {
-  min-width: 0;
   margin-left: auto;
-  overflow: hidden;
   color: #475569;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .gfs-match-detail {
   display: block;
-  min-width: 0;
   margin-top: 4px;
-  overflow: hidden;
   color: #64748b;
   font-size: 10px;
   line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .gfs-match-detail:empty {
   display: none;
@@ -5779,7 +5773,7 @@
     if (!bundle || !Array.isArray(bundle.entries)) return '';
     var entries = bundle.entries.map(function (entry) {
       var coordinates = String(entry.recordId || '') + ' · ' + entry.start + '..' + entry.end + ' · ' + entry.orientation +
-        (entry.available ? ' · ' + Number(entry.length || 0).toLocaleString() + ' bp' : '');
+        (entry.available ? ' · ' + numberText(Number(entry.length || 0)) + ' bp' : '');
       var actions = entry.available
         ? copyButton(entry.fasta, 'Copy') + downloadButton(entry.filename, entry.fasta, 'FASTA')
         : '';
@@ -5942,7 +5936,13 @@
       if (!Number.isFinite(start) || !Number.isFinite(end) || end &lt; start) return '';
       length += end - start;
     }
-    return String(Math.round(length).toLocaleString()) + ' bp';
+    return numberText(Math.round(length)) + ' bp';
+  }
+
+  // A number in every language as the Web app writes it (numberText in utils/i18n.js, which this script cannot
+  // import): English digits, decimal point and grouping by thousands, every fraction digit kept.
+  function numberText(value) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: 20 });
   }
 
   function getFeatureDisplayColor(feature, svgId) {
