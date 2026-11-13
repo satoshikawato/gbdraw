@@ -694,7 +694,7 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 - Korean wraps at word spaces: give `:lang(ko)` `word-break: keep-all` and
   the CJK 12 px floor, so a word is never split between syllables.
 
-## 6. Spanish (`es`)
+## 6. Spanish (`es`, international usage)
 
 International Spanish (PD-OI-106): words a reader understands in Spain and in the
 Americas; no voseo, no tuteo, no vosotros. Where Spain and Latin America
@@ -862,7 +862,7 @@ differ, take the word Microsoft uses in both markets or the RAE form
   la pista); never switch terms, and abbreviate with a period only where a
   screenshot shows an overflow.
 
-## 7. French (`fr`)
+## 7. French (`fr`, France usage)
 
 Standard French of France, vouvoiement, French typography (PD-OI-106). The Language menu
 entry is the endonym **Français**; the menu label itself is Langue.
@@ -1034,7 +1034,7 @@ entry is the endonym **Français**; the menu label itself is Langue.
 - Short forms: Monter / Descendre, Tout effacer, min. / max., Auto, ID, séq., no initial article
   in a label. Help texts and notices may be as long as needed.
 
-## 8. Portuguese (`pt`)
+## 8. Portuguese (`pt`, Brazilian usage)
 
 ### 8.1 Vocabulary
 
