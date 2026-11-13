@@ -22,3 +22,5 @@ bn-nfc	[\u09DC\u09DD\u09DF]|\u09C7\u09BE|\u09C7\u09D7	u	Not NFC: write ড় �
 bn-stray-joiner	\u200C|(?<!\u09B0)\u200D|\u200D(?!\u09CD\u09AF)	u	Stray ZWJ or ZWNJ: delete it; the only joiner kept is ZWJ in র‍্য (ra + ZWJ + virama + ya) (STYLE 19.4).	warn
 bn-latin-touching	[A-Za-z][\u0980-\u09FF]|[\u0980-\u09FF][A-Za-z]	u	Latin text touching Bengali letters: put a space between them, or a hyphen before an ending (GC পরিমাণ, gbdraw-এর) (STYLE 19.4).	warn
 bn-indian-grouping	(?<![\d,])\d{1,2},\d{2},\d{3}(?!\d)	u	Indian digit grouping: group digits in threes (1,234,567), never 12,34,567 (PD-OI-106 rev 7, STYLE 19.3).	error
+bn-unavailable-nei	উপলভ্য নেই	u	Unavailable is উপলভ্য নয় (STYLE 19.2): write কোনো X উপলভ্য নয়।	error
+bn-detached-case-ending	(?:বিকল্প|বোতাম|ফিল্ড|সেটিং|চেকবক্স|কমান্ড|বিভাগ|ট্যাব|মোড)\s(?:এর|কে|তে)(?![\u0980-\u09FF])	u	Case ending written as a separate word after a class noun (বিকল্প এর): attach it to the noun (বিকল্পটি, বিকল্পের).	warn
