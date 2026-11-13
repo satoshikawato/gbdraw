@@ -21,7 +21,7 @@ export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error:
  * E1: the generated artifact of one drawing, which each drawing keeps while
  * another is shown. The state ref of every key and the value an empty slot
  * installs, given the mode of the slot's drawing and the current value: the displayed-Result
- * part of the owner set, the selected Result, the feature-editor status, the generated Legend colors and
+ * part of the owner set, the selected Result, the feature-editor status, the generated
  * stroke defaults, the alignment Reset receipt (it binds the
  * committed Linear Session), and the protein identity manifest its LOSAT
  * protein rows resolve in (D-197). Draft and project state stays shared: the specific
@@ -58,7 +58,6 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   appliedPaletteName: (_mode, current) => current,
   appliedPaletteColors: (_mode, current) => current,
   similarityAlignmentResetReceipt: () => null,
-  originalLegendColors: () => ({}),
   originalSvgStroke: () => ({ color: null, width: null }),
   proteinIdentityManifest: () => emptyProteinIdentityManifest()
 });
@@ -70,10 +69,10 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
  * @typedef {object} ArtifactSlot
  * @property {DrawingId} drawingId The drawing whose artifact it is (its mode is the drawing's).
  * @property {Readonly<Record<string, any>>} values The value of every `ARTIFACT_SLOT_KEYS` key.
- * @property {readonly PythonLegendKey[]} legendInventory The selected Result's generated Legend inventory
- *   (`originalLegendOrder`). The Legend owner keeps each Result's inventory (OV-47), so an install
- *   does not write it: the mode transition hands it to the Legend owner, which adopts it when the
- *   Result is displayed.
+ * @property {Readonly<ShownSetLegend>} legend The selected Result's generated Legend inventory and
+ *   colors (`originalLegendOrder`, `originalLegendColors`), the inventory by the rule of
+ *   `resultSetInventory`. The slot install installs them (`installShownSetLegend`); the Legend owner
+ *   also keeps each Result's inventory (OV-47), so the mode transition hands the inventory to it too.
  * @property {any} matchSequenceOwner The match-sequence registry's trusted owner, or null.
  * @property {Record<string, any> | null} runtimeState The runtime owner's state (committed Session, CLI helper files).
  * @property {Readonly<Record<string, any>> | null} transportIdentity The History transport identity of the artifact.
@@ -83,7 +82,8 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
 /**
  * The artifact slots a Session Load installs before its preview mounts:
  * `opening`, the artifact the Session opens on when it is not the committed
- * set's, and `stashed`, the ones kept for the drawings not shown.
+ * set's (null: the shown set is the committed one, which Load installed), and
+ * `stashed`, the ones kept for the drawings not shown.
  * @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: readonly Readonly<ArtifactSlot>[] }} LoadedArtifactSlots
  */
 
@@ -98,10 +98,11 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
 export const resultSetInventory = (results, inventory) => (results.length > 0 ? [...inventory] : []);
 
 /**
- * The shown Result set's generated Legend inventory and colors, as a restore
- * (a Session Load, its rollback, a History step) brings them.
+ * The shown Result set's generated Legend inventory and colors, as an
+ * artifact slot holds them and a restore (a Session Load, its rollback, a
+ * History step) brings them.
  * @typedef {object} ShownSetLegend
- * @property {PythonLegendKey[]} originalOrder The inventory the set was drawn with.
+ * @property {readonly PythonLegendKey[]} originalOrder The inventory the set was drawn with.
  * @property {Record<string, string>} originalColors Python's color of each generated row, by its key.
  */
 /**
@@ -113,41 +114,32 @@ export const resultSetInventory = (results, inventory) => (results.length > 0 ? 
  */
 
 /**
- * The one writer of the displayed inventory after an artifact install, after
- * the install wrote the shown Results: `inventory` by the rule of
- * `resultSetInventory`. The Legend owner calls it after a switch and a Load
- * (`adoptShownSetInventory`), and `installShownSetLegend` for a restore.
- * @param {Pick<ShownSetLegendRefs, 'results' | 'originalLegendOrder'>} refs
- * @param {readonly PythonLegendKey[]} inventory
- */
-export const writeShownSetInventory = (refs, inventory) => {
-  refs.originalLegendOrder.value = resultSetInventory(refs.results.value, inventory);
-};
-
-/**
- * A restore's install of the shown set's inventory and colors (a Session
- * Load, its rollback, a History step), after it wrote the Results. The colors
- * have one more install: an artifact slot install writes them as a slot key
- * (`installArtifactSlot` in `history-snapshot.js`), while the slot's
- * inventory goes beside its values (`legendInventory`).
+ * The one install of the shown set's inventory and colors, after the
+ * install wrote the Results: an artifact slot install (a switch, a Load that
+ * opens on another set, its rollback; `installArtifactSlot` in
+ * `history-snapshot.js`) and a restore (a Session Load, its rollback, a
+ * History step). The inventory by the rule of `resultSetInventory`, the
+ * colors by reference.
  * @param {ShownSetLegendRefs} refs
- * @param {ShownSetLegend} legend
+ * @param {Readonly<ShownSetLegend>} legend
  */
 export const installShownSetLegend = (refs, { originalOrder, originalColors }) => {
   refs.originalLegendColors.value = originalColors;
-  writeShownSetInventory(refs, originalOrder);
+  refs.originalLegendOrder.value = resultSetInventory(refs.results.value, originalOrder);
 };
 
 /**
  * A slot of `drawing`'s artifact; a value it is not given is the empty
- * slot's for the drawing's mode.
- * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legendInventory?: ArtifactSlot['legendInventory'],
+ * slot's for the drawing's mode, and a slot given no `legend` has no
+ * inventory and its own empty colors, which the Legend owner fills in place
+ * after a draw.
+ * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legend?: Readonly<ShownSetLegend>,
  *   matchSequenceOwner?: ArtifactSlot['matchSequenceOwner'], runtimeState?: ArtifactSlot['runtimeState'],
  *   transportIdentity?: ArtifactSlot['transportIdentity'], retainedBytes?: number }} slot
  * @returns {Readonly<ArtifactSlot>}
  */
 export const createArtifactSlot = ({
-  drawing, values, legendInventory = [], matchSequenceOwner = null, runtimeState = null,
+  drawing, values, legend = { originalOrder: [], originalColors: {} }, matchSequenceOwner = null, runtimeState = null,
   transportIdentity = null, retainedBytes = 0
 }) => {
   // The cast widens the key list, so that a field of any name can be looked up in it.
@@ -158,7 +150,10 @@ export const createArtifactSlot = ({
     values: Object.freeze(Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
       key, Object.hasOwn(values, key) ? values[key] : ARTIFACT_SLOT_EMPTY[key](drawing.mode, null)
     ]))),
-    legendInventory: Object.freeze(resultSetInventory(Object.hasOwn(values, 'results') ? values.results : [], legendInventory)),
+    legend: Object.freeze({
+      originalOrder: Object.freeze(resultSetInventory(Object.hasOwn(values, 'results') ? values.results : [], legend.originalOrder)),
+      originalColors: legend.originalColors
+    }),
     matchSequenceOwner,
     runtimeState,
     transportIdentity,
@@ -177,7 +172,7 @@ export const createArtifactSlot = ({
 const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
   drawing,
   values: { ...slot?.values, ...values },
-  legendInventory: slot?.legendInventory,
+  legend: slot?.legend,
   matchSequenceOwner: slot?.matchSequenceOwner ?? null,
   runtimeState: slot?.runtimeState ?? null,
   transportIdentity: slot?.transportIdentity ?? null,

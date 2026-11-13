@@ -40,6 +40,7 @@ const { createLegendEntryActions } = await import(
 const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
 const { draftLegendRows, legendRowIds } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
 const { legendEntryKey } = await import(pathToFileURL(join(tempRoot, 'services', 'drawing', 'paint.js')));
+const { installShownSetLegend } = await import(pathToFileURL(join(tempRoot, 'services', 'artifact-slot.js')));
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
@@ -663,14 +664,12 @@ const mockLegendEntry = (caption, color, x) => {
   actions.rememberResultInventory('result-3', ['A', 'Coding', 'Own']);
   actions.adoptResultInventory('result-3');
   assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
-  // OV-3282: after an artifact install, a drawing showing a Result keeps the
-  // displayed inventory and one showing none has none; each Result keeps its
-  // own for when it is displayed again.
-  actions.adoptShownSetInventory();
-  assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
+  // OV-3282: an artifact install of a set showing no Result installs no
+  // inventory (`installShownSetLegend`); each Result keeps its own for when it
+  // is displayed again.
   const shownResults = state.results.value;
   state.results.value = [];
-  actions.adoptShownSetInventory();
+  installShownSetLegend(state, { originalOrder: ['A', 'Coding', 'Own'], originalColors: {} });
   assert.deepEqual(state.originalLegendOrder.value, []);
   state.results.value = shownResults;
   actions.adoptResultInventory('result-3');
