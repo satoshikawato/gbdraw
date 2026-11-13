@@ -19,7 +19,7 @@ from gbdraw.analysis.conservation import (
     CONSERVATION_COLOR_SCHEMES,
     ConservationTrack,
     conservation_track_gradient_colors,
-    resolve_conservation_track_colors,
+    resolve_drawn_conservation_rings,
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, assemble_circular_diagram_from_records
@@ -41,7 +41,7 @@ def _track(index: int, color: str | None = None) -> ConservationTrack:
         track_label=f"ring {index}",
         track_color=color,
         reference_side="subject",
-        hits=pd.DataFrame({"track_color": [color or ""]}),
+        hits=pd.DataFrame({"identity": [90.0]}),
     )
 
 
@@ -79,9 +79,9 @@ def test_ring_without_a_colour_takes_the_scheme_colour_of_its_drawn_position(
     tracks = tuple(_track(index) for index in range(1, 32))
     slots = [_slot(index) for index in range(1, 32)]
 
-    resolved = resolve_conservation_track_colors(scheme, slots, tracks)
+    resolved = resolve_drawn_conservation_rings(scheme, slots, tracks)
 
-    assert resolved[ring - 1].track_color == expected
+    assert resolved[ring - 1].color == expected
 
 
 def test_position_is_the_drawn_order_and_an_own_colour_wins() -> None:
@@ -89,18 +89,18 @@ def test_position_is_the_drawn_order_and_an_own_colour_wins() -> None:
     # Drawn outermost first: ring 3, ring 2, ring 1; ring 4 has no slot and is not drawn.
     slots = [CircularTrackSlot(id="features", renderer="features"), _slot(3), _slot(2), _slot(1)]
 
-    resolved = resolve_conservation_track_colors("ten", slots, tracks)
+    resolved = resolve_drawn_conservation_rings("ten", slots, tracks)
 
-    assert [track.track_index for track in resolved] == [3, 2, 1]
-    assert [track.track_color for track in resolved] == [TEN[0], "#123456", TEN[2]]
-    # The per-hit colour attribute reads the same colour.
-    assert [track.hits["track_color"].tolist() for track in resolved] == [[TEN[0]], ["#123456"], [TEN[2]]]
+    assert [ring.track.track_index for ring in resolved] == [3, 2, 1]
+    assert [ring.color for ring in resolved] == [TEN[0], "#123456", TEN[2]]
+    # Each ring is the track it was given, not a copy: its identity keys the render stages (OV-3112).
+    assert all(ring.track is tracks[ring.track.track_index - 1] for ring in resolved)
 
 
 def test_a_disabled_slot_draws_no_ring() -> None:
-    resolved = resolve_conservation_track_colors("ten", [_slot(1, enabled=False), _slot(2)], (_track(1), _track(2)))
+    resolved = resolve_drawn_conservation_rings("ten", [_slot(1, enabled=False), _slot(2)], (_track(1), _track(2)))
 
-    assert [(track.track_index, track.track_color) for track in resolved] == [(2, TEN[0])]
+    assert [(ring.track.track_index, ring.color) for ring in resolved] == [(2, TEN[0])]
 
 
 def test_a_ring_coloured_like_the_default_max_keeps_its_own_gradient() -> None:

@@ -70,13 +70,17 @@ class ConservationDrawer:
         fill_opacity: float,
         stroke_color: str,
         stroke_width: float,
+        track_color: str | None = None,
     ) -> None:
+        """``track_color`` is the ring's drawn colour, which each hit names (``data-track-color``, empty for none)."""
+
         self.identity_domain = identity_domain
         self.min_color = str(min_color)
         self.max_color = str(max_color)
         self.fill_opacity = float(fill_opacity)
         self.stroke_color = str(stroke_color)
         self.stroke_width = float(stroke_width)
+        self.track_color = track_color or ""
 
     def _identity_factor(self, identity: float) -> float:
         return self.identity_domain.factor(identity)
@@ -122,7 +126,7 @@ class ConservationDrawer:
                 "data-source-index": getattr(row, "source_index", ""),
                 "data-track-index": getattr(row, "track_index", ""),
                 "data-track-label": getattr(row, "track_label", ""),
-                "data-track-color": getattr(row, "track_color", ""),
+                "data-track-color": self.track_color,
                 "data-reference-side": _row_text(row, "reference_side"),
                 "data-identity": identity,
                 "data-query": _row_text(row, "query"),

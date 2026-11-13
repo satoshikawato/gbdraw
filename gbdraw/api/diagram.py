@@ -45,13 +45,13 @@ from gbdraw.analysis.conservation import (
     ConservationLoadResult,
     ConservationReferenceMode,
     ConservationTrack,
+    conservation_legend_sources,
     load_conservation_sources,
-    named_conservation_tracks,
+    named_conservation_rings,
     normalize_conservation_reference,
     read_conservation_inputs,
     normalize_conservation_tracks_for_record,
-    resolve_conservation_legend_sources,
-    resolve_conservation_track_colors,
+    resolve_drawn_conservation_rings,
 )
 from gbdraw.analysis.depth import depth_df as build_depth_df
 from gbdraw.analysis.depth_tracks import (
@@ -2871,9 +2871,13 @@ def assemble_circular_diagram_from_record(
                 conservation_slots,
                 axis_index=circular_track_axis_index,
             )
-        conservation_tracks = resolve_conservation_track_colors(
+    # A Multi-Record Canvas names the rings from its shared Legend; otherwise the assembly names them from its own.
+    conservation_rings = named_conservation_rings(
+        resolve_drawn_conservation_rings(
             cfg.objects.conservation.color_scheme, parsed_circular_track_slots, conservation_tracks
-        )
+        ),
+        context.conservation_ring_names or {},
+    )
 
     window, step = _resolve_circular_window_step(gb_record, cfg, window=inputs.window, step=inputs.step)
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
@@ -3019,7 +3023,7 @@ def assemble_circular_diagram_from_record(
             depth_df=resolved_depth_df,
             depth_tracks=resolved_depth_tracks,
             depth_track_count_value=available_depth_track_count,
-            conservation_tracks=conservation_tracks,
+            conservation_rings=conservation_rings,
             conservation_min_identity=float(identity),
             dinucleotide_dataframes=dinucleotide_dataframes,
             feature_density=_record_feature_density(context, one_circle, gb_record, inputs, cfg, record_transform),
@@ -3465,8 +3469,10 @@ def assemble_circular_diagram_from_records(
                 axis_index=circular_track_axis_index,
             )
         # The legend's rings; each record's rings are resolved by the record's own assembly, on these slots.
-        first_record_conservation_legend = resolve_conservation_legend_sources(
-            cfg.objects.conservation.color_scheme, parsed_circular_track_slots, first_record_conservation_tracks
+        first_record_conservation_legend = conservation_legend_sources(
+            resolve_drawn_conservation_rings(
+                cfg.objects.conservation.color_scheme, parsed_circular_track_slots, first_record_conservation_tracks
+            )
         )
     parsed_circular_track_slots = _with_circular_density_slots(
         parsed_circular_track_slots, inputs, implicit=implicit_track_stack, show_ticks=bool(cfg.objects.scale.show),
@@ -3659,7 +3665,8 @@ def assemble_circular_diagram_from_records(
                 precomputed_depth_track_count=(
                     available_depth_track_count if record_depth_track_data is not None else None
                 ),
-                precomputed_conservation_tracks=named_conservation_tracks(record_conservation_tracks, ring_names),
+                precomputed_conservation_tracks=record_conservation_tracks,
+                conservation_ring_names=ring_names,
                 feature_density=record_feature_density[record_index],
                 record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
                 record_presentation=(

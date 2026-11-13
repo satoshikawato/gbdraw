@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Mapping, NamedTuple, Sequence
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
-from ...analysis.conservation import ConservationTrack
+from ...analysis.conservation import DrawnConservationRing
 from ...analysis.depth_tracks import DepthTrackData
 from ...analysis.feature_density import FeatureDensityLayer
 from ...annotations import AnnotationOptions, ResolvedAnnotationBundle, ResolvedAnnotationTrack
@@ -43,7 +43,8 @@ class CircularRecordData:
     depth_df: DataFrame | None = None
     depth_tracks: Sequence[DepthTrackData] | None = None
     depth_track_count_value: int | None = None
-    conservation_tracks: Sequence[ConservationTrack] | None = None
+    # The rings the record draws, outermost first (``resolve_drawn_conservation_rings``).
+    conservation_rings: Sequence[DrawnConservationRing] | None = None
     conservation_min_identity: float = 0.0
     dinucleotide_dataframes: dict[str, DataFrame] | None = None
     # The record's feature density layers by track id.

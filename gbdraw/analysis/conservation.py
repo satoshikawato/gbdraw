@@ -124,7 +124,6 @@ NORMALIZED_CONSERVATION_COLUMNS = (
     "reference_side",
     "reference_match_key",
     "reference_record_id",
-    "track_color",
     "query",
     "subject",
     "qstart",
@@ -165,7 +164,16 @@ class ConservationTrack:
     track_color: str | None
     reference_side: ConservationReferenceSide | None
     hits: DataFrame
-    # The name the ring's Legend row draws (``LegendTable.ring_names``); None until the assembly names the ring.
+
+
+@dataclass(frozen=True)
+class DrawnConservationRing:
+    """One ring a record draws: the ``conservation_tracks`` stage's own track, unchanged, so its identity keys the
+    render stages that read it; the colour the ring draws (``None``: the configured default gradient); and the name
+    its Legend row draws (``LegendTable.ring_names``), ``None`` until the assembly names the ring."""
+
+    track: ConservationTrack
+    color: str | None
     legend_name: str | None = None
 
 
@@ -184,22 +192,22 @@ class ConservationLegendSource:
 
 
 def conservation_legend_sources(
-    tracks: Sequence[ConservationTrack] | None,
+    rings: Sequence[DrawnConservationRing] | None,
 ) -> tuple[ConservationLegendSource, ...]:
-    """The legend's rings: the resolved drawn tracks (``resolve_conservation_track_colors``), outermost first."""
+    """The legend's rings: the drawn rings (``resolve_drawn_conservation_rings``), outermost first."""
 
-    return tuple(ConservationLegendSource.of(track, track.track_color) for track in tracks or ())
+    return tuple(ConservationLegendSource.of(ring.track, ring.color) for ring in rings or ())
 
 
-def named_conservation_tracks(
-    tracks: Sequence[ConservationTrack], names: Mapping[int, str]
-) -> tuple[ConservationTrack, ...]:
-    """The tracks, each with the name its Legend row draws (``LegendTable.ring_names``, by ``track_index``); a track
+def named_conservation_rings(
+    rings: Sequence[DrawnConservationRing], names: Mapping[int, str]
+) -> tuple[DrawnConservationRing, ...]:
+    """The rings, each with the name its Legend row draws (``LegendTable.ring_names``, by ``track_index``); a ring
     already named keeps its name (a Multi-Record Canvas names its records' rings from its shared Legend)."""
 
     return tuple(
-        track if track.legend_name is not None else replace(track, legend_name=names.get(int(track.track_index)))
-        for track in tracks
+        ring if ring.legend_name is not None else replace(ring, legend_name=names.get(int(ring.track.track_index)))
+        for ring in rings
     )
 
 
@@ -287,29 +295,42 @@ CONSERVATION_COLOR_SCHEMES: Mapping[ConservationColorScheme, tuple[str, ...]] = 
 }
 
 
+def _slot_track_index(params: Mapping[str, object] | None) -> int:
+    return int(cast("int | str", (params or {}).get("track_index", 0) or 0))
+
+
 def conservation_slot_track(
     params: Mapping[str, object] | None, tracks: Sequence[ConservationTrack] | None
 ) -> ConservationTrack | None:
     """The track a ``sequence_conservation`` slot draws: the one its ``track_index`` names."""
 
-    track_index = int(cast("int | str", (params or {}).get("track_index", 0) or 0))
+    track_index = _slot_track_index(params)
     return next((track for track in (tracks or ()) if int(track.track_index) == track_index), None)
 
 
-def _drawn_ring_colors(
+def conservation_slot_ring(
+    params: Mapping[str, object] | None, rings: Sequence[DrawnConservationRing] | None
+) -> DrawnConservationRing | None:
+    """The drawn ring a ``sequence_conservation`` slot draws: the one its ``track_index`` names."""
+
+    track_index = _slot_track_index(params)
+    return next((ring for ring in (rings or ()) if int(ring.track.track_index) == track_index), None)
+
+
+def resolve_drawn_conservation_rings(
     scheme: ConservationColorScheme | str,
     slots: Sequence[CircularTrackSlot] | None,
     tracks: Sequence[ConservationTrack],
-) -> tuple[tuple[ConservationTrack, str | None], ...]:
-    """The drawn rings, outermost first, each with the colour it draws.
+) -> tuple[DrawnConservationRing, ...]:
+    """The drawn rings, outermost first, each with the colour it draws; the tracks themselves are not copied.
 
     ``slots`` is the final slot list (stacked outermost first). A ring keeps its own colour; a ring without one
     takes the scheme colour of its drawn position (``None`` under ``same``). Rings no enabled slot draws are left
-    out, so the ring groups and the legend read one list.
+    out, so the ring groups and the legend read one list. The rings are unnamed (``named_conservation_rings``).
     """
 
     cycle = CONSERVATION_COLOR_SCHEMES[cast(ConservationColorScheme, scheme)]
-    drawn: list[tuple[ConservationTrack, str | None]] = []
+    drawn: list[DrawnConservationRing] = []
     drawn_indexes: set[int] = set()
     for slot in slots or ():
         if not slot.enabled or str(slot.renderer) != "sequence_conservation":
@@ -318,33 +339,10 @@ def _drawn_ring_colors(
         if track is None or int(track.track_index) in drawn_indexes:
             continue
         drawn_indexes.add(int(track.track_index))
-        drawn.append((track, track.track_color or (cycle[len(drawn) % len(cycle)] if cycle else None)))
+        drawn.append(
+            DrawnConservationRing(track, track.track_color or (cycle[len(drawn) % len(cycle)] if cycle else None))
+        )
     return tuple(drawn)
-
-
-def resolve_conservation_track_colors(
-    scheme: ConservationColorScheme | str,
-    slots: Sequence[CircularTrackSlot] | None,
-    tracks: Sequence[ConservationTrack],
-) -> tuple[ConservationTrack, ...]:
-    """The drawn rings (``_drawn_ring_colors``), each with its colour on the track and on its hits."""
-
-    return tuple(
-        track
-        if color == track.track_color
-        else replace(track, track_color=color, hits=track.hits.assign(track_color=color))
-        for track, color in _drawn_ring_colors(scheme, slots, tracks)
-    )
-
-
-def resolve_conservation_legend_sources(
-    scheme: ConservationColorScheme | str,
-    slots: Sequence[CircularTrackSlot] | None,
-    tracks: Sequence[ConservationTrack],
-) -> tuple[ConservationLegendSource, ...]:
-    """The legend's rings from the same drawn order and colours, without copying any hit table."""
-
-    return tuple(ConservationLegendSource.of(track, color) for track, color in _drawn_ring_colors(scheme, slots, tracks))
 
 
 def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: ComparisonFilter) -> DataFrame:
@@ -618,7 +616,6 @@ def _normalize_source_hits_for_record(
                     "reference_side": reference_side,
                     "reference_match_key": _row_text(row, id_column),
                     "reference_record_id": str(record.id),
-                    "track_color": source.color or "",
                     "query": _row_text(row, "query"),
                     "subject": _row_text(row, "subject"),
                     "qstart": int(_row_float(row, "qstart")),
@@ -706,9 +703,11 @@ __all__ = [
     "ConservationSource",
     "ConservationTable",
     "ConservationTrack",
+    "DrawnConservationRing",
     "NORMALIZED_CONSERVATION_COLUMNS",
     "conservation_legend_sources",
-    "named_conservation_tracks",
+    "named_conservation_rings",
+    "conservation_slot_ring",
     "conservation_slot_track",
     "conservation_track_gradient_colors",
     "empty_normalized_conservation_hits",
@@ -718,6 +717,5 @@ __all__ = [
     "normalize_conservation_tracks_for_record",
     "read_conservation_inputs",
     "resolve_conservation_reference_side",
-    "resolve_conservation_legend_sources",
-    "resolve_conservation_track_colors",
+    "resolve_drawn_conservation_rings",
 ]

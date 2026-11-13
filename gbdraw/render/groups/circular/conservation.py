@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from gbdraw.svg.elements import Group, Path
 
-from ....analysis.conservation import ConservationTrack, conservation_track_gradient_colors
+from ....analysis.conservation import ConservationTrack, DrawnConservationRing, conservation_track_gradient_colors
 from ....comparisons.identity_scale import identity_color_domain
 from ....config.models import GbdrawConfig
 from ....layout.circular import RadialBand
@@ -33,6 +33,7 @@ def _conservation_drawer(cfg: GbdrawConfig, track_color: str | None, min_identit
         fill_opacity=conservation_cfg.fill_opacity,
         stroke_color=conservation_cfg.stroke_color,
         stroke_width=conservation_cfg.stroke_width,
+        track_color=track_color,
     )
 
 
@@ -51,7 +52,7 @@ def conservation_ring_paints_band_edges(track: ConservationTrack, cfg: GbdrawCon
 
 
 def conservation_ring_ink(
-    track: ConservationTrack,
+    ring: DrawnConservationRing,
     *,
     total_length: int,
     inner_radius_px: float,
@@ -65,9 +66,9 @@ def conservation_ring_ink(
 
     if _background_shows(cfg):
         return (CircularInkRing(RadialBand(float(inner_radius_px), float(outer_radius_px))),)
-    drawer = _conservation_drawer(cfg, str(track.track_color) if track.track_color else None, float(min_identity))
+    drawer = _conservation_drawer(cfg, ring.color, float(min_identity))
     return drawer.ink(
-        track.hits,
+        ring.track.hits,
         total_length=int(total_length),
         inner_radius_px=inner_radius_px,
         outer_radius_px=outer_radius_px,
@@ -79,7 +80,7 @@ class ConservationGroup:
     def __init__(
         self,
         *,
-        track: ConservationTrack,
+        ring: DrawnConservationRing,
         total_length: int,
         inner_radius_px: float,
         outer_radius_px: float,
@@ -90,8 +91,8 @@ class ConservationGroup:
         record_transform: RecordDisplayTransform | None = None,
         record_index: int = 0,
     ) -> None:
-        track_label = track.track_label
-        track_color = track.track_color
+        track = ring.track
+        track_color = ring.color
         source_index = track.source_index
         track_index = track.track_index
         self.group = Group(id=group_id)
@@ -99,11 +100,11 @@ class ConservationGroup:
         self.group.attribs["data-gbdraw-slot-renderer"] = "sequence_conservation"
         self.group.attribs["data-source-index"] = str(source_index)
         self.group.attribs["data-track-index"] = str(track_index)
-        self.group.attribs["data-track-label"] = str(track_label)
+        self.group.attribs["data-track-label"] = str(track.track_label)
         if track_color:
             self.group.attribs["data-track-color"] = str(track_color)
-        if track.legend_name is not None:
-            self.group.attribs[RING_LEGEND_NAME_ATTRIBUTE] = track.legend_name
+        if ring.legend_name is not None:
+            self.group.attribs[RING_LEGEND_NAME_ATTRIBUTE] = ring.legend_name
         self.hits = track.hits
         self.record_transform = record_transform
         self.record_index = record_index

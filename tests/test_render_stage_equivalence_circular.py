@@ -33,13 +33,13 @@ import gbdraw.linear as linear_cli
 from gbdraw.api.request_render import DiagramRequest
 from tests.utils import render_stage_equivalence
 from tests.utils.render_stage_equivalence import (
-    UNIVERSE_MARKS,
     CASES,
     CapturedRequest,
     EquivalenceHarness,
     Placeholders,
     StepResult,
     assert_same_outcome,
+    base_declaration_failures,
     declaration_failures,
     equivalence_failures,
     first_difference,
@@ -58,6 +58,11 @@ from tests.utils.render_stage_equivalence import (
 )
 
 pytestmark = pytest.mark.circular
+
+# The universe tests run only with ``--render-stage-universe`` (tests/conftest.py), in the release-tier job
+# ``render-stage-universe-release``. The marks are spelled in this file: the CI plan reads a test file's markers
+# from its text (``pythonMarkers`` in tools/ci-impact.mjs), so a change here does not carry release evidence.
+UNIVERSE_MARKS = (pytest.mark.slow, pytest.mark.render_stage_universe)
 
 _BASE = ("--labels", "out", "--gc", "--skew", "-l", "right")
 
@@ -115,6 +120,23 @@ def test_the_case_base_draws(chain: list[StepResult]) -> None:
     """A base that ends in an error checks only that warm and cold fail alike (OV-706)."""
 
     assert chain[0].cold.error is None, f"{chain[0].label}: {chain[0].cold.error}"
+
+
+@pytest.mark.parametrize(
+    ("case_id", "extra"),
+    [
+        pytest.param("C1", (), id="C1"),
+        pytest.param("C2", (), id="C2"),
+        pytest.param("C3", (), id="C3"),
+        # The rings take the scheme's colours beside the stage's tracks (OV-3112).
+        pytest.param("C3", ("--conservation_color_scheme", "ten"), id="C3-color-scheme"),
+    ],
+)
+def test_each_case_base_has_no_undeclared_read_or_uncacheable_stage(
+    case_id: str, extra: tuple[str, ...], placeholders: Placeholders, tmp_path: Path
+) -> None:
+    failures = base_declaration_failures(CASES[case_id], placeholders, tmp_path, extra)
+    assert not failures, "\n".join(failures)
 
 
 def test_the_harness_renders_without_the_label_fit_warning_search(monkeypatch: pytest.MonkeyPatch) -> None:

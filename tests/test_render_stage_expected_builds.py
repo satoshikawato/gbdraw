@@ -20,7 +20,6 @@ from pathlib import Path
 import pytest
 
 from tests.utils.render_stage_equivalence import (
-    UNIVERSE_MARKS,
     CASES,
     EquivalenceHarness,
     Mode,
@@ -37,6 +36,11 @@ from tests.utils.render_stage_equivalence import (
     write_genbank,
     write_tables,
 )
+
+# The universe tests run only with ``--render-stage-universe`` (tests/conftest.py), in the release-tier job
+# ``render-stage-universe-release``. The marks are spelled in this file: the CI plan reads a test file's markers
+# from its text (``pythonMarkers`` in tools/ci-impact.mjs), so a change here does not carry release evidence.
+UNIVERSE_MARKS = (pytest.mark.slow, pytest.mark.render_stage_universe)
 
 # DEPMAP classes P1 and P2 per case (measure/depmap/classes.json, 2026-10-13).
 _CIRCULAR_COMMON = (
@@ -637,6 +641,21 @@ def test_a_depth_label_change_rebuilds_no_depth_path(case_id: str, tables: Path,
     assert outcome.error is None
     assert "depth_content" not in outcome.stages.builds
     assert set(outcome.stages.builds) <= allowed_builds("depth_track_label", case.mode)
+
+
+def test_a_depth_track_tick_font_size_change_places_no_circular_labels(tables: Path, tmp_path: Path) -> None:
+    """OV-3112: only the radial growth reads the depth axes (``CircularRadialGrowthInputs``), and C3 places its
+    labels outside, so its labels are a hit."""
+
+    case = CASES["C3"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C3")
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["depth_track_tick_font_size"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "circular_labels" not in outcome.stages.builds
+    assert set(outcome.stages.builds) <= allowed_builds("depth_track_tick_font_size", case.mode)
 
 
 # --- Record parts and narrowed drawer keys -----------------------------------------------------

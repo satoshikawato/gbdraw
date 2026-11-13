@@ -860,6 +860,7 @@ test('release dispatch is exhaustive and cannot be inferred from a routine push'
   assert.ok(outcome.plan.requiredJobs.includes('acceptance-supported-main'));
   assert.ok(outcome.plan.requiredJobs.includes('slow-main'));
   assert.ok(outcome.plan.requiredJobs.includes('vibrio-generate-release'));
+  assert.ok(outcome.plan.requiredJobs.includes('render-stage-universe-release'));
   assert.throws(() => configuration({ CI_IMPACT_PROFILE: 'release', CI_IMPACT_EVENT_NAME: 'push' }), /explicit dispatch/);
 });
 
@@ -872,7 +873,7 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   // Missing or stale Web UI translations fail only the release tier.
   assert.match(release, /run: node tools\/i18n\/sync\.mjs status --require-complete\n/);
   assert.equal((workflow.match(/sync\.mjs status --require-complete/g) || []).length, 1);
-  for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
+  for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release', 'render-stage-universe-release']) {
     assert.ok(release.includes(`      - ${id}\n`), `release gate missing ${id}`);
   }
   assert.match(job('core'), /python-version: \["3.10", "3.11", "3.12", "3.13", "3.14"\]/);
@@ -882,6 +883,12 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   assert.match(job('slow-main'), /-m "slow and not browser"/);
   assert.match(job('vibrio-generate-release'), /run: npm run test:web:vibrio-generate\n/);
   assert.match(job('vibrio-generate-release'), /requiredJobs, 'vibrio-generate-release'/);
+  assert.match(job('render-stage-universe-release'), /requiredJobs, 'render-stage-universe-release'/);
+  assert.match(
+    job('render-stage-universe-release'),
+    /--render-stage-universe\n {10}-m render_stage_universe\n {10}-n 3 --dist loadscope\n/
+  );
+  assert.match(job('render-stage-universe-release'), /python-version: "3\.11"/);
   assert.match(job('browser'), /Run package build integration[\s\S]*-m "slow and not browser"/);
   assert.match(job('browser'), /Run offline GUI browser contracts[\s\S]*-m "slow and browser"/);
   assert.match(job('pr-gate'), /sparse-checkout: tools[\s\S]*node \.ci-trusted-base\/tools\/ci-impact.mjs gate/);
@@ -945,7 +952,8 @@ test('every job that runs pytest caches the test inputs and gives each pytest st
     'test.yml:browser',
     'test.yml:web-contracts-pr',
     'test.yml:acceptance-supported-main',
-    'test.yml:slow-main'
+    'test.yml:slow-main',
+    'test.yml:render-stage-universe-release'
   ]);
 });
 
@@ -1009,6 +1017,7 @@ test('every job that installs gbdraw from the checkout installs the managed LOSA
     'test.yml:acceptance-supported-main',
     'test.yml:slow-main',
     'test.yml:vibrio-generate-release',
+    'test.yml:render-stage-universe-release',
     'test.yml:losat-cache-browser-acceptance',
     'test.yml:promotion-audit-recipes',
     'test.yml:promotion-audit-sweeps',

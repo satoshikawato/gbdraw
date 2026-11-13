@@ -33,12 +33,12 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from tests.utils.render_stage_equivalence import (
-    UNIVERSE_MARKS,
     CASES,
     EquivalenceHarness,
     Placeholders,
     StepResult,
     assert_same_outcome,
+    base_declaration_failures,
     declaration_failures,
     equivalence_failures,
     full_chain_chunks,
@@ -54,6 +54,11 @@ from tests.utils.render_stage_equivalence import (
 )
 
 pytestmark = pytest.mark.linear
+
+# The universe tests run only with ``--render-stage-universe`` (tests/conftest.py), in the release-tier job
+# ``render-stage-universe-release``. The marks are spelled in this file: the CI plan reads a test file's markers
+# from its text (``pythonMarkers`` in tools/ci-impact.mjs), so a change here does not carry release evidence.
+UNIVERSE_MARKS = (pytest.mark.slow, pytest.mark.render_stage_universe)
 
 _BASE = ("--show_labels", "all", "--gc", "--skew", "-l", "right")
 
@@ -111,6 +116,14 @@ def test_declarations_have_no_undeclared_read_or_uncacheable_stage(
 
 # Slow walks: short walks over many seeds, each well within the 300 s timeout.
 _SLOW_WALKS = {"L1": (range(11, 17), 20), "L2": (range(21, 24), 10), "L3": (range(31, 33), 10)}
+
+
+@pytest.mark.parametrize("case_id", ["L1", "L2", "L3"])
+def test_each_case_base_has_no_undeclared_read_or_uncacheable_stage(
+    case_id: str, placeholders: Placeholders, tmp_path: Path
+) -> None:
+    failures = base_declaration_failures(CASES[case_id], placeholders, tmp_path)
+    assert not failures, "\n".join(failures)
 
 
 @pytest.mark.parametrize(

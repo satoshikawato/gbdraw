@@ -30,10 +30,10 @@ from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator, CircularCanvasGeometry
 from ...analysis.conservation import (
     ConservationLegendSource,
-    ConservationTrack,
+    DrawnConservationRing,
     conservation_legend_sources,
-    named_conservation_tracks,
-    conservation_slot_track,
+    named_conservation_rings,
+    conservation_slot_ring,
     conservation_track_gradient_colors,
 )
 from ...analysis.feature_density import FeatureDensityLayer
@@ -1419,7 +1419,7 @@ class CircularTrackInkSources:
     slot_data: Mapping[str, SlotPaintData]
     # The record's feature density layers by track id: a heatmap slot paints its runs.
     feature_density: Mapping[str, FeatureDensityLayer] | None
-    conservation_tracks: Sequence[ConservationTrack] | None
+    conservation_rings: Sequence[DrawnConservationRing] | None
     conservation_min_identity: float
     # The feature layers the radial layout measured (``_radial_layout_feature_dict``).
     feature_layers: FeatureBuildResult
@@ -1490,11 +1490,11 @@ def _record_track_ink(
             if layer is not None:
                 inks.extend(feature_density_heatmap_ink(layer, record_length, slot.draw_band_px, record_transform))
         elif renderer == "sequence_conservation":
-            track = _slot_conservation_track(slot, sources.conservation_tracks)
-            if track is not None:
+            conservation_ring = conservation_slot_ring(slot.params, sources.conservation_rings)
+            if conservation_ring is not None:
                 inks.extend(
                     conservation_ring_ink(
-                        track,
+                        conservation_ring,
                         total_length=record_length,
                         inner_radius_px=float(slot.draw_inner_radius_px),
                         outer_radius_px=float(slot.draw_outer_radius_px),
@@ -2327,8 +2327,8 @@ def _edge_painting_slot_ids(
         elif renderer == "dinucleotide_content":
             paints = gc_paints_edges
         elif renderer == "sequence_conservation":
-            track = conservation_slot_track(slot.params, record.conservation_tracks)
-            paints = track is not None and conservation_ring_paints_band_edges(track, cfg)
+            ring = conservation_slot_ring(slot.params, record.conservation_rings)
+            paints = ring is not None and conservation_ring_paints_band_edges(ring.track, cfg)
         elif renderer == "feature_density":
             layer = slot_feature_density_layer(str(slot.id), slot, record.feature_density)
             paints = layer is not None and feature_density_paints_band_edges(layer)
@@ -2520,14 +2520,6 @@ def _annotation_ring(resolved_slot: CircularResolvedSlot) -> AnnotationRing:
         side=str(resolved_slot.side),
         strand_bands_px=resolved_slot.strand_bands_px,
     )
-
-
-def _slot_conservation_track(
-    resolved_slot: CircularResolvedSlot, conservation_tracks: Sequence[ConservationTrack] | None
-) -> ConservationTrack | None:
-    """The conservation track a conservation slot draws."""
-
-    return conservation_slot_track(resolved_slot.params, conservation_tracks)
 
 
 class _TickOptions(TypedDict):
@@ -2930,7 +2922,7 @@ def _draw_resolved_circular_slot(
     depth_config: DepthConfigurator | None,
     depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
     feature_density: Mapping[str, FeatureDensityLayer] | None,
-    conservation_tracks: Sequence[ConservationTrack] | None,
+    conservation_rings: Sequence[DrawnConservationRing] | None,
     conservation_min_identity: float,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
     gc_content_tick_font_size_override: float | None = None,
@@ -3056,8 +3048,8 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "sequence_conservation":
-        track = _slot_conservation_track(resolved_slot, conservation_tracks)
-        if track is None:
+        ring = conservation_slot_ring(resolved_slot.params, conservation_rings)
+        if ring is None:
             logger.warning(
                 "Skipping circular conservation slot '%s' because conservation data are unavailable.",
                 resolved_slot.id,
@@ -3066,7 +3058,7 @@ def _draw_resolved_circular_slot(
         return add_conservation_group_on_canvas(
             canvas,
             gb_record,
-            track,
+            ring,
             canvas_config,
             inner_radius_px=float(resolved_slot.draw_inner_radius_px),
             outer_radius_px=float(resolved_slot.draw_outer_radius_px),
@@ -3426,6 +3418,19 @@ class CircularLabelPlacement:
     label_candidates: tuple[tuple[float, tuple[CircularLabelCandidate, ...]], ...]
 
 
+@dataclass(frozen=True)
+class CircularRadialGrowthInputs:
+    """What only the radial growth of ``circular_labels`` reads: it replans the tracks around the grown circle with
+    these. The stage gets them only when labels are radial, so a change only they carry (a depth axis's tick font
+    size, in ``scalar_axes``) rebuilds no labels placed another way."""
+
+    circular_preset: str
+    definition_reserved_radius_px: float | None
+    preferred_anchor_slot_ids: Collection[str]
+    scalar_axes: CircularScalarAxes
+    center_reserved_radius_explicit: bool
+
+
 def circular_labels(
     feature_layers: FeatureBuildResult,
     profile: CircularRenderProfile,
@@ -3437,16 +3442,12 @@ def circular_labels(
     layout_slots: tuple[CircularTrackSlot, ...],
     feature_slot: CircularTrackSlot | None,
     feature_lane_direction: CircularFeatureLaneDirection,
-    circular_preset: str,
     track_preset: str,
     resolved_feature_anchor_radius_px: float | None,
     feature_track_ratio_factor_override: float | None,
     feature_width_override_requested: bool,
     record_features: ResolvedRecordFeatureInputs | None,
-    definition_reserved_radius_px: float | None,
-    preferred_anchor_slot_ids: Collection[str],
-    scalar_axes: CircularScalarAxes,
-    center_reserved_radius_explicit: bool,
+    radial_growth: CircularRadialGrowthInputs | None,
     record_transform: RecordDisplayTransform | None,
     definition_text: tuple[Aabb, ...],
     label_filtering: Mapping[str, Any],
@@ -3459,7 +3460,7 @@ def circular_labels(
     ``label_radii`` (``circular_label_radii``), not the centre band (OV-2103). The growth loop replans the radial layout
     with a larger radius until the radial labels fit or growing stops making
     room. It works on copies: the feature layers it is given and the canvas
-    configurator are not changed.
+    configurator are not changed. ``radial_growth`` is None unless labels are radial.
     """
 
     cfg = profile.config
@@ -3494,7 +3495,7 @@ def circular_labels(
         labels, capacity = [], exceeded.capacities
     # Radial labels that collide once the canvas stops growing are refused (OV-694, RADIAL-JOIN).
     radial_refused = False
-    if profile.label_placement == "radial":
+    if radial_growth is not None:
         previous_growth: float | None = None
         stagnant_passes = 0
         preflight_tracks_frozen = False
@@ -3574,7 +3575,7 @@ def circular_labels(
                 if feature_slot is not None:
                     feature_lane_direction = _lane_direction_for_feature_slot(
                         feature_slot,
-                        track_preset=circular_preset,
+                        track_preset=radial_growth.circular_preset,
                     )
                 # Reflow changed the physical slot. Rebuild occupancy through
                 # the same planner before measuring any final geometry.
@@ -3610,10 +3611,12 @@ def circular_labels(
                 lambda sized, rooms: _CentreDefinitionFit(resolve_circular_radial_layout(
                     total_length=total_length, geometry=geometry, cfg=cfg, slots=sized,
                     feature_dict=_radial_layout_feature_dict(feature_layers),
-                    definition_reserved_radius_px=definition_reserved_radius_px,
-                    preferred_anchor_slot_ids=preferred_anchor_slot_ids, scalar_axes=scalar_axes,
-                    center_reserved_radius_explicit=center_reserved_radius_explicit, annotation_label_rooms=rooms,
-                ), definition_reserved_radius_px),
+                    definition_reserved_radius_px=radial_growth.definition_reserved_radius_px,
+                    preferred_anchor_slot_ids=radial_growth.preferred_anchor_slot_ids,
+                    scalar_axes=radial_growth.scalar_axes,
+                    center_reserved_radius_explicit=radial_growth.center_reserved_radius_explicit,
+                    annotation_label_rooms=rooms,
+                ), radial_growth.definition_reserved_radius_px),
                 slots, annotation_tracks,
             )
             replanned_layout, slots, annotation_tracks = where_drawn.fit.layout, where_drawn.slots, where_drawn.tracks
@@ -3799,7 +3802,7 @@ def _unit_track_ink_sources(
             profile=canvas_config.profile,
         ),
         feature_density=record.feature_density,
-        conservation_tracks=record.conservation_tracks,
+        conservation_rings=record.conservation_rings,
         conservation_min_identity=record.conservation_min_identity,
         feature_layers=feature_layers,
         feature_stroke_pad_px=stroke_pad_px(
@@ -4287,17 +4290,19 @@ def add_record_on_circular_canvas(
             layout_slots=tuple(layout_slots),
             feature_slot=feature_slot,
             feature_lane_direction=feature_lane_direction,
-            circular_preset=circular_preset,
             track_preset=_circular_preset_for_layout(cfg),
             resolved_feature_anchor_radius_px=resolved_feature_anchor_radius_px,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_width_override_requested=feature_width_override_requested,
             record_features=None if one_circle is not None else next(iter(configurators.feature.record_features or ()), None),
-            definition_reserved_radius_px=definition_reserved_radius_px,
-            preferred_anchor_slot_ids=preferred_anchor_slot_ids,
             # The radial replan reads the scalar axes and ticks only.
-            scalar_axes=scalar_axes,
-            center_reserved_radius_explicit=presentation.center_reserved_radius is not None,
+            radial_growth=CircularRadialGrowthInputs(
+                circular_preset=circular_preset,
+                definition_reserved_radius_px=definition_reserved_radius_px,
+                preferred_anchor_slot_ids=preferred_anchor_slot_ids,
+                scalar_axes=scalar_axes,
+                center_reserved_radius_explicit=presentation.center_reserved_radius is not None,
+            ) if profile.label_placement == "radial" else None,
             record_transform=presentation.record_transform if one_circle is None else None,
             definition_text=definition_text,
             label_filtering=label_filtering,
@@ -4487,7 +4492,7 @@ def add_record_on_circular_canvas(
                     depth_config=configurators.depth,
                     depth_tracks_by_index=depth_tracks_by_index,
                     feature_density=unit.record.feature_density,
-                    conservation_tracks=unit.record.conservation_tracks,
+                    conservation_rings=unit.record.conservation_rings,
                     conservation_min_identity=unit.record.conservation_min_identity,
                     dinucleotide_dataframes=unit.record.dinucleotide_dataframes,
                     gc_content_tick_font_size_override=gc_content_tick_font_size_override,
@@ -4868,7 +4873,7 @@ def _assemble_circular_record(
     # The table the Legend draws; with no Legend, the one that names the rings (a Multi-Record Canvas names them
     # from its shared Legend before it draws each record).
     legend_table = LegendTable()
-    unnamed = any(track.legend_name is None for track in record.conservation_tracks or ())
+    unnamed = any(ring.legend_name is None for ring in record.conservation_rings or ())
     if canvas_config.legend_position != "none" or unnamed:
         legend_table = circular_legend_table(
             legend_records,
@@ -4880,12 +4885,12 @@ def _assemble_circular_record(
             depth_track_count_value=resolved_depth_track_count,
             slots=circular_legend_slot_sources(planned.slots, planned.circular_track_axis_index),
             annotations=planned.annotations,
-            conservation_legend=conservation_legend_sources(record.conservation_tracks),
+            conservation_legend=conservation_legend_sources(record.conservation_rings),
             conservation_min_identity=record.conservation_min_identity,
         )
     if unnamed:
         record = replace(
-            record, conservation_tracks=named_conservation_tracks(record.conservation_tracks or (), legend_table.ring_names())
+            record, conservation_rings=named_conservation_rings(record.conservation_rings or (), legend_table.ring_names())
         )
     if canvas_config.legend_position == "none":
         legend_table = LegendTable()

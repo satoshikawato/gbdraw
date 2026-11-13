@@ -1305,6 +1305,51 @@ jobs:
         timeout-minutes: 25
         run: npm run test:web:vibrio-generate
 
+  render-stage-universe-release:
+    name: Render-stage universe
+    needs: ci-impact
+    if: >-
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'render-stage-universe-release') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    runs-on: ubuntu-latest
+    # Every option state of the six universe cases, warm against cold (tests/utils/render_stage_equivalence.py).
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install universe test dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Install the managed LOSAT runtime
+        uses: ./.github/actions/managed-losat
+
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
+      # Each module's chains share one module-scoped fixture, so a module runs on one worker (loadscope).
+      - name: Run the render-stage universe
+        timeout-minutes: 110
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python -m pytest tests/
+          --render-stage-universe
+          -m render_stage_universe
+          -n 3 --dist loadscope
+          --timeout=900
+          --durations=30
+
   lint:
     name: Lint
     needs: ci-impact
@@ -1945,6 +1990,7 @@ jobs:
       - acceptance-supported-main
       - slow-main
       - vibrio-generate-release
+      - render-stage-universe-release
       - lint
       - losat-cache-browser-acceptance
     if: >-
@@ -1991,6 +2037,7 @@ jobs:
       - acceptance-supported-main
       - slow-main
       - vibrio-generate-release
+      - render-stage-universe-release
       - lint
       - losat-cache-browser-acceptance
     if: >-
