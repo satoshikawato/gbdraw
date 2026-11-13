@@ -39,6 +39,8 @@ import {
 } from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
+// The root's reader without a displayed Result or its inventory: a row shows the color it holds.
+const NO_DISPLAYED_RESULT = { svgContent: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} } };
 
 // Session Load (services/config.js) reads the editor state through Vue state.
 globalThis.window = { Vue: {
@@ -805,7 +807,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []),
+    readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []),
     legendRowNames
   });
   reconcileMountedResult(mounted, two);
@@ -843,7 +845,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []),
+    readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []),
     legendRowNames: { value: new Map() }
   });
   reconcileMountedResult(mounted, two);
@@ -885,7 +887,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
     activeDrawing: () => drawing,
     sessionOperationAvailability: () => null
   };
-  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
+  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []) });
   const strokes = createLegendStrokeActions({ state });
   assert.equal(owner.updateLegendEntryColor(1, '#ff0000'), true);
   assert.equal(owner.updateLegendEntryColor(0, '#0000ff'), true);

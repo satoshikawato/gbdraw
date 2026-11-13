@@ -160,7 +160,7 @@ import { msg } from '../../utils/i18n.js';
  * @typedef {object} FeatureColorActionsOptions
  * @property {Pick<WebState, 'activeDrawing' | 'appliedPaletteColors' | 'appliedPaletteName' | 'clickedFeature'
  *   | 'displayedResultMetadata' | 'errorLog' | 'extractedFeatures' | 'featureStyleScopeDialog' | 'legendRenameDialog'
- *   | 'originalLegendOrder' | 'paletteDefinitions' | 'resetColorDialog' | 'sessionOperationAvailability' | 'svgContainer'
+ *   | 'originalLegendColors' | 'originalLegendOrder' | 'paletteDefinitions' | 'resetColorDialog' | 'sessionOperationAvailability' | 'svgContainer'
  *   | 'svgContent'>} state The app state members this owner and the helpers it passes `state` to read.
  * @property {((options: { domains: readonly string[] }) => unknown) | null} [showEditorIntent]
  *   The root's port of the editor intent onto the displayed Result (R1).

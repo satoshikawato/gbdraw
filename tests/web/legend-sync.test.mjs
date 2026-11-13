@@ -38,6 +38,8 @@ const { createLegendEntryActions } = await import(
 // The root's reader of the colors Legend rows show (app-setup.js); without a
 // displayed Result, a row shows the color it records.
 const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
+// The root's reader without a displayed Result or its inventory: a row shows the color it holds.
+const NO_DISPLAYED_RESULT = { svgContent: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} } };
 const { draftLegendRows, legendRowIds } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
 const { legendEntryKey } = await import(pathToFileURL(join(tempRoot, 'services', 'drawing', 'paint.js')));
 const { installShownSetLegend } = await import(pathToFileURL(join(tempRoot, 'services', 'artifact-slot.js')));
@@ -257,7 +259,8 @@ const mockLegendEntry = (caption, color, x) => {
       dirtyMarks += 1;
       return true;
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
+    readLegendRowColors: (drawing) => displayedLegendRowColors({ ...NO_DISPLAYED_RESULT,
+      originalLegendOrder: state.originalLegendOrder, originalLegendColors: state.originalLegendColors }, drawing, [])
   });
   // The layout owner lays the Legend out after a restore (zero shift).
   actions.setLegendGeometryChangedHandler(() => { layoutRefreshes += 1; });
@@ -312,7 +315,10 @@ const mockLegendEntry = (caption, color, x) => {
       featureIds: ['feature-unsafe']
     }
   ];
+  // A new Result: its swatches are Python's (OV-282), which the extraction keeps.
+  state.originalLegendColors.value = {};
   actions.extractLegendEntries();
+  assert.deepEqual(state.originalLegendColors.value, { Beta: '#abcdef', Gamma: '#778899' });
   assert.deepEqual(
     state.legendEntries.value.map((entry) => ({
       caption: entry.caption,
@@ -322,16 +328,16 @@ const mockLegendEntry = (caption, color, x) => {
     [
       {
         caption: 'Beta',
-        color: '#abcdef',
+        color: undefined,
         featureIds: ['feature-safe']
       },
       {
         caption: 'Gamma',
-        color: '#778899',
+        color: undefined,
         featureIds: ['feature-unsafe']
       }
     ],
-    'the paint is the sanitized Result\'s, and each row keeps the feature ids of its key (U3b)'
+    'a row of Python\'s holds no color, not a recorded one (OV-282), and each row keeps the feature ids of its key (U3b)'
   );
   assert.equal(state.legendEntries.value.some((entry) => Object.hasOwn(entry, 'showStroke')), false,
     'the Stroke options disclosure is view state, not a Legend entry field (OV-157)');
@@ -541,13 +547,14 @@ const mockLegendEntry = (caption, color, x) => {
   featureLegend.children[1].removeAttribute('display');
 
   // A step that renames and recolors a shared entry renames and recolors it
-  // here; an editor row the step adds is listed, after this Result's own.
+  // here; an editor row the step adds is listed, after this Result's own. A
+  // row of Python's the step leaves holds no color (OV-282).
   state.legendEntries.value = [
     { caption: 'A2', originalCaption: 'Alpha', color: '#445566' }, ...list('Beta', 'Only2', 'Mine')
   ];
   actions.adoptRestoredLegend({ from: list('Alpha', 'Beta', 'Only2') });
   assert.deepEqual(state.legendEntries.value.map(({ caption, originalCaption, color }) => [caption, originalCaption, color]), [
-    ['A2', 'Alpha', '#445566'], ['Beta', 'Beta', '#112233'], ['Own1', 'Own1', '#112233'], ['Mine', 'Mine', '#112233']
+    ['A2', 'Alpha', '#445566'], ['Beta', 'Beta', undefined], ['Own1', 'Own1', undefined], ['Mine', 'Mine', '#112233']
   ]);
 
   // A list that describes the displayed Result installs as is.
@@ -761,7 +768,8 @@ const mockLegendEntry = (caption, color, x) => {
   row('CDS', '#222222', 0);
   row('Skew+', '#80b1d3', 1, { 'data-gbdraw-base-data-legend-key': 'GC skew (+)' });
   actions.extractLegendEntries({ replaceGeneratedInventory: true });
-  assert.deepEqual(listed(), [['CDS', 'CDS', '#222222', ['cds-1']], ['Skew+', 'GC skew (+)', '#80b1d3', []]]);
+  // A row of Python's holds no color: its swatch is the Result's (OV-282).
+  assert.deepEqual(listed(), [['CDS', 'CDS', undefined, ['cds-1']], ['Skew+', 'GC skew (+)', undefined, []]]);
   assert.deepEqual(state.originalLegendOrder.value, ['CDS', 'GC skew (+)']);
 
   // A Result that differs from the intent only in its DOM leaves the list to
@@ -866,7 +874,7 @@ const mockLegendEntry = (caption, color, x) => {
   let commits = 0;
   const actions = createLegendEntryActions({
     state: withDrawings(state), commitActiveResultEdit: () => { commits += 1; return true; }, readActiveResultIdentity: () => 'result-1',
-    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
+    readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, [])
   });
   const listed = () => state.legendEntries.value.map(({ caption, color }) => [caption, color]);
   const drawnRows = shownRows();
@@ -938,7 +946,8 @@ const mockLegendEntry = (caption, color, x) => {
   });
   assert.deepEqual(recolored.diff.update, [{ caption: 'New', color: '#00aa00' }]);
   assert.equal(recolored.apply(), null);
-  assert.deepEqual(listed()[1], ['New', '#00aa00']);
+  // The row of Python's shows its rules' color (`displayedLegendRowColors`); the commit writes none into it (OV-282).
+  assert.equal(state.legendEntries.value[1], listedRows[1]);
   await assert.rejects(
     actions.prepareFileLegendEntries([{ caption: 'tRNA', color: '#000000' }]),
     // OV-644: a typed refusal that names no row key.
@@ -987,7 +996,7 @@ const mockLegendEntry = (caption, color, x) => {
     featureLegend.children.splice(0);
     order.listed.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, colors[caption], index * 70)));
     const actions = createLegendEntryActions({
-      state: withDrawings(state), readActiveResultIdentity: () => 'result-1', readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
+      state: withDrawings(state), readActiveResultIdentity: () => 'result-1', readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, [])
     });
     return {
       state, actions,
@@ -1009,8 +1018,9 @@ const mockLegendEntry = (caption, color, x) => {
   const listIds = legendRowIds(stops.state.legendEntries.value.map(legendEntryKey));
   const unshared = await stops.actions.prepareFileLegendEntries(
     [{ caption: 'alpha', color: '#e63946' }, { caption: 'gamma', color: '#2a9d8f' }],
-    // The renamed row replaces the teal row (OV-158), as a re-key of its records.
-    { previousFileIntents: sharedRows, rekeyed: new Map([[RED, 'alpha'], [TEAL, 'gamma']]) }
+    // The renamed row replaces the teal row (OV-158), as a re-key of its records. The previous
+    // intents name each row in the color it shows: the red row's Legend color (OV-2265, OV-282).
+    { previousFileIntents: [{ caption: RED, color: '#ff0000' }, sharedRows[1]], rekeyed: new Map([[RED, 'alpha'], [TEAL, 'gamma']]) }
   );
   assert.deepEqual(unshared.apply(), {
     add: [{ caption: 'alpha', color: '#e63946', before: RED }, { caption: 'gamma', color: '#2a9d8f', before: TEAL }],
@@ -1093,7 +1103,7 @@ const mockLegendEntry = (caption, color, x) => {
   const actions = createLegendEntryActions({
     state: withDrawings(state),
     commitActiveResultEdit: () => true,
-    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])
+    readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, [])
   });
   await actions.restoreDeletedLegendEntries();
   const colors = Object.fromEntries(state.legendEntries.value.map((entry) => [entry.caption, entry.color]));
@@ -1186,7 +1196,7 @@ const mockLegendEntry = (caption, color, x) => {
     extractedFeatures: ref([]),
     skipCaptureBaseConfig: ref(false)
   };
-  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
+  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []) });
   const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
   assert.equal(actions.updateLegendEntryColor(0, '#ff0000'), true);
   assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000' }, 'the color reaches both keys');
@@ -1237,7 +1247,7 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]), originalLegendOrder: ref(['Alpha', 'Beta']), originalLegendColors: ref({}),
     legendStrokeOverrides: {}, legendColorOverrides: {}, manualSpecificRules: [], skipCaptureBaseConfig: ref(false)
   };
-  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
+  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []) });
   const keepBoth = () => {
     actions.readLegendRowNames();
     return actions.keepBothNamesOf({ name: 'Beta', renamedKey: 'Alpha', targetKey: null, color: '#112233', deletedKey: 'Beta' });

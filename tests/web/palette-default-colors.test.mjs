@@ -432,7 +432,8 @@ const drawnCdsFeatures = async (rule, matched) => {
 test('a palette change leaves a Legend row that a rule draws', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: '.', color: '#00aa00', cap: 'CDS' };
   const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: await drawnCdsFeatures(rule, true) });
-  assert.deepEqual([...panel.listed], [['other tRNAs', '#333333']]);
+  // The panel shows the rule's color, as the compile does (OV-282: no row holds a copy of it).
+  assert.deepEqual([...panel.listed], [['CDS', '#00aa00'], ['other tRNAs', '#333333']]);
   assert.equal(compiled.colorOf('CDS'), '#00aa00');
 });
 
