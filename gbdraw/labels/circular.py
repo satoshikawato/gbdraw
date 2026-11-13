@@ -438,7 +438,7 @@ def _embedded_label_parts(label: CircularLabel, total_length: int) -> tuple[Poly
     half_height = 0.5 * float(label["height_px"])
     if radius <= half_height:
         return ()
-    center_deg = 360.0 * (float(label["middle"]) / total_length) - 90.0
+    center_deg = angle_from_middle_unwrapped(float(label["middle"]), total_length)
     half_span_deg = math.degrees(0.5 * float(label["width_px"]) / radius)
     return annular_sector_parts(radius - half_height, radius + half_height, center_deg, half_span_deg)
 
@@ -2972,7 +2972,7 @@ def calculate_angle_for_y(center_y, y_radius, y):
 
 def angle_from_middle(middle: float, total_length: int) -> float:
     """Convert genome midpoint to circular angle (degrees)."""
-    return (360.0 * (middle / total_length) - 90.0) % 360.0
+    return angle_from_middle_unwrapped(middle, total_length) % 360.0
 
 
 def angle_from_middle_unwrapped(middle: float, total_length: int) -> float:
