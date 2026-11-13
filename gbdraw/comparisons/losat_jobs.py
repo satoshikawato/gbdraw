@@ -576,6 +576,14 @@ class LosatBatch:
     # several records.
     search_context: str | None
 
+    @property
+    def searchable(self) -> bool:
+        """Whether both sides hold a sequence. A side of records without a CDS
+        protein holds none: its pairs find no hit and LOSAT, which refuses an
+        empty database, does not run (OV-3493; Web ``batch.searchable``)."""
+
+        return bool(self.query.ids and self.subject.ids)
+
 
 def prepare_losat_batches(
     jobs: Sequence[LosatJob],

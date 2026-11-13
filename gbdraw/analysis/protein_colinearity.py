@@ -2704,6 +2704,10 @@ def promote_legacy_protein_raw_cache_entries(
         raise ValidationError("query_fasta does not match the current query extraction.")
     if proteins_to_fasta(subject_proteins) != str(subject_fasta):
         raise ValidationError("subject_fasta does not match the current subject extraction.")
+    if not query_proteins or not subject_proteins:
+        # A legacy entry never searched a record without proteins: every search refused one before OV-3493, and an
+        # empty FASTA names no binding. The command line (session_compat) and the Web helper both ask here.
+        return LegacyProteinRawCachePromotionScan(None)
     query_instance_key = _fasta_record_instance_key(query_fasta, manifest)
     subject_instance_key = _fasta_record_instance_key(subject_fasta, manifest)
     pair_identity = build_protein_losat_pair_identity(
@@ -2990,8 +2994,9 @@ class LosatpCacheManager(LosatRawCache):
                 )
             protein_tuple = tuple(proteins)
             fasta_text = proteins_to_fasta(protein_tuple)
-            # set_identity_manifest above stored the (non-None) extraction manifest.
-            if (
+            # set_identity_manifest above stored the (non-None) extraction manifest. A record without proteins
+            # has an empty FASTA, which names no binding.
+            if protein_tuple and (
                 _fasta_record_instance_key(
                     fasta_text, cast(ProteinIdentityManifest, self.identity_manifest)
                 )
@@ -3021,21 +3026,22 @@ class LosatpCacheManager(LosatRawCache):
             raise ValidationError("Promoted protein entry does not match the current manifest.")
         self._add_search_entry(str(entry["key"]), dict(entry))
 
-    def _pair_identity_from_fasta(
+    def _pair_identity(
         self,
-        query_fasta: str,
-        subject_fasta: str,
+        query_record_instance_key: str,
+        subject_record_instance_key: str,
     ) -> ProteinLosatPairIdentity:
+        """The identity of a search of two records, by their record-instance keys: records without proteins
+        share one (empty) FASTA, so a search's text cannot name its records (OV-3493)."""
+
         if self.identity_manifest is None:
             raise ValidationError(
                 "Protein raw cache schema 4 requires a protein identity manifest."
             )
-        query_instance_key = _fasta_record_instance_key(query_fasta, self.identity_manifest)
-        subject_instance_key = _fasta_record_instance_key(subject_fasta, self.identity_manifest)
         return build_protein_losat_pair_identity(
             self.identity_manifest,
-            query_record_instance_key=query_instance_key,
-            subject_record_instance_key=subject_instance_key,
+            query_record_instance_key=query_record_instance_key,
+            subject_record_instance_key=subject_record_instance_key,
         )
 
     def _find_cached_entry(
@@ -3078,8 +3084,8 @@ class LosatpCacheManager(LosatRawCache):
 
     def cached_text(
         self,
-        query_fasta: str,
-        subject_fasta: str,
+        query_record_instance_key: str,
+        subject_record_instance_key: str,
         *,
         args: Sequence[str],
         search_context: str | None,
@@ -3088,7 +3094,7 @@ class LosatpCacheManager(LosatRawCache):
     ) -> str | None:
         """Raw TSV of one record pair from a current or promoted entry, if any."""
 
-        pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
+        pair_identity = self._pair_identity(query_record_instance_key, subject_record_instance_key)
         cache_key = build_protein_losat_cache_key(
             pair_identity,
             args=args,
@@ -3123,9 +3129,9 @@ class LosatpCacheManager(LosatRawCache):
             self._legacy_entries,
             query_proteins=query_proteins,
             subject_proteins=subject_proteins,
-            query_fasta=query_fasta,
-            subject_fasta=subject_fasta,
-            # _pair_identity_from_fasta above raised when the manifest is None.
+            query_fasta=proteins_to_fasta(query_proteins),
+            subject_fasta=proteins_to_fasta(subject_proteins),
+            # _pair_identity above raised when the manifest is None.
             identity_manifest=cast(ProteinIdentityManifest, self.identity_manifest),
             expected_args=args,
             expected_program="blastp",
@@ -3142,8 +3148,8 @@ class LosatpCacheManager(LosatRawCache):
 
     def store_search(
         self,
-        query_fasta: str,
-        subject_fasta: str,
+        query_record_instance_key: str,
+        subject_record_instance_key: str,
         *,
         args: Sequence[str],
         search_context: str | None,
@@ -3154,7 +3160,7 @@ class LosatpCacheManager(LosatRawCache):
     ) -> None:
         """Store the raw TSV that a source job produced for one record pair."""
 
-        pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
+        pair_identity = self._pair_identity(query_record_instance_key, subject_record_instance_key)
         entry: dict[str, object] = {
             "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
             "kind": "raw-losat",
@@ -6425,23 +6431,39 @@ def run_losatp_blastp(
     return parse_losatp_outfmt6(raw_text)
 
 
-def _validate_extraction_has_proteins(
-    records: Sequence[SeqRecord],
+def require_comparable_proteins(
+    record_ids: Sequence[str],
     extraction: ProteinExtractionResult,
+    pairs: Iterable[RecordPair],
     *,
     option_name: str,
 ) -> None:
-    empty_record_ids = [
-        str(records[index].id)
-        for index, proteins in enumerate(extraction.proteins_by_record)
-        if not proteins
-    ]
-    if empty_record_ids:
-        raise ValidationError(
-            f"{option_name} requires at least one CDS protein in each record; "
-            "no CDS proteins were found in: "
-            + ", ".join(empty_record_ids)
-        )
+    """Refuse a LOSATP comparison that has nothing to compare (OV-3493).
+
+    A record without a CDS protein adds nothing to a search: it draws without
+    protein links, and a database it belongs to holds the other records'
+    proteins, so no E-value changes. Only when displayed pairs (``pairs``,
+    record indexes) exist and none has proteins in both records can no link be
+    drawn; the refusal names the first record of those pairs that has none.
+    A figure with no displayed pair (all records in one row) has nothing to
+    refuse. The command line and the Web converter both ask this owner.
+    """
+
+    pair_list = list(pairs)
+    proteins = extraction.proteins_by_record
+    if not pair_list or any(proteins[query] and proteins[subject] for query, subject in pair_list):
+        return
+    empty = sorted({index for pair in pair_list for index in pair if not proteins[index]})
+    raise ValidationError(
+        f"{option_name} has nothing to compare: no compared pair of records has CDS proteins in both; "
+        "no CDS proteins were found in: " + ", ".join(str(record_ids[index]) for index in empty),
+        diagnostic={
+            "code": "COMPARISON_INPUT",
+            "reason": "NO_PROTEINS",
+            "recordName": str(record_ids[empty[0]]),
+            "recordPosition": empty[0] + 1,
+        },
+    )
 
 
 def _split_protein_hits(
@@ -6531,6 +6553,13 @@ def _search_losatp_record_pairs(
             fasta_by_record[index] = search_frame_protein_fasta(records[index], extraction.proteins_by_record[index])
         return fasta_by_record[index]
 
+    def record_key(index: int) -> str:
+        # The raw cache names a search's records by their record-instance keys, which only an extraction with an
+        # identity manifest has (extract_cds_proteins alone gives none).
+        if index >= len(extraction.record_instance_keys):
+            raise ValidationError("Protein raw cache schema 4 requires a protein identity manifest.")
+        return str(extraction.record_instance_keys[index])
+
     sizes = losatp_cache.database_sizes if losatp_cache is not None else None
 
     def search_args(query: int, subject: int) -> LosatSearchArgs:
@@ -6558,7 +6587,7 @@ def _search_losatp_record_pairs(
         and any(sizes(*pair) is not None for pair in specs)
         and not all(
             cache is not None and cache.cached_text(
-                record_fasta(query), record_fasta(subject), args=batch.job.args, search_context=batch.search_context,
+                record_key(query), record_key(subject), args=batch.job.args, search_context=batch.search_context,
             ) is not None
             for batch in batches for query, subject in batch.job.specs
         )
@@ -6574,8 +6603,8 @@ def _search_losatp_record_pairs(
         if cache is not None:
             for pair in batch.job.specs:
                 text = cache.cached_text(
-                    record_fasta(pair[0]),
-                    record_fasta(pair[1]),
+                    record_key(pair[0]),
+                    record_key(pair[1]),
                     args=args,
                     search_context=batch.search_context,
                     display=pair in displayed,
@@ -6590,7 +6619,10 @@ def _search_losatp_record_pairs(
             continue
         raw_text: list[str] = []
         runtime_records: list[LosatRuntimeRecord] = []
-        if runner is not None:
+        if not batch.searchable:
+            # A side without a sequence (records without a CDS protein) has nothing to search (OV-3493).
+            batch_hits = parse_losatp_outfmt6("")
+        elif runner is not None:
             batch_hits = runner(batch.query.fasta, batch.subject.fasta)
         else:
             batch_hits = run_losatp_blastp(
@@ -6612,8 +6644,8 @@ def _search_losatp_record_pairs(
         split = split_losat_batch_result("".join(raw_text), batch, missing)
         for pair in missing:
             cache.store_search(
-                record_fasta(pair[0]),
-                record_fasta(pair[1]),
+                record_key(pair[0]),
+                record_key(pair[1]),
                 args=args,
                 search_context=batch.search_context,
                 text=split[pair],
@@ -7111,14 +7143,8 @@ def build_pairwise_protein_blastp_comparisons(
     specs = losatp_job_specs(
         "pairwise", record_count=len(records), pairs=pairs, infer_orthogroups=False
     )
-    searched = sorted({index for pair in specs for index in pair})
-    _validate_extraction_has_proteins(
-        [records[index] for index in searched],
-        replace(
-            extraction,
-            proteins_by_record=[extraction.proteins_by_record[index] for index in searched],
-        ),
-        option_name="protein_blastp_mode='pairwise'",
+    require_comparable_proteins(
+        [str(record.id) for record in records], extraction, specs, option_name="protein_blastp_mode='pairwise'"
     )
     hits_by_pair = _search_losatp_record_pairs(
         records,
@@ -7203,17 +7229,14 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         records,
         feature_visibility_rules=feature_visibility_rules,
     )
-    _validate_extraction_has_proteins(
-        records,
-        extraction,
-        option_name="protein_blastp_mode='orthogroup'",
-    )
-
     specs = losatp_job_specs("orthogroup", record_count=len(records), infer_orthogroups=True)
     display_pairs: tuple[RecordPair, ...] = (
         tuple(comparison_pairs)
         if comparison_pairs is not None
         else tuple((index, index + 1) for index in range(len(records) - 1))
+    )
+    require_comparable_proteins(
+        [str(record.id) for record in records], extraction, display_pairs, option_name="protein_blastp_mode='orthogroup'"
     )
     hits_by_pair = _search_losatp_record_pairs(
         records,

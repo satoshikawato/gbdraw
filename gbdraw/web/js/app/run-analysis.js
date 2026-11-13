@@ -42,7 +42,7 @@ import {
 import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatSearchSequences, nucleotideLosatArgs, prepareLosatSourceBatches, proteinLosatArgs, requireLosatGeneticCode,
-  searchedLosatGencode,
+  runSearchableLosatSourceJobs, searchedLosatGencode,
   splitLosatSourceResult
 } from '../services/linear-sources.js';
 import {
@@ -4682,7 +4682,7 @@ export const createRunAnalysis = ({
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
             setProcessingStatus(tn(sourceJobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed: 0, total: sourceJobs.length }));
             const executionStartedAt = getNow();
-            const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
+            const sourceResults = await runSearchableLosatSourceJobs(sourceJobs, executeLosatJobs, {
               concurrency: requestedLosatParallelWorkers(state.losatExecution),
               executionMode: losatExecutionMode,
               totalThreadBudget: losatRequestedTotalThreadBudget,

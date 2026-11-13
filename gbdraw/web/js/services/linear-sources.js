@@ -534,8 +534,11 @@ export const losatSearchSequences = (drawn, sequences, drawnCards = drawn) => {
 
 /** @typedef {{ indexes: number[], ids: Map<string, { index: number, originalId: string }>, fasta: string, sequenceKey: string, hash: string }} LosatSourceSide A side's records as one FASTA, and the identifiers it was renamed to. */
 /**
+ * A batch of the plan. `searchable` says both sides hold a sequence: a side of records without a CDS protein holds
+ * none, so its pairs find no hit and LOSAT, which refuses an empty database, does not run (OV-3493; Python
+ * `LosatBatch.searchable`, held equal by the shared job-plan vectors).
  * @template Spec
- * @typedef {{ query: LosatSourceSide, subject: LosatSourceSide, searchContext: string | null, args: readonly unknown[], scope: LosatSourceScope, specs: Spec[] }} LosatSourceBatch
+ * @typedef {{ query: LosatSourceSide, subject: LosatSourceSide, searchContext: string | null, args: readonly unknown[], scope: LosatSourceScope, specs: Spec[], searchable: boolean }} LosatSourceBatch
  */
 /**
  * A side's renamed FASTA and digest, as `prepareLosatSourceBatches` built it from these record entries with this
@@ -626,12 +629,30 @@ export const prepareLosatSourceBatches = async ({
     // The searched database is part of raw-cache identity.
     const searchContext = query.indexes.length > 1 || subject.indexes.length > 1
       ? await hashText(JSON.stringify([query.hash, subject.hash])) : null;
-    const batch = { query, subject, searchContext, args: job.args, scope: job.scope, specs: job.specs };
+    const searchable = query.ids.size > 0 && subject.ids.size > 0;
+    const batch = { query, subject, searchContext, args: job.args, scope: job.scope, specs: job.specs, searchable };
     batches.push(batch);
     job.specs.forEach((spec) => bySpec.set(spec, batch));
   }
   lastPreparedLosatSides = preparedSides;
   return { batches, bySpec };
+};
+
+/**
+ * Runs the source jobs whose batch is searchable and answers each of the others with no rows. The runner gets each
+ * searched job without its source-job bookkeeping (`batch`, `members`).
+ * @template {{ cacheKey: string, batch: { searchable: boolean }, members?: unknown }} J
+ * @template O
+ * @template {{ cacheKey?: string, text: string }} R
+ * @param {readonly J[]} jobs
+ * @param {(searched: Omit<J, 'batch' | 'members'>[], options: O) => Promise<R[]>} run The search of the searchable jobs.
+ * @param {O} options The runner's options.
+ * @returns {Promise<Array<R | { cacheKey: string, text: string }>>}
+ */
+export const runSearchableLosatSourceJobs = async (jobs, run, options) => {
+  const searched = jobs.filter((job) => job.batch.searchable).map(({ batch, members, ...job }) => job);
+  const answered = jobs.filter((job) => !job.batch.searchable).map(({ cacheKey }) => ({ cacheKey, text: '' }));
+  return [...answered, ...(searched.length > 0 ? await run(searched, options) : [])];
 };
 
 /**

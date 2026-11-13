@@ -2523,8 +2523,6 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
         records,
         record_instance_keys=("r_left", "r_right"),
     )
-    query_fasta = proteins_to_fasta(extraction.proteins_by_record[0])
-    subject_fasta = proteins_to_fasta(extraction.proteins_by_record[1])
     query_id = extraction.proteins_by_record[0][0].protein_id
     subject_id = extraction.proteins_by_record[1][0].protein_id
     pair_identity = build_protein_losat_pair_identity(
@@ -2591,11 +2589,9 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
         {**entries[0], "text": raw_text.replace(subject_id, "outside-binding")},
         extraction.identity_manifest,
     )
-    with pytest.raises(ValidationError, match="IDs and sequences"):
-        cache._pair_identity_from_fasta(
-            query_fasta.replace("\nMK\n", "\nMA\n"),
-            subject_fasta,
-        )
+    # The cache names a search's records by their record-instance keys (OV-3493), from the manifest alone.
+    with pytest.raises(ValidationError, match="no record instance"):
+        cache._pair_identity("outside-manifest", extraction.record_instance_keys[1])
 
 
 @pytest.mark.linear

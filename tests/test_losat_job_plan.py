@@ -107,6 +107,7 @@ def test_job_plan_matches_web(case: dict) -> None:
             "queryHash": batch.query.hash,
             "subjectHash": batch.subject.hash,
             "searchContext": batch.search_context,
+            "searchable": batch.searchable,
         }
         for batch in batches
     ]
@@ -216,6 +217,7 @@ def test_losatp_jobs_and_raw_keys_match_web(case: dict) -> None:
             "queryHash": batch.query.hash,
             "subjectHash": batch.subject.hash,
             "searchContext": batch.search_context,
+            "searchable": batch.searchable,
         }
         for batch in batches
     ] == case["expected"]["jobs"]

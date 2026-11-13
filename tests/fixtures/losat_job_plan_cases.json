@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. proteinCases are LOSATP plans (D7): Python losatp_job_specs and Web buildLosatJobSpecs give the same specs, prepare_losat_batches(protein=True) and prepareLosatSourceBatches({protein: true}) the same jobs, and build_protein_losat_cache_key (which the Web calls through its Python helper) the raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree. proteinGridCases hold LOSATP 2x2 grid search-order and pair-index vectors that tests/web/linear-comparisons.test.mjs and tests/test_api_request_render.py check. searchSpaceCases are one figure each (a records table of the test inputs; {DE3A} and {DE3B} are DE3 split at 20,000 into two files) and the E-value scales Python plans for the Web's searches of the same figure (gbdraw.web_support.linear_units plan_genome_scales; reply.scales[query][subject] is the -searchsp of a LOSATN or TLOSATX search, the -dbsize of a LOSATP one): tests/test_losat_job_plan.py checks that the command line searches with the expected raw-cache args and that Python plans the reply for the command line's own request, and tests/web/linear-sources.test.mjs that the Web builds the expected args from the reply (PD-OI-018 revision 6).",
+  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, searchable (both sides hold a sequence; a LOSATP side of records without CDS proteins holds none, and its pairs find no hit without a LOSAT run, OV-3493), and raw keys. proteinCases are LOSATP plans (D7): Python losatp_job_specs and Web buildLosatJobSpecs give the same specs, prepare_losat_batches(protein=True) and prepareLosatSourceBatches({protein: true}) the same jobs, and build_protein_losat_cache_key (which the Web calls through its Python helper) the raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree. proteinGridCases hold LOSATP 2x2 grid search-order and pair-index vectors that tests/web/linear-comparisons.test.mjs and tests/test_api_request_render.py check. searchSpaceCases are one figure each (a records table of the test inputs; {DE3A} and {DE3B} are DE3 split at 20,000 into two files) and the E-value scales Python plans for the Web's searches of the same figure (gbdraw.web_support.linear_units plan_genome_scales; reply.scales[query][subject] is the -searchsp of a LOSATN or TLOSATX search, the -dbsize of a LOSATP one): tests/test_losat_job_plan.py checks that the command line searches with the expected raw-cache args and that Python plans the reply for the command line's own request, and tests/web/linear-sources.test.mjs that the Web builds the expected args from the reply (PD-OI-018 revision 6).",
   "cases": [
     {
       "name": "two single-record files, LOSATN megablast (lambda/DE3 shape)",
@@ -60,7 +60,8 @@
             },
             "queryHash": "0b9bb32c830e20cac4763a2d3886494b5ae331cd45b8c4bfde9992dff4063280",
             "subjectHash": "c58f625c025e7dd597c5a0e241e85e693b20a7dbb4f31bab5312e74b3324dce2",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -149,7 +150,8 @@
             },
             "queryHash": "7737b28f230fa28482abba23fae48b4dec259ad4c9be2144fc14691a565e5d33",
             "subjectHash": "f5fdb299a6a256bc38b5c00041c50f104e47a8ec569afbf611f7877d6d2e8700",
-            "searchContext": "bda43a1a077858e772acfbbf1a0249a597aca2cb0d1a298f93d5d34dd0a89bb9"
+            "searchContext": "bda43a1a077858e772acfbbf1a0249a597aca2cb0d1a298f93d5d34dd0a89bb9",
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -239,7 +241,8 @@
             },
             "queryHash": "712e0180bc88772dbbc39c81f26f0fa5b4971d02d82e7edab40c586552ab81d4",
             "subjectHash": "73a9131de807b60528bd7c0957a816e40b302906b571da5658d2e06467fe1916",
-            "searchContext": "06fd39757908196186b008883d17739ac31ec77fa330f2933596beb87778cc24"
+            "searchContext": "06fd39757908196186b008883d17739ac31ec77fa330f2933596beb87778cc24",
+            "searchable": true
           },
           {
             "scope": "within-source",
@@ -278,7 +281,8 @@
             },
             "queryHash": "04656d28a8b2611dbc3b8052fc5468bd6233f2911811cbb5734113d173e4719d",
             "subjectHash": "7a78c906e04b406274674196983e4dae4180aab6185d5059a4450b306fb570ec",
-            "searchContext": "ca1d8b1c53726639801ce6f05653d44713ee8084d78756630efce63cd7903989"
+            "searchContext": "ca1d8b1c53726639801ce6f05653d44713ee8084d78756630efce63cd7903989",
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -350,7 +354,8 @@
             },
             "queryHash": "4169cd185f5a72ec743c82c7a3840d4d0641be8efde89d54427e4a72b2ea52c4",
             "subjectHash": "9cc970f6e6c006e9a1b3d33472e2779a5922e907a488b98ed61391c203e7639f",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -442,7 +447,8 @@
             },
             "queryHash": "09365c4c5b7ffbb9a0dc71d47facc297dfa514bbe681a096e200164eec7de477",
             "subjectHash": "9016857b54211e5c0a24efb295149d245d5f82d081bda0fa3667159b82182071",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -487,7 +493,8 @@
             },
             "queryHash": "1d47182627f3be98678ca5465949a7a72a47d28ddd69eb7eecf8dc4acc28d88d",
             "subjectHash": "9016857b54211e5c0a24efb295149d245d5f82d081bda0fa3667159b82182071",
-            "searchContext": "b1ffec18e34a7d7d8110370ed33e31eecfb8d69ccbe23e2c17d4d0b9c0d68861"
+            "searchContext": "b1ffec18e34a7d7d8110370ed33e31eecfb8d69ccbe23e2c17d4d0b9c0d68861",
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -571,7 +578,8 @@
             },
             "queryHash": "b3071131da2e74bb88a5b2639230a21aa91d36c5b6a9fcc3aaf679fa92b08ad2",
             "subjectHash": "b3071131da2e74bb88a5b2639230a21aa91d36c5b6a9fcc3aaf679fa92b08ad2",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "within-source",
@@ -605,7 +613,8 @@
             },
             "queryHash": "b3071131da2e74bb88a5b2639230a21aa91d36c5b6a9fcc3aaf679fa92b08ad2",
             "subjectHash": "d9cdea3f8a419ca0f31d7bb1b25d850aff8b2bbe562b79b24d5a0ab61a766db9",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -699,7 +708,8 @@
             },
             "queryHash": "8a4237f09c49f00de1cdf0e6bfeafa57f36754306cff2746f89da47c32a47bbc",
             "subjectHash": "66e1459b7aeeb8eb93567ed926230cdbbc9d3e3b0dafe1e9a82a560bc069eba3",
-            "searchContext": "67dd0e245db56234bfb77eb2029fcc1c63b4c0c710f69c59a6b4eef8f0f44cfc"
+            "searchContext": "67dd0e245db56234bfb77eb2029fcc1c63b4c0c710f69c59a6b4eef8f0f44cfc",
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -847,7 +857,8 @@
             },
             "queryHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
             "subjectHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "within-source",
@@ -885,7 +896,8 @@
             },
             "queryHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "within-source",
@@ -923,7 +935,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -974,7 +987,8 @@
             },
             "queryHash": "37901c851ee68c477ae50987b3b028f17b707cb5c0be093f77ea195b5ef9ca49",
             "subjectHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
-            "searchContext": "6901cde441c0b9c989a688b2233d2118b3dca8378da34c958ec477f3167b3df4"
+            "searchContext": "6901cde441c0b9c989a688b2233d2118b3dca8378da34c958ec477f3167b3df4",
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -1025,7 +1039,8 @@
             },
             "queryHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
             "subjectHash": "37901c851ee68c477ae50987b3b028f17b707cb5c0be093f77ea195b5ef9ca49",
-            "searchContext": "b61bf174bb80c8f6f57f19adb66cfd840ed87d91224cb46c49f54202412f2da2"
+            "searchContext": "b61bf174bb80c8f6f57f19adb66cfd840ed87d91224cb46c49f54202412f2da2",
+            "searchable": true
           },
           {
             "scope": "self",
@@ -1059,7 +1074,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "self",
@@ -1101,7 +1117,8 @@
             },
             "queryHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
             "subjectHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -1263,7 +1280,8 @@
             },
             "queryHash": "2681416c941133c5b65bb4453313e7589c178600e042c283d847018ba4093ff7",
             "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
-            "searchContext": "35d4a1602664bff0ec94671dbfc6bf70c1f879c1ec38fede0a6949bb5f0d7715"
+            "searchContext": "35d4a1602664bff0ec94671dbfc6bf70c1f879c1ec38fede0a6949bb5f0d7715",
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -1430,7 +1448,8 @@
             },
             "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
             "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "self",
@@ -1464,7 +1483,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "self",
@@ -1498,7 +1518,8 @@
             },
             "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
             "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "self",
@@ -1532,7 +1553,8 @@
             },
             "queryHash": "d3cbb5ce3d039ed2fe68abd70e45d6b10c0e7604554771bbc15cb353270af1a8",
             "subjectHash": "d3cbb5ce3d039ed2fe68abd70e45d6b10c0e7604554771bbc15cb353270af1a8",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -1588,7 +1610,8 @@
             },
             "queryHash": "32a85537485cdbfbc4a0c61daeb1ffd39603046ba79f150041d7434066f9f56e",
             "subjectHash": "bcb926f0aa73d440821e07745926715c08def1f50ca51f0d8ae4bc2a83bd6472",
-            "searchContext": "fb5f6b5e3e26735288e7e6d51a5972c8fa13d1ee8abf01e03a8c98ae2258b4bb"
+            "searchContext": "fb5f6b5e3e26735288e7e6d51a5972c8fa13d1ee8abf01e03a8c98ae2258b4bb",
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -1644,7 +1667,8 @@
             },
             "queryHash": "bcb926f0aa73d440821e07745926715c08def1f50ca51f0d8ae4bc2a83bd6472",
             "subjectHash": "32a85537485cdbfbc4a0c61daeb1ffd39603046ba79f150041d7434066f9f56e",
-            "searchContext": "c9f51742bd9eddd21343f7eafabfaf3e539f7859254d3adbaf8bb1a1b163a254"
+            "searchContext": "c9f51742bd9eddd21343f7eafabfaf3e539f7859254d3adbaf8bb1a1b163a254",
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -1806,7 +1830,8 @@
             },
             "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -1837,7 +1862,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -1868,7 +1894,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -1899,7 +1926,8 @@
             },
             "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -2041,7 +2069,8 @@
             },
             "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
             "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "self",
@@ -2072,7 +2101,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "self",
@@ -2103,7 +2133,8 @@
             },
             "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
             "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -2134,7 +2165,8 @@
             },
             "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -2165,7 +2197,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -2196,7 +2229,8 @@
             },
             "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
             "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -2227,7 +2261,8 @@
             },
             "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
             "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -2258,7 +2293,8 @@
             },
             "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
             "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           },
           {
             "scope": "between-sources",
@@ -2289,7 +2325,8 @@
             },
             "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
             "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
-            "searchContext": null
+            "searchContext": null,
+            "searchable": true
           }
         ],
         "rawKeys": [
@@ -2337,6 +2374,174 @@
             2,
             1,
             "2d9bab028692c1fc95f35e68ab84711cedc3b5c1d4ca9d9a82fe29422e733ce0"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP Pairwise, records without CDS proteins in a draft file and in a file of their own",
+      "program": "blastp",
+      "mode": "pairwise",
+      "inferOrthogroups": false,
+      "searchScope": "adjacent",
+      "args": [
+        "--max-target-seqs",
+        "5"
+      ],
+      "edges": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gbk",
+          "fasta": ">p_1a\nMKTAYIAKQRQISFVKSHFSRQ1LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:8f5bc4cbf15c1d7f9d3e4f7f50acfdb7ddcebb2d955ba3a737272093bbfa3346",
+            "runtimeBindingHash": "sha256:6c127732fb7197db58e1c1c3ee45b5c0b4badf8c41c2e6a1c4cba245f6d87f22"
+          }
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gbk",
+          "fasta": "",
+          "identity": {
+            "proteinSetHash": "sha256:bde895e38662f75da9e355146e579a61bfb77a479a58f47bbe12cb5dcab6113e",
+            "runtimeBindingHash": "sha256:3769552707a3ac231461f9ffec344d1019a4ca7029d0e4dc2d9a535719e2fa5c"
+          }
+        },
+        {
+          "uid": "record-3",
+          "source": "b.gbk",
+          "fasta": ">p_3a\nMKTAYIAKQRQISFVKSHFSRQ3LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:3dbc19c021269b0f7c073d119002e68087c350f53a3af4c8ddc6a24a222f422c",
+            "runtimeBindingHash": "sha256:7664680353a5c6c00dcb48bc77971b0004ef2ff6c739b53d009f23d15187bcc1"
+          }
+        },
+        {
+          "uid": "record-4",
+          "source": "c.gbk",
+          "fasta": "",
+          "identity": {
+            "proteinSetHash": "sha256:bde895e38662f75da9e355146e579a61bfb77a479a58f47bbe12cb5dcab6113e",
+            "runtimeBindingHash": "sha256:3769552707a3ac231461f9ffec344d1019a4ca7029d0e4dc2d9a535719e2fa5c"
+          }
+        }
+      ],
+      "specs": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              0,
+              1
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "queryHash": "a365919901659b8f6db91e0c11a5d2e4e447f4f371322430b016ca345b85386c",
+            "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "searchContext": "2e4416a65d459d0f19c8f5ff1d252567fc9f4d41bec9b07e61c79dfcc1330dc0",
+            "searchable": true
+          },
+          {
+            "scope": "between-sources",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                2,
+                3
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              3
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "subjectIds": {},
+            "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "subjectHash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+            "searchContext": null,
+            "searchable": false
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            2,
+            "14a7e7880a9fd85a919bfb3c5598d32332ad7ee99af968ee2e94b1263b448f89"
+          ],
+          [
+            1,
+            2,
+            "fca8e074e1eb24a3d64fd4bb6f75bc517340cd0ef9599c0e66a2c8b16cdc2442"
+          ],
+          [
+            2,
+            3,
+            "f8bf110e879203cdde83920de22abedcf8464345896382c66bf870ab9dbe7ae8"
           ]
         ]
       }

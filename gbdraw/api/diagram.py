@@ -35,6 +35,7 @@ from gbdraw.analysis.collinearity import (
     RecordExtent,
     convert_collinearity_blocks_to_comparisons,
     convert_collinearity_blocks_to_pair_comparisons,
+    empty_collinearity_comparison,
     normalize_collinearity_anchor_mode,
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
@@ -2009,7 +2010,9 @@ def project_collinearity_frames(
     """The comparisons a Linear diagram draws for collinearity blocks.
 
     Without ``comparison_pairs`` the blocks give one ordered frame per adjacent
-    record pair; with them, one comparison per listed pair.
+    record pair; with them, one comparison per listed pair. A pair without a
+    block (such as a pair with a record that has no CDS protein) has an empty
+    frame either way (OV-3493).
     """
 
     if comparison_pairs is None:
@@ -2029,12 +2032,14 @@ def project_collinearity_frames(
         color_mode=color_mode,
         search_scope=search_scope,
     )
-    allowed_pairs = set(comparison_pairs)
     return ProteinComparisonFrames(
         pairs=tuple(
-            LinearComparison(query_index, subject_index, matches)
-            for (query_index, subject_index), matches in pair_comparisons.items()
-            if (query_index, subject_index) in allowed_pairs
+            LinearComparison(
+                query_index,
+                subject_index,
+                pair_comparisons.get((query_index, subject_index), empty_collinearity_comparison()),
+            )
+            for query_index, subject_index in sorted(set(comparison_pairs))
         )
     )
 
