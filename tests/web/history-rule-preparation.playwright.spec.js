@@ -219,8 +219,9 @@ test('A visibility rule added after a Generate that migrates legacy protein cach
   await generateAndWaitForResult(page, { timeout: 300_000 });
   const generated = await migratedFeatureState(page);
   expect(generated).toMatchObject({ promoted: true, catalogFeaturesInstalled: true, legacyProteinIds: 0 });
-  // The History step of this Generate: the last step before the rule edits.
-  const generateStep = await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo.at(-1).sequence);
+  // The History step of this Generate: the newest step before the rule edits (`timeline().undo` lists the steps
+  // newest first).
+  const generateStep = await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo.at(0).sequence);
   await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.addFeatureVisibilityRule();
