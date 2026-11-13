@@ -92,7 +92,7 @@ CAPTURE_RECORD_READS = (
 # CSS px from where the crop put it or inward within the crop's padding, never into what the
 # crop shows; it stops CROP_EDGE_MARGIN px clear of what it passes. CROP_EDGE_TOLERANCE only
 # absorbs rounding: a glyph or a border 1 CSS px over the edge is a visible cut.
-CROP_EDGE_REACH = 128.0
+CROP_EDGE_REACH = 160.0
 CROP_EDGE_MARGIN = 4.0
 CROP_EDGE_TOLERANCE = 0.1
 CROP_EDGE_ROUNDS = 8
