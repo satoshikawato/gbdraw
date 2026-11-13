@@ -303,6 +303,13 @@ Session 46-50 writer wrote them, so a Session 46-50 slice that holds one is refu
 a `setting-replaced` row. Python's step of a Session 27-44 through the Session 50 layout writes none of them
 (`mode_slice_of_version`), so the drawing takes their defaults. The rows Sessions 48-50 added carry no `since` yet.
 
+Session 51 also stops saving Python's swatch in `editorState.legend.entries`: an entry keeps `color` only for
+an editor row (a row not in `originalOrder`) and for a row with a user Legend color (`colorOverrides`, whose color
+it holds); a row of Python's has none, since `originalColors` holds its swatch. Load reads an entry without
+`color`, and discards the recorded swatch of a row of Python's that a Session written before this change holds
+(`normalizeSessionLegendEntries` in `services/config.js`); Python reads entry colors only in the Session 46
+reader, which is unchanged.
+
 ## Unreleased: LOSATN and TLOSATX raw-cache args carry the genome pair's search space
 
 No Session or request version changes. `LOSAT_SEARCH_FLAGS` (generated from `LOSAT_OPTION_FLAGS` in
