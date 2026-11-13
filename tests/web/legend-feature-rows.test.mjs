@@ -16,6 +16,12 @@ test('each drawn feature is in the row Python draws for it', () => {
     const answer = (/** @type {ReturnType<typeof rows.rowOf>} */ row) => (row && typeof row === 'object' ? [row.cap, row.color] : row);
     assert.deepEqual(uses.map(({ type, winner }) => answer(rows.rowOf(type, winner))), featureRows, name);
     assert.deepEqual(Object.fromEntries(rows.present.map((type) => [type, rows.typeRow(type)])), typeRows, name);
+    // A key is a type's "other" row exactly when the type draws its features of no rule in it (D-23).
+    for (const type of rows.present) {
+      const other = type === 'CDS' ? 'other proteins' : `other ${type}s`;
+      assert.equal(rows.otherRowType(other), typeRows[type] === other ? type : null, `${name}: ${other}`);
+      assert.equal(rows.otherRowType(type), null, `${name}: ${type} is no "other" row`);
+    }
     // A captioned rule draws a row exactly when a drawn feature is in it.
     const drawnRows = new Set(uses.map(({ type, winner }) => JSON.stringify(answer(rows.rowOf(type, winner)))));
     for (const rule of table.filter((each) => each.cap)) {

@@ -793,6 +793,7 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
         return true;
       },
       getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
+      otherLegendRowType: () => null,
       effectiveLegendCaptions: () => () => 'CDS',
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
       findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',

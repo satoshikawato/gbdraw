@@ -460,8 +460,10 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
 // OV-3461: the feature popup names the Legend row the figure draws the feature
 // in (featureLegendRows, the twin of Python's FeatureLegendRows): a CDS of no
 // rule beside a used captioned CDS rule is in "other proteins", and a tRNA,
-// whose type no rule colors, in "tRNA".
-test('HMMT Session: the popup names the Legend row the figure draws a default feature in (OV-3461)', async ({ browser }) => {
+// whose type no rule colors, in "tRNA". D-23: the Legend editor's rename of
+// that "other proteins" row, a row the drawing names, changes its name only:
+// no rule is written and the row keeps its place, live and after Generate.
+test('HMMT Session: the popup names the Legend row the figure draws a default feature in (OV-3461), and its rename keeps the row (D-23)', async ({ browser }) => {
   test.setTimeout(120_000);
   const page = await load(browser, HMMT_SESSION);
   try {
@@ -481,6 +483,19 @@ test('HMMT Session: the popup names the Legend row the figure draws a default fe
       await expect(page.getByLabel('Feature legend name', { exact: true }), product).toHaveValue(row);
       await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
     }
+    const rules = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => `${rule.cap}: ${rule.val}`));
+    const before = await rules();
+    const featureRows = async (source) => (await legendCaptions(page, { source })).filter((caption) => /ND1|CDS|proteins/.test(caption));
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'other proteins'), 'other CDS');
+    });
+    await settle(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rename onto a new name asks nothing').toBe(false);
+    expect(await rules(), 'the rename writes no rule').toEqual(before);
+    expect(await featureRows('mounted'), 'live').toEqual(['ND1', 'other CDS']);
+    await generate(page);
+    expect(await featureRows('result'), 'after Generate').toEqual(['ND1', 'other CDS']);
   } finally {
     await page.context().close();
   }

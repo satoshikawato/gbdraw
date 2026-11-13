@@ -216,11 +216,13 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
  *   the type is in, by the rule it takes; a feature that is not drawn gets the row it would join.
  * @property {(rule: SpecificRuleInput) => boolean} drawsRow Whether the rules of a captioned rule's caption
  *   and color draw a row.
+ * @property {(key: string) => string | null} otherRowType The drawn type whose "other" row (a row the drawing
+ *   names, of its features of no rule) `key` is; null when `key` is no such row.
  */
 
 // The key of a feature type's "other" row: Python's `_other_feature_legend_key`.
 /** @param {string} type @returns {PythonLegendKey} */
-const otherFeatureRowKey = (type) => captionRowKey(type === 'CDS' ? 'other proteins' : `other ${type}s`);
+export const otherFeatureRowKey = (type) => captionRowKey(type === 'CDS' ? 'other proteins' : `other ${type}s`);
 
 // The type among `types` whose own row or "other" row `key` is.
 /** @param {string} key @param {Iterable<string>} types @returns {string | undefined} */
@@ -271,13 +273,15 @@ export const featureLegendRows = (rules, drawn) => {
     if (!drawsByType.has(type)) drawsByType.set(type, typeRules(type).some((rule) => used.has(typeUse(type, rule))));
     return /** @type {boolean} */ (drawsByType.get(type));
   };
+  /** @param {string} type */
+  const typeRow = (type) => {
+    if (!table.some((rule) => rule.feat === type || rule.feat === '*') || !rulesDraw(type)) return captionRowKey(type);
+    return defaultTypes.has(type) ? otherFeatureRowKey(type) : null;
+  };
   return {
     present: [...present],
     rulesDraw,
-    typeRow: (type) => {
-      if (!table.some((rule) => rule.feat === type || rule.feat === '*') || !rulesDraw(type)) return captionRowKey(type);
-      return defaultTypes.has(type) ? otherFeatureRowKey(type) : null;
-    },
+    typeRow,
     rowOf: (type, winner) => {
       const rule = winner && normalizeSpecificRule(winner);
       if (rule?.cap) return { cap: rule.cap, color: rule.color };
@@ -288,7 +292,8 @@ export const featureLegendRows = (rules, drawn) => {
       const group = normalizeSpecificRule(rule);
       return Boolean(group.cap)
         && [...present].some((type) => used.has(typeUse(type, group)) && typeRules(type).some((each) => use(each) === use(group)));
-    }
+    },
+    otherRowType: (key) => [...present].find((type) => key !== type && typeRow(type) === key) ?? null
   };
 };
 

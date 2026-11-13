@@ -129,7 +129,8 @@ const setup = ({
     effectiveLegendCaptions: () => () => 'CDS',
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
     groupColorRules: groupColorRulesOver(preparation, (feature) => [feature.qualifiers.product[0]]),
-    getLegendRowRules: () => []
+    getLegendRowRules: () => [],
+    otherLegendRowType: () => null
   });
   // history-wrappers.js: `undoableAction(label, action)`.
   const pick = (color) => history.runUndoable('Change feature color', () => actions.updateClickedFeatureColor(color));

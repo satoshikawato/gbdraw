@@ -168,6 +168,13 @@ const featureRowReader = (context, labelOf) => {
   };
 };
 
+// The drawn type whose "other" row a key is in the displayed Result
+// (`featureLegendRows`), else null: a row the drawing names (D-23).
+/** @param {FeatureRuleActionsOptions['state']} state */
+const otherLegendRowTypeOf = (state) => (/** @type {PythonLegendKey} */ key) => (
+  drawnRuleMatches(displayedLegendRowContext(state, state.activeDrawing())).rows.otherRowType(key)
+);
+
 /** @param {FeatureRuleActionsOptions} options */
 export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, isRuleInputCurrent, snapshotRuleInputs, isRulePrepared, prepareRuleCandidate, synthesizeGroupRules, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
@@ -1293,6 +1300,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLegendRowRules,
+    otherLegendRowType: otherLegendRowTypeOf(state),
     groupColorRules,
     reviseColorRules,
     /** @param {number} index */

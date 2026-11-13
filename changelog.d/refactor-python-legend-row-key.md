@@ -5,6 +5,8 @@
   Legend editor put a feature that no captioned rule colors in the row the
   figure draws for it: its type's `other <feature type>s` row while a
   captioned rule of its type is used, as the figure shows, not its type's row.
+  The Legend item popup of that row now counts its features, and its Color
+  sets the type's default color, so the features change with the swatch.
 - Fixed: A Legend no longer shows `other <feature type>s` for a feature type
   that a captioned rule colors none of. A rule now counts as used only for the
   types whose features take it, so such a type keeps its own row, both for a
