@@ -15,7 +15,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { drawnRuleMatches, featureColorEditColor, generatedLegendRow, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { drawnRuleMatches, featureColorEditColor, generatedLegendRow, inRuleGroup, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -217,12 +217,10 @@ const addToResults = (operationsByResult, resultIndexes, domain, operation) => {
 const matchingRuleDerivedFill = (override, manualSpecificRules) => {
   if (!override || typeof override !== 'object') return false;
   // A non-null object: a field it lacks reads as undefined.
-  const caption = text(/** @type {{ caption?: unknown }} */ (override).caption);
-  const color = text(/** @type {{ color?: unknown }} */ (override).color).toLowerCase();
-  if (!caption || !color) return false;
-  return (Array.isArray(manualSpecificRules) ? manualSpecificRules : []).some((rule) => (
-    text(rule?.cap) === caption && text(rule?.color).toLowerCase() === color
-  ));
+  const { caption, color } = /** @type {{ caption?: unknown, color?: unknown }} */ (override);
+  if (!text(caption) || !text(color)) return false;
+  const group = { cap: text(caption), color: text(color) };
+  return (Array.isArray(manualSpecificRules) ? manualSpecificRules : []).some((rule) => inRuleGroup(group, rule));
 };
 
 // The Legend row caption a feature color edit names its feature into

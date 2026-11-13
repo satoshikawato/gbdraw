@@ -410,6 +410,16 @@ const uniqueLegendKey = (reserved, preferred) => {
 /** @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
 const legendGroupKey = (rule) => JSON.stringify([rule.cap, fillIdentity(rule.color)]);
 
+// Whether `rule` is in the Legend group `group` names: the same caption and the
+// same fill identity, a color name or spelling that is one fill being one fill.
+/**
+ * @param {Pick<SpecificColorRule, 'cap' | 'color'>} group
+ * @param {SpecificRuleInput} rule
+ */
+export const inRuleGroup = (group, rule) => (
+  legendGroupKey(normalizeSpecificRule(group)) === legendGroupKey(normalizeSpecificRule(rule))
+);
+
 // The fills each non-blank caption of a rule table is written with.
 /** @param {readonly Pick<SpecificColorRule, 'cap' | 'color'>[]} rules @returns {Map<string, Set<string>>} */
 const captionFills = (rules) => {
