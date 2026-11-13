@@ -370,6 +370,7 @@ def test_empty_feature_color_keeps_defensive_underlay_fill() -> None:
         [[feature]],
         [record],
         mode="linear",
+        record_transforms=[None],
     )
 
     assert merged.annotations[0].style.fill == AUTO_FEATURE_UNDERLAY_FILL

@@ -9,7 +9,7 @@ from Bio.SeqRecord import SeqRecord
 
 from ..exceptions import ValidationError
 from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval
-from .models import AnnotationOptions, ResolvedAnnotationBundle
+from .models import AnnotationOptions, RegionDisplayParts, ResolvedAnnotationBundle
 from .resolve import resolve_annotations
 
 
@@ -148,7 +148,8 @@ def prepare_annotation_track_slots(
                 parts = transform.project_local_parts(tuple(SourceInterval(start, end) for start, end in item.segments))
                 # A projecting transform makes project_local_parts return DisplayFragments.
                 item = replace(
-                    item, display_parts=tuple(cast("Sequence[DisplayFragment]", parts))
+                    item,
+                    display_parts=RegionDisplayParts.projected(cast("Sequence[DisplayFragment]", parts), transform),
                 )
             projected.append(item)
         bundle = replace(bundle, annotations=tuple(projected))
