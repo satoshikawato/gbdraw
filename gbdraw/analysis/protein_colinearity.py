@@ -5200,56 +5200,74 @@ def _next_orthogroup_index(group_ids: Sequence[str]) -> int:
     return max_index + 1
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class _OrthogroupBuild:
+    """The orthogroups of one anchor-core inference, which its phases fill in place.
+
+    ``group_order`` lists the group IDs as they are created: the anchor
+    components, then the record-local groups. By group ID: the members, the
+    representatives, the membership edges (``ortholog_edges_by_group``), the
+    related edges, the scope, and the record a record-local group is drawn from.
+    By protein ID: the group, role, confidence, assignment reason, and supporting
+    edge IDs of every member, and the best and second-best core support of every
+    member that core support or a record-local group assigned.
+    """
+
+    group_order: list[str]
+    group_member_ids: dict[str, set[str]]
+    representative_ids_by_group: dict[str, set[str]]
+    group_by_protein: dict[str, str]
+    member_roles: dict[str, OrthogroupMemberRole]
+    member_confidence: dict[str, OrthogroupMemberConfidence]
+    assignment_reasons: dict[str, str]
+    supporting_edges: dict[str, tuple[str, ...]]
+    best_core_support: dict[str, float]
+    second_core_support: dict[str, float]
+    ortholog_edges_by_group: dict[str, list[OrthologEdge]]
+    related_edges_by_group: dict[str, list[OrthologEdge]]
+    scope_by_group: dict[str, OrthogroupScope]
+    source_record_index_by_group: dict[str, int]
+
+
+def _supporting_edge_id(query_id: str, subject_id: str, edge_kind: str) -> str:
+    """The ID of an edge that supports a member: ``<query>-><subject>:<edge kind>``."""
+    return f"{query_id}->{subject_id}:{edge_kind}"
+
+
 def _append_record_local_orthogroups(
+    build: _OrthogroupBuild,
     *,
-    group_member_ids: dict[str, set[str]],
-    group_by_protein: dict[str, str],
-    representative_ids_by_group: dict[str, set[str]],
-    member_roles: dict[str, OrthogroupMemberRole],
-    member_confidence: dict[str, OrthogroupMemberConfidence],
-    assignment_reasons: dict[str, str],
-    supporting_edges: dict[str, tuple[str, ...]],
-    best_core_support: dict[str, float],
-    second_core_support: dict[str, float],
-    ortholog_edges_by_group: dict[str, list[OrthologEdge]],
-    scope_by_group: dict[str, OrthogroupScope],
-    source_record_index_by_group: dict[str, int],
-    group_order: list[str],
-    components: Sequence[Sequence[str]],
+    components: Sequence[tuple[str, ...]],
     accepted_edges: Sequence[_AnchorCoreEvidenceEdge],
     local_support_by_member: Mapping[str, float],
     protein_map: Mapping[str, CdsProtein],
 ) -> None:
-    next_group_index = _next_orthogroup_index(group_order or list(group_member_ids))
-    for component in components:
-        component_members = tuple(
-            sorted(
-                (member_id for member_id in component if member_id in protein_map),
-                key=lambda member_id: _protein_sort_key(protein_map[member_id]),
-            )
-        )
-        if len(component_members) < _RECORD_LOCAL_MIN_MEMBERS:
-            continue
+    """Add one record-local group per component, numbered after the existing groups.
+
+    The components are clusters of :func:`_record_local_components_from_edges`:
+    at least ``_RECORD_LOCAL_MIN_MEMBERS`` proteins of one record, all in
+    ``protein_map``, in CDS order.
+    """
+    next_group_index = _next_orthogroup_index(build.group_order or list(build.group_member_ids))
+    for component_members in components:
         component_set = set(component_members)
-        if len({protein_map[member_id].same_record_key for member_id in component_members}) != 1:
-            continue
         group_id = f"og_{next_group_index}"
         next_group_index += 1
-        group_order.append(group_id)
-        group_member_ids[group_id] = set(component_members)
-        scope_by_group[group_id] = "record_local"
+        build.group_order.append(group_id)
+        build.group_member_ids[group_id] = set(component_members)
+        build.scope_by_group[group_id] = "record_local"
         # The group is drawn from its first member's unit.
-        source_record_index_by_group[group_id] = int(protein_map[component_members[0]].record_index)
+        build.source_record_index_by_group[group_id] = int(protein_map[component_members[0]].record_index)
         for member_id in component_members:
-            group_by_protein[member_id] = group_id
-            member_roles[member_id] = "local_paralog"
-            member_confidence[member_id] = "high"
-            assignment_reasons[member_id] = "record-local reciprocal paralog cluster"
-            best_core_support[member_id] = min(
+            build.group_by_protein[member_id] = group_id
+            build.member_roles[member_id] = "local_paralog"
+            build.member_confidence[member_id] = "high"
+            build.assignment_reasons[member_id] = "record-local reciprocal paralog cluster"
+            build.best_core_support[member_id] = min(
                 float(local_support_by_member.get(component_member_id, 0.0))
                 for component_member_id in component_members
             )
-            second_core_support[member_id] = 0.0
+            build.second_core_support[member_id] = 0.0
 
         representative_id = min(
             component_members,
@@ -5258,7 +5276,7 @@ def _append_record_local_orthogroups(
                 _protein_sort_key(protein_map[member_id]),
             ),
         )
-        representative_ids_by_group[group_id] = {representative_id}
+        build.representative_ids_by_group[group_id] = {representative_id}
 
         component_edges = [
             edge
@@ -5266,10 +5284,10 @@ def _append_record_local_orthogroups(
             if edge.query_id in component_set and edge.subject_id in component_set
         ]
         for edge in component_edges:
-            edge_id = f"{edge.query_id}->{edge.subject_id}:record_local_paralog"
+            edge_id = _supporting_edge_id(edge.query_id, edge.subject_id, "record_local_paralog")
             for member_id in (edge.query_id, edge.subject_id):
-                supporting_edges[member_id] = (*supporting_edges.get(member_id, ()), edge_id)
-            ortholog_edges_by_group.setdefault(group_id, []).append(
+                build.supporting_edges[member_id] = (*build.supporting_edges.get(member_id, ()), edge_id)
+            build.ortholog_edges_by_group.setdefault(group_id, []).append(
                 _make_ortholog_edge(
                     orthogroup_id=group_id,
                     source_rbh_orthogroup_id=group_id,
@@ -5583,70 +5601,33 @@ def _append_related_edges(
         )
 
 
-def _build_anchor_core_orthogroups(
-    hits: _DirectedHitTable,
+def _anchor_core_components(
     anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
     protein_map: Mapping[str, CdsProtein],
-    *,
-    include_singletons: bool,
-    max_related_edges_per_orthogroup: int,
-) -> OrthogroupGraphResult:
-    thresholds = _derive_anchor_core_thresholds(hits, anchor_edges)
+) -> list[set[str]]:
+    """The proteins that the anchor edges connect, one set per component, in the
+    CDS order of each set's first protein."""
     union_find = _UnionFind()
-    member_ranks: dict[str, tuple[float, float, float, float]] = {}
-    member_roles: dict[str, OrthogroupMemberRole] = {}
-    member_confidence: dict[str, OrthogroupMemberConfidence] = {}
-    assignment_reasons: dict[str, str] = {}
-    supporting_edges: dict[str, tuple[str, ...]] = {}
-    best_core_support: dict[str, float] = {}
-    second_core_support: dict[str, float] = {}
-    ortholog_edges_by_group: dict[str, list[OrthologEdge]] = {}
-    scope_by_group: dict[str, OrthogroupScope] = {}
-    source_record_index_by_group: dict[str, int] = {}
-
     for edge in anchor_edges:
         union_find.union(edge.query_id, edge.subject_id)
-        rank = (edge.hit.bitscore, edge.hit.evalue, edge.hit.identity, edge.hit.alignment_length)
-        if _is_better_member_rank(rank, member_ranks.get(edge.query_id)):
-            member_ranks[edge.query_id] = rank
-        if _is_better_member_rank(rank, member_ranks.get(edge.subject_id)):
-            member_ranks[edge.subject_id] = rank
-        for protein_id in (edge.query_id, edge.subject_id):
-            current_role = member_roles.get(protein_id)
-            if edge.edge_kind == "rbh" or current_role is None:
-                member_roles[protein_id] = "anchor" if edge.edge_kind == "rbh" else "coortholog"
-            member_confidence[protein_id] = "high"
-            assignment_reasons[protein_id] = (
-                "cross-record reciprocal best anchor"
-                if edge.edge_kind == "rbh"
-                else "cross-record near-reciprocal anchor"
-            )
-            supporting_edges[protein_id] = (*supporting_edges.get(protein_id, ()), f"{edge.query_id}->{edge.subject_id}:{edge.edge_kind}")
-
     components: dict[str, set[str]] = {}
     for edge in anchor_edges:
         root = union_find.find(edge.query_id)
         components.setdefault(root, set()).update((edge.query_id, edge.subject_id))
-    if include_singletons:
-        # anchor_core_v1 keeps isolated proteins unassigned; record-local
-        # orthogroups are added only from accepted same-record evidence below.
-        pass
-
-    sorted_components = sorted(
-        (member_ids for member_ids in components.values() if member_ids),
+    return sorted(
+        components.values(),
         key=lambda member_ids: min(_protein_sort_key(protein_map[member_id]) for member_id in member_ids),
     )
-    group_member_ids: dict[str, set[str]] = {
-        f"og_{index}": set(member_ids)
-        for index, member_ids in enumerate(sorted_components, start=1)
-    }
-    group_order = list(group_member_ids)
-    group_by_protein: dict[str, str] = {
-        protein_id: group_id
-        for group_id, member_ids in group_member_ids.items()
-        for protein_id in member_ids
-    }
-    scope_by_group.update({group_id: "cross_record" for group_id in group_member_ids})
+
+
+def _anchor_representative_ids(
+    group_member_ids: Mapping[str, set[str]],
+    member_ranks: Mapping[str, tuple[float, float, float, float]],
+    protein_map: Mapping[str, CdsProtein],
+) -> dict[str, set[str]]:
+    """Each anchor group's representative in every record it spans: the member of
+    the best anchor hit (highest bit score, then lowest e-value, highest identity,
+    longest alignment), then the first in CDS order."""
 
     def representative_member_key(
         member_id: str,
@@ -5666,11 +5647,58 @@ def _build_anchor_core_orthogroups(
                 key=representative_member_key,
             )
             representative_ids_by_group.setdefault(group_id, set()).add(representative_id)
+    return representative_ids_by_group
 
+
+def _anchor_core_groups(
+    anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
+    protein_map: Mapping[str, CdsProtein],
+) -> _OrthogroupBuild:
+    """The cross-record groups ``og_1``, ``og_2``, ... of the anchor components.
+
+    Every anchor endpoint is a high-confidence member: an ``anchor`` once a
+    reciprocal best anchor joins it, else a ``coortholog``, with the IDs of all its
+    anchor edges. Each group holds its anchor edges, as ``block_anchor`` edges.
+    """
+    member_ranks: dict[str, tuple[float, float, float, float]] = {}
+    member_roles: dict[str, OrthogroupMemberRole] = {}
+    member_confidence: dict[str, OrthogroupMemberConfidence] = {}
+    assignment_reasons: dict[str, str] = {}
+    supporting_edges: dict[str, tuple[str, ...]] = {}
     for edge in anchor_edges:
-        edge_group_id = group_by_protein.get(edge.query_id)
-        if edge_group_id is None:
-            continue
+        rank = (edge.hit.bitscore, edge.hit.evalue, edge.hit.identity, edge.hit.alignment_length)
+        if _is_better_member_rank(rank, member_ranks.get(edge.query_id)):
+            member_ranks[edge.query_id] = rank
+        if _is_better_member_rank(rank, member_ranks.get(edge.subject_id)):
+            member_ranks[edge.subject_id] = rank
+        for protein_id in (edge.query_id, edge.subject_id):
+            current_role = member_roles.get(protein_id)
+            if edge.edge_kind == "rbh" or current_role is None:
+                member_roles[protein_id] = "anchor" if edge.edge_kind == "rbh" else "coortholog"
+            member_confidence[protein_id] = "high"
+            assignment_reasons[protein_id] = (
+                "cross-record reciprocal best anchor"
+                if edge.edge_kind == "rbh"
+                else "cross-record near-reciprocal anchor"
+            )
+            supporting_edges[protein_id] = (
+                *supporting_edges.get(protein_id, ()),
+                _supporting_edge_id(edge.query_id, edge.subject_id, edge.edge_kind),
+            )
+
+    group_member_ids: dict[str, set[str]] = {
+        f"og_{index}": set(member_ids)
+        for index, member_ids in enumerate(_anchor_core_components(anchor_edges, protein_map), start=1)
+    }
+    group_by_protein: dict[str, str] = {
+        protein_id: group_id
+        for group_id, member_ids in group_member_ids.items()
+        for protein_id in member_ids
+    }
+    ortholog_edges_by_group: dict[str, list[OrthologEdge]] = {}
+    for edge in anchor_edges:
+        # Both endpoints of every anchor edge are members of its component's group.
+        edge_group_id = group_by_protein[edge.query_id]
         ortholog_edges_by_group.setdefault(edge_group_id, []).append(
             _make_ortholog_edge(
                 orthogroup_id=edge_group_id,
@@ -5684,11 +5712,111 @@ def _build_anchor_core_orthogroups(
                 render_role="block_anchor",
             )
         )
+    return _OrthogroupBuild(
+        group_order=list(group_member_ids),
+        group_member_ids=group_member_ids,
+        representative_ids_by_group=_anchor_representative_ids(group_member_ids, member_ranks, protein_map),
+        group_by_protein=group_by_protein,
+        member_roles=member_roles,
+        member_confidence=member_confidence,
+        assignment_reasons=assignment_reasons,
+        supporting_edges=supporting_edges,
+        best_core_support={},
+        second_core_support={},
+        ortholog_edges_by_group=ortholog_edges_by_group,
+        related_edges_by_group={},
+        scope_by_group={group_id: "cross_record" for group_id in group_member_ids},
+        source_record_index_by_group={},
+    )
 
-    # Freeze core membership before any additions; evidence cannot chain through
-    # proteins assigned later in this loop.
-    core_member_snapshot = _index_core_support_evidence(hits, group_by_protein)
-    related_edges_by_group: dict[str, list[OrthologEdge]] = {}
+
+class _CoreSupportAssignment(NamedTuple):
+    """How the group of an unassigned protein's best core-support candidate takes it."""
+
+    role: OrthogroupMemberRole
+    confidence: OrthogroupMemberConfidence
+    reason: str
+
+
+def _core_support_assignment(
+    best: _CoreSupportCandidate,
+    gap_ratio: float,
+) -> _CoreSupportAssignment | None:
+    """The assignment of an unassigned protein to its best candidate's group, or
+    None: high confidence when the candidate passes with a clear lead over the
+    second, low confidence when it passes the lower bar with a smaller lead."""
+    if best.high_confidence_pass and gap_ratio >= _MIN_BEST_SECOND_CORE_RATIO:
+        role: OrthogroupMemberRole = "inparalog" if best.relation_kind == "same_record_inparalog" else "coortholog"
+        return _CoreSupportAssignment(role, "high", best.reason)
+    if best.low_confidence_pass and gap_ratio >= _LOW_CONFIDENCE_MIN_BEST_SECOND_CORE_RATIO:
+        return _CoreSupportAssignment("low_confidence", "low", f"low-confidence assignment: {best.reason}")
+    return None
+
+
+def _unassigned_related_edge_kind(
+    best: _CoreSupportCandidate,
+    second: _CoreSupportCandidate | None,
+) -> OrthologEdgeKind:
+    """The relation of an unassigned protein to its best candidate's group."""
+    if best.domain_only:
+        return "domain_only"
+    if second is not None and best.low_confidence_pass:
+        return "ambiguous_paralog"
+    return best.relation_kind
+
+
+def _assign_core_support_member(
+    build: _OrthogroupBuild,
+    protein_id: str,
+    best: _CoreSupportCandidate,
+    second_support: float,
+    assignment: _CoreSupportAssignment,
+    protein_map: Mapping[str, CdsProtein],
+) -> None:
+    """Add a protein to its best candidate's group, with the candidate's evidence
+    as its supporting edge and as a membership edge of the group."""
+    build.group_member_ids.setdefault(best.group_id, set()).add(protein_id)
+    build.group_by_protein[protein_id] = best.group_id
+    build.member_roles[protein_id] = assignment.role
+    build.member_confidence[protein_id] = assignment.confidence
+    build.assignment_reasons[protein_id] = assignment.reason
+    build.best_core_support[protein_id] = float(best.support)
+    build.second_core_support[protein_id] = float(second_support)
+    support_edge_id = _supporting_edge_id(best.evidence.query, best.evidence.subject, best.relation_kind)
+    build.supporting_edges[protein_id] = (support_edge_id,)
+    build.ortholog_edges_by_group.setdefault(best.group_id, []).append(
+        _make_ortholog_edge(
+            orthogroup_id=best.group_id,
+            source_rbh_orthogroup_id=best.group_id,
+            target_rbh_orthogroup_id=best.group_id,
+            query_id=best.evidence.query,
+            subject_id=best.evidence.subject,
+            hit=best.evidence,
+            protein_map=protein_map,
+            edge_kind=best.relation_kind,
+            render_role="display_edge",
+        )
+    )
+
+
+def _assign_members_by_core_support(
+    build: _OrthogroupBuild,
+    hits: _DirectedHitTable,
+    thresholds: Mapping[str, float],
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    max_related_edges_per_orthogroup: int,
+) -> None:
+    """Assign the unassigned proteins, in CDS order, by their evidence to the anchor groups.
+
+    A protein joins the group of its best core-support candidate when
+    :func:`_core_support_assignment` accepts it. Otherwise an ambiguous or
+    domain-only protein adds one related edge to that group while the group has
+    room. Core membership is frozen before any addition, so evidence cannot chain
+    through proteins assigned in this loop.
+    """
+    core_member_snapshot = _index_core_support_evidence(hits, build.group_by_protein)
+    group_by_protein = build.group_by_protein
     for protein_id in sorted(protein_map, key=lambda item: _protein_sort_key(protein_map[item])):
         if protein_id in group_by_protein:
             continue
@@ -5711,120 +5839,76 @@ def _build_anchor_core_orthogroups(
         best = candidates[0]
         second = candidates[1] if len(candidates) > 1 else None
         second_support = float(second.support) if second is not None else 0.0
-        gap_ratio = _support_gap_ratio(best.support, second_support)
-        assigned_role: OrthogroupMemberRole | None = None
-        assigned_confidence: OrthogroupMemberConfidence | None = None
-        assigned_reason = best.reason
-        if best.high_confidence_pass and gap_ratio >= _MIN_BEST_SECOND_CORE_RATIO:
-            assigned_role = "inparalog" if best.relation_kind == "same_record_inparalog" else "coortholog"
-            assigned_confidence = "high"
-        elif best.low_confidence_pass and gap_ratio >= _LOW_CONFIDENCE_MIN_BEST_SECOND_CORE_RATIO:
-            assigned_role = "low_confidence"
-            assigned_confidence = "low"
-            assigned_reason = f"low-confidence assignment: {best.reason}"
-
-        if assigned_role is None or assigned_confidence is None:
-            if best.domain_only:
-                unassigned_relation_kind: OrthologEdgeKind = "domain_only"
-            elif second is not None and best.low_confidence_pass:
-                unassigned_relation_kind = "ambiguous_paralog"
-            else:
-                unassigned_relation_kind = best.relation_kind
-            if unassigned_relation_kind in {"ambiguous_paralog", "domain_only"}:
-                related_edges = related_edges_by_group.setdefault(best.group_id, [])
-                # Each unassigned protein adds at most one edge, to a core member,
-                # so no edge here repeats another.
-                if len(related_edges) < max_related_edges_per_orthogroup:
-                    related_edges.append(
-                        _make_ortholog_edge(
-                            orthogroup_id=best.group_id,
-                            source_rbh_orthogroup_id=best.group_id,
-                            target_rbh_orthogroup_id=None,
-                            query_id=best.evidence.query,
-                            subject_id=best.evidence.subject,
-                            hit=best.evidence,
-                            protein_map=protein_map,
-                            edge_kind=unassigned_relation_kind,
-                            render_role="display_edge",
-                        )
-                    )
+        assignment = _core_support_assignment(best, _support_gap_ratio(best.support, second_support))
+        if assignment is not None:
+            _assign_core_support_member(build, protein_id, best, second_support, assignment, protein_map)
             continue
+        unassigned_relation_kind = _unassigned_related_edge_kind(best, second)
+        if unassigned_relation_kind in {"ambiguous_paralog", "domain_only"}:
+            related_edges = build.related_edges_by_group.setdefault(best.group_id, [])
+            # Each unassigned protein adds at most one edge, to a core member,
+            # so no edge here repeats another.
+            if len(related_edges) < max_related_edges_per_orthogroup:
+                related_edges.append(
+                    _make_ortholog_edge(
+                        orthogroup_id=best.group_id,
+                        source_rbh_orthogroup_id=best.group_id,
+                        target_rbh_orthogroup_id=None,
+                        query_id=best.evidence.query,
+                        subject_id=best.evidence.subject,
+                        hit=best.evidence,
+                        protein_map=protein_map,
+                        edge_kind=unassigned_relation_kind,
+                        render_role="display_edge",
+                    )
+                )
 
-        group_member_ids.setdefault(best.group_id, set()).add(protein_id)
-        group_by_protein[protein_id] = best.group_id
-        member_roles[protein_id] = assigned_role
-        member_confidence[protein_id] = assigned_confidence
-        assignment_reasons[protein_id] = assigned_reason
-        best_core_support[protein_id] = float(best.support)
-        second_core_support[protein_id] = float(second_support)
-        support_edge_id = f"{best.evidence.query}->{best.evidence.subject}:{best.relation_kind}"
-        supporting_edges[protein_id] = (support_edge_id,)
-        ortholog_edges_by_group.setdefault(best.group_id, []).append(
-            _make_ortholog_edge(
-                orthogroup_id=best.group_id,
-                source_rbh_orthogroup_id=best.group_id,
-                target_rbh_orthogroup_id=best.group_id,
-                query_id=best.evidence.query,
-                subject_id=best.evidence.subject,
-                hit=best.evidence,
-                protein_map=protein_map,
-                edge_kind=best.relation_kind,
-                render_role="display_edge",
-            )
-        )
 
-    del core_member_snapshot
-    record_local_edges = _select_record_local_paralog_edges(hits, protein_map, thresholds, group_by_protein)
+def _add_record_local_orthogroups(
+    build: _OrthogroupBuild,
+    hits: _DirectedHitTable,
+    thresholds: Mapping[str, float],
+    protein_map: Mapping[str, CdsProtein],
+) -> None:
+    """Add a record-local group for each record-local paralog cluster that no core
+    group competes for."""
+    record_local_edges = _select_record_local_paralog_edges(hits, protein_map, thresholds, build.group_by_protein)
     record_local_components = _record_local_components_from_edges(record_local_edges, protein_map)
     local_support_by_member = _record_local_support_by_member(record_local_edges)
     # Expanded cross-record membership is stable throughout component screening.
     # All components are screened before any record-local groups are appended.
     expanded_core_evidence = (
-        _index_core_support_evidence(hits, group_by_protein)
-        if record_local_components and group_member_ids else {}
+        _index_core_support_evidence(hits, build.group_by_protein)
+        if record_local_components and build.group_member_ids else {}
     )
     accepted_record_local_components = tuple(
         component
         for component in record_local_components
         if not _record_local_component_has_competing_core_support(
             component,
-            bool(group_member_ids),
+            bool(build.group_member_ids),
             expanded_core_evidence,
             thresholds,
             local_support_by_member,
         )
     )
-    del expanded_core_evidence, thresholds
+    del expanded_core_evidence
     _append_record_local_orthogroups(
-        group_member_ids=group_member_ids,
-        group_by_protein=group_by_protein,
-        representative_ids_by_group=representative_ids_by_group,
-        member_roles=member_roles,
-        member_confidence=member_confidence,
-        assignment_reasons=assignment_reasons,
-        supporting_edges=supporting_edges,
-        best_core_support=best_core_support,
-        second_core_support=second_core_support,
-        ortholog_edges_by_group=ortholog_edges_by_group,
-        scope_by_group=scope_by_group,
-        source_record_index_by_group=source_record_index_by_group,
-        group_order=group_order,
+        build,
         components=accepted_record_local_components,
         accepted_edges=record_local_edges,
         local_support_by_member=local_support_by_member,
         protein_map=protein_map,
     )
 
-    _append_related_edges(
-        hits,
-        protein_map,
-        group_by_protein=group_by_protein,
-        member_roles=member_roles,
-        ortholog_edges_by_group=ortholog_edges_by_group,
-        related_edges_by_group=related_edges_by_group,
-        max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
-    )
 
+def _anchor_core_result(
+    build: _OrthogroupBuild,
+    protein_map: Mapping[str, CdsProtein],
+) -> OrthogroupGraphResult:
+    """The finished groups: membership edges in record and CDS order with their
+    path indexes, each group's anchors (all its members when it has none) as its
+    RBH group, and related edges in display order."""
     updated_edges_by_group, paths_by_group = _build_ortholog_path_indexes(
         {
             group_id: sorted(
@@ -5837,16 +5921,16 @@ def _build_anchor_core_orthogroups(
                     edge.edge_kind,
                 ),
             )
-            for group_id, edges in ortholog_edges_by_group.items()
+            for group_id, edges in build.ortholog_edges_by_group.items()
         },
         protein_map,
     )
     rbh_orthogroups: dict[str, tuple[str, ...]] = {}
-    for group_id, member_ids in group_member_ids.items():
+    for group_id, member_ids in build.group_member_ids.items():
         anchor_member_ids = [
             member_id
             for member_id in member_ids
-            if member_roles.get(member_id) == "anchor"
+            if build.member_roles.get(member_id) == "anchor"
         ]
         rbh_orthogroups[group_id] = tuple(
             sorted(
@@ -5855,10 +5939,10 @@ def _build_anchor_core_orthogroups(
             )
         )
     return _orthogroup_result_from_member_ids(
-        group_member_ids,
-        representative_ids_by_group,
+        build.group_member_ids,
+        build.representative_ids_by_group,
         protein_map,
-        group_order=group_order,
+        group_order=build.group_order,
         rbh_orthogroups=rbh_orthogroups,
         ortholog_edges_by_orthogroup_id=updated_edges_by_group,
         path_indexes_by_orthogroup_id=paths_by_group,
@@ -5875,17 +5959,58 @@ def _build_anchor_core_orthogroups(
                     ),
                 )
             )
-            for group_id, edges in related_edges_by_group.items()
+            for group_id, edges in build.related_edges_by_group.items()
         },
-        member_roles_by_protein_id=member_roles,
-        member_confidence_by_protein_id=member_confidence,
-        assignment_reason_by_protein_id=assignment_reasons,
-        supporting_edges_by_protein_id=supporting_edges,
-        best_core_support_by_protein_id=best_core_support,
-        second_best_core_support_by_protein_id=second_core_support,
-        scope_by_orthogroup_id=scope_by_group,
-        source_record_index_by_orthogroup_id=source_record_index_by_group,
+        member_roles_by_protein_id=build.member_roles,
+        member_confidence_by_protein_id=build.member_confidence,
+        assignment_reason_by_protein_id=build.assignment_reasons,
+        supporting_edges_by_protein_id=build.supporting_edges,
+        best_core_support_by_protein_id=build.best_core_support,
+        second_best_core_support_by_protein_id=build.second_core_support,
+        scope_by_orthogroup_id=build.scope_by_group,
+        source_record_index_by_orthogroup_id=build.source_record_index_by_group,
     )
+
+
+def _build_anchor_core_orthogroups(
+    hits: _DirectedHitTable,
+    anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    include_singletons: bool,
+    max_related_edges_per_orthogroup: int,
+) -> OrthogroupGraphResult:
+    """Orthogroups from the anchor edges and the other hits.
+
+    The anchor components become the first groups; the other proteins then join
+    them by core support (:func:`_assign_members_by_core_support`), record-local
+    paralog clusters become groups of their own, and every group takes related
+    edges from the hits up to ``max_related_edges_per_orthogroup``.
+    ``include_singletons`` adds nothing here: this inference keeps isolated
+    proteins unassigned, and record-local groups come only from accepted
+    same-record evidence.
+    """
+    thresholds = _derive_anchor_core_thresholds(hits, anchor_edges)
+    build = _anchor_core_groups(anchor_edges, protein_map)
+    _assign_members_by_core_support(
+        build,
+        hits,
+        thresholds,
+        protein_map,
+        max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+    )
+    _add_record_local_orthogroups(build, hits, thresholds, protein_map)
+    del thresholds
+    _append_related_edges(
+        hits,
+        protein_map,
+        group_by_protein=build.group_by_protein,
+        member_roles=build.member_roles,
+        ortholog_edges_by_group=build.ortholog_edges_by_group,
+        related_edges_by_group=build.related_edges_by_group,
+        max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+    )
+    return _anchor_core_result(build, protein_map)
 
 
 def _select_anchor_core_orthogroup_edges_from_directional_hits(
