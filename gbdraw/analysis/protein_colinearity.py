@@ -3594,6 +3594,26 @@ def proteins_to_fasta(proteins: Sequence[CdsProtein]) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def search_frame_protein_fasta(record: SeqRecord, proteins: Sequence[CdsProtein]) -> str:
+    """FASTA of ``record``'s proteins in its search frame: the text a LOSATP search of the record reads.
+
+    The search frame is the record before its display reverse complement (PD-OI-073), and a record in its source's
+    orientation lists its features in source order (``reverse_records``, OV-3271). A record drawn reversed lists its
+    proteins by source feature position, so the CLI, which extracts from the drawn records, and the Web helper, which
+    extracts from the search region, write one FASTA for one record and one searchContext for a side of several
+    records (OV-3457). The nucleotide twin is ``gbdraw.comparisons.losat_jobs.losat_search_frame_fasta``.
+    """
+
+    if _read_coord_map(record)[1] == 1:
+        return proteins_to_fasta(proteins)
+    return proteins_to_fasta(sorted(
+        proteins,
+        key=lambda protein: (
+            protein.feature_index if protein.source_feature_position is None else protein.source_feature_position
+        ),
+    ))
+
+
 def source_protein_letters(
     records: Sequence[SeqRecord],
     *,
@@ -6488,7 +6508,7 @@ def _search_losatp_record_pairs(
 
     def record_fasta(index: int) -> str:
         if index not in fasta_by_record:
-            fasta_by_record[index] = proteins_to_fasta(extraction.proteins_by_record[index])
+            fasta_by_record[index] = search_frame_protein_fasta(records[index], extraction.proteins_by_record[index])
         return fasta_by_record[index]
 
     sizes = losatp_cache.database_sizes if losatp_cache is not None else None
@@ -7283,6 +7303,7 @@ __all__ = [
     "parse_losat_fasta_ids",
     "percent_encode_losat_transport_field",
     "proteins_to_fasta",
+    "search_frame_protein_fasta",
     "source_protein_letters",
     "promote_legacy_protein_raw_cache_entries",
     "raw_protein_tsv_matches_bindings",
