@@ -6942,13 +6942,17 @@
                 <div v-if="shownInputSummary && shownInputSummary.warnings.length && !shownInputSummaryStale && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
-                    <!-- The heading sits over the warnings that leave input out only; a warning of an input drawn in full follows apart. -->
-                    <div v-if="shownInputSummary.leftOutWarnings.length" data-input-warnings="left-out">
-                        <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
-                        <p v-for="(warning, index) in shownInputSummary.leftOutWarnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
-                    </div>
-                    <div v-if="shownInputSummary.drawnInWarnings.length" data-input-warnings="drawn-in" :class="{ 'mt-2': shownInputSummary.leftOutWarnings.length }">
-                        <p v-for="(warning, index) in shownInputSummary.drawnInWarnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                    <!-- The heading sits over the warnings that leave input out only; a warning of an input drawn in full follows apart.
+                         Each group shows its first lines; the rest opens below them in a box of its own height (OV-3495). -->
+                    <div v-for="(group, groupIndex) in shownInputSummary.warningGroups" :key="group.kind" :data-input-warnings="group.kind" :class="{ 'mt-2': groupIndex }">
+                        <p v-if="group.kind === 'left-out'" class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
+                        <p v-for="(warning, index) in group.shown" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                        <details v-if="group.rest.length" data-input-warnings-rest>
+                            <summary class="cursor-pointer font-medium">{{ tn(group.rest.length, 'and one more', 'and {count} more') }}</summary>
+                            <div class="max-h-40 overflow-y-auto">
+                                <p v-for="(warning, index) in group.rest" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                            </div>
+                        </details>
                     </div>
                 </div>
                 <!-- A live Feature visibility edit no render drew: the summary's counts are the last render's. -->

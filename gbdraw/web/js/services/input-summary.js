@@ -13,6 +13,7 @@
 // page says the summary describes the last render and keeps its warnings back.
 import { INPUT_WARNINGS_OF_DRAWN_INPUT } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { limitedList } from '../utils/i18n.js';
 
 /**
  * @typedef {object} InputWarning
@@ -47,12 +48,23 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {LinearWrapSummary | null} linearWrap `null` when the Result cut no record.
  */
 /**
- * @typedef {InputSummary & {
- *   readonly drawnVisibility: string, readonly leftOutWarnings: readonly InputWarning[], readonly drawnInWarnings: readonly InputWarning[]
- * }} DrawnInputSummary
- *   A Result's summary with the Feature visibility of the render that sent it (Web-owned), and its warnings in two
- *   groups: those that say part of the input was not drawn, and those of an input drawn in full.
+ * The warnings the preview notice shows in one group: `left-out` says part of the input was not drawn, `drawn-in`
+ * warns of an input drawn in full. `shown` and `rest` are the group cut to `NOTICE_LINE_LIMIT` lines.
+ * @typedef {{ readonly kind: 'left-out' | 'drawn-in' } & import('../utils/i18n.js').LimitedList<InputWarning>} InputWarningGroup
  */
+/**
+ * @typedef {InputSummary & {
+ *   readonly drawnVisibility: string, readonly warningGroups: readonly InputWarningGroup[]
+ * }} DrawnInputSummary
+ *   A Result's summary with the Feature visibility of the render that sent it (Web-owned), and its warnings in the
+ *   groups the notice shows, each with warnings, left-out first.
+ */
+
+/**
+ * The lines a warning group of the preview notice takes at most, its "and {count} more" line included (OV-3495:
+ * 59 empty record pairs of one LOSATP run pushed the figure out of view). The rest opens on request.
+ */
+export const NOTICE_LINE_LIMIT = 4;
 
 const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'records', 'linearWrap'];
 const WARNING_FIELDS = ['code', 'message'];
@@ -127,9 +139,11 @@ export const drawnInputSummaries = (summaries, drawnVisibility) => Object.freeze
   summaries.map((entry) => Object.freeze({
     ...entry,
     drawnVisibility,
-    // A warning of an input drawn in full (Python's `INPUT_WARNINGS_OF_DRAWN_INPUT`) leaves nothing out.
-    leftOutWarnings: Object.freeze(entry.warnings.filter((warning) => !INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code))),
-    drawnInWarnings: Object.freeze(entry.warnings.filter((warning) => INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code)))
+    warningGroups: Object.freeze(/** @type {const} */ (['left-out', 'drawn-in']).flatMap((kind) => {
+      // A warning of an input drawn in full (Python's `INPUT_WARNINGS_OF_DRAWN_INPUT`) leaves nothing out.
+      const warnings = entry.warnings.filter((warning) => INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code) === (kind === 'drawn-in'));
+      return warnings.length ? [Object.freeze({ kind, ...limitedList(warnings, NOTICE_LINE_LIMIT) })] : [];
+    }))
   }))
 );
 

@@ -292,6 +292,24 @@ export const listText = (items) => {
   return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
 };
 
+/**
+ * @template T
+ * @typedef {{ readonly shown: readonly T[], readonly rest: readonly T[] }} LimitedList
+ *   A list cut to its line limit: the items it shows, and the rest that one "and {count} more" line stands for.
+ */
+/**
+ * A list within `limit` lines: all of it when it fits, else its first `limit - 1` items and the rest, for the
+ * caller's `tn(rest.length, 'and one more', 'and {count} more')` line (the Load dialog, the preview's input-summary
+ * notice).
+ * @template T
+ * @param {readonly T[]} items
+ * @param {number} limit
+ * @returns {LimitedList<T>}
+ */
+export const limitedList = (items, limit) => (items.length > limit
+  ? { shown: items.slice(0, limit - 1), rest: items.slice(limit - 1) }
+  : { shown: items, rest: [] });
+
 // Every number of the UI and of an exported interactive file reads alike in every
 // language: Western digits, the English decimal point and grouping by thousands.
 const NUMBER_TEXT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });

@@ -41,6 +41,42 @@ test('a record with no feature to draw: the status area says so and Run Info lis
     'Comparison sequence file a.fna: record ID X names more than one record.'
   ]);
 
+  // OV-3495: one LOSATP run of a record against 60 contigs warned of 59 empty record pairs, and the notice listed
+  // every one above the figure. Each group shows its first lines and "and {count} more", which opens the rest in a
+  // box of its own height: the figure stays in view, closed and open.
+  await page.evaluate(async () => {
+    const { drawnInputSummaries } = await import(new URL('js/services/input-summary.js', document.baseURI).href);
+    const { state } = await import(new URL('js/state.js', document.baseURI).href);
+    const pairs = Array.from({ length: 59 }, (_, index) => ({
+      code: 'comparison_table_empty',
+      message: `Comparison of record #1 NZ_CP065372.1 and record #${index + 2} C${index}.1 has no rows, so no match is drawn.`
+    }));
+    state.inputSummaries.value = state.inputSummaries.value.map((entry) => drawnInputSummaries([{
+      resultIndex: entry.resultIndex, resultName: entry.resultName, lines: entry.lines,
+      warnings: pairs, records: entry.records, linearWrap: entry.linearWrap
+    }], entry.drawnVisibility)[0]);
+  });
+  const leftOut = notice.locator('[data-input-warnings="left-out"]');
+  await expect(leftOut.locator('[data-input-warning]:visible')).toHaveCount(3);
+  await expect(leftOut.locator('[data-input-warning]').first()).toHaveText(
+    'Comparison of record #1 NZ_CP065372.1 and record #2 C0.1 has no rows, so no match is drawn.'
+  );
+  const more = leftOut.locator('[data-input-warnings-rest] > summary');
+  await expect(more).toHaveText('and 56 more');
+  // The notice's height does not grow with the warnings: closed, a heading and four lines; open, the rest box
+  // (max-h-40, 160 px) and its margin more (measured 121 px closed, +168 px open). The figure below it keeps at least 100 px of the 720 px viewport.
+  const measure = async () => {
+    const figure = await page.locator('.preview-editor-layout').boundingBox();
+    return { notice: (await notice.boundingBox())?.height ?? Infinity, figureTop: figure?.y ?? Infinity };
+  };
+  const closed = await measure();
+  expect(closed.notice, 'the closed list keeps the notice short').toBeLessThan(160);
+  await more.click();
+  await expect(leftOut.locator('[data-input-warning]:visible')).toHaveCount(59);
+  const open = await measure();
+  expect(open.notice - closed.notice, 'the open list scrolls in its own box').toBeLessThanOrEqual(180);
+  expect(open.figureTop, 'the figure stays in view under the open list').toBeLessThanOrEqual(620);
+
   await page.evaluate(() => { window.__GBDRAW_APP__.resultPanelTab = 'run-info'; });
   await expect(page.locator('[data-run-info-input-summary] li')).toHaveText([
     'Record EMPTY001.1 (zero_features_record.gb), record 1 of 1, 1,000 bp: drew 0 features.'
