@@ -224,8 +224,8 @@ def test_cli_legacy_session_replay_reads_the_loaded_payload(
     # Loading validates the Session, and so does the public session_to_cli_args;
     # the linear run reads the loaded document's drawing when it renders.
     assert len(validations) == 2
-    # The replay reads the loaded payload; only the run copies its own input.
-    expected = Counter({f"gbdraw.{mode}.run_{mode}_from_namespace": 1})
+    # The replay reads the loaded payload; only the run copies its own config.
+    expected = Counter({f"gbdraw.{mode}._{mode}_config": 1})
     if mode == "linear":
         # The linear run's CurrentRequestArtifacts detaches the identity manifest.
         expected["gbdraw.api.request_render.__post_init__"] = 1
