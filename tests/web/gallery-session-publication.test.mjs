@@ -385,6 +385,41 @@ for (const [webShape, equivalent] of [['arrow', true], ['rectangle', false]]) {
   })).equivalent, equivalent, `misc_feature ${webShape}`);
 }
 
+// A Web-saved request states a diagram option at its type's default (or at the one value the other mode's type
+// allows); the CLI encoder omits a default, so the rebuilt request has no key. Both read the same, by the generated
+// request contract; any other value differs.
+{
+  const circularPrepared = await prepareGallerySessionForPublication(await loadSession('ecoli_o157_sakai_rings.gbdraw'));
+  assert.equal(circularPrepared.session.renderRequest.mode, 'circular');
+  assert.equal(lambdaPrepared.session.renderRequest.mode, 'linear');
+  for (const [prepared, key, value, equivalent] of [
+    [lambdaPrepared, 'pairwiseMatchStyle', 'ribbon', true],
+    [lambdaPrepared, 'pairwiseMatchStyle', 'curve', false],
+    [lambdaPrepared, 'dinucleotide', 'GC', true],
+    [lambdaPrepared, 'dinucleotide', 'AT', false],
+    [lambdaPrepared, 'featurePlacements', [], true],
+    [lambdaPrepared, 'conservationReference', 'auto', true],
+    [lambdaPrepared, 'keepFullDefinitionWithPlotTitle', false, true],
+    [circularPrepared, 'keepFullDefinitionWithPlotTitle', false, true],
+    [circularPrepared, 'keepFullDefinitionWithPlotTitle', true, false],
+    [circularPrepared, 'conservationReference', 'auto', true],
+    [circularPrepared, 'conservationReference', 'query', false],
+    [circularPrepared, 'dinucleotide', 'GC', true],
+    [circularPrepared, 'pairwiseMatchStyle', 'ribbon', true]
+  ]) {
+    const omitted = structuredClone(prepared.session.renderRequest);
+    delete omitted.diagramOptions[key];
+    const stated = structuredClone(omitted);
+    stated.diagramOptions[key] = value;
+    const result = await compareCanonicalRenderRequests({
+      expectedRequest: stated, expectedResources: prepared.session.resources,
+      actualRequest: omitted, actualResources: prepared.session.resources
+    });
+    assert.equal(result.equivalent, equivalent, `${omitted.mode} ${key} ${JSON.stringify(value)}`);
+    if (!equivalent) assert.equal(result.differences[0].path, `$.diagramOptions.${key}`);
+  }
+}
+
 const ungeneratedDraft = structuredClone(lambda);
 ungeneratedDraft.modes.linear.config.adv.arrow_shaft_width_ratio = 0.5;
 await assert.rejects(
