@@ -598,6 +598,13 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 
   modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
+  // OV-3314: a candidate of the committed request (Rotate record to feature, Align, Align at feature) replaces only
+  // the committed Session; the draft's comparisons stay as the draft has them, here the empty list a decision leaves.
+  adoptCanonicalRenderArtifacts(getCommittedCanonicalSession(), {
+    adoptOwnedRequest: true, drawing: modeDrawing(state, 'linear'), conservationPairs: 'committed'
+  });
+  assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
+  assert.equal(getCommittedCanonicalSession().renderRequest.comparisons.length, 4, 'the committed request keeps its comparisons');
   // Generate adopts what Load committed: the request of schema 9.
   adoptCanonicalRenderArtifacts({ renderRequest: committed.renderRequest, resources: committed.resources }, { drawing: modeDrawing(state, 'linear') });
   const collinearityName = committed.resources[committedComparisons[2].resourceId].name;
@@ -1941,3 +1948,83 @@ for (const key of ['__proto__', 'constructor', 'prototype']) {
     assert.deepEqual(alerts, []);
   });
 }
+
+// OV-3179: a Session 31-39 Load reads the stored draft over its committed request's projection, and each projected
+// ring takes the stored draft's genetic code of its own ring, paired by the one matcher, not by index. The document is
+// the Web Session 39 of whitelist-tab-keyword.v39 with two TLOSATX rings in the shape the main cdd31013 Web writer
+// gave them (the bytes of conservation-fasta.v39): each ring's table (`addText`: kind `conservation-blast-file`, the
+// name `<genome>.circular_conservation.tlosatx.tsv` behind its resource ID, no original name), its genome in the
+// request and in `webFiles.conservationLosatFastaSources` (`addFile`: kind `conservation-fasta-file`, the prefixed name
+// and the original one), and a draft as that writer's Generate adoption left it: entry k at table k's place under
+// table k's projected name (the projection drops the resource-ID prefix, then and now), with the source key of its
+// genome from before the Generate.
+const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
+const LOSAT_RINGS = [{ ring: 'ring-a', label: 'Ring A', code: 11 }, { ring: 'ring-b', label: 'Ring B', code: 4 }];
+/** @param {(series: object[]) => object[]} editDraft What the user did to the draft's series after the Generate. */
+const losatRingSession39 = (editDraft) => {
+  const document = fixture('whitelist-tab-keyword.v39.gbdraw-session.json.gz');
+  const { resources: ringBytes } = fixture('conservation-fasta.v39.gbdraw-session.json.gz');
+  const table = ringBytes['conservation-blast-files-1'];
+  const genome = ringBytes['conservation-fasta-files-1'];
+  const originalNames = document.webFiles.resourceOriginalNames;
+  const tableName = (ring) => `${ring}.circular_conservation.tlosatx.tsv`;
+  const ids = LOSAT_RINGS.map(({ ring }, index) => {
+    const tableId = `conservation-resolved-blast-${index + 1}`;
+    document.resources[tableId] = { kind: 'conservation-blast-file', name: `${tableId}-${tableName(ring)}`,
+      type: 'text/tab-separated-values', size: table.size, lastModified: 0, encoding: 'base64', data: table.data };
+    const genomeIds = [`conservation-resolved-fasta-${index + 1}`, `conservation-losat-fasta-files-${index + 1}`];
+    genomeIds.forEach((id) => {
+      document.resources[id] = { ...genome, kind: 'conservation-fasta-file', name: `${id}-${ring}.fna` };
+      originalNames[id] = `${ring}.fna`;
+    });
+    return { tableId, genomeId: genomeIds[0], losatId: genomeIds[1] };
+  });
+  Object.assign(document.renderRequest.diagramOptions, {
+    conservationBlastFiles: ids.map(({ tableId }) => ({ resourceId: tableId, representation: 'file' })),
+    conservationFastaFiles: ids.map(({ genomeId }) => ({ resourceId: genomeId, representation: 'file' })),
+    conservationReference: 'subject',
+    conservationLabels: LOSAT_RINGS.map(({ label }) => label),
+    conservationColors: LOSAT_RINGS.map(() => '#D9EAF7'),
+    conservationRingWidth: null,
+    conservationRingGap: null
+  });
+  Object.assign(document.webFiles, {
+    conservationBlastSource: 'losat-cache', conservationLosatFastaSources: ids.map(({ losatId }) => losatId)
+  });
+  const adopted = LOSAT_RINGS.map(({ ring, label, code }, index) => ({
+    sourceKey: `${ring}.fna|${genome.size}|${genome.lastModified}|0`, fileName: tableName(ring),
+    sourceIndex: index, label, color: '#d9eaf7', losat_gencode: code
+  }));
+  Object.assign(document.config.circularConservation, {
+    enabled: true, source: 'losat', losat_program: 'tblastx', reference: 'subject',
+    labels: LOSAT_RINGS.map(({ label }) => label).join(','), series: editDraft(adopted)
+  });
+  return document;
+};
+const loadedRingCodes = async (document) => {
+  const result = await importSession(await sessionLoadEvent(document), {
+    transformLegacyResultSvg, confirmLoadRepairs: async () => true
+  });
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  return state.activeDrawing().circularConservation.series.map(({ label, losat_gencode: code }) => ({ label, code }));
+};
+const OWN_CODES = LOSAT_RINGS.map(({ label, code }) => ({ label, code }));
+
+// Move series inward after the Generate: each entry keeps its table's name, so the matcher's name pass pairs it (its
+// place would give the same pairing).
+test('a Session 39 saved after a move of its LOSAT rings loads each ring with its own genetic code', async () => {
+  assert.deepEqual(await loadedRingCodes(losatRingSession39((series) => [...series].reverse())), OWN_CODES,
+    'each ring keeps its own genetic code');
+});
+
+// Move series inward, then Add comparison sequence: that writer cleared the derived tables and reconciled the series
+// against the genome files, so each entry carries its genome's name, which no table has, and its genome's place,
+// which is its table's place (the request lists the genomes in table order). The matcher's place pass decides; the
+// added genome has no table and no ring.
+test('a Session 39 saved after a move and Add comparison sequence loads each ring with its own genetic code', async () => {
+  const document = losatRingSession39((series) => [
+    ...[...series].reverse().map((entry) => ({ ...entry, fileName: entry.sourceKey.split('|')[0] })),
+    { sourceKey: 'ring-c.fna|24|5|0', fileName: 'ring-c.fna', sourceIndex: 2, label: 'ring-c', color: '#d9eaf7', losat_gencode: 2 }
+  ]);
+  assert.deepEqual(await loadedRingCodes(document), OWN_CODES, 'each ring keeps its own genetic code');
+});

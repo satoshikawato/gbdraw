@@ -2265,13 +2265,14 @@ const overlayCanonicalObject = (stored, canonical) => {
 /**
  * @param {Record<string, unknown>} projectedConfig
  * @param {unknown} storedConfig Unvalidated.
- * @param {{ hasCanonicalProteinPipeline?: boolean }} [options]
+ * @param {{ hasCanonicalProteinPipeline?: boolean, ringTables?: readonly ConservationSourcePlace<ConservationFile>[] }} [options]
+ *   `ringTables`: the projection's ring tables (`files.c_conservation_blasts`), at whose places its rings are.
  * @returns {Record<string, unknown>}
  */
 const restoreStoredNonCanonicalConfig = (
   projectedConfig,
   storedConfig,
-  { hasCanonicalProteinPipeline = false } = {}
+  { hasCanonicalProteinPipeline = false, ringTables = [] } = {}
 ) => {
   const restored = cloneJsonData(projectedConfig);
   if (!isPlainObject(storedConfig)) return restored;
@@ -2341,8 +2342,11 @@ const restoreStoredNonCanonicalConfig = (
   const series = conservation.series;
   const storedSeries = storedConservation.series;
   if (Array.isArray(series) && Array.isArray(storedSeries)) {
-    conservation.series = series.map((/** @type {unknown} */ entry, /** @type {number} */ index) => {
-      const storedEntry = storedSeries[index];
+    // Each projected ring is the request's ring at its table's place; it takes the code of the stored entry the one
+    // matcher pairs with that table, so a move of the rings after the Generate keeps each ring's code (OV-3179).
+    const { places } = conservationSourcesOfSeries(ringTables, { series: storedSeries });
+    conservation.series = series.map((/** @type {unknown} */ entry, /** @type {number} */ place) => {
+      const storedEntry = storedSeries[places.indexOf(place)];
       if (!isPlainObject(entry) || !isPlainObject(storedEntry)) return entry;
       if (!Object.prototype.hasOwnProperty.call(storedEntry, 'losat_gencode')) return entry;
       return { ...entry, losat_gencode: cloneJsonData(storedEntry.losat_gencode) };
@@ -3131,7 +3135,7 @@ const readDraftOverCommittedRequest = (projection, storedConfig, keepsOtherMode)
     ...restoreStoredNonCanonicalConfig(
       projection.config,
       storedConfig,
-      { hasCanonicalProteinPipeline: Boolean(projection.pipelineState) }
+      { hasCanonicalProteinPipeline: Boolean(projection.pipelineState), ringTables: projection.files.c_conservation_blasts ?? [] }
     ),
     rules: applySpecificRuleProvenance(
       projection.config.rules,
@@ -4719,7 +4723,8 @@ const deserializeCanonicalComparisons = (
  * }} options
  *   `drawing`: the drawing Generate drew, whose comparison and ring files the request's resources replace;
  *   `conservationPairs`: the hash pairs of the request's conservation rings (`conservationHashPairs`), or
- *   `'committed'` for a candidate of the committed request that ran no conservation search (its pairs stay);
+ *   `'committed'` for a candidate of the committed request that ran no conservation search (its pairs stay, and the
+ *   draft's Linear comparisons stay as the draft has them);
  *   `installRings`: the candidate is a Circular Generate that searched rings (`adoptCircularRingResult` decides it
  *   from the rings that Generate searched). Only such a candidate installs the rings' tables, genomes and series into
  *   the draft; any other (a Linear Generate, a Generate that searched no ring, a rotation, an alignment, a placement)
@@ -4753,7 +4758,8 @@ export const adoptCanonicalRenderArtifacts = (
    *   projectedConservation: Record<string, any> | undefined, series: Record<string, any>[]
    * } | null} */
   let nextCircularState = null;
-  if (projection.mode === 'linear') {
+  if (projection.mode === 'linear' && conservationPairs !== 'committed') {
+    // A candidate of the committed request leaves the draft's comparisons as the draft has them (R1 (c), OV-3314).
     nextLinearComparisons = deserializeCanonicalComparisons(
       projection.files.linearCanonicalComparisons,
       { adoptCanonicalPayloads: preserveAdoptedResources }
