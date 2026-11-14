@@ -490,10 +490,8 @@ export const createAppSetup = () => {
     DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES,
     payload
   ));
-  setLegacySessionUpgrader((payload) => runDiagramHelperOperation(
-    DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION,
-    payload
-  ));
+  // Load's Python steps of an older Session name their own operation (a Session 27-44's move, a 46-50's saved rows).
+  setLegacySessionUpgrader((operation, payload) => runDiagramHelperOperation(operation, payload));
   const {
     processing,
     processingStatus,

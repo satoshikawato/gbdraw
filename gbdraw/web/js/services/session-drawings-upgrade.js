@@ -305,7 +305,7 @@ const withKey = (target, key, value, present) => {
 /** @param {unknown} mode @returns {mode is DrawingMode} */
 const isDrawingMode = (mode) => typeof mode === 'string' && Object.hasOwn(LAYOUT.drawingNames, mode);
 /** `_request_mode`. @param {Fields} view @returns {DrawingMode | null} */
-const requestMode = (view) => {
+export const requestMode = (view) => {
   const mode = isObject(view.renderRequest) ? mapping(view.renderRequest).mode : null;
   return isDrawingMode(mode) ? mode : null;
 };

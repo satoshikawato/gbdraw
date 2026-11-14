@@ -584,3 +584,108 @@ def test_a_session_39_losatp_search_without_all_its_rows_loads_with_the_search(m
     assert [(item["kind"], item.get("mode")) for item in drawing["renderRequest"]["comparisons"]] == [
         ("generatedProteinComparison", "orthogroup")
     ]
+
+
+# OV-3545: `gbdraw linear --losat losatp --session_output` on main from 9839de8ee (2026-10-11) to 9fdab5f4d
+# (2026-10-23) wrote the LOSATP search as the committed request of a Session 46 or 47, with the search's raw rows in
+# `losatCache` (fixture: README.md, its provenance file).
+CLI_SEARCH_SESSION_47 = "BGC0000711-BGC0000713-losatp-cli.v47.gbdraw-session.json.gz"
+
+
+def _rendered_svg(reply: dict[str, Any]) -> str:
+    parts = reply["results"][0]["document"]
+    return parts["head"] + "".join(
+        piece["start"] + piece["children"] + "</g>" if piece["kind"] == "content" else piece["text"]
+        for piece in parts["pieces"]
+    ) + parts["tail"]
+
+
+def _session_47_with_saved_protein_results() -> tuple[dict[str, Any], dict[str, Any]]:
+    """The fixture as the file holds it, and with Web Load's step applied: each request Python returns replaces
+    the committed request of the drawing it names (a Session 46-50 names a drawing by its mode), and the resources
+    it adds join the document's."""
+
+    from gbdraw.web_support.legacy_session import saved_protein_results_json
+
+    stored = json.loads(_text(CLI_SEARCH_SESSION_47))
+    reply = json.loads(saved_protein_results_json(json.dumps(stored)))
+    assert "error" not in reply, reply.get("error")
+    assert set(reply) == {"requests", "resources"}
+    assert list(reply["requests"]) == [stored["renderRequest"]["mode"]]
+    assert not set(reply["resources"]) & set(stored["resources"])
+    loaded = {
+        **stored,
+        "renderRequest": reply["requests"][stored["renderRequest"]["mode"]],
+        "resources": {**stored["resources"], **reply["resources"]},
+    }
+    return stored, loaded
+
+
+def test_a_cli_session_47_losatp_search_loads_with_the_results_of_its_saved_rows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3545: the committed request of a CLI Session 47 names a LOSATP search, which the browser's render cannot
+    run. Web Load gives it the results of the rows the Session saved, as a Generate commits them, so a redraw before
+    the first Generate (a label edit, Reset record positions) renders without a search."""
+
+    from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+    _without_losat_runtime(monkeypatch)
+    stored, loaded = _session_47_with_saved_protein_results()
+    from gbdraw.exceptions import ValidationError
+
+    with pytest.raises(ValidationError) as stored_search:
+        render_embedded_canonical_web_request(
+            stored["renderRequest"], resources=stored["resources"], workspace=tmp_path / "stored"
+        )
+    assert (stored_search.value.diagnostic or {}).get("code") == "LOSAT_RUNTIME"
+    request = loaded["renderRequest"]
+    reply = render_embedded_canonical_web_request(request, resources=loaded["resources"], workspace=tmp_path / "web")
+    assert "error" not in reply, reply.get("error")
+    assert [(item["kind"], item.get("mode")) for item in request["comparisons"]] == [
+        ("precomputedProteinComparison", None),
+        ("orthogroupResult", None),
+        ("generatedProteinComparison", "none"),
+    ]
+    assert [record["source"] for record in request["records"]] == [
+        record["source"] for record in stored["renderRequest"]["records"]
+    ]
+
+
+def test_a_loaded_cli_session_47_losatp_request_draws_what_the_cli_replay_of_the_session_draws(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3545: the request Web Load commits draws, in the browser's render, the SVG that `gbdraw linear --session`
+    draws from the same Session's search answered by its saved rows."""
+
+    from gbdraw import linear as linear_cli
+    from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+    _without_losat_runtime(monkeypatch)
+    _stored, loaded = _session_47_with_saved_protein_results()
+    reply = render_embedded_canonical_web_request(
+        loaded["renderRequest"], resources=loaded["resources"], workspace=tmp_path / "web"
+    )
+    assert "error" not in reply, reply.get("error")
+    linear_cli.linear_main(["--session", str(SESSIONS / CLI_SEARCH_SESSION_47), "-o", str(tmp_path / "cli"), "-f", "svg"])
+    replayed_svg = (tmp_path / "cli.svg").read_text(encoding="utf-8")
+    # The CLI file adds the XML declaration before the document.
+    assert replayed_svg.startswith("<?xml") and replayed_svg.endswith(_rendered_svg(reply))
+
+
+def test_a_cli_session_47_losatp_search_without_all_its_rows_keeps_the_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-3545: rows the Session did not save need a search, which Generate runs in the browser; Load keeps the search.
+    from gbdraw.web_support.legacy_session import saved_protein_results_json
+
+    _without_losat_runtime(monkeypatch)
+    document = json.loads(_text(CLI_SEARCH_SESSION_47))
+    del document["losatCache"]["entries"][0]
+    assert json.loads(saved_protein_results_json(json.dumps(document))) == {"requests": {}, "resources": {}}
+
+
+def test_saved_protein_results_are_read_only_from_a_session_46_to_50() -> None:
+    # A Session 27-44 takes them in its move to drawings (`legacy_session_to_drawings_json`), a Session 51 in Generate.
+    from gbdraw.web_support.legacy_session import saved_protein_results_json
+
+    reply = json.loads(saved_protein_results_json(_text("BGC0000708-BGC0000713.v39.gbdraw-session.json.gz")))
+    assert reply["error"]["operation"] == "storeSavedProteinResults"

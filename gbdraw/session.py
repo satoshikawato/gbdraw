@@ -21,6 +21,7 @@ from gbdraw.core.numeric import JS_WHITESPACE
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.session_contract import (
     SESSION_ID_RE,
+    CanonicalRequestJson,
     GbdrawSession51,
     SessionContainerResource,
     SessionResult,
@@ -2146,6 +2147,72 @@ def _with_saved_protein_results(
         if (exc.diagnostic or {}).get("code") != "LOSAT_RUNTIME":
             raise
         return request
+
+
+class SavedProteinResults(NamedTuple):
+    """:func:`mode_scoped_saved_protein_results` of a Session 46-50."""
+
+    # The committed request of each drawing that changed, encoded, by drawing ID.
+    requests: dict[str, CanonicalRequestJson]
+    # The resources those requests add (the result tables), with their bytes' sources.
+    resources: SessionResources
+
+
+def mode_scoped_saved_protein_results(
+    data: SessionDocument | Mapping[str, Any],
+    *,
+    temporary_directory: str | Path | None = None,
+) -> SavedProteinResults:
+    """For Web Load of a Session 46-50: each Linear drawing whose committed
+    LOSATP search its saved LOSAT rows answer, with the results of those rows
+    (:func:`_with_saved_protein_results`, OV-3545), as Web Load of a Session
+    31-44 gives them (OV-3540). Web Load reads a Session 46-50 itself; it
+    replaces each returned request in the drawing that the ID names (a Session
+    46-50 names a drawing by its mode) and adds the returned resources. The
+    other resources the requests name keep their IDs.
+    """
+
+    loaded = load_session_document(data)
+    if not MODE_SCOPED_SESSION_MIN_VERSION <= loaded.version <= MODE_SCOPED_SESSION_MAX_VERSION:
+        raise SessionVersionError(
+            f"Only a Session {MODE_SCOPED_SESSION_MIN_VERSION}-{MODE_SCOPED_SESSION_MAX_VERSION} "
+            f"takes its saved protein results at Web Load; this is Session {loaded.version}."
+        )
+    from gbdraw.api.session_compat import adapt_session_request
+    from gbdraw.session_migration import session_with_current_anchor_modes
+
+    repaired = session_with_current_anchor_modes(loaded._data)
+    if repaired != loaded._data:
+        loaded = SessionDocument._built(repaired, loaded._resource_sources, loaded.source_path)
+    written: list[_DrawingBuild] = []
+    with materialize_session(
+        loaded, output_directory=Path("."), temporary_directory=temporary_directory,
+    ) as materialized:
+        for drawing in loaded._drawings:
+            if drawing.mode != "linear" or drawing.request is None:
+                continue
+            try:
+                adapted = adapt_session_request(_decode_drawing(materialized, drawing), drawing.artifacts)
+                request = _with_saved_protein_results(adapted.request, adapted.artifacts)
+            except SessionError:
+                raise
+            except ValidationError as exc:
+                raise SessionConversionError(str(exc)) from exc
+            if request is not adapted.request:
+                written.append(_DrawingBuild(mode=drawing.mode, request=request, state={}, id=drawing.id))
+        if not written:
+            return SavedProteinResults({}, SessionResources({}, {}))
+        # One table seeded with the Session's resources: unchanged inputs keep their IDs.
+        encoded = _encoded_drawings(written, allocate=False, resources=loaded.resources)
+    added = {
+        resource_id: descriptor
+        for resource_id, descriptor in encoded.resources.items()
+        if resource_id not in loaded.resources.descriptors
+    }
+    return SavedProteinResults(
+        {drawing_id: CanonicalRequestJson(view["renderRequest"]) for drawing_id, view in zip(encoded.ids, encoded.views)},
+        SessionResources(added, {resource_id: encoded.sources[resource_id] for resource_id in added}),
+    )
 
 
 def _upgrade_to_current(
