@@ -729,19 +729,20 @@ def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
     assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "none")]
 
 
+@pytest.mark.parametrize("rows", ["rec0\trec1\t90\t40\t0\t0\t1\t40\t1\t40\t1e-20\t200\n", ""], ids=["one-row", "empty"])
 def test_a_cli_session_stores_a_comparison_table_as_a_nucleotide_table_and_replays_it_as_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, rows: str
 ) -> None:
-    """OV-3512: a `--comparisons_table` BLAST table is stored as a nucleotide
-    table under its file name, never as a protein comparison, and its replay
-    words it as the fresh render does."""
+    """OV-3512, OV-3557: a `--comparisons_table` BLAST table is stored as a
+    nucleotide table under its file name, never as a protein comparison, and
+    its replay names and words it as the fresh render does, with rows or empty."""
 
     from gbdraw.api.input_summary import input_summary_lines
     from tests.test_render_stage_protein_analysis import _request
 
     request, _identities = _request("pairwise", tmp_path)
     blast = tmp_path / "pair.tsv"
-    blast.write_text("rec0\trec1\t90\t40\t0\t0\t1\t40\t1\t40\t1e-20\t200\n", encoding="utf-8")
+    blast.write_text(rows, encoding="utf-8")
     table = tmp_path / "comparisons.tsv"
     table.write_text("blast\tquery\tsubject\npair.tsv\t#1\t#2\n", encoding="utf-8")
     sidecar = tmp_path / "table.gbdraw"
@@ -749,8 +750,9 @@ def test_a_cli_session_stores_a_comparison_table_as_a_nucleotide_table_and_repla
     _cli(monkeypatch, "linear", "--gbk", *(str(record.source.path) for record in request.records[:2]),
          "--comparisons_table", str(table), "-o", str(tmp_path / "table"), "-f", "svg",
          "--session_output", str(sidecar))
-    (fresh,) = [record.getMessage() for record in caplog.records if "record #2" in record.getMessage()]
-    assert fresh.startswith("Comparison table pair.tsv ("), fresh
+    fresh_messages = [record.getMessage() for record in caplog.records if "record #2" in record.getMessage()]
+    assert fresh_messages and all(message.startswith("Comparison table pair.tsv (") for message in fresh_messages)
+    fresh = fresh_messages[0]
 
     session = drawing_view(read_session_payload(sidecar), mode="linear")
     (stored,) = [item for item in session["renderRequest"]["comparisons"] if "resourceId" in item]
@@ -758,7 +760,9 @@ def test_a_cli_session_stores_a_comparison_table_as_a_nucleotide_table_and_repla
     with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "api") as materialized:
         lines = input_summary_lines(render_session(materialized).input_summary)
     assert [line for line in lines if "record #2" in line] == [fresh]
+    caplog.clear()
     _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replay"), "-f", "svg")
+    assert [record.getMessage() for record in caplog.records if "record #2" in record.getMessage()] == fresh_messages
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "table.svg").read_bytes()
 
 

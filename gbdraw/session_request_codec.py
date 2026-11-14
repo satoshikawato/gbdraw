@@ -4669,6 +4669,24 @@ def _read_blast_edge(resource_path: Path, label: str) -> tuple[str, bytes | None
     return text, stored, read_comparison_table(StringIO(text), label=label)
 
 
+def _user_file_name(resource_id: str, file_name: str) -> str | None:
+    """The name of the user's file a comparison resource holds, or None for a table a writer made.
+
+    The input summary names a comparison by its file only when the user gave one (OV-3557). A writer that holds no
+    user file names the table after its resource ID: a LOSAT search result (``comparison-losat-<n>.tsv`` on the CLI,
+    ``comparison-resolved-<n>.tsv`` on the Web), a table given without its file (``comparison-table-<n>.tsv``), with
+    ``.<k>`` before the extension when another resource holds that name. The Web writes each resource's name after a
+    ``<resource ID>-`` prefix (``normalizeResourceName``), which is not part of the user's file name.
+    """
+
+    name = file_name.removeprefix(f"{resource_id}-") or file_name
+    stem, _dot, rest = name.partition(".")
+    ordinal = rest.partition(".")[0]
+    if resource_id in {stem, f"{stem}-{ordinal}"}:
+        return None
+    return name
+
+
 def _decode_comparisons(
     value: object,
     *,
@@ -4734,7 +4752,7 @@ def _decode_comparisons(
                         register_prepared_resource_value(table, resource_path),
                         search_frame_text=text,
                         search_frame_gzip=stored,
-                        source_name=resource_path.name,
+                        source_name=_user_file_name(item["resourceId"], resource_path.name),
                     )
                 )
             else:
