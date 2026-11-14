@@ -360,6 +360,15 @@ test('Circular: on a record that is not circular a drag through 12 o\'clock stop
   await expectHeading(page, 'NC_001416.1', '45,501-48,502 (3,002 bp)');
   await expect(page.locator('[data-region-feature-count]')).not.toContainText('crosses the origin');
   await expect(popup.locator('[data-region-new-drawing]')).toBeEnabled();
+  // Copy to another drawing opens on that span of its record, by Coordinates (PD-OI-090 (4)).
+  await popup.locator('[data-region-new-drawing]').click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.regionDrawings.dialog.rows
+    .map(({ checked, kind, start, end }) => [checked, kind, start, end])), { timeout: 180_000 })
+    .toEqual([[true, 'coordinates', '45501', '48502']]);
+  await page.locator('[data-region-drawing-cancel]').click();
+  await expect(page.locator('[data-region-drawing-dialog]')).toHaveCount(0);
+  await dragAlong(page, 0, [45_500.5, 47_000.5, 48_490.5, 1_000.5, 3_000.5]);
+  await expect(popup).toBeVisible();
   await popup.locator('[data-region-add-annotation]').click();
   const [row] = await regionRows(page);
   expect(row.target).toEqual(expect.objectContaining({ start: 45_501, end: 48_502, wrapsOrigin: false }));

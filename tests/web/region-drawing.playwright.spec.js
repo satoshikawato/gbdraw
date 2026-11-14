@@ -6,7 +6,7 @@
 const { execFileSync } = require('node:child_process');
 const { writeFileSync } = require('node:fs');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { openWithGenBank } = require('./helpers/audit-browser.cjs');
+const { loadSessionFile, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { test, expect } = require('@playwright/test');
 const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
@@ -327,4 +327,117 @@ test('a record popup and the records of a Shift+drag open Copy to another drawin
   await expect.poll(async () => (await undoLabels(page))[0]).toBe('Copy to another drawing');
   await undo.click();
   await expect.poll(() => drawingIds(page)).toEqual([source]);
+});
+
+/** The shown drawing's Linear rows (record captions are their files' record IDs). @param {import('@playwright/test').Page} page */
+const linearRowCount = (page) => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().linearSeqs.length);
+/** The record IDs the shown drawing's Result draws, in drawn order. @param {import('@playwright/test').Page} page */
+const drawnRecordIds = (page) => page.evaluate(() => window.__GBDRAW_APP__.currentResults().flatMap((result) => [
+  ...new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml')
+    .querySelectorAll('[data-gbdraw-role="record-definition"][data-gbdraw-record-id]')
+].map((group) => group.getAttribute('data-gbdraw-record-id'))));
+/** Checks the dialog's rows of `captions` whole and waits for the derivation. @param {import('@playwright/test').Page} page */
+const checkRecords = async (page, dialog, captions) => {
+  for (const caption of captions) {
+    await dialog.locator('[data-region-drawing-row]').filter({ hasText: caption }).locator('[data-region-drawing-check]').check();
+  }
+  await expect.poll(() => regionStatus(page), { timeout: 180_000 }).toBe('derived');
+};
+
+// OV-3533 (D-30): the whole records of one file copied to a Circular drawing are one File card, so each keeps the row
+// the source drew it on: #1 and #2 of a three-record canvas share its first row.
+test('a Circular copy of whole records #1 and #2 of a three-record file draws exactly those two, on one row as the source drew them', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  const input = testInfo.outputPath('three-records.gbk');
+  writeFileSync(input, smallGenbank('RECA') + smallGenbank('RECB') + smallGenbank('RECD'));
+  await openWithGenBank(page, input, () => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await generateAndWaitForResult(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await expect.poll(async () => (await recordNameBoxes(page)).map(({ id }) => id)).toEqual(['RECA', 'RECB', 'RECD']);
+  const rowsOf = async (ids) => {
+    const boxes = await recordNameBoxes(page);
+    return ids.map((id) => Math.round(boxes.find((box) => box.id === id).top));
+  };
+  const [topA, topB] = await rowsOf(['RECA', 'RECB']);
+  expect(topA, 'the source draws #1 and #2 on one row').toBe(topB);
+  const dialog = await openRegionDialog(page);
+  await checkRecords(page, dialog, ['RECA', 'RECB']);
+  await expect(dialog.locator('[data-region-drawing-mode]')).toHaveValue('circular');
+  await dialog.locator('[data-region-drawing-create]').click();
+  await expect(dialog).toHaveCount(0);
+  await generateAndWaitForResult(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().length)).toBe(1);
+  expect(await drawnRecordIds(page), 'exactly the two records').toEqual(['RECA', 'RECB']);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await expect.poll(async () => (await recordNameBoxes(page)).map(({ id }) => id)).toEqual(['RECA', 'RECB']);
+  const [copyA, copyB] = await rowsOf(['RECA', 'RECB']);
+  expect(copyA, 'one row, as the source drew them').toBe(copyB);
+});
+
+test('Copy to an existing Linear drawing appends the records as one Undo step of that drawing, which the next Generate draws; Skip it and Add it again; the last target is kept until a Load', async ({ page }, testInfo) => {
+  test.setTimeout(600_000);
+  const input = testInfo.outputPath('two-records.gbk');
+  writeFileSync(input, smallGenbank('RECA') + smallGenbank('RECB'));
+  await openWithGenBank(page, input, () => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await generateAndWaitForResult(page);
+  const source = (await shownDrawing(page)).id;
+
+  // A new Linear drawing of RECA: the dialog opens on a new drawing at first, then on the drawing that copy made (D-29).
+  let dialog = await openRegionDialog(page);
+  await expect(dialog.locator('[data-region-drawing-target-new]')).toBeChecked();
+  await expect(dialog.locator('[data-region-drawing-target-existing]'), 'no other drawing yet').toBeDisabled();
+  await checkRecords(page, dialog, ['RECA']);
+  await dialog.locator('[data-region-drawing-mode]').selectOption('linear');
+  await expect.poll(() => regionStatus(page), { timeout: 180_000 }).toBe('derived');
+  await dialog.locator('[data-region-drawing-create]').click();
+  await expect(dialog).toHaveCount(0);
+  const target = (await shownDrawing(page)).id;
+  expect(target).not.toBe(source);
+  expect(await linearRowCount(page)).toBe(1);
+
+  await drawingTab(page, source).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(source);
+  dialog = await openRegionDialog(page);
+  await expect(dialog.locator('[data-region-drawing-target-existing]'), 'the last target').toBeChecked();
+  await expect(dialog.locator('[data-region-drawing-existing]')).toHaveValue(target);
+  await checkRecords(page, dialog, ['RECA', 'RECB']);
+  const already = dialog.locator('[data-region-drawing-already]');
+  await expect(already).toContainText('RECA (whole record) is already in');
+  await expect(dialog.locator('[data-region-drawing-skip]'), 'Skip it first').toBeChecked();
+  await dialog.locator('[data-region-drawing-create]').click();
+  await expect(dialog).toHaveCount(0);
+  expect(await shownDrawing(page)).toEqual({ id: target, kind: 'linear' });
+  expect(await linearRowCount(page), 'RECB appended, RECA skipped').toBe(2);
+  expect((await undoLabels(page))[0], 'one step of the drawing').toBe('Copy to another drawing');
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  await undo.click();
+  await expect.poll(() => linearRowCount(page)).toBe(1);
+  expect(await shownDrawing(page)).toEqual({ id: target, kind: 'linear' });
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(() => linearRowCount(page)).toBe(2);
+  await generateAndWaitForResult(page);
+  expect(await drawnRecordIds(page), 'Generate draws the pasted record').toEqual(['RECA', 'RECB']);
+
+  // Add it again adds the record that is there already as another record.
+  await drawingTab(page, source).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(source);
+  dialog = await openRegionDialog(page);
+  await expect(dialog.locator('[data-region-drawing-existing]')).toHaveValue(target);
+  await checkRecords(page, dialog, ['RECA']);
+  await expect(already).toBeVisible();
+  await dialog.locator('[data-region-drawing-add-again]').check();
+  await expect.poll(() => regionStatus(page), { timeout: 180_000 }).toBe('derived');
+  await expect(already, 'the line stays, with Add it again chosen').toBeVisible();
+  await dialog.locator('[data-region-drawing-create]').click();
+  await expect(dialog).toHaveCount(0);
+  expect(await linearRowCount(page)).toBe(3);
+  await generateAndWaitForResult(page);
+  expect(await drawnRecordIds(page)).toEqual(['RECA', 'RECB', 'RECA']);
+
+  // A Load replaces the drawings: the dialog opens on a new drawing again.
+  const saved = testInfo.outputPath('pasted.gbdraw');
+  await download(page, 'Save Session', saved, { title: 'pasted' });
+  await loadSessionFile(page, saved);
+  dialog = await openRegionDialog(page);
+  await expect(dialog.locator('[data-region-drawing-target-new]')).toBeChecked();
 });
