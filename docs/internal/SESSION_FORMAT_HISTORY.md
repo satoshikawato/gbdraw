@@ -280,6 +280,19 @@ keys in a request of schema 9 or older (`ONE_CIRCLE_LAYOUT_OPTIONS` and `RECORD_
 `gbdraw/session_request_codec.py`). The Web app does not read them yet. This adds no request schema (schema 10 has not
 reached `main`). `tests/test_session_request_codec.py` holds the positive and refusal cases.
 
+Request schema 10 also lets a Linear request's `layout.recordGapPx` be null, the default (Auto) record gap
+(OV-3572): Python draws 24 px, narrowed in a row whose gaps would take more than a quarter of its width
+(`DEFAULT_RECORD_GAP_PX` and `ROW_GAPS_MAX_SHARE` in `gbdraw/layout/linear_multi_record.py`). A number is a gap the
+user set and is drawn as set; a row it does not fit is refused (`INPUT_INVALID` / `ROW_WIDTH`). The CLI, the Python
+API (`LinearMultiRecordOptions.record_gap_px`, `LinearLayout.record_gap`) and the Web app write null unless a gap is
+set. Schemas up to 9 stored the gap the figure drew, which reads as set (the released writers drew it as set), and the
+decoder refuses null in them (`RECORD_GAP_AUTO_SCHEMA`). The Web draft `config.linearRecordLayout.recordGap` of a
+Session 51 holds null for Auto; a Session up to 50 stored a number, read as set
+(`tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` keeps 24, asserted in
+`tests/web/load-repair-dialog.test.mjs`), and `gbdraw/data/mode-slice-defaults.json` lists that stored 24 as an
+earlier default. This adds no request schema and no Session version (neither has reached `main`).
+`tests/test_session_request_codec.py` holds the round trip and the refusal.
+
 A Circular drawing of Session 51 keeps the window of its record that its Start/End fields cannot hold, one window
 across the origin of a circular record (start after end, PD-OI-122), in `config.form.circular_windows`: a list of
 `{start, end, reverseComplement, column}` as the request writes it, empty for a record drawn whole or in one ordered

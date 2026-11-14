@@ -425,6 +425,31 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
     assert decoded.records[0].presentation.grid_row == 2
 
 
+@pytest.mark.parametrize("gap", (None, 24.0, 100.0))
+def test_a_linear_record_gap_round_trips_as_auto_or_as_set(tmp_path: Path, gap: float | None) -> None:
+    """OV-3572: schema 10 writes the Auto record gap as null and a set one as its number; schemas up to 9 stored the
+    gap the figure drew, read as set, and never null."""
+
+    source = _source_file(tmp_path / "multi-record.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source), cardinality=RecordCardinality.ALL,
+                                 presentation=RecordPresentation(grid_row=1)),),
+            layout=LinearMultiRecordOptions(record_gap_px=gap),
+        )
+    )
+    assert encoded.payload["layout"]["recordGapPx"] == gap
+    resources = _materialize_resources(encoded, tmp_path / "resources")
+    for schema in (CANONICAL_REQUEST_SCHEMA, 9):
+        payload = _payload_for_schema(encoded, schema)
+        if gap is None and schema < CANONICAL_REQUEST_SCHEMA:
+            with pytest.raises(CanonicalRequestDecodingError, match="recordGapPx must be a finite non-negative"):
+                decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
+            continue
+        decoded = decode_canonical_request(payload, resource_paths=resources, output_directory=tmp_path / "output")
+        assert decoded.layout is not None and decoded.layout.record_gap_px == gap, schema
+
+
 def _similarity_alignment_plan() -> SimilarityAlignmentPlan:
     reference = AlignmentAnchorIdentity(
         record_key="record-a",

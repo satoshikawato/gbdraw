@@ -236,6 +236,13 @@ tables. A schema 2–9 request that stored such a table as
 `precomputedProteinComparison` (gbdraw 0.14.0 to 0.14.5) still reads it as a
 nucleotide table, and saving the Session again stores it in the new form.
 
+A schema-10 Linear request's `layout.recordGapPx` may be `null`, the
+default (Auto) record gap: 24 px, narrowed in a row whose gaps would take more
+than a quarter of its width. A number is a gap you set, drawn as set; a row
+that cannot hold it is refused. A schema 1–9 request, and the
+`config.linearRecordLayout.recordGap` of a Session 50 or older, stored the gap
+the figure drew: it reads as set, so the figure stays as it was.
+
 A schema-10 Circular request may also draw its records one after another
 on one circle: `layout.recordLayout` is `"one_circle"` and
 `oneCircleGapDegrees`, `oneCircleMinLength` and `oneCircleRecordBand` hold
