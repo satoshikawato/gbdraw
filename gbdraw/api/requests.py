@@ -13,7 +13,7 @@ from typing import Literal, NamedTuple, Sequence, TypeAlias, cast
 
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION
+from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, RecordSourceKind
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureCatalog
 from gbdraw.io.record_select import RecordSelector
@@ -136,6 +136,20 @@ class FastaInputSource:
 
 
 @dataclass(frozen=True)
+class GfaInputSource:
+    """One materialized GFA 1 file: each segment is a record with sequence and no features (D-86)."""
+
+    gfa_path: str | Path
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "gfa_path",
+            _materialized_path(self.gfa_path, field_name="GFA path"),
+        )
+
+
+@dataclass(frozen=True)
 class InMemoryRecordSource:
     """One already-parsed sequence record.
 
@@ -153,9 +167,29 @@ class InMemoryRecordSource:
             raise ValidationError("source_features must be a SourceFeatureCatalog.")
 
 
+# A file source whose file holds whole records (no GFF3 to pair): its loader's parse is the file's records.
+WholeRecordFileSource: TypeAlias = GenBankInputSource | FastaInputSource | GfaInputSource
 RecordInputSource: TypeAlias = (
-    GenBankInputSource | GffFastaInputSource | FastaInputSource | InMemoryRecordSource
+    GenBankInputSource | GffFastaInputSource | FastaInputSource | GfaInputSource | InMemoryRecordSource
 )
+
+
+def _source_details(
+    source: RecordInputSource,
+) -> tuple[RecordSourceKind, tuple[str, ...]]:
+    """The one reading of a record source: its kind and the paths of its files, in resource order."""
+    if isinstance(source, GenBankInputSource):
+        return "genbank", (str(source.path),)
+    if isinstance(source, GffFastaInputSource):
+        return "gff_fasta", (str(source.gff_path), str(source.fasta_path))
+    if isinstance(source, FastaInputSource):
+        return "fasta", (str(source.fasta_path),)
+    if isinstance(source, GfaInputSource):
+        return "gfa", (str(source.gfa_path),)
+    if isinstance(source, InMemoryRecordSource):
+        return "memory", ()
+    raise ValidationError("Unsupported record input source.")
+
 
 
 class RecordCardinality(str, Enum):
@@ -321,10 +355,10 @@ class RecordInput:
     def _validate(self, region: RegionSpec | None) -> None:
         if not isinstance(
             self.source,
-            (GenBankInputSource, GffFastaInputSource, FastaInputSource, InMemoryRecordSource),
+            (GenBankInputSource, GffFastaInputSource, FastaInputSource, GfaInputSource, InMemoryRecordSource),
         ):
             raise ValidationError(
-                "Record source must be GenBank, GFF3/FASTA, FASTA, or an in-memory SeqRecord."
+                "Record source must be GenBank, GFF3/FASTA, FASTA, GFA, or an in-memory SeqRecord."
             )
         if not isinstance(self.cardinality, RecordCardinality):
             raise ValidationError(
@@ -1123,6 +1157,7 @@ __all__ = [
     "GenBankInputSource",
     "GffFastaInputSource",
     "FastaInputSource",
+    "GfaInputSource",
     "InMemoryRecordSource",
     "LinearDiagramRequest",
     "RecordCardinality",

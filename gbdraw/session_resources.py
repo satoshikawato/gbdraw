@@ -19,13 +19,15 @@ from gbdraw.io.filenames import safe_embedded_filename, unique_filename
 from gbdraw.session_container import BytesResourceSource, FileResourceSource, SessionResourceSource
 from gbdraw.session_contract import SESSION_ID_RE, SessionContainerResource
 from gbdraw.session_request_codec import (
+    RECORD_SOURCE_RESOURCE_FIELDS,
     CanonicalRequestEncodingError,
     CanonicalRequestResource,
 )
 
 # The keys under which a canonical request or a Web file binding names a
-# resource, as the Web reads them (services/canonical-resource-references.js).
-_RESOURCE_REFERENCE_FIELDS = frozenset({"resourceId", "gffResourceId", "fastaResourceId"})
+# resource, as the Web reads them (services/canonical-resource-references.js):
+# a binding's and other references' ``resourceId``, and each record source file's field.
+_RESOURCE_REFERENCE_FIELDS = frozenset({"resourceId", *RECORD_SOURCE_RESOURCE_FIELDS})
 
 
 def canonical_resource_ids(value: object) -> set[str]:

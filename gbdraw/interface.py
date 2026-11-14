@@ -32,7 +32,7 @@ from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
 from gbdraw.api.input_summary import log_input_warnings as _log_input_warnings
 from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_sequence_file
-from gbdraw.io.genome import load_fasta as _load_fasta
+from gbdraw.io.genome import load_fasta as _load_fasta, load_gfa as _load_gfa
 from gbdraw.io.record_sequences import detached_records
 from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
@@ -828,6 +828,20 @@ def read_fasta(
     return detached_records(_load_fasta(_paths(paths, field_name="paths")))
 
 
+def read_gfa(
+    paths: str | PathLike[str] | Sequence[str | PathLike[str]],
+) -> list[SeqRecord]:
+    """Read the segments of one or more GFA 1 assembly graphs, each a record.
+
+    Each segment (S line) is a record with its sequence and no features, in
+    file order. A segment with a link from its end back to its own start is
+    circular and drops the bases that link's overlap repeats; P and W lines are
+    not read. A GFA 2 file and a segment without sequence are refused.
+    """
+
+    return _load_gfa(_paths(paths, field_name="paths"))
+
+
 def read_gff(
     gff_paths: str | PathLike[str] | Sequence[str | PathLike[str]],
     fasta_paths: str | PathLike[str] | Sequence[str | PathLike[str]],
@@ -1386,5 +1400,6 @@ __all__ = [
     "draw_linear",
     "read_genbank",
     "read_fasta",
+    "read_gfa",
     "read_gff",
 ]

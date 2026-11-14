@@ -83,7 +83,6 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.objects import DEFAULT_SCALAR_AXIS_LABELS
 from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
-from gbdraw.api.record_planning import _source_details
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
 from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
@@ -185,6 +184,7 @@ from .api.requests import (
     FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
+    GfaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordCardinality,
@@ -194,6 +194,7 @@ from .api.requests import (
     RecordInputSource,
     RecordPresentation,
     RenderOutputRequest,
+    _source_details,
     _LegacySimilarityAlignment,
     _with_legacy_similarity_alignment,
 )
@@ -1086,18 +1087,24 @@ def _shared_record_selector(
 
 
 # The resources of a source file read by the planner, by its source kind
-# (``record_planning._source_details``, whose paths come in this order):
+# (``requests._source_details``, whose paths come in this order):
 # (resource kind, source field). The wire kind is the camel-cased source kind.
 _SOURCE_FILE_RESOURCES: Mapping[str, tuple[tuple[str, str], ...]] = {
     "genbank": (("genbank", "resourceId"),),
     "gff_fasta": (("gff3", "gffResourceId"), ("fasta", "fastaResourceId")),
     "fasta": (("fasta", "fastaResourceId"),),
+    "gfa": (("gfa", "gfaResourceId"),),
 }
+# The source fields of every kind that name a resource (each kind's files, in resource order, by wire field).
+RECORD_SOURCE_RESOURCE_FIELDS: frozenset[str] = frozenset(
+    field for files in _SOURCE_FILE_RESOURCES.values() for _resource_kind, field in files
+)
 # The request source each source kind decodes to, built from its paths in resource order.
 _SOURCE_FILE_CLASSES: Mapping[str, Callable[..., RecordInputSource]] = {
     "genbank": GenBankInputSource,
     "gff_fasta": GffFastaInputSource,
     "fasta": FastaInputSource,
+    "gfa": GfaInputSource,
 }
 
 
@@ -1549,7 +1556,7 @@ def _encode_record(
     selector = record.selector
     if shared_source is not None:
         source_payload, selector = shared_source
-    elif isinstance(source, (GenBankInputSource, GffFastaInputSource, FastaInputSource)):
+    elif isinstance(source, (GenBankInputSource, GffFastaInputSource, FastaInputSource, GfaInputSource)):
         source_kind, paths = _source_details(source)
         source_payload = {"kind": _camel(source_kind)}
         for path, (kind, field) in zip(paths, _SOURCE_FILE_RESOURCES[source_kind], strict=True):
@@ -6165,6 +6172,14 @@ def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:
 class RecordSourceFile(TypedDict):
     resource: str
     field: str
+
+
+def record_source_file_ids(source: Mapping[str, object]) -> tuple[object, ...]:
+    """The resource ids a request record's source (``records[].source``) names, in resource order (the last file
+    holds the records: a GFF3 + FASTA pair's FASTA); none for a kind that names no file."""
+
+    files = next((files for kind, files in _SOURCE_FILE_RESOURCES.items() if _camel(kind) == source.get("kind")), ())
+    return tuple(source.get(field) for _resource_kind, field in files)
 
 
 def describe_record_source_files() -> dict[str, list[RecordSourceFile]]:

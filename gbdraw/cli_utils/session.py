@@ -1115,16 +1115,16 @@ def collect_embedded_files_from_cli_args(
                 files["cliTables"].append(table_entry)
             index += 2
             continue
-        if mode == "circular" and token in {"--gbk", "--gff", "--fasta", "--conservation_blast", "--depth_track"}:
+        if mode == "circular" and token in {*_SOURCE_FILE_KEYS, "--conservation_blast", "--depth_track"}:
             values, next_index = _collect_option_values(cli_args, index + 1)
             for offset, value in enumerate(values):
                 arg_index = index + 1 + offset
                 if not _is_embeddable_path(value):
                     continue
-                if token in _CIRCULAR_SOURCE_FILE_KEYS:
+                if token in _SOURCE_FILE_KEYS:
                     # One File card per input, as the request has one record
-                    # input per --gbk value or per --gff/--fasta pair.
-                    slot = f"files.circularSources[{offset}].{_CIRCULAR_SOURCE_FILE_KEYS[token]}"
+                    # input per --gbk or --gfa value or per --gff/--fasta pair.
+                    slot = f"files.circularSources[{offset}].{_SOURCE_FILE_KEYS[token]}"
                 elif token == "--conservation_blast":
                     slot = f"files.c_conservation_blasts[{len(files['c_conservation_blasts'])}]"
                 else:
@@ -1134,21 +1134,13 @@ def collect_embedded_files_from_cli_args(
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
-        if mode == "linear" and token in {"--gbk", "--gff", "--fasta", "-b", "--blast"}:
+        if mode == "linear" and token in {*_SOURCE_FILE_KEYS, "-b", "--blast"}:
             values, next_index = _collect_option_values(cli_args, index + 1)
             for offset, value in enumerate(values):
                 arg_index = index + 1 + offset
                 if not _is_embeddable_path(value):
                     continue
-                seq_index = offset
-                if token == "--gbk":
-                    slot = f"files.linearSeqs[{seq_index}].gb"
-                elif token == "--gff":
-                    slot = f"files.linearSeqs[{seq_index}].gff"
-                elif token == "--fasta":
-                    slot = f"files.linearSeqs[{seq_index}].fasta"
-                else:
-                    slot = f"files.linearSeqs[{seq_index}].blast"
+                slot = f"files.linearSeqs[{offset}].{_SOURCE_FILE_KEYS.get(token, 'blast')}"
                 _set_file_slot(files, slot, value)
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
@@ -1235,8 +1227,9 @@ _COMMON_SINGLE_FILE_OPTIONS = {
 }
 
 
-# The file of a Circular File card that each input option fills.
-_CIRCULAR_SOURCE_FILE_KEYS = {"--gbk": "gb", "--gff": "gff", "--fasta": "fasta"}
+# The file slot of a Circular File card or a Linear card that each input option fills. A GFA file fills the slot
+# of the file that holds a source's sequences, where the Web's input type ``gfa`` reads it.
+_SOURCE_FILE_KEYS = {"--gbk": "gb", "--gff": "gff", "--fasta": "fasta", "--gfa": "fasta"}
 
 
 def _empty_files_payload() -> CliSessionFiles:

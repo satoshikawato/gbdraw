@@ -10,11 +10,12 @@ The package-root API is the stable, beginner-facing interface for reading annota
 read_genbank(paths: str | PathLike[str] | Sequence[str | PathLike[str]]) -> list[SeqRecord]
 read_gff(gff_paths: str | PathLike[str] | Sequence[str | PathLike[str]], fasta_paths: str | PathLike[str] | Sequence[str | PathLike[str]], *, features: Sequence[str] | None = None) -> list[SeqRecord]
 read_fasta(paths: str | PathLike[str] | Sequence[str | PathLike[str]]) -> list[SeqRecord]
+read_gfa(paths: str | PathLike[str] | Sequence[str | PathLike[str]]) -> list[SeqRecord]
 draw_circular(records: RecordCollection, *, options: CircularOptions | None = None, layout: CircularLayout | None = None, record_displays: Sequence[RecordDisplayOptions] | None = None) -> Diagram
 draw_linear(records: RecordCollection, *, options: LinearOptions | None = None, layout: LinearLayout | None = None, record_displays: Sequence[RecordDisplayOptions] | None = None) -> Diagram
 ```
 
-`read_genbank()` returns every record from every supplied file. `read_gff()` requires equally sized GFF3 and FASTA path lists and matching sequence IDs. `read_fasta()` reads every record of one or more FASTA files given without GFF3, as records with their sequence and no features; it refuses an empty record or one that holds a character that is not an IUPAC nucleotide code, and names the record. A path may name a gzip-compressed file. Each drawing function accepts one Biopython `SeqRecord` or a sequence of records. Both reject an empty record collection, non-`SeqRecord` members, and option or layout objects for the wrong mode.
+`read_genbank()` returns every record from every supplied file. `read_gff()` requires equally sized GFF3 and FASTA path lists and matching sequence IDs. `read_fasta()` reads every record of one or more FASTA files given without GFF3, as records with their sequence and no features; it refuses an empty record or one that holds a character that is not an IUPAC nucleotide code, and names the record. `read_gfa()` reads the segments (S lines) of one or more GFA 1 assembly graphs, each a record with its sequence and no features, in file order; a segment with a link from its end back to its own start is circular and drops the bases that link's overlap (`nM`) repeats. It refuses a GFA 2 file, a segment without sequence (`*`) and a self-loop overlap in any other form, and names the segment. A path may name a gzip-compressed file. Each drawing function accepts one Biopython `SeqRecord` or a sequence of records. Both reject an empty record collection, non-`SeqRecord` members, and option or layout objects for the wrong mode.
 
 The reader helpers accept filesystem paths, not open file handles. If another
 library has already parsed an upload or in-memory stream, pass its Biopython

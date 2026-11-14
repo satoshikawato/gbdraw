@@ -1263,6 +1263,7 @@ def _read_circular_inputs(args: argparse.Namespace) -> _CircularInputs:
             gbk_paths=args.gbk,
             gff_paths=args.gff,
             fasta_paths=args.fasta,
+            gfa_paths=args.gfa,
             cardinalities=_circular_cli_record_cardinality(),
         ),
         args,

@@ -1617,19 +1617,20 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
         return json.dumps({'error': serialize_web_error(error, operation='unknown', stage="helper")})
 
 def list_sequence_records(path, format):
-    """List record selectors, IDs, and lengths of a GenBank file, or of a FASTA file given without GFF3."""
+    """List record selectors, IDs, and lengths of a GenBank file, of a FASTA file given without GFF3, or of a GFA."""
     from gbdraw.layout.record_transform import detected_topology
     from gbdraw.core.record_metadata import (
         format_inferred_definition,
         infer_record_source_metadata,
     )
-    from gbdraw.io.genome import load_fasta, require_record_sequence
+    from gbdraw.io.genome import load_fasta, load_gfa, require_record_sequence
+    # The records Generate draws of a FASTA-only input or a GFA, refused as Generate refuses them (the one loader).
+    loaders = {"fasta": load_fasta, "gfa": load_gfa}
     try:
-        if format not in {"genbank", "fasta"}:
+        if format not in {"genbank", *loaders}:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
-        if format == "fasta":
-            # The records Generate draws of a FASTA-only input, refused unless nucleotide (the one loader).
-            records = load_fasta([path])
+        if format in loaders:
+            records = loaders[format]([path])
         else:
             # A GenBank/DDBJ/EMBL file the parser refuses, or one without a record, raises its diagnostic here.
             records = _parse_sequence_file(path, "genbank")

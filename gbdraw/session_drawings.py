@@ -52,6 +52,7 @@ from gbdraw.session_contract import (
     SessionProjectWebFiles,
     keys_of,
 )
+from gbdraw.session_request_codec import record_source_file_ids
 from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     CircularSourceCard,
@@ -984,8 +985,7 @@ _CLI_RECORD_KEY = re.compile(re.escape(CLI_RECORD_KEY_PREFIX) + r"[1-9][0-9]*")
 def _request_record_file(record: object) -> object:
     """The resource of the file a request record reads its record from."""
 
-    source = _mapping(_mapping(record).get("source"))
-    return source.get("resourceId") or source.get("fastaResourceId")
+    return next(reversed(record_source_file_ids(_mapping(_mapping(record).get("source")))), None)
 
 
 def _card_record_counts(cards: Sequence[CircularSourceCard], records: Sequence[object]) -> list[int] | None:

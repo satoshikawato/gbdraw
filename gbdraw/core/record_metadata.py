@@ -26,7 +26,7 @@ _SOURCE_FEATURE_HASH_ATTR = "_gbdraw_source_feature_hash"
 _SourceBase = TypeVar("_SourceBase", int, "NDArray[np.int64]")
 
 
-RecordSourceKind = Literal["genbank", "gff_fasta", "fasta", "memory"]
+RecordSourceKind = Literal["genbank", "gff_fasta", "fasta", "gfa", "memory"]
 RECORD_ORIGIN_ANNOTATION = "gbdraw_record_origin"
 
 

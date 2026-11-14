@@ -46,12 +46,14 @@ InputWarningCode = Literal[
     "comparison_table_empty",
     "annotation_set_not_drawn",
     "comparison_record_id_repeated",
+    "gfa_paths_not_drawn",
 ]
 NO_DRAWABLE_FEATURES: InputWarningCode = "no_drawable_features"
 COMPARISON_ROWS_FILTERED_OUT: InputWarningCode = "comparison_rows_filtered_out"
 COMPARISON_TABLE_EMPTY: InputWarningCode = "comparison_table_empty"
 ANNOTATION_SET_NOT_DRAWN: InputWarningCode = "annotation_set_not_drawn"
 COMPARISON_RECORD_ID_REPEATED: InputWarningCode = "comparison_record_id_repeated"
+GFA_PATHS_NOT_DRAWN: InputWarningCode = "gfa_paths_not_drawn"
 # Warnings of inputs drawn in full: the Web does not head them "Part of the input was not drawn".
 INPUT_WARNINGS_OF_DRAWN_INPUT: frozenset[InputWarningCode] = frozenset({COMPARISON_RECORD_ID_REPEATED})
 
@@ -106,6 +108,8 @@ class RecordInputSummary:
     # The shortest record one circle draws, when this record is shorter and so not drawn
     # (``gbdraw.layout.record_units.left_off_circle``); ``features`` is then empty.
     left_off_circle_under_bp: int | None = None
+    # The path and walk lines (P, W) of the record's GFA file, which are not drawn.
+    graph_lines_not_drawn: int = 0
 
     @property
     def drawn_features(self) -> int:
@@ -284,6 +288,7 @@ def summarize_inputs(
             ) if draws_features and under_bp is None else (),
             features_track=draws_features,
             left_off_circle_under_bp=under_bp,
+            graph_lines_not_drawn=item.graph_lines_not_drawn,
         ))
     return InputSummary(
         records=tuple(summaries),
@@ -470,6 +475,18 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message, (item.source_path,))
         for item in summary.repeated_comparison_ids
     )
+    # One warning per GFA file (its records share the subject), whose paths and walks are not drawn (D-86).
+    warnings.extend(
+        InputWarning(
+            GFA_PATHS_NOT_DRAWN,
+            f"{record.source_name}: its "
+            f"{_count(record.graph_lines_not_drawn, 'path or walk line (P, W) is', 'path and walk lines (P, W) are')} "
+            "not drawn; each segment (S) is drawn as a record.",
+            record.source_paths,
+        )
+        for record in summary.records
+        if record.graph_lines_not_drawn
+    )
     return tuple(_first_per_input(warnings, set()))
 
 
@@ -573,6 +590,7 @@ __all__ = [
     "COMPARISON_ROWS_FILTERED_OUT",
     "COMPARISON_TABLE_EMPTY",
     "FeatureTypeTally",
+    "GFA_PATHS_NOT_DRAWN",
     "INPUT_WARNINGS_OF_DRAWN_INPUT",
     "InputSummary",
     "InputSummaryPayload",

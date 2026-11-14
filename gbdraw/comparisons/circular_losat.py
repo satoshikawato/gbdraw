@@ -33,7 +33,9 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.conservation import ConservationSearchResult
 from gbdraw.api.options import CircularDiagramOptions, LosatSearchOptions
-from gbdraw.api.requests import FastaInputSource, GenBankInputSource, GffFastaInputSource, RecordInputSource
+from gbdraw.api.requests import (
+    GffFastaInputSource, InMemoryRecordSource, RecordInputSource, WholeRecordFileSource, _source_details,
+)
 from gbdraw.comparisons.losat_jobs import (
     LOSAT_OUTFMT,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -154,14 +156,14 @@ class RingSubjectSource:
 def ring_subject_sources(
     sources: Iterable[RecordInputSource],
     *,
-    file_records: Callable[[GenBankInputSource | FastaInputSource], Sequence[SeqRecord]],
+    file_records: Callable[[WholeRecordFileSource], Sequence[SeqRecord]],
 ) -> tuple[RingSubjectSource, ...]:
     """The sources of the ring subject database, in request order (Owner D-25): the reference genome.
 
     Every distinct subject-side source the request reads gives all of its
     records, uncropped, in file order, on the file's strand, also records that
     are not drawn. A source whose file holds whole records (a GenBank file, a
-    FASTA given without GFF3) gives the records the render's loader read
+    FASTA given without GFF3, a GFA) gives the records the render's loader read
     (``file_records``: the planner's parse, so no source is parsed twice). A
     GFF3/FASTA pair gives every entry of its FASTA file, also one the GFF3 file
     does not name: the GFF3 parse keeps only named entries, so the FASTA file is
@@ -174,21 +176,17 @@ def ring_subject_sources(
     found: list[RingSubjectSource] = []
     for source in sources:
         key: Hashable = (
-            ("genbank", str(source.path)) if isinstance(source, GenBankInputSource)
-            else ("fasta", str(source.fasta_path)) if isinstance(source, (GffFastaInputSource, FastaInputSource))
-            else ("memory", id(source.record))
+            ("memory", id(source.record)) if isinstance(source, InMemoryRecordSource)
+            # A GFF3/FASTA pair is its FASTA file, the file that holds its records.
+            else _source_details(source)[1][-1]
         )
         if key in seen:
             continue
         seen.add(key)
-        if isinstance(source, GenBankInputSource):
+        if isinstance(source, WholeRecordFileSource):
             records = tuple(file_records(source))
-            genome = ring_genome_file(os.path.basename(str(source.path)), "genbank", (str(source.path),), records)
-        elif isinstance(source, FastaInputSource):
-            records = tuple(file_records(source))
-            genome = ring_genome_file(
-                os.path.basename(str(source.fasta_path)), "fasta", (str(source.fasta_path),), records
-            )
+            kind, paths = _source_details(source)
+            genome = ring_genome_file(os.path.basename(paths[0]), kind, paths, records)
         elif isinstance(source, GffFastaInputSource):
             records = tuple(read_sequence_file_records(str(source.fasta_path), "fasta"))
             genome = ring_genome_file(

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Literal, Sequence
 
 from ..core.numeric import parse_ascii_integer
+from ..core.record_metadata import RecordSourceKind
 from ..exceptions import ValidationError
 from ..io.input_text import GZIP_ERRORS, open_input_text
 from ..io.regions import parse_region_spec
@@ -23,9 +24,11 @@ from ..tracks.circular import _LEGACY_SPACING_PARAM
 from ..tracks.parsing import split_kv_list
 
 
-InputKind = Literal["gbk", "gff_fasta", "fasta"]
+InputKind = Literal["gbk", "gff_fasta", "fasta", "gfa"]
 # How a records table names each input kind in its errors.
-_INPUT_KIND_ROWS: dict[InputKind, str] = {"gbk": "GenBank rows", "gff_fasta": "GFF3/FASTA rows", "fasta": "FASTA rows"}
+_INPUT_KIND_ROWS: dict[InputKind, str] = {
+    "gbk": "GenBank rows", "gff_fasta": "GFF3/FASTA rows", "fasta": "FASTA rows", "gfa": "GFA rows",
+}
 
 
 @dataclass(frozen=True)
@@ -143,6 +146,18 @@ class RecordsTableRow:
     losat_gencode: int | None = None
     # The value of the ``record_group`` column; rows sharing a non-empty value are the windows of one record (D-32).
     record_group: str = ""
+    gfa: str = ""
+
+    @property
+    def source_files(self) -> tuple[RecordSourceKind, tuple[str, ...]]:
+        """The kind of the record source the row names and its files, in resource order."""
+        if self.gbk:
+            return "genbank", (self.gbk,)
+        if self.gff:
+            return "gff_fasta", (self.gff, self.fasta)
+        if self.gfa:
+            return "gfa", (self.gfa,)
+        return "fasta", (self.fasta,)
 
 
 @dataclass(frozen=True)
@@ -185,7 +200,7 @@ class RecordsTableRecord:
 
 
 # What the rows of one ``record_group`` must name alike, and what they may give once for the record (D-32).
-_RECORD_GROUP_SOURCE_FIELDS = ("gbk", "gff", "fasta", "record_id", "row")
+_RECORD_GROUP_SOURCE_FIELDS = ("gbk", "gff", "fasta", "gfa", "record_id", "row")
 _RECORD_GROUP_RECORD_FIELDS = ("record_label", "record_subtitle", "topology", "losat_gencode")
 
 
@@ -336,6 +351,7 @@ _RECORDS_COLUMNS = frozenset(
         "gbk",
         "gff",
         "fasta",
+        "gfa",
         "record_label",
         "record_subtitle",
         "record_id",
@@ -632,27 +648,32 @@ def read_records_table(path: str) -> RecordsTable:
         gbk_raw = values.get("gbk", "").strip()
         gff_raw = values.get("gff", "").strip()
         fasta_raw = values.get("fasta", "").strip()
+        gfa_raw = values.get("gfa", "").strip()
         if gbk_raw and (gff_raw or fasta_raw):
             raise ValidationError(
                 f"{table_path}: row {row.row_number} cannot mix gbk with gff/fasta."
             )
-        if not (gbk_raw or gff_raw or fasta_raw):
+        if gfa_raw and (gbk_raw or gff_raw or fasta_raw):
+            raise ValidationError(f"{table_path}: row {row.row_number} cannot mix gfa with gbk, gff or fasta.")
+        if not (gbk_raw or gff_raw or fasta_raw or gfa_raw):
             raise ValidationError(
-                f"{table_path}: row {row.row_number} must provide gbk, fasta, or both gff and fasta."
+                f"{table_path}: row {row.row_number} must provide gbk, fasta, gfa, or both gff and fasta."
             )
         if gff_raw and not fasta_raw:
             raise ValidationError(
                 _cell_error(table_path, row.row_number, "fasta", "value is required for GFF3/FASTA rows")
             )
-        row_kinds.setdefault("gbk" if gbk_raw else "gff_fasta" if gff_raw else "fasta")
+        row_kinds.setdefault("gbk" if gbk_raw else "gff_fasta" if gff_raw else "gfa" if gfa_raw else "fasta")
 
         gbk_path = _resolve_table_path(table_path, gbk_raw) if gbk_raw else ""
         gff_path = _resolve_table_path(table_path, gff_raw) if gff_raw else ""
         fasta_path = _resolve_table_path(table_path, fasta_raw) if fasta_raw else ""
+        gfa_path = _resolve_table_path(table_path, gfa_raw) if gfa_raw else ""
         for dependency_column, resolved_path in (
             ("gbk", gbk_path),
             ("gff", gff_path),
             ("fasta", fasta_path),
+            ("gfa", gfa_path),
         ):
             if resolved_path:
                 dependencies.append(
@@ -706,6 +727,7 @@ def read_records_table(path: str) -> RecordsTable:
                 display_start=display_start,
                 losat_gencode=_parse_optional_positive_int(table_path, row, "losat_gencode"),
                 record_group=values.get(RECORD_GROUP_COLUMN, "").strip(),
+                gfa=gfa_path,
             )
         )
 
@@ -1115,6 +1137,7 @@ class RecordsTableEntry:
     row: int | None = None
     column: int | None = None
     record_group: str = ""
+    gfa: str = ""
 
 
 @dataclass(frozen=True)
@@ -1153,7 +1176,7 @@ def records_table_text(entries: Sequence[RecordsTableEntry]) -> str:
     """A records table of ``entries`` in order: the input columns they use, then label, record, region,
     orientation, placement and record group."""
 
-    inputs = [name for name in ("gbk", "gff", "fasta") if any(getattr(entry, name) for entry in entries)]
+    inputs = [name for name in ("gbk", "gff", "fasta", "gfa") if any(getattr(entry, name) for entry in entries)]
     header = [*inputs, "record_label", "record_id", "region", "reverse_complement", "row", "column", RECORD_GROUP_COLUMN]
     return _table_text(
         header,

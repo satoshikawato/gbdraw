@@ -1,0 +1,13 @@
+{
+  "purpose": "Positive fixture of the gfa record source kind in Session 51: a Circular CLI Session drawn from a GFA 1 graph whose one segment has a 55M self-loop (D-86, D-126)",
+  "writer": "gbdraw/circular.py --save_session (CLI sidecar), run from the feat/gfa-input worktree on PYTHONPATH",
+  "command": "PYTHONPATH=<worktree> python -P -c 'from gbdraw.cli import main; main()' circular --gfa HmmtDNA.gfa -o cli-circular-gfa -f svg --save_session",
+  "workingDirectory": "a scratch folder holding HmmtDNA.gfa: H VN:Z:1.0, one S line HmmtDNA whose sequence is tests/test_inputs/HmmtDNA.gbk in upper case followed by its first 55 bases, and L HmmtDNA + HmmtDNA + 55M (input paths stay relative in cliInvocation)",
+  "inputs": {
+    "HmmtDNA.gfa": "db27a8ef130b95c49113dbdbadd03059b26c1f236346a3a7c2c1b836f6d5c2f6"
+  },
+  "values": "drawings[0].renderRequest.records[0].source {kind: gfa, gfaResourceId: record-1-gfa}; resources.record-1-gfa kind gfa; drawings[0].webFiles.bindings.circularSources[0].fasta holds the GFA file",
+  "sha256": "96492e9aca1e7f947802f47c6572d54fe5784c22715c5985fe4522142bcdf87e",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

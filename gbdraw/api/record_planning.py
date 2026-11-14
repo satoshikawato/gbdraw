@@ -54,8 +54,9 @@ from gbdraw.io.cli_tables import (
     read_records_table,
 )
 from gbdraw.io.comparisons import read_comparison_resource
+from gbdraw.io.gfa import GFA_PATH_LINES_ANNOTATION
 from gbdraw.io.genome import (
-    feature_types_left_out, filter_features_by_type, load_fasta, load_gbks, parse_gff_fasta, require_record_sequence,
+    feature_types_left_out, filter_features_by_type, load_fasta, load_gbks, load_gfa, parse_gff_fasta, require_record_sequence,
 )
 from gbdraw.io.record_select import (
     RecordSelector,
@@ -114,6 +115,7 @@ from .requests import (
     FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
+    GfaInputSource,
     InMemoryRecordSource,
     RecordCardinality,
     RecordCollectionOptions,
@@ -122,6 +124,7 @@ from .requests import (
     RecordInputSource,
     RecordPresentation,
     RenderOutputRequest,
+    _source_details,
 )
 
 logger = logging.getLogger(__name__)
@@ -295,6 +298,8 @@ class ResolvedRecordProvenance:
     # GFF3 features whose type the request does not draw, left out when the record
     # was planned, by type (the GFF3 type filter); the input summary counts them.
     feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
+    # The path and walk lines (P, W) of the record's GFA file, which are not drawn; the input summary names them.
+    graph_lines_not_drawn: int = field(default=0, kw_only=True)
     # The window this unit draws, when the record is drawn through windows; ``record_key`` is then the unit's key.
     window: ResolvedWindow | None = field(default=None, kw_only=True)
     # The record whose window an earlier plan drew this record as, when this plan draws it whole (``RecordOrigin``).
@@ -1599,21 +1604,6 @@ def _source_key(source: RecordInputSource) -> tuple[object, ...]:
     return (kind, *paths)
 
 
-def _source_details(
-    source: RecordInputSource,
-) -> tuple[RecordSourceKind, tuple[str, ...]]:
-    """The one reading of a record source: its kind and the paths of its files, in resource order."""
-    if isinstance(source, GenBankInputSource):
-        return "genbank", (str(source.path),)
-    if isinstance(source, GffFastaInputSource):
-        return "gff_fasta", (str(source.gff_path), str(source.fasta_path))
-    if isinstance(source, FastaInputSource):
-        return "fasta", (str(source.fasta_path),)
-    if isinstance(source, InMemoryRecordSource):
-        return "memory", ()
-    raise ValidationError("Unsupported record input source.")
-
-
 class SourceFileContents:
     """The content of record source files, compared across drawings: the one owner of "these records read the same
     file" (a paste's duplicates, the Similarity alignment's source fingerprints).
@@ -1675,6 +1665,8 @@ def _file_source(kind: RecordSourceKind, paths: Sequence[str]) -> RecordInputSou
         return GffFastaInputSource(paths[0], paths[1])
     if kind == "fasta":
         return FastaInputSource(paths[0])
+    if kind == "gfa":
+        return GfaInputSource(paths[0])
     raise ValidationError(f"A {kind} record source names no file.", diagnostic={"code": "INPUT_INVALID"})
 
 
@@ -1698,6 +1690,8 @@ def _load_source_records(
             records = genbank_loader([str(source.path)])
         elif isinstance(source, FastaInputSource):
             records = fasta_loader([str(source.fasta_path)])
+        elif isinstance(source, GfaInputSource):
+            records = load_gfa([str(source.gfa_path)])
         elif isinstance(source, GffFastaInputSource):
             # One parse serves every type filter: ``resolve_record_inputs`` applies it in memory.
             records = gff_loader(
@@ -2226,6 +2220,7 @@ def resolve_record_inputs(
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
                 feature_types_left_out_at_load=types_left_out,
+                graph_lines_not_drawn=int(source_record.annotations.get(GFA_PATH_LINES_ANNOTATION, 0)),
             )
             for unit in units:
                 _apply_record_key(unit, record_key=record_key)
@@ -2266,6 +2261,7 @@ def record_input_manifest_from_paths(
     gbk_paths: Sequence[str] | None = None,
     gff_paths: Sequence[str] | None = None,
     fasta_paths: Sequence[str] | None = None,
+    gfa_paths: Sequence[str] | None = None,
     cardinalities: Sequence[RecordCardinality] | RecordCardinality,
     selectors: Sequence[str] | None = None,
     reverse_flags: Sequence[object] | None = None,
@@ -2278,13 +2274,21 @@ def record_input_manifest_from_paths(
     gbks = tuple(gbk_paths or ())
     gffs = tuple(gff_paths or ())
     fastas = tuple(fasta_paths or ())
+    gfas = tuple(gfa_paths or ())
     if gffs and len(gffs) != len(fastas):
         raise ValidationError("GFF3 and FASTA path counts must match.")
-    if bool(gbks) == bool(fastas):
+    if sum(bool(paths) for paths in (gbks, fastas, gfas)) != 1:
         raise ValidationError(
-            "Specify either GenBank paths, or FASTA paths with or without GFF3 paths."
+            "Specify either GenBank paths, FASTA paths with or without GFF3 paths, or GFA paths."
         )
-    count = len(gbks) if gbks else len(fastas)
+    # Each source's kind and files, in resource order (``_source_details``).
+    file_sources: list[tuple[RecordSourceKind, tuple[str, ...]]] = (
+        [("genbank", (path,)) for path in gbks] if gbks
+        else [("gff_fasta", pair) for pair in zip(gffs, fastas)] if gffs
+        else [("fasta", (path,)) for path in fastas] if fastas
+        else [("gfa", (path,)) for path in gfas]
+    )
+    count = len(file_sources)
     if isinstance(cardinalities, RecordCardinality):
         cardinality_values = [cardinalities] * count
     else:
@@ -2315,12 +2319,8 @@ def record_input_manifest_from_paths(
     records: list[RecordInput] = []
     source_paths: list[str] = []
     for index in range(count):
-        source: RecordInputSource = (
-            GenBankInputSource(gbks[index]) if gbks
-            else GffFastaInputSource(gffs[index], fastas[index]) if gffs
-            else FastaInputSource(fastas[index])
-        )
-        source_paths.append(_source_details(source)[1][0])
+        source = _file_source(*file_sources[index])
+        source_paths.append(file_sources[index][1][0])
         selector = parse_record_selector(str(selector_values[index] or ""))
         cardinality = cardinality_values[index]
         if selector is not None:
@@ -2351,11 +2351,7 @@ def _records_table_input(record: RecordsTableRecord, index: int) -> RecordInput:
     """The record input of one records-table record: a row, or the rows that share a ``record_group`` (D-32)."""
 
     first = record.first
-    source: RecordInputSource = (
-        GenBankInputSource(first.gbk) if first.gbk
-        else GffFastaInputSource(first.gff, first.fasta) if first.gff
-        else FastaInputSource(first.fasta)
-    )
+    source = _file_source(*first.source_files)
     windowed = record.is_windowed and len(record.rows) > 1
     windows: tuple[RecordWindow, ...] = ()
     if windowed:

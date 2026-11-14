@@ -223,7 +223,6 @@ from .record_planning import (
     _load_source_records,
     _prepared_source_cache_spec,
     _similarity_candidate_from_orthogroup_member,
-    _source_details,
     _source_key,
     alignment_record_keys,
     comparison_record_bindings,
@@ -248,8 +247,6 @@ from .requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
-    FastaInputSource,
-    GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -259,6 +256,8 @@ from .requests import (
     RecordInputSource,
     RecordPresentation,
     RenderOutputRequest,
+    WholeRecordFileSource,
+    _source_details,
     drawn_record_identity,
 )
 
@@ -1974,7 +1973,7 @@ def _resolve_ring_losat(
     if options.losat_search is None:
         return options, ()
 
-    def file_records(source: GenBankInputSource | FastaInputSource) -> tuple[SeqRecord, ...]:
+    def file_records(source: WholeRecordFileSource) -> tuple[SeqRecord, ...]:
         parsed = parsed_sources.get(_source_key(source))
         # A request served from the prepared resolved-record cache made no parse
         # here: the prepared parsed source holds it.

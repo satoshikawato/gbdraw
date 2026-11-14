@@ -164,6 +164,15 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
         ),
         type=str,
         nargs='*')
+    parser.add_argument(
+        "--gfa",
+        metavar="GFA_FILE",
+        help=(
+            "GFA 1 assembly graph, plain or gzip-compressed (instead of --gbk, --gff or --fasta): each segment "
+            "(S line) is a record without features; a segment with a self-loop link is circular"
+        ),
+        type=str,
+        nargs='*')
 
 
 def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
@@ -1092,14 +1101,16 @@ def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         or getattr(args, "display_start_coordinate", None) is not None
     ):
         parser.error("--records_table cannot be combined with --record_topology or --display_start_coordinate.")
-    if records_table and (args.gbk or args.gff or args.fasta):
-        parser.error("--records_table cannot be used with --gbk, --gff, or --fasta.")
+    if records_table and (args.gbk or args.gff or args.fasta or args.gfa):
+        parser.error("--records_table cannot be used with --gbk, --gff, --fasta, or --gfa.")
     if args.gbk and (args.gff or args.fasta):
         parser.error("--gbk cannot be used with --gff or --fasta.")
+    if args.gfa and (args.gbk or args.gff or args.fasta):
+        parser.error("--gfa cannot be used with --gbk, --gff or --fasta.")
     if args.gff and not args.fasta:
         parser.error("--gff requires --fasta.")
-    if not records_table and not args.gbk and not args.fasta:
-        parser.error("Either --records_table, --gbk, or --fasta (with or without --gff) must be provided.")
+    if not records_table and not args.gbk and not args.fasta and not args.gfa:
+        parser.error("Either --records_table, --gbk, --fasta (with or without --gff), or --gfa must be provided.")
 
 
 def apply_record_display_cli_options(

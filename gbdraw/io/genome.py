@@ -26,6 +26,7 @@ from .input_text import (
     gff3_stream,
     read_input_bytes,
 )
+from .gfa import read_gfa_records
 from .record_sequences import read_fasta_records, read_flat_records, read_gff3_text
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
@@ -228,10 +229,19 @@ def load_gbks(
     )
 
 
+# What a sequence file given as records calls one of its records, and the reason a record that is not
+# nucleotide is refused with (the Web words each reason).
+_NUCLEOTIDE_SOURCES: dict[Literal["FASTA", "GFA"], tuple[str, str]] = {
+    "FASTA": ("FASTA record", "NOT_NUCLEOTIDE"),
+    "GFA": ("GFA segment", "GFA_NOT_NUCLEOTIDE"),
+}
+
+
 def _fasta_record_diagnostic(
     reason: str, record: SeqRecord, position: int, letter: str | None = None
 ) -> dict[str, object]:
-    """The diagnostic of a FASTA-only record gbdraw cannot draw: its ID, its 1-based position, and the letter.
+    """The diagnostic of a FASTA-only record or GFA segment gbdraw cannot draw: its ID, its 1-based position, and the
+    letter.
 
     The Web error adapter keeps the ID when it can be shown, else the position.
     """
@@ -243,8 +253,10 @@ def _fasta_record_diagnostic(
     return diagnostic
 
 
-def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqRecord]:
-    """Stop at the first record of a FASTA given without GFF3 that gbdraw cannot draw (D-17).
+def require_nucleotide_records(
+    records: list[SeqRecord], path: str, *, source: Literal["FASTA", "GFA"] = "FASTA"
+) -> list[SeqRecord]:
+    """Stop at the first record of a FASTA given without GFF3, or of a GFA, that gbdraw cannot draw (D-17).
 
     A record needs a sequence, and its sequence may hold only IUPAC nucleotide
     codes (A C G T U R Y S W K M B D H V N, either case). The diagnostic names the
@@ -253,14 +265,15 @@ def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqR
     """
 
     name = os.path.basename(path)
+    noun, reason = _NUCLEOTIDE_SOURCES[source]
     for position, record in enumerate(records, start=1):
         _require_sequence(record, position, name)
         letter = _first_letter_outside(record.seq, _IUPAC_NUCLEOTIDE_CODES)
         if letter is not None:
             raise ValidationError(
-                f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is not a nucleotide code: "
+                f"{noun} {record.id or f'#{position}'} in {name} holds {letter!r}, which is not a nucleotide code: "
                 "gbdraw draws nucleotide records (IUPAC codes A C G T U R Y S W K M B D H V N).",
-                diagnostic=_fasta_record_diagnostic("NOT_NUCLEOTIDE", record, position, letter),
+                diagnostic=_fasta_record_diagnostic(reason, record, position, letter),
             )
     return records
 
@@ -351,6 +364,27 @@ def load_fasta(
     return _load_record_files(
         fasta_list, _read_nucleotide_fasta, record_selectors, reverse_flags, kind="FASTA"
     )
+
+
+def _read_nucleotide_gfa(path: str) -> list[SeqRecord]:
+    """The segments of one GFA 1 file, refused unless each is a nucleotide record."""
+
+    return require_nucleotide_records(read_gfa_records(path), path, source="GFA")
+
+
+def load_gfa(
+    gfa_list: List[str],
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+) -> list[SeqRecord]:
+    """Parse GFA 1 files: each segment (S line) is a record with its sequence and no features, in file order.
+
+    The one loader of a GFA input (CLI, Python API, the Web's Worker helper);
+    :mod:`gbdraw.io.gfa` owns the reading of the graph (topology, self-loop
+    overlaps, refusals).
+    """
+
+    return _load_record_files(gfa_list, _read_nucleotide_gfa, record_selectors, reverse_flags, kind="GFA")
 
 
 def merge_gff_fasta_records(
@@ -761,6 +795,7 @@ __all__ = [
     "source_genome_length",
     "load_gbks",
     "load_fasta",
+    "load_gfa",
     "load_query_fasta",
     "require_nucleotide_records",
     "SequenceMolecule",

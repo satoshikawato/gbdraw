@@ -1654,13 +1654,14 @@ def _linear_records(args: argparse.Namespace, losat_search: LosatSearchOptions |
     else:
         cardinality = _linear_cli_record_cardinality(
             is_gff_source=bool(args.gff),
-            source_count=len(args.gbk or args.fasta or ()),
+            source_count=len(args.gbk or args.fasta or args.gfa or ()),
             load_comparison=bool(args.blast or args.comparisons_table or losat_search is not None),
         )
         record_manifest = record_input_manifest_from_paths(
             gbk_paths=args.gbk,
             gff_paths=args.gff,
             fasta_paths=args.fasta,
+            gfa_paths=args.gfa,
             cardinalities=cardinality,
             selectors=args.record_id,
             reverse_flags=args.reverse_complement,
