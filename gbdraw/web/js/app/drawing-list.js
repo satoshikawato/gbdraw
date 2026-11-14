@@ -43,7 +43,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {import('../services/config.js').RegionDerivation} RegionDerivation A derived region drawing and the request it was derived from.
  * @typedef {(derivation: RegionDerivation, create: { runSavedComparison: boolean }) => Promise<(drawingId: DrawingId) => DrawingState>} RegionDrawing
  *   Reads a derived region drawing; the result makes its state under the new drawing's ID. Find in other files' Create
- *   runs its saved comparison at Generate (PD-OI-123); New drawing from a region leaves the choice to the user.
+ *   runs its saved comparison at Generate (PD-OI-123); Copy to another drawing leaves the choice to the user.
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
  * @typedef {(drawingId: DrawingId, left?: HeldLosatRows) => HeldDrawing} RemoveDrawingFromStore
  *   Removes a drawing that is not shown and hands over its slot and LOSAT rows; `left` are the rows its ID had
@@ -227,7 +227,7 @@ export const createDrawingList = ({
   const newDrawingFromRegion = async (sourceId, derivation, kind = 'region') => {
     tabIndexOf('newDrawingFromRegion', sourceId);
     const make = await regionDrawing(derivation, { runSavedComparison: kind === 'search' });
-    return addNewDrawing(kind === 'region' ? 'New drawing from a region' : 'Find in other files', derivation.derived.mode,
+    return addNewDrawing(kind === 'region' ? 'Copy to another drawing' : 'Find in other files', derivation.derived.mode,
       (drawingId) => startingEmpty(make(drawingId)), kind === 'region' ? null : sourceId);
   };
 

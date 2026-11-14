@@ -5,10 +5,11 @@ import { msg, numberText, t, tm } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
 import { drawnRecordIdentities } from '../services/record-draw-selection.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { copyRefusalLine } from './region-drawing/copy-text.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
-/** @import { DerivedRegionDrawing, NotCarriedItem } from '../contracts/locate.generated.js' */
+/** @import { DerivedRegionDrawing, NewDrawingCopy, NotCarriedItem, RefusedCopy } from '../contracts/locate.generated.js' */
 /** @import { RefusedRegionDrawing, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
 /** @import { DrawingListOutcome } from './drawing-list.js' */
 /** @import { IdentityRequestRecord, RecordIdentitySources } from '../services/record-draw-selection.js' */
@@ -24,13 +25,19 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
  *   lists, read first when a Load left them deferred; null without the record discovery owner.
  * @property {(recordKey: string) => readonly RegionSourceFeature[] | null} resultFeatures The features the shown
  *   Result drew under a record key (the committed request's), or null when it drew none under that key.
+ * @property {(drawn: DrawnRecordChoice) => string | null} committedRecordKeyOf The committed request's record key of a
+ *   drawn record (its definition group's index and ID), found as the record popup finds it; null when none.
  */
+
+/** @typedef {{ recordIndex: number, recordId: string }} DrawnRecordChoice A drawn record (the record popup's identity). */
 
 /**
  * A record of the source drawing as the dialog offers it. `features` are the
  * shown Result's admitted features of the record, or `null` without a Result.
  * @typedef {object} RegionSourceRecord
  * @property {string} recordKey The record key of the source drawing's request (the identity).
+ * @property {readonly string[]} aliases The other keys the record has (`drawnRecordIdentities`): a committed request
+ *   may key it so.
  * @property {string} caption Display only.
  * @property {number} length Source length in bases.
  * @property {readonly RegionSourceFeature[] | null} features
@@ -58,13 +65,14 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
     // The Result keys the record as the committed request did: its draft key, or a key it has under the other
     // canvas (its aliases).
     const features = [...new Set([requestKey, ...aliases])].map(featuresOf).find((found) => found !== null) ?? null;
-    return [{ recordKey: requestKey, caption, length, features }];
+    return [{ recordKey: requestKey, aliases, caption, length, features }];
   });
 
 /**
  * One record row of the dialog: display values and the user's input only.
  * @typedef {object} RegionDialogRow
  * @property {string} recordKey
+ * @property {readonly string[]} aliases
  * @property {string} caption
  * @property {number} length
  * @property {boolean} checked
@@ -89,6 +97,10 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
  * @property {boolean} show
  * @property {RegionDialogRow[]} rows
  * @property {boolean} keepValues "Keep my values": derive with `adaptSizes: false`.
+ * @property {NewDrawingCopy['mode']} newMode The mode the user chose for the new drawing; null takes Python's default
+ *   (the source mode for whole records only, else Linear: PD-OI-090 (4)).
+ * @property {NewDrawingCopy['settings']} settings "Keep this drawing's settings and edits" or "Start from the mode defaults".
+ * @property {DerivedRegionDrawing['mode'] | null} mode The mode of the derived drawing, shown in the mode choice.
  * @property {'idle' | 'invalid' | 'deriving' | 'derived' | 'creating' | 'refused' | 'error'} status
  * @property {string} message The reason shown for 'idle', 'invalid', 'refused' and 'error'.
  * @property {{ setting: string, label: string, explicit: string, auto: string }[]} returnedToAuto
@@ -194,7 +206,7 @@ const shownValue = (value) => {
 
 /**
  * What a derived drawing's dialog lists: the sizes that return to Auto and the lines of what is not carried.
- * New drawing from a region and Find in other files word them alike.
+ * Copy to another drawing and Find in other files word them alike.
  * @param {Pick<DerivedRegionDrawing, 'mode' | 'returnedToAuto' | 'notCarried'>} derived
  * @returns {Pick<RegionDialogView, 'returnedToAuto' | 'notCarried'>}
  */
@@ -204,6 +216,43 @@ export const derivedDrawingNotes = ({ mode, returnedToAuto, notCarried }) => ({
   })),
   notCarried: notCarried.map((item) => notCarriedLine(mode, item.kind))
 });
+
+/** The dialog as it opens and after Close. @returns {Omit<RegionDialogView, 'show' | 'rows'>} */
+const startingChoices = () => ({
+  keepValues: false, newMode: null, settings: 'keep', mode: null, status: 'idle', message: '', returnedToAuto: [], notCarried: []
+});
+
+/**
+ * The user's choices of the dialog that are not rows: Keep my values, the new drawing's mode and settings.
+ * @typedef {Partial<Pick<RegionDialogView, 'keepValues' | 'newMode' | 'settings'>>} RegionChoiceEdit
+ */
+
+/** The copy the dialog's choices make (a new drawing). @param {RegionDialogView} dialog @returns {NewDrawingCopy} */
+const copyOf = (dialog) => ({ into: 'new', settings: dialog.settings, mode: dialog.newMode });
+
+/** The reason a refusal shows, from the wording owner of its vocabulary. @param {RefusedRegionDrawing | RefusedCopy} offer */
+const refusalText = (offer) => (offer.reason === 'START_AFTER_END'
+  ? tm(/** @type {string} */ (reasonText(offer.reason)))
+  : copyRefusalLine(offer.reason));
+
+// A feature is chosen from the features the shown Result drew of the record.
+/** @param {readonly RegionSourceFeature[] | null} features */
+const featureReasonOf = (features) => {
+  if (features === null) return t('Generate the drawing to choose a feature.');
+  return features.length === 0 ? t('This record has no features to choose.') : '';
+};
+
+/**
+ * The dialog's rows of `records`; a record that `chosen` names by its key or an alias takes the chosen edit.
+ * @param {readonly RegionSourceRecord[]} records @param {{ keys: readonly string[], edit: RegionRowEdit }} chosen
+ * @returns {RegionDialogRow[]}
+ */
+const dialogRowsOf = (records, chosen) => records.map((record) => ({
+  recordKey: record.recordKey, aliases: record.aliases, caption: record.caption, length: record.length, checked: false,
+  kind: /** @type {RegionDialogRow['kind']} */ ('whole'), start: '1', end: String(record.length), featureId: '',
+  features: record.features, featureReason: featureReasonOf(record.features),
+  ...([record.recordKey, ...record.aliases].some((key) => chosen.keys.includes(key)) ? chosen.edit : {})
+}));
 
 /** @param {string} text @returns {number | null} */
 const wholeNumber = (text) => (/^\s*[1-9]\d*\s*$/.test(text) ? Number(text) : null);
@@ -238,7 +287,7 @@ const regionsOf = (rows) => {
 /**
  * What the creation screen shows: the refusal, or the derived drawing (what
  * returned to Auto, what is not carried) with the Create that adds it.
- * @typedef {RefusedRegionDrawing | (DerivedRegionDrawing & { create: () => Promise<DrawingListOutcome> })} RegionDrawingOffer
+ * @typedef {RefusedRegionDrawing | RefusedCopy | (DerivedRegionDrawing & { create: () => Promise<DrawingListOutcome> })} RegionDrawingOffer
  */
 
 const REPLY_INVALID = () => diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
@@ -246,16 +295,22 @@ const REPLY_INVALID = () => diagnosticError('RESULT_INVALID', {}, { stage: 'help
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-/** The reply's vocabularies, from Python's `StartAfterEndReason` and `NotCarriedKind`. */
-const { refusalReasons: REFUSAL_REASONS, notCarriedKinds: NOT_CARRIED_KINDS } = MODE_PROFILE_DATA.regionDrawing;
+/** The reply's vocabularies, from Python's `StartAfterEndReason`, `CopyRefusalReason` and `NotCarriedKind`. */
+const {
+  refusalReasons: REFUSAL_REASONS, copyRefusalReasons: COPY_REFUSAL_REASONS, notCarriedKinds: NOT_CARRIED_KINDS
+} = MODE_PROFILE_DATA.regionDrawing;
 
 /**
- * The Worker's reply, checked against `RegionDrawingReply`.
+ * The Worker's reply, checked against `RegionDrawingReply` or a refused copy (`RefusedCopy`).
  * @param {unknown} result
- * @returns {RegionDrawingReply}
+ * @returns {RegionDrawingReply | RefusedCopy}
  */
 const readRegionDrawingReply = (result) => {
   if (!isRecord(result)) throw REPLY_INVALID();
+  if (result.status === 'refused' && Object.keys(result).length === 2) {
+    if (typeof result.reason !== 'string' || !COPY_REFUSAL_REASONS.includes(result.reason)) throw REPLY_INVALID();
+    return /** @type {RefusedCopy} */ (result);
+  }
   if (result.status === 'refused') {
     if (typeof result.reason !== 'string' || !REFUSAL_REASONS.includes(result.reason) || typeof result.recordKey !== 'string'
       || !Number.isSafeInteger(result.start) || !Number.isSafeInteger(result.end)) throw REPLY_INVALID();
@@ -273,20 +328,22 @@ const readRegionDrawingReply = (result) => {
 };
 
 /**
- * New drawing from a region (PD-OI-090 〔作成〕(4)): Python derives the
- * drawing from the shown drawing's draft request; Create adds it with the
+ * Copy to another drawing (PD-OI-090 〔作成〕(4)): Python derives the
+ * drawing from the shown drawing's draft request; Copy adds it with the
  * Web files of the request that was sent.
  * @param {RegionDrawingPorts} ports
  */
 export const createRegionDrawing = ({
-  shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, readRecordSources, resultFeatures
+  shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, readRecordSources, resultFeatures,
+  committedRecordKeyOf
 }) => {
   /**
    * @param {readonly RegionDrawingRegion[]} regions Source coordinates, 1-based and inclusive.
    * @param {boolean} adaptSizes Whether hand-set sizes whose Auto differs return to Auto.
+   * @param {NewDrawingCopy} copy Where the regions go and with which settings.
    * @returns {Promise<RegionDrawingOffer>}
    */
-  const deriveFromShown = async (regions, adaptSizes) => {
+  const deriveFromShown = async (regions, adaptSizes, copy) => {
     const sourceId = shownDrawingId();
     const sent = await projectShownRequest();
     const { renderRequest, resources } = sent.envelope;
@@ -294,7 +351,8 @@ export const createRegionDrawing = ({
       canonicalRequest: renderRequest,
       resources: /** @type {RegionDrawingHelperPayload['resources']} */ (resources),
       regions,
-      adaptSizes
+      adaptSizes,
+      copy
     })).result);
     if (reply.status === 'refused') return reply;
     return { ...reply, create: () => newDrawingFromRegion(sourceId, { derived: reply, sent }) };
@@ -302,9 +360,7 @@ export const createRegionDrawing = ({
 
   // The dialog (the one owner of its open, close, reset and input edits; the template assigns none of its state).
   /** @type {RegionDialogView} */
-  const dialog = reactive({
-    show: false, rows: [], keepValues: false, status: 'idle', message: '', returnedToAuto: [], notCarried: []
-  });
+  const dialog = reactive({ show: false, rows: [], ...startingChoices() });
   /** @type {(() => Promise<DrawingListOutcome>) | null} */
   let create = null;
   let request = 0;
@@ -323,11 +379,11 @@ export const createRegionDrawing = ({
     if (!('regions' in choice)) return showStatus(choice.status, choice.reason);
     showStatus('deriving', '');
     try {
-      const offer = await deriveFromShown(choice.regions, !dialog.keepValues);
+      const offer = await deriveFromShown(choice.regions, !dialog.keepValues, copyOf(dialog));
       if (mine !== request) return undefined;
-      // The reason alone, from the wording owner of diagnostic reasons: the dialog's rows are the region.
-      if (offer.status === 'refused') return showStatus('refused', tm(/** @type {string} */ (reasonText(offer.reason))));
-      Object.assign(dialog, { status: 'derived', message: '', ...derivedDrawingNotes(offer) });
+      // The reason alone, from the wording owner of its vocabulary: the dialog's rows are the region.
+      if (offer.status === 'refused') return showStatus('refused', refusalText(offer));
+      Object.assign(dialog, { status: 'derived', message: '', mode: offer.mode, ...derivedDrawingNotes(offer) });
       create = offer.create;
     } catch (error) {
       if (mine !== request) return undefined;
@@ -350,28 +406,24 @@ export const createRegionDrawing = ({
     return refresh();
   };
 
-  /** "Keep my values": derives again with or without adapting the sizes. @param {boolean} value */
-  const setKeepValues = (value) => {
-    dialog.keepValues = value;
+  /** A choice that is not a row (Keep my values, the mode, the settings): derives again. @param {RegionChoiceEdit} edit */
+  const setChoice = (edit) => {
+    Object.assign(dialog, edit);
     return refresh();
   };
 
   const close = () => {
     request += 1;
     create = null;
-    Object.assign(dialog, {
-      show: false, rows: [], keepValues: false, status: 'idle', message: '', returnedToAuto: [], notCarried: []
-    });
+    Object.assign(dialog, { show: false, rows: [], ...startingChoices() });
   };
 
-  /** Opens on the shown drawing's records; a close before they are read keeps it closed. */
-  // A feature is chosen from the features the shown Result drew of the record.
-  /** @param {readonly RegionSourceFeature[] | null} features */
-  const featureReasonOf = (features) => {
-    if (features === null) return t('Generate the drawing to choose a feature.');
-    return features.length === 0 ? t('This record has no features to choose.') : '';
-  };
-  const open = async () => {
+  /**
+   * Opens on the shown drawing's records, those `chosen` names (by record key) with its edit, and derives when one is
+   * chosen; a close before they are read keeps it closed.
+   * @param {{ keys: readonly string[], edit: RegionRowEdit }} [chosen]
+   */
+  const open = async (chosen = { keys: [], edit: {} }) => {
     close();
     const mine = request;
     dialog.show = true;
@@ -388,26 +440,27 @@ export const createRegionDrawing = ({
       showStatus('error', normalized ? errorText(normalized.summaryParts) : String(error));
       return;
     }
-    if (mine !== request) return;
-    dialog.rows = records.map((record) => ({
-      recordKey: record.recordKey, caption: record.caption, length: record.length, checked: false, kind: 'whole',
-      start: '1', end: String(record.length), featureId: '', features: record.features,
-      featureReason: featureReasonOf(record.features)
-    }));
-    showStatus('idle', t('Choose at least one record.'));
+    if (mine !== request) return undefined;
+    dialog.rows = dialogRowsOf(records, chosen);
+    return refresh();
   };
 
   /**
    * Opens the dialog on a region chosen on the figure (Select region): its record checked with its coordinates, so
-   * Create makes it as the dialog makes any region. A record the dialog does not offer leaves the dialog as `open`
-   * left it.
+   * Copy makes it as the dialog makes any region. A record the dialog does not offer is not chosen.
    * @param {{ recordKey: string, start: number, end: number }} region Source coordinates, 1-based and inclusive.
    */
-  const openWithRegion = async ({ recordKey, start, end }) => {
-    await open();
-    if (!dialog.show || !dialog.rows.some((row) => row.recordKey === recordKey)) return undefined;
-    return editRow(recordKey, { checked: true, kind: 'coordinates', start: String(start), end: String(end) });
-  };
+  const openWithRegion = ({ recordKey, start, end }) => open({
+    keys: [recordKey], edit: { checked: true, kind: 'coordinates', start: String(start), end: String(end) }
+  });
+
+  /**
+   * Opens the dialog with drawn records chosen whole (the record popup, the records of a Shift+drag), each found by
+   * its committed record key, never by its caption. @param {readonly DrawnRecordChoice[]} drawn
+   */
+  const openWithRecords = (drawn) => open({
+    keys: drawn.map(committedRecordKeyOf).filter(/** @returns {key is string} */ (key) => key !== null), edit: { checked: true, kind: 'whole' }
+  });
 
   /**
    * Create: the derived drawing as one project step; the dialog closes. While it runs the dialog is 'creating',
@@ -429,5 +482,5 @@ export const createRegionDrawing = ({
     }
   };
 
-  return { deriveFromShown, dialog, open, openWithRegion, refresh, editRow, setKeepValues, confirm, close };
+  return { deriveFromShown, dialog, open, openWithRegion, openWithRecords, refresh, editRow, setChoice, confirm, close };
 };

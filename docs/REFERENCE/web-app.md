@@ -175,18 +175,30 @@ so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 4. Select **Generate Diagram**.
 5. Inspect **Result Preview**, then export a file or select **Save Session**.
 
-**New drawing from a region…** in the drawing menu (the menu of a drawing tab,
-beside **New Circular drawing** and **New Linear drawing**) draws chosen regions
-of the shown drawing as a new drawing. The dialog lists the drawing's records.
-For each, **Region** is **Whole record**, **Coordinates** (**Start** and **End**,
-1-based and inclusive, in the source's coordinates), or **A feature** (choose it
-under **Feature**). **A feature** is disabled with a reason until the drawing
-has a Result, and for a record without features. One whole record keeps the
-drawing's mode; any other choice makes a Linear drawing. A start after the end
-is refused. The dialog lists the sizes that return to Auto for the new length
-and what is not carried; **Keep my values** keeps the sizes you set. **Create**
-adds the drawing as a new tab, and one Undo removes it. Python offers the same
-through `derive_region_drawing()`; see [Typed requests](./typed-requests.md).
+**Copy to another drawing…** copies chosen records or regions of the shown
+drawing to a new drawing. It is in the drawing menu (the menu of a drawing tab,
+beside **New Circular drawing** and **New Linear drawing**), in a record's
+popup (that record chosen whole), and in the Region popup of **Select region**
+(that span chosen). Outside **Select region**, Shift+drag also selects the
+records whose name the box covers; the selection toolbar then shows
+"N records: <names>" and **Copy to another drawing…** opens the dialog with
+those records chosen, and **Clear** clears the features and the records.
+The dialog lists the drawing's records. For each, **Region** is
+**Whole record**, **Coordinates** (**Start** and **End**, 1-based and
+inclusive, in the source's coordinates), or **A feature** (choose it under
+**Feature**). **A feature** is disabled with a reason until the drawing has a
+Result, and for a record without features. The new drawing's mode starts as
+the drawing's mode when only whole records are chosen, several whole Circular
+records making one Multi-Record Canvas, and as Linear when a range is chosen;
+a Circular drawing draws a range only when one range of one record is chosen.
+**Keep this drawing's settings and edits** (the default) carries the
+drawing's look; the dialog lists the sizes that return to Auto for the new
+length and what is not carried, and **Keep my values** keeps the sizes you
+set. **Start from the Circular defaults** (or Linear) draws only the chosen
+records and regions with that mode's defaults. A start after the end is
+refused. **Copy** adds the drawing as a new tab and shows it, and one Undo
+removes it. Python offers the same through `derive_region_drawing()`; see
+[Typed requests](./typed-requests.md).
 
 ### Drawings
 
@@ -203,7 +215,7 @@ The menu of the shown drawing's tab holds:
 
 - **New Circular drawing** and **New Linear drawing**: an empty drawing with
   that mode's defaults and no files.
-- **New drawing from a region…**: see above.
+- **Copy to another drawing…**: see above.
 - **Duplicate drawing**: copies the files, settings, legend and feature edits,
   and Result; the copy starts with an empty History.
 - **New Circular drawing with this style** and **New Linear drawing with this

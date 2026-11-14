@@ -2,3 +2,10 @@
   document that is built already, such as the `document` of
   `paste_region_drawing()` or of `upgrade_session_document()`, without
   building it again. See [Typed requests](./docs/REFERENCE/typed-requests.md).
+- Changed: in the Web app, **New drawing from a region…** is now **Copy to
+  another drawing…**, and it also opens from a record's popup and from the
+  records a Shift+drag selects ("N records: <names>" in the selection
+  toolbar). The dialog chooses the new drawing's mode and whether it keeps
+  the drawing's settings and edits or starts from the mode's defaults;
+  several whole Circular records make one Multi-Record Canvas. See
+  [Web app](./docs/REFERENCE/web-app.md).

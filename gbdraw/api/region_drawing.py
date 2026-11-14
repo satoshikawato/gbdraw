@@ -399,15 +399,11 @@ def derive_region_request(
     reverse_complement: bool | None = None,
     adapt_sizes: bool = True,
     settings: SettingsChoice = "keep",
-    circular_canvas: bool = True,
 ) -> RegionRequest:
     """Derive the request of a drawing of ``regions`` from the request of its source drawing.
 
-    The one derivation behind :func:`derive_region_drawing` and the Web's New
-    drawing from a region; the arguments are as there. Without
-    ``circular_canvas`` a Circular drawing takes one record and the mode's
-    default for several whole records is Linear: the Web's New drawing from a
-    region asks so until its dialog offers the Multi-Record Canvas.
+    The one derivation behind :func:`derive_region_drawing` and the Web's Copy
+    to another drawing; the arguments are as there.
     """
     collection = resolve_request_records(source)
     selected = _resolve_regions(collection, regions, margin=margin)
@@ -419,7 +415,6 @@ def derive_region_request(
         reverse_complement=reverse_complement,
         adapt_sizes=adapt_sizes,
         settings=settings,
-        circular_canvas=circular_canvas,
     )
 
 
@@ -432,7 +427,6 @@ def _derive_selected(
     reverse_complement: bool | None,
     adapt_sizes: bool,
     settings: SettingsChoice,
-    circular_canvas: bool,
 ) -> RegionRequest:
     """The request of a drawing of the resolved regions ``selected`` of ``source``."""
     if settings not in {"keep", "defaults"}:
@@ -440,12 +434,12 @@ def _derive_selected(
     source_mode: DrawingMode = "linear" if isinstance(source, LinearDiagramRequest) else "circular"
     whole = all(region.whole for region in selected)
     target_mode: DrawingMode = mode or (
-        source_mode if whole and (len(selected) == 1 or circular_canvas) else "linear"
+        source_mode if whole else "linear"
     )
     if target_mode not in {"circular", "linear"}:
         raise ValidationError(f"Unknown drawing mode: {target_mode!r}.", diagnostic={"code": "INPUT_INVALID"})
     one_span = len(selected) == 1 and len(selected[0].spans) == 1
-    if target_mode == "circular" and not (one_span or (circular_canvas and whole)):
+    if target_mode == "circular" and not (one_span or whole):
         raise CopyRefused("CIRCULAR_WHOLE_RECORDS")
     defaults = settings == "defaults"
     records = tuple(_record_input(source, region, reverse_complement, defaults=defaults) for region in selected)
@@ -1274,7 +1268,6 @@ def paste_region_request(
         reverse_complement=reverse_complement,
         adapt_sizes=False,
         settings="keep" if edits == "edits" else "defaults",
-        circular_canvas=True,
     ).request
     keys = _fresh_record_keys(
         [record.record_key or "" for record in carried.records],

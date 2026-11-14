@@ -62,6 +62,86 @@ const TOOLBAR_EDGE_MARGIN_PX = 8;
 /** @typedef {{ clientX: number, clientY: number }} PointerPosition */
 
 /**
+ * A record whose drawn name a Shift+drag box covered (PD-OI-115): its drawn definition group's record index and record
+ * ID, the identity the record popup reads (the Result's record of that index and ID). Transient: no History step, not
+ * in the Session or an export.
+ * @typedef {{ recordIndex: number, recordId: string }} DrawnRecordChoice
+ */
+
+/**
+ * How far the selection toolbar may move: inside its offset parent (else its parent, else `fallback`, else the
+ * window), a margin from each edge.
+ * @param {HTMLElement | null} toolbar @param {{ x: number, y: number }} offset @param {Element | null} fallback
+ */
+const toolbarDragBounds = (toolbar, offset, fallback) => {
+  if (!toolbar || typeof toolbar.getBoundingClientRect !== 'function') return null;
+  const toolbarRect = toolbar.getBoundingClientRect();
+  const boundsElement = toolbar.offsetParent || toolbar.parentElement || fallback;
+  const boundsRect = boundsElement?.getBoundingClientRect?.() || {
+    left: 0,
+    top: 0,
+    right: window.innerWidth,
+    bottom: window.innerHeight
+  };
+  return {
+    minX: offset.x + boundsRect.left + TOOLBAR_EDGE_MARGIN_PX - toolbarRect.left,
+    maxX: offset.x + boundsRect.right - TOOLBAR_EDGE_MARGIN_PX - toolbarRect.right,
+    minY: offset.y + boundsRect.top + TOOLBAR_EDGE_MARGIN_PX - toolbarRect.top,
+    maxY: offset.y + boundsRect.bottom - TOOLBAR_EDGE_MARGIN_PX - toolbarRect.bottom
+  };
+};
+
+/** The marquee box's style while a Shift+drag runs; none otherwise. @param {FeatureSelectionDrag} drag */
+const marqueeStyle = (drag) => {
+  if (!drag.active) return {};
+  const rect = normalizePointerRect(drag);
+  return {
+    left: `${Math.round(rect.left)}px`,
+    top: `${Math.round(rect.top)}px`,
+    width: `${Math.round(rect.width)}px`,
+    height: `${Math.round(rect.height)}px`
+  };
+};
+
+/**
+ * The records a Shift+drag selects (PD-OI-115 r2), held by the selection owner: a box with Ctrl or Cmd adds the
+ * records whose name it covers to them, another box replaces them, Clear and a new selection empty them.
+ * @param {DrawnRecordChoice[]} list The reactive list the toolbar shows.
+ */
+const recordChoices = (list) => ({
+  list,
+  clear: () => { if (list.length) list.splice(0); },
+  /** @param {Element} svg @param {Edges} box @param {boolean} additive */
+  choose: (svg, box, additive) => {
+    const kept = additive ? [...list] : [];
+    const found = recordsInBox(svg, box).filter((record) => !kept.some((held) => (
+      held.recordIndex === record.recordIndex && held.recordId === record.recordId)));
+    list.splice(0, list.length, ...kept, ...found);
+  }
+});
+
+/** The drawn name of a record: its definition group (Linear: the row label group of the record's first row). */
+const DRAWN_RECORD_NAME_SELECTOR = '[data-gbdraw-role="record-definition"][data-gbdraw-record-index][data-gbdraw-record-id]';
+
+/**
+ * The records whose drawn name the box covers, in drawn order, each once.
+ * @param {Element} svg @param {Edges} marqueeRect
+ * @returns {DrawnRecordChoice[]}
+ */
+const recordsInBox = (svg, marqueeRect) => {
+  /** @type {Map<string, DrawnRecordChoice>} */
+  const found = new Map();
+  svg.querySelectorAll(DRAWN_RECORD_NAME_SELECTOR).forEach((group) => {
+    const rect = getElementScreenRect(group);
+    const recordIndex = Number(group.getAttribute('data-gbdraw-record-index'));
+    const recordId = String(group.getAttribute('data-gbdraw-record-id'));
+    if (!rect || !Number.isSafeInteger(recordIndex) || !rectsIntersect(rect, marqueeRect)) return;
+    found.set(`${recordIndex}\u0000${recordId}`, { recordIndex, recordId });
+  });
+  return [...found.values()];
+};
+
+/**
  * The pointer position and target of an event the selection reads.
  * @typedef {{ clientX?: number, clientY?: number, target?: EventTarget | null }} SelectionEventLike
  */
@@ -311,6 +391,7 @@ export const createFeatureSelection = ({
   /** @type {{ startX: number, startY: number, originX: number, originY: number, minX?: number, maxX?: number, minY?: number, maxY?: number } | null} */
   let activeToolbarDrag = null;
   const toolbarOffset = reactive({ x: 0, y: 0 });
+  const records = recordChoices(/** @type {DrawnRecordChoice[]} */ (reactive([])));
 
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
@@ -343,23 +424,7 @@ export const createFeatureSelection = ({
   };
 
   /** @param {HTMLElement | null} toolbar */
-  const getToolbarDragBounds = (toolbar) => {
-    if (!toolbar || typeof toolbar.getBoundingClientRect !== 'function') return null;
-    const toolbarRect = toolbar.getBoundingClientRect();
-    const boundsElement = toolbar.offsetParent || toolbar.parentElement || svgContainer.value?.parentElement || null;
-    const boundsRect = boundsElement?.getBoundingClientRect?.() || {
-      left: 0,
-      top: 0,
-      right: window.innerWidth,
-      bottom: window.innerHeight
-    };
-    return {
-      minX: toolbarOffset.x + boundsRect.left + TOOLBAR_EDGE_MARGIN_PX - toolbarRect.left,
-      maxX: toolbarOffset.x + boundsRect.right - TOOLBAR_EDGE_MARGIN_PX - toolbarRect.right,
-      minY: toolbarOffset.y + boundsRect.top + TOOLBAR_EDGE_MARGIN_PX - toolbarRect.top,
-      maxY: toolbarOffset.y + boundsRect.bottom - TOOLBAR_EDGE_MARGIN_PX - toolbarRect.bottom
-    };
-  };
+  const getToolbarDragBounds = (toolbar) => toolbarDragBounds(toolbar, toolbarOffset, svgContainer.value?.parentElement || null);
 
   const featureSelectionToolbarStyle = computed(() => ({
     transform: `translate(${Math.round(toolbarOffset.x)}px, ${Math.round(toolbarOffset.y)}px)`
@@ -440,6 +505,7 @@ export const createFeatureSelection = ({
     // shows a selection class (OV-913).
     const alreadyEmpty = !selectedFeatureIds.value.size;
     if (!alreadyEmpty) selectedFeatureIds.value = new Set();
+    records.clear();
     selectedFeatureAnchorId.value = normalizeFeatureSelectionId(keepAnchorId);
     featureSelectionDrag.active = false;
     featureSelectionDrag.committed = false;
@@ -536,6 +602,8 @@ export const createFeatureSelection = ({
     const clickedId = normalizeFeatureSelectionId(featureId);
     const clicked = getFeatureById(clickedId);
     if (!clickedId || !clicked) return false;
+    // A new selection that does not add replaces the records too.
+    if (!additive) records.clear();
 
     const anchorId = normalizeFeatureSelectionId(selectedFeatureAnchorId.value);
     const anchor = getFeatureById(anchorId);
@@ -636,10 +704,12 @@ export const createFeatureSelection = ({
         nextIds.add(entry.id);
       }
     });
+    // The box also selects the records whose name it covers (PD-OI-115 r2); Ctrl or Cmd adds to them as to features.
+    records.choose(svg, marqueeRect, additive);
     const firstNewId = Array.from(nextIds).find(Boolean) || '';
     replaceSelectedFeatureIds(nextIds, {
       anchorId: firstNewId || selectedFeatureAnchorId.value,
-      status: nextIds.size > 0 ? `${numberText(nextIds.size)} features selected.` : 'No rendered features in selection.'
+      status: nextIds.size > 0 || records.list.length > 0 ? `${numberText(nextIds.size)} features selected.` : 'No rendered features in selection.'
     });
     closePreviewPopups();
   };
@@ -726,16 +796,7 @@ export const createFeatureSelection = ({
     return true;
   };
 
-  const featureSelectionMarqueeStyle = computed(() => {
-    if (!featureSelectionDrag.active) return {};
-    const rect = normalizePointerRect(featureSelectionDrag);
-    return {
-      left: `${Math.round(rect.left)}px`,
-      top: `${Math.round(rect.top)}px`,
-      width: `${Math.round(rect.width)}px`,
-      height: `${Math.round(rect.height)}px`
-    };
-  });
+  const featureSelectionMarqueeStyle = computed(() => marqueeStyle(featureSelectionDrag));
 
   /** @param {KeyboardEvent} event */
   const handleEscape = (event) => {
@@ -781,6 +842,7 @@ export const createFeatureSelection = ({
 
   return {
     clearFeatureSelection,
+    selectedRecords: records.list,
     consumeSuppressNextClick,
     featureSelectionMarqueeStyle,
     featureSelectionToolbarStyle,

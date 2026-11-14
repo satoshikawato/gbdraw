@@ -224,9 +224,7 @@ def _regions(value: object) -> list[RegionChoice]:
     return regions
 
 
-def _copy_choice(value: object) -> CopyChoice | None:
-    if value is None:
-        return None
+def _copy_choice(value: object) -> CopyChoice:
     if not isinstance(value, Mapping):
         raise _protocol_error("A copy needs its choices.")
     if value.get("into") == "new" and set(value) == {"into", "settings", "mode"} and value["settings"] in {
@@ -261,15 +259,14 @@ def derive_web_region_drawing(
     regions: Sequence[RegionInput],
     *,
     adapt_sizes: bool,
-    copy: object = None,
+    copy: object,
 ) -> RegionDrawingReply:
     """The region drawing of the source drawing's canonical request ``request_payload``, or the paste of its
     regions into an existing drawing.
 
     ``resource_paths`` are its staged resources by resource ID. A derived
     request names the same resources: the source's files are its only inputs.
-    ``copy`` is a :data:`CopyChoice`; without it (New drawing from a region) a
-    Circular drawing takes one record, as before Copy to another drawing.
+    ``copy`` is a :data:`CopyChoice`: a new drawing, or the existing drawing to paste into.
     """
 
     if not isinstance(adapt_sizes, bool):
@@ -278,15 +275,10 @@ def derive_web_region_drawing(
     source = decode_canonical_request(request_payload, resource_paths=resource_paths, output_directory=output_directory)
     selections = _regions(regions)
     try:
-        if choice is not None and choice["into"] == "existing":
+        if choice["into"] == "existing":
             return _pasted_reply(source, selections, choice, resource_paths, output_directory)
         derived = derive_region_request(
-            source,
-            selections,
-            mode=None if choice is None else choice["mode"],
-            adapt_sizes=adapt_sizes,
-            settings="keep" if choice is None else choice["settings"],
-            circular_canvas=choice is not None,
+            source, selections, mode=choice["mode"], adapt_sizes=adapt_sizes, settings=choice["settings"]
         )
     except StartAfterEndRegion as refusal:
         return {
@@ -423,10 +415,9 @@ def derive_web_region_drawing_json(
     output_directory: str,
     regions_json: str,
     adapt_sizes_json: str,
-    copy_json: str = "null",
+    copy_json: str,
 ) -> str:
-    """JSON boundary of the diagram Worker; ``copy_json`` is the copy's choices, ``null`` for New drawing from a
-    region."""
+    """JSON boundary of the diagram Worker; ``copy_json`` is the copy's choices (:data:`CopyChoice`)."""
 
     return json.dumps(
         derive_web_region_drawing(

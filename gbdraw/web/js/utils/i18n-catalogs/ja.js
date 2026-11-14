@@ -580,6 +580,7 @@ export default Object.freeze({
   "Copy the gene-pair table": "遺伝子ペアの表をコピー",
   "Copy the name, product, location, and these details": "名前、遺伝子産物、位置情報、およびこれらの詳細をコピー",
   "Copy this summary": "この概要をコピー",
+  "Copy to another drawing…": "別の図にコピー…",
   "Copy {role} span": "{role}の範囲の配列をコピー",
   "Copy {role} span FASTA": "{role}の範囲の配列をFASTAでコピー",
   "Correct the Python regular expression.": "Pythonの正規表現を修正してください。",
