@@ -17,6 +17,7 @@ import {
   GbdrawLoader,
   LinearRecordNames,
   MarkupPreview,
+  NoticeLines,
   PreviewZoomPercent,
   previewMarkup,
   previewPanning,
@@ -39,7 +40,6 @@ import { committedValue, settleCommittedField } from './app/committed-value.js';
 import { keepsListFocus } from './app/list-focus.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, numberText, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
-import { moreLine } from './utils/limited-list.js';
 import { errorText } from './utils/error-text.js';
 import { INTERACTIVE_GALLERY_URL } from './utils/gallery-routes.js';
 import { settingApplicationHelp, settingApplicationSentence } from './services/setting-application.js';
@@ -47,7 +47,7 @@ import { settingApplicationHelp, settingApplicationSentence } from './services/s
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ActionMenu, ChoiceDialog, OperationError, SequenceReadLine, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, FileCard, RecordDisplayControl, AutoValueField, ColorSwatch, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
+  components: { ActionMenu, ChoiceDialog, OperationError, SequenceReadLine, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, FileCard, RecordDisplayControl, AutoValueField, ColorSwatch, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, NoticeLines, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
   methods: { chooseUiLanguage, formatFeatureLocation, settingApplicationHelp, settingApplicationSentence, translationFeedbackUrl },
   setup: createAppSetup
 });
@@ -60,7 +60,7 @@ const app = createApp({
 // `INTERACTIVE_GALLERY_URL` is the Gallery the header and the footer open.
 // `settleCommittedField` hands an asynchronous commit of a `v-committed-value`
 // field to that directive (app/committed-value.js).
-Object.assign(app.config.globalProperties, { t, tn, tx, tm, moreLine, numberText, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL, settleCommittedField });
+Object.assign(app.config.globalProperties, { t, tn, tx, tm, numberText, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL, settleCommittedField });
 // A sentence with elements inside it: <i18n-text :text="t('…{name}…')"> with a #name slot.
 app.component('I18nText', I18nText);
 app.directive('dialog-focus', dialogFocus);

@@ -61,7 +61,7 @@ test('a record with no feature to draw: the status area says so and Run Info lis
   await expect(leftOut.locator('[data-input-warning]').first()).toHaveText(
     'Comparison of record #1 NZ_CP065372.1 and record #2 C0.1 has no rows, so no match is drawn.'
   );
-  const more = leftOut.locator('[data-input-warnings-rest] > summary');
+  const more = leftOut.locator('[data-notice-lines-rest] > summary');
   await expect(more).toHaveText('and 56 more');
   // The notice's height does not grow with the warnings: closed, a heading and four lines; open, the rest box
   // (max-h-40, 160 px) and its margin more (measured 121 px closed, +168 px open). The figure below it keeps at least 100 px of the 720 px viewport.
@@ -81,6 +81,38 @@ test('a record with no feature to draw: the status area says so and Run Info lis
   await expect(page.locator('[data-run-info-input-summary] li')).toHaveText([
     'Record EMPTY001.1 (zero_features_record.gb), record 1 of 1, 1,000 bp: drew 0 features.'
   ]);
+
+  // OV-3562: the notice of skipped annotation rows (one line per row) and the notice of comparison rows placed by
+  // position (one line per record pair) show their first lines the same way. Each notice stays one atomic live
+  // region; the rest is a region of its own with aria-live off, so opening it does not read the notice again.
+  await page.evaluate(async () => {
+    const { state } = await import(new URL('js/state.js', document.baseURI).href);
+    const [result] = window.__GBDRAW_APP__.currentResults();
+    state.annotationWarnings.value = Array.from({ length: 12 }, (_, index) => ({
+      code: 'feature_selector_unmatched', setId: 'regions', annotationId: `row-${index + 1}`, recordIndex: 0,
+      recordId: 'EMPTY001.1', missingCount: 1, message: 'no feature matches gene=MISSING', resultIndex: 0, resultName: result.name
+    }));
+    state.comparisonWarnings.value = Array.from({ length: 6 }, (_, index) => ({
+      code: 'comparison_record_id_unmatched', queryRecordIndex: index, subjectRecordIndex: index + 1,
+      queryRecordId: `Q${index}`, subjectRecordId: `S${index}`, rowCount: 1, exampleIds: ['contig_A'],
+      message: `Comparison between query record #${index + 1} and subject record #${index + 2}: 1 row(s) use sequence IDs that match no displayed record.`,
+      resultIndex: 0, resultName: result.name
+    }));
+  });
+  for (const [testId, count, first] of [
+    ['annotation-resolution-notice', 12, 'regions/row-1 · record #1 (EMPTY001.1): no feature matches gene=MISSING'],
+    ['comparison-id-notice', 6, 'Comparison between query record #1 and subject record #2: 1 row(s) use sequence IDs that match no displayed record.']
+  ]) {
+    const shown = page.getByTestId(testId);
+    await expect(shown).toHaveAttribute('aria-atomic', 'true');
+    await expect(shown.locator('p:visible')).toHaveCount(4); // the heading and three lines
+    await expect(shown.locator('p').nth(1)).toHaveText(first);
+    const rest = shown.locator('[data-notice-lines-rest]');
+    await expect(rest).toHaveAttribute('aria-live', 'off');
+    await expect(rest.locator('> summary')).toHaveText(`and ${count - 3} more`);
+    await rest.locator('> summary').click();
+    await expect(shown.locator('p:visible')).toHaveCount(count + 1);
+  }
 });
 
 // A record of `bp` bases with a CDS per locus tag, in GenBank text.
