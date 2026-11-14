@@ -165,7 +165,8 @@ inside the regions:
 - The mode is the source's mode when every region is a whole record, and
   Linear when any region is a range. A Circular drawing of several whole
   records is a Multi-Record Canvas, which keeps the source canvas's layout
-  except where it placed each record. `mode` can choose Circular for whole
+  and draws each record on the row the source draws it on, without the rows
+  that hold none of them. `mode` can choose Circular for whole
   records or for one range alone, which is drawn as a closed circle numbered
   from 1; a Circular drawing of a range and other records is refused with
   `CopyRefused` (reason `CIRCULAR_WHOLE_RECORDS`).
@@ -215,8 +216,8 @@ change:
 - Each pasted record takes a record key of its own in the target
   (`pasted_record_keys`). A Linear target that places its records by row gives
   each pasted record a new row; a Circular target takes whole records only and
-  becomes, or stays, a Multi-Record Canvas, with the pasted records on one new
-  row where it places its records by row. A Circular target that draws
+  becomes, or stays, a Multi-Record Canvas: its records stay on the rows it
+  draws them on, and the pasted records take one new row below them. A Circular target that draws
   separate diagrams takes each pasted record as a diagram of its own. A
   Circular target takes whole records only, and only while it draws whole
   records: a range is left out and listed in `left_out` (`LeftOut`, reason

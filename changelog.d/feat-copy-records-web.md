@@ -16,3 +16,9 @@
   `gbdraw circular --records_table --multi_record_canvas` drew only some
   records of that file on one canvas; it now draws the records the Session
   names.
+- Changed: `derive_region_drawing()` of several whole Circular records
+  keeps each record on the row the source canvas draws it on, without the
+  rows that hold none of them, instead of placing the records in order; and
+  `paste_region_drawing()` into a Circular canvas that names no places keeps
+  its records where they are drawn and adds the pasted records on a new row
+  below them.
