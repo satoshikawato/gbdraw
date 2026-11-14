@@ -808,6 +808,8 @@ LOSATP_MODE_WIRE: Mapping[str, str] = MappingProxyType(
         "none": "none",
     }
 )
+# The spelling that runs no LOSATP search (``losatp_analysis_mode``); the Web reads it from the generated contracts.
+LOSATP_NO_SEARCH_MODE: str = LOSATP_MODE_WIRE["none"]
 
 
 @dataclass(frozen=True)
@@ -1010,7 +1012,7 @@ def losatp_analysis_mode(search: LosatSearchOptions | None) -> str:
     """
 
     if search is None or search.program != "losatp":
-        return "none"
+        return LOSATP_NO_SEARCH_MODE
     return LOSATP_MODE_WIRE[str(search.losatp_mode)]
 
 

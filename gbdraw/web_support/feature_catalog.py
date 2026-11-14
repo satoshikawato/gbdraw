@@ -2127,9 +2127,11 @@ class _ComplementTable(dict[int, int]):
         return ord("N")
 
 
-_COMPLEMENT_TABLE = _ComplementTable(
-    str.maketrans("ACGTURYSWKMBDHVN-", "TGCAAYRSWMKVHDBN-")
-)
+# The complement of each IUPAC base letter and the gap; any other letter reads as N. The exported Interactive SVG's
+# viewer reverse-complements a span with this table: the export writes it into the file's script
+# (``STANDALONE_BASE_COMPLEMENTS_SLOT``), the Web from drawn-attributes.generated.js.
+BASE_COMPLEMENTS: dict[str, str] = dict(zip("ACGTURYSWKMBDHVN-", "TGCAAYRSWMKVHDBN-", strict=True))
+_COMPLEMENT_TABLE = _ComplementTable(str.maketrans("".join(BASE_COMPLEMENTS), "".join(BASE_COMPLEMENTS.values())))
 
 
 def _reverse_complement_sequence(sequence: str) -> str:

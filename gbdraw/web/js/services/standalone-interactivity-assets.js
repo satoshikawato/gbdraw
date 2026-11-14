@@ -792,6 +792,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   // The sentence of each reason a match span cannot be read (Python's MATCH_SPAN_REASON_TEXTS, written in by the
   // embedder): {id} is the record the match names, {length} the length of the record the span reads.
   var MATCH_SPAN_REASON_TEXTS = {/* gbdraw: MATCH_SPAN_REASON_TEXTS */};
+  // The complement of each base letter (Python's BASE_COMPLEMENTS, written in by the embedder); any other letter
+  // reads as N.
+  var BASE_COMPLEMENTS = {/* gbdraw: BASE_COMPLEMENTS */};
   var MATCH_SELECTOR =
     'path[data-gbdraw-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var ANNOTATION_SELECTOR = '[data-gbdraw-interactive-annotation="true"][data-gbdraw-annotation-id]';
@@ -2513,7 +2516,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       /^h_[a-z2-7]{26}$/i.test(text) ||
       /^f_[0-9a-f]{64}$/i.test(text) ||
       /^p_r_/.test(text) ||
-      /@[^|]+\|.+~f_[0-9a-f]{64}$/i.test(text) ||
+      /@[^|]+\\|.+~f_[0-9a-f]{64}$/i.test(text) ||
       /^(?:gbd_r\\d+_(?:cds\\d+|unit\\d+)|p_.+_\\d+_\\d+_-?\\d+_[0-9a-f]{12}(?:_\\d+)?)$/i.test(text)
     );
   }
@@ -5250,10 +5253,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function reverseComplementMatchSequence(sequence) {
-    var complements = { A:'T', C:'G', G:'C', T:'A', U:'A', R:'Y', Y:'R', S:'S', W:'W', K:'M', M:'K', B:'V', D:'H', H:'D', V:'B', N:'N', '-':'-' };
     var input = String(sequence || '').replace(/\\s+/g, '').toUpperCase();
     var output = '';
-    for (var index = input.length - 1; index >= 0; index -= 1) output += complements[input[index]] || 'N';
+    for (var index = input.length - 1; index >= 0; index -= 1) output += BASE_COMPLEMENTS[input[index]] || 'N';
     return output;
   }
 

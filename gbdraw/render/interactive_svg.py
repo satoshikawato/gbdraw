@@ -454,6 +454,9 @@ STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT = "[/* gbdraw: MATCH_FRAGMENT_OWN_
 # Where the standalone interactive script's asset takes the sentence of each reason a match span cannot be read
 # (``MATCH_SPAN_REASON_TEXTS`` of ``feature_catalog``), written in as the fragment attributes are.
 STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT = "{/* gbdraw: MATCH_SPAN_REASON_TEXTS */}"
+# Where it takes the complement of each base letter (``BASE_COMPLEMENTS`` of ``feature_catalog``), with which it
+# reverse-complements a span.
+STANDALONE_BASE_COMPLEMENTS_SLOT = "{/* gbdraw: BASE_COMPLEMENTS */}"
 
 
 def _validate_match_fragments(attributes: Sequence[Mapping[str, object]]) -> None:
@@ -1337,12 +1340,13 @@ def _load_standalone_assets() -> tuple[str, str]:
         )
     except Exception as exc:
         raise GbdrawError("Missing standalone interactive SVG runtime/style package asset.") from exc
-    from gbdraw.web_support.feature_catalog import MATCH_SPAN_REASON_TEXTS
+    from gbdraw.web_support.feature_catalog import BASE_COMPLEMENTS, MATCH_SPAN_REASON_TEXTS
 
     script = _extract_template_literal(source, "STANDALONE_INTERACTIVE_SCRIPT")
     for slot, value in (
         (STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, list(MATCH_FRAGMENT_OWN_ATTRIBUTES)),
         (STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, MATCH_SPAN_REASON_TEXTS),
+        (STANDALONE_BASE_COMPLEMENTS_SLOT, BASE_COMPLEMENTS),
     ):
         if script.count(slot) != 1:
             raise GbdrawError("Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT")

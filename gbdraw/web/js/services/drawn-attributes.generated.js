@@ -4,7 +4,8 @@
 // gbdraw/render/drawers/annotation_marks.py (the annotation attributes) and
 // gbdraw/render/drawers/circular/conservation.py (the similarity-ring attributes) and
 // gbdraw/render/interactive_svg.py (the attributes of a match fragment and the slots of the standalone
-// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS); do not edit manually.
+// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS, BASE_COMPLEMENTS); do not edit
+// manually.
 
 /** A drawn region annotation's group names its annotation and its set, in both modes. */
 export const ANNOTATION_ID_ATTRIBUTE = 'data-gbdraw-annotation-id';
@@ -44,4 +45,27 @@ export const MATCH_SPAN_REASON_TEXTS = Object.freeze({
   OUT_OF_RANGE: 'Coordinates exceed the sequence length ({length} bp).',
   IDENTITY_INVALID: 'The sequence identifier metadata for this match is invalid.',
   RECORD_UNNAMED: 'The match does not identify a sequence record.'
+});
+/** Where the standalone interactive script's asset takes BASE_COMPLEMENTS. */
+export const STANDALONE_BASE_COMPLEMENTS_SLOT = '{/* gbdraw: BASE_COMPLEMENTS */}';
+/** The complement of each base letter, with which an exported Interactive SVG reverse-complements a span. */
+/** @type {Readonly<Record<'A' | 'C' | 'G' | 'T' | 'U' | 'R' | 'Y' | 'S' | 'W' | 'K' | 'M' | 'B' | 'D' | 'H' | 'V' | 'N' | '-', string>>} */
+export const BASE_COMPLEMENTS = Object.freeze({
+  A: 'T',
+  C: 'G',
+  G: 'C',
+  T: 'A',
+  U: 'A',
+  R: 'Y',
+  Y: 'R',
+  S: 'S',
+  W: 'W',
+  K: 'M',
+  M: 'K',
+  B: 'V',
+  D: 'H',
+  H: 'D',
+  V: 'B',
+  N: 'N',
+  "-": '-'
 });

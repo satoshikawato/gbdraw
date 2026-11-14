@@ -46,7 +46,8 @@ print(json.dumps(out))
 /** The viewer script as an export writes it: Python's values in its slots. */
 const SCRIPT = [
   [slots.STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, slots.MATCH_FRAGMENT_OWN_ATTRIBUTES],
-  [slots.STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, slots.MATCH_SPAN_REASON_TEXTS]
+  [slots.STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, slots.MATCH_SPAN_REASON_TEXTS],
+  [slots.STANDALONE_BASE_COMPLEMENTS_SLOT, slots.BASE_COMPLEMENTS]
 ].reduce((text, [slot, value]) => (slot ? text.split(String(slot)).join(JSON.stringify(value)) : text),
   STANDALONE_INTERACTIVE_SCRIPT);
 
@@ -93,6 +94,7 @@ const viewerSpans = (item) => new Function('item', `
   var orthogroupsById = new Map();
   var featuresById = new Map();
   ${scriptVar('MATCH_SPAN_REASON_TEXTS')}
+  ${scriptVar('BASE_COMPLEMENTS')}
   ${withCallees(['expandCatalogItem', 'buildEmbeddedMatchBundle'])}
   var payload = expandCatalogItem(item, 'rich');
   var sequenceSources = payload.sequence_sources;
@@ -124,6 +126,24 @@ test('the viewer shows what Python embedded, with no lookup of its own', () => {
       .map(([role, expected]) => `${testCase.name}: ${id} ${role} shows ${JSON.stringify(shown[id]?.[role])}, not ${JSON.stringify(expected)}`));
   });
   assert.deepEqual(failures, []);
+});
+
+// The viewer reverse-complements a minus-strand span with Python's base complements (written into its slot): the
+// bases it shows are the bases Python reads for the same text, whitespace dropped, any case, any other letter N.
+test('the viewer reverse-complements a span as Python does', () => {
+  const texts = ['ACGTURYSWKMBDHVN-', 'acgturyswkmbdhvn-', 'AC GT\tu\nn', 'XZ*.EFIJLOPQ0', ''];
+  const python = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
+import json, sys
+from gbdraw.web_support.feature_catalog import _reverse_complement_sequence
+print(json.dumps([_reverse_complement_sequence(text) for text in json.load(sys.stdin)]))
+`], { encoding: 'utf8', input: JSON.stringify(texts) }));
+  const viewer = new Function('texts', `
+  ${scriptVar('BASE_COMPLEMENTS')}
+  ${withCallees(['reverseComplementMatchSequence'])}
+  return texts.map(reverseComplementMatchSequence);
+`)(texts);
+  assert.deepEqual(viewer, python);
+  assert.equal(python[0], '-NBDHVKMWSRYAACGT');
 });
 
 /**

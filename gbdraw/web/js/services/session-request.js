@@ -180,6 +180,7 @@ import {
   CONFIG_UNSET_NUMBER_SPELLINGS,
   EXPANDED_RECORD_KEY_SEPARATOR,
   INPUT_FILE_MEDIA_TYPE,
+  LOSATP_NO_SEARCH_MODE,
   STORED_REGION_FIELDS,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
   WRITTEN_RESOURCE_MEDIA_TYPES
@@ -3329,18 +3330,20 @@ const buildConfigOverrides = (
 
 /**
  * Whether request `comparisons` are only the protein settings that the CLI
- * writes without -b or a protein mode: disabled pipelines (mode `none`) with
+ * writes without -b or a protein mode: disabled pipelines (mode
+ * `LOSATP_NO_SEARCH_MODE`) with
  * no pairs, which draw no comparison.
  * @param {any[]} comparisons
  */
 const drawsNoComparison = (comparisons) => comparisons.length > 0
   && comparisons.every((comparison) => comparison?.kind === 'generatedProteinComparison'
-    && comparison.mode === 'none' && !comparison.pairs?.length);
+    && comparison.mode === LOSATP_NO_SEARCH_MODE && !comparison.pairs?.length);
 
 /**
  * Whether a Linear request asks Python to run a LOSATP search: its protein
- * pipeline (`generatedProteinComparison`) has a mode other than `none`, as
- * Python's `losatp_analysis_mode` reads it (`saved_protein_result_request`).
+ * pipeline (`generatedProteinComparison`) has a mode other than Python's
+ * spelling of no search (`LOSATP_NO_SEARCH_MODE`), as Python's
+ * `losatp_analysis_mode` reads it (`saved_protein_result_request`).
  * A Generate runs the search in the browser and commits its results with the
  * pipeline's mode `none`, and Load answers a search with the rows a Session
  * saved (OV-3545), so only a search no saved rows answered stays. The
@@ -3351,7 +3354,7 @@ export const requestRunsProteinSearch = (request) => {
   const stored = /** @type {UnvalidatedFields<'mode' | 'comparisons'>} */ (request);
   return stored?.mode === 'linear' && Array.isArray(stored.comparisons) && stored.comparisons.some((item) => {
     const comparison = /** @type {UnvalidatedFields<'kind' | 'mode'>} */ (item);
-    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== 'none';
+    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== LOSATP_NO_SEARCH_MODE;
   });
 };
 
@@ -4366,7 +4369,7 @@ const buildComparisons = ({
   comparisons.push(...metadataComparisons);
   if (shouldEmitResolvedProteinMarker || shouldGenerateSelectedProteinPairs || shouldGenerateAdjacentProteinPipeline) {
     const mode = shouldEmitResolvedProteinMarker
-      ? 'none'
+      ? LOSATP_NO_SEARCH_MODE
       : selectedPairwiseLosat
         ? 'pairwise'
         : String(drawing.losat?.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
@@ -5730,7 +5733,7 @@ export const normalizeWebGridColumnOrdering = (records = []) => {
 
 /** @param {{ collinearInferOrthogroups?: unknown }} settings @param {string} mode */
 const resolvePipelineCollinearInference = (settings, mode) =>
-  settings.collinearInferOrthogroups ?? ['collinear', 'none'].includes(mode);
+  settings.collinearInferOrthogroups ?? (mode === LOSATP_NO_SEARCH_MODE || mode === 'collinear');
 
 /**
  * @param {UnvalidatedFields<'kind' | 'mode' | 'settings'>} comparison A request's comparison (unvalidated).
@@ -5758,7 +5761,7 @@ const projectGeneratedProteinPipeline = (
   }
   const parameters = readStoredCollinearityParams(settings.collinearityParams)?.parameters || {};
   const mode = String(comparison.mode || 'orthogroup');
-  const draftMode = mode === 'none' ? storedMode : mode;
+  const draftMode = mode === LOSATP_NO_SEARCH_MODE ? storedMode : mode;
   return {
     generatedProteinComparison: adoptCanonicalPayloads
       ? comparison

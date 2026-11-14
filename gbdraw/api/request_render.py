@@ -196,6 +196,7 @@ from .options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
     LinearRecordTranslation,
+    LOSATP_NO_SEARCH_MODE,
     LosatSearchOptions,
     losatp_analysis_mode,
 )
@@ -2247,7 +2248,7 @@ def plan_linear_request(
             feature_anchor=feature_anchor,
             losat_cache_entries=losat_cache_entries,
             losatp_database_sizes=(
-                None if losatp_analysis_mode(resolved_options.losat_search) == "none"
+                None if losatp_analysis_mode(resolved_options.losat_search) == LOSATP_NO_SEARCH_MODE
                 else _losatp_database_sizes(replace(loaded, collection=collection, inputs=inputs))
             ),
         )
@@ -2701,7 +2702,7 @@ def stored_protein_result_request(
         return request
     options = request.options
     mode = losatp_analysis_mode(options.losat_search)
-    if mode not in {"pairwise", "orthogroup", "collinear"}:
+    if mode == LOSATP_NO_SEARCH_MODE:
         return request
     if metadata is None or not {
         # A Pairwise render computed its pairs' tables, of which there may be none.
@@ -2741,7 +2742,7 @@ def saved_protein_result_request(
 
     if not isinstance(request, LinearDiagramRequest) or losatp_analysis_mode(
         request.options.losat_search
-    ) not in {"pairwise", "orthogroup", "collinear"}:
+    ) == LOSATP_NO_SEARCH_MODE:
         return request
     built = build_request_plan_diagram(plan_linear_request(request), artifacts=artifacts)
     return stored_protein_result_request(built.request, built.linear_metadata)
@@ -3003,7 +3004,7 @@ def _prepare_linear_artifacts(
     )
     needs_protein_identity = bool(
         current_protein
-        or losatp_analysis_mode(request.options.losat_search) != "none"
+        or losatp_analysis_mode(request.options.losat_search) != LOSATP_NO_SEARCH_MODE
         or request.options.protein_comparisons is not None
         or request.options.orthogroups is not None
         or request.options.collinearity_blocks is not None

@@ -13,6 +13,7 @@ import {
 } from './linear-units.js';
 import { readStoredCollinearityParams } from './losat-normalization.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { LOSATP_NO_SEARCH_MODE } from '../contracts/schema.generated.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
@@ -353,7 +354,7 @@ const generatedPipelineIsProjectable = ({ comparisons, pipeline }) => {
     return false;
   }
   // A disabled pipeline can carry CLI settings without any comparison work.
-  if (pipeline.mode === 'none' && !storedProteinResultMode(comparisons)
+  if (pipeline.mode === LOSATP_NO_SEARCH_MODE && !storedProteinResultMode(comparisons)
     && (comparisons.length !== 1 || pipeline.pairs.length !== 0)) return false;
   const collinearity = readStoredCollinearityParams(pipeline.settings?.collinearityParams);
   if (!isObject(collinearity) || collinearity.kind !== 'lossless') return false;

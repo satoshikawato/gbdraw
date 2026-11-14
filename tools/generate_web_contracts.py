@@ -106,6 +106,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("SESSION_ENTRY_ENCRYPTED_FLAGS", "gbdraw.session_container", "SESSION_ENTRY_ENCRYPTED_FLAGS"),
     ("SESSION_ENTRY_DATE_TIME", "gbdraw.session_container", "SESSION_ENTRY_DATE_TIME"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
+    # The protein pipeline mode of a request that runs no LOSATP search.
+    ("LOSATP_NO_SEARCH_MODE", "gbdraw.api.options", "LOSATP_NO_SEARCH_MODE"),
     # A "This feature only" color rule names a feature instance; the Source
     # recipe names the CLI record of its record key.
     ("FEATURE_INSTANCE_SEPARATOR", "gbdraw.features.ids", "FEATURE_INSTANCE_SEPARATOR"),
@@ -1070,10 +1072,11 @@ def render_drawn_attributes_module() -> str:
     from gbdraw.render.drawers.linear.wrap_rows import WRAP_ROW_ATTRIBUTE
     from gbdraw.render.interactive_svg import (
         MATCH_FRAGMENT_OWN_ATTRIBUTES,
+        STANDALONE_BASE_COMPLEMENTS_SLOT,
         STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT,
         STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT,
     )
-    from gbdraw.web_support.feature_catalog import MATCH_SPAN_REASON_TEXTS
+    from gbdraw.web_support.feature_catalog import BASE_COMPLEMENTS, MATCH_SPAN_REASON_TEXTS
 
     minimum, maximum = GRADIENT_SCALE_NAME_ATTRIBUTES
     span_start, span_end = HIT_DISPLAY_SPAN_ATTRIBUTES
@@ -1085,7 +1088,8 @@ def render_drawn_attributes_module() -> str:
         "// gbdraw/render/drawers/annotation_marks.py (the annotation attributes) and\n"
         "// gbdraw/render/drawers/circular/conservation.py (the similarity-ring attributes) and\n"
         "// gbdraw/render/interactive_svg.py (the attributes of a match fragment and the slots of the standalone\n"
-        "// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS); do not edit manually.\n"
+        "// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS, BASE_COMPLEMENTS); do not edit\n"
+        "// manually.\n"
         "\n"
         "/** A drawn region annotation's group names its annotation and its set, in both modes. */\n"
         f"export const ANNOTATION_ID_ATTRIBUTE = {_scalar(ANNOTATION_ID_ATTRIBUTE)};\n"
@@ -1113,6 +1117,10 @@ def render_drawn_attributes_module() -> str:
         " * changes no saved file.\n"
         " */\n"
         + _declaration("MATCH_SPAN_REASON_TEXTS", MATCH_SPAN_REASON_TEXTS)
+        + "/** Where the standalone interactive script's asset takes BASE_COMPLEMENTS. */\n"
+        f"export const STANDALONE_BASE_COMPLEMENTS_SLOT = {_scalar(STANDALONE_BASE_COMPLEMENTS_SLOT)};\n"
+        "/** The complement of each base letter, with which an exported Interactive SVG reverse-complements a span. */\n"
+        + _declaration("BASE_COMPLEMENTS", BASE_COMPLEMENTS)
     )
 
 

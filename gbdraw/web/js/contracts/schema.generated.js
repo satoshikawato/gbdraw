@@ -165,6 +165,9 @@ export const LEGEND_POSITIONS = Object.freeze({
   linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none'])
 });
 
+// gbdraw/api/options.py: LOSATP_NO_SEARCH_MODE
+export const LOSATP_NO_SEARCH_MODE = 'none';
+
 // gbdraw/features/ids.py: FEATURE_INSTANCE_SEPARATOR
 export const FEATURE_INSTANCE_SEPARATOR = '@';
 
