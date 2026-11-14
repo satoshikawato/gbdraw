@@ -1002,7 +1002,7 @@ const deriveAsWorker = async (payload) => {
   const staged = JSON.parse(await evaluatePython(`${STAGE}
 result = json.dumps(paths)
 `, { staged: await stagedFiles(references, payload.resources) }));
-  const { copy, sourcePaths } = pasteTargetPaths(payload.copy, staged);
+  const { copy, sourcePaths } = pasteTargetPaths(payload.copy, staged, {});
   return { result: JSON.parse(await evaluatePython(`
 import json, tempfile
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json

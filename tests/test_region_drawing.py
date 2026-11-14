@@ -977,6 +977,58 @@ def test_the_web_helper_copies_the_records_of_one_file_onto_one_circular_card(tm
     assert reply["resourceSources"] == {source_id: source_id}
 
 
+def _six_record_file(tmp_path: Path) -> Path:
+    """One GenBank file of six circular 4 kb records, RECD1..RECD6."""
+    text = TWO_RECORDS.read_text().split("//\n")[0] + "//\n"
+    path = tmp_path / "six.gb"
+    path.write_text("".join(text.replace("TESTA", f"RECD{number}") for number in range(1, 7)))
+    return path
+
+
+@pytest.mark.parametrize(
+    ("positions", "chosen", "expected"),
+    [
+        # Places of its own, as the Gallery's Vnig canvas names them: #3 and #4 share its second row.
+        (("#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"), (3, 4), ("#1@1", "#2@1")),
+        (("#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"), (1, 3), ("#1@1", "#2@2")),
+        # No places: the drawer's own grid of six (three a row) draws #3 and #4 on two rows, #1 and #2 on one.
+        (None, (3, 4), ("#1@1", "#2@2")),
+        (None, (1, 2), ("#1@1", "#2@1")),
+    ],
+)
+def test_a_circular_copy_of_whole_records_keeps_the_rows_the_source_draws_them_on(
+    tmp_path: Path, positions: tuple[str, ...] | None, chosen: tuple[int, ...], expected: tuple[str, ...]
+) -> None:
+    # OV-3533: the copy looks as the source drew those records, its empty rows left out.
+    from gbdraw.api import CircularMultiRecordOptions
+
+    source = CircularDiagramRequest(
+        records=[
+            RecordInput(GenBankInputSource(_six_record_file(tmp_path)), record_key="six", cardinality=RecordCardinality.ALL)
+        ],
+        layout=CircularMultiRecordOptions(multi_record_positions=positions),
+    )
+    derived = derive_region_request(source, [RegionSelection(f"six:{number}", 1, 4000) for number in chosen])
+    assert derived.request.layout.multi_record_positions == expected
+
+
+def test_a_paste_into_a_circular_canvas_without_places_keeps_its_records_where_they_are_drawn(tmp_path: Path) -> None:
+    from gbdraw.api import CircularMultiRecordOptions
+    from gbdraw.api.region_drawing import paste_region_request
+
+    target = CircularDiagramRequest(
+        records=[
+            RecordInput(GenBankInputSource(_six_record_file(tmp_path)), record_key="six", cardinality=RecordCardinality.ALL)
+        ],
+        layout=CircularMultiRecordOptions(),
+    )
+    pasted = paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 4000)], target)
+    # The drawer's grid of six (three a row), then the pasted record on a new row below.
+    assert pasted.request.layout.multi_record_positions == (
+        "#1@1", "#2@1", "#3@1", "#4@2", "#5@2", "#6@2", "#7@3"
+    )
+
+
 def test_the_web_helper_names_only_the_resources_the_derived_request_reads(tmp_path: Path) -> None:
     examples = REPO / "examples"
     source = LinearDiagramRequest(
@@ -1170,11 +1222,13 @@ def test_a_circular_drawing_of_whole_records_is_a_canvas_as_the_web_stores_it(ma
     request = region.drawing.request
     assert isinstance(request, CircularDiagramRequest)
     assert [record.record_key for record in request.records] == ["pair:1", "pair:2"]
-    # The canvas keeps the source's layout; its records take their places in order.
-    assert request.layout == CircularMultiRecordOptions(multi_record_size_mode="equal")
+    # The canvas keeps the source's layout, each record on the row the source draws it on (OV-3533).
+    assert request.layout == CircularMultiRecordOptions(
+        multi_record_size_mode="equal", multi_record_positions=("#1@1", "#2@2")
+    )
     payload = encode_canonical_request(request).payload
     assert (payload["mode"], payload["grouping"]) == ("circular", "grid")
-    assert payload["layout"]["multiRecordPositions"] is None
+    assert payload["layout"]["multiRecordPositions"] == ["#1@1", "#2@2"]
     assert resolve_request_records(request).records[1].id == "TESTB"
     defaults = derive_region_drawing(
         materialize(_vnig_like_canvas()),
@@ -1303,8 +1357,8 @@ def test_a_paste_into_a_circular_drawing_takes_whole_records_on_a_new_row() -> N
     source = _vnig_like_canvas()
     pasted = paste_region_request(source, [RegionSelection("pair:1", 1, 4000)], target)
     assert (pasted.request.grouping, len(pasted.request.records)) == ("grid", 2)
-    # A drawing that names no places draws each record on a row of its own; the pasted records take one new row
-    # after them, so they are added below its records, not beside them.
+    # A drawing that names no places keeps the rows the drawer gives its records; the pasted records take one new
+    # row after them, so they are added below its records, not beside them.
     both = paste_region_request(source, [RegionSelection("pair:1", 1, 4000), RegionSelection("pair:2", 1, 4000)], target)
     assert both.request.layout.multi_record_positions == ("#1@1", "#2@2", "#3@2")
     with pytest.raises(CopyRefused) as refused:
