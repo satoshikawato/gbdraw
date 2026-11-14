@@ -121,6 +121,10 @@ The `Gallery publication` workflow measures the fixed base commit (`baseSha`)
 and the head in the same job, three trials each, base first. It fails when the
 head's median wall time exceeds 1.25 times the base median, or the head's
 largest peak RSS exceeds 1.25 times the base's largest.
+Each revision projects its own file of the Vibrio Gallery Session
+(`vibrio-harveyi-group-collinear.gbdraw*`): a base before #1760 stores it as
+`.gbdraw-session.json.gz`, later commits as a `.gbdraw` file. The report lists
+the command of each trial.
 
 Measured in CI over 73 runs (2026-10-31 to 2026-11-05): trials within one job
 had noise 0.5% (σ 0.8%), but base medians across runners fell into three groups
@@ -135,6 +139,21 @@ On the quiet workstation (σ 2.7% within a job) it gives none at 1.10 and 2.5%
 at 1.05. Head peak RSS in the 73 CI runs was 571,604 to 683,108 KiB (largest
 over smallest within one run up to 1.19); against the new base, the RSS limit
 went from about 2.4 times to 1.25 times current code.
+
+The base moved from `8b8afec97` to `d6e680cbb`, the merge of #1760 and the
+first commit that stores the Gallery Sessions as `.gbdraw` files. Against
+`8b8afec97` the projection command became 1.43 times slower in CI (median 1.20
+to 1.72 s) with 31% less peak RSS, all at that format step: against `d6e680cbb`,
+`dev` of 2026-11-14 took 0.93 times its time (1.80 to 1.67 s). The projection
+itself takes 2 to 3 ms. The command's time is reading the Session file, and from
+`.gbdraw` files on, it reads the file as the Web app does (`readSessionContainer`:
+the document inflated, CRC-checked and checked for repeated keys, then each input
+entry inflated and CRC-checked) and re-encodes the inputs as base64 for the test's
+bridge, where the older command only ran `gunzipSync` and `JSON.parse`. The Web
+app's own Load steps did not slow down at that step: on the workstation under
+load, eight alternating runs each of `9d61ca214` (just before #1760) and
+`d6e680cbb` took a median 1.96 to 1.45 s until the document was parsed and 2.10
+to 2.23 s with every input inflated, with peak RSS 669,144 to 451,736 KiB.
 
 ## Fixed limits in the Playwright performance specs
 

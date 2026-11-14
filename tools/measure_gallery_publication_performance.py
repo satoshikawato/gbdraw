@@ -12,19 +12,46 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, TypedDict
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PATH = REPO_ROOT / "tests" / "performance" / "gallery-publication-baseline.json"
 TIME_COMMAND = Path("/usr/bin/time")
+GALLERY_SESSIONS = Path("gbdraw/web/gallery/sessions")
+PROJECTION_SESSION_ID = "vibrio-harveyi-group-collinear"
 PEAK_RSS_RE = re.compile(r"Maximum resident set size \(kbytes\):\s*(\d+)")
+
+
+class Trial(TypedDict):
+    wallSeconds: float
+    peakRssKiB: int
+
+
+class MeasuredTrial(Trial):
+    command: list[str]
 
 
 def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _operation_command(operation: str) -> list[str]:
+def _projection_session(checkout: Path) -> str:
+    """Return the Vibrio Gallery Session file as the checked-out revision stores it.
+
+    The fixed base may store the Session in an older file format (a
+    .gbdraw-session.json.gz file before the .gbdraw Session file), so each
+    revision projects its own file of the same Session.
+    """
+    matches = sorted((checkout / GALLERY_SESSIONS).glob(f"{PROJECTION_SESSION_ID}.gbdraw*"))
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"Expected one {PROJECTION_SESSION_ID} Gallery Session file in "
+            f"{GALLERY_SESSIONS} of {checkout}, found {len(matches)}."
+        )
+    return matches[0].relative_to(checkout).as_posix()
+
+
+def _operation_command(operation: str, checkout: Path) -> list[str]:
     if operation == "refresh":
         return [sys.executable, "tools/refresh_gallery_sessions.py", "--no-assets"]
     if operation == "projection":
@@ -35,12 +62,12 @@ def _operation_command(operation: str) -> list[str]:
             "--no-incremental-marking",
             "tests/web/session-request.test.mjs",
             "--project-session",
-            "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw",
+            _projection_session(checkout),
         ]
     raise ValueError(f"Unsupported Gallery performance operation: {operation}")
 
 
-def _run_trial(operation: str, revision: str, index: int) -> dict[str, float | int]:
+def _run_trial(operation: str, revision: str, index: int) -> MeasuredTrial:
     with tempfile.TemporaryDirectory(prefix=f"gbdraw-{operation}-perf-") as tmpdir:
         trial_root = Path(tmpdir)
         worktree = trial_root / "worktree"
@@ -51,7 +78,7 @@ def _run_trial(operation: str, revision: str, index: int) -> dict[str, float | i
             stdout=subprocess.DEVNULL,
         )
         try:
-            command = _operation_command(operation)
+            command = _operation_command(operation, worktree)
             started = time.perf_counter()
             result = subprocess.run(
                 [str(TIME_COMMAND), "-v", *command],
@@ -69,7 +96,8 @@ def _run_trial(operation: str, revision: str, index: int) -> dict[str, float | i
             match = PEAK_RSS_RE.search(result.stderr)
             if match is None:
                 raise RuntimeError("Could not read peak RSS from /usr/bin/time output.")
-            trial = {
+            trial: MeasuredTrial = {
+                "command": command,
                 "wallSeconds": round(wall_seconds, 2),
                 "peakRssKiB": int(match.group(1)),
             }
@@ -87,9 +115,9 @@ def _run_trial(operation: str, revision: str, index: int) -> dict[str, float | i
 def enforce_performance_gate(
     baseline: Mapping[str, Any],
     operation: str,
-    trials: list[Mapping[str, float | int]],
+    trials: list[Trial],
     *,
-    baseline_trials: list[Mapping[str, float | int]],
+    baseline_trials: list[Trial],
 ) -> dict[str, Any]:
     ratio = float(baseline["maximumRegressionRatio"])
     expected_wall_values = [float(trial["wallSeconds"]) for trial in baseline_trials]
@@ -150,7 +178,6 @@ def main(argv: list[str] | None = None) -> int:
         "baseSha": baseline["baseSha"],
         "headRevision": args.revision,
         "operation": args.operation,
-        "command": _operation_command(args.operation),
         "pythonVersion": platform.python_version(),
         "platform": platform.platform(),
         "baselineTrials": baseline_trials,
@@ -158,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     if args.operation == "projection":
         report["nodeVersion"] = subprocess.check_output(
-            [report["command"][0], "--version"], text=True
+            [shutil.which("node") or "node", "--version"], text=True
         ).strip()
     try:
         report["summary"] = enforce_performance_gate(

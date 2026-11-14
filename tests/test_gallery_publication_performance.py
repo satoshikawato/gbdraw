@@ -121,6 +121,54 @@ def test_gate_failure_retains_all_trials_and_measures_fixed_base(
     )
 
 
+@pytest.mark.parametrize(
+    "stored",
+    [
+        # The fixed base 8b8afec97 predates the .gbdraw Session file.
+        "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        "vibrio-harveyi-group-collinear.gbdraw",
+    ],
+)
+def test_projection_reads_the_session_file_of_the_measured_revision(
+    tmp_path: Path, stored: str
+) -> None:
+    sessions = tmp_path / "gbdraw" / "web" / "gallery" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / stored).write_bytes(b"")
+    (sessions / "vibrio-harveyi-group-collinear.svg").write_bytes(b"")
+    command = measurement._operation_command("projection", tmp_path)
+    assert command[-2:] == [
+        "--project-session",
+        f"gbdraw/web/gallery/sessions/{stored}",
+    ]
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        (),
+        (
+            "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "vibrio-harveyi-group-collinear.gbdraw",
+        ),
+    ],
+)
+def test_projection_needs_exactly_one_session_file(
+    tmp_path: Path, stored: tuple[str, ...]
+) -> None:
+    sessions = tmp_path / "gbdraw" / "web" / "gallery" / "sessions"
+    sessions.mkdir(parents=True)
+    for name in stored:
+        (sessions / name).write_bytes(b"")
+    with pytest.raises(RuntimeError, match=f"found {len(stored)}"):
+        measurement._operation_command("projection", tmp_path)
+
+
+def test_checked_out_tree_has_one_projection_session() -> None:
+    command = measurement._operation_command("projection", measurement.REPO_ROOT)
+    assert (measurement.REPO_ROOT / command[-1]).is_file()
+
+
 @pytest.mark.parametrize("trials", [0, 1, 2, 4])
 def test_gallery_gate_rejects_other_trial_counts(trials: int) -> None:
     with pytest.raises(SystemExit) as error:
