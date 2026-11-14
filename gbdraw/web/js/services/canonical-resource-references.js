@@ -1,9 +1,9 @@
 // @ts-check
-const RESOURCE_REFERENCE_FIELDS = new Set([
-  'resourceId',
-  'gffResourceId',
-  'fastaResourceId'
-]);
+import { SESSION_DRAWINGS_LAYOUT } from '../contracts/schema.generated.js';
+
+// The fields of a request that name a resource: `resourceId` and each record source file's field, as Python names
+// them (`_RESOURCE_REFERENCE_FIELDS` in gbdraw/session_resources.py).
+const RESOURCE_REFERENCE_FIELDS = new Set(SESSION_DRAWINGS_LAYOUT.resourceReferenceFields);
 
 /** @param {string} field */
 export const isCanonicalResourceReferenceField = (field) => (

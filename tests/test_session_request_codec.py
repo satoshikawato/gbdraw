@@ -59,6 +59,7 @@ from gbdraw.api.requests import (
     CircularDiagramRequest,
     FastaInputSource,
     GenBankInputSource,
+    GfaInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -792,6 +793,29 @@ def test_a_fasta_source_round_trips_in_both_modes(tmp_path: Path) -> None:
         assert decoded.records[0].source == FastaInputSource(fasta)
         assert encode_canonical_request(decoded).payload == encoded.payload
 
+
+
+def test_a_gfa_source_round_trips_in_both_modes(tmp_path: Path) -> None:
+    """A GFA 1 file is the record source kind ``gfa`` (D-86): one resource of kind ``gfa``."""
+
+    gfa = _source_file(tmp_path / "graph.gfa", "H\tVN:Z:1.0\nS\tcircle\tACGTACGT\nL\tcircle\t+\tcircle\t+\t2M\n")
+    for request_type in (CircularDiagramRequest, LinearDiagramRequest):
+        request = request_type(
+            records=(RecordInput(source=GfaInputSource(gfa)),),
+            output=RenderOutputRequest(output_directory=tmp_path, output_prefix="out"),
+        )
+        encoded = encode_canonical_request(request)
+        source = encoded.payload["records"][0]["source"]
+        assert source == {"kind": "gfa", "gfaResourceId": source["gfaResourceId"]}
+        (resource,) = encoded.resources
+        assert (resource.resource_id, resource.kind) == (source["gfaResourceId"], "gfa")
+        decoded = decode_canonical_request(
+            json.loads(json.dumps(encoded.payload)),
+            resource_paths={resource.resource_id: gfa},
+            output_directory=tmp_path,
+        )
+        assert decoded.records[0].source == GfaInputSource(gfa)
+        assert encode_canonical_request(decoded).payload == encoded.payload
 
 _DENSITY_TRACKS = (
     FeatureDensityTrack("genes", FeatureQuery("gene")),

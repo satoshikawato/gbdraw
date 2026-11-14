@@ -33,7 +33,7 @@ import { storedRecordSourceResourceIds } from './input-types.js';
  *   windows: { start: number, end: number, reverseComplement: boolean }[],
  *   presentation: { reverseComplement: boolean },
  *   display?: { isCircular: boolean | null, startCoordinate: number | null },
- *   source: { kind: string, resourceId?: string, gffResourceId?: string, fastaResourceId?: string }
+ *   source: { kind: string, resourceId?: string, gffResourceId?: string, fastaResourceId?: string, gfaResourceId?: string }
  * }} CommittedRecord
  */
 /** @typedef {{ mode?: string, records: CommittedRecord[] }} CommittedRecordRequest */

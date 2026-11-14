@@ -65,6 +65,23 @@ its records have unknown topology: a setting that needs a complete circular
 record, such as a display start, needs **Circular record** in the Web app or
 `--record_topology circular`.
 
+A GFA 1 assembly graph (`--gfa`, a records-table row with only `gfa`,
+`read_gfa()` or `GfaInputSource` in Python, or the **GFA** input type in the
+Web app) draws each segment (`S` line) as a record with its sequence and no
+features, in file order; the segment name is the record ID. A segment with a
+link from its end back to its own start (`L s + s +` or `L s - s -`) is
+circular, and every other segment is linear. Where that link's overlap is
+`nM`, the record drops its last n bases, so each base of the circle is drawn
+once; an overlap of `*`, `0M`, or none drops nothing. In the Web app,
+**Circular record** starts on for a circular segment. Other links are not
+drawn, nor are path (`P`) and walk (`W`) lines: one notice per file says so.
+Segment sequences follow the FASTA rule above (IUPAC nucleotide codes). gbdraw
+refuses, with the reason: a GFA 2 file; a segment whose sequence is `*`; two
+segments with one name; and a self-loop whose overlap is any other CIGAR
+string, is as long as the segment or longer, or differs from another self-loop
+of the same segment. To draw some segments of a large graph, select them by ID
+or index, as for any file with several records.
+
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
 source annotation model. Rows that share an `ID` form one multipart feature;
@@ -174,7 +191,7 @@ containing the table.
 
 | Table | Required columns | Optional columns |
 |---|---|---|
-| Records | One of `gbk`, both `gff` and `fasta`, or `fasta` alone | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode`, `record_group` |
+| Records | One of `gbk`, both `gff` and `fasta`, `fasta` alone, or `gfa` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode`, `record_group` |
 | Linear comparisons | `query`, `subject`; `blast` for `source=table` rows | `source` |
 | Circular conservation | `blast`; `comparison_sequence` with `--losat` (then `blast` is rejected) | `label`, `color`, `comparison_sequence`, `losat_gencode` |
 | Circular tracks | `id`, `renderer` | `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, `z`, `params` |

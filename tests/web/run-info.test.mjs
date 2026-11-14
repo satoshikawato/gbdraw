@@ -257,6 +257,44 @@ test('source recipe of a FASTA alone gives --fasta in both modes and a fasta rec
   }
 });
 
+// A GFA is `--gfa` in both modes (D-86); a records table names it in its `gfa` column. Its records count by segment,
+// so a record of a two-segment graph is named by #index. The recipe runs: the CLI draws the same input.
+test('source recipe of a GFA gives --gfa in both modes and a gfa records-table column', async () => {
+  const text = `H\tVN:Z:1.0\nS\tcircle\t${'ACGT'.repeat(30)}\nS\tleft\t${'GGCC'.repeat(30)}\nL\tcircle\t+\tcircle\t+\t4M\n`;
+  for (const mode of ['circular', 'linear']) {
+    for (const labelled of [false, true]) {
+      const session = canonical({
+        mode,
+        records: [{
+          recordKey: 'circle',
+          cardinality: 'exactly_one',
+          source: { kind: 'gfa', gfaResourceId: 'source' },
+          selector: { kind: 'recordIndex', index: 0 },
+          windows: [],
+          presentation: { ...presentation(), label: labelled ? 'Circle' : null }
+        }],
+        resources: { source: resource('gfa', 'graph.gfa', text) },
+        webFiles: { resourceOriginalNames: { source: 'graph.gfa' } }
+      });
+      const recipe = await buildSourceRecipe(session);
+      assert.equal(recipe.available, true, `${mode}: ${recipe.unavailableReason}`);
+      assert.equal(['--gbk', '--gff', '--fasta'].some((option) => recipe.args.includes(option)), false, mode);
+      if (recipe.args.includes('--records_table')) {
+        const [header, row] = recipe.generatedFiles[0].data.split('\n');
+        assert.equal(header.split('\t')[0], 'gfa', mode);
+        assert.equal(row.split('\t')[0], 'graph.gfa', mode);
+      } else {
+        const gfa = recipe.args.indexOf('--gfa');
+        assert.notEqual(gfa, -1, mode);
+        assert.equal(recipe.fileMetadata.get(recipe.args[gfa + 1])?.name, 'graph.gfa');
+      }
+      await assertCliParserAccepts(recipe);
+      const info = buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe });
+      await materializeAndRunRecipe(session, recipe, info, `gfa ${mode}${labelled ? ' labelled' : ''}`);
+    }
+  }
+});
+
 test('source recipe reuses materialized source text and preserves record selection', async () => {
   for (const format of ['genbank', 'fasta']) {
     for (const recordCount of [1, 2]) {

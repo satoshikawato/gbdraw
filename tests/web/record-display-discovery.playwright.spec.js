@@ -334,6 +334,42 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// A GFA 1 file (D-86, D-126 Q3): the GFA source choice lists each segment as a record through Python's GFA loader;
+// a segment with a self-loop starts with Circular record on and drops the bases of its nM overlap, and the input
+// summary says once that the path line is not drawn.
+const gfaGraph = `H\tVN:Z:1.0\nS\tcircle\t${'acgt'.repeat(60)}ACGTACGTAC\nS\tleft\t${'ggcc'.repeat(45)}\n`
+  + 'L\tcircle\t+\tcircle\t+\t10M\nL\tcircle\t+\tleft\t+\t0M\nP\tp1\tcircle+,left+\t*\n';
+for (const mode of ['circular', 'linear']) {
+  test(`a GFA lists its segments and Generate draws them in ${mode}`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
+    await page.locator('input[type=radio][value=gfa]').first().check();
+    await expect(page.getByText('Records are drawn without features.')).toBeVisible();
+    const upload = mode === 'linear' ? page.getByTestId('linear-gfa-1') : circularFileInput(page, 'gfa');
+    await upload.setInputFiles({ name: 'graph.gfa', mimeType: 'text/plain', buffer: Buffer.from(gfaGraph) });
+    if (mode === 'circular') {
+      await waitStatus(page, 'ready');
+      expect((await snapshot(page)).rows).toEqual([['#1', 'circle'], ['#2', 'left']]);
+      expect(await page.evaluate(async () => (await import('./js/state.js')).state.drawingList()
+        .find((drawing) => drawing.mode === 'circular').circularRecordList.value
+        .map((row) => [row.record_length, row.detectedTopology]))).toEqual([[240, 'circular'], [180, 'linear']]);
+      const circularRows = page.getByRole('checkbox', { name: /^Circular record/ });
+      await expect(circularRows).toHaveCount(2);
+      await expect(circularRows.nth(0)).toBeChecked();
+      await expect(circularRows.nth(1)).not.toBeChecked();
+    } else {
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 180000 }).toBe(2);
+    }
+    await generateAndWaitForResult(page);
+    const drawn = await drawnText(page);
+    expect(drawn).toContain('circle');
+    expect(drawn).toContain('left');
+    await expect(page.getByTestId('input-summary-notice').locator('[data-input-warning="gfa_paths_not_drawn"]'))
+      .toHaveText(/its 1 path or walk line \(P, W\) is not drawn/);
+  });
+}
+
 test('a protein FASTA alone is refused before Generate with the record named', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);

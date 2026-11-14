@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SequenceFormat } from '../services/input-types.js' */
 import { normalizeUserFacingError, renderErrorText } from '../utils/error-normalization.js';
 import {
   buildCircularTrackSlotSpec
@@ -14,7 +15,7 @@ import {
   parseLinearTrackSlotSpec,
   syncLinearSlotsFromAxisIndex
 } from '../services/linear-track-slot-model.js';
-import { countGenBankRecords } from '../services/genbank-header.js';
+import { countSequenceRecords } from '../services/genbank-header.js';
 import { identityScalePathForMode } from '../mode-profiles.js';
 import { msg, t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
@@ -48,7 +49,7 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
  * @typedef {{ path: string, name: string, kind: 'generated' | 'uploaded', slot: string, resourceId?: string }} RecipeFileMetadata
  * @typedef {(path: string) => string} FinalNameForPath The visible name allocated to a generated file's path.
  * @typedef {{ path: string, name: string, slot: string, data?: string | Uint8Array, buildData?: (finalNameForPath: FinalNameForPath) => string | Uint8Array, resourceId?: string }} RecipeGeneratedFile
- * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
+ * @typedef {(resourceId: string, kind: SequenceFormat) => number | Promise<number>} ResourceRecordCounter
  * @typedef {(resourceId: string) => string | Promise<string>} ResourceTextReader
  * @typedef {(resourceId: string) => Promise<Uint8Array | null>} ResourceFileBytesReader The bytes a File holds for a
  *   resource whose descriptor holds none (a File Generate described), else null.
@@ -57,11 +58,11 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
  * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
  * @property {(nameRaw: unknown, data: string | ((finalNameForPath: FinalNameForPath) => string), slot: string | undefined) => string} generatedTextPath
  * @property {(path: string) => string} visibleName
- * @property {(resourceId: unknown, kind: 'genbank' | 'fasta') => Promise<number>} resourceRecordCount
+ * @property {(resourceId: unknown, kind: SequenceFormat) => Promise<number>} resourceRecordCount
  * @property {Map<string, RecipeFileMetadata>} fileMetadata
  * @property {RecipeGeneratedFile[]} generatedFiles
  * @typedef {{ schema: number, consumedPaths: Set<string>, metadataPaths: Set<string> }} RecipeCoverage The semantic fields of a request, by path.
- * @typedef {{ kind: CanonicalRecord['source']['kind'], ids: string[], options: readonly CliSourceOption[], extensions: readonly string[], countFormat: 'genbank' | 'fasta' }} SourceSpec
+ * @typedef {{ kind: CanonicalRecord['source']['kind'], ids: string[], options: readonly CliSourceOption[], extensions: readonly string[], countFormat: SequenceFormat }} SourceSpec
  *   The resource ids that one record needs, in source order, the CLI option and the fallback file extension of each,
  *   and the format its records are counted in.
  * @typedef {{ path: string, name: string, slot: string }} RecipeHelperFile A file the recipe or the replay needs beside the uploaded inputs.
@@ -595,7 +596,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
   const visibleName = (path) => fileMetadata.get(path)?.name || fallbackNameFromPath(path);
   /**
    * @param {unknown} resourceIdRaw
-   * @param {'genbank' | 'fasta'} kind
+   * @param {SequenceFormat} kind
    * @returns {Promise<number>}
    */
   const resourceRecordCount = async (resourceIdRaw, kind) => {
@@ -607,10 +608,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     if (typeof readResourceRecordCount === 'function') {
       count = await readResourceRecordCount(resourceId, kind);
     } else {
-      const text = descriptorText(descriptors, resourceId);
-      count = kind === 'genbank'
-        ? countGenBankRecords(text)
-        : (text.match(/^>/gm) || []).length;
+      count = countSequenceRecords(descriptorText(descriptors, resourceId), kind);
     }
     recordCountCache.set(cacheKey, count);
     return count;
@@ -887,14 +885,15 @@ const validateCurrentSemanticCoverage = (request) => {
 /**
  * The CLI option of each resource kind of a record source file, which is also its records-table column, and the
  * extension of the file name a recipe gives a file without one. The one CLI projection of the input types: a
- * GenBank file is `--gbk`, a GFF3 file `--gff` with its FASTA `--fasta`, a FASTA alone `--fasta`.
- * @typedef {'gbk' | 'gff' | 'fasta'} CliSourceOption
+ * GenBank file is `--gbk`, a GFF3 file `--gff` with its FASTA `--fasta`, a FASTA alone `--fasta`, a GFA `--gfa`.
+ * @typedef {'gbk' | 'gff' | 'fasta' | 'gfa'} CliSourceOption
  * @type {Readonly<Record<RecordSourceFileResource, Readonly<{ option: CliSourceOption, extension: string }>>>}
  */
 const CLI_SOURCE_FILES = Object.freeze({
   genbank: Object.freeze({ option: 'gbk', extension: 'gbk' }),
   gff3: Object.freeze({ option: 'gff', extension: 'gff3' }),
-  fasta: Object.freeze({ option: 'fasta', extension: 'fasta' })
+  fasta: Object.freeze({ option: 'fasta', extension: 'fasta' }),
+  gfa: Object.freeze({ option: 'gfa', extension: 'gfa' })
 });
 /** @typedef {(typeof RECORD_SOURCE_FILES)[CanonicalRecord['source']['kind']][number]['resource']} RecordSourceFileResource */
 

@@ -131,6 +131,22 @@
       ],
       "additionalProperties": false
     },
+    "CanonicalGfaRecordSource": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "gfa"
+        },
+        "gfaResourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "gfaResourceId"
+      ],
+      "additionalProperties": false
+    },
     "CanonicalRecordSource": {
       "anyOf": [
         {
@@ -141,6 +157,9 @@
         },
         {
           "$ref": "#/$defs/CanonicalFastaRecordSource"
+        },
+        {
+          "$ref": "#/$defs/CanonicalGfaRecordSource"
         }
       ]
     },

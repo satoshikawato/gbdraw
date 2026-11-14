@@ -481,7 +481,7 @@ export const SESSION_DRAWINGS_LAYOUT = Object.freeze({
     linear: 'linearSeqs'
   }),
   modeScopedCircularInputSlots: Object.freeze(['c_fasta', 'c_gb', 'c_gff']),
-  resourceReferenceFields: Object.freeze(['fastaResourceId', 'gffResourceId', 'resourceId']),
+  resourceReferenceFields: Object.freeze(['fastaResourceId', 'gfaResourceId', 'gffResourceId', 'resourceId']),
   resourceIdListFields: Object.freeze(['conservationLosatFastaSources', 'conservationSequenceSources']),
   drawingResourceFields: Object.freeze(['renderRequest', 'webFiles', 'results'])
 });
@@ -529,6 +529,12 @@ export const RECORD_SOURCE_FILES = Object.freeze({
     Object.freeze({
       resource: 'fasta',
       field: 'fastaResourceId'
+    })
+  ]),
+  gfa: Object.freeze([
+    Object.freeze({
+      resource: 'gfa',
+      field: 'gfaResourceId'
     })
   ])
 });

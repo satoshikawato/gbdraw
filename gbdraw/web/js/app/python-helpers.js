@@ -343,7 +343,7 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
     from gbdraw.io.record_select import parse_record_selector, select_record
     from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
     try:
-        fmt_map = {"genbank": "genbank", "fasta": "fasta"}
+        fmt_map = {"genbank": "genbank", "fasta": "fasta", "gfa": "gfa"}
         if fmt not in fmt_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='extractFirstFasta', stage="helper")})
         records = _parse_sequence_file(path, fmt_map[fmt])
@@ -1592,9 +1592,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         return json.dumps({'error': serialize_web_error(error, operation='convertLosatpPairsToGenomicPayload', stage="helper")})
 
 def get_record_length(path, fmt, record_id=None, record_index=None):
-    """Return record length for a GenBank/FASTA file."""
+    """Return record length for a GenBank, FASTA or GFA file."""
     try:
-        fmt_map = {"genbank": "genbank", "fasta": "fasta"}
+        fmt_map = {"genbank": "genbank", "fasta": "fasta", "gfa": "gfa"}
         if fmt not in fmt_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='unknown', stage="helper")})
         records = _parse_sequence_file(path, fmt_map[fmt])

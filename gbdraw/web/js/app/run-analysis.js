@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SequenceFormat } from '../services/input-types.js' */
 /** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
@@ -180,7 +181,7 @@ import {
 import {
   bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows, ringGenomeFileLists
 } from '../services/drawing/inputs.js';
-import { circularInputComplete, circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
+import { circularInputComplete, circularSourceInputs, inputSequenceSource } from '../services/input-types.js';
 import {
   NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs, losatRequestRings
 } from '../services/circular-conservation-keys.js';
@@ -4015,9 +4016,9 @@ export const createRunAnalysis = ({
           if (held) return held.entry;
           const startedAt = getNow();
           // A protein search reads a GFF3 input's GFF3 file with its FASTA; a nucleotide search reads its FASTA.
-          const inputSpec = inputTypeSpec(drawing.inputType.value);
+          const { spec: inputSpec, format: sequenceFormat } = inputSequenceSource(drawing.inputType.value);
           const proteinPair = useProteinBlastp && inputSpec.paired !== null;
-          const fmt = proteinPair ? 'gff' : inputSpec.sourceKind === 'genbank' ? 'genbank' : 'fasta';
+          const fmt = proteinPair ? 'gff' : sequenceFormat;
           const regionSpec = regionSpecs[idx]?.file || null;
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
           const recordSelector = !useProteinBlastp && inputSpec.paired !== null
@@ -5243,7 +5244,7 @@ export const createRunAnalysis = ({
         sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
           generatedFileNameHints,
-          readResourceRecordCount: (/** @type {string} */ id, /** @type {'genbank' | 'fasta'} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
+          readResourceRecordCount: (/** @type {string} */ id, /** @type {SequenceFormat} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
           readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
           readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id),
           drawnUnits: requestDrawnUnits,

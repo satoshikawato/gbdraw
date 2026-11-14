@@ -8,6 +8,7 @@ import { shapeViolations } from '../utils/contract-shape.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { numberText } from '../utils/i18n.js';
 import { windowSpanOf } from './linear-card-windows.js';
+import { recordSourceResourceIds } from './input-types.js';
 
 /** @import { LosatJob, LosatJobResult } from './losat.js' */
 /** @import { CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -156,15 +157,14 @@ export const windowGeneSpan = (genes, names) => {
 };
 
 /**
- * The name of the Web file each record of a drawing's request reads (the GenBank file, else the GFF3 file, else the
- * FASTA file), by its record key. A File's key is the record key of the first request record of its source
+ * The name of the Web file each record of a drawing's request reads (its source's first file: the GenBank file, the
+ * GFF3 file of a GFF3 + FASTA pair, the FASTA file or the GFA file), by its record key. A File's key is the record key of the first request record of its source
  * (`d:1` for a card the request writes as one record per record), so every File key is named.
  * @param {readonly CanonicalRecord[]} records The request's records.
  * @param {ReadonlyMap<string, { name: string }>} filesByResource The Web file of each resource.
  * @returns {Record<string, string>}
  */
 export const fileNamesOf = (records, filesByResource) => Object.fromEntries(records.map(({ recordKey, source }) => {
-  const resourceId = source.kind === 'genbank' ? source.resourceId
-    : source.kind === 'gffFasta' ? source.gffResourceId : source.fastaResourceId;
+  const [resourceId] = recordSourceResourceIds(source);
   return [recordKey, filesByResource.get(resourceId)?.name ?? recordKey];
 }));

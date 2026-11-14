@@ -62,6 +62,7 @@ Examples:
   gbdraw circular --gff input.gff --fasta input.fna
   gbdraw linear --gbk input.gb
   gbdraw linear --gff input.gff --fasta input.fna
+  gbdraw circular --gfa assembly.gfa
   gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw render --session project.gbdraw
@@ -72,6 +73,7 @@ Options (examples):
   --gbk                Input GenBank file(s)
   --gff                Input GFF3 file(s) (requires --fasta; mutually exclusive with --gbk)
   --fasta              Input FASTA file(s) (with --gff, its sequences; alone, records without features; mutually exclusive with --gbk)
+  --gfa                Input GFA 1 file(s) (each segment a record without features; mutually exclusive with --gbk, --gff and --fasta)
   -o, --output         Output file prefix (optional)
   --overwrite          Replace existing output files (default: refuse)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
@@ -107,10 +109,11 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT]
-              [--overwrite] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS]
-              [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES]
-              [--strain STRAIN] [-k FEATURES] [--feature_shape TYPE=SHAPE]
+              [--fasta [FASTA_FILE ...]] [--gfa [GFA_FILE ...]]
+              [--records_table TSV] [-o OUTPUT] [--overwrite] [-p PALETTE]
+              [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
+              [--species SPECIES] [--strain STRAIN] [-k FEATURES]
+              [--feature_shape TYPE=SHAPE]
               [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
               [--arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO]
               [--block_stroke_color BLOCK_STROKE_COLOR]
@@ -248,6 +251,10 @@ options:
                         FASTA file, plain or gzip-compressed: with --gff, its
                         sequences; alone (instead of --gbk), each nucleotide
                         entry is a record without features
+  --gfa [GFA_FILE ...]  GFA 1 assembly graph, plain or gzip-compressed
+                        (instead of --gbk, --gff or --fasta): each segment (S
+                        line) is a record without features; a segment with a
+                        self-loop link is circular
   --records_table TSV   TSV manifest for row-based input records and circular
                         placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
@@ -936,7 +943,7 @@ The table options accept UTF-8, tab-separated files with a header row, with or w
 
 ### `--records_table`
 
-Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk`, `--gff` plus `--fasta`, or `--fasta` alone, and cannot be combined with those input options. Rows of one table use one input kind: GenBank, GFF3/FASTA, or FASTA.
+Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk`, `--gff` plus `--fasta`, `--fasta` alone, or `--gfa`, and cannot be combined with those input options. Rows of one table use one input kind: GenBank, GFF3/FASTA, FASTA, or GFA.
 
 Allowed columns:
 
@@ -945,6 +952,7 @@ Allowed columns:
 | `gbk` | required for GenBank rows | GenBank/GBFF path. |
 | `gff` | required for GFF3/FASTA rows | GFF3 path. |
 | `fasta` | required for GFF3/FASTA and FASTA rows | FASTA path: the sequences of `gff`, or, in a row without `gff`, a FASTA whose nucleotide entries are records without features. |
+| `gfa` | required for GFA rows | GFA 1 path: each segment (S line) is a record without features; a segment with a self-loop link is circular (see [Input formats](REFERENCE/input-formats-and-tsv-schemas.md#sequence-and-annotation-files)). |
 | `record_label` | optional | Linear record label, equivalent to one repeated `--record_label` value. |
 | `record_subtitle` | optional | Linear subtitle line, equivalent to one repeated `--record_subtitle` value. |
 | `record_id` | optional | Record selector for this row, such as a record ID or `#1`. Required when the source file would otherwise load more than one displayed record. |
@@ -955,7 +963,7 @@ Allowed columns:
 | `column` | optional | Positive integer used to order records from left to right within a multi-record row. |
 | `record_group` | optional | Linear: rows that share a value are the windows of one record (see below). |
 
-One table row represents one displayed record, except that rows sharing a `record_group` value are the windows of one record: they are drawn side by side in that row, ordered by `column`, and leave out the interval between them. Rows of one `record_group` must name the same file, `record_id`, and `row`, and each needs a `region`; their regions may overlap. Each row's `region`, `reverse_complement`, and `column` belong to its window, and the record's `record_label`, `record_subtitle`, `topology`, and `losat_gencode` are the values its rows give; rows that give different non-empty values are refused. Rows without a `record_group` value stay separate records, even when they name the same record in the same `row`. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+One table row represents one displayed record, except that rows sharing a `record_group` value are the windows of one record: they are drawn side by side in that row, ordered by `column`, and leave out the interval between them. Rows of one `record_group` must name the same file, `record_id`, and `row`, and each needs a `region`; their regions may overlap. Each row's `region`, `reverse_complement`, and `column` belong to its window, and the record's `record_label`, `record_subtitle`, `topology`, and `losat_gencode` are the values its rows give; rows that give different non-empty values are refused. Rows without a `record_group` value stay separate records, even when they name the same record in the same `row`. A table must use either all GenBank rows, all GFF3/FASTA rows, all FASTA rows, or all GFA rows; do not mix `gbk`, `gff`/`fasta`, and `gfa`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
 
 A `:rc` suffix and `reverse_complement` draw the same window. `region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both crop 1000..9000 of the record as stored in the file, then reverse-complement the crop. `--region` and `--reverse_complement` follow the same order.
 
@@ -1255,9 +1263,10 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [--records_table TSV]
-              [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
-              [--comparisons_table TSV] [-b [BLAST ...]] [--auto_orient]
+              [--fasta [FASTA_FILE ...]] [--gfa [GFA_FILE ...]]
+              [--records_table TSV] [--multi_record_position SELECTOR@ROW]
+              [--linear_record_gap PX] [--comparisons_table TSV]
+              [-b [BLAST ...]] [--auto_orient]
               [--losat {losatn,tlosatx,losatp}]
               [--losatp_mode {similarity_groups,collinear,pairwise}]
               [--losatn_task {megablast,blastn,dc-megablast}]
@@ -1396,6 +1405,10 @@ options:
                         FASTA file, plain or gzip-compressed: with --gff, its
                         sequences; alone (instead of --gbk), each nucleotide
                         entry is a record without features
+  --gfa [GFA_FILE ...]  GFA 1 assembly graph, plain or gzip-compressed
+                        (instead of --gbk, --gff or --fasta): each segment (S
+                        line) is a record without features; a segment with a
+                        self-loop link is circular
   --records_table TSV   TSV manifest for row-based input records and per-
                         record options.
   --multi_record_position SELECTOR@ROW

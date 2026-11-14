@@ -852,14 +852,17 @@ const parseGenbankRecordsFast = (text) => {
 export const parseSequenceRecordsFast = (text, fmt) => (
   fmt === 'genbank' ? parseGenbankRecordsFast(text) : parseFastaRecordsFast(text)
 );
+// The formats the browser reads records of; a GFA is read only by the Python loader (gbdraw/io/gfa.py).
+const BROWSER_SEQUENCE_FORMATS = new Set(['genbank', 'fasta']);
 /**
  * A file's records, parsed once per File and format, frozen, or null when only the Python reader reads the
- * file (`browserReaderText`); `parsed` says whether this call read the file.
+ * file (`browserReaderText`, or a format the browser has no reader for); `parsed` says whether this call read the file.
  * @param {FileLike} file
- * @param {string} fmt `genbank` or `fasta`.
+ * @param {string} fmt `genbank`, `fasta` or `gfa`.
  * @returns {Promise<{ records: readonly ParsedSequenceRecord[] | null, parsed: boolean }>}
  */
 export const readParsedSequenceRecords = async (file, fmt) => {
+  if (!BROWSER_SEQUENCE_FORMATS.has(fmt)) return { records: null, parsed: false };
   let parsed = false;
   const records = await readOncePerFile([file], `sequence-records:${fmt}`, async () => {
     parsed = true;
@@ -910,11 +913,11 @@ const allSequenceRecordsFromReply = (payload) => {
  * Every record of a sequence file, in file order, as the CLI loader reads it. The browser records
  * (`readParsedSequenceRecords`) serve when the browser reader and the record-list rules (`parseSequenceRecordText`)
  * both take the file; otherwise the Worker reads it (OV-1599): a file that starts with a UTF-8 byte order mark,
- * or a FASTA entry without an ID, which Python names '' and the browser record_N.
+ * or a FASTA entry without an ID, which Python names '' and the browser record_N; and every GFA.
  * Frozen, read once per File and format. The Circular conservation reference and the restored Linear and reference
  * match sequences read it.
  * @param {FileLike} file
- * @param {string} fmt `genbank` or `fasta`.
+ * @param {string} fmt `genbank`, `fasta` or `gfa`.
  * @param {HelperOperationRunner<AllSequenceRecordsPayload>} [runHelperOperation]
  * @returns {Promise<readonly ParsedSequenceRecord[]>}
  */
@@ -1128,16 +1131,17 @@ export const discoverGffFastaRecords = async ({
 };
 
 /**
- * The records of a FASTA given without GFF3, as Generate draws them. Only the
- * Python loader (`load_fasta`) decides that a record is nucleotide, so the browser
- * has no fast path here and every read goes to the Worker helper (R4).
- * @param {{ file: FileLike | null | undefined, runHelperOperation?: HelperOperationRunner<SequenceRecordsPayload> }} options
+ * The records of a FASTA given without GFF3 or of a GFA, as Generate draws them. Only the
+ * Python loader (`load_fasta`, `load_gfa`) decides that a record is nucleotide (and reads a GFA at all),
+ * so the browser has no fast path here and every read goes to the Worker helper (R4).
+ * @param {{ file: FileLike | null | undefined, format: 'fasta' | 'gfa',
+ *   runHelperOperation?: HelperOperationRunner<SequenceRecordsPayload> }} options
  */
-export const discoverFastaInputRecords = async ({ file, runHelperOperation = runDiagramHelperOperation }) => {
-  if (!file) throw new Error('A FASTA file is required.');
-  return copiedRecords(readOncePerFile([file], 'records:fasta-input', async () => {
+export const discoverWorkerInputRecords = async ({ file, format, runHelperOperation = runDiagramHelperOperation }) => {
+  if (!file) throw new Error(format === 'gfa' ? 'A GFA file is required.' : 'A FASTA file is required.');
+  return copiedRecords(readOncePerFile([file], `records:${format}-input`, async () => {
     const response = await runHelperOperation(DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS, {
-      format: 'fasta', files: [await helperInputFile('source', file)]
+      format, files: [await helperInputFile('source', file)]
     });
     return normalizeSequenceRecords(response.result);
   }));
@@ -1154,7 +1158,8 @@ export const discoverFastaInputRecords = async ({ file, runHelperOperation = run
 const INPUT_RECORD_READERS = Object.freeze({
   genbank: { operation: 'listSequenceRecords', read: (file) => discoverSequenceRecords({ file, format: 'genbank' }) },
   gffFasta: { operation: 'listGffFastaRecords', read: (gffFile, fastaFile) => discoverGffFastaRecords({ gffFile, fastaFile }) },
-  fasta: { operation: 'listSequenceRecords', read: (file) => discoverFastaInputRecords({ file }) }
+  fasta: { operation: 'listSequenceRecords', read: (file) => discoverWorkerInputRecords({ file, format: 'fasta' }) },
+  gfa: { operation: 'listSequenceRecords', read: (file) => discoverWorkerInputRecords({ file, format: 'gfa' }) }
 });
 
 /**

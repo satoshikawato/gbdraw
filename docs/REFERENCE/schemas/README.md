@@ -390,6 +390,7 @@ classDiagram
   CanonicalRecordSource <|-- CanonicalGenbankRecordSource
   CanonicalRecordSource <|-- CanonicalGffFastaRecordSource
   CanonicalRecordSource <|-- CanonicalFastaRecordSource
+  CanonicalRecordSource <|-- CanonicalGfaRecordSource
   class CanonicalRecordSelector
   <<union>> CanonicalRecordSelector
   CanonicalRecordSelector <|-- CanonicalRecordIdSelector
@@ -437,6 +438,7 @@ classDiagram
   class CanonicalGenbankRecordSource
   class CanonicalGffFastaRecordSource
   class CanonicalFastaRecordSource
+  class CanonicalGfaRecordSource
   class CanonicalRecordIdSelector
   class CanonicalRecordIndexSelector
   class CanonicalAnnotationSet

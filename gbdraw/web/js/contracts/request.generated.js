@@ -40,7 +40,12 @@
  * @property {'fasta'} kind
  * @property {string} fastaResourceId
  */
-/** @typedef {CanonicalGenbankRecordSource | CanonicalGffFastaRecordSource | CanonicalFastaRecordSource} CanonicalRecordSource */
+/**
+ * @typedef {object} CanonicalGfaRecordSource
+ * @property {'gfa'} kind
+ * @property {string} gfaResourceId
+ */
+/** @typedef {CanonicalGenbankRecordSource | CanonicalGffFastaRecordSource | CanonicalFastaRecordSource | CanonicalGfaRecordSource} CanonicalRecordSource */
 /**
  * @typedef {object} CanonicalRecordDisplayOptions
  * @property {boolean | null} isCircular

@@ -7,7 +7,7 @@ import {
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
 /** @import { LosatRequestRing } from './circular-conservation-keys.js' */
 import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
-/** @import { InputSlot } from './input-types.js' */
+/** @import { InputSlot, SequenceFormat } from './input-types.js' */
 /** @import { CircularLayoutDraft } from './one-circle-layout.js' */
 import {
   canonicalFeatureOverrides,
@@ -65,7 +65,7 @@ import {
   effectiveSlotPlacement,
   circularRequestSlotsWithPlacedLanes
 } from './circular-track-slot-model.js';
-import { countGenBankRecords } from './genbank-header.js';
+import { countSequenceRecords } from './genbank-header.js';
 import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendRowKeys } from './legend-draft-rows.js';
 /** @import { LegendEditConfigLeaves } from './legend-draft-rows.js' */
 import { DEFAULT_LINEAR_OUTPUT_PREFIX, downloadSafeName } from '../utils/download-names.js';
@@ -5328,7 +5328,7 @@ export const projectCompositionRecordIdentity = (canonical, keys) => {
 export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput(args);
 
 /**
- * @param {{ source?: { kind?: unknown, resourceId?: unknown, gffResourceId?: unknown, fastaResourceId?: unknown } | null } | null | undefined} record
+ * @param {{ source?: { kind?: unknown, resourceId?: unknown, gffResourceId?: unknown, fastaResourceId?: unknown, gfaResourceId?: unknown } | null } | null | undefined} record
  * @param {string} field
  */
 const recordSourceResourceId = (record, field) => {
@@ -5363,7 +5363,7 @@ const addResourceOriginalNameHint = (target, resourceId, name) => {
 const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings }) => {
   /** @type {Record<string, string>} */
   const hints = {};
-  /** @type {readonly UnvalidatedFields<'source', UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId'>>[]} */
+  /** @type {readonly UnvalidatedFields<'source', UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId' | 'gfaResourceId'>>[]} */
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
   // The cast: an object other than an array, read through views of its properties.
   const files = legacyFiles && typeof legacyFiles === 'object' && !Array.isArray(legacyFiles)
@@ -5678,7 +5678,7 @@ const cloneCanonicalJsonValue = (value) => (
  * checks or converts it where it reads it.
  * @typedef {RequestRecordView & {
  *   recordKey?: unknown, cardinality?: unknown,
- *   source?: UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId'>,
+ *   source?: UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId' | 'gfaResourceId'>,
  *   display?: UnvalidatedFields<'isCircular' | 'startCoordinate'>,
  *   presentation?: UnvalidatedFields<'reverseComplement' | 'label' | 'subtitle' | 'gridRow' | 'gridColumn'>
  * }} ProjectionRecordView
@@ -6024,7 +6024,7 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
   return bytesToText(bytes, { fatal: true });
 };
 
-/** @type {WeakMap<WeakKey, { genbank: number, fasta: number }>} */
+/** @type {WeakMap<WeakKey, Record<SequenceFormat, number>>} */
 const sourceRecordCounts = new WeakMap();
 
 /**
@@ -6072,7 +6072,7 @@ export const readCanonicalResourceFileBytes = async (resources, resourceId) => {
 /**
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {string} resourceId
- * @param {'genbank' | 'fasta'} kind
+ * @param {SequenceFormat} kind
  */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
   const fileOwner = resourceFileOwner(resources?.[resourceId]);
@@ -6080,8 +6080,9 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
   if (!counts) {
     const text = await readCanonicalResourceText(resources, resourceId);
     counts = {
-      genbank: countGenBankRecords(text),
-      fasta: (text.match(/^>/gm) || []).length
+      genbank: countSequenceRecords(text, 'genbank'),
+      fasta: countSequenceRecords(text, 'fasta'),
+      gfa: countSequenceRecords(text, 'gfa')
     };
     // Immutable File/view identity outlives transferred bytes. Retain only counts;
     // a replacement source gets its own entry, and ownerless descriptors stay uncached.
@@ -7689,9 +7690,10 @@ export const projectCanonicalSessionRequest = ({
     const source = renderRequest.mode === 'circular'
       ? (Array.isArray(files.circularSources) ? files.circularSources[0] : undefined)
       : files.linearSeqs[0];
-    // The first input type whose files are all bound (GenBank, then GFF3 + FASTA, then FASTA).
+    // The first input type whose files are all bound: the request's own, then GenBank, GFF3 + FASTA, FASTA, GFA.
+    // A GFA and a FASTA both fill the sequence slot, so only the request's source kind tells them apart.
     const boundSlots = source ?? {};
-    inputType = /** @type {InputType[]} */ (Object.keys(INPUT_TYPES))
+    inputType = [inputType, .../** @type {InputType[]} */ (Object.keys(INPUT_TYPES))]
       .find((candidate) => inputSourceFiles(candidate, boundSlots).complete) ?? inputType;
   }
   // Legend and plot-title positions are layout preferences, not form fields:
@@ -8210,7 +8212,7 @@ const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
     lossless: (pattern) => (places.otherType.has(pattern) ? { value: places.otherType.get(pattern) } : null),
     discriminator: (pattern) => (pattern === '' ? 'mode' : places.tagged.has(pattern) ? 'kind' : null),
     reference: (pattern, value) => {
-      if (/(^|\.)(resourceId|gffResourceId|fastaResourceId)$/.test(pattern)) {
+      if (isCanonicalResourceReferenceField(pattern.slice(pattern.lastIndexOf('.') + 1))) {
         return typeof value === 'string' && !resourceIds.has(value) ? 'unknown-resource' : null;
       }
       if (holdComparisons && HELD_COMPARISON_PLACE.test(pattern)) return null;

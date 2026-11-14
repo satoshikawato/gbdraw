@@ -63,12 +63,13 @@ const COMMON_ACCEPT = '.txt,text/plain,text/*,.gz,application/gzip';
 const ADD_ZONES = Object.freeze({
   gb: { label: () => t('GenBank/DDBJ files'), accept: `.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,${COMMON_ACCEPT}` },
   gff: { label: () => t('GFF3 and FASTA files'), accept: `.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,${COMMON_ACCEPT}` },
-  fasta: { label: () => t('FASTA files'), accept: `.fa,.fas,.fasta,.fna,.ffn,${COMMON_ACCEPT}` }
+  fasta: { label: () => t('FASTA files'), accept: `.fa,.fas,.fasta,.fna,.ffn,${COMMON_ACCEPT}` },
+  gfa: { label: () => t('GFA files'), accept: `.gfa,${COMMON_ACCEPT}` }
 });
 /** @param {InputType} inputType @returns {InputFileKind[]} the kinds of the slots the input type reads */
 const fileKindsOf = (inputType) => {
   const { primary, paired } = inputTypeSpec(inputType);
-  return (paired ? [primary, paired] : [primary]).map(circularSlotFileKind);
+  return (paired ? [primary, paired] : [primary]).map((slot) => circularSlotFileKind(slot, inputType));
 };
 
 /** @param {readonly CircularListRecord[]} records */

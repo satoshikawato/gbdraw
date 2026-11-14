@@ -142,7 +142,7 @@ _EXACT = {
     "DepthTrackInput.source path must not be empty.": ("DEPTH_INVALID", {"field": "source", "reason": "REQUIRED"}),
     "No records found": ("NO_RECORDS", {}),
     "A resolved record collection cannot be empty.": ("NO_RECORDS", {}),
-    "Specify either GenBank paths, or FASTA paths with or without GFF3 paths.": ("INPUT_REQUIRED", {}),
+    "Specify either GenBank paths, FASTA paths with or without GFF3 paths, or GFA paths.": ("INPUT_REQUIRED", {}),
     "GFF3 and FASTA path counts must match.": ("FASTA_REQUIRED", {}),
     "GFF3 protein extraction requires a FASTA path.": ("FASTA_REQUIRED", {}),
     "An explicit display start cannot be combined with a crop.": ("REGION_INVALID", {"reason": "CROP_START_CONFLICT"}),

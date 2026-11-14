@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SequenceFormat } from '../services/input-types.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { RulePreparation, RulePreparationOptions } from './rule-matching.js' */
 /** @import { EditDefaultColorsPort, PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
@@ -42,7 +43,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {ReadDrawnTracksPort} readDrawnTracks
  * @property {() => CommittedCanonicalSession | null} [getCommittedSession] The committed canonical Session.
- * @property {((resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>) | null} [readResourceRecordCount]
+ * @property {((resourceId: string, kind: SequenceFormat) => number | Promise<number>) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource.
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
  *   The diagram helper that reads a Feature Edits TSV (R7).

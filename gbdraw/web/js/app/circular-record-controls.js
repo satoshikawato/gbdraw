@@ -161,7 +161,7 @@ const sessionSlotOf = (bindings, inputType) => (file) => {
   if (!isInputFileRef(file)) return null;
   const { primary, paired } = inputTypeSpec(inputType);
   for (const slot of paired ? [primary, paired] : [primary]) {
-    if (sessionFilesOfKind(bindings, circularSlotFileKind(slot)).some((ref) => ref.fileId === file.fileId)) return slot;
+    if (sessionFilesOfKind(bindings, circularSlotFileKind(slot, inputType)).some((ref) => ref.fileId === file.fileId)) return slot;
   }
   return null;
 };

@@ -2,6 +2,7 @@
 // The single JavaScript reader of GenBank record headers. Record discovery,
 // LOSAT FASTA extraction, and match sequences use it so their record IDs are
 // the ones gbdraw.io.genome reads with Biopython.
+/** @import { SequenceFormat } from './input-types.js' */
 
 // Biopython's GenBankScanner reads a header keyword from the first 12 columns
 // and its value from the rest of the line; a value continues on lines that
@@ -165,4 +166,14 @@ export const countGenBankRecords = (text) => {
     lineStart = newline < 0 ? -1 : newline + 1;
   }
   return count;
+};
+
+// The number of records the loader reads from a sequence file of each format: GenBank/DDBJ or EMBL records
+// (countGenBankRecords), FASTA entries (lines that start with ">"), or GFA segments (S lines, gbdraw/io/gfa.py).
+// The one counter of a source file's records in the browser: a recipe names a record by #index only when its file
+// holds more than one.
+/** @param {unknown} text @param {SequenceFormat} format */
+export const countSequenceRecords = (text, format) => {
+  if (format === 'genbank') return countGenBankRecords(text);
+  return (String(text || '').match(format === 'gfa' ? /^S\t/gm : /^>/gm) || []).length;
 };

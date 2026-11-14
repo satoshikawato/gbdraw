@@ -24,7 +24,7 @@ const {
   formatRecordLength
 } = await import(pathToFileURL(join(tempRoot, 'linear-record-selector.js')));
 const {
-  discoverFastaInputRecords,
+  discoverWorkerInputRecords,
   discoverGffFastaRecords,
   discoverSequenceRecords,
   normalizeSequenceRecords,
@@ -172,8 +172,8 @@ const fastaFile = (text) => ({
   arrayBuffer: async () => new TextEncoder().encode(text).buffer
 });
 const fastaHelperCalls = [];
-const fastaOnly = await discoverFastaInputRecords({
-  file: fastaFile('>alpha\nACGT\n'),
+const fastaOnly = await discoverWorkerInputRecords({
+  file: fastaFile('>alpha\nACGT\n'), format: 'fasta',
   runHelperOperation: async (operation, payload) => {
     fastaHelperCalls.push({ operation, format: payload.format, roles: payload.files.map(({ role }) => role) });
     return { result: { records: [{ selector: '#1', record_id: 'alpha', record_length: 4, topology: 'unknown' }] } };
@@ -183,8 +183,8 @@ assert.deepEqual(fastaOnly.map(({ recordId, detectedTopology }) => [recordId, de
 assert.deepEqual(fastaHelperCalls, [{ operation: 'listSequenceRecords', format: 'fasta', roles: ['source'] }]);
 const refusal = { code: 'INPUT_INVALID', context: { reason: 'NOT_NUCLEOTIDE', recordName: 'LvMJNV_ORF1', codepoint: 76 } };
 await assert.rejects(
-  discoverFastaInputRecords({
-    file: fastaFile('>LvMJNV_ORF1\nMKLVE\n'),
+  discoverWorkerInputRecords({
+    file: fastaFile('>LvMJNV_ORF1\nMKLVE\n'), format: 'fasta',
     runHelperOperation: async () => ({ result: { error: refusal } })
   }),
   (error) => error === refusal

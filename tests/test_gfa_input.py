@@ -243,6 +243,25 @@ def test_worker_helper_lists_a_gfa_through_the_gfa_loader(tmp_path: Path) -> Non
     assert refused["error"]["context"] == {"reason": "GFA_NO_SEQUENCE", "recordName": "unknown"}
 
 
+def test_worker_helpers_read_a_gfa_as_generate_reads_it(tmp_path: Path) -> None:
+    """The whole-file reader, the LOSAT FASTA extraction and the record length read a GFA's segments, the overlap
+    of a self-loop dropped, as Generate draws them."""
+
+    source = (Path(__file__).resolve().parents[1] / "gbdraw/web/js/app/python-helpers.js").read_text()
+    helpers: dict[str, object] = {}
+    exec(source.split("`", 1)[1].rsplit("`", 1)[0], helpers)
+    graph = str(_graph(tmp_path / "graph.gfa"))
+
+    read_all = json.loads(helpers["read_all_sequence_records"](graph, "gfa"))  # type: ignore[operator]
+    assert [(record["id"], len(record["sequence"])) for record in read_all["records"]] == [
+        ("circle", 160), ("left", 16), ("right", 16),
+    ]
+    extracted = json.loads(helpers["extract_first_fasta"](graph, "gfa", None, "circle"))  # type: ignore[operator]
+    assert (extracted["record_id"], extracted["record_length"]) == ("circle", 160)
+    length = json.loads(helpers["get_record_length"](graph, "gfa", "right"))  # type: ignore[operator]
+    assert (length["record_id"], length["length"], length["record_index"]) == ("right", 16, 2)
+
+
 GFA_SESSION = Path(__file__).resolve().parent / "fixtures/sessions/cli-circular-gfa.v51.gbdraw"
 
 

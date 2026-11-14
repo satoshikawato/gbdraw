@@ -283,10 +283,12 @@ Reading a Session 46 to 50 moves each mode's part into its own drawing.
 
 Each record of a drawing's request names its source by `kind`: `genbank` (a
 GenBank/DDBJ file, `resourceId`), `gffFasta` (a GFF3 file and its FASTA,
-`gffResourceId` and `fastaResourceId`), or `fasta` (a FASTA given without GFF3,
-`fastaResourceId`). The `fasta` kind is new in Session 51 and adds no request
-schema; its records have sequence and no features, and their topology is
-unknown until a Circular record setting says otherwise.
+`gffResourceId` and `fastaResourceId`), `fasta` (a FASTA given without GFF3,
+`fastaResourceId`), or `gfa` (a GFA 1 assembly graph, `gfaResourceId`). The
+`fasta` and `gfa` kinds are new in Session 51 and add no request schema; their
+records have sequence and no features. A `fasta` record's topology is unknown
+until a Circular record setting says otherwise; a `gfa` segment with a self-loop
+link is circular, and every other segment linear.
 
 Sessions 46 to 50 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:

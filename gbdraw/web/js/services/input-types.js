@@ -1,5 +1,5 @@
 // @ts-check
-// The input types of a drawing's source files (GenBank, GFF3 + FASTA, FASTA):
+// The input types of a drawing's source files (GenBank, GFF3 + FASTA, FASTA, GFA):
 // which file slots each type reads and which request record source kind it
 // projects to. The one table of input types: readers look a type up here
 // instead of branching on it. It imports only the generated contracts, so
@@ -7,8 +7,13 @@
 import { RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
-/** @typedef {'gb' | 'gff' | 'fasta'} InputType */
-/** @typedef {'gb' | 'gff' | 'fasta'} InputSlot A source file slot of a Linear card or of a Circular source card. */
+/** @typedef {'gb' | 'gff' | 'fasta' | 'gfa'} InputType */
+/**
+ * A source file slot of a Linear card or of a Circular source card. The `fasta` slot holds the file of a
+ * sequence-only input: a FASTA (with or without GFF3) or a GFA.
+ * @typedef {'gb' | 'gff' | 'fasta'} InputSlot
+ */
+/** @typedef {'genbank' | 'fasta' | 'gfa'} SequenceFormat The format a sequence reader reads a source file in. */
 /**
  * What an input type reads: the slot of its primary file, the slot of the FASTA a
  * GFF3 file pairs with (or null), and the record source kind the request projects
@@ -24,10 +29,13 @@ import { RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
 export const INPUT_TYPES = Object.freeze({
   gb: Object.freeze({ primary: 'gb', paired: null, sourceKind: 'genbank' }),
   gff: Object.freeze({ primary: 'gff', paired: 'fasta', sourceKind: 'gffFasta' }),
-  fasta: Object.freeze({ primary: 'fasta', paired: null, sourceKind: 'fasta' })
+  fasta: Object.freeze({ primary: 'fasta', paired: null, sourceKind: 'fasta' }),
+  gfa: Object.freeze({ primary: 'fasta', paired: null, sourceKind: 'gfa' })
 });
 /** @param {unknown} value A stored or chosen input type; anything else is GenBank. @returns {InputType} */
-export const normalizeInputType = (value) => (value === 'gff' || value === 'fasta' ? value : 'gb');
+export const normalizeInputType = (value) => (
+  value === 'gff' || value === 'fasta' || value === 'gfa' ? value : 'gb'
+);
 /** @param {unknown} inputType */
 export const inputTypeSpec = (inputType) => INPUT_TYPES[normalizeInputType(inputType)];
 /** @param {unknown} sourceKind A record source kind. @returns {InputType} the input type that projects it (GenBank when none does) */
@@ -53,15 +61,17 @@ export const inputSourceFiles = (inputType, slots) => {
     holdsFile: Boolean(primaryFile || pairedFile)
   };
 };
+/** The format each record source kind's sequence file is read in. @type {Readonly<Record<RecordSourceKind, SequenceFormat>>} */
+const SEQUENCE_FORMATS = Object.freeze({ genbank: 'genbank', gffFasta: 'fasta', fasta: 'fasta', gfa: 'gfa' });
 /**
  * The file that holds an input's sequences (a GFF3 input's FASTA; otherwise its
  * primary file) and the format a sequence reader reads it in.
  * @param {unknown} inputType
- * @returns {{ spec: Readonly<InputTypeSpec>, slot: InputSlot, format: 'genbank' | 'fasta' }}
+ * @returns {{ spec: Readonly<InputTypeSpec>, slot: InputSlot, format: SequenceFormat }}
  */
 export const inputSequenceSource = (inputType) => {
   const spec = inputTypeSpec(inputType);
-  return { spec, slot: spec.paired ?? spec.primary, format: spec.sourceKind === 'genbank' ? 'genbank' : 'fasta' };
+  return { spec, slot: spec.paired ?? spec.primary, format: SEQUENCE_FORMATS[spec.sourceKind] };
 };
 /**
  * One file of a record source: the resource kind that holds it and the source
@@ -81,7 +91,8 @@ const sourceSlotFiles = ({ primary, paired, sourceKind }) => {
 };
 /** The files of each input type's record source, in source order. @type {Readonly<Record<InputType, readonly SourceSlotFile[]>>} */
 const INPUT_SOURCE_FILES = Object.freeze({
-  gb: sourceSlotFiles(INPUT_TYPES.gb), gff: sourceSlotFiles(INPUT_TYPES.gff), fasta: sourceSlotFiles(INPUT_TYPES.fasta)
+  gb: sourceSlotFiles(INPUT_TYPES.gb), gff: sourceSlotFiles(INPUT_TYPES.gff), fasta: sourceSlotFiles(INPUT_TYPES.fasta),
+  gfa: sourceSlotFiles(INPUT_TYPES.gfa)
 });
 /**
  * The files of the record source an input type projects, in the order the source names them.

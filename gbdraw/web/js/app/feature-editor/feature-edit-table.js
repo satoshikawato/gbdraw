@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SequenceFormat } from '../../services/input-types.js' */
 /** @import { ShowNotice } from '../app-messages.js' */
 import { buildFeatureOverrideTable } from '../run-info.js';
 import {
@@ -73,7 +74,7 @@ export const replaceFeatureEdits = (slice, rows, records) => {
  * @property {(value?: any) => { value: any }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
  * @property {() => Record<string, any> | null} getCommittedSession The committed canonical Session (render request and resources).
- * @property {((resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>) | null} [readResourceRecordCount]
+ * @property {((resourceId: string, kind: SequenceFormat) => number | Promise<number>) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource, for the Source recipe checks of the export.
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
  *   The diagram helper that reads a Feature Edits TSV (R7).

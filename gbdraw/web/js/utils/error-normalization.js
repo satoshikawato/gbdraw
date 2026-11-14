@@ -236,6 +236,13 @@ const REASONS = Object.freeze({
   FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
   // gbdraw/io/genome.py require_nucleotide_records: a FASTA given without GFF3 holds nucleotide records only.
   NOT_NUCLEOTIDE: 'This FASTA file holds a sequence that is not nucleotide, such as a protein; gbdraw draws nucleotide records. Use a FASTA file of DNA or RNA sequences (IUPAC codes A C G T U R Y S W K M B D H V N).',
+  // gbdraw/io/gfa.py: the refusals of a GFA file (D-86, D-126); the segment or line it names comes before.
+  GFA_VERSION: 'This is a GFA 2 file; gbdraw reads GFA 1 (its S and L lines). Save the graph as GFA 1.',
+  GFA_NO_SEGMENTS: 'The GFA file has no segment (S line), so it is not a GFA 1 file.',
+  GFA_LINE: 'A line of the GFA file has too few fields: an S line needs a segment name and a sequence, and an L line two segments and their orientations.',
+  GFA_NO_SEQUENCE: 'A segment of this GFA file has no sequence (*). Write the graph with its segment sequences.',
+  GFA_NOT_NUCLEOTIDE: 'A segment of this GFA file holds a sequence that is not nucleotide; gbdraw draws nucleotide records. Use a GFA file of DNA or RNA segments (IUPAC codes A C G T U R Y S W K M B D H V N).',
+  GFA_SELF_LOOP_OVERLAP: 'The link from this segment\'s end to its own start has an overlap gbdraw cannot drop. gbdraw reads one overlap per segment: n matching bases (nM) fewer than the segment\'s length, * or none.',
   // gbdraw/io/genome.py load_query_fasta: a Sequence search query is a nucleotide or a protein sequence.
   NOT_SEQUENCE: 'A query holds a character that is neither a nucleotide nor an amino acid code. Give DNA, RNA or protein sequences in FASTA: letters, and * for a stop.',
   EMPTY_SEQUENCE: 'A record of this FASTA file has no sequence. Give each FASTA record its sequence.',
@@ -1226,7 +1233,7 @@ export const normalizeUserFacingError = (value, {
       : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null))),
     losatMessage !== undefined && { text: PHRASES.losatReported, params: { message: shownLosatMessage(losatMessage) } },
     reason === 'GENETIC_CODE' && geneticCodes !== undefined && { text: PHRASES.geneticCodes, params: { codes: geneticCodes } },
-    reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
+    (reason === 'NOT_NUCLEOTIDE' || reason === 'GFA_NOT_NUCLEOTIDE') && letter && { text: PHRASES.letter, params: { letter } },
     reason === 'NOT_SEQUENCE' && letter && { text: PHRASES.queryLetter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
     ...trackRoomParts(result.context),

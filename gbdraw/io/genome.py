@@ -649,13 +649,17 @@ def read_sequence_file_records(path: str, fmt: str) -> list[SeqRecord]:
 
     ``genbank`` reads with :func:`load_gbks`; ``fasta`` with the FASTA reader of
     :func:`parse_gff_fasta`, so it keeps every entry, also one the GFF3 file does
-    not name. The Circular similarity ring database (whole source file, D-25) and
-    the Web's whole-file reader (``read_all_sequence_records``) read files here.
+    not name; ``gfa`` with :func:`load_gfa`'s reader, so a self-loop's overlap is
+    dropped as Generate drops it. The Circular similarity ring database (whole
+    source file, D-25) and the Web's whole-file reader
+    (``read_all_sequence_records``) read files here.
     """
     if fmt == "genbank":
         return load_gbks([path])
     if fmt == "fasta":
         return _read_fasta_records(path)
+    if fmt == "gfa":
+        return _read_nucleotide_gfa(path)
     raise ValueError(f"Unsupported format: {fmt}")
 
 

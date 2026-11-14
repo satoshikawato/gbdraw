@@ -85,6 +85,17 @@ a records table row with only a `fasta` path. This adds no request schema:
 the kind is a new value of the record source's `kind`. Fixture:
 `tests/fixtures/sessions/cli-circular-fasta.v51.gbdraw`.
 
+Session 51 also adds the record source kind `gfa` (D-86, D-126): a GFA 1
+assembly graph, named by `gfaResourceId` and stored as a resource of kind `gfa`.
+Each segment is a record with sequence and no features; a segment with a
+self-loop link is circular, every other one linear. The Web app writes it for
+the input type `gfa` (the fourth source choice, `config.inputType`), whose file
+sits in the `fasta` slot of a Circular File card or a Linear card, as a FASTA
+does: the input type, not the slot, tells the two apart. The CLI writes it for
+`--gfa` and for a records table row with only a `gfa` path. This adds no
+request schema: the kind is a new value of the record source's `kind`.
+Fixture: `tests/fixtures/sessions/cli-circular-gfa.v51.gbdraw`.
+
 Session 51 also stores a Circular drawing's input as File cards (circular
 multi-file input). Its `webFiles.bindings` holds `circularSources`, a list of
 `{uid, gb, gff, fasta}` cards; each of `gb`, `gff` and `fasta` is a binding or

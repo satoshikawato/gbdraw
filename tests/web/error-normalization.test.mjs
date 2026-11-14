@@ -948,6 +948,19 @@ test('a FASTA-only refusal names the record and the letter Python found (PD-OI-0
     + 'First letter that is not a nucleotide code: "L".');
 });
 
+// D-86, D-126: each refusal of a GFA file says why, and names the segment or the line Python names.
+test('a GFA refusal names its reason and the segment or line (D-86, D-126)', () => {
+  assert.match(producerSummary('INPUT_UNREADABLE', { reason: 'GFA_VERSION' }), / This is a GFA 2 file; gbdraw reads GFA 1/);
+  assert.match(producerSummary('NO_RECORDS', { reason: 'GFA_NO_SEGMENTS' }), / The GFA file has no segment \(S line\)/);
+  assert.match(producerSummary('INPUT_UNREADABLE', { reason: 'GFA_LINE', row: 3 }), / Line 3\. A line of the GFA file has too few fields/);
+  assert.match(producerSummary('INPUT_INVALID', { reason: 'GFA_NO_SEQUENCE', recordName: 'utg1' }),
+    / Record: utg1\. A segment of this GFA file has no sequence \(\*\)/);
+  assert.match(producerSummary('INPUT_INVALID', { reason: 'GFA_NOT_NUCLEOTIDE', recordName: 'utg1', codepoint: 0x4c }),
+    / Record: utg1\. A segment of this GFA file holds a sequence that is not nucleotide.* First letter that is not a nucleotide code: "L"\.$/);
+  assert.match(producerSummary('INPUT_INVALID', { reason: 'GFA_SELF_LOOP_OVERLAP', recordName: 'utg1' }),
+    / Record: utg1\. The link from this segment's end to its own start has an overlap gbdraw cannot drop/);
+});
+
 // TK-06: a Depth series with no file in any record names the series and offers
 // both recoveries, whether the request builder or the Generate check finds it.
 test('a Depth series without a file says to attach a TSV or remove the series (TK-06)', () => {

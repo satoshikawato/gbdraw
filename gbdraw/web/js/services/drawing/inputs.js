@@ -14,6 +14,7 @@
 /** @import { SliceHandle } from './slice-handle.js' */
 import { CIRCULAR_SOURCE_FILE_SLOTS } from '../../contracts/schema.generated.js';
 import { isInputFileRef } from '../history-files.js';
+import { inputTypeSpec } from '../input-types.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { reactive, ref } from '../../utils/reactivity.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
@@ -233,6 +234,7 @@ export const createCircularSource = (overrides = {}) => ({
  * comparison files and, from the inputs slice, its input fields and record
  * rows.
  * @typedef {object} BoundDrawingInputs
+ * @property {{ readonly value: unknown }} inputType The kind of the files in its sequence slots follows it.
  * @property {{ readonly edges?: readonly { readonly id: string, readonly file?: unknown }[] } | null} [linearComparisonPlan]
  * @property {Readonly<Record<string, unknown>>} files
  * @property {readonly (Readonly<Record<string, unknown>> & { readonly uid: string })[]} linearSeqs
@@ -374,7 +376,7 @@ const CARD_MARK_KEYS = Object.freeze(['c_depth_rows', 'c_legacy_record_cards']);
 /**
  * The kinds of file an uploader takes; a binding slot's kind is the kind of
  * the files it binds. Each of the five cards is its own kind.
- * @typedef {'genbank' | 'gff' | 'fasta' | 'depth' | 'comparison' | CardFileSlot} InputFileKind
+ * @typedef {'genbank' | 'gff' | 'fasta' | 'gfa' | 'depth' | 'comparison' | CardFileSlot} InputFileKind
  */
 /**
  * The slots an input file replacement writes (PD-OI-090 〔入力ファイル〕): every
@@ -396,6 +398,17 @@ const FILE_KIND_OF_SLOT = Object.freeze({
   d_color: 'd_color', t_color: 't_color', blacklist: 'blacklist', whitelist: 'whitelist',
   qualifier_priority: 'qualifier_priority'
 });
+/**
+ * The kind of the files a drawing of `inputType` binds in an uploader slot: a GFA input holds its GFA in the
+ * sequence slot (`fasta`) of its cards and rows, so its files there are GFA files; any other slot has its own kind.
+ * @param {unknown} inputType
+ * @param {ReplaceableInputSlot | CardFileSlot} slot
+ * @returns {InputFileKind}
+ */
+const boundFileKind = (inputType, slot) => (
+  (slot === 'source.fasta' || slot === 'row.fasta') && inputTypeSpec(inputType).sourceKind === 'gfa'
+    ? 'gfa' : FILE_KIND_OF_SLOT[slot]
+);
 
 /**
  * Where a drawing binds a ref: the slot (`FILE_KIND_OF_SLOT`'s keys, `committed` for a committed
@@ -433,12 +446,13 @@ const visitDrawingFiles = (drawing, visit) => {
   (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add({ slot: 'edge', rowUid: null, edgeId: edge.id }, edge.file));
 };
 /**
- * Every ref the bindings name, with the slot that names it, through the walk of each drawing.
+ * Every ref the bindings name, with the slot that names it and the drawing that binds it, through the walk of each
+ * drawing.
  * @param {InputBindings} bindings
- * @param {(ref: InputFileRef, slot: string) => void} visit
+ * @param {(ref: InputFileRef, slot: string, drawing: BoundDrawingInputs) => void} visit
  */
 const visitBoundFiles = (bindings, visit) => {
-  bindings.drawingList().forEach((drawing) => visitDrawingFiles(drawing, (ref, place) => visit(ref, place.slot)));
+  bindings.drawingList().forEach((drawing) => visitDrawingFiles(drawing, (ref, place) => visit(ref, place.slot, drawing)));
 };
 
 /**
@@ -506,18 +520,21 @@ export const sessionFilesOfKind = (bindings, kind) => {
   const kinds = typeof kind === 'string' ? [kind] : kind;
   /** @type {Map<string, InputFileRef>} */
   const refs = new Map();
-  visitBoundFiles(bindings, (ref, slot) => {
-    if (isUploaderSlot(slot) && kinds.includes(FILE_KIND_OF_SLOT[slot]) && !refs.has(ref.fileId)) refs.set(ref.fileId, ref);
+  visitBoundFiles(bindings, (ref, slot, drawing) => {
+    if (isUploaderSlot(slot) && kinds.includes(boundFileKind(drawing.inputType.value, slot)) && !refs.has(ref.fileId)) {
+      refs.set(ref.fileId, ref);
+    }
   });
   return [...refs.values()];
 };
 
 /**
- * The kind of the files a Circular source card's slot binds.
+ * The kind of the files a Circular source card's slot binds in a drawing of `inputType`.
  * @param {'gb' | 'gff' | 'fasta'} slot
+ * @param {unknown} inputType
  * @returns {InputFileKind}
  */
-export const circularSlotFileKind = (slot) => FILE_KIND_OF_SLOT[`source.${slot}`];
+export const circularSlotFileKind = (slot, inputType) => boundFileKind(inputType, `source.${slot}`);
 
 /**
  * The store's release for History's budget: it keeps the files History names

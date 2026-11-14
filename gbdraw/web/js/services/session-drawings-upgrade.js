@@ -30,6 +30,7 @@ import { CIRCULAR_SOURCE_UID } from './drawing/inputs.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { withoutUnarrangedEntries } from './linear-record-layout.js';
 import { isCliRecordKey, recordSelectorNumber } from './record-draw-selection.js';
+import { recordSourceFilesOf } from './input-types.js';
 import { normalizeDefaultColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
@@ -658,10 +659,14 @@ export const sessionDocumentOfViews = (saved, activeDrawingId) => {
 
 const MODE_SCOPED_CIRCULAR_INPUT = fieldSet(LAYOUT.modeScopedCircularInputSlots);
 
-/** `_request_record_file`: the resource of the file a request record reads. @param {unknown} record @returns {unknown} */
+/**
+ * `_request_record_file`: the resource of the file a request record reads, the last file its source kind names
+ * (a GFF3 + FASTA pair's FASTA); none for a kind that names no file.
+ * @param {unknown} record @returns {unknown}
+ */
 export const requestRecordFile = (record) => {
   const source = mapping(mapping(record).source);
-  return source.resourceId || source.fastaResourceId;
+  return recordSourceFilesOf(source.kind).map(({ field }) => source[field]).at(-1);
 };
 
 /**

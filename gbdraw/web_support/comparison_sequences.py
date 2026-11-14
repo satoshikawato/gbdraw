@@ -26,7 +26,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api.record_planning import prepared_parsed_source
 from gbdraw.api.request_render import load_render_source_records
-from gbdraw.api.requests import FastaInputSource, GenBankInputSource
+from gbdraw.api.requests import WholeRecordFileSource
 from gbdraw.comparisons.circular_losat import (
     RingGenomeFile,
     comparison_genome_files,
@@ -108,7 +108,7 @@ def plan_ring_scales(
         for index, source in enumerate(reference_sources)
     ]
 
-    def file_records(source: GenBankInputSource | FastaInputSource) -> tuple[SeqRecord, ...]:
+    def file_records(source: WholeRecordFileSource) -> tuple[SeqRecord, ...]:
         parsed = prepared_parsed_source(source, load_render_source_records)
         return (parsed if parsed is not None else load_render_source_records(source)).records
 

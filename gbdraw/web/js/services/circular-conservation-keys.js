@@ -5,6 +5,7 @@
 // (`readOncePerFile`), so a File a Generate already hashed is not read again.
 // The hash pairs a request names (`ConservationPairs`) are recorded with the
 // request when Generate or Load installs it; Save reads that record, no file.
+/** @import { SequenceFormat } from './input-types.js' */
 import { inputSequenceSource } from './input-types.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { orderedConservationSources } from './conservation-series.js';
@@ -62,7 +63,7 @@ export const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(re
 /**
  * One file's part of the subject: its records' IDs and LOSAT FASTA, with the FASTA's SHA-256.
  * @param {FileLike} file
- * @param {'genbank' | 'fasta'} fmt
+ * @param {SequenceFormat} fmt
  * @returns {Promise<{ ids: readonly string[], fasta: string, hash: string }>}
  */
 const readSubjectFile = (file, fmt) => readOncePerFile([file], `ring-subject:${fmt}`, async () => {
@@ -76,7 +77,7 @@ const readSubjectFile = (file, fmt) => readOncePerFile([file], `ring-subject:${f
  * The subject of the source cards' files. Two cards that hold a record of one ID would put a ring's hits on either
  * record, so the subject refuses them before any search (Python refuses such a frame too, `_one_frame_per_id`).
  * @param {readonly FileLike[]} files one per card, in card order
- * @param {'genbank' | 'fasta'} fmt
+ * @param {SequenceFormat} fmt
  * @returns {Promise<ConservationSubject>}
  */
 export const readConservationSubject = async (files, fmt) => {

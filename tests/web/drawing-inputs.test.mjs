@@ -446,3 +446,25 @@ test('a Session file chosen in another drawing binds the same file ID and stores
   assert.deepEqual(sessionFilesOfKind(bindings, 'genbank'), [genome], 'one file, bound twice, is offered once');
   assert.equal(store.registerFile(fileNamed('later.gb')).fileId, 'file-4', 'choosing stored no new file');
 });
+
+// D-126 Q3: a GFA drawing holds its GFA in the sequence slot of its cards and rows, the slot a FASTA drawing holds its
+// FASTA in. The file kind of that slot follows the drawing's input type, so a FASTA uploader never offers a GFA bound
+// in this Session, nor a GFA uploader a FASTA.
+test('a GFA bound in a sequence slot is offered as a GFA, not as a FASTA', async () => {
+  const { circularSlotFileKind, sessionFilesOfKind } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const store = createInputFileStore();
+  const graph = INPUTS_SLICE.create();
+  const fasta = INPUTS_SLICE.create();
+  graph.view.inputType.value = 'gfa';
+  fasta.view.inputType.value = 'fasta';
+  addCircularSource(graph.handle, createCircularSource({ uid: 'graph' }));
+  const gfa = bindCircularSourceFile(store, graph.handle, 'graph', 'fasta', fileNamed('assembly.gfa'));
+  bindLinearSeqFile(store, fasta.handle, fasta.view.linearSeqs[0].uid, 'fasta', fileNamed('contigs.fasta'));
+  const contigs = fasta.view.linearSeqs[0].fasta;
+  const bindings = { drawingList: () => [graph.view, fasta.view] };
+  assert.deepEqual(sessionFilesOfKind(bindings, 'gfa'), [gfa]);
+  assert.deepEqual(sessionFilesOfKind(bindings, 'fasta'), [contigs]);
+  assert.equal(circularSlotFileKind('fasta', 'gfa'), 'gfa');
+  assert.equal(circularSlotFileKind('fasta', 'fasta'), 'fasta');
+  assert.equal(circularSlotFileKind('fasta', 'gff'), 'fasta');
+});

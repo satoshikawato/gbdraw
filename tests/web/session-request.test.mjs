@@ -6412,6 +6412,17 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN, -1, -0.5]) {
     initializeCliInputs: true });
   assert.equal(fastaCli.inputType, 'fasta');
   assert.equal(fastaCli.files.circularSources[0].fasta.data, gffCli.resources['sequence-0'].data);
+  // A GFA fills the sequence slot as a FASTA does (D-126 Q3); the request's source kind gfa keeps it the GFA input
+  // type, which comes before the bound-file order.
+  const gfaCli = structuredClone(canonical);
+  gfaCli.resources['graph-0'] = descriptor('gfa', 'graph.gfa', 'S\trecord\tACGT\n');
+  gfaCli.renderRequest.records.forEach((record) => { record.source = { kind: 'gfa', gfaResourceId: 'graph-0' }; });
+  const gfaProjection = projectCanonicalSessionRequest({ ...gfaCli,
+    webFiles: { bindings: { ...emptyCliSlots, circularSources: [{ uid: 'record-1', gb: null, gff: null,
+      fasta: { resourceId: 'graph-0', name: 'graph.gfa', type: '', lastModified: 8 } }] } },
+    initializeCliInputs: true });
+  assert.equal(gfaProjection.inputType, 'gfa');
+  assert.equal(gfaProjection.files.circularSources[0].fasta.data, gfaCli.resources['graph-0'].data);
 }
 
 // A helper-produced typed resource uses the Python codec bytes without serializing its graph again.

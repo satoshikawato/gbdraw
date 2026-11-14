@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SequenceFormat } from './input-types.js' */
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
 import { t, tm } from '../utils/i18n.js';
@@ -4943,7 +4944,7 @@ export const getCommittedLinearDefinitionVisibility = () => (
 // it names records by #index (Export Feature Edits TSV).
 /**
  * @param {string} resourceId
- * @param {'genbank' | 'fasta'} kind
+ * @param {SequenceFormat} kind
  */
 export const readCommittedResourceRecordCount = (resourceId, kind) => (
   readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
