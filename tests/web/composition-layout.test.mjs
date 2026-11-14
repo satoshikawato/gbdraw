@@ -22,6 +22,9 @@ import {
   replaceLeadingTranslate
 } from '../../gbdraw/web/js/services/svg-transform.js';
 
+// The resolver port when no feature read again gives an anchor's drawn ID.
+const noDrawnIds = () => [];
+
 class FakeElement {
   constructor({ tagName = 'g', id = '', attributes = {}, bbox = { x: 0, y: 0, width: 1, height: 1 } } = {}) {
     this.tagName = tagName;
@@ -381,7 +384,7 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
   primaryB.setAttribute('data-record-translation-x', '10');
   primaryB.setAttribute('data-record-translation-y', '2');
   assert.deepEqual(
-    materializeRecordTranslations(svg, [], ['record-a', 'record-b']),
+    materializeRecordTranslations(svg, [], ['record-a', 'record-b'], null, noDrawnIds),
     [
       { recordKey: 'record-a', x: 10, y: 2 },
       { recordKey: 'record-b', x: 104, y: 2 }
@@ -399,7 +402,9 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
         { recordKey: 'record-a', x: 7, y: 8 },
         { recordKey: 'record-b', x: 20, y: 30 }
       ],
-      ['record-a', 'record-b']
+      ['record-a', 'record-b'],
+      null,
+      noDrawnIds
     ),
     [
       { recordKey: 'record-a', x: 7, y: 8 },
@@ -448,7 +453,8 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
         { recordKey: 'record-b', x: 0, y: 5 }
       ],
       ['record-a', 'record-b'],
-      plan
+      plan,
+      noDrawnIds
     ),
     [
       { recordKey: 'record-a', x: -20, y: 2 },
@@ -465,7 +471,8 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
         { recordKey: 'record-b', x: 0, y: 5 }
       ],
       ['record-a', 'record-b'],
-      plan
+      plan,
+      noDrawnIds
     ),
     /cannot bind alignment record "record-a"/
   );
@@ -490,6 +497,40 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
   assert.throws(
     () => materializeRecordTranslations(svg, base, ['record-a', 'record-b'], plan, drawnFeatureIdsOf),
     /binds one record group to multiple alignment records|duplicate record key "record-a"/
+  );
+}
+
+{
+  // OV-3538: one record drawn twice (a Session before 40 that loaded one GenBank file twice) draws the same stable
+  // IDs in both record groups, so the anchors of both copies name both groups by their stable ID. The drawn IDs,
+  // which name one drawn record each, bind each group to its own copy.
+  const { svg, primaryA, primaryB } = schemaOneSvg();
+  primaryA.setAttribute('transform', 'translate(10,33) translate(101,70)');
+  primaryB.setAttribute('transform', 'translate(6,36) translate(-20,170)');
+  primaryA.appendChild(new FakeElement({
+    attributes: { 'data-gbdraw-feature-id': 'same_record_1', 'data-gbdraw-stable-feature-id': 'same' }
+  }));
+  primaryB.appendChild(new FakeElement({
+    attributes: { 'data-gbdraw-feature-id': 'same_record_2', 'data-gbdraw-stable-feature-id': 'same' }
+  }));
+  const anchorOf = (recordKey) => ({ recordKey, biologicalFeatureId: 'same', stableFeatureSvgId: 'same' });
+  const plan = { records: [
+    { recordKey: 'record-a', status: 'reference', anchor: anchorOf('record-a') },
+    { recordKey: 'record-b', status: 'aligned', anchor: anchorOf('record-b') }
+  ] };
+  const drawnIds = { 'record-a': ['same_record_1'], 'record-b': ['same_record_2'] };
+  const base = [{ recordKey: 'record-a', x: 0, y: 2 }, { recordKey: 'record-b', x: 0, y: 5 }];
+  assert.deepEqual(
+    materializeRecordTranslations(svg, base, ['record-a', 'record-b'], plan, (anchor) => drawnIds[anchor.recordKey]),
+    [
+      { recordKey: 'record-a', x: 105, y: -1 },
+      { recordKey: 'record-b', x: -20, y: 5 }
+    ]
+  );
+  // Without the drawn IDs the stable ID names both groups, as before.
+  assert.throws(
+    () => materializeRecordTranslations(svg, base, ['record-a', 'record-b'], plan, noDrawnIds),
+    /binds one record group to multiple alignment records/
   );
 }
 

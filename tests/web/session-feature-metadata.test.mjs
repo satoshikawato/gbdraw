@@ -1052,6 +1052,18 @@ for (const invalidRecordIndex of [
     readFeatureExtractionDataImpl });
   assert.equal(ready.status, 'aligned', ready.reason);
   assert.deepEqual(reads, []);
+  // When the sources cannot be read again, or the features read again do not match every drawn element, Load keeps
+  // the saved rows as it did before this check (a 'ready' plan with the extraction warning), not a failed recovery.
+  for (const failingRead of [
+    async () => { throw new Error('source unreadable'); },
+    async ({ path }) => ({ ...extracted[path], features: [] })
+  ]) {
+    const kept = await buildSessionFeatureRecoveryPlan({ snapshot: snapshot(saved), featureVisibilityTsv: '',
+      readFeatureExtractionDataImpl: failingRead });
+    assert.equal(kept.status, 'ready', kept.reason);
+    assert.equal(kept.recoveredFeatureState, undefined);
+    assert.ok(kept.warning);
+  }
 }
 
 // OV-751: two features of one record that share a hash (a 0.13.0

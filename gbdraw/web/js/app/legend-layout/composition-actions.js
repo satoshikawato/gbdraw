@@ -1738,9 +1738,10 @@ const drawnFeatureIds = (target) => new Set(
 );
 
 /**
- * The record a record group draws: the decision whose anchor it draws, by the anchor's stable ID or by a drawn ID of
- * its feature. A record drawn reverse complemented, cropped or rotated by an older gbdraw draws its features under
- * their hash in the drawn record, not under the stable ID the anchor names (OV-3538).
+ * The record a record group draws: the decision whose anchor it draws, by the drawn IDs of the anchor's feature when
+ * the resolver knows them, else by the anchor's stable ID. A drawn ID names one drawn record (`..._record_N`); a
+ * stable ID does not: a record drawn reverse complemented, cropped or rotated by an older gbdraw draws its features
+ * under their hash in the drawn record, and a record drawn twice draws the same stable IDs twice (OV-3538).
  * @param {Element} target
  * @param {LegacyRecordDecision[]} decisions
  * @param {DrawnFeatureIdsOf} drawnFeatureIdsOf
@@ -1751,11 +1752,13 @@ const legacyRecordKey = (target, decisions, drawnFeatureIdsOf) => {
   if (available.size === 0 && drawn.size === 0) return '';
   const matches = decisions.filter((decision) => {
     const anchor = decision?.anchor;
-    return anchor && ([anchor.stableFeatureSvgId, anchor.biologicalFeatureId]
+    if (!anchor) return false;
+    const drawnIds = drawnFeatureIdsOf(anchor);
+    if (drawnIds.length > 0) return drawnIds.some((value) => drawn.has(value));
+    return [anchor.stableFeatureSvgId, anchor.biologicalFeatureId]
       .map((value) => String(value || '').trim())
       .filter(Boolean)
-      .some((value) => available.has(value))
-      || drawnFeatureIdsOf(anchor).some((value) => drawn.has(value)));
+      .some((value) => available.has(value));
   });
   if (matches.length > 1) {
     fail('Legacy composition metadata binds one record group to multiple alignment records.');
@@ -1790,17 +1793,17 @@ const legacyRenderedTranslation = (target, fallbackValue) => {
 // persisted identity.
 /**
  * @param {Element} svg
- * @param {({ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined)[]} [baseTranslations]
- * @param {unknown[]} [recordKeys]
- * @param {{ records?: unknown } | null} [activePlan] The active plan; only its `records` are read.
- * @param {DrawnFeatureIdsOf} [drawnFeatureIdsOf] The resolver port of an anchor's drawn feature IDs.
+ * @param {({ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined)[]} baseTranslations
+ * @param {unknown[]} recordKeys
+ * @param {{ records?: unknown } | null} activePlan The active plan; only its `records` are read.
+ * @param {DrawnFeatureIdsOf} drawnFeatureIdsOf The resolver port of an anchor's drawn feature IDs.
  */
 export const materializeRecordTranslations = (
   svg,
-  baseTranslations = [],
-  recordKeys = [],
-  activePlan = null,
-  drawnFeatureIdsOf = () => []
+  baseTranslations,
+  recordKeys,
+  activePlan,
+  drawnFeatureIdsOf
 ) => {
   const binding = bindCompositionMetadata(svg);
   const deltas = userDeltas(binding).primary;

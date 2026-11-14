@@ -1160,6 +1160,12 @@ export const buildSessionFeatureRecoveryPlan = async ({
   const savedRowsConflict = savedLinearRecordIndexConflict(snapshot);
   /** @param {{ state?: string } | null | undefined} checked */
   const savedRowsClickReady = (checked) => !savedRowsConflict && isClickReadyValidation(checked);
+  // Rows that only their record-index conflict sent to the sources stay as saved when that read fails, as Load kept
+  // them before (the 'ready' return below): reading the sources again never makes such a Load worse.
+  /** @template {object} F @param {F} failed */
+  const failedRecovery = (failed) => (savedRowsConflict && biologicalCatalogReady && isClickReadyValidation(validation)
+    ? { status: 'ready', reason: validation.state, validation, warning: EXTRACTION_FAILED_WARNING, errors: [] }
+    : failed);
 
   if (validation.state === 'not-needed') {
     return {
@@ -1280,7 +1286,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
     const recoveredValidation = recoveredAlignment.alignedValidation;
 
     if (!isClickReadyValidation(recoveredValidation)) {
-      return {
+      return failedRecovery({
         status: 'failed',
         reason: 'validation-not-ready-after-recovery',
         validation,
@@ -1288,7 +1294,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
         alignment: recoveredAlignment.alignment,
         warning: EXTRACTION_FAILED_WARNING,
         errors: payload.errors || []
-      };
+      });
     }
 
     const migration = buildFeatureOverrideMigration({
@@ -1328,12 +1334,12 @@ export const buildSessionFeatureRecoveryPlan = async ({
       errors: payload.errors || []
     };
   } catch (error) {
-    return {
+    return failedRecovery({
       status: 'failed',
       reason: 'extraction-failed',
       validation,
       warning: EXTRACTION_FAILED_WARNING,
       errors: [error]
-    };
+    });
   }
 };

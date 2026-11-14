@@ -1423,7 +1423,9 @@ test('released v40 alignment materializes by stable feature identity without a W
     legacyRecordGroups.reverse().forEach((group) => group.parentElement.append(group));
     const recordKeys = session.renderRequest.records.map((record) => record.recordKey);
     const base = recordKeys.map((recordKey) => ({ recordKey, x: 0, y: 0 }));
-    const translations = materializeRecordTranslations(svg, base, recordKeys, plan);
+    // This Result draws every anchor under its stable ID: no feature read again is needed for a drawn ID.
+    const noDrawnIds = () => [];
+    const translations = materializeRecordTranslations(svg, base, recordKeys, plan, noDrawnIds);
     const malformed = structuredClone(plan);
     malformed.records[0].anchor.biologicalFeatureId = 'missing-feature';
     malformed.records[0].anchor.stableFeatureSvgId = 'missing-feature';
@@ -1431,7 +1433,7 @@ test('released v40 alignment materializes by stable feature identity without a W
     malformed.reference.stableFeatureSvgId = 'missing-feature';
     let malformedError = '';
     try {
-      materializeRecordTranslations(svg, base, recordKeys, malformed);
+      materializeRecordTranslations(svg, base, recordKeys, malformed, noDrawnIds);
     } catch (error) {
       malformedError = String(error?.message || error);
     }
