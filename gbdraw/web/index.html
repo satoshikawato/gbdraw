@@ -6900,9 +6900,9 @@
                      role="status" aria-live="polite" aria-atomic="true" data-testid="annotation-resolution-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p class="font-semibold">{{ tn(annotationWarnings.filter(w => w.code !== 'out_of_bounds_clipped').length, 'Skipped {count} annotation row.', 'Skipped {count} annotation rows.') }}</p>
-                    <p v-for="(warning, index) in annotationWarnings" :key="index">
-                        {{ t('{set}/{annotation} · record #{n} ({record}): {message}', { set: warning.setId, annotation: warning.annotationId, n: warning.recordIndex + 1, record: warning.recordId, message: warning.message }) }}
-                    </p>
+                    <notice-lines :lines="annotationWarnings" v-slot="{ line: warning }">
+                        <p>{{ t('{set}/{annotation} · record #{n} ({record}): {message}', { set: warning.setId, annotation: warning.annotationId, n: warning.recordIndex + 1, record: warning.recordId, message: warning.message }) }}</p>
+                    </notice-lines>
                 </div>
                 <div v-if="featureIdentityNoticeSummary && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="feature-identity-notice"
@@ -6918,23 +6918,17 @@
                      role="status" aria-live="polite" aria-atomic="true" data-testid="comparison-id-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p class="font-semibold">{{ t('Comparison table rows were placed by position.') }}</p>
-                    <p v-for="(warning, index) in comparisonWarnings" :key="index">{{ warning.message }}</p>
+                    <notice-lines :lines="comparisonWarnings" v-slot="{ line: warning }"><p>{{ warning.message }}</p></notice-lines>
                 </div>
                 <!-- Python's input summary of the shown Result: a record or a comparison table it draws nothing of. -->
                 <div v-if="shownInputSummary && shownInputSummary.warnings.length && !shownInputSummaryStale && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <!-- The heading sits over the warnings that leave input out only; a warning of an input drawn in full follows apart.
-                         Each group shows its first lines; the rest opens below them in a box of its own height (OV-3495). -->
+                         Each group shows its first lines; the rest opens below them in a box of its own height (notice-lines). -->
                     <div v-for="(group, groupIndex) in shownInputSummary.warningGroups" :key="group.kind" :data-input-warnings="group.kind" :class="{ 'mt-2': groupIndex }">
                         <p v-if="group.kind === 'left-out'" class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
-                        <p v-for="(warning, index) in group.shown" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
-                        <details v-if="group.rest.length" data-input-warnings-rest>
-                            <summary class="cursor-pointer font-medium">{{ moreLine(group.rest.length) }}</summary>
-                            <div class="max-h-40 overflow-y-auto">
-                                <p v-for="(warning, index) in group.rest" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
-                            </div>
-                        </details>
+                        <notice-lines :lines="group.warnings" v-slot="{ line: warning }"><p :data-input-warning="warning.code">{{ warning.message }}</p></notice-lines>
                     </div>
                 </div>
                 <!-- A live Feature visibility edit no render drew: the summary's counts are the last render's. -->

@@ -13,6 +13,7 @@ import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidan
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
+import { limitedList, moreLine } from './utils/limited-list.js';
 import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
@@ -1106,6 +1107,31 @@ export const FileUploader = {
       dragging, dragOver, dropFiles, dropHintId
     };
   }
+};
+
+/**
+ * The lines a preview notice shows at most, its "and {count} more" line included (OV-3495: one LOSATP run of a
+ * record against 60 contigs warned of 56 record pairs without a match, and the notice pushed the figure out of view).
+ */
+export const NOTICE_LINE_LIMIT = 4;
+
+// The lines of a preview notice (OV-3495, OV-3562): the input summary's warnings, the skipped annotation rows, the
+// comparison rows placed by position. It shows the first lines through its default slot (`{ line }`) and "and
+// {count} more", which opens the rest in a box of its own height. The notice is an atomic live region: lines added
+// inside it read the whole notice again, so the rest, which enters the accessibility tree when it opens, is a region
+// of its own with aria-live off.
+export const NoticeLines = {
+  props: { lines: { type: Array, required: true } },
+  /** @param {{ lines: readonly unknown[] }} props */
+  setup(props) {
+    const list = computed(() => limitedList(props.lines, NOTICE_LINE_LIMIT));
+    return { list, moreLine };
+  },
+  template: `<template v-for="(line, index) in list.shown" :key="index"><slot :line="line"></slot></template>
+<details v-if="list.rest.length" data-notice-lines-rest aria-live="off">
+  <summary class="cursor-pointer font-medium">{{ moreLine(list.rest.length) }}</summary>
+  <div class="max-h-40 overflow-y-auto"><template v-for="(line, index) in list.rest" :key="index"><slot :line="line"></slot></template></div>
+</details>`
 };
 
 // A record's name in a narrow row: the name shrinks with an ellipsis and its

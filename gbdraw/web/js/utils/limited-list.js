@@ -1,6 +1,6 @@
 // @ts-check
 // A list cut to a line limit, and the one line that stands for the rest (OV-3495): the Load repair dialog and the
-// preview's input-summary notice show long lists this way.
+// preview's notices (`NoticeLines` in components.js) show long lists this way.
 import { tn } from './i18n.js';
 
 /**

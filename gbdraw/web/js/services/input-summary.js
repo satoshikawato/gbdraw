@@ -13,7 +13,6 @@
 // page says the summary describes the last render and keeps its warnings back.
 import { INPUT_WARNINGS_OF_DRAWN_INPUT } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { limitedList } from '../utils/limited-list.js';
 
 /**
  * @typedef {object} InputWarning
@@ -49,8 +48,8 @@ import { limitedList } from '../utils/limited-list.js';
  */
 /**
  * The warnings the preview notice shows in one group: `left-out` says part of the input was not drawn, `drawn-in`
- * warns of an input drawn in full. `shown` and `rest` are the group cut to `NOTICE_LINE_LIMIT` lines.
- * @typedef {{ readonly kind: 'left-out' | 'drawn-in' } & import('../utils/limited-list.js').LimitedList<InputWarning>} InputWarningGroup
+ * warns of an input drawn in full. The notice shows each group's first lines (`NoticeLines` in components.js).
+ * @typedef {{ readonly kind: 'left-out' | 'drawn-in', readonly warnings: readonly InputWarning[] }} InputWarningGroup
  */
 /**
  * @typedef {InputSummary & {
@@ -59,13 +58,6 @@ import { limitedList } from '../utils/limited-list.js';
  *   A Result's summary with the Feature visibility of the render that sent it (Web-owned), and its warnings in the
  *   groups the notice shows, each with warnings, left-out first.
  */
-
-/**
- * The lines a warning group of the preview notice takes at most, its "and {count} more" line included (OV-3495:
- * one LOSATP run of a record against 60 contigs warned of 56 record pairs without a match, and the notice pushed
- * the figure out of view). The rest opens on request.
- */
-export const NOTICE_LINE_LIMIT = 4;
 
 const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'records', 'linearWrap'];
 const WARNING_FIELDS = ['code', 'message'];
@@ -143,7 +135,7 @@ export const drawnInputSummaries = (summaries, drawnVisibility) => Object.freeze
     warningGroups: Object.freeze(/** @type {const} */ (['left-out', 'drawn-in']).flatMap((kind) => {
       // A warning of an input drawn in full (Python's `INPUT_WARNINGS_OF_DRAWN_INPUT`) leaves nothing out.
       const warnings = entry.warnings.filter((warning) => INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code) === (kind === 'drawn-in'));
-      return warnings.length ? [Object.freeze({ kind, ...limitedList(warnings, NOTICE_LINE_LIMIT) })] : [];
+      return warnings.length ? [Object.freeze({ kind, warnings: Object.freeze(warnings) })] : [];
     }))
   }))
 );
