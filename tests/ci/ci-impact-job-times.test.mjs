@@ -44,7 +44,7 @@ test('every job of the Tests workflow has its limit, and each run name finds its
     ['Promotion audit / summary', 'promotion-audit-summary', 10],
     ['Web change budget', 'web-change-budget', 10],
     ['Fail fast (Core PR)', 'fail-fast-core-pr', 2],
-    ['PR / gate', 'pr-gate', 5],
+    ['PR / gate', 'pr-gate', 10],
     // A job without timeout-minutes has GitHub's 360-minute limit.
     ['Lint', 'lint', 360]
   ]) {
@@ -225,5 +225,7 @@ test('both Tests gates read the job times of their run from the run\'s own workf
   assert.match(pr, /CI_IMPACT_WORKFLOW_FILE: \.ci-run-workflow\/\.github\/workflows\/test\.yml\n/);
   const dev = jobOf('dev-staging-gate');
   assert.match(dev, /CI_IMPACT_REPOSITORY: \$\{\{ github\.repository \}\}\n {10}CI_IMPACT_WORKFLOW_FILE: \.github\/workflows\/test\.yml\n {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}\n/);
-  for (const gate of [pr, dev]) assert.match(gate, /\n    timeout-minutes: 5\n/);
+  // PR / gate also merges the pull request into the current dev and runs the fresh guards.
+  assert.match(pr, /\n    timeout-minutes: 10\n/);
+  assert.match(dev, /\n    timeout-minutes: 5\n/);
 });

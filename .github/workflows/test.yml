@@ -1921,7 +1921,7 @@ jobs:
       github.event_name == 'pull_request' &&
       github.base_ref == 'dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Report repository growth (report only)
         env:
@@ -1975,6 +1975,42 @@ jobs:
           CI_IMPACT_WORKFLOW_FILE: .ci-run-workflow/.github/workflows/test.yml
           GITHUB_TOKEN: ${{ github.token }}
         run: node .ci-trusted-base/tools/ci-impact.mjs gate
+
+      # Fresh guards (docs/internal/SELECTIVE_CI.md "Fresh guards at the gate"): the jobs above
+      # tested this run's merge commit, whose base can predate a rule dev gained since, and a
+      # rerun of this job alone keeps their results. Merge the pull request into dev as it is now
+      # and run the fast structure guards again. These steps run pull request code, so they come
+      # after the trusted check and get no token.
+      - name: Checkout the current dev
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/${{ github.base_ref }}
+          path: .ci-fresh-merge
+          fetch-depth: 0
+          # All commits and trees; Git fetches old file contents on demand.
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Merge the pull request into the current dev
+        working-directory: .ci-fresh-merge
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin "$HEAD_SHA"
+          dev="$(git rev-parse HEAD)"
+          if ! git -c user.name='PR / gate' -c user.email='pr-gate@localhost' merge --no-ff --no-edit "$HEAD_SHA"; then
+            echo "::error title=Conflict with dev::The pull request head $HEAD_SHA conflicts with dev $dev. Update the branch from dev."
+            exit 1
+          fi
+          printf '## Fresh guards\n\nThe pull request head %s merged into dev %s.\n\n' "$HEAD_SHA" "$dev" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install the merge's locked Node packages
+        working-directory: .ci-fresh-merge
+        run: npm ci
+
+      - name: Run the fast guards on the merge
+        working-directory: .ci-fresh-merge
+        run: node tools/ci-impact-fresh-guards.mjs
 
   dev-staging-gate:
     name: Dev staging / gate

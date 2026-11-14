@@ -786,8 +786,9 @@ workflow's deciding run, and the label either way. The `dev`, release, and
 Gallery gates do not read it.
 
 The gate reads dev once, when it runs. A pull request held this way passes
-after dev turns green by rerunning its `PR / gate` job (about a minute); adding
-or removing a label starts a new run. The gate does not hold a pull request
+after dev turns green by rerunning its `PR / gate` job (a few minutes, with the
+[fresh guards](#fresh-guards-at-the-gate)); adding or removing a label starts a
+new run. The gate does not hold a pull request
 whose gate passed before dev turned red, nor one whose `pull_request.base.sha`
 predates this check because its head or base was not updated since, including
 reruns of older runs: such a run uses that base's helper. A new run started by
@@ -800,6 +801,51 @@ the workflow that feeds it ([`WEB_CHANGE_POLICY.md`](WEB_CHANGE_POLICY.md)).
 The workflow change passed the repository, labels, and token to `PR / gate`
 first; the base helper ignored them. The pull request that added the check ran
 that base helper too, so it was not held by the red `dev` it was written for.
+
+### Fresh guards at the gate
+
+The jobs of a pull request run test its merge commit, whose base is `dev` as it
+was when the run started. A rerun of `PR / gate` alone, as after `dev` turns
+green, keeps those results, so a rule that `dev` gained after that base would
+never reach the pull request before it merges. On 2026-11-11 #1907 merged this
+way: its run had tested a base before #1876, which limited a Python function to
+58 statements, and its merge turned `dev` red with a function of 59.
+
+After its trusted check passes, `PR / gate` therefore checks out `dev` as it is
+at that moment, merges the pull request head into it (`dev` is the first
+parent, as in GitHub's merge commit), and runs the fast guards listed in
+`FRESH_GUARD_FILES` of `tools/ci-impact-fresh-guards.mjs` on that merge, all at
+once:
+
+- `tests/test_python_structure_ratchet.py` (import layers, import cycles,
+  function statements and parameters), whose test functions run with the
+  standard library alone, without pytest or an installed gbdraw;
+- `tests/web/function-size-ratchet.test.mjs`,
+  `tests/web/explicit-any-ratchet.test.mjs`, and
+  `tests/web/owner-graph-baseline.test.mjs`, with the merge's locked Node
+  packages.
+
+The gate fails when a guard fails or when the pull request conflicts with
+`dev`. The step summary names the merged `dev` commit and each guard's result
+and time. Update the branch from `dev` and fix the pull request. When `dev`
+alone fails a guard too, `dev` is broken ("When dev is red" in `AGENTS.md`):
+every pull request fails that guard, a `dev-red-fix` one included unless it
+fixes it, so one pull request fixes all of `dev`'s fast-guard failures.
+
+These guards were chosen by time. Their baselines change on `dev` most often,
+and they run at once; the step summary shows each one's time. The Web
+architecture contracts
+take 4 to 5 minutes in `Web change budget`, and no CI policy test under
+`tests/ci` failed on `dev` in the 30 days to 2026-11-10, so the gate does not
+rerun them; `tests/ci/ci-impact-fresh-guards.test.mjs` replays the #1907 and
+#1876 pair against the Python guard.
+
+These steps run pull request code. They come after the trusted check, so that
+code cannot change its result, and they get no token: the checkout of `dev`
+keeps no credentials, no step passes `GITHUB_TOKEN` or a secret, and the
+workflow token stays read-only, as in every test job. A run whose workflow
+predates these steps has none, and rerunning its gate applies no fresh guard;
+updating the branch from `dev` gives it a run with them.
 
 ### Repository growth on pull requests
 
