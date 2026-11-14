@@ -1149,13 +1149,14 @@ test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
   const gallery = read('.github/workflows/gallery-publication.yml');
   // A checkout alone has taken 63 s, so a 1-minute gate can cancel a run whose jobs all passed.
   for (const [workflow, id] of [
-    [tests, 'pr-gate'],
     [tests, 'dev-staging-gate'],
     [tests, 'release-gate'],
     [gallery, 'readiness-gate']
   ]) {
     assert.match(jobIn(workflow, id), /\n    timeout-minutes: 5\n/, id);
   }
+  // PR / gate also checks out dev, merges the pull request, and runs the fresh guards.
+  assert.match(jobIn(tests, 'pr-gate'), /\n    timeout-minutes: 10\n/);
   // A full-history checkout with blobs has taken 4 min 53 s of this 5-minute job.
   const planner = jobIn(gallery, 'ci-impact');
   assert.match(planner, /\n    timeout-minutes: 5\n/);
