@@ -78,14 +78,12 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   expect(clearMutations.length).toBeLessThanOrEqual(6);
 });
 
-test('v3 derives FASTA and the runtime still accepts v1/v2 metadata', async ({ page }, testInfo) => {
-  const v3Path = testInfo.outputPath('interactive-v3.svg');
-  const v2Path = testInfo.outputPath('interactive-v2.svg');
-  const v1Path = testInfo.outputPath('interactive-v1.svg');
+// The viewer derives each FASTA from the catalog the file embeds (it reads no other metadata: every writer writes the
+// catalog with the viewer, and a file exported earlier keeps the viewer it was written with).
+test('the Interactive SVG derives FASTA from its embedded catalog', async ({ page }, testInfo) => {
+  const svgPath = testInfo.outputPath('interactive-v3.svg');
   const generator = String.raw`
-import json
 import sys
-import xml.etree.ElementTree as ET
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 
 source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80"><rect id="fseq" data-gbdraw-feature-id="fseq" x="10" y="10" width="20" height="10" fill="#54bcf8" /></svg>'
@@ -105,65 +103,26 @@ context = InteractiveSvgContext(features=[{
     "nucleotide_sequence": "ATGAAATAA",
     "amino_acid_sequence": "MPEPTIDE",
 }])
-v3 = enrich_svg(source, context)
 with open(sys.argv[1], 'w', encoding='utf-8') as handle:
-    handle.write(v3)
-root = ET.fromstring(v3)
-metadata = next(item for item in root.iter() if item.tag.rsplit('}', 1)[-1] == 'metadata')
-feature = {
-    "svg_id": "fseq",
-    "record_id": "rec1",
-    "type": "CDS",
-    "start": 0,
-    "end": 9,
-    "strand": "+",
-    "qualifiers": {
-        "product": ["protein A"],
-        "protein_id": ["WP_000001.1"],
-        "translation": ["MPEPTIDE"],
-    },
-    "nucleotide_sequence": "ATGAAATAA",
-}
-payload = {
-    "schema": "gbdraw-interactive-feature-popup-v2",
-    "popup_mode": "rich",
-    "features": [feature],
-    "biological_features": [feature],
-    "orthogroups": [],
-    "matches": [],
-}
-metadata.set("data-schema", payload["schema"])
-metadata.text = json.dumps(payload, separators=(',', ':'))
-with open(sys.argv[2], 'w', encoding='utf-8') as handle:
-    handle.write(ET.tostring(root, encoding='unicode'))
-payload["schema"] = "gbdraw-interactive-feature-popup-v1"
-feature["amino_acid_sequence"] = "MPEPTIDE"
-feature["nucleotide_fasta"] = ">rec1:1-9 protein A\nATGAAATAA"
-feature["amino_acid_fasta"] = ">WP_000001.1 protein A\nMPEPTIDE"
-metadata.set("data-schema", payload["schema"])
-metadata.text = json.dumps(payload, separators=(',', ':'))
-with open(sys.argv[3], 'w', encoding='utf-8') as handle:
-    handle.write(ET.tostring(root, encoding='unicode'))
+    handle.write(enrich_svg(source, context))
 `;
-  execFileSync('python', ['-c', generator, v3Path, v2Path, v1Path], { cwd: process.cwd(), stdio: 'inherit' });
+  execFileSync('python', ['-c', generator, svgPath], { cwd: process.cwd(), stdio: 'inherit' });
 
-  for (const [schema, svgPath] of [['v3', v3Path], ['v2', v2Path], ['v1', v1Path]]) {
-    await page.goto(pathToFileURL(svgPath).href);
-    await page.getByRole('button', { name: 'Expand feature search' }).click();
-    await page.locator('[data-search-field]').selectOption('amino-acid');
-    await page.locator('[data-search-query]').fill('MPEPTIDE');
-    await page.locator('[data-search-apply]').click();
-    await expect(page.locator('.gbdraw-interactive-feature--match')).toHaveCount(1);
-    await page.locator('[data-search-open]').click();
-    await page.locator('[data-tab="sequence"]').click();
-    const sequences = await page.locator('.gfi-pre').allTextContents();
-    expect(sequences.join('\n'), `${schema} nucleotide FASTA`).toContain('ATGAAATAA');
-    expect(sequences.join('\n'), `${schema} amino-acid FASTA`).toContain('MPEPTIDE');
-    expect(sequences.join('\n'), `${schema} protein ID`).toContain('WP_000001.1');
-  }
+  await page.goto(pathToFileURL(svgPath).href);
+  await page.getByRole('button', { name: 'Expand feature search' }).click();
+  await page.locator('[data-search-field]').selectOption('amino-acid');
+  await page.locator('[data-search-query]').fill('MPEPTIDE');
+  await page.locator('[data-search-apply]').click();
+  await expect(page.locator('.gbdraw-interactive-feature--match')).toHaveCount(1);
+  await page.locator('[data-search-open]').click();
+  await page.locator('[data-tab="sequence"]').click();
+  const sequences = (await page.locator('.gfi-pre').allTextContents()).join('\n');
+  expect(sequences, 'nucleotide FASTA').toContain('ATGAAATAA');
+  expect(sequences, 'amino-acid FASTA').toContain('MPEPTIDE');
+  expect(sequences, 'protein ID').toContain('WP_000001.1');
 });
 
-test('v2 raw match metadata is materialized lazily for the popup', async ({ page }, testInfo) => {
+test('the raw match fields of the embedded catalog are materialized lazily for the popup', async ({ page }, testInfo) => {
   const svgPath = testInfo.outputPath('interactive-v2-match.svg');
   const generator = String.raw`
 import sys
@@ -428,6 +387,12 @@ source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
  data-query-record-id="ref" data-subject-record-id="missing"
  data-qstart="1" data-qend="4" data-sstart="1" data-send="4"
  fill="#3b82f6" d="M 10 45 L 110 45 L 110 55 L 10 55 Z" />
+<path data-gbdraw-match-id="homology_ring2_hit18" data-match-kind="homology"
+ data-source-index="0" data-track-index="2" data-track-label="Comparison A"
+ data-reference-side="query" data-reference-record-id="ref"
+ data-query-record-id="ref" data-subject-record-id="absent"
+ data-qstart="1" data-qend="4" data-sstart="1" data-send="4"
+ fill="#ef4444" d="M 10 62 L 110 62 L 110 72 L 10 72 Z" />
 </svg>'''
 # The drawn record and each source's comparison FASTA records; source 1 (BLAST only) has no FASTA.
 records = CatalogSequenceRecords(
@@ -478,6 +443,12 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     'Comparison sequence was not supplied for this BLAST source.'
   );
   await expect(page.locator('.gfi-block-actions')).toHaveCount(0);
+
+  // A record its source's comparison FASTA lacks is not a FASTA that was never supplied (OV-2755).
+  await page.locator('[data-close]').click();
+  await page.locator('[data-gbdraw-match-id="homology_ring2_hit18"]').click();
+  await expect(page.locator('.gfi-content')).toContainText('No sequence source matched record “absent”.');
+  await expect(page.locator('.gfi-content')).not.toContainText('Comparison sequence was not supplied');
 });
 
 test('preview search renderer applies result and active differences only', async ({ page }) => {

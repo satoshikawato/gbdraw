@@ -98,7 +98,6 @@ const drawing = {
 test('the capture holds the stored catalog item of the shown Result, found by its index and name', () => {
   const { interactivity } = captureSvgExport(exportState([storedItem]), drawing, { interactive: true });
   assert.equal(interactivity.catalogItem, storedItem);
-  assert.equal(interactivity.requireFeatureCatalog, true);
   assert.deepEqual(interactivity.labelTextFeatureOverrides, { f0001: 'renamed' });
   for (const other of [{ ...storedItem, resultName: 'other.svg' }, { ...storedItem, resultIndex: 1 }]) {
     const captured = captureSvgExport(exportState([other]), drawing, { interactive: true }).interactivity;
@@ -121,9 +120,7 @@ test('the file embeds the item Python encoded, under the export schema, byte for
   assert.equal(INTERACTIVE_EMBED_SCHEMA, 5);
   assert.notEqual(INTERACTIVE_EMBED_SCHEMA, FEATURE_CATALOG_SCHEMA);
   const svg = new FakeElement('svg');
-  assert.equal(enrichSvgWithStandaloneInteractivity(svg, {
-    requireFeatureCatalog: true, catalogItem: storedItem, embeddedSequences
-  }), true);
+  assert.equal(enrichSvgWithStandaloneInteractivity(svg, { catalogItem: storedItem, embeddedSequences }), true);
   const metadata = svg.childNodes.find((child) => child.localName === 'metadata');
   assert.equal(metadata.getAttribute('data-schema'), String(INTERACTIVE_EMBED_SCHEMA));
   assert.equal(metadata.getAttribute('data-result-index'), '0');
@@ -131,7 +128,7 @@ test('the file embeds the item Python encoded, under the export schema, byte for
   assert.equal(metadata.textContent, JSON.stringify({ schema: INTERACTIVE_EMBED_SCHEMA, items: [embedItem] }));
   // Without Python's sequences the export writes nothing: the stored item holds no sequence.
   for (const options of [{ catalogItem: storedItem }, { embeddedSequences }]) {
-    assert.equal(enrichSvgWithStandaloneInteractivity(new FakeElement('svg'), { requireFeatureCatalog: true, ...options }), false);
+    assert.equal(enrichSvgWithStandaloneInteractivity(new FakeElement('svg'), options), false);
   }
 });
 

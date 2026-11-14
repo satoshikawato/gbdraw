@@ -192,7 +192,6 @@ export const captureSvgExport = (state, drawing, { interactive = false } = {}) =
     ...(interactive ? { interactivity: /** @satisfies {ExportInteractivity} */ ({
       popupMode: state.richFeaturePopup.value === false ? 'simple' : 'rich',
       catalogItem,
-      requireFeatureCatalog: true,
       editableLabels: state.editableLabels.value.map(({ featureId, text, sourceText }) => ({
         featureId, text, sourceText
       })),

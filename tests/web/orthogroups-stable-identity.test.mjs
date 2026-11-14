@@ -94,7 +94,7 @@ const standaloneSource = await readFile(
 );
 await writeFile(
   join(tempDir, 'services', 'standalone-interactivity.js'),
-  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, catalogItemWithStandaloneOverrides, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry };\n`,
+  `${standaloneSource}\nexport { catalogItemWithStandaloneOverrides, getStandaloneDisplayLabel };\n`,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-editor-svg-actions.js'), `
@@ -194,12 +194,8 @@ const {
   pathToFileURL(join(tempDir, 'services', 'orthogroup-feature-metadata.js'))
 );
 const {
-  buildStandaloneBiologicalFeaturePayloads,
-  buildStandaloneOrthogroupPayloads,
   catalogItemWithStandaloneOverrides,
-  createStandaloneBiologicalFeatureResolver,
-  getStandaloneDisplayLabel,
-  getStandaloneFeatureOrthogroupEntry
+  getStandaloneDisplayLabel
 } = await import(
   pathToFileURL(join(tempDir, 'services', 'standalone-interactivity.js'))
 );
@@ -984,266 +980,6 @@ for (const invalidGroups of [
   }
 }
 
-const standaloneRecordZero = {
-  fileIdx: 0,
-  svg_id: 'rendered-zero_record_1',
-  stable_svg_id: 'shared-stable'
-};
-const standaloneRecordOne = {
-  fileIdx: 1,
-  svg_id: 'rendered-one_record_2',
-  stable_svg_id: 'shared-stable'
-};
-const standaloneCanonicalFeature = {
-  recordKey: 'standalone-record-key',
-  biologicalFeatureId: 'standalone-biological-feature'
-};
-const standaloneResolver = createStandaloneBiologicalFeatureResolver([
-  standaloneRecordZero,
-  standaloneRecordOne,
-  standaloneCanonicalFeature,
-  { fileIdx: 0, svg_id: 'rendered-conflict_record_1', stable_svg_id: 'conflict-stable' }
-]);
-assert.equal(
-  standaloneResolver({ stableSvgId: 'shared-stable', recordIndex: 0 }),
-  standaloneRecordZero
-);
-assert.equal(
-  standaloneResolver({ renderedSvgId: 'rendered-one_record_2', recordIndex: 1 }),
-  standaloneRecordOne
-);
-assert.equal(
-  standaloneResolver({
-    recordKey: 'standalone-record-key',
-    biologicalFeatureId: 'standalone-biological-feature'
-  }),
-  standaloneCanonicalFeature
-);
-assert.equal(standaloneResolver({ stableSvgId: 'shared-stable' }), null);
-assert.equal(
-  standaloneResolver({ stableSvgId: 'shared-stable', recordIndex: 9 }),
-  null
-);
-assert.equal(
-  standaloneResolver({
-    stableSvgId: 'shared-stable',
-    renderedSvgId: 'rendered-conflict_record_1',
-    recordIndex: 0
-  }),
-  null
-);
-assert.equal(
-  standaloneResolver({
-    stableSvgId: 'shared-stable',
-    renderedSvgId: 'unknown-rendered',
-    recordIndex: 0
-  }),
-  null
-);
-assert.equal(
-  standaloneResolver({ stableSvgId: 'shared-stable', recordIndex: '0.9' }),
-  null
-);
-assert.equal(
-  standaloneResolver({ stableSvgId: 'shared-stable', recordIndex: -1 }),
-  null
-);
-assert.equal(
-  standaloneResolver({
-    stableSvgId: 'shared-stable',
-    recordIndex: '9007199254740993'
-  }),
-  null
-);
-const duplicateStandaloneResolver = createStandaloneBiologicalFeatureResolver([
-  { fileIdx: 0, stable_svg_id: 'duplicate-stable' },
-  { fileIdx: 0, stable_svg_id: 'duplicate-stable' }
-]);
-assert.equal(
-  duplicateStandaloneResolver({ stableSvgId: 'duplicate-stable', recordIndex: 0 }),
-  null
-);
-const standaloneRoleA = {
-  fileIdx: 0,
-  stable_svg_id: 'standalone-stable-a',
-  svg_id: 'standalone-collision'
-};
-const standaloneRoleB = {
-  fileIdx: 0,
-  stable_svg_id: 'standalone-collision',
-  svg_id: 'standalone-rendered-b'
-};
-const roleSeparatedStandaloneResolver = createStandaloneBiologicalFeatureResolver([
-  standaloneRoleA,
-  standaloneRoleB
-]);
-assert.equal(
-  roleSeparatedStandaloneResolver({
-    stableSvgId: 'standalone-collision',
-    recordIndex: 0
-  }),
-  standaloneRoleB
-);
-assert.equal(
-  roleSeparatedStandaloneResolver({
-    renderedSvgId: 'standalone-collision',
-    recordIndex: 0
-  }),
-  standaloneRoleA
-);
-assert.equal(
-  roleSeparatedStandaloneResolver({
-    stableSvgId: 'standalone-collision',
-    renderedSvgId: 'standalone-collision',
-    recordIndex: 0
-  }),
-  null
-);
-
-const standaloneEntry = { orthogroupId: 'og_record_one' };
-const standaloneCanonicalEntry = { orthogroupId: 'og_canonical' };
-const standaloneIndex = new Map([
-  ['1:shared-stable', standaloneEntry],
-  ['shared-stable', standaloneEntry],
-  ['canonical:standalone-record-key\0standalone-biological-feature', standaloneCanonicalEntry]
-]);
-const standaloneContext = { featureOrthogroupIndex: standaloneIndex };
-assert.equal(
-  getStandaloneFeatureOrthogroupEntry(
-    { fileIdx: 1, stable_svg_id: 'shared-stable' },
-    standaloneContext
-  ),
-  standaloneEntry
-);
-assert.equal(
-  getStandaloneFeatureOrthogroupEntry(
-    {
-      recordKey: 'standalone-record-key',
-      biologicalFeatureId: 'standalone-biological-feature'
-    },
-    standaloneContext
-  ),
-  standaloneCanonicalEntry
-);
-for (const unresolved of [
-  { fileIdx: 0, stable_svg_id: 'shared-stable' },
-  { stable_svg_id: 'shared-stable' },
-  { fileIdx: 0, recordIndex: 1, stable_svg_id: 'shared-stable' },
-  { fileIdx: 1, recordIndex: -1, stable_svg_id: 'shared-stable' },
-  { fileIdx: 1, stable_svg_id: 'shared-stable', rendered_svg_id: 'unknown' },
-  { fileIdx: 1, protein_id: 'CAG34720.1' }
-]) {
-  assert.equal(
-    getStandaloneFeatureOrthogroupEntry(unresolved, standaloneContext),
-    null
-  );
-}
-const directGroupMember = {
-  recordIndex: 1,
-  stableFeatureSvgId: 'shared-stable'
-};
-const directContext = {
-  ...standaloneContext,
-  orthogroups: [{ id: 'og_direct', members: [directGroupMember] }]
-};
-assert.equal(
-  getStandaloneFeatureOrthogroupEntry({
-    fileIdx: 1,
-    stable_svg_id: 'shared-stable',
-    orthogroupId: 'og_direct',
-    orthogroupMember: { ...directGroupMember }
-  }, directContext)?.orthogroupId,
-  'og_direct'
-);
-// A whitespace-only feature index is not supplied, as in the catalog readers
-// and Python (OV-274).
-assert.equal(
-  getStandaloneFeatureOrthogroupEntry({
-    fileIdx: 1,
-    featureIndex: ' ',
-    stable_svg_id: 'shared-stable',
-    orthogroupId: 'og_direct',
-    orthogroupMember: { ...directGroupMember }
-  }, directContext)?.orthogroupId,
-  'og_direct'
-);
-assert.equal(
-  getStandaloneFeatureOrthogroupEntry({
-    fileIdx: 1,
-    stable_svg_id: 'shared-stable',
-    orthogroupId: 'og_stale_direct',
-    orthogroupMember: {
-      recordIndex: 0,
-      stableFeatureSvgId: 'shared-stable'
-    }
-  }, {
-    ...standaloneContext,
-    orthogroups: [{
-      id: 'og_stale_direct',
-      members: [{ recordIndex: 0, stableFeatureSvgId: 'shared-stable' }]
-    }]
-  }),
-  null
-);
-assert.equal(
-  getStandaloneFeatureOrthogroupEntry({
-    fileIdx: 1,
-    featureIndex: 7,
-    stable_svg_id: 'shared-stable',
-    orthogroupId: 'og_direct'
-  }, directContext),
-  null
-);
-assert.equal(
-  getStandaloneFeatureOrthogroupEntry({
-    fileIdx: 1,
-    stable_svg_id: 'shared-stable',
-    orthogroupId: 'og_direct',
-    orthogroup_id: 'og_conflict'
-  }, directContext),
-  null
-);
-
-assert.deepEqual(
-  buildStandaloneOrthogroupPayloads([], {
-    orthogroups: [{ id: 'og_a', orthogroupId: 'og_b', members: [] }]
-  }),
-  []
-);
-assert.deepEqual(
-  buildStandaloneOrthogroupPayloads([], {
-    orthogroups: [
-      { id: 'og_duplicate', members: [] },
-      { id: 'og_duplicate', members: [] }
-    ]
-  }),
-  []
-);
-const conflictingStandaloneMemberGroups = buildStandaloneOrthogroupPayloads([], {
-  orthogroups: [{
-    id: 'og_conflicting_member',
-    members: [{
-      recordKey: 'record-key',
-      biologicalFeatureId: 'bio-id',
-      stableFeatureSvgId: 'stable-a',
-      featureSvgId: 'stable-b'
-    }]
-  }]
-});
-assert.equal(conflictingStandaloneMemberGroups.length, 1);
-assert.deepEqual(conflictingStandaloneMemberGroups[0].members, []);
-
-assert.deepEqual(
-  buildStandaloneBiologicalFeaturePayloads({
-    features: [
-      { fileIdx: 0, stable_svg_id: 'duplicate-biological', product: 'first' },
-      { fileIdx: 0, stable_svg_id: 'duplicate-biological', product: 'second' }
-    ],
-    orthogroups: []
-  }, []),
-  []
-);
-
 const fiveMemberGroup = {
   id: 'og_1',
   members: Array.from({ length: 5 }, (_, recordIndex) => {
@@ -2017,30 +1753,23 @@ console.log('orthogroup stable identity tests passed');
 // OV-554: the source text is label text; only an own key of the bulk table is an edit.
 {
   const inheritedFeature = { svg_id: 'f1', product: 'constructor' };
-  assert.equal(
-    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: {} }),
-    'constructor'
-  );
-  assert.equal(
-    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: { constructor: 'ctor' } }),
-    'ctor'
-  );
+  const context = (labelTextBulkOverrides) => ({ editableLabels: [], labelTextFeatureOverrides: {}, labelTextBulkOverrides });
+  assert.equal(getStandaloneDisplayLabel(inheritedFeature, 'constructor', context({})), 'constructor');
+  assert.equal(getStandaloneDisplayLabel(inheritedFeature, 'constructor', context({ constructor: 'ctor' })), 'ctor');
 }
 
-// The same for a Similarity group id in the standalone HTML: only an own key of a rename table is a rename.
+// The same for a Similarity group id in the exported Interactive SVG: only an own key of a rename table is a rename.
 {
   const inheritedGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
-  const shown = (context) => [
-    ...buildStandaloneOrthogroupPayloads([], { orthogroups: [inheritedGroup], ...context }),
-    ...catalogItemWithStandaloneOverrides({ features: [], biologicalFeatures: [], orthogroups: [inheritedGroup] }, context).orthogroups
-  ].map((group) => [group.display_name ?? group.name, group.description]);
+  const shown = (context) => catalogItemWithStandaloneOverrides({ features: [], biologicalFeatures: [], orthogroups: [inheritedGroup] }, context)
+    .orthogroups.map((group) => [group.display_name ?? group.name, group.description]);
   assert.deepEqual(
     shown({ orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} }),
-    [['Own name', 'Own description'], ['Own name', 'Own description']]
+    [['Own name', 'Own description']]
   );
   assert.deepEqual(
     shown({ orthogroupNameOverrides: { constructor: 'Renamed' }, orthogroupDescriptionOverrides: { constructor: 'Edited' } }),
-    [['Renamed', 'Edited'], ['Renamed', 'Edited']]
+    [['Renamed', 'Edited']]
   );
 }
 

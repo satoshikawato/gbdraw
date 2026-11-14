@@ -262,16 +262,16 @@
     },
     {
       "id": "vector:tests/fixtures/location-parts-vectors.json",
-      "concern": "Feature location parts written into the interactive SVG",
+      "concern": "A location part's start and end, as written into the interactive SVG and read back",
       "pythonOwner": [
-        "gbdraw/render/interactive_svg.py:_normalize_location_parts"
+        "gbdraw/render/interactive_svg.py:_location_part_number"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/standalone-interactivity.js:normalizeLocationParts"
+        "gbdraw/web/js/services/feature-utils.js:locationPartNumber"
       ],
       "vector": "tests/fixtures/location-parts-vectors.json",
-      "reason": "Two writers normalize the location parts of a feature into the interactive SVG: the Python CLI writer and the Web export writer. The shared vector pins that both read a part alike: a null or blank start or end is missing, a number truncates toward zero, and a missing display is built from the 1-based start and the end.",
-      "retireWhen": "the Web writes the interactive SVG through the Python writer (Worker) instead of its own copy",
+      "reason": "Python writes the location parts of a feature into the interactive SVG (the Web export writes what Python encoded); the app and the viewer script read a part's start or end by the writer's rule. The shared vector pins that they read a part alike: a null or blank start or end is missing, and a number truncates toward zero.",
+      "retireWhen": "the app reads a start or end only as Python wrote it; the viewer's copy ships inside each exported file and stays",
       "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)"
     },
     {
@@ -694,32 +694,17 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
-      "id": "function:normalizeLocationParts",
-      "concern": "Feature location parts written into the interactive SVG",
-      "pythonOwner": [
-        "gbdraw/render/interactive_svg.py:_normalize_location_parts"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/standalone-interactivity.js:normalizeLocationParts"
-      ],
-      "vector": "tests/fixtures/location-parts-vectors.json",
-      "reason": "The Python CLI writer and the Web export writer both normalize the parts; the shared vector pins them.",
-      "retireWhen": "the Web writes the interactive SVG through the Python writer (Worker) instead of its own copy",
-      "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)"
-    },
-    {
       "id": "function:normalizeQualifierMap",
       "concern": "Qualifier map to lists of strings",
       "pythonOwner": [
         "gbdraw/render/interactive_svg.py:_normalize_qualifier_map"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/standalone-interactivity.js:normalizeQualifierMap",
         "gbdraw/web/js/services/feature-selector.js:normalizeQualifierMap"
       ],
       "vector": null,
-      "reason": "Partly the same: standalone-interactivity.js matches Python; feature-selector.js lower-cases keys and keeps empty lists.",
-      "retireWhen": "never for the standalone interactive SVG; the feature-selector.js copy goes when Python owns rule matching (OV-286)",
+      "reason": "Partly the same: feature-selector.js lower-cases keys and keeps empty lists.",
+      "retireWhen": "the feature-selector.js copy goes when Python owns rule matching (OV-286)",
       "source": "inventory C section B (interactive SVG vs app; FL-08, OV-211)"
     },
     {

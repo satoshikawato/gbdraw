@@ -1984,11 +1984,9 @@ _LOCATION_PART_VECTORS = _SHARED_LOCATION_VECTORS["cases"]
 @pytest.mark.parametrize(
     "case", _LOCATION_PART_VECTORS, ids=[case["name"] for case in _LOCATION_PART_VECTORS]
 )
-def test_location_parts_normalize_to_the_vectors_shared_with_the_web_export_writer(
+def test_location_parts_normalize_to_the_shared_vectors(
     case: dict[str, object],
 ) -> None:
-    # tests/web/standalone-location-parts.test.mjs checks the same vectors against
-    # normalizeLocationParts.
     assert _normalize_location_parts(json.loads(json.dumps(case["input"]))) == case["expected"]
 
 
@@ -1998,11 +1996,11 @@ _FEATURE_COORDINATE_VECTORS = _SHARED_LOCATION_VECTORS["featureCoordinateCases"]
 @pytest.mark.parametrize(
     "case", _FEATURE_COORDINATE_VECTORS, ids=[case["name"] for case in _FEATURE_COORDINATE_VECTORS]
 )
-def test_feature_start_and_end_read_to_the_vectors_shared_with_the_web_export_writer(
+def test_feature_start_and_end_read_to_the_shared_vectors(
     case: dict[str, object],
 ) -> None:
-    # OV-1011: the Web writer read a null start as 0. tests/web/standalone-location-parts.test.mjs
-    # checks the same vectors against featureCoordinates.
+    # OV-1011: a writer read a null start as 0. The app's and the viewer's start and end readers check the same
+    # vectors (tests/web/feature-search-scope.test.mjs).
     assert _feature_coordinates(json.loads(json.dumps(case["input"]))) == case["expected"]
 
 
