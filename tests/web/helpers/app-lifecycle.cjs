@@ -1033,11 +1033,17 @@ const fetchRoute = async (route, options) => {
 // A served Pyodide snapshot passes through unchanged: the Worker fetches it
 // same-origin, which COEP allows without headers, and fulfilling its 100 MB
 // body from the test process closes the page (OV-1020).
+// The route serves every request of the page, including those no test step
+// waits for (a font, an image). One still in flight when the test ends has no
+// page to serve any more: Playwright rejects it with "Test ended" or a closed
+// target, and a rejected route callback fails the run outside any test. Such a
+// request is dropped; every other error is rethrown.
 const CROSS_ORIGIN_ISOLATION_HEADERS = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp'
 };
-const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', async (route) => {
+const ROUTE_AFTER_TEST = /\bTest ended\b|Target page, context or browser has been closed/;
+const serveCrossOriginIsolated = async (route, stubs) => {
   const url = new URL(route.request().url());
   if (url.hostname !== '127.0.0.1') return route.abort();
   if (url.pathname.startsWith(PYODIDE_SNAPSHOT_TEST_PATH)) return route.fallback();
@@ -1045,6 +1051,14 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
   if (stub) return route.fulfill({ ...stub, headers: CROSS_ORIGIN_ISOLATION_HEADERS });
   const response = await fetchRoute(route);
   return route.fulfill({ response, headers: { ...response.headers(), ...CROSS_ORIGIN_ISOLATION_HEADERS } });
+};
+const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', async (route) => {
+  try {
+    return await serveCrossOriginIsolated(route, stubs);
+  } catch (error) {
+    if (!ROUTE_AFTER_TEST.test(String(error?.message || error))) throw error;
+    return undefined;
+  }
 });
 
 module.exports = {

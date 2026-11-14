@@ -190,6 +190,32 @@ export const featureIdentity = (source, { allowLegacySvgStable = false } = {}) =
 };
 
 /**
+ * The canonical names of a feature that a Session before 40 named by its
+ * drawn record index and stable ID: the key of the committed request's record
+ * at that index, and the stable ID as its biological feature ID. Load gives a
+ * saved group member these names (`migrateLegacyOrthogroupMembers`), and the
+ * member's source feature is found under the same names (OV-3539). An
+ * identity that is not valid, has either name already, lacks a record index
+ * or stable ID, or whose index names no record, is returned as it is.
+ * @param {FeatureIdentity} identity
+ * @param {readonly unknown[]} recordKeys The committed request's record keys, in record order.
+ * @returns {FeatureIdentity}
+ */
+export const withLegacyCanonicalIdentity = (identity, recordKeys) => {
+  const { valid, recordKey, biologicalId, recordIndex, stableId } = identity;
+  if (!valid || recordKey.supplied || biologicalId.supplied || recordIndex.value === null || !stableId.supplied) {
+    return identity;
+  }
+  const key = recordKeys[recordIndex.value];
+  if (typeof key !== 'string' || !key) return identity;
+  return {
+    ...identity,
+    recordKey: { valid: true, supplied: true, value: key },
+    biologicalId: { valid: true, supplied: true, value: stableId.value }
+  };
+};
+
+/**
  * @param {AliasSource | null | undefined} feature
  * @returns {FeatureIdentity}
  */

@@ -1,5 +1,5 @@
 // @ts-check
-import { featureIdentity } from './feature-identity.js';
+import { featureIdentity, withLegacyCanonicalIdentity } from './feature-identity.js';
 import { LEGACY_FEATURE_CATALOG_SCHEMA, SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 
 // The released Sessions this module reads were not validated: every field is
@@ -102,17 +102,20 @@ export const materializeLegacySimilarityAlignment = ({
   const groups = useLegacyGroups
     ? legacyGroups(legacyOrthogroupState)
     : catalogGroups;
-  /** @param {LegacyMember | null | undefined} member */
-  const memberRecordKey = (member) => {
-    if (!useLegacyGroups) return member?.recordKey;
-    // `isSafeInteger` holds in the later operands: `member` exists and `recordIndex` is a number.
-    if (!Number.isSafeInteger(member?.recordIndex) ||
-        /** @type {{ recordIndex: number }} */ (member).recordIndex < 0 ||
-        /** @type {{ recordIndex: number }} */ (member).recordIndex >= recordKeys.length) {
-      throw new Error('Legacy similarity alignment member has no stable record mapping.');
-    }
-    return recordKeys[/** @type {{ recordIndex: number }} */ (member).recordIndex];
+  /**
+   * A legacy state member under the canonical names Load gives it (`withLegacyCanonicalIdentity`).
+   * @param {LegacyMember | null | undefined} member
+   */
+  const legacyCanonical = (member) => {
+    const identity = featureIdentity(member);
+    const canonical = withLegacyCanonicalIdentity(identity, recordKeys);
+    if (canonical === identity) throw new Error('Legacy similarity alignment member has no stable record mapping.');
+    return canonical;
   };
+  /** @param {LegacyMember | null | undefined} member */
+  const memberRecordKey = (member) => (
+    useLegacyGroups ? legacyCanonical(member).recordKey.value : member?.recordKey
+  );
   const groupsById = groups.filter((group) => String(group?.id || '') === legacyTarget);
   /** @type {LegacyGroup | null | undefined} */
   let group = null;
@@ -171,17 +174,13 @@ export const materializeLegacySimilarityAlignment = ({
   /** @param {LegacyMember} member */
   const anchorFor = (member) => {
     if (useLegacyGroups) {
-      const biologicalFeatureId = requiredText(
-        member?.stableFeatureSvgId ||
-          member?.stable_feature_svg_id ||
-          member?.featureSvgId,
-        'legacy member stable feature identity'
-      );
-      if (!Number.isSafeInteger(member?.featureIndex) || /** @type {number} */ (member.featureIndex) < 0) { // number after `isSafeInteger`
+      const canonical = legacyCanonical(member);
+      if (canonical.sourceIndex.value === null) {
         throw new Error('Legacy similarity alignment member lacks a source feature index.');
       }
+      const biologicalFeatureId = canonical.biologicalId.value;
       return {
-        recordKey: requiredText(memberRecordKey(member), 'legacy member recordKey'),
+        recordKey: canonical.recordKey.value,
         biologicalFeatureId,
         // Legacy featureIndex was an orthogroup subset ordinal, not a source feature index.
         sourceFeatureIndex: null,
@@ -271,19 +270,16 @@ export const migrateLegacyOrthogroupMembers = (groups, records) => {
       Array.isArray(group?.members) ? group.members : []
     )).map((member) => {
       const identity = featureIdentity(member);
-      // `recordIndex.supplied` is checked below, and a supplied valid index has a number value.
-      if (!identity.valid || identity.recordKey.supplied || identity.biologicalId.supplied ||
-          !identity.recordIndex.supplied || !identity.sourceIndex.supplied ||
-          !identity.stableId.supplied || typeof recordKeys[/** @type {number} */ (identity.recordIndex.value)] !== 'string' ||
-          !recordKeys[/** @type {number} */ (identity.recordIndex.value)]) return member;
-      // Every operand above held, so `featureIdentity` read supplied fields of an object member.
+      const canonical = withLegacyCanonicalIdentity(identity, recordKeys);
+      if (canonical === identity || !identity.sourceIndex.supplied) return member;
+      // The identity took its canonical names, so `featureIdentity` read supplied fields of an object member.
       const { featureIndex: _legacyIndex, feature_index: _legacySnakeIndex,
         sourceFeatureIndex: _legacySourceIndex,
         source_feature_index: _legacySnakeSourceIndex, ...stableMember } = /** @type {Record<string, unknown>} */ (member);
       return {
         ...stableMember,
-        recordKey: recordKeys[/** @type {number} */ (identity.recordIndex.value)],
-        biologicalFeatureId: identity.stableId.value
+        recordKey: canonical.recordKey.value,
+        biologicalFeatureId: canonical.biologicalId.value
       };
     })
   }));

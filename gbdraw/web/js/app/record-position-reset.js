@@ -20,7 +20,8 @@ import { ref } from '../utils/reactivity.js';
 /**
  * @typedef {object} RecordPositionResetPorts
  * @property {() => CommittedCanonicalSession} materializedSession The committed Session with the active alignment
- *   plan materialized into its record translations, and no plan (Align at feature's port).
+ *   plan materialized into its record translations, and no plan; from a Result an older gbdraw drew, the committed
+ *   translations (the Similarity alignment's `repairBaseSession`).
  * @property {() => boolean} hasAlignmentPlan
  * @property {(reason: string) => void} notePlanReplaced Says that the press ended the Similarity alignment.
  * @property {RecordPlacementRun} runPlacement Draws `canonical` and commits it as one History step under `label`
