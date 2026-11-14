@@ -318,6 +318,27 @@ const catalogRowLookup = (biological, extracted, recordKeys) => {
   return indexFeatureIdentities(entries, (entry) => entry.identity);
 };
 
+/**
+ * The catalog row lookup (`catalogRowLookup`) of the shown rows, rebuilt only when the rows or the committed request's
+ * record keys change. It depends on the two array refs, which every writer replaces (services/config.js,
+ * services/history-snapshot.js), and reads the rows through `toRaw`, as state.js does, so Vue records no dependency on
+ * each alias key of every row that `featureIdentity` reads. The record keys stay the same list while a committed change
+ * keeps them (a placement, a setting), so such a change does not read every row again.
+ * @param {Pick<WebState, 'extractedFeatures' | 'biologicalFeatures'>} rows
+ * @param {CommittedRequestPort} getCommittedRequest
+ */
+const catalogRowLookupOf = ({ extractedFeatures, biologicalFeatures }, getCommittedRequest) => {
+  const recordKeys = computed((/** @type {unknown[] | undefined} */ previous) => {
+    const keys = (getCommittedRequest()?.records || []).map((record) => record.recordKey);
+    return previous?.length === keys.length && keys.every((key, index) => key === previous[index]) ? previous : keys;
+  });
+  return computed(() => catalogRowLookup(
+    toRaw(biologicalFeatures.value),
+    Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [],
+    recordKeys.value
+  ));
+};
+
 /** @param {FeatureSvgRoot | null | undefined} svg @param {(Record<string, unknown> | null | undefined)[] | null} [features] */
 const buildRenderedFeatureIndex = (svg, features = []) => {
   /** @type {Map<string, FeatureIdentity[]>} */
@@ -420,8 +441,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     showRightDrawer,
     rightDrawerTab,
     svgContainer,
-    extractedFeatures,
-    biologicalFeatures
+    extractedFeatures
   } = state;
 
   const sequenceActions = makeMemberSequenceActions(memberAction);
@@ -654,14 +674,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     }));
   });
 
-  // The catalog row of a member, by its identity. The lookup depends on the two array refs, which every writer replaces (services/config.js,
-  // services/history-snapshot.js); it reads the rows through `toRaw`, as state.js does, so Vue records no dependency
-  // on each alias key of every row that `featureIdentity` reads.
-  const featureCatalogLookup = computed(() => catalogRowLookup(
-    toRaw(biologicalFeatures.value),
-    Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [],
-    (getCommittedRequest()?.records || []).map((record) => record.recordKey)
-  ));
+  // The catalog row of a member, by its identity.
+  const featureCatalogLookup = catalogRowLookupOf(state, getCommittedRequest);
 
   // A member with the catalog row it resolved to (`sequenceFeature`); it carries no sequence (D5).
   /** @param {OrthogroupMember} member @returns {OrthogroupMember} */

@@ -882,6 +882,37 @@ for (const invalidRecordIndex of [
     assert.deepEqual(recovered.map((feature) => featureIdentity(feature).recordIndex), [0, 1, 2]
       .map((value) => ({ valid: true, supplied: true, value })));
   }
+
+  // A stale Session: its saved rows name no drawn element, and an edit of input 1's feature is matched only by its
+  // biological key, which reads the input and record pair the Session saved (1, 0). The edit migration reads the
+  // extraction's own pair before Load names the drawn record (2), so the edit survives.
+  const stale = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      linearSeqs: [{ gb: { name: 'a.gb' } }, { gb: { name: 'b.gb' } }],
+      selectedResultIndex: 0,
+      results: committedResults(svg),
+      featureState: {
+        extractedFeatures: [{ id: 'old-b', svg_id: 'old-hash-b', fileIdx: 1, record_idx: 0, record_id: 'RB',
+          type: 'CDS', start: 10, end: 90, strand: '+' }],
+        featureColorOverrides: { 'old-b': { color: '#123456' } }
+      },
+      editorState: { featureStrokes: { overrides: { 'old-hash-b': { color: '#654321' } } } }
+    },
+    featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl: async ({ path }) => ({
+      ...extracted[path],
+      features: extracted[path].features.map((feature, index) => ({
+        ...feature, start: 10 + index, end: 90, strand: '+'
+      }))
+    })
+  });
+  assert.equal(stale.reason, 'stale-metadata-recovered');
+  const staleB = stale.recoveredFeatureState.extractedFeatures.find((feature) => feature.record_id === 'RB');
+  assert.deepEqual([staleB.fileIdx, staleB.record_idx], [2, 2]);
+  assert.deepEqual(stale.recoveredFeatureState.featureColorOverrides, { [staleB.id]: { color: '#123456' } });
+  assert.deepEqual(stale.migratedEditorState.featureStrokes.overrides, { [staleB.svg_id]: { color: '#654321' } });
 }
 
 {

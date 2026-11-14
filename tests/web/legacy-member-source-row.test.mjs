@@ -14,7 +14,9 @@ const Vue = loadPageVue();
 globalThis.window = { Vue, setTimeout, clearTimeout };
 
 const { createOrthogroupEditor } = await import('../../gbdraw/web/js/app/orthogroups.js');
-const { migrateLegacyOrthogroupMembers } = await import('../../gbdraw/web/js/services/legacy-similarity-alignment.js');
+const { materializeLegacySimilarityAlignment, migrateLegacyOrthogroupMembers } = await import(
+  '../../gbdraw/web/js/services/legacy-similarity-alignment.js'
+);
 const { featureOverrideKey } = await import('../../gbdraw/web/js/services/feature-override-identity.js');
 const { ref, reactive } = Vue;
 
@@ -49,7 +51,8 @@ const editorFor = (biologicalFeatures, request = { records }) => {
     extractedFeatures: ref(biologicalFeatures.map((row) => ({ ...row, svg_id: row.rendered_svg_id ?? row.svg_id }))),
     biologicalFeatures: ref(biologicalFeatures)
   };
-  return createOrthogroupEditor({ state: withDrawings(state), getCommittedRequest: () => request, memberAction: () => null });
+  const getCommittedRequest = typeof request === 'function' ? request : () => request;
+  return createOrthogroupEditor({ state: withDrawings(state), getCommittedRequest, memberAction: () => null });
 };
 
 test('Load gives the saved members their canonical identity from the committed request', () => {
@@ -70,4 +73,52 @@ test('a member of a Session before 40 resolves the feature read again, by its ca
 test('a feature whose record index names no record of the committed request resolves no member', () => {
   const members = editorFor([livA, racM], { records: records.slice(0, 1) }).getEnrichedOrthogroupMembers(group);
   assert.deepEqual(members.map((member) => member.sequenceFeature ?? null), [livA, null]);
+});
+
+// The saved alignment of such a Session names its members by the same rule: a member that saved its stable ID under
+// any of its keys gets the names Load gives it, and its source feature index must still be saved.
+test('a saved alignment reads each member by the rule Load gives the members their names', () => {
+  for (const stableKey of ['stableFeatureSvgId', 'featureSvgId', 'stableFeatureId', 'stable_feature_id']) {
+    const members = [
+      { recordIndex: 0, featureIndex: 3, [stableKey]: 'stable-liva', representative: true },
+      { recordIndex: 1, featureIndex: 7, [stableKey]: 'stable-racm' }
+    ];
+    const plan = materializeLegacySimilarityAlignment({
+      target: 'og_18', records, featureCatalog: null, legacyOrthogroupState: { groups: [{ id: 'og_18', members }] }
+    });
+    const [migrated] = migrateLegacyOrthogroupMembers([{ id: 'og_18', members }], records);
+    assert.deepEqual(plan.records.map(({ anchor }) => [anchor.recordKey, anchor.biologicalFeatureId]),
+      migrated.members.map((member) => [member.recordKey, member.biologicalFeatureId]), stableKey);
+    assert.deepEqual(plan.records.map(({ status }) => status), ['reference', 'aligned'], stableKey);
+  }
+  const withoutIndex = [{ recordIndex: 0, stableFeatureId: 'stable-liva', representative: true }];
+  assert.throws(() => materializeLegacySimilarityAlignment({
+    target: 'og_18', records, featureCatalog: null, legacyOrthogroupState: { groups: [{ id: 'og_18', members: withoutIndex }] }
+  }), /lacks a source feature index/);
+  const outOfRange = [{ recordIndex: 2, featureIndex: 3, stableFeatureId: 'stable-liva', representative: true }];
+  assert.throws(() => materializeLegacySimilarityAlignment({
+    target: 'og_18', records, featureCatalog: null, legacyOrthogroupState: { groups: [{ id: 'og_18', members: outOfRange }] }
+  }), /no stable record mapping/);
+});
+
+// The lookup reads the committed request's record keys only: a committed change that keeps them (a placement, a
+// setting) does not read every row again; one that changes them does.
+test('the row lookup is rebuilt when the record keys change, not on every committed change', () => {
+  let reads = 0;
+  const counted = { ...racM };
+  delete counted.stable_feature_id;
+  Object.defineProperty(counted, 'stable_feature_id', {
+    enumerable: true, get: () => { reads += 1; return 'stable-racm'; }
+  });
+  const committed = ref({ records, layout: { recordGapPx: 30 } });
+  const editor = editorFor([livA, counted], () => committed.value);
+  const strands = () => editor.getEnrichedOrthogroupMembers(group).map((member) => member.sequenceFeature?.strand);
+  assert.deepEqual(strands(), ['-', '-']);
+  const built = reads;
+  committed.value = { records: records.map((record) => ({ ...record })), layout: { recordGapPx: 40 } };
+  assert.deepEqual(strands(), ['-', '-']);
+  assert.equal(reads, built, 'same record keys: the rows are not read again');
+  committed.value = { records: records.slice(0, 1) };
+  assert.deepEqual(strands(), ['-', undefined]);
+  assert.ok(reads > built, 'other record keys: the rows are read again');
 });
