@@ -628,6 +628,56 @@ const labelFeatureAssignments = (svg, labelElements, mode) => assignFeatureIdsTo
 /** @param {{ labelSourceText?: string | null } | null | undefined} row @param {Element} element */
 const labelSourceTextOf = (row, element) => row?.labelSourceText
   ?? element.getAttribute('data-label-source-text') ?? getLabelText(element);
+// A label's feature row: the drawing's row of the feature's identity (R2).
+/** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
+const rowOf = (drawing, feature) => {
+  const key = featureIdentityKeyOf(feature);
+  return key ? drawing.featureOverrides[key] || null : null;
+};
+// The feature a mounted label names by rendered ID: the Result's catalog binds
+// that ID to the feature's source identity (R3); without a catalog, the
+// extracted feature of that SVG ID.
+/**
+ * @param {unknown} featureIdRaw
+ * @param {Map<string, LabelFeature> | null} catalog
+ * @param {readonly (LabelFeature | null | undefined)[]} [extracted]
+ * @returns {LabelFeature | null}
+ */
+const featureOfLabelId = (featureIdRaw, catalog, extracted = []) => {
+  const featureId = String(featureIdRaw || '').trim();
+  if (!featureId) return null;
+  if (catalog) return catalog.get(featureId) || null;
+  const key = normalizeKeyToken(featureId);
+  return extracted.find((feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
+};
+// The labels the renderer bound to features in a committed Result's text.
+const BOUND_LABEL_SELECTOR = `text[${LABEL_FEATURE_ID_ATTRIBUTE}]`;
+// A Label TSV row selects labels in every Result of a batch: after the
+// displayed Result's labels, once per feature, the labels the renderer bound
+// in the committed content of each other Result (B6).
+/**
+ * @param {Pick<WebState, 'featureCatalog' | 'results' | 'selectedResultIndex'>} state
+ * @param {DrawingState} drawing The drawing that owns the Results; its mode names the catalog's records.
+ * @param {LabelImportTarget[]} targets The displayed Result's labels.
+ * @returns {LabelImportTarget[]}
+ */
+const withBatchLabelTargets = (state, drawing, targets) => {
+  const seen = new Set(targets.map(({ feature }) => featureIdentityKeyOf(feature)).filter(Boolean));
+  state.results.value.forEach((result, index) => {
+    if (index === state.selectedResultIndex.value || typeof result.content !== 'string') return;
+    const features = resultRenderedFeatures(state, drawing.mode, index);
+    const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+    root.querySelectorAll(BOUND_LABEL_SELECTOR).forEach((element) => {
+      const featureId = String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
+      const feature = featureOfLabelId(featureId, features);
+      const key = featureIdentityKeyOf(feature);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      targets.push({ featureId, feature, sourceText: labelSourceTextOf(rowOf(drawing, feature), element) });
+    });
+  });
+  return targets;
+};
 
 /**
  * The preview owner's identity of a Result: its committed identity, which a
@@ -723,18 +773,9 @@ export const createFeatureLabelActions = ({
    * @param {Map<string, LabelFeature> | null} [displayed]
    * @returns {LabelFeature | null}
    */
-  const labelFeature = (drawing, featureIdRaw, displayed = displayedFeatures(drawing)) => {
-    const featureId = String(featureIdRaw || '').trim();
-    if (!featureId) return null;
-    if (displayed) return displayed.get(featureId) || null;
-    const key = normalizeKeyToken(featureId);
-    return extractedFeatures.value.find((/** @type {LabelFeature | null | undefined} */ feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
-  };
-  /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
-  const rowOf = (drawing, feature) => {
-    const key = featureIdentityKeyOf(feature);
-    return key ? drawing.featureOverrides[key] || null : null;
-  };
+  const labelFeature = (drawing, featureIdRaw, displayed = displayedFeatures(drawing)) => (
+    featureOfLabelId(featureIdRaw, displayed, extractedFeatures.value)
+  );
   /** @param {DrawingState} drawing @param {unknown} featureId @param {Map<string, LabelFeature> | null} [displayed] */
   const labelRow = (drawing, featureId, displayed) => rowOf(drawing, labelFeature(drawing, featureId, displayed));
 
@@ -823,9 +864,7 @@ export const createFeatureLabelActions = ({
     let changed = false;
     const displayed = displayedFeatures(drawing);
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
-      const sourceText = labelRow(drawing, textEl.getAttribute('data-label-feature-id'), displayed)?.labelSourceText
-        ?? textEl.getAttribute('data-label-source-text');
-      if (sourceText === null) return;
+      const sourceText = labelSourceTextOf(labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed), textEl);
       if (getLabelText(textEl) === sourceText) return;
       setLabelText(textEl, sourceText);
       textEl.setAttribute('data-label-source-text', sourceText);
@@ -1479,7 +1518,7 @@ export const createFeatureLabelActions = ({
       || state.resultGenerationKey.value !== generationKey) return null;
     const root = new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml').documentElement;
     const key = normalizeKeyToken(featureId);
-    return Array.from(root.querySelectorAll(`text[${LABEL_FEATURE_ID_ATTRIBUTE}]`))
+    return Array.from(root.querySelectorAll(BOUND_LABEL_SELECTOR))
       .some((element) => normalizeKeyToken(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE)) === key);
   };
 
@@ -1660,22 +1699,21 @@ export const createFeatureLabelActions = ({
   // it is displayed (B6, R3). The label table owner (`label-table.js`) plans
   // them; a global `label` row is a bulk label edit and records the source text
   // of a tracked label, any other row is its feature's label edit (design Q4).
-  // The labels a Label TSV row selects on the displayed Result: each editable
-  // label, the feature the binder assigns it, and its source text, as the
-  // editor binds and projects them; the label table owner reads them (R13).
+  // The labels a Label TSV row selects in every Result of the batch: on the
+  // displayed Result each editable label, the feature the binder assigns it,
+  // and its source text, as the editor binds and projects them; then the
+  // labels of the other Results. The label table owner reads them (R13).
   /** @param {DrawingState} drawing @param {SVGSVGElement} svg @returns {LabelImportTarget[]} */
   const labelTargetsOf = (drawing, svg) => {
     const elements = collectEditableLabelElements(svg, mode.value);
     const assignments = labelFeatureAssignments(svg, elements, mode.value);
     const displayed = displayedFeatures(drawing);
-    return elements.map((element) => {
+    return withBatchLabelTargets(state, drawing, elements.map((element) => {
       const featureId = assignments.get(element) || '';
-      const feature = featureId ? labelFeature(drawing, featureId, displayed) : null;
-      return { featureId, feature, sourceText: labelSourceText(drawing, element, feature) };
-    });
+      const feature = labelFeature(drawing, featureId, displayed);
+      return { featureId, feature, sourceText: labelSourceTextOf(rowOf(drawing, feature), element) };
+    }));
   };
-  /** @param {DrawingState} drawing @param {Element} element @param {LabelFeature | null} feature */
-  const labelSourceText = (drawing, element, feature) => labelSourceTextOf(rowOf(drawing, feature), element);
 
   /** @param {DrawingState} drawing @param {readonly LabelImportEdit[]} applicable */
   const applyLabelTable = (drawing, applicable) => {
@@ -1708,7 +1746,7 @@ export const createFeatureLabelActions = ({
     hiddenLabelTextMessage,
     moveDrawnLabelVisibility,
     // R13: the label table owner's ports (`label-table.js`).
-    labelTargetsOf, labelSourceText, applyLabelTable, rememberLabelImportNotice,
+    labelTargetsOf, applyLabelTable, rememberLabelImportNotice,
     getEditableLabelByFeatureId,
     handleHiddenLabelTextChoice,
     handleLabelOnChoice,

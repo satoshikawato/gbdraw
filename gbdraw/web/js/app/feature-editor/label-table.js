@@ -1,10 +1,10 @@
 // @ts-check
-// Load and Export Label TSV (the bulk label table): the file read, the labels
-// a row selects in every Result of a batch, the declines of a load whose
-// inputs changed while it waited, the failure and its Retry, and the export.
-// The label owner (`label-actions.js`) writes the label edits a load makes
-// and keeps the notice of the last load; this owner reaches it through the
-// ports the composition root (`feature-editor.js`) passes (R13).
+// Load and Export Label TSV (the bulk label table): the file read, the
+// declines of a load whose inputs changed while it waited, the failure and
+// its Retry, and the export. The label owner (`label-actions.js`) lists the
+// labels a row selects in every Result of a batch, writes the label edits a
+// load makes, and keeps the notice of the last load; this owner reaches it
+// through the ports the composition root (`feature-editor.js`) passes (R13).
 /** @import { NoticeHandle, ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState, WebState } from '../../state.js' */
 /** @import { RulePreparation, RulePreparationOptions } from '../rule-matching.js' */
@@ -15,11 +15,8 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, labelRulePayloads } from '../rule-matching.js';
 import { parseLabelOverrideTsv } from '../../services/label-override-table.js';
 import { labelImportNotice, labelIntentSignature, labelTableExportLines, planLabelImport } from '../../services/label-import-plan.js';
-import { featureIdentityKeyOf } from '../../services/feature-placement.js';
-import { resultRenderedFeatures } from '../../services/feature-catalog.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { createRetryCopyHold, holdFileCopy, readFileText } from '../../services/file-content-cache.js';
-import { LABEL_FEATURE_ID_ATTRIBUTE } from '../../services/drawn-groups.js';
 import { t } from '../../utils/i18n.js';
 
 /**
@@ -41,9 +38,9 @@ import { t } from '../../utils/i18n.js';
 
 /**
  * @typedef {object} LabelTableActionsOptions
- * @property {Pick<WebState, 'activeDrawing' | 'errorLog' | 'featureCatalog' | 'mode' | 'results' | 'selectedResultIndex'
+ * @property {Pick<WebState, 'activeDrawing' | 'errorLog' | 'results' | 'selectedResultIndex'
  *   | 'sessionOperationAvailability' | 'svgContainer'>} state
- *   The members of the app state (state.js) this owner and the helpers it passes `state` to read.
+ *   The members of the app state (state.js) this owner reads.
  * @property {<T>(value: T) => { value: T }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
  * @property {RulePreparation['isCurrent']} isRuleInputCurrent Whether a snapshot of the rule inputs is still the current inputs.
@@ -52,9 +49,7 @@ import { t } from '../../utils/i18n.js';
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
  * @property {(drawing: DrawingState, svg: SVGSVGElement) => LabelImportTarget[]} labelTargetsOf
- *   The label owner's labels of the displayed Result: each editable label, its feature, and its source text.
- * @property {(drawing: DrawingState, element: Element, feature: LabelFeature | null) => string} labelSourceText
- *   The label owner's source text of a label of another Result of the batch.
+ *   The label owner's labels of every Result of the batch: each label, its feature, and its source text.
  * @property {(drawing: DrawingState, applicable: readonly LabelImportEdit[]) => void} applyLabelTable
  *   The label owner's replacement of the drawing's label edits by those a loaded table makes.
  * @property {(drawing: DrawingState, notice: NoticeHandle | void) => void} rememberLabelImportNotice
@@ -86,44 +81,12 @@ const undecidedLabelCount = (labels, rows) => labels.filter(({ feature }) => (
   ))
 )).length;
 
-// A Label TSV row selects labels in every Result of a batch. The label owner
-// binds the displayed Result's labels as the editor does; the committed
-// content of another Result carries the renderer's label bindings (B6).
-/**
- * The readers the labels a row selects come from: the app state and the label owner's ports.
- * @typedef {Pick<LabelTableActionsOptions, 'state' | 'labelTargetsOf' | 'labelSourceText'>} LabelTargetReaders
- */
-/**
- * @param {LabelTargetReaders} readers
- * @param {DrawingState} drawing @param {SVGSVGElement} svg
- * @returns {LabelImportTarget[]}
- */
-const labelImportTargets = ({ state, labelTargetsOf, labelSourceText }, drawing, svg) => {
-  const targets = labelTargetsOf(drawing, svg);
-  const seen = new Set(targets.map(({ feature }) => featureIdentityKeyOf(feature)).filter(Boolean));
-  state.results.value.forEach((/** @type {{ content?: unknown } | null | undefined} */ result, /** @type {number} */ index) => {
-    if (index === state.selectedResultIndex.value || typeof result?.content !== 'string') return;
-    const features = resultRenderedFeatures(state, drawing.mode, index);
-    const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
-    root.querySelectorAll(`text[${LABEL_FEATURE_ID_ATTRIBUTE}]`).forEach((element) => {
-      const featureId = String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
-      const feature = featureId ? features?.get(featureId) || null : null;
-      const key = featureIdentityKeyOf(feature);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      targets.push({ featureId, feature, sourceText: labelSourceText(drawing, element, feature) });
-    });
-  });
-  return targets;
-};
-
 /** @param {LabelTableActionsOptions} options */
 export const createLabelTableActions = ({
   state, ref, computed, isRuleInputCurrent, snapshotRuleInputs, evaluateLabelRules, showNotice,
-  labelTargetsOf, labelSourceText, applyLabelTable, rememberLabelImportNotice
+  labelTargetsOf, applyLabelTable, rememberLabelImportNotice
 }) => {
   const shownSvg = () => state.svgContainer.value?.querySelector('svg') || null;
-  const targetReaders = { state, labelTargetsOf, labelSourceText };
 
   let labelImportRevision = 0;
   const labelImportFailure = ref(/** @type {LabelImportFailure | null} */ (null));
@@ -162,7 +125,7 @@ export const createLabelTableActions = ({
       if (input.files?.[0] !== file || shownSvg() !== sourceSvg) return;
       if (state.sessionOperationAvailability()) return state.sessionOperationAvailability();
       const rows = parseLabelOverrideTsv(text);
-      const labels = sourceSvg ? labelImportTargets(targetReaders, drawing, sourceSvg) : [];
+      const labels = sourceSvg ? labelTargetsOf(drawing, sourceSvg) : [];
       const evaluation = await evaluateLabelRules({ kind: 'label', rules: rows, features: labelRulePayloads(rows, labels) });
       if (state.sessionOperationAvailability()) return state.sessionOperationAvailability();
       if (revision !== labelImportRevision || input.files?.[0] !== file) return;
@@ -183,7 +146,7 @@ export const createLabelTableActions = ({
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !isRuleInputCurrent(before)
         || state.errorLog.value !== previousError) return;
-      // The read, the parse, and the evaluation throw an Error, so the model is set.
+      // Everything in the try throws an Error object, and `normalizeUserFacingError` returns null only for a falsy value.
       const model = /** @type {UserFacingError} */ (normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'resource-staging' }));
       state.errorLog.value = model;
       const retryInput = event.sourceInput || input;
