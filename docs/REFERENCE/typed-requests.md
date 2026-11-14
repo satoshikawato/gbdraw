@@ -129,6 +129,7 @@ Use `render_session()` for a supported saved session and
 | `render_session()` | migrate supported persisted state and replay one drawing's request plus saved analysis artifacts |
 | `render_session_drawings()` | render several drawings together, with distinct output names |
 | `derive_region_drawing()` | derive a new drawing of selected regions from a materialized session |
+| `paste_region_drawing()` | append selected records or regions of one drawing to another drawing of the session |
 
 `build_session_document()` and `save_session_document()` accept optional
 `title` and `created_at` values. If `created_at` is omitted, the writer records
@@ -161,9 +162,17 @@ label tables, and the per-feature edits, placements, annotations, and Depth
 inside the regions:
 
 - `margin` adds bases on each side, clamped to the record ends.
-- The mode is Linear, or the source's mode for one whole record. `mode` can
-  choose Circular for one record; a Circular region is drawn as a closed
-  circle numbered from 1.
+- The mode is the source's mode when every region is a whole record, and
+  Linear when any region is a range. A Circular drawing of several whole
+  records is a Multi-Record Canvas, which keeps the source canvas's layout
+  except where it placed each record. `mode` can choose Circular for whole
+  records or for one range alone, which is drawn as a closed circle numbered
+  from 1; a Circular drawing of a range and other records is refused with
+  `CopyRefused` (reason `CIRCULAR_WHOLE_RECORDS`).
+- `settings="defaults"` draws the records with the mode's defaults instead:
+  none of the drawing's settings, colors, rules, tables, annotations, Depth,
+  per-feature edits, or record orientation and display start come along, and
+  nothing is listed as returned to Auto or not carried.
 - Each record keeps its orientation unless `reverse_complement` is given.
 - A region whose start is after its end is refused with a `ValidationError`
   whose diagnostic code is `REGION_INVALID`: reason `ORIGIN_CROSSING` on a
@@ -184,6 +193,35 @@ Auto), `not_carried` (typed entries, each with a `kind` and a `message`), and
 
 The request reads the materialized files, so build or render it before the
 materialization context closes.
+
+`paste_region_drawing(materialized, regions, target=...)` returns a
+`PastedDrawing`: the drawing that `target` names by ID or name, with the
+records or regions of the source drawing (`drawing=`, as above) appended after
+its own records. Put `drawing` in place of the target when you build the
+session again. The target keeps its settings, colors and rules, tables, and
+comparisons, and neither drawing changes:
+
+- Each pasted record takes a record key of its own in the target
+  (`pasted_record_keys`). A Linear target that places its records by row gives
+  each pasted record a new row; a Circular target takes whole records only and
+  becomes, or stays, a Multi-Record Canvas, with the pasted records on one new
+  row where it places its records by row. A Circular target that draws one
+  range, and a Linear target aligned at a feature or by a Similarity
+  alignment, refuse a paste with `CopyRefused` (reasons
+  `CIRCULAR_WHOLE_RECORDS`, `CIRCULAR_RANGE_TARGET`, `TARGET_ALIGNED`).
+- With `edits="edits"` (the default) each record comes as the source draws it,
+  with its per-feature label and visibility edits inside the regions moved to
+  its new key. The source's annotations, feature placements, and Depth tracks
+  of those records are not carried. With `edits="records"` the records come as
+  a new drawing of their files draws them.
+- A selected span that the target already draws, the same record of the same
+  file (compared by file content and the record's place in the file, not by
+  its name) and the same span, is listed in `already_present` with the
+  target's record key. `duplicates="skip"` (the default) leaves it out;
+  `duplicates="add"` adds it as a record of its own. Another span of the same
+  record is not a duplicate.
+- `not_carried` lists what the paste left behind, and pasted records that the
+  target's comparison tables or pairs have no rows for.
 
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.

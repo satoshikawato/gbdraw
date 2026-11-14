@@ -66,7 +66,14 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import RecordWindow
 from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.session_request_codec import decode_canonical_request
-from gbdraw.web_support.region_drawing import DerivedRegionDrawing, derived_drawing_reply
+from gbdraw.web_support.region_drawing import (
+    DerivedRegionDrawing,
+    ExistingDrawingCopy,
+    NewDrawingCopy,
+    PastedRecords,
+    RefusedCopy,
+    derived_drawing_reply,
+)
 
 
 class LocateWindowInput(TypedDict):
@@ -531,10 +538,16 @@ def describe_locate() -> LocateDescription:
 
     for step in (LocateFilesStep, LocateReferenceStep, LocateSearchStep, LocatePlanStep, LocateDrawingStep):
         special(step)
-    # The replies the page checks, by name.
-    replies = (LocateFilesReply, LocateReferenceReady, LocateWindowRefused, LocateSearchPlanReply, LocatePlanReply, LocateDrawingReady, LocateEditRefused)
+    # The replies the page checks, by name, with those of Copy to another drawing, which shares the derived
+    # drawing (``deriveRegionDrawing``), and the copy's choices it sends.
+    replies = (
+        LocateFilesReply, LocateReferenceReady, LocateWindowRefused, LocateSearchPlanReply, LocatePlanReply,
+        LocateDrawingReady, LocateEditRefused, PastedRecords, RefusedCopy,
+    )
     for reply in replies:
         special(reply)
+    for choice in (NewDrawingCopy, ExistingDrawingCopy):
+        special(choice)
     return {"roots": {reply.__name__: reply.__name__ for reply in replies}, "types": types_}
 
 

@@ -1,4 +1,4 @@
-"""New drawing from a region of a source drawing.
+"""Copy records or regions of a source drawing to a new drawing or into an existing one.
 
 A region drawing draws the same records of the same files as its source, cut to
 regions given in source coordinates (1-based, inclusive). It keeps the source's
@@ -6,12 +6,18 @@ look for those records: settings, colors and rules, label tables and filters,
 per-feature edits and placements, annotations and Depth inside the regions. A
 hand-set size is kept only where its Auto value is the same at the new length
 and mode (``gbdraw.auto_sizes``). Comparison tables are not carried: they are
-in the coordinates of the uncut records.
+in the coordinates of the uncut records. With ``settings="defaults"`` the new
+drawing draws the records with the mode's defaults instead.
+
+A paste (:func:`paste_region_request`) appends the records or regions to an
+existing drawing, which keeps its own settings; the records' per-feature edits
+come along unless the paste takes the records only.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+import hashlib
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from numbers import Real
 from typing import Any, Literal, cast
@@ -27,10 +33,12 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import (
     DEPTH_COMPATIBILITY_FIELDS,
     CircularDiagramOptions,
+    CircularMultiRecordOptions,
     CircularRequestTrackOptions,
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LosatSearchOptions,
     _ModeDiagramOptions,
     config_override_mode,
 )
@@ -39,10 +47,12 @@ from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
+    EXPANDED_RECORD_KEY_SEPARATOR,
     DiagramRequest,
     LinearDiagramRequest,
     RecordDisplayOptions,
     RecordInput,
+    RecordPresentation,
     RenderOutputRequest,
 )
 from gbdraw.analysis.depth_tracks import DepthTrackStyle, depth_track_config
@@ -60,8 +70,10 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.render_profiles import CircularRenderProfile
 from gbdraw.configurators.depth import DepthConfigurator
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RecordWindow, window_drawn_reverse
+from gbdraw.layout.record_placement import parse_record_row_position
 from gbdraw.session import MaterializedSession, SessionDrawingSpec, session_to_request
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import canonical_depth_tracks
@@ -206,6 +218,36 @@ class StartAfterEndRegion(ValidationError):
         self.reason = reason
 
 
+# Settings of a new drawing: the source drawing's settings and edits, or the mode's defaults (PD-OI-090 (1)).
+SettingsChoice = Literal["keep", "defaults"]
+# What comes along into an existing drawing: the records with their per-feature edits, or the records only.
+PasteEdits = Literal["edits", "records"]
+# A selection the existing drawing draws already: left out, or added again as a record of its own.
+DuplicatesChoice = Literal["skip", "add"]
+# Why a copy is refused:
+# CIRCULAR_WHOLE_RECORDS: a Circular drawing takes several whole records, or one record or range alone;
+# CIRCULAR_RANGE_TARGET: the existing Circular drawing draws one range, which takes nothing more;
+# TARGET_ALIGNED: the existing Linear drawing is aligned (Align at feature or a Similarity alignment), whose
+# alignment names every record it draws;
+# SEPARATE_DIAGRAMS: the existing Circular drawing draws each record as a diagram of its own.
+CopyRefusalReason = Literal["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "TARGET_ALIGNED", "SEPARATE_DIAGRAMS"]
+
+
+class CopyRefused(ValidationError):
+    """A copy the drawing cannot take, by ``reason`` (the Web words it)."""
+
+    _MESSAGES: Mapping[CopyRefusalReason, str] = {
+        "CIRCULAR_WHOLE_RECORDS": "A Circular drawing draws several whole records, or one record or range alone.",
+        "CIRCULAR_RANGE_TARGET": "The Circular drawing draws one range; it takes no other record or range.",
+        "TARGET_ALIGNED": "The Linear drawing is aligned; its alignment names every record it draws.",
+        "SEPARATE_DIAGRAMS": "The Circular drawing draws each record as a separate diagram.",
+    }
+
+    def __init__(self, reason: CopyRefusalReason) -> None:
+        super().__init__(self._MESSAGES[reason], diagnostic={"code": "INPUT_INVALID"})
+        self.reason = reason
+
+
 @dataclass(frozen=True)
 class RegionRequest:
     """A derived region request, its mode, the sizes that returned to Auto, and what was not carried."""
@@ -284,6 +326,7 @@ def derive_region_drawing(
     reverse_complement: bool | None = None,
     adapt_sizes: bool = True,
     name: str | None = None,
+    settings: SettingsChoice = "keep",
 ) -> RegionDrawing:
     """Derive a drawing of ``regions`` from a drawing of ``materialized``.
 
@@ -291,13 +334,17 @@ def derive_region_drawing(
     :func:`gbdraw.session.session_to_request`; without it, the Session's only
     drawing. One region per record; the new drawing lists the records in source order.
     ``margin`` bp are added on each side and clamped to the record ends. The
-    mode defaults to Linear, or to the source's mode for one whole record; a
-    Circular drawing takes exactly one record. Each record keeps the source's
+    mode defaults to the source's mode when every region is a whole record, and
+    to Linear when any is a range; a Circular drawing of several whole records
+    is a Multi-Record Canvas, and a Circular drawing of a range draws that one
+    range (else :class:`CopyRefused`). Each record keeps the source's
     orientation unless ``reverse_complement`` is given. With ``adapt_sizes``
-    off, every hand-set size is kept. A region whose start is after its end
-    runs across the origin of a circular record and is drawn as one window
-    (D-34); on a linear record it is refused. Use the result while
-    ``materialized`` is active: its request reads the materialized files.
+    off, every hand-set size is kept. With ``settings="defaults"`` the drawing
+    takes the mode's defaults and none of the source's settings or edits. A
+    region whose start is after its end runs across the origin of a circular
+    record and is drawn as one window (D-34); on a linear record it is refused.
+    Use the result while ``materialized`` is active: its request reads the
+    materialized files.
     """
     # The one read of the source drawing's settings and edits.
     derived = derive_region_request(
@@ -307,6 +354,7 @@ def derive_region_drawing(
         margin=margin,
         reverse_complement=reverse_complement,
         adapt_sizes=adapt_sizes,
+        settings=settings,
     )
     return RegionDrawing(
         drawing=SessionDrawingSpec(request=derived.request, mode=derived.mode, name=name),
@@ -323,29 +371,80 @@ def derive_region_request(
     margin: int = 0,
     reverse_complement: bool | None = None,
     adapt_sizes: bool = True,
+    settings: SettingsChoice = "keep",
+    circular_canvas: bool = True,
 ) -> RegionRequest:
     """Derive the request of a drawing of ``regions`` from the request of its source drawing.
 
     The one derivation behind :func:`derive_region_drawing` and the Web's New
-    drawing from a region; the arguments are as there.
+    drawing from a region; the arguments are as there. Without
+    ``circular_canvas`` a Circular drawing takes one record and the mode's
+    default for several whole records is Linear: the Web's New drawing from a
+    region asks so until its dialog offers the Multi-Record Canvas.
     """
     collection = resolve_request_records(source)
     selected = _resolve_regions(collection, regions, margin=margin)
+    return _derive_selected(
+        source,
+        collection,
+        selected,
+        mode=mode,
+        reverse_complement=reverse_complement,
+        adapt_sizes=adapt_sizes,
+        settings=settings,
+        circular_canvas=circular_canvas,
+    )
+
+
+def _derive_selected(
+    source: DiagramRequest,
+    collection: ResolvedRecordCollection,
+    selected: tuple[SourceRegion, ...],
+    *,
+    mode: DrawingMode | None,
+    reverse_complement: bool | None,
+    adapt_sizes: bool,
+    settings: SettingsChoice,
+    circular_canvas: bool,
+) -> RegionRequest:
+    """The request of a drawing of the resolved regions ``selected`` of ``source``."""
+    if settings not in {"keep", "defaults"}:
+        raise ValidationError(f"Unknown settings choice: {settings!r}.", diagnostic={"code": "INPUT_INVALID"})
     source_mode: DrawingMode = "linear" if isinstance(source, LinearDiagramRequest) else "circular"
-    target_mode: DrawingMode = mode or (source_mode if len(selected) == 1 and selected[0].whole else "linear")
+    whole = all(region.whole for region in selected)
+    target_mode: DrawingMode = mode or (
+        source_mode if whole and (len(selected) == 1 or circular_canvas) else "linear"
+    )
     if target_mode not in {"circular", "linear"}:
         raise ValidationError(f"Unknown drawing mode: {target_mode!r}.", diagnostic={"code": "INPUT_INVALID"})
-    if target_mode == "circular" and (len(selected) != 1 or len(selected[0].spans) != 1):
-        raise ValidationError(
-            "A Circular region drawing draws exactly one record.", diagnostic={"code": "INPUT_INVALID"}
+    one_span = len(selected) == 1 and len(selected[0].spans) == 1
+    if target_mode == "circular" and not (one_span or (circular_canvas and whole)):
+        raise CopyRefused("CIRCULAR_WHOLE_RECORDS")
+    defaults = settings == "defaults"
+    records = tuple(_record_input(source, region, reverse_complement, defaults=defaults) for region in selected)
+    # A Circular drawing of several records is a Multi-Record Canvas: the source canvas's layout without its
+    # placements (each record of the new drawing takes its place in order), else the canvas defaults.
+    layout = (
+        replace(source.layout, multi_record_positions=None)
+        if not defaults and isinstance(source, CircularDiagramRequest) and source.layout is not None
+        else CircularMultiRecordOptions()
+    ) if target_mode == "circular" and len(records) > 1 else None
+    if defaults:
+        # The mode's defaults draw the records: nothing of the source to adapt or to leave behind.
+        request: DiagramRequest = (
+            LinearDiagramRequest(records=records)
+            if target_mode == "linear"
+            else CircularDiagramRequest(records=records, layout=layout, grouping="single" if layout is None else "grid")
         )
+        return RegionRequest(request=request, mode=target_mode, adaptation=SettingAdaptation(kept={}, reset=()), not_carried=())
     source_ids = [str(record.id) for record in collection.records]
     derived = DerivedRecords(
         mode=target_mode,
-        records=tuple(_record_input(source, region, reverse_complement) for region in selected),
+        records=records,
         record_ids=tuple(source_ids[region.item.resolved_index] for region in selected),
         lengths=tuple(length for region in selected for length in region.drawn_lengths),
         regions=selected,
+        layout=layout,
     )
     return derive_from_source(
         source,
@@ -365,7 +464,9 @@ class DerivedRecords:
     ``regions`` the records that come from records of the source drawing, each
     placed by its ``index`` in ``records``. A record that is not in the source
     drawing carries none of its edits. ``layout`` places records that share a
-    Linear row; without it each record takes a row of its own.
+    Linear row (without it each record takes a row of its own), or lays out a
+    Circular Multi-Record Canvas (without it the Circular drawing draws one
+    record).
     """
 
     mode: DrawingMode
@@ -373,7 +474,7 @@ class DerivedRecords:
     record_ids: tuple[str, ...]
     lengths: tuple[int, ...]
     regions: tuple[SourceRegion, ...]
-    layout: LinearMultiRecordOptions | None = None
+    layout: LinearMultiRecordOptions | CircularMultiRecordOptions | None = None
 
 
 # The comparison fields of a derived Linear drawing, from the source's options; it adds what it does not carry.
@@ -501,7 +602,10 @@ def derive_from_source(
         elif _has_any(options, _RING_RESULTS + _RING_PLAN):
             dropped.append(NotCarried("CONSERVATION_RINGS", source_mode))
         request = LinearDiagramRequest(
-            records=records, options=LinearDiagramOptions(**values), output=output, layout=derived.layout
+            records=records,
+            options=LinearDiagramOptions(**values),
+            output=output,
+            layout=derived.layout if isinstance(derived.layout, LinearMultiRecordOptions) else None,
         )
     else:
         if isinstance(options, CircularDiagramOptions):
@@ -515,8 +619,12 @@ def derive_from_source(
                     dropped.append(NotCarried("CONSERVATION_RING_TABLES", source_mode))
         elif _has_any(options, _LINEAR_COMPARISON_INPUTS) or getattr(options, "losat_search", None) is not None:
             dropped.append(NotCarried("LINEAR_COMPARISONS", source_mode))
+        # A Circular drawing of several records is a grid (the request's grouping rule).
         request = CircularDiagramRequest(
-            records=records, options=CircularDiagramOptions(**values), output=output, grouping="single"
+            records=records,
+            options=CircularDiagramOptions(**values),
+            output=output,
+            layout=derived.layout if isinstance(derived.layout, CircularMultiRecordOptions) else None,
         )
     return RegionRequest(request=request, mode=target_mode, adaptation=adaptation, not_carried=tuple(dropped))
 
@@ -619,17 +727,24 @@ def _record_input(
     source: DiagramRequest,
     region: SourceRegion,
     reverse_complement: bool | None,
+    *,
+    defaults: bool = False,
 ) -> RecordInput:
+    """The record input of ``region``: as the source draws the record, or, with ``defaults``, as a new drawing of
+    the record's file draws it (forward, with the record's own caption and topology)."""
     item = region.item
     selector = item.selector
     if selector is None and item.source_record_count > 1:
         index = item.source_record_index
         selector = RecordSelector(raw=f"#{index + 1}", record_id=None, record_index=index)
-    reverse = (
-        window_drawn_reverse(bool(item.region and item.region.reverse_complement), item.presentation.reverse_complement)
-        if reverse_complement is None
-        else reverse_complement
-    )
+    if reverse_complement is not None:
+        reverse = reverse_complement
+    elif defaults:
+        reverse = False
+    else:
+        reverse = window_drawn_reverse(
+            bool(item.region and item.region.reverse_complement), item.presentation.reverse_complement
+        )
     # The windows of one record share its row in source order (D-01; the planner places them).
     windows = () if region.whole else tuple(RecordWindow(start, end, reverse) for start, end in region.spans)
     return RecordInput(
@@ -637,7 +752,7 @@ def _record_input(
         selector=selector,
         windows=windows,
         presentation=replace(
-            item.presentation,
+            RecordPresentation() if defaults else item.presentation,
             reverse_complement=reverse and region.whole,
             grid_row=None,
             grid_column=None,
@@ -646,7 +761,7 @@ def _record_input(
         # A display start cannot be combined with a crop.
         # A window across the origin keeps the record circular, as the source drew it (D-34).
         display=(
-            item.display
+            (RecordDisplayOptions() if defaults else item.display)
             if region.whole
             else RecordDisplayOptions(is_circular=True if any(start > end for start, end in region.spans) else None)
         ),
@@ -905,12 +1020,409 @@ def _has_any(options: object, names: Sequence[str]) -> bool:
     return False
 
 
+
+PasteNotCarriedKind = Literal["ANNOTATIONS", "FEATURE_PLACEMENTS", "DEPTH", "NO_COMPARISON_ROWS"]
+
+
+@dataclass(frozen=True)
+class PasteNotCarried:
+    """One part a paste does not bring, or the pasted records lack, by kind, with its ``count``.
+
+    ANNOTATIONS, FEATURE_PLACEMENTS and DEPTH are the source drawing's
+    annotations, feature placements and Depth tracks of the copied records,
+    which a paste does not carry; NO_COMPARISON_ROWS counts the pasted records
+    the existing drawing's comparisons have no rows or pairs for. The CLI and
+    API text is ``message``; the Web words the kind in its own wording owner.
+    """
+
+    kind: PasteNotCarriedKind
+    count: int
+
+    @property
+    def message(self) -> str:
+        return {
+            "ANNOTATIONS": f"{self.count} annotation(s) of the source drawing.",
+            "FEATURE_PLACEMENTS": f"{self.count} feature placement(s) of the source drawing.",
+            "DEPTH": f"{self.count} Depth track(s) of the source drawing.",
+            "NO_COMPARISON_ROWS": f"The comparisons of the drawing have no rows for {self.count} pasted record(s).",
+        }[self.kind]
+
+
+@dataclass(frozen=True)
+class AlreadyPresent:
+    """A selected span the existing drawing draws already.
+
+    ``record_key`` is the source drawing's record key; ``start`` and ``end``
+    the span in source coordinates (``1`` to the record's length for a whole
+    record, then ``whole``); ``target_record_key`` the record of the existing
+    drawing that draws it.
+    """
+
+    record_key: str
+    start: int
+    end: int
+    whole: bool
+    target_record_key: str
+
+
+@dataclass(frozen=True)
+class PasteRequest:
+    """The existing drawing's request with the pasted records, their keys there, and the lists for the dialog."""
+
+    request: DiagramRequest
+    mode: DrawingMode
+    pasted_record_keys: tuple[str, ...]
+    already_present: tuple[AlreadyPresent, ...]
+    not_carried: tuple[PasteNotCarried, ...]
+
+
+@dataclass(frozen=True)
+class PastedDrawing:
+    """The existing drawing with the pasted records, their keys there, and the lists the CLI and API word."""
+
+    drawing: SessionDrawingSpec
+    pasted_record_keys: tuple[str, ...]
+    already_present: tuple[AlreadyPresent, ...]
+    not_carried: tuple[PasteNotCarried, ...]
+
+    @property
+    def dropped(self) -> tuple[str, ...]:
+        """What was not carried, as the CLI and API word it."""
+        return tuple(item.message for item in self.not_carried)
+
+
+def paste_region_drawing(
+    materialized: MaterializedSession,
+    regions: Sequence[RegionChoice],
+    *,
+    target: str,
+    drawing: str | None = None,
+    margin: int = 0,
+    reverse_complement: bool | None = None,
+    edits: PasteEdits = "edits",
+    duplicates: DuplicatesChoice = "skip",
+) -> PastedDrawing:
+    """Paste ``regions`` of a drawing of ``materialized`` into its drawing ``target`` (by ID or name).
+
+    ``drawing`` selects the source drawing as in :func:`derive_region_drawing`.
+    The result is the target drawing with the records appended after its own
+    (:func:`paste_region_request`), under the target's ID and name; build the
+    Session again with it in the target's place. Use the result while
+    ``materialized`` is active: its request reads the materialized files.
+    """
+    selected = materialized.document.drawing(target)
+    pasted = paste_region_request(
+        session_to_request(materialized, drawing=drawing),
+        regions,
+        session_to_request(materialized, drawing=target),
+        margin=margin,
+        reverse_complement=reverse_complement,
+        edits=edits,
+        duplicates=duplicates,
+    )
+    return PastedDrawing(
+        drawing=SessionDrawingSpec(request=pasted.request, mode=pasted.mode, id=selected.id, name=selected.name),
+        pasted_record_keys=pasted.pasted_record_keys,
+        already_present=pasted.already_present,
+        not_carried=pasted.not_carried,
+    )
+
+
+def paste_region_request(
+    source: DiagramRequest,
+    regions: Sequence[RegionChoice],
+    target: DiagramRequest,
+    *,
+    margin: int = 0,
+    reverse_complement: bool | None = None,
+    edits: PasteEdits = "edits",
+    duplicates: DuplicatesChoice = "skip",
+) -> PasteRequest:
+    """The request of the existing drawing ``target`` with ``regions`` of the drawing ``source`` appended.
+
+    The target keeps its settings, palette, rules, tables and comparisons; the
+    pasted records follow its own records, each on a row of its own (Linear) or
+    on one new row of the canvas (Circular), and take keys of their own there.
+    With ``edits="edits"`` each record comes as the source draws it, with the
+    per-feature edits (color, label, hidden) inside its regions rebound to its
+    new key; the source's annotations, feature placements and Depth stay, and
+    are listed. With ``edits="records"`` the records come as a new drawing of
+    their files draws them. A selected span the target draws already (the same
+    record of the same file, by record identity, and the same span) is listed;
+    ``duplicates="skip"`` leaves it out, ``"add"`` adds it as a record of its
+    own. A Circular target takes whole records only (:class:`CopyRefused`).
+    Neither request changes.
+    """
+    if edits not in {"edits", "records"}:
+        raise ValidationError(f"Unknown edits choice: {edits!r}.", diagnostic={"code": "INPUT_INVALID"})
+    if duplicates not in {"skip", "add"}:
+        raise ValidationError(f"Unknown duplicates choice: {duplicates!r}.", diagnostic={"code": "INPUT_INVALID"})
+    if isinstance(target, CircularBatchRequest):
+        raise CopyRefused("SEPARATE_DIAGRAMS")
+    target_mode: DrawingMode = "linear" if isinstance(target, LinearDiagramRequest) else "circular"
+    collection = resolve_request_records(source)
+    selected = _resolve_regions(collection, regions, margin=margin)
+    if isinstance(target, CircularDiagramRequest):
+        if len(target.records) == 1 and target.records[0].windows:
+            raise CopyRefused("CIRCULAR_RANGE_TARGET")
+        if not all(region.whole for region in selected):
+            raise CopyRefused("CIRCULAR_WHOLE_RECORDS")
+    elif target.similarity_alignment is not None or (target.layout is not None and target.layout.record_translations):
+        raise CopyRefused("TARGET_ALIGNED")
+    target_collection = resolve_request_records(target)
+    present = _already_present(collection, selected, target_collection)
+    kept = selected if duplicates == "add" else _without_spans(
+        selected, {(item.record_key, (item.start, item.end)) for item in present}
+    )
+    if not kept:
+        return PasteRequest(target, target_mode, (), present, ())
+    carried = _derive_selected(
+        source,
+        collection,
+        kept,
+        mode=target_mode,
+        reverse_complement=reverse_complement,
+        adapt_sizes=False,
+        settings="keep" if edits == "edits" else "defaults",
+        circular_canvas=True,
+    ).request
+    keys = _fresh_record_keys(
+        [record.record_key or "" for record in carried.records],
+        inputs={record.record_key for record in target.records if record.record_key is not None},
+        units={item.record_identity_key for item in target_collection.provenance},
+    )
+    added = tuple(
+        replace(record, record_key=key) for record, key in zip(carried.records, keys, strict=True)
+    )
+    rename = dict(zip((record.record_key for record in carried.records), keys, strict=True))
+    options = carried.options
+    counts: tuple[tuple[PasteNotCarriedKind, int], ...] = (
+        ("ANNOTATIONS", sum(len(item.annotations) for item in options.annotations.sets) if options.annotations else 0),
+        ("FEATURE_PLACEMENTS", len(options.feature_placements)),
+        ("DEPTH", len(options.depth_tracks or ())),
+        ("NO_COMPARISON_ROWS", len(added) if _compares_by_rows(target) else 0),
+    )
+    rows = tuple(replace(row, record_key=rename[row.record_key]) for row in options.feature_overrides)
+    records, layout = _placed(target, added, kept, unit_count=len(target_collection.records))
+    units = sum(len(region.spans) for region in kept)
+    request: DiagramRequest
+    if isinstance(target, LinearDiagramRequest):
+        assert isinstance(layout, LinearMultiRecordOptions) or layout is None
+        linear_options = _pasted_options(target.options, rows, len(target_collection.records), units, len(added))
+        assert isinstance(linear_options, LinearDiagramOptions)
+        request = replace(target, records=records, layout=layout, options=linear_options)
+    else:
+        circular_options = _pasted_options(target.options, rows, len(target_collection.records), units, len(added))
+        assert isinstance(layout, CircularMultiRecordOptions) and isinstance(circular_options, CircularDiagramOptions)
+        request = replace(target, records=records, layout=layout, grouping="grid", options=circular_options)
+    not_carried = tuple(PasteNotCarried(kind, count) for kind, count in counts if count)
+    return PasteRequest(request, target_mode, keys, present, not_carried)
+
+
+def _compares_by_rows(target: DiagramRequest) -> bool:
+    """Whether the drawing's comparisons are results or pairs of its own records, which a pasted record has none of;
+    a search with no pairs compares adjacent rows, the pasted ones too."""
+    options = target.options
+    search = getattr(options, "losat_search", None)
+    return _has_any(options, _LINEAR_COMPARISON_INPUTS + _RING_RESULTS) or (
+        isinstance(target, LinearDiagramRequest) and search is not None and search.pairs is not None
+    )
+
+
+def _record_identities(collection: ResolvedRecordCollection, digests: dict[str, str]) -> list[Hashable | None]:
+    """The record each drawn unit of ``collection`` draws, comparable across the drawings of one Session: its file
+    (by content: each drawing reads its own copy) and its place there; ``None`` for a record of no file."""
+    def digest(path: str) -> str:
+        if path not in digests:
+            hasher = hashlib.sha256()
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1 << 20), b""):
+                    hasher.update(chunk)
+            digests[path] = hasher.hexdigest()
+        return digests[path]
+
+    return [
+        (item.source_kind, tuple(digest(path) for path in item.source_paths), item.source_record_index)
+        if item.source_paths else None
+        for item in collection.provenance
+    ]
+
+
+def _already_present(
+    collection: ResolvedRecordCollection,
+    selected: Sequence[SourceRegion],
+    target: ResolvedRecordCollection,
+) -> tuple[AlreadyPresent, ...]:
+    """The selected spans whose record and span (whole, or the same start and end) the target draws already."""
+    digests: dict[str, str] = {}
+    drawn: dict[tuple[Hashable, tuple[int, int]], str] = {}
+    for item, identity, record in zip(
+        target.provenance, _record_identities(target, digests), target.records, strict=True
+    ):
+        if identity is None:
+            continue
+        length = int(item.source_length or len(record))
+        span = (
+            (item.window.span.start, item.window.span.end) if item.window is not None
+            else (item.region.start, item.region.end) if item.region is not None
+            else (1, length)
+        )
+        drawn.setdefault((identity, span), item.record_identity_key)
+    identities = _record_identities(collection, digests)
+    present: list[AlreadyPresent] = []
+    for region in selected:
+        identity = identities[region.item.resolved_index]
+        for span in region.spans:
+            target_key = None if identity is None else drawn.get((identity, span))
+            if target_key is not None:
+                key = region.item.record_identity_key
+                present.append(AlreadyPresent(key, span[0], span[1], span == (1, region.length), target_key))
+    return tuple(present)
+
+
+def _without_spans(
+    selected: Sequence[SourceRegion], spans: set[tuple[str, tuple[int, int]]]
+) -> tuple[SourceRegion, ...]:
+    """``selected`` without the given spans of their records, renumbered; a record left with none is left out."""
+    kept: list[SourceRegion] = []
+    first_unit = 0
+    for region in selected:
+        left = tuple(span for span in region.spans if (region.item.record_identity_key, span) not in spans)
+        if left:
+            kept.append(replace(
+                region, index=len(kept), spans=left, whole=left == ((1, region.length),), first_unit=first_unit
+            ))
+            first_unit += len(left)
+    return tuple(kept)
+
+
+def _fresh_record_keys(keys: Sequence[str], *, inputs: set[str], units: set[str]) -> tuple[str, ...]:
+    """A key for each pasted record that names no record of the drawing: ``<key>``, else ``<key>-2``, ``<key>-3``, ...
+
+    A key is taken by a record the drawing draws (``units``) and by any key the
+    Web reads as one of its records: a member ``<input key>:<n>`` of a record
+    input that draws a whole file, or an input key ``<key>:<n>`` of which the
+    pasted key would be the File card.
+    """
+    def taken(key: str) -> bool:
+        return key in units or key in inputs or any(
+            _expands(key, other) or _expands(other, key) for other in inputs
+        )
+
+    fresh: list[str] = []
+    for key in keys:
+        candidate, number = key, 1
+        while taken(candidate) or candidate in fresh:
+            number += 1
+            candidate = f"{key}-{number}"
+        fresh.append(candidate)
+    return tuple(fresh)
+
+
+def _expands(key: str, card: str) -> bool:
+    """Whether ``key`` is the key of a member of the File card ``card`` (``expanded_record_key``)."""
+    prefix = f"{card}{EXPANDED_RECORD_KEY_SEPARATOR}"
+    return key.startswith(prefix) and key[len(prefix):].isdigit() and not key[len(prefix):].startswith("0")
+
+
+def _pasted_options(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    rows: Sequence[FeatureOverride],
+    record_count: int,
+    added_units: int,
+    added_inputs: int,
+) -> CircularDiagramOptions | LinearDiagramOptions:
+    """The existing drawing's options with the pasted records' feature edits ``rows`` after its own; a per-record
+    Depth track has none for the ``added_units`` drawn records, and a genetic code per record input is the runtime
+    default for the ``added_inputs`` records."""
+    search: LosatSearchOptions | None = options.losat_search
+    if search is not None and len(search.record_gencodes) > 1:
+        search = replace(search, record_gencodes=(*search.record_gencodes, *(None,) * added_inputs))
+    pasted = replace(options, feature_overrides=(*options.feature_overrides, *rows), losat_search=search)
+    depth: list[DepthTrackInput] = []
+    for track in canonical_depth_tracks(options, record_count=record_count) or ():
+        source = track.source
+        depth.append(replace(track, source=(*source, *(None,) * added_units)) if isinstance(source, tuple) else track)
+    if not any(isinstance(track.source, tuple) for track in depth):
+        return pasted
+    # The depth tracks in their canonical form, which replaces the compatibility inputs.
+    pasted = replace(
+        pasted,
+        depth_tracks=tuple(depth),
+        depth_table=None,
+        depth_file=None,
+        depth_tables=None,
+        depth_files=None,
+        depth_track_tables=None,
+        depth_track_files=None,
+        depth_track_labels=None,
+        depth_track_colors=None,
+        depth_track_large_tick_intervals=None,
+        depth_track_small_tick_intervals=None,
+        depth_track_tick_font_sizes=None,
+    )
+    return replace(pasted, depth_track_heights=None) if isinstance(pasted, LinearDiagramOptions) else pasted
+
+
+def _placed(
+    target: CircularDiagramRequest | LinearDiagramRequest,
+    added: Sequence[RecordInput],
+    regions: Sequence[SourceRegion],
+    *,
+    unit_count: int,
+) -> tuple[tuple[RecordInput, ...], LinearMultiRecordOptions | CircularMultiRecordOptions | None]:
+    """The target's records with ``added`` after them, and its layout: where the target places its records by row,
+    a Linear record takes a new row of its own and the Circular records one new row together; otherwise they follow
+    in order. A Circular target becomes, or stays, a Multi-Record Canvas."""
+    linear = isinstance(target, LinearDiagramRequest)
+    layout = target.layout if linear or target.layout is not None else CircularMultiRecordOptions()
+    rows = [record.presentation.grid_row for record in target.records]
+    positions = layout.multi_record_positions if layout is not None else None
+    new_rows = [index + 1 if linear else 1 for index in range(len(added))]
+    if any(row is not None for row in rows):
+        top = max(row for row in rows if row is not None)
+        columns = any(
+            record.presentation.grid_column is not None or any(window.column is not None for window in record.windows)
+            for record in target.records
+        )
+        placed = []
+        for index, (record, row) in enumerate(zip(added, new_rows, strict=True)):
+            column = None if not columns else 1 if linear else index + 1
+            if columns and len(record.windows) > 1:
+                record = replace(
+                    record, windows=tuple(replace(window, column=number) for number, window in enumerate(record.windows, 1))
+                )
+                column = None
+            placed.append(replace(record, presentation=replace(record.presentation, grid_row=top + row, grid_column=column)))
+        return (*target.records, *placed), layout
+    if positions:
+        top = max(parse_record_row_position(str(token))[1] for token in positions)
+        tokens = list(positions)
+        unit = unit_count
+        for region, row in zip(regions, new_rows, strict=True):
+            for _span in region.spans:
+                unit += 1
+                tokens.append(f"#{unit}@{top + row}")
+        assert layout is not None
+        layout = replace(layout, multi_record_positions=tuple(tokens))
+    return (*target.records, *added), layout
+
 __all__ = [
+    "AlreadyPresent",
+    "CopyRefusalReason",
+    "CopyRefused",
     "DerivedRecords",
+    "DuplicatesChoice",
     "FeatureRegionSelection",
     "LinearComparisonRule",
     "NotCarried",
     "NotCarriedKind",
+    "PasteEdits",
+    "PasteNotCarried",
+    "PasteNotCarriedKind",
+    "PasteRequest",
+    "PastedDrawing",
+    "SettingsChoice",
     "StartAfterEndReason",
     "StartAfterEndRegion",
     "RegionChoice",
@@ -921,4 +1433,6 @@ __all__ = [
     "derive_from_source",
     "derive_region_drawing",
     "derive_region_request",
+    "paste_region_drawing",
+    "paste_region_request",
 ]

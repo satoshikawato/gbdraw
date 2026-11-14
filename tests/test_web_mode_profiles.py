@@ -97,13 +97,15 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
 def test_mode_profiles_carry_the_region_drawing_vocabularies() -> None:
     from typing import get_args
 
-    from gbdraw.api.region_drawing import NotCarriedKind, StartAfterEndReason
+    from gbdraw.api.region_drawing import CopyRefusalReason, NotCarriedKind, PasteNotCarriedKind, StartAfterEndReason
     from gbdraw.web_support.mode_profile_data import mode_profiles_payload
 
     region = mode_profiles_payload()["regionDrawing"]  # type: ignore[index]
     assert region == {
         "notCarriedKinds": list(get_args(NotCarriedKind)),
         "refusalReasons": list(get_args(StartAfterEndReason)),
+        "pasteNotCarriedKinds": list(get_args(PasteNotCarriedKind)),
+        "copyRefusalReasons": list(get_args(CopyRefusalReason)),
     }
 
 

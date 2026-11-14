@@ -488,6 +488,12 @@ export const MODE_PROFILE_DATA = deepFreeze({
     "objects.gc_content.mode": "percent"
   },
   "regionDrawing": {
+    "copyRefusalReasons": [
+      "CIRCULAR_WHOLE_RECORDS",
+      "CIRCULAR_RANGE_TARGET",
+      "TARGET_ALIGNED",
+      "SEPARATE_DIAGRAMS"
+    ],
     "notCarriedKinds": [
       "OTHER_MODE_SETTINGS",
       "FEATURE_PLACEMENTS",
@@ -502,6 +508,12 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "ANNOTATION_CROSSES_ORIGIN",
       "ANNOTATION_DRAWN_COORDINATES",
       "ANNOTATIONS_OUTSIDE"
+    ],
+    "pasteNotCarriedKinds": [
+      "ANNOTATIONS",
+      "FEATURE_PLACEMENTS",
+      "DEPTH",
+      "NO_COMPARISON_ROWS"
     ],
     "refusalReasons": [
       "START_AFTER_END"
