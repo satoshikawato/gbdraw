@@ -45,4 +45,6 @@ test('the wait for the record panel scroll anchor settles only after the pane is
   paint();
   await wait;
   assert.equal(scrollingElement.scrollTop, 40);
+  // The wait settles to nothing, so it holds no value from earlier restores.
+  assert.equal(await waitForCircularRecordScrollAnchor(), undefined);
 });
