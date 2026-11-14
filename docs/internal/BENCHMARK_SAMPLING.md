@@ -121,6 +121,10 @@ The `Gallery publication` workflow measures the fixed base commit (`baseSha`)
 and the head in the same job, three trials each, base first. It fails when the
 head's median wall time exceeds 1.25 times the base median, or the head's
 largest peak RSS exceeds 1.25 times the base's largest.
+Each revision projects its own file of the Vibrio Gallery Session
+(`vibrio-harveyi-group-collinear.gbdraw*`): a base before #1760 stores it as
+`.gbdraw-session.json.gz`, later commits as a `.gbdraw` file. The report lists
+the command of each trial.
 
 Measured in CI over 73 runs (2026-10-31 to 2026-11-05): trials within one job
 had noise 0.5% (σ 0.8%), but base medians across runners fell into three groups
