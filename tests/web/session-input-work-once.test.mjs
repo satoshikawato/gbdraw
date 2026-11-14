@@ -48,7 +48,7 @@ const savedSession = async (...args) => {
   return { ...built, resources: await encodeSessionResources(built.resources) };
 };
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
-const { holdReadBytes, inputContentBlob, readFileText, releaseFileContentCache, residentBytesOf, useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { contentTokenOfBytes, holdReadBytes, inputContentBlob, readFileText, releaseFileContentCache, residentBytesOf, useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
 const { discoverSequenceRecords, readOncePerFile, readParsedSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
@@ -195,6 +195,19 @@ const loadWithCountedCopies = async () => {
   return { view, copy };
 };
 
+/** Generate's staging of the active Linear drawing's GenBank input, as the diagram Worker receives it. */
+const stageLinearGenBank = async () => {
+  const linear = modeDrawing(state, 'linear');
+  const described = (await serializeActiveRenderFiles({ inputFiles: state.inputFiles, files: linear.files,
+    linearSeqs: linear.linearSeqs, circularSources: [] }, linear)).linearSeqs[0].gb;
+  return createDiagramResourceTransport().prepare({ request: {
+    schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear',
+    records: [{ recordKey: 'r1', source: { kind: 'genbank', resourceId: 'src' }, presentation: { label: 'x' } }],
+    diagramOptions: { trackSlots: [], annotations: { sets: [] } }, layout: {}, comparisons: [],
+    output: { prefix: 'x', formats: ['svg'], overwrite: false }
+  }, resources: { src: described } });
+};
+
 test('Generate after a Load stages each input as its copy file, reading and hashing nothing; History counts none (OV-2753, OV-2754)', async () => {
   try {
     const { view, copy } = await loadWithCountedCopies();
@@ -206,15 +219,7 @@ test('Generate after a Load stages each input as its copy file, reading and hash
 
     const readsBeforeGenerate = copy.reads;
     metrics.length = 0;
-    const linear = modeDrawing(state, 'linear');
-    const described = (await serializeActiveRenderFiles({ inputFiles: state.inputFiles, files: linear.files,
-      linearSeqs: linear.linearSeqs, circularSources: [] }, linear)).linearSeqs[0].gb;
-    const prepared = await createDiagramResourceTransport().prepare({ request: {
-      schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear',
-      records: [{ recordKey: 'r1', source: { kind: 'genbank', resourceId: 'src' }, presentation: { label: 'x' } }],
-      diagramOptions: { trackSlots: [], annotations: { sets: [] } }, layout: {}, comparisons: [],
-      output: { prefix: 'x', formats: ['svg'], overwrite: false }
-    }, resources: { src: described } });
+    const prepared = await stageLinearGenBank();
     assert.equal(prepared.stagedResources[0].blob, copy.blob, 'the staged content is the copy file itself');
     assert.equal(prepared.resourceManifest[0].cacheToken, copy.token, 'under the token the Load hashed');
     assert.deepEqual({ copyReads: copy.reads - readsBeforeGenerate, byteReads: count('resourceByteReadCount') },
@@ -242,4 +247,25 @@ test('One reading of a loaded Session input reads its copy once and keeps nothin
   } finally {
     useInputCopyStore(null);
   }
+});
+
+// A Session loaded where the browser lets no copy be written (no private file system): the input rests in the
+// Session file, whose entry may be deflated, so Generate stages a Blob streamed from the entry under the token the
+// Load hashed during its checked read of the entry; the page holds no whole read, and History counts none.
+test('Generate after a Load with no input copies streams each input from the Session file, reading and hashing nothing whole', async () => {
+  useInputCopyStore(null);
+  const sessionFile = await gallerySessionFile('lambda_basic_linear');
+  const input = { target: { files: [new File([sessionFile], 'session.gbdraw')], value: 'selected' } };
+  const loaded = await importSession(input, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const view = state.inputFiles.fileOf(modeDrawing(state, 'linear').linearSeqs[0].gb);
+  assert.equal(residentBytesOf(view), 0, 'History keeps no bytes alive for an input that rests in the Session file');
+  const text = await readFileText(view);
+
+  metrics.length = 0;
+  const prepared = await stageLinearGenBank();
+  assert.equal(count('resourceByteReadCount'), 0, 'Generate reads no input bytes whole in the page');
+  const staged = new Uint8Array(await prepared.stagedResources[0].blob.arrayBuffer());
+  assert.equal(new TextDecoder().decode(staged), text, 'the staged content is the stored input');
+  assert.equal(prepared.resourceManifest[0].cacheToken, await contentTokenOfBytes(staged), 'under the token of its bytes');
 });
