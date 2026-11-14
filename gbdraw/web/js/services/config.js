@@ -111,7 +111,8 @@ import {
   readStoredRenderRequest,
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
-  linearCardWindowPlanRecords
+  linearCardWindowPlanRecords,
+  requestRunsProteinSearch
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -7540,15 +7541,7 @@ const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) =
 const withSavedProteinResults = async (document) => {
   const unchanged = { document, repairs: [] };
   if (!isModeScopedBand(/** @type {SessionChecked} */ (/** @type {unknown} */ (document)))) return unchanged;
-  /** @param {unknown} stored */
-  const searchesProteins = (stored) => {
-    const request = /** @type {UnvalidatedFields<'mode' | 'comparisons'>} */ (stored);
-    return request?.mode === 'linear' && Array.isArray(request.comparisons) && request.comparisons.some((item) => {
-      const comparison = /** @type {UnvalidatedFields<'kind' | 'mode'>} */ (item);
-      return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== 'none';
-    });
-  };
-  const searches = storedResultSets(document).filter(({ set }) => searchesProteins(set.renderRequest));
+  const searches = storedResultSets(document).filter(({ set }) => requestRunsProteinSearch(set.renderRequest));
   // A Session 46-50 keeps its LOSAT caches at the top level, which every drawing reads.
   const { losatCache } = /** @type {{ losatCache?: unknown }} */ (document);
   const rows = /** @type {UnvalidatedFields<'entries'>} */ (losatCache)?.entries;

@@ -718,7 +718,10 @@ CLI Pairwise Session written before 0.15.0) runs through **Inherit saved
 comparison**: Generate runs LOSAT in the browser, with the saved LOSATP
 settings and score thresholds, for exactly the pairs of drawn records or
 windows it names, or, when it names none, for the records of adjacent rows, as
-the CLI searches them.
+the CLI searches them. Before that Generate, an edit that redraws the diagram (a
+label edit, Reset record positions, Align at feature, or a record rotation) is
+not drawn: a notice says that the Session has no saved comparison results and
+asks for one Generate. No edit starts a LOSAT run.
 **Generate Diagram** before choosing **Inherit saved comparison**, **Replace
 with current controls**, or **Clear comparison** stops with
 `COMPARISON_CHOICE_REQUIRED` ("Choose how to handle the saved comparison in the
@@ -1033,7 +1036,8 @@ search itself, with the raw rows it found in `losatCache`. Web Load gives such
 a request the results of those rows, as a Generate commits them, so a redraw
 before the first Generate (a label edit, Reset record positions, Align) needs
 no LOSAT run. When the saved rows do not answer every search,
-the request keeps the search, and Generate runs it in the browser. Web Load
+the request keeps the search, and Generate runs it in the browser; until then,
+a redraw stops with the same notice. Web Load
 does the same for a Session 46 or 47 that `gbdraw linear --losat losatp
 --session_output` wrote between 2026-10-11 and 2026-10-23, before the CLI
 stored the results itself. If such a file's saved rows cannot be read, it

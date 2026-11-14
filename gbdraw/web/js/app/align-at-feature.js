@@ -79,6 +79,9 @@ import { computed, ref } from '../utils/reactivity.js';
  * @typedef {object} FeatureAnchorPorts
  * @property {() => CommittedCanonicalSession} materializedSession The committed Session with
  *   the active alignment plan materialized into its record translations, and no plan.
+ * @property {(committed: CommittedCanonicalSession) => CommittedCanonicalSession} requireRedrawable The Session as
+ *   given, or the refusal of one the browser cannot redraw (`requireRedrawableCommittedSession`): the helper draws the
+ *   committed request as a redraw does (OV-3541).
  * @property {() => boolean} hasAlignmentPlan
  * @property {(operation: string, payload: FeatureAnchorHelperPayload) => Promise<{ result?: unknown }>} runHelperOperation
  * @property {string} resolveOperation
@@ -157,7 +160,7 @@ const previewLine = (record, index) => {
 
 /** @param {FeatureAnchorPorts} ports */
 export const createFeatureAnchorAction = ({
-  materializedSession, hasAlignmentPlan, runHelperOperation, resolveOperation, runPlacement, notePlanReplaced, projectPlacement,
+  materializedSession, requireRedrawable, hasAlignmentPlan, runHelperOperation, resolveOperation, runPlacement, notePlanReplaced, projectPlacement,
   committedRequest, sessionReplacements
 }) => {
   /** @type {Ref<string>} */
@@ -214,7 +217,7 @@ export const createFeatureAnchorAction = ({
     noticeState.value = { text: '', written: [], starts: [], session: -1 };
     status.value = 'resolving';
     try {
-      const canonical = materializedSession();
+      const canonical = requireRedrawable(materializedSession());
       const reply = await runHelperOperation(resolveOperation, {
         canonicalRequest: canonical.renderRequest, selector: selector.value,
         // The Worker stages the committed resource descriptors as Generate does.

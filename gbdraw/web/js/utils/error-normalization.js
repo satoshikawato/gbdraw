@@ -292,6 +292,10 @@ const DEFINITIONS = Object.freeze({
   INPUT_UNREADABLE: ['An input could not be read. Replace or reselect it.', ['select-input', 'retry']],
   SESSION_SAVE_REQUIRES_GENERATE: ['Save Session needs current feature metadata for the loaded Result. Generate once, then Save Session.', ['generate']],
   LIVE_EDIT_REQUIRES_GENERATE: ['Generate the diagram to update its label placement.', ['generate']],
+  // A committed request whose LOSATP search no saved rows answered (`requestRunsProteinSearch` in
+  // services/session-request.js): the browser's Python has no LOSAT, so only Generate, which runs the search in the
+  // browser, draws it; a redraw is refused (OV-3541).
+  COMPARISON_REQUIRES_GENERATE: ['This Session has no saved comparison results, so the diagram cannot be redrawn before Generate runs its comparison search. Generate once; after that, edits redraw the diagram.', ['generate']],
   NO_RECORDS: ['No records were found. Choose input containing records.', ['select-input', 'retry']],
   RECORD_SELECTION: ['The record selection is invalid.', ['select-record', 'retry']],
   REGION_INVALID: ['The region is invalid.', ['edit-region', 'retry']],

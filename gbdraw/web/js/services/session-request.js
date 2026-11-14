@@ -3337,6 +3337,40 @@ const drawsNoComparison = (comparisons) => comparisons.length > 0
   && comparisons.every((comparison) => comparison?.kind === 'generatedProteinComparison'
     && comparison.mode === 'none' && !comparison.pairs?.length);
 
+/**
+ * Whether a Linear request asks Python to run a LOSATP search: its protein
+ * pipeline (`generatedProteinComparison`) has a mode other than `none`, as
+ * Python's `losatp_analysis_mode` reads it (`saved_protein_result_request`).
+ * A Generate runs the search in the browser and commits its results with the
+ * pipeline's mode `none`, and Load answers a search with the rows a Session
+ * saved (OV-3545), so only a search no saved rows answered stays. The
+ * browser's Python has no LOSAT: such a request is drawn only by Generate.
+ * @param {unknown} request A request as a file stores it or as it is committed.
+ */
+export const requestRunsProteinSearch = (request) => {
+  const stored = /** @type {UnvalidatedFields<'mode' | 'comparisons'>} */ (request);
+  return stored?.mode === 'linear' && Array.isArray(stored.comparisons) && stored.comparisons.some((item) => {
+    const comparison = /** @type {UnvalidatedFields<'kind' | 'mode'>} */ (item);
+    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== 'none';
+  });
+};
+
+/**
+ * The committed Session a redraw draws in the browser, or the refusal
+ * COMPARISON_REQUIRES_GENERATE when its request runs a LOSATP search
+ * (`requestRunsProteinSearch`): only Generate runs that search, so no redraw
+ * starts one (OV-3541). Every redraw renders `projectCommittedEditorIntent`,
+ * which reads it; Align at feature reads it too, because its Python helper
+ * draws the committed request as a render does.
+ * @template {{ renderRequest: unknown }} T
+ * @param {T} committed
+ * @returns {T}
+ */
+export const requireRedrawableCommittedSession = (committed) => {
+  if (requestRunsProteinSearch(committed.renderRequest)) throw diagnosticError('COMPARISON_REQUIRES_GENERATE');
+  return committed;
+};
+
 /** @type {Readonly<Record<string, boolean>>} */
 const ALL_GENERATED_TABLES = Object.freeze({
   colors: true, visibility: true, whitelist: true, priority: true, labelOverrides: true
@@ -8715,7 +8749,9 @@ const referencedResourceIds = (value, ids = new Set()) => {
  * visibility, and label overrides, plus the writes of the live setting values
  * an action changed (`projectLiveSettingWrites`; none by default). An
  * automatic rerender renders this request, so no other draft setting reaches
- * the Result before Generate (R1(c), N-16).
+ * the Result before Generate (R1(c), N-16). Every redraw of the committed
+ * Session renders this request, so it refuses a request that runs a LOSATP
+ * search (`requireRedrawableCommittedSession`, OV-3541).
  * @param {{ committed: CommittedCanonicalSession & { config?: Record<string, unknown> | null }, state: Record<string, any>, drawing: RequestDrawing, liveSettingWrites?: readonly LiveSettingWrite[] }} input
  */
 export const projectCommittedEditorIntent = ({
@@ -8724,8 +8760,7 @@ export const projectCommittedEditorIntent = ({
   drawing,
   liveSettingWrites = []
 }) => {
-  const request = committed?.renderRequest;
-  requireCurrentCommittedRequest(committed);
+  const request = requireCurrentCommittedRequest(requireRedrawableCommittedSession(committed));
   const candidate = {
     ...committed,
     renderRequest: cloneCanonicalJsonValue(request),

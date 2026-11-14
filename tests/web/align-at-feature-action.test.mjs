@@ -7,6 +7,7 @@ import test from 'node:test';
 
 const { createFeatureAnchorAction, validateFeatureAnchorReply } = await import('../../gbdraw/web/js/app/align-at-feature.js');
 const { ref } = await import('../../gbdraw/web/js/utils/reactivity.js');
+const { diagnosticError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 
 const KEYS = ['record-1', 'record-2'];
 const RECORDS = KEYS.map((recordKey) => ({ recordKey, cardinality: 'exactly_one' }));
@@ -43,6 +44,10 @@ const fixture = ({ plan = false, helper = async () => ({ result: reply() }), com
     materializedSession: () => {
       if (!page.committed) throw new Error('Generate a Linear diagram before aligning.');
       return page.committed;
+    },
+    requireRedrawable: (session) => {
+      if (page.unredrawable) throw diagnosticError('COMPARISON_REQUIRES_GENERATE');
+      return session;
     },
     hasAlignmentPlan: () => page.plan,
     runHelperOperation: async (operation, payload) => { page.helperCalls.push({ operation, payload }); return helper(); },
@@ -148,6 +153,19 @@ test('a refusal for records that share a row names the Generate that makes new r
   assert.equal(reasonOf(action.error.value), 'ANCHOR_SHARED_ROW');
   assert.match(action.error.value.summary,
     /Give each record its own row in Record Layout, click Generate Diagram, then use Align at feature again\./);
+});
+
+// OV-3541: the helper draws the committed request, so a Session whose LOSATP search no saved rows answered is refused
+// before any Worker call, with the notice to Generate once, as every redraw refuses it.
+test('Resolve on a Session the browser cannot redraw asks for one Generate and calls no helper', async () => {
+  const { page, action } = fixture();
+  page.unredrawable = true;
+  action.selector.value = 'gene=COX1';
+  assert.deepEqual(await action.resolve(), { status: 'error' });
+  assert.equal(action.error.value.code, 'COMPARISON_REQUIRES_GENERATE');
+  assert.deepEqual(action.error.value.actions, ['generate']);
+  assert.equal(page.helperCalls.length, 0);
+  assert.equal(action.status.value, 'idle');
 });
 
 test('Apply over an active Similarity alignment writes the translations and starts without the plan, in one step, and announces the clearing', async () => {
