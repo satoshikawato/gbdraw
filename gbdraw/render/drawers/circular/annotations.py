@@ -1102,7 +1102,7 @@ def _label_at(
         partial(_ink_extent, direction=direction, offsets=offsets),
         partial(_label_radius, outward=outward, direction=direction, offsets=offsets),
     )
-    x, y = radius * math.cos(theta), radius * math.sin(theta)
+    x, y = circle_point(radius, angle)
     left, right, top, bottom = offsets
     cos, sin = math.cos(turn), math.sin(turn)
     return label(
@@ -1198,11 +1198,11 @@ def _curved_label(
     # Along the reading direction an offset is an arc length on the baseline; anticlockwise when flipped.
     sign = -1.0 if flipped else 1.0
     centre = angle + sign * math.degrees(0.5 * (left + right) / radius)
-    theta = math.radians(angle)
+    x, y = circle_point(radius, angle)
     return label(
         runs=shown,
-        x=radius * math.cos(theta),
-        y=radius * math.sin(theta),
+        x=x,
+        y=y,
         rotation=0.0,
         ink_radii=(near, far),
         height=far - near,

@@ -27,6 +27,7 @@ from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.layout.common import calculate_cds_ratio
 from gbdraw.layout.spatial import Aabb, TouchingAabbIndex, touching_aabb_indices
+from gbdraw.svg.circular_arcs import position_angle
 from gbdraw.labels.circular import (
     angle_from_middle,
     improved_label_placement_fc,
@@ -791,7 +792,7 @@ def test_circular_fixed_radius_overlap_pass_keeps_order_reach_and_radii() -> Non
     for previous, angle in zip(angles, angles[1:]):
         assert angle - previous >= module.LABEL_MIN_ORDER_GAP_DEG - 1e-9
     for label, angle in zip(result, angles):
-        assert abs(angle - module.angle_from_middle_unwrapped(label["middle"], total_length)) <= cap + 1e-9
+        assert abs(angle - position_angle(label["middle"], total_length)) <= cap + 1e-9
         assert math.hypot(label["start_x"], label["start_y"]) == pytest.approx(radius, abs=1e-9)
     assert [value for label in result for value in (label["start_x"], label["start_y"])] == pytest.approx(
         [

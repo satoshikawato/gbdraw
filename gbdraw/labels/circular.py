@@ -61,6 +61,7 @@ from ..svg.arrows import (
     resolve_circular_arrow_head_length_bp,
 )
 from ..layout.text_geometry import annular_sector_parts
+from ..svg.circular_arcs import circle_point, position_angle
 from ..svg.ids import instance_svg_id
 
 # Keep dense large-font labels from being pushed excessively far from features.
@@ -438,7 +439,7 @@ def _embedded_label_parts(label: CircularLabel, total_length: int) -> tuple[Poly
     half_height = 0.5 * float(label["height_px"])
     if radius <= half_height:
         return ()
-    center_deg = angle_from_middle_unwrapped(float(label["middle"]), total_length)
+    center_deg = position_angle(float(label["middle"]), total_length)
     half_span_deg = math.degrees(0.5 * float(label["width_px"]) / radius)
     return annular_sector_parts(radius - half_height, radius + half_height, center_deg, half_span_deg)
 
@@ -1670,7 +1671,7 @@ def _leader_shift_positions(
             if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
                 continue
 
-            candidate_x, candidate_y = _point_on_circle(radius, candidate_angle)
+            candidate_x, candidate_y = circle_point(radius, candidate_angle)
             if current_half != 0 and _current_half_from_x(
                 candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
             ) != current_half:
@@ -2760,7 +2761,7 @@ class _FixedRadiiRun:
     def _apply(self, idx: int) -> None:
         """Write label `idx`'s start point at its radius and current angle."""
         label = self.labels[idx]
-        label["start_x"], label["start_y"] = _point_on_circle(self.radii[idx], self.angles[idx])
+        label["start_x"], label["start_y"] = circle_point(self.radii[idx], self.angles[idx])
 
     def _overlaps(self, idx: int, jdx: int) -> bool:
         """Whether labels `idx` and `jdx` overlap at their pair's minimum gap."""
@@ -2975,13 +2976,8 @@ def calculate_angle_for_y(center_y, y_radius, y):
 
 
 def angle_from_middle(middle: float, total_length: int) -> float:
-    """Convert genome midpoint to circular angle (degrees)."""
-    return angle_from_middle_unwrapped(middle, total_length) % 360.0
-
-
-def angle_from_middle_unwrapped(middle: float, total_length: int) -> float:
-    """Convert genome midpoint to monotonic circular angle (degrees, unwrapped)."""
-    return 360.0 * (middle / total_length) - 90.0
+    """The angle of a feature middle (``position_angle``) wrapped into [0, 360) degrees."""
+    return position_angle(middle, total_length) % 360.0
 
 
 def _label_target_angle_unwrapped(label: CircularLabel, total_length: int) -> float:
@@ -2989,18 +2985,12 @@ def _label_target_angle_unwrapped(label: CircularLabel, total_length: int) -> fl
 
     The middle's angle is computed first in either case, so a label without `middle` raises KeyError.
     """
-    return float(label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length)))
+    return float(label.get("target_angle_unwrapped", position_angle(float(label["middle"]), total_length)))
 
 
 def _angle_unwrapped_from_start(label: CircularLabel, total_length: int) -> float:
     """The angle of a label's start point near its target angle (`_start_angle_near`, `_label_target_angle_unwrapped`)."""
     return _start_angle_near(label, _label_target_angle_unwrapped(label, total_length))
-
-
-def _point_on_circle(radius: float, angle_deg: float) -> tuple[float, float]:
-    """The point at `radius` from the center and `angle_deg` degrees."""
-    angle_rad = math.radians(angle_deg)
-    return radius * math.cos(angle_rad), radius * math.sin(angle_rad)
 
 
 def _start_angle_near(label: CircularLabel, reference_unwrapped: float) -> float:
@@ -3139,7 +3129,7 @@ def place_labels_on_arc_fc(
     placed = _LabelPeers.empty(labels, pad)
 
     for label in labels:
-        target_angle_unwrapped = angle_from_middle_unwrapped(label["middle"], total_length)
+        target_angle_unwrapped = position_angle(label["middle"], total_length)
         label["target_angle_unwrapped"] = target_angle_unwrapped
         lower_bound = prev_angle_unwrapped + min_order_gap
         best_x = None
@@ -3705,7 +3695,7 @@ def _seam_ordered_targets(labels: list[CircularLabel], total_length: int) -> tup
     is not cut at the 0/360-degree seam (the list itself when it already starts there). Each target
     is the feature angle on the first 360-degree branch above the previous target.
     """
-    raw_targets = [angle_from_middle_unwrapped(float(label["middle"]), total_length) for label in labels]
+    raw_targets = [position_angle(float(label["middle"]), total_length) for label in labels]
     if len(labels) > 2:
         gap_values = [raw_targets[idx + 1] - raw_targets[idx] for idx in range(len(labels) - 1)]
         gap_values.append(raw_targets[0] + 360.0 - raw_targets[-1])
@@ -4623,7 +4613,7 @@ def _shift_inner_block(
         candidate_angles[move_idx] = moved_angle
         moved_label = candidate_labels[move_idx]
         moved_label["angle_unwrapped"] = moved_angle
-        moved_label["start_x"], moved_label["start_y"] = _point_on_circle(radii[move_idx], moved_angle)
+        moved_label["start_x"], moved_label["start_y"] = circle_point(radii[move_idx], moved_angle)
     return _InnerPlacement(candidate_labels, candidate_angles)
 
 
@@ -5897,8 +5887,8 @@ def prepare_label_list(
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)
             label_start = label_middle - (label_as_feature_length / 2)
             label_end = label_middle + (label_as_feature_length / 2)
-            feature_angle_deg = angle_from_middle_unwrapped(label_middle, total_length)
-            feature_middle_x, feature_middle_y = _point_on_circle(feature_center_radius, feature_angle_deg)
+            feature_angle_deg = position_angle(label_middle, total_length)
+            feature_middle_x, feature_middle_y = circle_point(feature_center_radius, feature_angle_deg)
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
             assignment = getattr(feature_object, "placement", None)
@@ -5929,7 +5919,7 @@ def prepare_label_list(
                 if lane_clearance and not is_short_directional_feature:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
-                    feature_anchor_x, feature_anchor_y = _point_on_circle(feature_outer_radius, feature_angle_deg)
+                    feature_anchor_x, feature_anchor_y = circle_point(feature_outer_radius, feature_angle_deg)
                 # With an arena, its inner edge is the "anchor" radius for leader lines.
                 middle_radius = (
                     float(outer_arena[0]) if outer_arena is not None else radius_factor * radius
@@ -5943,13 +5933,13 @@ def prepare_label_list(
                             + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
                         ),
                     )
-                middle_x, middle_y = _point_on_circle(middle_radius, feature_angle_deg)
+                middle_x, middle_y = circle_point(middle_radius, feature_angle_deg)
             else:
                 if lane_clearance and not is_short_directional_feature:
                     # For displaced inner features, anchor leaders on the inner edge so lines
                     # do not cross over raised feature bodies.
-                    feature_anchor_x, feature_anchor_y = _point_on_circle(feature_inner_radius, feature_angle_deg)
-                middle_x, middle_y = _point_on_circle(inner_radius_factor * radius, feature_angle_deg)
+                    feature_anchor_x, feature_anchor_y = circle_point(feature_inner_radius, feature_angle_deg)
+                middle_x, middle_y = circle_point(inner_radius_factor * radius, feature_angle_deg)
             is_embedded = _is_label_embedded_in_segment(
                 label_start,
                 label_end,
@@ -6259,7 +6249,6 @@ __all__ = [
     "calculate_angle_for_y",
     "calculate_coordinates",
     "angle_from_middle",
-    "angle_from_middle_unwrapped",
     "angle_delta_deg",
     "normalize_angle_near_reference",
     "euclidean_distance",

@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Iterable, Literal, NamedTuple, Sequence, TypeA
 import numpy as np
 from numpy.typing import NDArray
 
+from ..svg.circular_arcs import circle_point
+
 if TYPE_CHECKING:
     # Read at run time only by its attributes: an import here would join the module cycle through gbdraw.core.text.
     from gbdraw.core.text import GlyphOutlines
@@ -293,18 +295,12 @@ def annular_sector_parts(
     """
 
     steps = max(1, math.ceil(2.0 * half_span_deg / SECTOR_PART_DEG))
-    angles = [
-        math.radians(centre_deg - half_span_deg + 2.0 * half_span_deg * index / steps)
-        for index in range(steps + 1)
+    edges = [
+        (circle_point(inner, angle), circle_point(outer, angle))
+        for angle in (centre_deg - half_span_deg + 2.0 * half_span_deg * index / steps for index in range(steps + 1))
     ]
     return tuple(
-        (
-            (inner * math.cos(start), inner * math.sin(start)),
-            (outer * math.cos(start), outer * math.sin(start)),
-            (outer * math.cos(end), outer * math.sin(end)),
-            (inner * math.cos(end), inner * math.sin(end)),
-        )
-        for start, end in zip(angles, angles[1:])
+        (start_in, start_out, end_out, end_in) for (start_in, start_out), (end_in, end_out) in zip(edges, edges[1:])
     )
 
 

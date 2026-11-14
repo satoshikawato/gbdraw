@@ -7,7 +7,7 @@ from typing import Literal
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.svg.elements import Path, Text, TextPath
-from gbdraw.svg.circular_arcs import circle_arc, position_angle
+from gbdraw.svg.circular_arcs import circle_arc, circle_point, position_angle
 from gbdraw.svg.path_data import path_point
 
 from ..auto_sizes import circular_tick_intervals, determine_length_parameter
@@ -488,11 +488,8 @@ def circular_tick_marks(
             tick = record_transform.source_boundary_to_display_offset(tick)
         elif record_transform is not None and record_transform.start_coordinate is not None:
             tick = record_transform.source_base_to_display_index(tick or 1)
-        prox_x: float = prox_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
-        prox_y: float = prox_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
-        dist_x: float = dist_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
-        dist_y: float = dist_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
-        marks.append(((prox_x, prox_y), (dist_x, dist_y)))
+        angle = position_angle(tick, total_len)
+        marks.append((circle_point(prox_radius, angle), circle_point(dist_radius, angle)))
     return marks
 
 
