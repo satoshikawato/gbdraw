@@ -7,7 +7,7 @@ import { TextDecoder } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import {
   PromotionReadinessError,
-  readDevTestsState,
+  readDevState,
   readRunAttemptJobs,
   verifyWorkflowEvidence
 } from './check-promotion-readiness.mjs';
@@ -855,9 +855,12 @@ const runPlanCommand = async ({
 const formatDevStateSummary = ({ devState, labeled, failure = null }) => [
   '## Dev state',
   '',
-  failure
-    ? `- Dev state: unavailable — \`${html(failure.code)}\` ${html(failure.reason)}`
-    : `- Dev state: \`${devState.state}\` (\`${devState.conclusion}\`) — [run ${devState.runId}](${devState.runUrl}) attempt ${devState.attempt}${devState.rerunning ? ' (a rerun is in progress)' : ''} on \`${devState.headSha}\``,
+  ...(failure
+    ? [`- Dev state: unavailable — \`${html(failure.code)}\` ${html(failure.reason)}`]
+    : [
+      `- Dev state: \`${devState.state}\``,
+      ...devState.workflows.map((run) => `- \`${run.workflow}\`: \`${run.state}\` (\`${run.conclusion}\`) — [run ${run.runId}](${run.runUrl}) attempt ${run.attempt}${run.rerunning ? ' (a rerun is in progress)' : ''} on \`${run.headSha}\``)
+    ]),
   `- Label \`${DEV_RED_FIX_LABEL}\`: ${labeled ? 'yes' : 'no'}`,
   ''
 ].join('\n');
@@ -876,7 +879,7 @@ const checkDevState = async ({ env, fetchImpl, writeSummary }) => {
   const repository = requiredEnvironment(env, 'CI_IMPACT_REPOSITORY');
   let devState;
   try {
-    devState = await readDevTestsState({ repository, token: env.GITHUB_TOKEN, fetchImpl });
+    devState = await readDevState({ repository, token: env.GITHUB_TOKEN, fetchImpl });
   } catch (error) {
     if (!(error instanceof PromotionReadinessError)) throw error;
     const failure = evidenceFailure(error.code, error.message, env.GITHUB_TOKEN);
@@ -887,15 +890,13 @@ const checkDevState = async ({ env, fetchImpl, writeSummary }) => {
   }
   writeSummary(formatDevStateSummary({ devState, labeled }));
   if (devState.state === 'red' && !labeled) {
+    const red = devState.workflows.filter(({ state }) => state === 'red');
     fail('DEV_RED',
-      `dev is red: Tests run ${devState.runUrl} on ${devState.headSha} ended ${devState.conclusion} `
-      + `in attempt ${devState.attempt}${devState.rerunning ? ', and its rerun has not finished' : ''}. `
+      `dev is red: ${red.map((run) => `${run.workflow} run ${run.runUrl} on ${run.headSha} ended ${run.conclusion} `
+        + `in attempt ${run.attempt}${run.rerunning ? ', and its rerun has not finished' : ''}`).join('; ')}. `
       + `Merge only the fix (label ${DEV_RED_FIX_LABEL}), and rerun the PR / gate job after dev turns green.`, {
-        runUrl: devState.runUrl,
-        headSha: devState.headSha,
-        conclusion: devState.conclusion,
-        attempt: devState.attempt,
-        rerunning: devState.rerunning
+        runs: red.map(({ workflow, runUrl, headSha, conclusion, attempt, rerunning }) => (
+          { workflow, runUrl, headSha, conclusion, attempt, rerunning }))
       });
   }
 };

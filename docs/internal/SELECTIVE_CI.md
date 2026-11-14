@@ -743,25 +743,33 @@ start on all relevant events and filter at job level; they never use workflow
 
 ### Dev state on pull requests
 
-dev is red when the newest `Tests` run of a push to `dev` that has a result
-failed (`failure`, `timed_out`, or `startup_failure`). A run's result is that
+dev is red when, in `Tests` (`test.yml`) or in `Gallery publication`
+(`gallery-publication.yml`), the newest run of a push to `dev` that has a
+result failed (`failure`, `timed_out`, or `startup_failure`). Each workflow
+counts by its own newest run, under the same rule. A run's result is that
 of its newest attempt that finished with one. An attempt still running, or one
 that ended `cancelled`, `skipped`, `neutral`, `stale`, or `action_required`,
 does not count, and the attempt before it decides; a run with no such attempt
 is skipped. A failed run therefore stays red until an attempt of it passes,
-also while a rerun runs or after a rerun is cancelled. `PR / gate` reads this through the Actions REST API with
-`actions: read` (`readDevTestsState` in `tools/check-promotion-readiness.mjs`,
-called by the `gate` command of the trusted `tools/ci-impact.mjs`). While dev is
-red it fails with `DEV_RED`, naming the run and its head SHA, unless the pull
-request carries the label `dev-red-fix`; `AGENTS.md` ("When dev is red") limits
-that label to the pull request that fixes the failure. The gate fails closed
-with `DEV_STATE_UNAVAILABLE` and the reader's code when the run list or an
+also while a rerun runs or after a rerun is cancelled. `Gallery publication`
+counts too: it runs only on pushes to `dev` and by dispatch, never on a pull
+request, so its failures first show on `dev`. `PR / gate` reads both workflows' runs by
+their file names through the Actions REST API with the workflow's
+`actions: read`, which covers every workflow of the repository
+(`readDevState` and its list `DEV_STATE_WORKFLOWS` in
+`tools/check-promotion-readiness.mjs`, called by the `gate` command of the
+trusted `tools/ci-impact.mjs`). While dev is red it fails with `DEV_RED`,
+naming each red workflow's run and its head SHA, unless the pull request
+carries the label `dev-red-fix`; `AGENTS.md` ("When dev is red") limits that
+label to the pull request that fixes the failure. The gate fails closed
+with `DEV_STATE_UNAVAILABLE` and the reader's code when a run list or an
 attempt cannot be read or does not match the run (`API_REQUEST_FAILED`,
-`RUN_IDENTITY_MISMATCH`, and the other verifier codes), when no run among the
-newest 100 has a result (`NO_DEV_STATE`), and when any listed run or read
-attempt has an unknown conclusion (`UNKNOWN_RUN_CONCLUSION`). The step summary shows the dev
-state and the label either way. The `dev`, release, and Gallery gates do not
-read it.
+`RUN_IDENTITY_MISMATCH`, and the other verifier codes), when no run of a
+workflow among its newest 100 has a result (`NO_DEV_STATE`), and when any
+listed run or read attempt has an unknown conclusion
+(`UNKNOWN_RUN_CONCLUSION`). The step summary shows the dev state, each
+workflow's deciding run, and the label either way. The `dev`, release, and
+Gallery gates do not read it.
 
 The gate reads dev once, when it runs. A pull request held this way passes
 after dev turns green by rerunning its `PR / gate` job (about a minute); adding

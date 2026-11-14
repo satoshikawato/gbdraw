@@ -36,16 +36,17 @@ Product Contract records with the tests and CI jobs that check them.
 
 ## When dev is red
 
-- dev is red when the newest `Tests` run of a push to `dev` that finished
-  with a result failed (`failure`, `timed_out`, or `startup_failure`). Runs
-  that ended `cancelled`, `skipped`, `neutral`, `stale`, or `action_required`
-  do not count. A run being rerun counts by its previous attempt, so a failed
-  run stays red while it reruns. Read the state before you open a pull
-  request, arm auto-merge on one, or merge one (command in the
-  `gbdraw-ship-pr` skill, "Merge").
+- dev is red when, in `Tests` or in `Gallery publication`, the newest run
+  of a push to `dev` that finished with a result failed (`failure`,
+  `timed_out`, or `startup_failure`). Each workflow counts by its own newest
+  run. Runs that ended `cancelled`, `skipped`, `neutral`, `stale`, or
+  `action_required` do not count. A run being rerun counts by its previous
+  attempt, so a failed run stays red while it reruns. Read the state before
+  you open a pull request, arm auto-merge on one, or merge one (command in
+  the `gbdraw-ship-pr` skill, "Merge").
 - While dev is red, merge only a pull request that fixes the failure: it
-  carries the label `dev-red-fix` and names the failing job and run in its
-  body. Other pull requests may run CI but stay unmerged. `PR / gate` enforces
+  carries the label `dev-red-fix` and names the failing workflow, job, and
+  run in its body. Other pull requests may run CI but stay unmerged. `PR / gate` enforces
   the label ([Dev state on pull requests](docs/internal/SELECTIVE_CI.md#dev-state-on-pull-requests)).
 - The session that finds dev red reruns a job it believes flaky once. If the
   job fails again, it fixes the failure or tells the session that merged its
