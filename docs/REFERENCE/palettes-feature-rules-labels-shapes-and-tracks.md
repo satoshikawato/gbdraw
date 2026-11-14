@@ -651,8 +651,8 @@ their label counts, font sizes, and counts, and `refused` for radial labels
 without room; and the rows. A row's `values` maps config paths to the values
 that fit, and its `status` is `found`, `found_with_notice` (the figure then
 draws with the warning; `remaining` holds what is left), `not_found`, or
-`not_computed`. A row without a value says why in `reason`, as data rather
-than a sentence: a `LimitReason` (the setting's `kind` and the `limit` it
+`not_computed`. A `not_found` row says why in `reason`, as data rather than
+a sentence: a `LimitReason` (the setting's `kind` and the `limit` it
 reached), a `CombinationLimitReason` (the combination's `font_size` and Y
 offset `limit`), an `UnfitReason` (the label counts the setting leaves), or a
 `PlainReason` (a `kind` only). `gbdraw.api` exports these types.
