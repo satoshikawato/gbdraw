@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal, TypedDict
 
@@ -118,8 +118,9 @@ class InputWarning:
 
     code: InputWarningCode
     message: str
-    # The input it concerns, by identity: a record's place in its files, a comparison table's file and record pair,
-    # a region annotation set's ID, a comparison sequence file's path. A batch logs one warning of a code per input.
+    # The input it concerns, by identity: a record's place in its files (in the drawing when it has no file), a
+    # comparison table's place among the Result's comparisons, a region annotation set's ID, a comparison sequence
+    # file's path. A Result and a run each give one warning of a code per input.
     subject: tuple[str, ...]
 
 
@@ -318,7 +319,11 @@ def _types_not_read_in_record(record: RecordInputSummary) -> list[tuple[str, int
 
 
 def _record_subject(record: RecordInputSummary) -> tuple[str, ...]:
+    """A drawn record's identity: its place in its files and its region; a record with no file (one built or edited
+    in memory) has only its place in the drawing, so two of them are two inputs."""
     region = "" if record.region is None else _region_text(record.region)
+    if not record.source_paths:
+        return ("drawn record", str(record.record_index), region)
     return (str(record.source_record_index), region, *record.source_paths)
 
 
@@ -416,7 +421,8 @@ def _no_feature_reason(record: RecordInputSummary) -> str:
 
 def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     """The reasons the drawing shows nothing of a record, of a comparison table, or of a region annotation set, and
-    the comparison files whose hover and span export name some records ambiguously."""
+    the comparison files whose hover and span export name some records ambiguously: one per input and code, so one
+    file given twice warns once."""
 
     warnings = [
         InputWarning(
@@ -429,11 +435,15 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         # line says so); the inputs are not the reason.
         if record.features_track and record.left_off_circle_under_bp is None and record.drawn_features == 0
     ]
-    for table in summary.comparisons:
+    for position, table in enumerate(summary.comparisons):
         tally = table.tally
         label = _comparison_label(table, summary.records)
-        # A Linear comparison: a table's file, or a record pair (a Linear run draws one Result).
-        table_subject = (table.source_name or "", str(table.query_record_index), str(table.subject_record_index))
+        # A Linear comparison is one input by its place among the Result's comparisons: two tables of one base name
+        # and one record pair are two inputs (the summary keeps the base name only).
+        table_subject = (
+            "comparison", str(position), table.source_name or "", str(table.query_record_index),
+            str(table.subject_record_index),
+        )
         if table.protein_matches and tally.rows_kept == 0:
             warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no protein match to draw.", table_subject))
         elif tally.rows_read == 0:
@@ -460,7 +470,17 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message, (item.source_path,))
         for item in summary.repeated_comparison_ids
     )
-    return tuple(warnings)
+    return tuple(_first_per_input(warnings, set()))
+
+
+def _first_per_input(warnings: Iterable[InputWarning], seen: set[InputWarningKey]) -> Iterator[InputWarning]:
+    """The warnings of inputs not in ``seen``, by code and input, each added to it: one warning per input."""
+
+    for warning in warnings:
+        key: InputWarningKey = (warning.code, warning.subject)
+        if key not in seen:
+            seen.add(key)
+            yield warning
 
 
 def log_input_warnings(summary: InputSummary, *, warned: set[InputWarningKey] | None = None) -> None:
@@ -472,12 +492,7 @@ def log_input_warnings(summary: InputSummary, *, warned: set[InputWarningKey] | 
     read alike (two files of one base name) are each written.
     """
 
-    for warning in input_warnings(summary):
-        if warned is not None:
-            key: InputWarningKey = (warning.code, warning.subject)
-            if key in warned:
-                continue
-            warned.add(key)
+    for warning in _first_per_input(input_warnings(summary), set() if warned is None else warned):
         logger.warning("%s", warning.message)
 
 

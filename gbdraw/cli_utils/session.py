@@ -879,8 +879,7 @@ def render_session_drawings_cli(
                 )[plan.drawing.id]
                 rendered[plan.drawing.id] = result
                 log_render_notices(
-                    result.items if isinstance(result, CircularBatchRenderResult) else (result,),
-                    warned=set(),
+                    result.items if isinstance(result, CircularBatchRenderResult) else (result,)
                 )
         if sidecar is None:
             return

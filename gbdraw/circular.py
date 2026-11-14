@@ -1573,7 +1573,7 @@ def _circular_run_result(
     session_feature_metadata: list[Mapping[str, Any]] = []
     session_biological_feature_metadata: list[Mapping[str, Any]] = []
     session_interactive_contexts = []
-    log_render_notices(rendered_items, warned=set())
+    log_render_notices(rendered_items)
     for rendered_item in rendered_items:
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")

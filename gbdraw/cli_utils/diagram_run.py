@@ -237,15 +237,15 @@ def mode_option_fields(
     }
 
 
-def log_render_notices(
-    rendered_items: Sequence[RequestRenderResult], *, warned: set[InputWarningKey] | None = None
-) -> None:
+def log_render_notices(rendered_items: Sequence[RequestRenderResult]) -> None:
     """Log each Result's annotation warnings, feature notices, input summary and, for a wrapped Linear figure, its wrap.
 
-    ``warned``: the input warnings logged so far; with it, a warning of an input the Results of a batch share (one
-    comparison file every Result reads) is logged once. Without it, every warning is logged.
+    One call is one run or one Session drawing: a warning of one input is logged once in it, also when its Results
+    share the input (one comparison file every Result of a batch reads) or a Result reads it twice (one file given
+    twice).
     """
 
+    warned: set[InputWarningKey] = set()
     for rendered_item in rendered_items:
         for warning in rendered_item.annotation_warnings:
             logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
