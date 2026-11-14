@@ -30,17 +30,18 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
         parts = list(feature.location)
 
     if not parts:
-        return 1, 1, strand
+        return 0, 0, strand
 
-    starts = [max(1, int(part.start)) for part in parts]
-    ends = [max(1, int(part.end)) for part in parts]
+    # Half-open, 0-based bounds, as the parts are drawn: a part at the first base starts at 0.
+    starts = [int(part.start) for part in parts]
+    ends = [int(part.end) for part in parts]
 
     # Origin-spanning features touch both the left and right genome boundaries.
     # Avoid using part ordering for detection because negative-strand multipart features
     # can be listed in descending genomic order without crossing the origin.
     if len(parts) > 1 and genome_length:
         genome_end = int(genome_length)
-        touches_left_boundary = min(starts) <= 1
+        touches_left_boundary = min(starts) == 0
         touches_right_boundary = max(ends) >= genome_end
         if touches_left_boundary and touches_right_boundary:
             # Represent origin-spanning features as start > end.
@@ -68,7 +69,7 @@ def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> T
 
     # Calculate total span, accounting for origin-spanning
     if start > end and genome_length:
-        # Origin-spanning: spans from start to genome_length, then from 1 to end
+        # Origin-spanning: spans from start to genome_length, then from 0 to end
         total_span = (genome_length - start) + end
     else:
         total_span = abs(end - start)
@@ -86,7 +87,7 @@ def feature_overlap_bp(
     a: dict, b: dict, *, separate_strands: bool = False,
     genome_length: Optional[int] = None,
 ) -> int:
-    """Length of the shared outer envelope, using existing [1, length) wrap pieces."""
+    """Length of the shared outer envelope; an origin-spanning envelope is [start, length) and [0, end)."""
     if separate_strands and _strand_pool(a["strand"]) != _strand_pool(b["strand"]):
         return 0
     if genome_length is None and (a["start"] > a["end"] or b["start"] > b["end"]):
@@ -97,7 +98,7 @@ def feature_overlap_bp(
         if start <= end:
             return [(start, end)]
         # genome_length is set here: origin-spanning input without it raised above.
-        return [(start, int(cast(int, genome_length))), (1, end)]
+        return [(start, int(cast(int, genome_length))), (0, end)]
 
     return sum(
         max(0, min(a_end, b_end) - max(a_start, b_start))

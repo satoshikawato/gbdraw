@@ -256,7 +256,7 @@ _WRAPPED = RecordDisplayTransform(30_000, 1, 1, None, True).with_wrap(10_000, 30
 )
 def test_a_wrapped_record_adds_no_connection_its_unwrapped_figure_does_not_draw(exons) -> None:
     locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
-    assert not [part for part in get_exon_and_intron_coordinates(locations, 30_000) if part.kind == "line"]
+    assert not [part for part in get_exon_and_intron_coordinates(locations) if part.kind == "line"]
     assert _connectors(locations, _WRAPPED) == []
 
 
@@ -273,7 +273,7 @@ def test_a_wrapped_record_adds_no_connection_its_unwrapped_figure_does_not_draw(
 )
 def test_a_wrapped_record_drops_no_connection_its_unwrapped_figure_draws(exons, expected) -> None:
     locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
-    assert [part for part in get_exon_and_intron_coordinates(locations, 30_000) if part.kind == "line"]
+    assert [part for part in get_exon_and_intron_coordinates(locations) if part.kind == "line"]
     assert sorted(_connectors(locations, _WRAPPED)) == sorted(expected)
 
 

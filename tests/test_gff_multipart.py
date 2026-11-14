@@ -179,7 +179,7 @@ def test_load_gff_fasta_orders_negative_multipart_rows_in_transcription_directio
     assert cds.qualifiers["phase"] == ["0", "2", "1"]
     assert cds.qualifiers["Note"] == ["high", "middle", "low"]
 
-    drawing_parts = get_exon_and_intron_coordinates(cds.location.parts, len(records[0].seq))
+    drawing_parts = get_exon_and_intron_coordinates(cds.location.parts)
     assert [part.kind for part in drawing_parts] == ["block", "line", "block", "line", "block"]
 
 

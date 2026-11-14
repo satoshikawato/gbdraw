@@ -93,7 +93,7 @@ def test_aabb_index_query_padding_and_duplicate_suppression() -> None:
 
 def test_split_circular_interval_splits_origin_spanning_ranges() -> None:
     assert split_circular_interval(10, 20, 100) == [Interval(10, 20)]
-    assert split_circular_interval(90, 12, 100) == [Interval(90, 100), Interval(1, 12)]
+    assert split_circular_interval(90, 12, 100) == [Interval(90, 100), Interval(0, 12)]
 
 
 def test_interval_index_candidates_do_not_miss_overlapping_intervals() -> None:

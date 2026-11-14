@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import logging
-from typing import List, NamedTuple, Sequence, Tuple, cast
+from typing import List, NamedTuple, Protocol, Sequence, Tuple, cast
 
 from Bio.SeqFeature import AfterPosition, BeforePosition, SimpleLocation
 
@@ -43,10 +43,21 @@ def location_partial_ends(exons: Sequence[SimpleLocation]) -> tuple[PartialEnds,
     return tuple(ends)
 
 
-def _unrotated_connector_gaps(previous: SourceInterval, part: SourceInterval, strand: object) -> list[tuple[int, int]]:
-    """What an unrotated record connects: the parts ``get_intron_coordinate`` connects, by the first part's strand.
+class _Span(Protocol):
+    """Half-open, 0-based bounds of a feature part."""
 
-    Wrapping is a display format, so it adds and drops no connection. Parts in the other order have none.
+    @property
+    def start(self) -> int: ...
+
+    @property
+    def end(self) -> int: ...
+
+
+def _unrotated_connector_gaps(previous: _Span, part: _Span, strand: object) -> list[tuple[int, int]]:
+    """What an unrotated record connects: the half-open gap from one part to the next, by the first part's strand.
+
+    Both the location path (``get_intron_coordinate``) and the display path draw these gaps. Wrapping is a display
+    format, so it adds and drops no connection. Parts that touch, overlap or come in the other order have none.
     """
 
     if strand == 1:
@@ -142,13 +153,9 @@ def get_exon_coordinate(
     exon_strand: Strand = get_strand(exon_line.strand)
     exon_count: int = previous_exon_count + 1
     exon_id: str = str(exon_count).zfill(3)
+    # Half-open, 0-based bounds, as the display path projects them: a part at the first base starts at 0.
     exon_start = int(exon_line.start)
-    if exon_start < 1:
-        exon_start = 1
-
     exon_end = int(exon_line.end)
-    if exon_end < 1:
-        exon_end = 1
     open_start, open_end = strand_ordered(partial.start, partial.end, exon_line.strand)
     exon_coordinate = FeatureLocationPart(
         "block", exon_id, exon_strand, exon_start, exon_end, last_or_not and not partial.end,
@@ -161,81 +168,25 @@ def get_intron_coordinate(
     previous_exon: FeatureLocationPart,
     current_exon: FeatureLocationPart,
     previous_intron_count: int,
-    genome_length: int,
+    strand_value: object,
 ) -> tuple[int, list[FeatureLocationPart]]:
     """
-    Generates coordinates for introns based on adjacent exons.
-    Returns an empty list if exons overlap or if coordinates would be invalid
-    (e.g., RNA editing frameshift features with coordinate fallback).
+    The connector line from one part to the next, on the first part's strand (``strand_value``, Biopython's).
+
+    The line spans the half-open gap between the parts (``_unrotated_connector_gaps``). Parts that touch or
+    overlap (e.g. an RNA editing frameshift such as join(1850..2340,2339..3026)) or come in the other order
+    have none.
     """
     intron_count: int = previous_intron_count + 1
     intron_id: str = str(intron_count).zfill(3)
-    intron_strand: Strand = previous_exon.strand
-    previous_exon_start: int = previous_exon.start
-    previous_exon_end: int = previous_exon.end
-    current_exon_start: int = current_exon.start
-    current_exon_end: int = current_exon.end
-    intron_parts: List[FeatureLocationPart] = []
-
-    # Check for overlapping exons or invalid intron coordinates
-    # This handles cases like RNA editing frameshift (e.g., join(1850..2340,2339..3026))
-    # where the second exon starts before or at the first exon's end
-    if intron_strand == "positive" and previous_exon_end >= current_exon_start:
-        # Exons overlap or are adjacent with no gap - no intron to draw
-        return intron_count, intron_parts
-    elif intron_strand == "negative" and current_exon_end >= previous_exon_start:
-        # Exons overlap or are adjacent with no gap - no intron to draw
-        return intron_count, intron_parts
-
-    if (intron_strand == "positive" and previous_exon_end > current_exon_start + 1) or (
-        intron_strand == "negative" and previous_exon_end + 1 < current_exon_start
-    ):
-        if intron_strand == "positive":
-            intron_start_1: int = min(int(previous_exon_end) + 1, genome_length)
-            intron_end_1: int = genome_length
-            intron_coordinate_1 = FeatureLocationPart(
-                "line", intron_id, intron_strand, intron_start_1, intron_end_1, False
-            )
-            intron_parts.append(intron_coordinate_1)
-            intron_start_2: int = 0
-            intron_end_2: int = int(current_exon_start) - 1
-            intron_coordinate_2 = FeatureLocationPart(
-                "line", intron_id, intron_strand, intron_start_2, intron_end_2, False
-            )
-            intron_parts.append(intron_coordinate_2)
-        elif intron_strand == "negative":
-            intron_start_1 = int(previous_exon_start) - 1
-            intron_end_1 = 0
-            intron_coordinate_1 = FeatureLocationPart(
-                "line", intron_id, intron_strand, intron_start_1, intron_end_1, False
-            )
-            intron_parts.append(intron_coordinate_1)
-            intron_start_2 = genome_length
-            intron_end_2 = min(int(current_exon_end) + 1, genome_length)
-            intron_coordinate_2 = FeatureLocationPart(
-                "line", intron_id, intron_strand, intron_start_2, intron_end_2, False
-            )
-            intron_parts.append(intron_coordinate_2)
-    else:
-        intron_start: int = 0
-        intron_end: int = 0
-        if intron_strand == "positive":
-            intron_start = int(previous_exon_end) + 1
-            intron_end = int(current_exon_start) - 1
-        elif intron_strand == "negative":
-            intron_start = int(current_exon_end) + 1
-            intron_end = int(previous_exon_start) - 1
-        else:
-            logger.error(f"Undefined intron_strand: {intron_strand}")
-        intron_coordinate = FeatureLocationPart(
-            "line", intron_id, intron_strand, intron_start, intron_end, False
-        )
-        intron_parts.append(intron_coordinate)
-    return intron_count, intron_parts
+    return intron_count, [
+        FeatureLocationPart("line", intron_id, previous_exon.strand, start, end, False)
+        for start, end in _unrotated_connector_gaps(previous_exon, current_exon, strand_value)
+    ]
 
 
 def get_exon_and_intron_coordinates(
-    exons: List[SimpleLocation], genome_length: int, is_trans_spliced: bool = False
+    exons: List[SimpleLocation], is_trans_spliced: bool = False
 ) -> FeatureLocation:
     """
     Processes a list of exons to determine the coordinates of both exons and introns.
@@ -262,7 +213,7 @@ def get_exon_and_intron_coordinates(
             if i > 0:
                 previous_exon_coord = coordinates_list[-1]
                 intron_count, intron_coords = get_intron_coordinate(
-                    previous_exon_coord, exon_coord, intron_count, genome_length
+                    previous_exon_coord, exon_coord, intron_count, exons[i - 1].strand
                 )
                 coordinates_list.extend(intron_coords)
 

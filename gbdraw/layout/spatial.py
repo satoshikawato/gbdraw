@@ -513,7 +513,7 @@ def split_circular_interval(start: int, end: int, genome_length: int | None) -> 
     if genome_length is None or int(genome_length) <= 0:
         return [Interval(start, end)]
     length = int(genome_length)
-    return [Interval(start, length), Interval(1, end)]
+    return [Interval(start, length), Interval(0, end)]
 
 
 def candidate_aabb_partners(

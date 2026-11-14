@@ -40,7 +40,6 @@ def create_repeat_object(
     feature: SeqFeature,
     color_table,
     default_colors,
-    genome_length: int,
     label_filtering,
     is_directional: bool | None,
     record_id: Optional[str] = None,
@@ -57,7 +56,7 @@ def create_repeat_object(
     rpt_family: str = feature.qualifiers.get("rpt_family", ["undefined"])[0]
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates, genome_length)
+    location = get_exon_and_intron_coordinates(coordinates)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -89,7 +88,6 @@ def create_feature_object(
     feature: SeqFeature,
     color_table,
     default_colors,
-    genome_length: int,
     label_filtering,
     is_directional: bool | None,
     record_id: Optional[str] = None,
@@ -104,7 +102,7 @@ def create_feature_object(
     """
     coordinates = feature.location.parts
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates, genome_length)
+    location = get_exon_and_intron_coordinates(coordinates)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -134,7 +132,6 @@ def create_gene_object(
     feature: SeqFeature,
     color_table,
     default_colors,
-    genome_length: int,
     label_filtering,
     is_directional: bool | None,
     record_id: Optional[str] = None,
@@ -153,7 +150,7 @@ def create_gene_object(
     gene: str = feature.qualifiers.get("gene", [""])[0]
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
-    location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
+    location = get_exon_and_intron_coordinates(coordinates, is_trans_spliced)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     label_text = (
         get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
@@ -259,7 +256,6 @@ def _build_feature_layers(
                 feature,
                 color_table,
                 default_colors,
-                genome_length,
                 label_filtering,
                 None,
                 record_id=gb_record.id,
@@ -277,7 +273,6 @@ def _build_feature_layers(
                 feature,
                 color_table,
                 default_colors,
-                genome_length,
                 label_filtering,
                 None,
                 record_id=gb_record.id,
@@ -295,7 +290,6 @@ def _build_feature_layers(
                 feature,
                 color_table,
                 default_colors,
-                genome_length,
                 label_filtering,
                 None,
                 record_id=gb_record.id,
