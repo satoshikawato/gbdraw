@@ -240,7 +240,7 @@ def mode_option_fields(
 def log_render_notices(
     rendered_items: Sequence[RequestRenderResult], *, warned: set[InputWarningKey] | None = None
 ) -> None:
-    """Log each Result's annotation warnings, feature notices and input summary.
+    """Log each Result's annotation warnings, feature notices, input summary and, for a wrapped Linear figure, its wrap.
 
     ``warned``: the input warnings logged so far; with it, a warning of an input the Results of a batch share (one
     comparison file every Result reads) is logged once. Without it, every warning is logged.
@@ -253,3 +253,5 @@ def log_render_notices(
                 warning.record_id, warning.message)
         log_feature_identity_notices(rendered_item.feature_identity_notices)
         log_input_summary(rendered_item.input_summary, warned=warned)
+        if rendered_item.linear_metadata is not None and rendered_item.linear_metadata.wrap is not None:
+            logger.info("%s", rendered_item.linear_metadata.wrap.message)
