@@ -505,3 +505,82 @@ def test_the_reply_counts_the_hash_annotation_targets_the_conversion_moved() -> 
     payload = json.loads(legacy_session_to_drawings_json(_text("selected-feature-annotations.v44.gbdraw-session.json.gz")))
     assert set(payload) == REPLY_FIELDS, payload.get("error")
     assert payload["movedAnnotationTargets"] == 1
+
+
+def _without_losat_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The browser's Python has no LOSAT executable: a search that the saved rows do not answer cannot run.
+    from gbdraw.comparisons import losat_runtime
+    from gbdraw.exceptions import ValidationError
+
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise ValidationError("No LOSAT runtime.", diagnostic={"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE"})
+
+    monkeypatch.setattr(losat_runtime, "resolve_losat_runtime", unavailable)
+
+
+def test_a_session_39_losatp_search_loads_with_the_results_of_its_saved_rows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3540: a Session 39 Linear request names a LOSATP Similarity groups search, whose rows the Session saved.
+    Web Load commits the request with the results of those rows, as a Generate commits them, so a redraw of the
+    committed request (Reset record positions, Align at feature, a label rerender) needs no LOSAT search."""
+
+    from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+    _without_losat_runtime(monkeypatch)
+    document = json.loads(legacy_session_to_drawings_json(_text("BGC0000708-BGC0000713.v39.gbdraw-session.json.gz")))[
+        "document"
+    ]
+    [drawing] = [drawing for drawing in document["drawings"] if drawing.get("renderRequest") is not None]
+    request = drawing["renderRequest"]
+    reply = render_embedded_canonical_web_request(request, resources=document["resources"], workspace=tmp_path / "web")
+    assert "error" not in reply, reply.get("error")
+    assert [(item["kind"], item.get("mode")) for item in request["comparisons"]] == [
+        *[("precomputedProteinComparison", None)] * 4,
+        ("orthogroupResult", None),
+        ("generatedProteinComparison", "none"),
+    ]
+    assert request["layout"]["similarityAlignment"]["groupId"] == "og_1"
+
+
+def test_a_loaded_session_39_losatp_request_draws_what_the_cli_replay_of_the_session_draws(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3540: the request Web Load commits for a Session 39 LOSATP search draws, in the browser's render and
+    without a LOSAT runtime, the SVG that `gbdraw linear --session` draws from the same Session's search answered by
+    its saved rows: Load's stored results add nothing and lose nothing."""
+
+    from gbdraw import linear as linear_cli
+    from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+    _without_losat_runtime(monkeypatch)
+    name = "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
+    document = json.loads(legacy_session_to_drawings_json(_text(name)))["document"]
+    [drawing] = [drawing for drawing in document["drawings"] if drawing.get("renderRequest") is not None]
+    reply = render_embedded_canonical_web_request(
+        drawing["renderRequest"], resources=document["resources"], workspace=tmp_path / "web"
+    )
+    assert "error" not in reply, reply.get("error")
+    [result] = reply["results"]
+    parts = result["document"]
+    loaded_svg = parts["head"] + "".join(
+        piece["start"] + piece["children"] + "</g>" if piece["kind"] == "content" else piece["text"]
+        for piece in parts["pieces"]
+    ) + parts["tail"]
+    linear_cli.linear_main(["--session", str(SESSIONS / name), "-o", str(tmp_path / "cli"), "-f", "svg"])
+    replayed_svg = (tmp_path / "cli.svg").read_text(encoding="utf-8")
+    # The CLI file adds the XML declaration before the document.
+    assert replayed_svg.startswith("<?xml") and replayed_svg.endswith(loaded_svg)
+
+
+def test_a_session_39_losatp_search_without_all_its_rows_loads_with_the_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-3540: rows the Session did not save need a search, which Generate runs in the browser; Load keeps the search.
+    _without_losat_runtime(monkeypatch)
+    document = json.loads(_text("BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"))
+    del document["losatCache"]["entries"][0]
+    reply = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert "error" not in reply, reply.get("error")
+    [drawing] = [drawing for drawing in reply["document"]["drawings"] if drawing.get("renderRequest") is not None]
+    assert [(item["kind"], item.get("mode")) for item in drawing["renderRequest"]["comparisons"]] == [
+        ("generatedProteinComparison", "orthogroup")
+    ]
