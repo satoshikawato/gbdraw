@@ -460,3 +460,13 @@ which walks `tests/fixtures`, and `contract-shape.test.mjs`, `stored-request-rea
 description. Only
 `tests/test_collinear_option_surfaces.py` and `tests/web/stored-request-read.test.mjs`
 read it, by name.
+
+`BGC0000711-BGC0000713-losatp-cli.v47.gbdraw-session.json.gz` is the Session 47
+(request schema 9) that `gbdraw linear --losat losatp --session_output` wrote on
+first-parent `main` commit `150d26706064e7ca20eef4d3553ea266b51b79f6` (2026-10-15),
+compressed with `gzip -n -9`. From 9839de8ee (2026-10-11) to 9fdab5f4d (2026-10-23)
+this writer stored the LOSATP search as the committed request and the search's
+raw rows in `losatCache`; no release tag holds it. Web Load gives that request the
+results of those rows (`tests/web/saved-protein-results-load.test.mjs`,
+`tests/test_web_legacy_session.py`). The command, input hashes and decompressed
+hash are in `BGC0000711-BGC0000713-losatp-cli.v47.provenance.json`.

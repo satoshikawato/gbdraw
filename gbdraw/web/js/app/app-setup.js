@@ -135,7 +135,7 @@ import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
   setStoredProteinResultFrameConverter
 } from '../services/main-session-comparison-frame.js';
-import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
+import { setLegacySessionUpgrader, setSavedProteinResultReader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
 import { bindDrawingInputFileTree, createLinearSeq, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
@@ -492,6 +492,10 @@ export const createAppSetup = () => {
   ));
   setLegacySessionUpgrader((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION,
+    payload
+  ));
+  setSavedProteinResultReader((payload) => runDiagramHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.STORE_SAVED_PROTEIN_RESULTS,
     payload
   ));
   const {
@@ -1347,6 +1351,7 @@ export const createAppSetup = () => {
     setUnmanagedConfigOverrideValidator(null);
     setStoredProteinResultFrameConverter(null);
     setLegacySessionUpgrader(null);
+    setSavedProteinResultReader(null);
     setDiagramWorkerFontSource(null);
     setDiagramResourceRetainSource(null);
     disposeSessionOperations();

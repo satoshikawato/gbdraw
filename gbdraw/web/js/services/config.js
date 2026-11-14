@@ -195,7 +195,7 @@ import { importSessionFile } from './session-import-client.js';
 import {
   convertStoredProteinResultFrames, withConvertedResources
 } from './main-session-comparison-frame.js';
-import { upgradeLegacySession } from './legacy-session-upgrade.js';
+import { upgradeLegacySession, withSavedProteinResults } from './legacy-session-upgrade.js';
 /** @import { StoredLeafReadings } from './stored-leaf-readings.js' */
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
@@ -7783,15 +7783,17 @@ const importSessionDocument = async (e, options = {}) => {
         comparisonClassification: fileParts.requestRead.comparisonClassification
       };
     }
+    // The document as the file holds it (R4 reads it); a Session 46-50's Linear LOSATP search takes the results of
+    // its saved rows, as a 27-44's does above (OV-3545).
+    const storedDocument = legacyRead ? readSessionInput(legacyRead.upgrade.document) : await withSavedProteinResults(fileDocument);
+    if (!options.isCurrent()) return { status: 'canceled' };
     recordSessionLifecycleEvent('current-session-preflight-start');
     // What Load cannot restore as stored, listed in the dialog before the
     // commit (BA-D25); frozen there, so no step after the commit adds one.
     // A Session 27-44's rows are its readers' and Python's (above).
     /** @type {LoadRepair[]} */
     const repairs = [...(legacyRead?.repairs ?? [])];
-    // The one read of the document (D1c 2.2): its band's description, repaired.
-    // The document as the file holds it (R4 reads it), and as its band reads it.
-    const storedDocument = legacyRead ? readSessionInput(legacyRead.upgrade.document) : fileDocument;
+    // The one read of the document (D1c 2.2): its band's description, repaired, and as its band reads it.
     const document = readSessionDocument(storedDocument);
     repairs.push(...document.repairs);
     const preflight = await preflightSessionImport(storedDocument, document.value, repairs, uncomposedSets,

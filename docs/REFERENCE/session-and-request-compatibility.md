@@ -1033,7 +1033,10 @@ search itself, with the raw rows it found in `losatCache`. Web Load gives such
 a request the results of those rows, as a Generate commits them, so a redraw
 before the first Generate (a label edit, Reset record positions, Align) needs
 no LOSAT run. When the saved rows do not answer every search,
-the request keeps the search, and Generate runs it in the browser.
+the request keeps the search, and Generate runs it in the browser. Web Load
+does the same for a Session 46 or 47 that `gbdraw linear --losat losatp
+--session_output` wrote between 2026-10-11 and 2026-10-23, before the CLI
+stored the results itself.
 
 Released request schemas 1, 2, 5, 6, and 7 remain readable. Their
 `alignOrthogroupFeature` protein-setting string is read only when loading old

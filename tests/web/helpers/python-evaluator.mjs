@@ -190,6 +190,18 @@ result = legacy_session_to_drawings_json(json.dumps(request["document"]), json.d
   return { result: reply };
 };
 
+// Load of a Session 46-50 whose Linear request holds a LOSATP search (OV-3545): the Worker port as the composition
+// root sets it, with Python's step evaluated here. `calls` collects each document sent.
+export const pythonSavedProteinResultReader = (calls = []) => async ({ document }) => {
+  calls.push(document);
+  const reply = JSON.parse(await evaluatePython(`
+from gbdraw.web_support.legacy_session import saved_protein_results_json
+result = saved_protein_results_json(payload)
+`, JSON.stringify(document)));
+  if (reply.error) throw reply.error;
+  return { result: reply };
+};
+
 /**
  * The rule owner's `reviseColorRules` (app/feature-editor/rule-actions.js) over
  * `preparation`, for a test that stands in for the rule owner.
