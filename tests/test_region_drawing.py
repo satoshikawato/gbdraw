@@ -1874,3 +1874,60 @@ def test_a_paste_gives_the_pasted_records_no_depth_or_genetic_code_of_the_target
     assert pasted.request.options.depth_track_files is None
     assert tuple(pasted.request.options.losat_search.record_gencodes) == (2, 2, None)
     assert len(resolve_request_records(pasted.request).records) == 3
+
+
+def test_a_paste_into_a_target_with_an_anchor_feature_aligns_the_pasted_records_too() -> None:
+    from gbdraw.api.region_drawing import paste_region_request
+    from gbdraw.api.request_render import plan_linear_request
+
+    # `anchor_feature` acts on every record a request draws; a paste keeps the target's option, so the pasted record
+    # is aligned with the others (only stored translations and a Similarity alignment plan leave it where it is).
+    target = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(MITO), record_key="mito")],
+        options=LinearDiagramOptions(anchor_feature="gene=COX1"),
+    )
+    source = LinearDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="m")])
+    pasted = paste_region_request(source, [RegionSelection("m", 1, 16569)], target, duplicates="add")
+    assert pasted.request.options.anchor_feature == target.options.anchor_feature
+    assert plan_linear_request(pasted.request).feature_anchor.statuses == ("rotated", "rotated")
+
+
+def test_same_file_contents_reads_sizes_first_and_hashes_only_files_of_equal_size(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gbdraw.api.record_planning import SourceFileContents
+
+    first, second, third = (tmp_path / name for name in ("a.gbk", "b.gbk", "c.gbk"))
+    first.write_bytes(b"LOCUS one\n")
+    second.write_bytes(b"LOCUS two, longer\n")
+    third.write_bytes(b"LOCUS one\n")
+    contents = SourceFileContents()
+    hashed: list[str] = []
+    digests = contents.digests
+    monkeypatch.setattr(contents, "digests", lambda paths: (hashed.extend(paths), digests(paths))[1])
+    assert not contents.same([str(first)], [str(second)])
+    assert hashed == []
+    assert contents.same([str(first)], [str(third)])
+    assert hashed == [str(first), str(third)]
+    # One fingerprint for files on disk and for bytes held in memory, however they are chunked.
+    assert SourceFileContents.fingerprint((b"LOCUS ", b"one\n")) == digests([str(first)])[0]
+
+
+def test_a_pasted_drawing_is_saved_through_the_public_session_writer(tmp_path: Path) -> None:
+    from gbdraw.api import SessionDrawingSpec, paste_region_drawing, save_session_document
+    from gbdraw.session import SessionFormatError, session_to_request
+
+    document = build_session_document(drawings=[
+        SessionDrawingSpec(request=_vnig_like_canvas()),
+        SessionDrawingSpec(request=LinearDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="m")])),
+    ], title="Copy")
+    with materialize_session(document, output_directory=tmp_path / "out") as materialized:
+        pasted = paste_region_drawing(materialized, [RegionSelection("pair:1", 1, 400)], drawing="circular", target="linear")
+    with pytest.raises(SessionFormatError, match="alone"):
+        save_session_document(tmp_path / "x.gbdraw", document=pasted.document, title="Other")
+    written = save_session_document(tmp_path / "copy.gbdraw", document=pasted.document)
+    assert written is pasted.document
+    loaded = load_session_document(tmp_path / "copy.gbdraw")
+    assert loaded.to_dict()["title"] == "Copy"
+    with materialize_session(loaded, output_directory=tmp_path / "out2") as materialized:
+        assert [record.record_key for record in session_to_request(materialized, drawing="linear").records] == ["m", "pair:1"]

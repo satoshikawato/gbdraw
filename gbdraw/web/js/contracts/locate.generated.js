@@ -364,7 +364,7 @@
  * @property {string} recordKey
  * @property {number} start
  * @property {number} end
- * @property {'CIRCULAR_WHOLE_RECORDS' | 'CIRCULAR_RANGE_TARGET' | 'SAME_DRAWING'} reason
+ * @property {'CIRCULAR_WHOLE_RECORDS'} reason
  */
 /**
  * @typedef {object} PasteNotCarriedItem
@@ -1051,10 +1051,7 @@ export const LOCATE_DESCRIPTION = Object.freeze({
         recordKey: Object.freeze({kind: "string"}),
         start: Object.freeze({kind: "integer"}),
         end: Object.freeze({kind: "integer"}),
-        reason: Object.freeze({
-          kind: "literal",
-          values: Object.freeze(["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "SAME_DRAWING"])
-        })
+        reason: Object.freeze({kind: "literal", values: Object.freeze(["CIRCULAR_WHOLE_RECORDS"])})
       }),
       optional: Object.freeze([]),
       open: false

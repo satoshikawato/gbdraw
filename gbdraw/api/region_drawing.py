@@ -257,6 +257,8 @@ DuplicatesChoice = Literal["skip", "add"]
 # CIRCULAR_RANGE_TARGET: the existing Circular drawing draws a range, so it takes nothing more (PD-OI-090 (4));
 # SAME_DRAWING: a copy goes to another drawing, and the source drawing does not change.
 CopyRefusalReason = Literal["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "SAME_DRAWING"]
+# The one reason a selected span is left out while the others are pasted (a member of ``CopyRefusalReason``).
+LeftOutReason = Literal["CIRCULAR_WHOLE_RECORDS"]
 
 
 class CopyRefused(ValidationError):
@@ -1115,7 +1117,7 @@ class LeftOut:
     record_key: str
     start: int
     end: int
-    reason: CopyRefusalReason
+    reason: LeftOutReason
 
 
 @dataclass(frozen=True)
@@ -1230,8 +1232,10 @@ def paste_region_request(
     and are listed (``not_carried``). A selected span the target draws already
     (the same record of the same file, by file content, and the same span) is
     listed; ``duplicates="skip"`` leaves it out, ``"add"`` adds it as a record
-    of its own. An aligned Linear target keeps its alignment and draws the
-    pasted records unmoved; separate Circular diagrams take each record as a
+    of its own. A Linear target aligned by stored record translations or a
+    Similarity alignment plan keeps its alignment and draws the pasted
+    records unmoved; a target whose options set ``anchor_feature`` aligns the
+    pasted records as it aligns all of its records. Separate Circular diagrams take each record as a
     diagram of its own. A Circular target takes whole records, and only while
     it draws whole records: a range is left out and listed (``left_out``), and
     the paste is refused (:class:`CopyRefused`) when nothing whole is left.
@@ -1649,6 +1653,7 @@ def _placed(
 __all__ = [
     "AlreadyPresent",
     "CopyRefusalReason",
+    "LeftOutReason",
     "CopyRefused",
     "DerivedRecords",
     "DuplicatesChoice",

@@ -23,6 +23,7 @@ from gbdraw.api.region_drawing import (
     CopyRefused,
     DuplicatesChoice,
     FeatureRegionSelection,
+    LeftOutReason,
     NotCarried,
     NotCarriedKind,
     PasteEdits,
@@ -152,7 +153,7 @@ class LeftOutItem(TypedDict):
     recordKey: str
     start: int
     end: int
-    reason: CopyRefusalReason
+    reason: LeftOutReason
 
 
 class PasteNotCarriedItem(TypedDict):
