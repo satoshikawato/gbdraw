@@ -16,11 +16,14 @@ come along unless the paste takes the records only.
 
 from __future__ import annotations
 
-import hashlib
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from numbers import Real
+from types import SimpleNamespace
 from typing import Any, Literal, cast
+
+import pandas as pd
+from pandas import DataFrame
 
 from gbdraw.analysis.origin_arcs import location_origin_arc
 from gbdraw.annotations.models import (
@@ -33,16 +36,23 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import (
     DEPTH_COMPATIBILITY_FIELDS,
     CircularDiagramOptions,
+    ColorOptions,
     CircularMultiRecordOptions,
     CircularRequestTrackOptions,
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LosatSearchOptions,
     _ModeDiagramOptions,
     config_override_mode,
 )
-from gbdraw.api.record_planning import ResolvedRecordCollection, ResolvedRecordProvenance
+from gbdraw.api.record_planning import (
+    ResolvedRecordCollection,
+    ResolvedRecordProvenance,
+    SourceFileContents,
+    resolve_implicit_record_output_prefix,
+)
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import (
     CircularBatchRequest,
@@ -67,14 +77,32 @@ from gbdraw.auto_sizes import (
     adapt_explicit_settings,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.core.record_metadata import RecordSourceKind
 from gbdraw.config.models.render_profiles import CircularRenderProfile
 from gbdraw.configurators.depth import DepthConfigurator
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.colors import build_specific_color_rules
+from gbdraw.features.ids import exact_value_pattern, feature_instance
 from gbdraw.features.overrides import FeatureOverride
+from gbdraw.features.selector_values import find_specific_color_rule
+from gbdraw.io.colors import read_color_table
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RecordWindow, window_drawn_reverse
 from gbdraw.layout.record_placement import parse_record_row_position
-from gbdraw.session import MaterializedSession, SessionDrawingSpec, session_to_request
+from gbdraw.layout.similarity_alignment import (
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+)
+from gbdraw.session import (
+    MaterializedSession,
+    SessionDocument,
+    SessionDrawingSpec,
+    replace_drawing_request,
+    session_to_request,
+)
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import canonical_depth_tracks
 from gbdraw.tracks.circular import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slots
@@ -226,11 +254,9 @@ PasteEdits = Literal["edits", "records"]
 DuplicatesChoice = Literal["skip", "add"]
 # Why a copy is refused:
 # CIRCULAR_WHOLE_RECORDS: a Circular drawing takes several whole records, or one record or range alone;
-# CIRCULAR_RANGE_TARGET: the existing Circular drawing draws one range, which takes nothing more;
-# TARGET_ALIGNED: the existing Linear drawing is aligned (Align at feature or a Similarity alignment), whose
-# alignment names every record it draws;
-# SEPARATE_DIAGRAMS: the existing Circular drawing draws each record as a diagram of its own.
-CopyRefusalReason = Literal["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "TARGET_ALIGNED", "SEPARATE_DIAGRAMS"]
+# CIRCULAR_RANGE_TARGET: the existing Circular drawing draws a range, so it takes nothing more (PD-OI-090 (4));
+# SAME_DRAWING: a copy goes to another drawing, and the source drawing does not change.
+CopyRefusalReason = Literal["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "SAME_DRAWING"]
 
 
 class CopyRefused(ValidationError):
@@ -238,9 +264,8 @@ class CopyRefused(ValidationError):
 
     _MESSAGES: Mapping[CopyRefusalReason, str] = {
         "CIRCULAR_WHOLE_RECORDS": "A Circular drawing draws several whole records, or one record or range alone.",
-        "CIRCULAR_RANGE_TARGET": "The Circular drawing draws one range; it takes no other record or range.",
-        "TARGET_ALIGNED": "The Linear drawing is aligned; its alignment names every record it draws.",
-        "SEPARATE_DIAGRAMS": "The Circular drawing draws each record as a separate diagram.",
+        "CIRCULAR_RANGE_TARGET": "The Circular drawing draws a range; it takes no other record or range.",
+        "SAME_DRAWING": "A copy goes to another drawing; choose a drawing other than the source.",
     }
 
     def __init__(self, reason: CopyRefusalReason) -> None:
@@ -436,7 +461,11 @@ def _derive_selected(
             if target_mode == "linear"
             else CircularDiagramRequest(records=records, layout=layout, grouping="single" if layout is None else "grid")
         )
-        return RegionRequest(request=request, mode=target_mode, adaptation=SettingAdaptation(kept={}, reset=()), not_carried=())
+        # The uploaded comparison and ring tables are not copied either, and are listed (PD-OI-090 (4)).
+        tables = tuple(NotCarried(kind, source_mode) for kind, _count in _uploaded_tables(source.options))
+        return RegionRequest(
+            request=request, mode=target_mode, adaptation=SettingAdaptation(kept={}, reset=()), not_carried=tables
+        )
     source_ids = [str(record.id) for record in collection.records]
     derived = DerivedRecords(
         mode=target_mode,
@@ -1021,7 +1050,14 @@ def _has_any(options: object, names: Sequence[str]) -> bool:
 
 
 
-PasteNotCarriedKind = Literal["ANNOTATIONS", "FEATURE_PLACEMENTS", "DEPTH", "NO_COMPARISON_ROWS"]
+PasteNotCarriedKind = Literal[
+    "ANNOTATIONS",
+    "FEATURE_PLACEMENTS",
+    "DEPTH",
+    "COMPARISON_TABLES",
+    "CONSERVATION_RING_TABLES",
+    "NO_COMPARISON_ROWS",
+]
 
 
 @dataclass(frozen=True)
@@ -1029,10 +1065,13 @@ class PasteNotCarried:
     """One part a paste does not bring, or the pasted records lack, by kind, with its ``count``.
 
     ANNOTATIONS, FEATURE_PLACEMENTS and DEPTH are the source drawing's
-    annotations, feature placements and Depth tracks of the copied records,
-    which a paste does not carry; NO_COMPARISON_ROWS counts the pasted records
-    the existing drawing's comparisons have no rows or pairs for. The CLI and
-    API text is ``message``; the Web words the kind in its own wording owner.
+    annotations, feature placements and Depth tracks of the copied records and
+    regions; COMPARISON_TABLES and CONSERVATION_RING_TABLES its uploaded
+    comparison and ring tables (counted by file or table). A paste carries
+    none of them, whatever it brings (PD-OI-090 (4)). NO_COMPARISON_ROWS
+    counts the pasted records the existing drawing's comparisons have no rows
+    or pairs for. The CLI and API text is ``message``; the Web words the kind
+    in its own wording owner.
     """
 
     kind: PasteNotCarriedKind
@@ -1044,6 +1083,8 @@ class PasteNotCarried:
             "ANNOTATIONS": f"{self.count} annotation(s) of the source drawing.",
             "FEATURE_PLACEMENTS": f"{self.count} feature placement(s) of the source drawing.",
             "DEPTH": f"{self.count} Depth track(s) of the source drawing.",
+            "COMPARISON_TABLES": f"{self.count} uploaded comparison table(s) of the source drawing.",
+            "CONSERVATION_RING_TABLES": f"{self.count} uploaded ring table(s) of the source drawing.",
             "NO_COMPARISON_ROWS": f"The comparisons of the drawing have no rows for {self.count} pasted record(s).",
         }[self.kind]
 
@@ -1066,6 +1107,18 @@ class AlreadyPresent:
 
 
 @dataclass(frozen=True)
+class LeftOut:
+    """A selected span the existing drawing cannot take, with the reason, while it takes the others: a range into a
+    Circular drawing of whole records (``CIRCULAR_WHOLE_RECORDS``). Source coordinates, as in :class:`AlreadyPresent`.
+    """
+
+    record_key: str
+    start: int
+    end: int
+    reason: CopyRefusalReason
+
+
+@dataclass(frozen=True)
 class PasteRequest:
     """The existing drawing's request with the pasted records, their keys there, and the lists for the dialog."""
 
@@ -1073,16 +1126,28 @@ class PasteRequest:
     mode: DrawingMode
     pasted_record_keys: tuple[str, ...]
     already_present: tuple[AlreadyPresent, ...]
+    left_out: tuple[LeftOut, ...]
     not_carried: tuple[PasteNotCarried, ...]
 
 
 @dataclass(frozen=True)
 class PastedDrawing:
-    """The existing drawing with the pasted records, their keys there, and the lists the CLI and API word."""
+    """The existing drawing with the pasted records, the Session with it in its place, and the lists.
+
+    ``drawing`` is the target drawing with its ID, name and Web state (its
+    settings draft, Legend and feature edits, ``ui`` and editor state), ready
+    to stand in its place; ``document`` is the Session with it there, every
+    other drawing as it was. When records were pasted the drawing's saved
+    Result drew the old request, so it is dropped (``result_dropped``) and the
+    next Generate draws the drawing again.
+    """
 
     drawing: SessionDrawingSpec
+    document: SessionDocument
+    result_dropped: bool
     pasted_record_keys: tuple[str, ...]
     already_present: tuple[AlreadyPresent, ...]
+    left_out: tuple[LeftOut, ...]
     not_carried: tuple[PasteNotCarried, ...]
 
     @property
@@ -1102,28 +1167,40 @@ def paste_region_drawing(
     edits: PasteEdits = "edits",
     duplicates: DuplicatesChoice = "skip",
 ) -> PastedDrawing:
-    """Paste ``regions`` of a drawing of ``materialized`` into its drawing ``target`` (by ID or name).
+    """Paste ``regions`` of a drawing of ``materialized`` into another of its drawings, ``target`` (by ID or name).
 
-    ``drawing`` selects the source drawing as in :func:`derive_region_drawing`.
-    The result is the target drawing with the records appended after its own
-    (:func:`paste_region_request`), under the target's ID and name; build the
-    Session again with it in the target's place. Use the result while
-    ``materialized`` is active: its request reads the materialized files.
+    ``drawing`` selects the source drawing as in :func:`derive_region_drawing`;
+    the target is another drawing (:class:`CopyRefused`, ``SAME_DRAWING``).
+    The records are appended after the target's own
+    (:func:`paste_region_request`). The result keeps everything else of the
+    target and of the Session (:class:`PastedDrawing`); save its ``document``.
+    Use it while ``materialized`` is active: its request reads the
+    materialized files.
     """
-    selected = materialized.document.drawing(target)
+    document = materialized.document
+    source_id = document.drawing(drawing).id
+    target_id = document.drawing(target).id
+    if source_id == target_id:
+        raise CopyRefused("SAME_DRAWING")
     pasted = paste_region_request(
-        session_to_request(materialized, drawing=drawing),
+        session_to_request(materialized, drawing=source_id),
         regions,
-        session_to_request(materialized, drawing=target),
+        session_to_request(materialized, drawing=target_id),
         margin=margin,
         reverse_complement=reverse_complement,
         edits=edits,
         duplicates=duplicates,
     )
+    replaced = replace_drawing_request(
+        document, target_id, pasted.request, keep_result=not pasted.pasted_record_keys
+    )
     return PastedDrawing(
-        drawing=SessionDrawingSpec(request=pasted.request, mode=pasted.mode, id=selected.id, name=selected.name),
+        drawing=replaced.drawing,
+        document=replaced.document,
+        result_dropped=replaced.result_dropped,
         pasted_record_keys=pasted.pasted_record_keys,
         already_present=pasted.already_present,
+        left_out=pasted.left_out,
         not_carried=pasted.not_carried,
     )
 
@@ -1145,37 +1222,46 @@ def paste_region_request(
     on one new row of the canvas (Circular), and take keys of their own there.
     With ``edits="edits"`` each record comes as the source draws it, with the
     per-feature edits (color, label, hidden) inside its regions rebound to its
-    new key; the source's annotations, feature placements and Depth stay, and
-    are listed. With ``edits="records"`` the records come as a new drawing of
-    their files draws them. A selected span the target draws already (the same
-    record of the same file, by record identity, and the same span) is listed;
-    ``duplicates="skip"`` leaves it out, ``"add"`` adds it as a record of its
-    own. A Circular target takes whole records only (:class:`CopyRefused`).
+    new key. A per-feature color is a ``hash`` row of the color table: the
+    rows that color a feature inside the regions are added after the target's
+    rows, naming the feature of the pasted record. With ``edits="records"`` the
+    records come as a new drawing of their files draws them. Either way the
+    source's annotations, feature placements, Depth and uploaded tables stay,
+    and are listed (``not_carried``). A selected span the target draws already
+    (the same record of the same file, by file content, and the same span) is
+    listed; ``duplicates="skip"`` leaves it out, ``"add"`` adds it as a record
+    of its own. An aligned Linear target keeps its alignment and draws the
+    pasted records unmoved; separate Circular diagrams take each record as a
+    diagram of its own. A Circular target takes whole records, and only while
+    it draws whole records: a range is left out and listed (``left_out``), and
+    the paste is refused (:class:`CopyRefused`) when nothing whole is left.
     Neither request changes.
     """
     if edits not in {"edits", "records"}:
         raise ValidationError(f"Unknown edits choice: {edits!r}.", diagnostic={"code": "INPUT_INVALID"})
     if duplicates not in {"skip", "add"}:
         raise ValidationError(f"Unknown duplicates choice: {duplicates!r}.", diagnostic={"code": "INPUT_INVALID"})
-    if isinstance(target, CircularBatchRequest):
-        raise CopyRefused("SEPARATE_DIAGRAMS")
     target_mode: DrawingMode = "linear" if isinstance(target, LinearDiagramRequest) else "circular"
     collection = resolve_request_records(source)
     selected = _resolve_regions(collection, regions, margin=margin)
-    if isinstance(target, CircularDiagramRequest):
-        if len(target.records) == 1 and target.records[0].windows:
-            raise CopyRefused("CIRCULAR_RANGE_TARGET")
-        if not all(region.whole for region in selected):
-            raise CopyRefused("CIRCULAR_WHOLE_RECORDS")
-    elif target.similarity_alignment is not None or (target.layout is not None and target.layout.record_translations):
-        raise CopyRefused("TARGET_ALIGNED")
     target_collection = resolve_request_records(target)
-    present = _already_present(collection, selected, target_collection)
+    left_out: tuple[LeftOut, ...] = ()
+    if target_mode == "circular":
+        if any(item.window is not None or item.region is not None for item in target_collection.provenance):
+            raise CopyRefused("CIRCULAR_RANGE_TARGET")
+        if not any(region.whole for region in selected):
+            raise CopyRefused("CIRCULAR_WHOLE_RECORDS")
+        left_out = tuple(
+            LeftOut(region.item.record_identity_key, start, end, "CIRCULAR_WHOLE_RECORDS")
+            for region in selected if not region.whole for start, end in region.spans
+        )
+        selected = _without_spans(selected, {(item.record_key, (item.start, item.end)) for item in left_out})
+    present = _already_present(source, selected, target, target_collection)
     kept = selected if duplicates == "add" else _without_spans(
         selected, {(item.record_key, (item.start, item.end)) for item in present}
     )
     if not kept:
-        return PasteRequest(target, target_mode, (), present, ())
+        return PasteRequest(target, target_mode, (), present, left_out, ())
     carried = _derive_selected(
         source,
         collection,
@@ -1195,28 +1281,88 @@ def paste_region_request(
         replace(record, record_key=key) for record, key in zip(carried.records, keys, strict=True)
     )
     rename = dict(zip((record.record_key for record in carried.records), keys, strict=True))
-    options = carried.options
-    counts: tuple[tuple[PasteNotCarriedKind, int], ...] = (
-        ("ANNOTATIONS", sum(len(item.annotations) for item in options.annotations.sets) if options.annotations else 0),
-        ("FEATURE_PLACEMENTS", len(options.feature_placements)),
-        ("DEPTH", len(options.depth_tracks or ())),
-        ("NO_COMPARISON_ROWS", len(added) if _compares_by_rows(target) else 0),
+    rows = tuple(replace(row, record_key=rename[row.record_key]) for row in carried.options.feature_overrides)
+    colors = _pasted_colors(
+        source.options.colors if edits == "edits" else None,
+        target.options.colors,
+        [(region, rename[region.item.record_identity_key]) for region in kept],
     )
-    rows = tuple(replace(row, record_key=rename[row.record_key]) for row in options.feature_overrides)
-    records, layout = _placed(target, added, kept, unit_count=len(target_collection.records))
     units = sum(len(region.spans) for region in kept)
+    pasted_options = _pasted_options(target.options, rows, colors, len(target_collection.records), units, len(added))
     request: DiagramRequest
-    if isinstance(target, LinearDiagramRequest):
-        assert isinstance(layout, LinearMultiRecordOptions) or layout is None
-        linear_options = _pasted_options(target.options, rows, len(target_collection.records), units, len(added))
-        assert isinstance(linear_options, LinearDiagramOptions)
-        request = replace(target, records=records, layout=layout, options=linear_options)
+    if isinstance(target, CircularBatchRequest):
+        assert isinstance(pasted_options, CircularDiagramOptions)
+        request = _pasted_diagrams(target, added, [collection.records[r.item.resolved_index].id for r in kept])
+        request = replace(request, options=pasted_options)
+    elif isinstance(target, LinearDiagramRequest):
+        records, placed = _placed(target, added, kept, unit_count=len(target_collection.records))
+        assert isinstance(placed, LinearMultiRecordOptions) or placed is None
+        assert isinstance(pasted_options, LinearDiagramOptions)
+        layout, alignment = _unmoved(placed, target.similarity_alignment, keys)
+        request = replace(
+            target, records=records, layout=layout, options=pasted_options, similarity_alignment=alignment
+        )
     else:
-        circular_options = _pasted_options(target.options, rows, len(target_collection.records), units, len(added))
-        assert isinstance(layout, CircularMultiRecordOptions) and isinstance(circular_options, CircularDiagramOptions)
-        request = replace(target, records=records, layout=layout, grouping="grid", options=circular_options)
-    not_carried = tuple(PasteNotCarried(kind, count) for kind, count in counts if count)
-    return PasteRequest(request, target_mode, keys, present, not_carried)
+        records, canvas = _placed(target, added, kept, unit_count=len(target_collection.records))
+        assert isinstance(canvas, CircularMultiRecordOptions) and isinstance(pasted_options, CircularDiagramOptions)
+        request = replace(target, records=records, layout=canvas, grouping="grid", options=pasted_options)
+    not_carried = _paste_not_carried(source, collection, kept, target_mode, compares_by_rows=_compares_by_rows(target))
+    return PasteRequest(request, target_mode, keys, present, left_out, not_carried)
+
+
+UploadedTableKind = Literal["COMPARISON_TABLES", "CONSERVATION_RING_TABLES"]
+
+
+def _uploaded_tables(options: object) -> tuple[tuple[UploadedTableKind, int], ...]:
+    """The uploaded comparison and ring tables of a drawing, by kind and count (files or tables): its comparison and
+    ring inputs when it has no LOSAT search, whose results it would otherwise hold. No copy carries them: a new
+    drawing that keeps the settings lists them in its own words (``_linear_comparisons``, the ring tables)."""
+    if getattr(options, "losat_search", None) is not None:
+        return ()
+
+    def count(names: Sequence[str]) -> int:
+        values = [getattr(options, name, None) for name in names]
+        return sum(len(value) if isinstance(value, (list, tuple)) else 1 for value in values if value is not None)
+
+    found: tuple[tuple[UploadedTableKind, int], ...] = (
+        ("COMPARISON_TABLES", count(_LINEAR_COMPARISON_INPUTS) if isinstance(options, LinearDiagramOptions) else 0),
+        ("CONSERVATION_RING_TABLES", count(_RING_RESULTS) if isinstance(options, CircularDiagramOptions) else 0),
+    )
+    return tuple(item for item in found if item[1])
+
+
+def _paste_not_carried(
+    source: DiagramRequest,
+    collection: ResolvedRecordCollection,
+    kept: Sequence[SourceRegion],
+    target_mode: DrawingMode,
+    *,
+    compares_by_rows: bool,
+) -> tuple[PasteNotCarried, ...]:
+    """What a paste of ``kept`` leaves behind, read from the source drawing whatever the paste brings and whatever
+    the target's mode: the annotations, feature placements and Depth tracks of the copied records and regions, and
+    the uploaded tables; and the pasted records the target's comparisons have no rows for."""
+    options = source.options
+    source_mode: DrawingMode = "linear" if isinstance(source, LinearDiagramRequest) else "circular"
+    by_key = {region.item.record_identity_key: region for region in kept}
+    source_ids = [str(record.id) for record in collection.records]
+    annotations = _region_annotations(
+        options.annotations, collection, kept, [], source_mode,
+        tuple(source_ids[region.item.resolved_index] for region in kept),
+    )
+    depth = _region_depth_tracks(
+        canonical_depth_tracks(options, record_count=len(collection.records)), kept, target_mode
+    )
+    counts: tuple[tuple[PasteNotCarriedKind, int], ...] = (
+        ("ANNOTATIONS", sum(len(item.annotations) for item in annotations.sets) if annotations else 0),
+        ("FEATURE_PLACEMENTS", sum(
+            _keeps_feature(by_key, row.record_key, row.biological_feature_id) for row in options.feature_placements
+        )),
+        ("DEPTH", len(depth or ())),
+        *_uploaded_tables(options),
+        ("NO_COMPARISON_ROWS", len(kept) if compares_by_rows else 0),
+    )
+    return tuple(PasteNotCarried(kind, count) for kind, count in counts if count)
 
 
 def _compares_by_rows(target: DiagramRequest) -> bool:
@@ -1229,37 +1375,23 @@ def _compares_by_rows(target: DiagramRequest) -> bool:
     )
 
 
-def _record_identities(collection: ResolvedRecordCollection, digests: dict[str, str]) -> list[Hashable | None]:
-    """The record each drawn unit of ``collection`` draws, comparable across the drawings of one Session: its file
-    (by content: each drawing reads its own copy) and its place there; ``None`` for a record of no file."""
-    def digest(path: str) -> str:
-        if path not in digests:
-            hasher = hashlib.sha256()
-            with open(path, "rb") as handle:
-                for chunk in iter(lambda: handle.read(1 << 20), b""):
-                    hasher.update(chunk)
-            digests[path] = hasher.hexdigest()
-        return digests[path]
-
-    return [
-        (item.source_kind, tuple(digest(path) for path in item.source_paths), item.source_record_index)
-        if item.source_paths else None
-        for item in collection.provenance
-    ]
-
-
 def _already_present(
-    collection: ResolvedRecordCollection,
+    source: DiagramRequest,
     selected: Sequence[SourceRegion],
-    target: ResolvedRecordCollection,
+    target: DiagramRequest,
+    target_collection: ResolvedRecordCollection,
 ) -> tuple[AlreadyPresent, ...]:
-    """The selected spans whose record and span (whole, or the same start and end) the target draws already."""
-    digests: dict[str, str] = {}
-    drawn: dict[tuple[Hashable, tuple[int, int]], str] = {}
-    for item, identity, record in zip(
-        target.provenance, _record_identities(target, digests), target.records, strict=True
-    ):
-        if identity is None:
+    """The selected spans whose record and span (whole, or the same start and end) the target draws already.
+
+    A record is the same when it is the same record (by its place) of a file with the same bytes
+    (``SourceFileContents``): each drawing stages its own copy of a file. The files are read from the requests'
+    record sources, and a file is read only when its size matches.
+    """
+    contents = SourceFileContents()
+    drawn: list[tuple[RecordSourceKind, tuple[str, ...], int, tuple[int, int], str]] = []
+    for item, record in zip(target_collection.provenance, target_collection.records, strict=True):
+        kind, paths = contents.files(target.records[item.input_index].source)
+        if not paths:
             continue
         length = int(item.source_length or len(record))
         span = (
@@ -1267,13 +1399,16 @@ def _already_present(
             else (item.region.start, item.region.end) if item.region is not None
             else (1, length)
         )
-        drawn.setdefault((identity, span), item.record_identity_key)
-    identities = _record_identities(collection, digests)
+        drawn.append((kind, paths, item.source_record_index, span, item.record_identity_key))
     present: list[AlreadyPresent] = []
     for region in selected:
-        identity = identities[region.item.resolved_index]
+        kind, paths = contents.files(source.records[region.item.input_index].source)
         for span in region.spans:
-            target_key = None if identity is None else drawn.get((identity, span))
+            target_key = next((
+                key for drawn_kind, drawn_paths, index, drawn_span, key in drawn
+                if (drawn_kind, index, drawn_span) == (kind, region.item.source_record_index, span)
+                and paths and contents.same(paths, drawn_paths)
+            ), None)
             if target_key is not None:
                 key = region.item.record_identity_key
                 present.append(AlreadyPresent(key, span[0], span[1], span == (1, region.length), target_key))
@@ -1328,17 +1463,24 @@ def _expands(key: str, card: str) -> bool:
 def _pasted_options(
     options: CircularDiagramOptions | LinearDiagramOptions,
     rows: Sequence[FeatureOverride],
+    colors: ColorOptions | None,
     record_count: int,
     added_units: int,
     added_inputs: int,
 ) -> CircularDiagramOptions | LinearDiagramOptions:
-    """The existing drawing's options with the pasted records' feature edits ``rows`` after its own; a per-record
-    Depth track has none for the ``added_units`` drawn records, and a genetic code per record input is the runtime
-    default for the ``added_inputs`` records."""
+    """The existing drawing's options with the pasted records' feature edits ``rows`` after its own, and its color
+    table with their color rows (``colors``, None for none); a per-record Depth track has none for the
+    ``added_units`` drawn records, and a genetic code per record input is the runtime default for the
+    ``added_inputs`` records."""
     search: LosatSearchOptions | None = options.losat_search
     if search is not None and len(search.record_gencodes) > 1:
         search = replace(search, record_gencodes=(*search.record_gencodes, *(None,) * added_inputs))
-    pasted = replace(options, feature_overrides=(*options.feature_overrides, *rows), losat_search=search)
+    pasted = replace(
+        options,
+        feature_overrides=(*options.feature_overrides, *rows),
+        losat_search=search,
+        colors=options.colors if colors is None else colors,
+    )
     depth: list[DepthTrackInput] = []
     for track in canonical_depth_tracks(options, record_count=record_count) or ():
         source = track.source
@@ -1362,6 +1504,103 @@ def _pasted_options(
         depth_track_tick_font_sizes=None,
     )
     return replace(pasted, depth_track_heights=None) if isinstance(pasted, LinearDiagramOptions) else pasted
+
+
+_COLOR_TABLE_COLUMNS = ("feature_type", "qualifier_key", "value", "color", "caption")
+
+
+def _color_rows(colors: ColorOptions | None) -> DataFrame | None:
+    """The rows of a drawing's color table, read as its render reads them."""
+    if colors is None:
+        return None
+    if colors.color_table is not None:
+        return colors.color_table
+    return read_color_table(colors.color_table_file) if colors.color_table_file else None
+
+
+def _pasted_colors(
+    source: ColorOptions | None,
+    target: ColorOptions | None,
+    pasted: Sequence[tuple[SourceRegion, str]],
+) -> ColorOptions | None:
+    """The target's colors with a ``hash`` row for each feature inside a pasted region that a ``hash`` row of the
+    source colors: the row names the feature in the pasted record (its key there), with the source row's color and
+    caption, after the target's own rows. None when no such row comes along: the target's colors stay as they are.
+
+    The source's rows are matched as the renderer matches them (``find_specific_color_rule``): a row naming the
+    feature's instance in the source record, or an older row naming its stable hash, colors it.
+    """
+    table = _color_rows(source)
+    if table is None or "qualifier_key" not in table.columns:
+        return None
+    hash_rules = build_specific_color_rules(table[table["qualifier_key"] == "hash"])
+    added: list[tuple[str, str, str, str, str]] = []
+    for region, key in pasted:
+        for entry in region.item.source_feature_catalog:
+            if not region.contains(entry.location_parts):
+                continue
+            matched = find_specific_color_rule(
+                SimpleNamespace(type=entry.feature_type, qualifiers={}),
+                hash_rules,
+                selector={"hash": entry.stable_feature_id},
+                instance=feature_instance(entry.biological_feature_id, region.item.record_identity_key),
+            )
+            if matched is not None:
+                value = exact_value_pattern(feature_instance(entry.biological_feature_id, key))
+                added.append((entry.feature_type, "hash", value, str(matched[0]), str(matched[1] or "")))
+    if not added:
+        return None
+    rows = DataFrame(added, columns=list(_COLOR_TABLE_COLUMNS))
+    own = _color_rows(target)
+    merged = rows if own is None else pd.concat([own, rows], ignore_index=True)
+    return replace(target or ColorOptions(), color_table=merged, color_table_file=None)
+
+
+def _unmoved(
+    layout: LinearMultiRecordOptions | None,
+    plan: SimilarityAlignmentPlan | SimilarityAlignmentReference | None,
+    keys: Sequence[str],
+) -> tuple[LinearMultiRecordOptions | None, SimilarityAlignmentPlan | SimilarityAlignmentReference | None]:
+    """An aligned drawing's translations and Similarity alignment plan, which name every record it draws, naming
+    the pasted records ``keys`` too as records drawn where they are: no translation of their own, and the plan's
+    decision for a record with no candidate (``resolve_similarity_alignment``)."""
+    if layout is not None and layout.record_translations:
+        layout = replace(layout, record_translations=(
+            *layout.record_translations, *(LinearRecordTranslation(key) for key in keys)
+        ))
+    if not isinstance(plan, SimilarityAlignmentPlan):
+        return layout, plan
+    skipped = tuple(
+        AlignmentRecordDecision(
+            record_key=key,
+            status=AlignmentDecisionStatus.SKIPPED,
+            rationale=AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE,
+        )
+        for key in keys
+    )
+    return layout, replace(plan, records=(*plan.records, *skipped))
+
+
+def _pasted_diagrams(
+    target: CircularBatchRequest, added: Sequence[RecordInput], record_ids: Sequence[str]
+) -> CircularBatchRequest:
+    """Separate Circular diagrams with a diagram of each pasted record after them: no grid place, and an output
+    named by its record ID, as ``resolve_circular_batch_outputs`` names one, where the diagrams name each output."""
+    records = (*target.records, *(
+        replace(record, presentation=replace(record.presentation, grid_row=None, grid_column=None)) for record in added
+    ))
+    if not target.outputs:
+        return replace(target, records=records)
+    used = {(output.output_directory, output.output_prefix) for output in target.outputs}
+    outputs = list(target.outputs)
+    for record_id in record_ids:
+        base = resolve_implicit_record_output_prefix(record_id)
+        candidate, suffix = base, 2
+        while (outputs[-1].output_directory, candidate) in used:
+            candidate, suffix = f"{base}_{suffix}", suffix + 1
+        used.add((outputs[-1].output_directory, candidate))
+        outputs.append(replace(outputs[-1], output_prefix=candidate))
+    return replace(target, records=records, outputs=tuple(outputs))
 
 
 def _placed(
@@ -1414,6 +1653,7 @@ __all__ = [
     "DerivedRecords",
     "DuplicatesChoice",
     "FeatureRegionSelection",
+    "LeftOut",
     "LinearComparisonRule",
     "NotCarried",
     "NotCarriedKind",

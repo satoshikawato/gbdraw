@@ -339,9 +339,17 @@
  * @property {Record<string, unknown>} renderRequest
  * @property {Record<string, string>} resourceSources
  * @property {Record<string, string>} targetResourceSources
+ * @property {AddedResource[]} addedResources
  * @property {string[]} pastedRecordKeys
  * @property {AlreadyPresentItem[]} alreadyPresent
+ * @property {LeftOutItem[]} leftOut
  * @property {PasteNotCarriedItem[]} notCarried
+ */
+/**
+ * @typedef {object} AddedResource
+ * @property {string} resourceId
+ * @property {string} name
+ * @property {string} text
  */
 /**
  * @typedef {object} AlreadyPresentItem
@@ -352,14 +360,21 @@
  * @property {string} targetRecordKey
  */
 /**
+ * @typedef {object} LeftOutItem
+ * @property {string} recordKey
+ * @property {number} start
+ * @property {number} end
+ * @property {'CIRCULAR_WHOLE_RECORDS' | 'CIRCULAR_RANGE_TARGET' | 'SAME_DRAWING'} reason
+ */
+/**
  * @typedef {object} PasteNotCarriedItem
- * @property {'ANNOTATIONS' | 'FEATURE_PLACEMENTS' | 'DEPTH' | 'NO_COMPARISON_ROWS'} kind
+ * @property {'ANNOTATIONS' | 'FEATURE_PLACEMENTS' | 'DEPTH' | 'COMPARISON_TABLES' | 'CONSERVATION_RING_TABLES' | 'NO_COMPARISON_ROWS'} kind
  * @property {number} count
  */
 /**
  * @typedef {object} RefusedCopy
  * @property {'refused'} status
- * @property {'CIRCULAR_WHOLE_RECORDS' | 'CIRCULAR_RANGE_TARGET' | 'TARGET_ALIGNED' | 'SEPARATE_DIAGRAMS'} reason
+ * @property {'CIRCULAR_WHOLE_RECORDS' | 'CIRCULAR_RANGE_TARGET' | 'SAME_DRAWING'} reason
  */
 /**
  * @typedef {object} NewDrawingCopy
@@ -999,9 +1014,21 @@ export const LOCATE_DESCRIPTION = Object.freeze({
         renderRequest: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
         resourceSources: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})}),
         targetResourceSources: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})}),
+        addedResources: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "AddedResource"})}),
         pastedRecordKeys: Object.freeze({kind: "array", items: Object.freeze({kind: "string"})}),
         alreadyPresent: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "AlreadyPresentItem"})}),
+        leftOut: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "LeftOutItem"})}),
         notCarried: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "PasteNotCarriedItem"})})
+      }),
+      optional: Object.freeze([]),
+      open: false
+    }),
+    AddedResource: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        resourceId: Object.freeze({kind: "string"}),
+        name: Object.freeze({kind: "string"}),
+        text: Object.freeze({kind: "string"})
       }),
       optional: Object.freeze([]),
       open: false
@@ -1018,12 +1045,33 @@ export const LOCATE_DESCRIPTION = Object.freeze({
       optional: Object.freeze([]),
       open: false
     }),
+    LeftOutItem: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        recordKey: Object.freeze({kind: "string"}),
+        start: Object.freeze({kind: "integer"}),
+        end: Object.freeze({kind: "integer"}),
+        reason: Object.freeze({
+          kind: "literal",
+          values: Object.freeze(["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "SAME_DRAWING"])
+        })
+      }),
+      optional: Object.freeze([]),
+      open: false
+    }),
     PasteNotCarriedItem: Object.freeze({
       kind: "object",
       fields: Object.freeze({
         kind: Object.freeze({
           kind: "literal",
-          values: Object.freeze(["ANNOTATIONS", "FEATURE_PLACEMENTS", "DEPTH", "NO_COMPARISON_ROWS"])
+          values: Object.freeze([
+            "ANNOTATIONS",
+            "FEATURE_PLACEMENTS",
+            "DEPTH",
+            "COMPARISON_TABLES",
+            "CONSERVATION_RING_TABLES",
+            "NO_COMPARISON_ROWS"
+          ])
         }),
         count: Object.freeze({kind: "integer"})
       }),
@@ -1036,7 +1084,7 @@ export const LOCATE_DESCRIPTION = Object.freeze({
         status: Object.freeze({kind: "literal", values: Object.freeze(["refused"])}),
         reason: Object.freeze({
           kind: "literal",
-          values: Object.freeze(["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "TARGET_ALIGNED", "SEPARATE_DIAGRAMS"])
+          values: Object.freeze(["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "SAME_DRAWING"])
         })
       }),
       optional: Object.freeze([]),

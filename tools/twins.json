@@ -885,7 +885,7 @@
       "id": "concern:exact-value-pattern",
       "concern": "Exact-value pattern of a rule (^, the value with regex specials escaped, $)",
       "pythonOwner": [
-        "gbdraw/web_support/rule_matching.py:exact_value_pattern"
+        "gbdraw/features/ids.py:exact_value_pattern"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/feature-selector.js:escapeRegexLiteral",

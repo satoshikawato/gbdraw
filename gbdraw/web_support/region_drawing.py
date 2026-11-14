@@ -38,6 +38,7 @@ from gbdraw.api.region_drawing import (
 from gbdraw.api.requests import DiagramRequest
 from gbdraw.auto_sizes import AutoValue, SettingAdaptation
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
 from gbdraw.session_resources import SessionResourceTable, canonical_resource_ids
@@ -144,6 +145,16 @@ class AlreadyPresentItem(TypedDict):
     targetRecordKey: str
 
 
+class LeftOutItem(TypedDict):
+    """A selected span the existing drawing cannot take while it takes the others, with the reason: the source record
+    key and the span in source coordinates."""
+
+    recordKey: str
+    start: int
+    end: int
+    reason: CopyRefusalReason
+
+
 class PasteNotCarriedItem(TypedDict):
     """A part a paste does not bring, or the pasted records lack, by kind, with its count."""
 
@@ -151,14 +162,23 @@ class PasteNotCarriedItem(TypedDict):
     count: int
 
 
+class AddedResource(TypedDict):
+    """A resource of the pasted request that neither drawing has: the existing drawing's color table with the
+    pasted records' color rows, as canonical TSV text, under the resource ID the request names."""
+
+    resourceId: str
+    name: str
+    text: str
+
+
 class PastedRecords(TypedDict):
     """The existing drawing with the pasted records: its mode, its canonical request, and the lists.
 
-    Each resource the request names reads either a resource of the existing
-    drawing (``targetResourceSources``) or of the source drawing
-    (``resourceSources``), by that drawing's resource ID. ``pastedRecordKeys``
-    are the pasted records' keys in the request; empty when every selection
-    was already there and left out.
+    Each resource the request names reads a resource of the existing drawing
+    (``targetResourceSources``) or of the source drawing (``resourceSources``),
+    by that drawing's resource ID, or is new (``addedResources``).
+    ``pastedRecordKeys`` are the pasted records' keys in the request; empty
+    when every selection was already there and left out.
     """
 
     status: Literal["pasted"]
@@ -166,8 +186,10 @@ class PastedRecords(TypedDict):
     renderRequest: dict[str, object]
     resourceSources: dict[str, str]
     targetResourceSources: dict[str, str]
+    addedResources: list[AddedResource]
     pastedRecordKeys: list[str]
     alreadyPresent: list[AlreadyPresentItem]
+    leftOut: list[LeftOutItem]
     notCarried: list[PasteNotCarriedItem]
 
 
@@ -291,8 +313,12 @@ def _pasted_reply(
     target = decode_canonical_request(
         choice["target"]["renderRequest"], resource_paths=target_paths, output_directory=output_directory
     )
-    pasted = paste_region_request(source, selections, target, edits=choice["edits"], duplicates=choice["duplicates"])
-    payload, named = _encoded(pasted.request, target_paths)
+    # Both drawings send their color rules as files, which a render reads as written (request_render).
+    with rule_captions_as_written():
+        pasted = paste_region_request(
+            source, selections, target, edits=choice["edits"], duplicates=choice["duplicates"]
+        )
+    payload, named, added = _encoded(pasted.request, target_paths)
     target_sources, source_sources = _resource_sources(named, target_paths, resource_paths)
     return {
         "status": "pasted",
@@ -300,6 +326,7 @@ def _pasted_reply(
         "renderRequest": payload,
         "resourceSources": source_sources,
         "targetResourceSources": target_sources,
+        "addedResources": added,
         "pastedRecordKeys": list(pasted.pasted_record_keys),
         "alreadyPresent": [
             {
@@ -308,23 +335,37 @@ def _pasted_reply(
             }
             for item in pasted.already_present
         ],
+        "leftOut": [
+            {"recordKey": item.record_key, "start": item.start, "end": item.end, "reason": item.reason}
+            for item in pasted.left_out
+        ],
         "notCarried": [{"kind": item.kind, "count": item.count} for item in pasted.not_carried],
     }
 
 
-def _encoded(request: DiagramRequest, held: Mapping[str, str]) -> tuple[dict[str, object], dict[str, str]]:
-    """``request`` encoded with the staged files ``held`` under their own IDs, and the file of each resource it
-    names: the encoder takes a held resource with equal bytes, and adds one for a second input of a file."""
+def _encoded(
+    request: DiagramRequest, held: Mapping[str, str]
+) -> tuple[dict[str, object], dict[str, str], list[AddedResource]]:
+    """``request`` encoded with the staged files ``held`` under their own IDs, the file of each resource it names,
+    and the resources it names that no file holds (a table built for it): the encoder takes a held resource with
+    equal bytes, and adds one for a second input of a file."""
 
     table = SessionResourceTable()
     for resource_id, path in held.items():
         table.request().add_path(resource_id, kind="web-file", value=path)
     encoded = encode_canonical_request(request, table=table)
-    added = {resource.resource_id: str(resource.source_path) for resource in encoded.resources}
-    return encoded.payload, {
-        resource_id: held[resource_id] if resource_id in held else added.get(resource_id, "")
-        for resource_id in canonical_resource_ids(encoded.payload)
-    }
+    by_id = {resource.resource_id: resource for resource in encoded.resources}
+    named: dict[str, str] = {}
+    built: list[AddedResource] = []
+    for resource_id in canonical_resource_ids(encoded.payload):
+        resource = by_id.get(resource_id)
+        if resource_id in held:
+            named[resource_id] = held[resource_id]
+        elif resource is not None and resource.content is not None:
+            built.append({"resourceId": resource_id, "name": resource.name, "text": resource.content.decode("utf-8")})
+        else:
+            named[resource_id] = "" if resource is None else str(resource.source_path)
+    return encoded.payload, named, built
 
 
 def _resource_sources(named: Mapping[str, str], *drawings: Mapping[str, str]) -> tuple[dict[str, str], ...]:
@@ -356,7 +397,9 @@ def derived_drawing_reply(
     """A drawing derived from a source drawing (New drawing from a region, Find in other files), encoded with the
     source's resources: the request names the source's resource of each file it reads."""
 
-    payload, named = _encoded(request, resource_paths)
+    payload, named, built = _encoded(request, resource_paths)
+    if built:
+        raise _protocol_error("The derived drawing names a resource its source drawing does not have.")
     (resource_sources,) = _resource_sources(named, resource_paths)
     return {
         "status": "derived",
@@ -397,10 +440,12 @@ def derive_web_region_drawing_json(
 
 
 __all__ = [
+    "AddedResource",
     "AlreadyPresentItem",
     "CopyChoice",
     "DerivedRegionDrawing",
     "ExistingDrawingCopy",
+    "LeftOutItem",
     "NewDrawingCopy",
     "PasteNotCarriedItem",
     "PasteTarget",

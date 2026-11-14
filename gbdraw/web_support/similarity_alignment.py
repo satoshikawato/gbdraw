@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 import hashlib
 from dataclasses import dataclass, replace
-from pathlib import Path
 from collections.abc import Mapping, Sequence, Set
 from typing import Any, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
-    ResolvedRecordCollection, _source_details, alignment_record_keys,
+    ResolvedRecordCollection, SourceFileContents, alignment_record_keys,
     project_similarity_alignment_anchor_fact, similarity_alignment_evidence_edges,
 )
 from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request, resolve_request_records
@@ -401,14 +400,11 @@ def _serialize_projection(
     # The content of each source this call staged, hashed once per file. Not
     # ``provenance.source_paths``: records the Worker's cache supplied name the
     # files of the Generate that parsed them.
+    contents = SourceFileContents()
     fingerprints: dict[int, list[str]] = {}
-    hashes: dict[str, str] = {}
     for provenance in collection.provenance:
-        _kind, paths = _source_details(request.records[provenance.input_index].source)
-        for path in paths:
-            if path not in hashes:
-                hashes[path] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-        fingerprints[provenance.input_index] = [hashes[path] for path in paths]
+        _kind, paths = contents.files(request.records[provenance.input_index].source)
+        fingerprints[provenance.input_index] = list(contents.digests(paths))
     binding_records = []
     records = []
     base = {item.record_key: item for item in (before.layout.record_translations if before.layout else ())}

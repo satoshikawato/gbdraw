@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
@@ -1613,6 +1614,49 @@ def _source_details(
     raise ValidationError("Unsupported record input source.")
 
 
+class SourceFileContents:
+    """The content of record source files, compared across drawings: the one owner of "these records read the same
+    file" (a paste's duplicates, the Similarity alignment's source fingerprints).
+
+    Each drawing of a Session stages its own copy of a file, so a file is the
+    same by its bytes, not its path. A size is read first; a file is read once,
+    in chunks, and only when its SHA-256 is asked for.
+    """
+
+    def __init__(self) -> None:
+        self._sizes: dict[str, int] = {}
+        self._digests: dict[str, str] = {}
+
+    @staticmethod
+    def files(source: RecordInputSource) -> tuple[RecordSourceKind, tuple[str, ...]]:
+        """The kind of a record source and the paths of its files (none for a record held in memory)."""
+        return _source_details(source)
+
+    def sizes(self, paths: Sequence[str]) -> tuple[int, ...]:
+        for path in paths:
+            if path not in self._sizes:
+                self._sizes[path] = Path(path).stat().st_size
+        return tuple(self._sizes[path] for path in paths)
+
+    def digests(self, paths: Sequence[str]) -> tuple[str, ...]:
+        for path in paths:
+            if path not in self._digests:
+                hasher = hashlib.sha256()
+                with open(path, "rb") as handle:
+                    for chunk in iter(lambda: handle.read(1 << 20), b""):
+                        hasher.update(chunk)
+                self._digests[path] = hasher.hexdigest()
+        return tuple(self._digests[path] for path in paths)
+
+    def same(self, first: Sequence[str], second: Sequence[str]) -> bool:
+        """Whether two lists of files hold the same bytes, file by file: sizes first, then digests."""
+        return (
+            len(first) == len(second)
+            and self.sizes(first) == self.sizes(second)
+            and self.digests(first) == self.digests(second)
+        )
+
+
 def _file_source(kind: RecordSourceKind, paths: Sequence[str]) -> RecordInputSource:
     """The file source :func:`_source_details` reads as ``kind`` and ``paths``: a record held from a file plan
     (``held_record_origin``) names the file it was read from this way."""
@@ -2775,6 +2819,7 @@ def resolve_implicit_record_output_prefix(record_id: object) -> str:
 
 __all__ = [
     "DrawnUnitName",
+    "SourceFileContents",
     "RecordInputManifest",
     "ResolvedRecordCollection",
     "ResolvedRecordProvenance",
