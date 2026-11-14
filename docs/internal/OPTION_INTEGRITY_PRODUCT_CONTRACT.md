@@ -10707,7 +10707,7 @@ Decision date: 2026-10-11
 
 - Concern key: `session.project-drawings`
 - Scenario revision: `11`
-- Supersedes: `PD-OI-090`, scenario revision `10` (its Revision #2045 entry below).
+- Supersedes: `PD-OI-090`, scenario revision `10` (its Revision #2047 entry below).
   Scenario revision `10` superseded `PD-OI-090`, scenario revision `9` (`A / PROJECT-WITH-DRAWINGS`).
   Scenario revision `10` keeps the outcome and every term of scenario
   revision `9` except five sentences added at the end of 〔Undo と削除〕:
@@ -10804,7 +10804,7 @@ Decision date: 2026-10-11
   above, and for scenario revision `9` those quoted in the Revision 99 entry
   above, and for scenario revision `10` those quoted in the Revision 109
   entry above, and for scenario revision `11` the approval quoted in its
-  Revision #2045 entry below. The Owner approved the receipt text below as
+  Revision #2047 entry below. The Owner approved the receipt text below as
   written. The receipt reproduces its fields without translation or additional
   terms. Dependent runtime requires this authority merged into its base; this
   record supplies no runtime acceptance evidence.
@@ -10844,7 +10844,7 @@ Decision date: 2026-11-02
 }
 ```
 
-#### Revision #2045
+#### Revision #2047
 
 - On `2026-11-14`, about 22:47 JST, the Product Decision Owner `satoshikawato` answered
   「PD-OI-090 r11=承認 PD-OI-115 r2=承認」 to the full receipt texts of `PD-OI-090`
@@ -13658,7 +13658,7 @@ Decision date: 2026-11-07
 
 - Concern key: `web.result.region-select`
 - Scenario revision: `2`
-- Supersedes: `PD-OI-115`, scenario revision `1` (its Revision #2045 entry
+- Supersedes: `PD-OI-115`, scenario revision `1` (its Revision #2047 entry
   below). Scenario revision `1` superseded none. No earlier record fixed how a span is selected by a
   drag on the drawing; `PD-OI-053` fixes Layout edit and the canvas pan,
   `PD-OI-090` 〔作成〕 (4) fixes what New drawing from a region creates, and
@@ -13669,7 +13669,7 @@ Decision date: 2026-11-07
   and its JSON representation below.
 - Decision source: the Owner replies of `2026-11-04` quoted in the Revision 117
   entry above, and for scenario revision `2` the approval quoted in the
-  `PD-OI-090` Revision #2045 entry (its entry below points to it). The receipt and JSON below reproduce the approved fields
+  `PD-OI-090` Revision #2047 entry (its entry below points to it). The receipt and JSON below reproduce the approved fields
   without translation or additional terms. The runtime that implements it
   merges with it (static Product Contract co-change); this record supplies no
   runtime acceptance evidence.
@@ -13716,9 +13716,9 @@ Decision date: 2026-11-04
 }
 ```
 
-#### Revision #2045
+#### Revision #2047
 
-- This entry belongs to the same revision as the `PD-OI-090` Revision #2045 entry, which
+- This entry belongs to the same revision as the `PD-OI-090` Revision #2047 entry, which
   quotes the approval 「PD-OI-090 r11=承認 PD-OI-115 r2=承認」 (`2026-11-14`, `D-16`).
   Scenario revision `2` supersedes scenario revision `1`; the receipt below is serialized
   byte for byte as approved.
