@@ -22,12 +22,12 @@ export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error:
  * another is shown. The state ref of every key and the value an empty slot
  * installs, given the mode of the slot's drawing and the current value: the displayed-Result
  * part of the owner set, the selected Result, the feature-editor status, the generated
- * stroke defaults, the alignment Reset receipt (it binds the
- * committed Linear Session), and the protein identity manifest its LOSAT
+ * stroke defaults, a Linear drawing's Similarity alignment plan, its Reset receipt (it
+ * binds the committed Linear Session) and its record translations (PD-OI-090: each
+ * drawing's own record display; OV-3532), and the protein identity manifest its LOSAT
  * protein rows resolve in (D-197). Draft and project state stays shared: the specific
  * color rules, the file Legend captions, the Linear record orientations, the
- * pending palette, the LOSAT caches and legacy protein candidates, the alignment plan and
- * record translations, and every editor intent (R2).
+ * pending palette, the LOSAT caches and legacy protein candidates, and every editor intent (R2).
  * @satisfies {Readonly<Record<string, (mode: 'circular' | 'linear', current: any) => any>>}
  */
 export const ARTIFACT_SLOT_EMPTY = Object.freeze({
@@ -57,7 +57,9 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   // as a slot whose applied palette is null does (`installArtifactSlot`).
   appliedPaletteName: (_mode, current) => current,
   appliedPaletteColors: (_mode, current) => current,
+  similarityAlignmentPlan: () => null,
   similarityAlignmentResetReceipt: () => null,
+  linearRecordTranslations: () => [],
   originalSvgStroke: () => ({ color: null, width: null }),
   proteinIdentityManifest: () => emptyProteinIdentityManifest()
 });

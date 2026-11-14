@@ -60,6 +60,7 @@ const state = () => {
   return {
     ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
     activeDrawing: () => ({ mode: 'linear', recordsOff: [], linearSeqs }),
+    activeDrawingId: ref('linear-1'),
     mode: ref('linear'),
     featureCatalog: ref({ items: [{ recordKeys: ['a', 'b', 'c'] }] }),
     selectedOrthogroupId: ref('og-1'),
@@ -197,6 +198,7 @@ const create = ({
   });
   const actions = createSimilarityAlignmentActions({
     state: controllerState,
+    writeArtifactValues: () => {},
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
     getEnrichedOrthogroupMembers: () => { enrichCalls += 1; return currentGroup.members; },
     // The orthogroup owner's drawn IDs of an anchor's feature; this Result names its records by key.

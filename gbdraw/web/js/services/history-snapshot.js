@@ -877,7 +877,7 @@ const applyFilesData = (drawing, filesData, fileStore) => {
  *   The file store that holds the files an intent and a checkpoint name.
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
- * @property {((drawing: D, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean, applyAlignment?: boolean }) => unknown) | null} [applyConfigData]
+ * @property {((drawing: D, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean }) => unknown) | null} [applyConfigData]
  *   The Settings restore.
  * @property {((drawing: D, options: { includePreviewNavigation: boolean }) => HistorySnapshotData) | null} [buildUiStateData]
  *   The UI capture; `includePreviewNavigation` adds pan, zoom, and tab state.
@@ -1331,10 +1331,11 @@ export const createHistorySnapshotService = ({
   // OV-2212: the shown artifact is still the one the fingerprint names while
   // the drawing's own artifact values are the ones its Generate committed: these
   // artifact slot values, by reference. The project
-  // LOSAT values and the alignment draft are not the drawing's (a Generate in
-  // another drawing replaces them), and Clear empties its protein manifest: the
-  // fingerprint covers what of them the Result drew, and the compact
-  // signature covers the alignment plan and record translations, by value.
+  // LOSAT values are not the drawing's (a Generate in another drawing replaces
+  // them), Clear empties its protein manifest, and a record move or a
+  // clearing edit changes its alignment plan and record translations without
+  // a Generate: the fingerprint covers what of them the Result drew, and the
+  // compact signature covers the plan and translations, by value.
   /** @type {readonly (typeof ARTIFACT_SLOT_KEYS)[number][]} */
   const TRANSPORT_IDENTITY_SLOT_KEYS = Object.freeze([
     'results',
@@ -1679,23 +1680,20 @@ export const createHistorySnapshotService = ({
 
   // The alignment plan, its Reset receipt, and record translations of
   // drawing `drawingId`; intents and checkpoints capture and restore them
-  // together. The receipt is an artifact slot value, the drawing's own
-  // (`readSlotValues`, OV-1195).
+  // together. They are artifact slot values, the drawing's own
+  // (`readSlotValues`, OV-1195, OV-3532).
   /** @param {DrawingId} drawingId */
-  const captureAlignmentState = (drawingId) => ({
-    receipt: readSlotValues(drawingId, ['similarityAlignmentResetReceipt']).similarityAlignmentResetReceipt,
-    plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
-    recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
-  });
-  /** @param {AlignmentStateData | null | undefined} alignmentState @param {DrawingId} drawingId */
-  const installAlignmentState = (alignmentState, drawingId) => {
-    writeArtifactValues(drawingId, { similarityAlignmentResetReceipt: cloneJsonData(alignmentState?.receipt) || null });
-    setGeneratedArtifactRef(state.similarityAlignmentPlan, cloneJsonData(alignmentState?.plan) || null);
-    setGeneratedArtifactRef(
-      state.linearRecordTranslations,
-      cloneJsonData(alignmentState?.recordTranslations) || []
-    );
+  const captureAlignmentState = (drawingId) => {
+    const values = readSlotValues(drawingId, ALIGNMENT_SLOT_KEYS);
+    return { receipt: values.similarityAlignmentResetReceipt, plan: values.similarityAlignmentPlan,
+      recordTranslations: values.linearRecordTranslations ?? [] };
   };
+  /** @param {AlignmentStateData | null | undefined} alignmentState @param {DrawingId} drawingId */
+  const installAlignmentState = (alignmentState, drawingId) => writeArtifactValues(drawingId, {
+    similarityAlignmentResetReceipt: cloneJsonData(alignmentState?.receipt) || null,
+    similarityAlignmentPlan: cloneJsonData(alignmentState?.plan) || null,
+    linearRecordTranslations: cloneJsonData(alignmentState?.recordTranslations) || []
+  });
 
   /** @param {D} drawing */
   const buildGeneratedArtifactSnapshot = (drawing) => {
@@ -1808,6 +1806,7 @@ export const createHistorySnapshotService = ({
   };
   const losatClearReach = createLosatClearReach(artifactSlots, writeArtifactValues);
   const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
+  const ALIGNMENT_SLOT_KEYS = /** @type {const} */ (['similarityAlignmentResetReceipt', 'similarityAlignmentPlan', 'linearRecordTranslations']);
 
   // Synchronous: History captures it without an await (OV-922).
   /** @param {DrawingId} drawingId */
@@ -1903,7 +1902,7 @@ export const createHistorySnapshotService = ({
         const config = intent.config;
         if (typeof applyConfigData === 'function' && config) {
           // The alignmentState domain below owns the plan and translations (OV-383).
-          applyConfigData(drawing, config, { resolveTrackPlacements: false, applyAlignment: false });
+          applyConfigData(drawing, config, { resolveTrackPlacements: false });
         } else if (config?.linearComparisonPlan) {
           installComparisonPlan(drawing, config.linearComparisonPlan);
         }

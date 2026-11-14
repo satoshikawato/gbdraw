@@ -50,6 +50,8 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
+ * @property {{ leaveDrawing: () => void }} alignment The Similarity alignment owner's port: its review, summary and
+ *   notice were the departing drawing's.
  * @property {(id: DrawingId) => DrawingState} installShownDrawing The one writer of the shown drawing.
  * @property {() => void} dismissNotice
  * @property {(departing: DrawingId, arriving: DrawingId) => void} switchDrawingSearch
@@ -74,7 +76,7 @@ export const createDrawingSwitch = ({
   state, results, selectedResultIndex, errorLog, failedGeneratePreservedResult, sessionOperationAvailability,
   historyAvailability, historyRestoring, traversalPending, settlePendingIntent, refreshCurrentIntent, adoptSessionReset,
   ruleWritePending, suspendSpecificRulePatternDrafts, clearFeatureSelection, rememberDepartingResultProjection,
-  auxiliaryImportFailureOnArrival, resetModeTransientUi, installShownDrawing, dismissNotice, switchDrawingSearch,
+  auxiliaryImportFailureOnArrival, resetModeTransientUi, alignment, installShownDrawing, dismissNotice, switchDrawingSearch,
   rebindAnnotationRecords, clearActiveRuntime, getResultIdentity, presentSelectedResult, rememberResultInventory,
   artifactSlotsSwap, captureArtifactSlot, installArtifactSlot
 }) => {
@@ -155,6 +157,7 @@ export const createDrawingSwitch = ({
     // 4. Transient UI. "Showing the last successful result" named the
     // departing drawing's Result, and the notice the departing drawing's work.
     adoptSessionReset(resetModeTransientUi);
+    alignment.leaveDrawing();
     dismissNotice();
     switchDrawingSearch(departing.id, arriving.id);
     failedGeneratePreservedResult.value = false;

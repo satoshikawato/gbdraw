@@ -362,6 +362,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalLinearLayout, CanonicalLinearRecordTranslation, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /** @import { LosatExecution } from './session-active-config-contract.js' */
 /** @import { ProteinFrameSource, StoredDrawing } from './main-session-comparison-frame.js' */
 /** @import { CommittedCanonicalSession, LiveSettingItem, LiveSettingWrite, SessionRequestProjection,
@@ -1723,6 +1724,7 @@ const unmanagedConfigValidationOf = (mode, storedConfig, storedRequest) => (
  * @param {{ projectedConfig?: Record<string, any> | null, resolveTrackPlacements?: boolean, applyCanvasPadding?: boolean }} [options]
  *   `applyCanvasPadding: false` leaves the padding to the caller (Load pads the shown Result after it mounts).
  *   Per-feature color edits are read as the rules are (`savedFeatureColorEdits`).
+ * @returns {DrawingAlignment} The alignment the drawing's draft holds, which the caller installs.
  */
 const applyModeSliceData = (drawing, mode, slice, {
   projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
@@ -1744,6 +1746,7 @@ const applyModeSliceData = (drawing, mode, slice, {
   }
   restorePendingPaletteFromSession(drawing, ui);
   reconcileImportedLinearTypographyLink({ adv: drawing.adv, linked: drawing.linearTypographyLinked, ui });
+  return draftAlignmentOf(mode, config);
 };
 
 const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
@@ -2232,6 +2235,7 @@ const applyLegacyConfigPayload = (drawing, config) => {
     && drawing.form.multi_record_canvas === false
     && isPlainObject(config.form) && config.form.multi_record_canvas === true;
   applyConfigData(drawing, config);
+  if (drawing.mode === 'linear') installShownAlignment(draftAlignmentOf(drawing.mode, config));
   if (turnsCanvasOn && !hasStoredCircularMultiRecordLayout(drawing.layoutPreferences)) {
     updateActiveLayoutPreference(drawing.layoutPreferences, 'circular', true,
       resolveCircularLayoutPreference(drawing.layoutPreferences, false));
@@ -3402,6 +3406,9 @@ const buildLoadedArtifactSlot = (set, {
   const runMetadata = isPlainObject(set.runMetadata) ? /** @type {Record<string, any>} */ (set.runMetadata) : {};
   const generatedLegend = readLegendPositionOfMode(ui.generatedLegendPosition, mode, `${at}ui.generatedLegendPosition`);
   repairs?.push(...generatedLegend.repairs, ...sessionUiFieldRepairs(ui, `${at}ui`));
+  // The set's Linear request owns the drawing's alignment plan and record
+  // translations, admitted as the request projection admits them (OV-3532).
+  const layout = canonicalLinearRecordLayout(set.renderRequest);
   return createArtifactSlot({
     drawing,
     values: {
@@ -3424,7 +3431,9 @@ const buildLoadedArtifactSlot = (set, {
       generatedCircularPlotTitlePosition: readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value,
       appliedPaletteName: String(ui.appliedPaletteName || 'default'),
       appliedPaletteColors: cloneColors(readPaletteColors(ui.appliedPaletteColors).value),
+      similarityAlignmentPlan: layout.similarityAlignment,
       similarityAlignmentResetReceipt: editorState.alignmentResetReceipt ?? null,
+      linearRecordTranslations: layout.recordTranslations,
       originalSvgStroke: editorState.originalSvgStroke,
       // The set's own manifest, adopted once it validates (D-197).
       proteinIdentityManifest: loadedProteinIdentityManifest(set.proteinIdentityManifest, { adoptCurrent: true })
@@ -3504,6 +3513,64 @@ export const applyLabelFitValues = (drawing, values, mode, trackOptions = {}) =>
   adv.forEach(([field, value]) => LABEL_FIT_ADV_WRITERS[field](drawing.adv, value));
 };
 
+/**
+ * A Linear drawing's Similarity alignment plan and record translations: artifact
+ * slot values of the drawing (OV-3532), not settings.
+ * @typedef {{ similarityAlignmentPlan: CanonicalSimilarityAlignmentPlan | null,
+ *   linearRecordTranslations: CanonicalLinearRecordTranslation[] }} DrawingAlignment
+ */
+/**
+ * The alignment an older draft's layout holds (a Session 46-50 slice, a
+ * request projection, a legacy configuration), read with the readers Load
+ * lists their losses with; a Circular drawing has none.
+ * @param {DiagramMode} mode
+ * @param {Record<string, unknown>} config
+ * @returns {DrawingAlignment}
+ */
+const draftAlignmentOf = (mode, config) => {
+  const layout = mode === 'linear' ? readPlainObject(config.linearRecordLayout).value : {};
+  return {
+    similarityAlignmentPlan: readSimilarityAlignment(layout.similarityAlignment).value,
+    linearRecordTranslations: readRecordTranslations(layout.recordTranslations).value
+  };
+};
+/**
+ * Installs the shown drawing's alignment, which the displayed artifact holds.
+ * @param {DrawingAlignment} alignment
+ */
+const installShownAlignment = ({ similarityAlignmentPlan, linearRecordTranslations }) => {
+  state.similarityAlignmentPlan.value = similarityAlignmentPlan;
+  state.linearRecordTranslations.value = linearRecordTranslations;
+};
+/**
+ * Session Load: each loaded Linear drawing's alignment plan and record
+ * translations are its own (OV-3532). A drawing with a Result set has its
+ * request's in its slot (`buildLoadedArtifactSlot`); the committed set's
+ * drawing has its request projection's, and another drawing its draft's. The
+ * shown drawing's are the page's unless a slot opens; a drawing not shown whose
+ * draft holds some keeps them in a slot of its own without a Result.
+ * @param {{ committed: readonly DrawingState[], shownDrawing: DrawingState, opensSlot: boolean,
+ *   committedSetDrawingId: DrawingId, committedLayout: CanonicalLinearLayout | null,
+ *   setDrawingIds: ReadonlySet<DrawingId>, draftAlignments: ReadonlyMap<DrawingId, DrawingAlignment> }} loaded
+ * @returns {Readonly<ArtifactSlot>[]} The slots of the drawings not shown that only an alignment fills.
+ */
+const installLoadedAlignments = ({
+  committed, shownDrawing, opensSlot, committedSetDrawingId, committedLayout, setDrawingIds, draftAlignments
+}) => {
+  /** @param {DrawingState} drawing @returns {DrawingAlignment} */
+  const alignmentOf = (drawing) => (drawing.id === committedSetDrawingId && drawing.mode === 'linear' && committedLayout
+    ? {
+        similarityAlignmentPlan: cloneJsonData(committedLayout.similarityAlignment ?? null),
+        linearRecordTranslations: cloneJsonData(committedLayout.recordTranslations ?? [])
+      }
+    : /** @type {DrawingAlignment} */ (draftAlignments.get(drawing.id)));
+  if (!opensSlot) installShownAlignment(alignmentOf(shownDrawing));
+  return committed.filter((drawing) => drawing !== shownDrawing && !setDrawingIds.has(drawing.id))
+    .map((drawing) => ({ drawing, values: alignmentOf(drawing) }))
+    .filter(({ values }) => values.similarityAlignmentPlan !== null || values.linearRecordTranslations.length > 0)
+    .map((slot) => createArtifactSlot(slot));
+};
+
 // Captured or stored settings (History Undo and Redo, the failed Session Load
 // rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
 // track stacks are installed as given, so unset slot sides, lane directions,
@@ -3512,10 +3579,10 @@ export const applyLabelFitValues = (drawing, values, mode, trackOptions = {}) =>
 /**
  * @param {DrawingState} drawing
  * @param {Record<string, unknown>} data
- * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean, captured?: boolean }} [options] `captured`:
+ * @param {{ resolveTrackPlacements?: boolean, captured?: boolean }} [options] `captured`:
  *   settings the app wrote (`applyCapturedConfigData`).
  */
-const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true, captured = false } = {}) => {
+const applyConfigData = (drawing, data, { resolveTrackPlacements = true, captured = false } = {}) => {
   const mode = drawing.mode;
   // The execution settings of a Session 44 or older draft or of a request
   // projection are app-level (`state.losatExecution`); the drawing keeps the
@@ -3546,16 +3613,9 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
     featurePlacementOverrides: /** @type {FeaturePlacementDraft} */ (featurePlacementsReader(mode)(data.featurePlacementOverrides).value)
   });
   ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets: readAnnotationSets(data.annotationSets).value });
-  // The record translations and alignment plan are the Linear mode's
-  // artifact; only the Linear drawing's settings carry them. A History
-  // config step carries neither and leaves them alone (OV-383).
-  const ownsAlignment = applyAlignment && mode === 'linear';
-  if (state.linearRecordTranslations && ownsAlignment) {
-    state.linearRecordTranslations.value = readRecordTranslations(linearLayout.recordTranslations).value;
-  }
-  if (state.similarityAlignmentPlan && ownsAlignment) {
-    state.similarityAlignmentPlan.value = readSimilarityAlignment(linearLayout.similarityAlignment).value;
-  }
+  // The record translations and alignment plan an older draft's layout
+  // holds are the drawing's artifact values: its caller installs them
+  // (`draftAlignmentOf`), and a History config step leaves them (OV-383).
   drawing.importedComparisonIntent.action = readImportedComparisonAction(readPlainObject(data.importedComparisonResolution).value.action).value;
   drawing.form.plot_title = String(drawing.form.plot_title || '');
   // `form.legend` and `adv.plot_title_position` are accessors over
@@ -3626,7 +3686,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
  * hold only values the app wrote, which `requireCurrentConfigFields` checks.
  * @param {DrawingState} drawing
  * @param {Record<string, unknown>} data
- * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean }} [options]
+ * @param {{ resolveTrackPlacements?: boolean }} [options]
  */
 export const applyCapturedConfigData = (drawing, data, options = {}) => {
   requireCurrentConfigFields(data);
@@ -6064,6 +6124,8 @@ const resetSessionProject = () => {
   state.featureOrthogroupIndex.value = new Map();
   state.selectedOrthogroupId.value = '';
   state.selectedOrthogroupAlignmentFeature.value = '';
+  state.similarityAlignmentPlan.value = null;
+  state.linearRecordTranslations.value = [];
   state.extractedFeatures.value = [];
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureRecordIds.value = [];
@@ -7192,10 +7254,11 @@ const readStoredDrawingDraft = async (view, repairs) => {
  * defaults (a new drawing state, or one `resetDrawingSettings` reset).
  * @param {DrawingState} drawing
  * @param {StoredDrawingInstall} install
+ * @returns {DrawingAlignment} The alignment its draft holds (`applyModeSliceData`).
  */
 const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPlacements, applyCanvasPadding }) => {
   INPUTS_SLICE.install(drawing.slices.inputs, { inputType });
-  applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
+  return applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
 };
 /**
  * One drawing to install outside a whole Load (a New drawing from a region):
@@ -8290,11 +8353,6 @@ const importSessionDocument = async (e, options = {}) => {
       ?? savedLegendRekeys(draftConfigOf(drawingId)?.rules, { originalOrder: [], originalColors: {} });
     // The slot the Load opens: the shown drawing's set when it is not the committed one.
     const openingSlot = storedSetSlots.find((slot) => slot.drawingId === plan.activeDrawingId) ?? null;
-    // The Linear drawing's committed request owns its alignment plan and
-    // record translations, wherever its set sits; both are admitted as the
-    // request projection admits the committed set's.
-    const linearSet = storedSets.find(({ drawing }) => drawing.mode === 'linear' && storedSetSlots.some((slot) => slot.drawingId === drawing.id));
-    const linearSetLayout = linearSet ? canonicalLinearRecordLayout(linearSet.set.renderRequest) : null;
 
     /** @type {Record<string, any> | null} */
     let legacyFeatureRecoveryPlan = null;
@@ -8610,9 +8668,11 @@ const importSessionDocument = async (e, options = {}) => {
     // drawing's Canvas padding follows once its Result is mounted. A Session 46
     // slice without its mode's request projection is stored settings: its track
     // stacks install as saved, unset axis indexes included (R11).
+    /** @type {Map<DrawingId, DrawingAlignment>} The alignment each drawing's draft holds (a Session 46-50 slice's). */
+    const draftAlignments = new Map();
     for (const drawing of committed) {
       const { id } = drawing;
-      installStoredDrawing(drawing, {
+      draftAlignments.set(id, installStoredDrawing(drawing, {
         // A Session 51 drawing's own input type; else the field of its mode.
         inputType: /** @type {InputType} */ (storedDrawingInputs.get(id)?.inputType ?? inputTypes[SESSION_DRAWINGS_LAYOUT.inputTypeFields[drawing.mode]]),
         slice: draftPartOf(id).slice,
@@ -8621,7 +8681,7 @@ const importSessionDocument = async (e, options = {}) => {
         draft: withRecoveredPaint(id, loadedFeatureEditsOf(id), draftOf(id)),
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
         applyCanvasPadding: id !== plan.activeDrawingId
-      });
+      }));
     }
     // App-level settings: LOSAT execution (after the drafts, whose request
     // projection may name a thread count), the rich popup, CLI provenance.
@@ -8635,17 +8695,11 @@ const importSessionDocument = async (e, options = {}) => {
       ...[...storedDrawingInputs].map(([id, inputs]) => /** @type {[DrawingId, SessionCliOptions | null]} */ ([id, inputs.cliOptions]))
     ];
     for (const [id, options] of cliOptionsByDrawing) if (options) preservedCliOptions.set(id, options);
-    const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
-    if (canonicalLinearLayout && state.linearRecordTranslations) {
-      state.linearRecordTranslations.value = cloneJsonData(
-        canonicalLinearLayout.recordTranslations || []
-      );
-    }
-    if (canonicalLinearLayout && state.similarityAlignmentPlan) {
-      state.similarityAlignmentPlan.value = canonicalLinearLayout.similarityAlignment
-        ? cloneJsonData(canonicalLinearLayout.similarityAlignment)
-        : null;
-    }
+    const draftAlignmentSlots = installLoadedAlignments({
+      committed, shownDrawing, opensSlot: openingSlot !== null, committedSetDrawingId,
+      committedLayout: canonicalProjection?.config?.linearRecordLayout ?? null,
+      setDrawingIds: new Set([committedSetDrawingId, ...storedSetSlots.map((slot) => slot.drawingId)]), draftAlignments
+    });
     restoreAppliedPaletteFromSession(shownDrawing, ui);
     // Layout preferences: a drawing's slice holds its mode's slot; a drawing
     // whose slice has none takes its own request's, opened or not (OV-2493);
@@ -8796,7 +8850,8 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
     const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
     /** @type {Readonly<ArtifactSlot>[]} Every loaded set's slot but the opening one, each in its drawing. */
-    const stashedSlots = [...(committedSetSlot ? [committedSetSlot] : []), ...storedSetSlots].filter((slot) => slot !== openingSlot);
+    const stashedSlots = [...(committedSetSlot ? [committedSetSlot] : []), ...storedSetSlots, ...draftAlignmentSlots]
+      .filter((slot) => slot !== openingSlot);
     {
       installLoadedArtifactSlots?.({ opening: openingSlot, stashed: stashedSlots });
       if (openingSlot) desiredResultIndex = Number(state.selectedResultIndex.value) || 0;

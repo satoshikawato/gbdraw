@@ -621,13 +621,14 @@ export const createAppSetup = () => {
   } = state;
   /** @type {ReturnType<typeof createSimilarityAlignmentActions> | null} */
   let similarityAlignmentActions = null;
-  // R13 port: the drawer, the preview binder, and the result watchers read the
-  // alignment owner through these ports; the root assigns them once the
-  // alignment owner exists.
-  /** @type {{ refreshCanvas: () => void, editorDisabledReason: () => string }} */
+  // R13 port: the drawer, the preview binder, the result watchers, and the
+  // drawing switch read the alignment owner through these ports; the root
+  // assigns them once the alignment owner exists.
+  /** @type {{ refreshCanvas: () => void, editorDisabledReason: () => string, leaveDrawing: () => void }} */
   const similarityAlignmentPorts = {
     refreshCanvas: () => {},
-    editorDisabledReason: () => ''
+    editorDisabledReason: () => '',
+    leaveDrawing: () => {}
   };
   /**
    * The shown drawing when it is of `drawingMode`, else null: a mode panel's
@@ -2555,7 +2556,8 @@ export const createAppSetup = () => {
     ruleWritePending: featureActions.ruleWritePending,
     suspendSpecificRulePatternDrafts: featureActions.suspendSpecificRulePatternDrafts,
     clearFeatureSelection, rememberDepartingResultProjection,
-    auxiliaryImportFailureOnArrival, resetModeTransientUi, installShownDrawing, dismissNotice: noticeBanner.dismiss,
+    auxiliaryImportFailureOnArrival, resetModeTransientUi, alignment: similarityAlignmentPorts,
+    installShownDrawing, dismissNotice: noticeBanner.dismiss,
     switchDrawingSearch: previewFeatureSearch.switchDrawingSearch, rebindAnnotationRecords,
     clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
     presentSelectedResult: previewRuntime.presentSelectedResult,
@@ -2774,6 +2776,7 @@ export const createAppSetup = () => {
 
   similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
+    writeArtifactValues: historySnapshots.writeArtifactValues,
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
     drawnFeatureIdsOf: orthogroupActions.drawnFeatureIdsOf,
@@ -2929,8 +2932,11 @@ export const createAppSetup = () => {
     reviewDrawingFigure, dropSimilarityAlignmentView, fitPreviewForSimilarityAlignment, endSimilarityAlignmentTakeover,
     rememberSimilarityAlignmentInvoker, restoreSimilarityAlignmentFocus, focusSimilarityAlignmentDialog
   });
-  similarityAlignmentPorts.refreshCanvas = refreshSimilarityAlignmentCanvas;
-  similarityAlignmentPorts.editorDisabledReason = () => similarityAlignmentEditorDisabledReason.value;
+  Object.assign(similarityAlignmentPorts, {
+    refreshCanvas: refreshSimilarityAlignmentCanvas,
+    editorDisabledReason: () => similarityAlignmentEditorDisabledReason.value,
+    leaveDrawing: similarityAlignmentActions.leaveDrawing
+  });
   const {
     canUseClickedOrthogroupActions, clickedOrthogroupDetail, alignByClickedOrthogroup, highlightClickedOrthogroup,
     clearOrthogroupHighlight, openOrthogroupInDrawer, reselectSimilarityAlignmentReference, openClickedOrthogroupInEditor

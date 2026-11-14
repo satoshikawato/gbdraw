@@ -84,6 +84,7 @@ const fixture = (catalog) => {
   };
   const actions = createSimilarityAlignmentActions({
     state,
+    writeArtifactValues: () => {},
     getOrthogroupById: (id) => (id === group.id ? group : null),
     getEnrichedOrthogroupMembers: () => group.members,
     drawnFeatureIdsOf: () => [],
@@ -182,6 +183,7 @@ test('a member without facts and with a null start names no coordinates', () => 
   const group = { id: 'og-1', members: [bare] };
   const actions = createSimilarityAlignmentActions({
     state,
+    writeArtifactValues: () => {},
     getOrthogroupById: () => group,
     getEnrichedOrthogroupMembers: () => group.members,
     drawnFeatureIdsOf: () => [],
@@ -205,6 +207,7 @@ test('inparalog reference labels with a missing bound show only the present boun
   const group = { id: 'og-1', members: [bare('q', 5, { start: null, end: 20 }), bare('r', 6, { start: 10, end: null })] };
   const actions = createSimilarityAlignmentActions({
     state,
+    writeArtifactValues: () => {},
     getOrthogroupById: () => group,
     getEnrichedOrthogroupMembers: () => group.members,
     drawnFeatureIdsOf: () => [],

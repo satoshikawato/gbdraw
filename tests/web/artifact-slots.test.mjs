@@ -2,8 +2,9 @@
 // service captures and installs one mode's artifact slot by reference, key by
 // key (`ARTIFACT_SLOT_KEYS`). Draft and project state stays in place: the
 // specific color rules, the file Legend captions, the Linear record
-// orientations, the pending palette, the LOSAT caches and manifests, the
-// alignment plan and record translations, and every editor intent.
+// orientations, the pending palette, the LOSAT caches and manifests, and every
+// editor intent. A Linear drawing's alignment plan and record translations are
+// its own artifact values (OV-3532).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -37,7 +38,8 @@ const SWAPPED = [
   'pairwiseMatchFactors',
   'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
-  'similarityAlignmentResetReceipt', 'originalSvgStroke',
+  // OV-3532: a Linear drawing's alignment plan, its Reset receipt and its record translations.
+  'similarityAlignmentPlan', 'similarityAlignmentResetReceipt', 'linearRecordTranslations', 'originalSvgStroke',
   // D-197: the manifest the drawing's LOSAT protein rows resolve in.
   'proteinIdentityManifest'
 ];
@@ -45,7 +47,7 @@ const SWAPPED = [
 const KEPT = [
   'pendingPaletteName', 'pendingPaletteColors', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence',
-  'similarityAlignmentPlan', 'linearRecordTranslations', 'legendEntries', 'deletedLegendEntries',
+  'legendEntries', 'deletedLegendEntries',
   // The slot carries the generated Legend inventory and colors beside its values (`legend`).
   'originalLegendOrder', 'originalLegendColors'
 ];
@@ -71,7 +73,8 @@ const fillCircularArtifact = async () => {
     editableLabels: [{ key: 'l1' }], generatedLegendPosition: 'right',
     generatedMultiRecordCanvas: true, generatedCircularPlotTitlePosition: 'top',
     appliedPaletteName: 'tableau', appliedPaletteColors: { CDS: '#111111' },
-    similarityAlignmentResetReceipt: null,
+    similarityAlignmentPlan: { groupId: 'g' }, similarityAlignmentResetReceipt: null,
+    linearRecordTranslations: [{ recordKey: 'r', x: 1, y: 2 }],
     originalSvgStroke: { color: '#000000', width: 1 },
     proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} }
   };
@@ -81,8 +84,7 @@ const fillCircularArtifact = async () => {
     pendingPaletteName: 'pending', pendingPaletteColors: { CDS: '#222222' }, losatCache: new Map([['k', {}]]),
     losatDerivedCache: new Map([['d', {}]]), losatCacheInfo: [{ edgeKey: 'e' }],
     legacyProteinRawCandidates: { schema: 1, entries: [] },
-    legacyProteinDerivedEvidence: { schema: 1, entries: [] }, similarityAlignmentPlan: { groupId: 'g' },
-    linearRecordTranslations: [{ recordKey: 'r', x: 1, y: 2 }], legendEntries: [{ caption: 'CDS' }],
+    legacyProteinDerivedEvidence: { schema: 1, entries: [] }, legendEntries: [{ caption: 'CDS' }],
     deletedLegendEntries: [{ caption: 'gene' }]
   };
   const legend = { originalOrder: ['CDS', 'tRNA'], originalColors: { CDS: '#111111' } };
@@ -483,7 +485,8 @@ const legendSwitch = () => {
     settlePendingIntent: async () => {}, refreshCurrentIntent: async () => {}, adoptSessionReset: (reset) => reset(),
     ruleWritePending: () => false, suspendSpecificRulePatternDrafts: () => {}, clearFeatureSelection: () => {},
     rememberDepartingResultProjection: () => {}, auxiliaryImportFailureOnArrival: () => null,
-    resetModeTransientUi: () => {}, installShownDrawing, dismissNotice: () => {}, switchDrawingSearch: () => {},
+    resetModeTransientUi: () => {}, alignment: { leaveDrawing: () => {} }, installShownDrawing, dismissNotice: () => {},
+    switchDrawingSearch: () => {},
     rebindAnnotationRecords: () => {}, clearActiveRuntime: () => {}, getResultIdentity: (result) => result.name,
     presentSelectedResult: () => {}, rememberResultInventory: (identity, inventory) => remembered.set(identity, inventory),
     artifactSlotsSwap: store.swap, captureArtifactSlot: snapshots.captureArtifactSlot,

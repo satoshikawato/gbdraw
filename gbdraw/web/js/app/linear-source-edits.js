@@ -38,6 +38,7 @@ import { askTrackSourceRemoval } from './track-slot-edits.js';
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { RecordSelectorStatus } from './linear-record-selector.js' */
 /** @import { LinearUnitPlace } from '../services/linear-units.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
 
 const { computed, nextTick } = window.Vue;
@@ -50,7 +51,11 @@ const { computed, nextTick } = window.Vue;
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
 /** @typedef {() => SessionBusy | null} SessionOperationAvailability The session's busy answer, or null when an edit may run. */
 /** @typedef {(label: string, fn: () => unknown) => Promise<unknown>} RunUndoable History's undoable step. */
-/** @typedef {(reason: string) => unknown} ClearAlignmentForMutation The alignment owner clears its plan; `reason` is a `msg` clause. */
+/**
+ * The alignment owner clears the plan of the drawing an edit changes (`drawingId`, the shown one unless given); `reason`
+ * is a `msg` clause.
+ * @typedef {(reason: string, drawingId?: DrawingId) => unknown} ClearAlignmentForMutation
+ */
 /** @typedef {(drawing: DrawingState) => unknown} DiscoverDrawingRecords Reads the records of the drawing's inputs. */
 /**
  * The edit of a drawing's record rows that every File and record card change
@@ -166,7 +171,7 @@ export const createLinearSourceEdits = ({
         drawing.linearSeqs.map((sequence) => sequence.uid)
       );
     } else {
-      clearAlignmentForMutation(alignmentMutation);
+      clearAlignmentForMutation(alignmentMutation, drawing.id);
     }
     rebindAnnotationRecords();
     void discoverDrawingRecords(drawing);

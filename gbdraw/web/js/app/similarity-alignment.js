@@ -13,6 +13,7 @@ import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { canonicalRecordReverseComplement, cropFormReverseComplement, linearCardCropForm } from '../services/record-display-model.js';
 /** @import { LinearSeq, WebState } from '../state.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,
@@ -1193,9 +1194,11 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  * types; the shapes of requests and helper payloads belong to their owners
  * (the committed request to Python, R7) and stay `Record<string, any>`.
  * @typedef {object} SimilarityAlignmentActionsOptions
- * @property {Pick<WebState, 'activeDrawing' | 'featureCatalog' | 'linearRecordTranslations' | 'mode'
+ * @property {Pick<WebState, 'activeDrawing' | 'activeDrawingId' | 'featureCatalog' | 'linearRecordTranslations' | 'mode'
  *   | 'selectedOrthogroupId' | 'similarityAlignmentPlan' | 'similarityAlignmentResetReceipt'>} state
- *   the Web state members the alignment actions read and write
+ *   the Web state members the alignment actions read and write: the shown drawing's alignment
+ * @property {(drawingId: DrawingId, values: { similarityAlignmentPlan: null, similarityAlignmentResetReceipt: null }) => void}
+ *   writeArtifactValues writes the artifact slot values of a drawing that is not shown (the History snapshot service's)
  * @property {(groupId: string) => OrthogroupGroup | null} getOrthogroupById
  * @property {(group: OrthogroupGroup | string | null) => OrthogroupMember[]} getEnrichedOrthogroupMembers
  * @property {DrawnFeatureIdsOf} drawnFeatureIdsOf the drawn element IDs of an anchor's feature (the orthogroup owner's
@@ -1250,10 +1253,42 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  */
 
 /**
+ * The choices that review a committed plan again: each record but the reference, as the plan decided it.
+ * @param {AlignmentPlan} plan
+ * @param {Set<string>} [staleRecordKeys]
+ * @returns {AlignmentChoice[]}
+ */
+const planChoices = (plan, staleRecordKeys = new Set()) => (
+  plan.records
+    .filter(({ status, recordKey }) => status !== 'reference' && !staleRecordKeys.has(recordKey))
+    .map((decision) => ({
+      recordKey: decision.recordKey,
+      kind: decision.status === 'aligned' ? 'select' : 'skip',
+      anchor: decision.status === 'aligned' ? decision.anchor : null
+    }))
+);
+
+/**
+ * The plan clear of an edit to drawing `drawingId`, the shown one unless given (OV-3532): the shown drawing's goes
+ * through `clearShownPlan`, which also ends its review and says why; a drawing not shown loses its plan and Reset
+ * receipt in its artifact slot, and the other drawings keep theirs.
+ * @param {Pick<WebState, 'activeDrawingId'>} state
+ * @param {SimilarityAlignmentActionsOptions['writeArtifactValues']} writeArtifactValues
+ * @param {(reason: string) => boolean} clearShownPlan
+ * @returns {(reason: string, drawingId?: DrawingId) => boolean}
+ */
+const planClearOfDrawing = (state, writeArtifactValues, clearShownPlan) => (reason, drawingId = state.activeDrawingId.value) => {
+  if (drawingId === state.activeDrawingId.value) return clearShownPlan(reason);
+  writeArtifactValues(drawingId, { similarityAlignmentPlan: null, similarityAlignmentResetReceipt: null });
+  return false;
+};
+
+/**
  * @param {SimilarityAlignmentActionsOptions} options
  */
 export const createSimilarityAlignmentActions = ({
   state,
+  writeArtifactValues,
   getOrthogroupById,
   getEnrichedOrthogroupMembers,
   drawnFeatureIdsOf,
@@ -1278,6 +1313,7 @@ export const createSimilarityAlignmentActions = ({
   };
   if (
     !state
+    || typeof writeArtifactValues !== 'function'
     || typeof getOrthogroupById !== 'function'
     || typeof getEnrichedOrthogroupMembers !== 'function'
     || typeof drawnFeatureIdsOf !== 'function'
@@ -1439,12 +1475,18 @@ export const createSimilarityAlignmentActions = ({
     noticeState.value = { text: String(message || ''), whileNoPlan };
   };
 
-  /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
-  const announceClearedPlan = (reason) => {
+  /**
+   * The summary and the repair give way to `message` (none when empty).
+   * @param {string} message
+   * @param {boolean} [whileNoPlan]
+   */
+  const replaceSummary = (message, whileNoPlan = false) => {
     summary.value = null;
     repair.value = null;
-    publishNotice(t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
+    publishNotice(message, whileNoPlan);
   };
+  /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
+  const announceClearedPlan = (reason) => replaceSummary(t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
 
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
   const clearCommittedPlan = (reason) => {
@@ -1731,6 +1773,13 @@ export const createSimilarityAlignmentActions = ({
     activeBaseline = null;
     return { status: 'canceled' };
   };
+  // A drawing switch: the review, the summary, the notice and the repair were
+  // the departing drawing's work (OV-3532); the arriving drawing's plan is in
+  // `state`, installed with its artifact slot.
+  const leaveDrawing = () => {
+    cancel();
+    replaceSummary('');
+  };
 
   // Record and feature names of the committed request, shared by the drawer
   // reference options and the Reset preview; record keys and hashes stay binding-only.
@@ -1900,9 +1949,9 @@ export const createSimilarityAlignmentActions = ({
       const outcome = await promise;
       if (expectedActionId !== actionId) return {status:'stale'};
       if (outcome?.status === 'ok') {
-        clearDraft(); repair.value = null; summary.value = null; resetDialogOpen.value = false;
+        clearDraft(); resetDialogOpen.value = false;
         error.value = null;
-        publishNotice(scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
+        replaceSummary(scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
           : t('Alignment reset: record positions and directions restored to before the latest Align.'));
       } else if (!['busy', 'canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
       return outcome;
@@ -1913,21 +1962,6 @@ export const createSimilarityAlignmentActions = ({
     }
     finally { if (activeApply === promise) activeApply = null; if (expectedActionId === actionId) status.value = 'idle'; }
   };
-
-  /**
-   * @param {AlignmentPlan} plan
-   * @param {Set<string>} [staleRecordKeys]
-   * @returns {AlignmentChoice[]}
-   */
-  const planChoices = (plan, staleRecordKeys = new Set()) => (
-    plan.records
-      .filter(({ status, recordKey }) => status !== 'reference' && !staleRecordKeys.has(recordKey))
-      .map((decision) => ({
-        recordKey: decision.recordKey,
-        kind: decision.status === 'aligned' ? 'select' : 'skip',
-        anchor: decision.status === 'aligned' ? decision.anchor : null
-      }))
-  );
 
   /**
    * @param {AlignmentHelperRequest} request
@@ -2167,7 +2201,7 @@ export const createSimilarityAlignmentActions = ({
     canApply: computed(() => status.value === 'reviewing' && unresolvedCount.value === 0),
     validateBeforeGenerate,
     resetAlignment,
-    clearForMutation: clearCommittedPlan,
+    clearForMutation: planClearOfDrawing(state, writeArtifactValues, clearCommittedPlan),
     notePlanReplaced,
     /**
      * The committed Session with the active plan materialized into the record
@@ -2221,6 +2255,7 @@ export const createSimilarityAlignmentActions = ({
     skipRecord: (recordKey) => editRow(recordKey, { kind: 'skip' }),
     applyDraft,
     cancel,
+    leaveDrawing,
     /** @param {AliasSource} anchor */
     previewCandidate: (anchor) => {
       if (typeof previewCandidate === 'function') previewCandidate(anchor);

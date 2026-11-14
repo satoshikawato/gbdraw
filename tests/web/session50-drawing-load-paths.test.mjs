@@ -183,3 +183,73 @@ test('the Load afterImport hook holds no legacy-configuration arm', () => {
   assert.ok(start >= 0);
   assert.equal(source.slice(start, source.indexOf('\n  });\n', start)).includes("'legacy'"), false);
 });
+
+// OV-3532 (b), OV-3506: each Linear drawing loads its own request's Similarity
+// alignment plan and record translations: the shown drawing's into the page,
+// another's into its artifact slot. A Load that opens a drawing without one
+// (a Circular one) leaves no previous plan, and a failed Load gives the page
+// back the plan it had.
+const ALIGNMENT_ANCHOR = { recordKey: 'record-1', biologicalFeatureId: 'f1', sourceFeatureIndex: 0, stableFeatureSvgId: null };
+const ALIGNMENT_PLAN = {
+  schema: 2, groupId: 'og-loaded', reference: ALIGNMENT_ANCHOR,
+  records: [{ recordKey: 'record-1', status: 'reference', rationale: 'reference', anchor: ALIGNMENT_ANCHOR }]
+};
+/** Two Linear drawings, `linear` aligned and `linear-2` not, `shown` opened. @param {string} shown */
+const twoLinearSession = (shown) => {
+  const session = v49Session('drawings-circular-linear');
+  const linear = session.drawings.find((entry) => entry.id === 'linear');
+  const copy = { ...structuredClone(linear), id: 'linear-2', name: 'Linear copy' };
+  linear.renderRequest.layout = {
+    recordGapPx: 0, multiRecordPositions: null, similarityAlignment: ALIGNMENT_PLAN,
+    recordTranslations: [{ recordKey: 'record-1', x: 0, y: 0 }]
+  };
+  session.drawings.push(copy);
+  session.ui.activeDrawingId = shown;
+  return session;
+};
+const shownAlignmentAfterLoad = () => ({
+  plan: state.similarityAlignmentPlan.value?.groupId ?? null, translations: state.linearRecordTranslations.value
+});
+/** @param {unknown} session */
+const loadKeepingSlots = async (session) => {
+  /** @type {Map<string, Record<string, any>>} */
+  const kept = new Map();
+  const loaded = await importSession(await sessionLoadEvent(session), {
+    confirmLoadRepairs: async () => true,
+    installLoadedArtifactSlots: ({ stashed }) => stashed.forEach((slot) => kept.set(slot.drawingId, slot.values))
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  return kept;
+};
+
+test('a Session 51 Load gives each Linear drawing its own alignment plan and translations', async () => {
+  let kept = await loadKeepingSlots(twoLinearSession('linear-2'));
+  assert.deepEqual(shownAlignmentAfterLoad(), { plan: null, translations: [] }, 'the shown copy loads none');
+  assert.equal(kept.get('linear')?.similarityAlignmentPlan?.groupId, 'og-loaded', 'the aligned drawing waits with its plan');
+  assert.deepEqual(kept.get('linear')?.linearRecordTranslations, [{ recordKey: 'record-1', x: 0, y: 0 }]);
+
+  kept = await loadKeepingSlots(twoLinearSession('linear'));
+  assert.equal(shownAlignmentAfterLoad().plan, 'og-loaded');
+  assert.equal(kept.get('linear-2')?.similarityAlignmentPlan, null, 'the copy waits without a plan');
+  assert.deepEqual(kept.get('linear-2')?.linearRecordTranslations, []);
+
+  const circularOnly = v49Session('drawings-circular-linear');
+  circularOnly.drawings = circularOnly.drawings.filter((entry) => entry.mode === 'circular');
+  circularOnly.ui.activeDrawingId = 'circular';
+  await loadKeepingSlots(circularOnly);
+  assert.deepEqual(shownAlignmentAfterLoad(), { plan: null, translations: [] }, 'a Circular Load leaves no previous plan');
+});
+
+test('a Load that fails after its commit gives the page back its alignment plan and translations', async () => {
+  await loadKeepingSlots(twoLinearSession('linear'));
+  const before = { plan: state.similarityAlignmentPlan.value, translations: state.linearRecordTranslations.value };
+  const failing = twoLinearSession('linear');
+  failing.drawings.find((entry) => entry.id === 'linear').renderRequest.layout.recordTranslations = [{ recordKey: 'record-1', x: 5, y: 0 }];
+  const loaded = await importSession(await sessionLoadEvent(failing), {
+    confirmLoadRepairs: async () => true,
+    afterImport: async () => { throw new Error('a failure after the commit'); }
+  });
+  assert.equal(loaded.status, 'error');
+  assert.strictEqual(state.similarityAlignmentPlan.value, before.plan);
+  assert.strictEqual(state.linearRecordTranslations.value, before.translations);
+});
