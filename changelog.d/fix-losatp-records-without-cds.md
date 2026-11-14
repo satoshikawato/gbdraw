@@ -13,3 +13,9 @@
   the web app and the command line now drop the copy they do not use once the
   search is answered, with the older derived results kept for it, instead of
   carrying it in every saved Session.
+- Fixed: A Session saved by gbdraw 0.11 to 0.13 with a Linear LOSATP
+  comparison that includes a record drawn reversed now reuses its stored
+  results on the command line and in the web app (the web app also reuses the
+  results the 0.13 command line stored), instead of stopping or searching
+  again; saving such a Session again from the command line no longer stops
+  with a duplicate-key error.
