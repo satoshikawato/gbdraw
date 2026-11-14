@@ -1435,6 +1435,10 @@ class _LabelPeers:
         """The reach box of `label` where it is."""
         return _label_reach_box(label, self.pad)
 
+    def kept_box(self, idx: int) -> Aabb | None:
+        """The reach box of label `idx` where it was when added or last moved."""
+        return self._index.boxes[idx]
+
     def add(self, label: CircularLabel) -> None:
         """Append `label` as the next index."""
         self._index.append(self.box(label))
@@ -4863,25 +4867,31 @@ class _HemisphereBlockShift(NamedTuple):
 
 
 @dataclass(frozen=True, slots=True)
-class _HemisphereSettings:
-    """The ellipse the labels sit on and the search settings of the hemisphere refinement."""
+class _LabelEllipse:
+    """The ellipse a set of labels sits on: its center and radii, and the record length that maps a feature to an angle."""
 
     total_length: int
     center_x: float
     center_y: float
     x_radius: float
     y_radius: float
-    axis_neutral_deg: float
-    axis_eps_px: float
-    angle_step_deg: float
-    max_steps: int
-    block_max_steps: int
 
     def start_at(self, angle_unwrapped: float, middle: float) -> tuple[float, float]:
         """The start point of a label at `angle_unwrapped` on the ellipse."""
         return calculate_coordinates(
             self.center_x, self.center_y, self.x_radius, self.y_radius, angle_unwrapped, middle, self.total_length
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _HemisphereSettings(_LabelEllipse):
+    """The ellipse the labels sit on and the search settings of the hemisphere refinement."""
+
+    axis_neutral_deg: float
+    axis_eps_px: float
+    angle_step_deg: float
+    max_steps: int
+    block_max_steps: int
 
 
 def _hemisphere_blocks(label_idx: int, label_count: int) -> list[tuple[int, int]]:
@@ -5150,6 +5160,282 @@ def _refine_labels_to_preferred_hemisphere(
     return labels
 
 
+_LeaderPolishScore: TypeAlias = tuple[int, int, int, float, float]
+"""How a label set ranks in the leader polish, smallest first: plain overlaps, min-gap overlaps, labels on the half
+away from their feature, the sum of leader lengths, and the sum of the labels' distances from their target angles."""
+_LeaderPolishMove: TypeAlias = tuple[float, _LeaderPolishScore]
+"""A move the leader polish accepts: the label's new unwrapped angle and the score of the label set after it."""
+
+
+@dataclass(frozen=True, slots=True)
+class _LeaderPolishSettings(_LabelEllipse):
+    """The ellipse the labels sit on and the step settings of the leader polish."""
+
+    min_order_gap: float
+    angle_step_deg: float
+
+
+class _LeaderPolishFocus(NamedTuple):
+    """A label away from its target angle, how it stands where it is, and where it may go.
+
+    `positions` are its candidate places (unwrapped angle, start_x, start_y), stepping from where it is
+    toward its target and kept inside its feature-order bounds; `peers` are the labels whose reach boxes
+    touch any of them. `plain` and `min_gap` count its overlaps where it is, `leader` is its leader
+    length there, `target_delta` its distance from the target, and `others_mismatch` the labels other
+    than this one on the half away from their feature.
+    """
+
+    label_idx: int
+    label: CircularLabel
+    target_angle: float
+    positions: list[tuple[float, float, float]]
+    peers: list[int]
+    plain: int
+    min_gap: int
+    leader: float
+    target_delta: float
+    others_mismatch: int
+
+
+def _angles_toward_target(current_angle: float, target_angle: float, angle_step_deg: float) -> list[float]:
+    """The angles from `current_angle` toward `target_angle` in steps of `angle_step_deg`, ending at the target."""
+    direction = 1.0 if target_angle > current_angle else -1.0
+    max_steps = int(abs(target_angle - current_angle) / angle_step_deg)
+    candidate_angles = [current_angle + direction * angle_step_deg * step for step in range(1, max_steps + 1)]
+    if not candidate_angles or not math.isclose(candidate_angles[-1], target_angle, abs_tol=1e-9):
+        candidate_angles.append(target_angle)
+    return candidate_angles
+
+
+def _total_target_delta(labels: list[CircularLabel], total_length: int) -> float:
+    """The sum of the labels' distances from their target angles, from their `angle_unwrapped` (the target when unset)."""
+    delta_sum = 0.0
+    for label in labels:
+        target = _label_target_angle_unwrapped(label, total_length)
+        current = float(label.get("angle_unwrapped", target))
+        delta_sum += abs(current - target)
+    return delta_sum
+
+
+class _LeaderPolish:
+    """One run of the leader polish over `labels`, which it changes in place.
+
+    It keeps the labels' unwrapped angles (`angles`, in feature order), their reach-box peers
+    (`peers`) and the score of the label set (`score`) up to date as labels move. A move must keep
+    the plain overlaps and the hemisphere mismatches from rising; the min-gap overlaps may rise by
+    `DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX` above where the run started (`max_min_gap`) when the set
+    has `DENSE_DISTANCE_COMPACTION_MIN_LABELS` labels or more (`relax_min_gap`).
+    """
+
+    __slots__ = ("settings", "labels", "peers", "angles", "relax_min_gap", "max_min_gap", "score")
+
+    def __init__(self, settings: _LeaderPolishSettings, labels: list[CircularLabel]) -> None:
+        total_length = settings.total_length
+        self.settings = settings
+        self.labels = labels
+        # Peer pruning (output-preserving): both overlap predicates are false for labels whose reach boxes are disjoint.
+        self.peers = _LabelPeers.of(labels, _label_reach_pad(labels))
+        self.angles = _derive_monotonic_unwrapped_angles(labels, total_length)
+        for idx, angle_unwrapped in enumerate(self.angles):
+            labels[idx]["angle_unwrapped"] = angle_unwrapped
+        plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
+        min_gap_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=True)
+        self.relax_min_gap = len(labels) >= DENSE_DISTANCE_COMPACTION_MIN_LABELS
+        self.max_min_gap = min_gap_overlaps + (DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX if self.relax_min_gap else 0)
+        mismatch_count, _ = _hemisphere_mismatch_metrics(labels, total_length)
+        leader_sum, _ = _leader_distance_score(labels, total_length)
+        self.score: _LeaderPolishScore = (
+            plain_overlaps,
+            min_gap_overlaps,
+            mismatch_count,
+            leader_sum,
+            _total_target_delta(labels, total_length),
+        )
+
+    def polish(self, max_passes: int) -> None:
+        """Up to `max_passes` passes over the labels, longest leader first, each moving a label to its best
+        accepted place toward its target; stop after a pass that moves nothing."""
+        labels = self.labels
+        total_length = self.settings.total_length
+        for _ in range(max_passes):
+            pass_changed = False
+            label_order = sorted(
+                range(len(labels)),
+                key=lambda label_idx: _leader_length_px(labels[label_idx], total_length),
+                reverse=True,
+            )
+            for label_idx in label_order:
+                focus = self._focus(label_idx)
+                if focus is None:
+                    continue
+                accepted = self._best_move(focus)
+                if accepted is None:
+                    continue
+                self._move(label_idx, *accepted)
+                pass_changed = True
+            if not pass_changed:
+                break
+
+    def _focus(self, label_idx: int) -> _LeaderPolishFocus | None:
+        """Label `label_idx` with its candidate places, when it is away from its target and has a place
+        toward it between its neighbours; else None."""
+        settings = self.settings
+        total_length = settings.total_length
+        labels = self.labels
+        label = labels[label_idx]
+        current_angle = self.angles[label_idx]
+        target_angle = _label_target_angle_unwrapped(label, total_length)
+        if math.isclose(current_angle, target_angle, abs_tol=1e-9):
+            return None
+        lower_bound, upper_bound = _cyclic_order_bounds(self.angles, label_idx, settings.min_order_gap)
+        if lower_bound >= upper_bound:
+            return None
+        candidate_angles = _angles_toward_target(current_angle, target_angle, settings.angle_step_deg)
+        peers = self.peers
+        current_peers = peers.near(peers.kept_box(label_idx), skip=label_idx)
+        current_plain = _count_local_label_overlaps(
+            labels, total_length, label_idx, label, use_min_gap=False, peers=current_peers
+        )
+        current_min_gap = _count_local_label_overlaps(
+            labels, total_length, label_idx, label, use_min_gap=True, peers=current_peers
+        )
+        current_leader = _leader_length_px(label, total_length)
+        current_target_delta = abs(current_angle - target_angle)
+        # The mismatch count always counts the current labels, so a move changes it by this label's own flag only.
+        others_mismatch = self.score[2] - (_label_hemisphere_mismatch_weight(label, total_length) is not None)
+        positions = [
+            (candidate_angle, *settings.start_at(candidate_angle, label["middle"]))
+            for candidate_angle in candidate_angles
+            if not (candidate_angle <= lower_bound + 1e-9 or candidate_angle >= upper_bound - 1e-9)
+        ]
+        if not positions:
+            return None
+        candidate_peers = peers.near(
+            _label_reach_box(label, peers.pad, anchors=[(item[1], item[2]) for item in positions]), skip=label_idx
+        )
+        return _LeaderPolishFocus(
+            label_idx,
+            label,
+            target_angle,
+            positions,
+            candidate_peers,
+            current_plain,
+            current_min_gap,
+            current_leader,
+            current_target_delta,
+            others_mismatch,
+        )
+
+    def _best_move(self, focus: _LeaderPolishFocus) -> _LeaderPolishMove | None:
+        """The best place of the focus label that keeps the plain overlaps and the hemisphere mismatches
+        from rising: the lowest score below the current one without more min-gap overlaps, else (in a
+        dense set) the shortest leaders and target distances with a few more min-gap overlaps
+        (`_relaxed_move`); None when no place is better."""
+        labels = self.labels
+        total_length = self.settings.total_length
+        label_idx, label, target_angle = focus.label_idx, focus.label, focus.target_angle
+        peers = focus.peers
+        current_plain_for_label, current_min_gap_for_label = focus.plain, focus.min_gap
+        current_leader, current_target_delta = focus.leader, focus.target_delta
+        others_mismatch_count = focus.others_mismatch
+        best_score = self.score
+        plain_overlaps, min_gap_overlaps, hemisphere_mismatch_count, leader_sum, target_delta_sum = best_score
+        max_allowed_min_gap_overlaps = self.max_min_gap
+        allow_min_gap_relaxation = self.relax_min_gap
+        peer_bounds: dict[tuple[int, float, float], LabelBounds] = {}
+        best_strict: _LeaderPolishMove | None = None
+        best_relaxed: tuple[float, _LeaderPolishScore, tuple[float, float, int]] | None = None
+        for candidate_angle, candidate_x, candidate_y in focus.positions:
+            candidate_label = label.copy()
+            candidate_label["angle_unwrapped"] = candidate_angle
+            candidate_label["start_x"], candidate_label["start_y"] = candidate_x, candidate_y
+
+            candidate_plain_for_label = _count_local_label_overlaps(
+                labels,
+                total_length,
+                label_idx,
+                candidate_label,
+                use_min_gap=False,
+                peers=peers,
+                peer_bounds=peer_bounds,
+                cap=current_plain_for_label,
+            )
+            candidate_plain_total = plain_overlaps - current_plain_for_label + candidate_plain_for_label
+            if candidate_plain_total > plain_overlaps:
+                continue
+
+            candidate_min_gap_for_label = _count_local_label_overlaps(
+                labels,
+                total_length,
+                label_idx,
+                candidate_label,
+                use_min_gap=True,
+                peers=peers,
+                peer_bounds=peer_bounds,
+                cap=max_allowed_min_gap_overlaps - min_gap_overlaps + current_min_gap_for_label,
+            )
+            candidate_min_gap_total = min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
+            if candidate_min_gap_total > max_allowed_min_gap_overlaps:
+                continue
+
+            candidate_leader = _leader_length_px(candidate_label, total_length)
+            candidate_leader_sum = leader_sum - current_leader + candidate_leader
+            candidate_target_delta = abs(candidate_angle - target_angle)
+            candidate_target_delta_sum = target_delta_sum - current_target_delta + candidate_target_delta
+
+            candidate_mismatch_count = others_mismatch_count + (
+                _label_hemisphere_mismatch_weight(candidate_label, total_length) is not None
+            )
+            if candidate_mismatch_count > hemisphere_mismatch_count:
+                continue
+
+            candidate_score = (
+                candidate_plain_total,
+                candidate_min_gap_total,
+                candidate_mismatch_count,
+                candidate_leader_sum,
+                candidate_target_delta_sum,
+            )
+            if candidate_min_gap_total <= min_gap_overlaps and candidate_score < best_score:
+                if best_strict is None or candidate_score < best_strict[1]:
+                    best_strict = (candidate_angle, candidate_score)
+                continue
+            if (
+                allow_min_gap_relaxation
+                and candidate_plain_total == plain_overlaps
+                and candidate_mismatch_count <= hemisphere_mismatch_count
+                and candidate_min_gap_total > min_gap_overlaps
+            ):
+                relaxed_cmp = (
+                    candidate_leader_sum,
+                    candidate_target_delta_sum,
+                    candidate_min_gap_total,
+                )
+                if best_relaxed is None or relaxed_cmp < best_relaxed[2]:
+                    best_relaxed = (candidate_angle, candidate_score, relaxed_cmp)
+
+        if best_strict is None and best_relaxed is not None:
+            return self._relaxed_move(best_relaxed[0], best_relaxed[1])
+        return best_strict
+
+    def _relaxed_move(self, angle_unwrapped: float, score: _LeaderPolishScore) -> _LeaderPolishMove | None:
+        """The move to `angle_unwrapped`, which adds min-gap overlaps, when the label set's (leader sum,
+        target distance sum, min-gap overlaps) after it ranks below the current ones; else None."""
+        current = self.score
+        if (score[3], score[4], score[1]) < (current[3], current[4], current[1]):
+            return angle_unwrapped, score
+        return None
+
+    def _move(self, label_idx: int, angle_unwrapped: float, score: _LeaderPolishScore) -> None:
+        """Put label `label_idx` at `angle_unwrapped` on the ellipse; the label set now scores `score`."""
+        self.angles[label_idx] = angle_unwrapped
+        label = self.labels[label_idx]
+        label["angle_unwrapped"] = angle_unwrapped
+        label["start_x"], label["start_y"] = self.settings.start_at(angle_unwrapped, label["middle"])
+        self.peers.move(label_idx, label)
+        self.score = score
+
+
 def _polish_total_leader_distance(
     labels: list[CircularLabel],
     total_length: int,
@@ -5170,217 +5456,10 @@ def _polish_total_leader_distance(
     """
     if not labels:
         return labels
-
-    def _move_label(label_idx: int, angle_unwrapped: float) -> None:
-        unwrapped[label_idx] = angle_unwrapped
-        label = labels[label_idx]
-        label["angle_unwrapped"] = angle_unwrapped
-        label["start_x"], label["start_y"] = calculate_coordinates(
-            center_x,
-            center_y,
-            x_radius,
-            y_radius,
-            angle_unwrapped,
-            label["middle"],
-            total_length,
-        )
-
-    def _total_target_delta() -> float:
-        delta_sum = 0.0
-        for label in labels:
-            target = _label_target_angle_unwrapped(label, total_length)
-            current = float(label.get("angle_unwrapped", target))
-            delta_sum += abs(current - target)
-        return delta_sum
-
-    # Peer pruning (output-preserving): both overlap predicates are false for labels whose reach boxes are disjoint.
-    reach_pad = _label_reach_pad(labels)
-    reach_boxes = [_label_reach_box(label, reach_pad) for label in labels]
-
-    unwrapped = _derive_monotonic_unwrapped_angles(labels, total_length)
-    for idx, angle_unwrapped in enumerate(unwrapped):
-        labels[idx]["angle_unwrapped"] = angle_unwrapped
-
-    plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
-    min_gap_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=True)
-    baseline_min_gap_overlaps = min_gap_overlaps
-    allow_min_gap_relaxation = len(labels) >= DENSE_DISTANCE_COMPACTION_MIN_LABELS
-    max_allowed_min_gap_overlaps = baseline_min_gap_overlaps + (
-        DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX if allow_min_gap_relaxation else 0
+    settings = _LeaderPolishSettings(
+        total_length, center_x, center_y, x_radius, y_radius, min_order_gap, angle_step_deg
     )
-    hemisphere_mismatch_count, _ = _hemisphere_mismatch_metrics(labels, total_length)
-    leader_sum, _ = _leader_distance_score(labels, total_length)
-    target_delta_sum = _total_target_delta()
-    best_score = (
-        plain_overlaps,
-        min_gap_overlaps,
-        hemisphere_mismatch_count,
-        leader_sum,
-        target_delta_sum,
-    )
-
-    for _ in range(max_passes):
-        pass_changed = False
-        label_order = sorted(
-            range(len(labels)),
-            key=lambda label_idx: _leader_length_px(labels[label_idx], total_length),
-            reverse=True,
-        )
-
-        for label_idx in label_order:
-            label = labels[label_idx]
-            current_angle = unwrapped[label_idx]
-            target_angle = _label_target_angle_unwrapped(label, total_length)
-            if math.isclose(current_angle, target_angle, abs_tol=1e-9):
-                continue
-
-            lower_bound, upper_bound = _cyclic_order_bounds(unwrapped, label_idx, min_order_gap)
-            if lower_bound >= upper_bound:
-                continue
-
-            direction = 1.0 if target_angle > current_angle else -1.0
-            max_steps = int(abs(target_angle - current_angle) / angle_step_deg)
-            candidate_angles = [current_angle + direction * angle_step_deg * step for step in range(1, max_steps + 1)]
-            if not candidate_angles or not math.isclose(candidate_angles[-1], target_angle, abs_tol=1e-9):
-                candidate_angles.append(target_angle)
-
-            current_peers = touching_aabb_indices(reach_boxes, reach_boxes[label_idx], skip=label_idx)
-            current_plain_for_label = _count_local_label_overlaps(
-                labels, total_length, label_idx, label, use_min_gap=False, peers=current_peers
-            )
-            current_min_gap_for_label = _count_local_label_overlaps(
-                labels, total_length, label_idx, label, use_min_gap=True, peers=current_peers
-            )
-            current_leader = _leader_length_px(label, total_length)
-            current_target_delta = abs(current_angle - target_angle)
-            # hemisphere_mismatch_count always counts the current labels, so a move changes it by
-            # this label's own flag only.
-            others_mismatch_count = hemisphere_mismatch_count - (
-                _label_hemisphere_mismatch_weight(label, total_length) is not None
-            )
-
-            candidate_positions = []
-            for candidate_angle in candidate_angles:
-                if candidate_angle <= lower_bound + 1e-9 or candidate_angle >= upper_bound - 1e-9:
-                    continue
-                candidate_positions.append(
-                    (
-                        candidate_angle,
-                        *calculate_coordinates(
-                            center_x,
-                            center_y,
-                            x_radius,
-                            y_radius,
-                            candidate_angle,
-                            label["middle"],
-                            total_length,
-                        ),
-                    )
-                )
-            if not candidate_positions:
-                continue
-            peers = touching_aabb_indices(
-                reach_boxes,
-                _label_reach_box(label, reach_pad, anchors=[(item[1], item[2]) for item in candidate_positions]),
-                skip=label_idx,
-            )
-
-            peer_bounds: dict[tuple[int, float, float], tuple[float, float, float, float]] = {}
-            best_strict: tuple[float, tuple[int, int, int, float, float]] | None = None
-            best_relaxed: tuple[float, tuple[int, int, int, float, float], tuple[float, float, int]] | None = None
-            for candidate_angle, candidate_x, candidate_y in candidate_positions:
-                candidate_label = label.copy()
-                candidate_label["angle_unwrapped"] = candidate_angle
-                candidate_label["start_x"], candidate_label["start_y"] = candidate_x, candidate_y
-
-                candidate_plain_for_label = _count_local_label_overlaps(
-                    labels,
-                    total_length,
-                    label_idx,
-                    candidate_label,
-                    use_min_gap=False,
-                    peers=peers,
-                    peer_bounds=peer_bounds,
-                    cap=current_plain_for_label,
-                )
-                candidate_plain_total = plain_overlaps - current_plain_for_label + candidate_plain_for_label
-                if candidate_plain_total > plain_overlaps:
-                    continue
-
-                candidate_min_gap_for_label = _count_local_label_overlaps(
-                    labels,
-                    total_length,
-                    label_idx,
-                    candidate_label,
-                    use_min_gap=True,
-                    peers=peers,
-                    peer_bounds=peer_bounds,
-                    cap=max_allowed_min_gap_overlaps - min_gap_overlaps + current_min_gap_for_label,
-                )
-                candidate_min_gap_total = min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
-                if candidate_min_gap_total > max_allowed_min_gap_overlaps:
-                    continue
-
-                candidate_leader = _leader_length_px(candidate_label, total_length)
-                candidate_leader_sum = leader_sum - current_leader + candidate_leader
-                candidate_target_delta = abs(candidate_angle - target_angle)
-                candidate_target_delta_sum = target_delta_sum - current_target_delta + candidate_target_delta
-
-                candidate_mismatch_count = others_mismatch_count + (
-                    _label_hemisphere_mismatch_weight(candidate_label, total_length) is not None
-                )
-                if candidate_mismatch_count > hemisphere_mismatch_count:
-                    continue
-
-                candidate_score = (
-                    candidate_plain_total,
-                    candidate_min_gap_total,
-                    candidate_mismatch_count,
-                    candidate_leader_sum,
-                    candidate_target_delta_sum,
-                )
-                if candidate_min_gap_total <= min_gap_overlaps and candidate_score < best_score:
-                    if best_strict is None or candidate_score < best_strict[1]:
-                        best_strict = (candidate_angle, candidate_score)
-                    continue
-                if (
-                    allow_min_gap_relaxation
-                    and candidate_plain_total == plain_overlaps
-                    and candidate_mismatch_count <= hemisphere_mismatch_count
-                    and candidate_min_gap_total > min_gap_overlaps
-                ):
-                    relaxed_cmp = (
-                        candidate_leader_sum,
-                        candidate_target_delta_sum,
-                        candidate_min_gap_total,
-                    )
-                    if best_relaxed is None or relaxed_cmp < best_relaxed[2]:
-                        best_relaxed = (candidate_angle, candidate_score, relaxed_cmp)
-
-            accepted = best_strict
-            if accepted is None and best_relaxed is not None:
-                relaxed_angle, relaxed_score, _ = best_relaxed
-                current_cmp = (leader_sum, target_delta_sum, min_gap_overlaps)
-                if (relaxed_score[3], relaxed_score[4], relaxed_score[1]) < current_cmp:
-                    accepted = (relaxed_angle, relaxed_score)
-
-            if accepted is None:
-                continue
-
-            accepted_angle, accepted_score = accepted
-            _move_label(label_idx, accepted_angle)
-            reach_boxes[label_idx] = _label_reach_box(label, reach_pad)
-            plain_overlaps = accepted_score[0]
-            min_gap_overlaps = accepted_score[1]
-            hemisphere_mismatch_count = accepted_score[2]
-            leader_sum = accepted_score[3]
-            target_delta_sum = accepted_score[4]
-            best_score = accepted_score
-            pass_changed = True
-
-        if not pass_changed:
-            break
-
+    _LeaderPolish(settings, labels).polish(max_passes)
     return labels
 
 
