@@ -1,0 +1,16 @@
+{
+  "sourceCommit": "150d26706064e7ca20eef4d3553ea266b51b79f6",
+  "history": "first-parent main",
+  "writer": "gbdraw/linear.py --session_output (CLI sidecar), run from `git archive 150d26706 gbdraw` on PYTHONPATH",
+  "command": "PATH=<LOSAT 0.1.0 directory>:$PATH PYTHONPATH=<git archive 150d26706 gbdraw> python -P -m gbdraw.cli linear --gbk tests/test_inputs/BGC0000711.gbk tests/test_inputs/BGC0000713.gbk --losat losatp -o BGC0000711-BGC0000713-losatp-cli -f svg --session_output BGC0000711-BGC0000713-losatp-cli.v47.gbdraw-session.json",
+  "workingDirectory": "repository root (input paths stay relative in cliInvocation)",
+  "inputs": {
+    "tests/test_inputs/BGC0000711.gbk": "32393648f6a91166444331b83687f1b9b7b24c60553a7ddcb677dfe207736789",
+    "tests/test_inputs/BGC0000713.gbk": "bf182663de453f4a3fc30ed0aa8f040a164eeab1c98e604983844994996e58fb"
+  },
+  "sha256": "a16ab5c4c5e331dcb168d0ba6bf6079fa0734d560e54deb280c8a19979f20973",
+  "compression": "gzip -n -9",
+  "sessionVersion": 47,
+  "requestSchema": 9,
+  "storesSearch": "renderRequest.comparisons is one generatedProteinComparison of mode `orthogroup`; losatCache holds its raw LOSATP rows (schema 4, runtime-handle-v1); no stored protein results"
+}

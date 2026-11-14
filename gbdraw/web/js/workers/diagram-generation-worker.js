@@ -1211,6 +1211,14 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       [jsonArgument(payload.document, null), jsonArgument(payload.storedRequestSchema, null)]
     )
   },
+  // Load of a Session 46-50 whose Linear request holds a LOSATP search: Python
+  // returns the request with the results of the file's saved LOSAT rows and the
+  // tables it adds (OV-3545). The resources travel inside the document.
+  [DIAGRAM_HELPER_OPERATIONS.STORE_SAVED_PROTEIN_RESULTS]: {
+    keys: ['document'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'saved_protein_results_json', [jsonArgument(payload.document, null)])
+  },
   // Generate's ring search output in the search frame of the records its
   // request draws (PD-OI-073): Python converts it from the staged request.
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: {

@@ -54,8 +54,8 @@ const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/
 /** @type {Record<string, any>[]} */
 const conversions = [];
 const pythonUpgrade = pythonLegacySessionUpgrader();
-setLegacySessionUpgrader(async (request) => {
-  const reply = await pythonUpgrade(request);
+setLegacySessionUpgrader(async (operation, request) => {
+  const reply = await pythonUpgrade(operation, request);
   conversions.push(reply.result.document);
   return reply;
 });

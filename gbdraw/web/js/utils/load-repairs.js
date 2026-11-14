@@ -26,6 +26,7 @@ import { limitedList, moreLine } from './limited-list.js';
  *   | 'depth-row-disabled'
  *   | 'orthogroup-edit-dropped'
  *   | 'cache-entry-dropped'
+ *   | 'saved-comparison-results-unread'
  *   | 'feature-edit-unmatched'
  *   | 'feature-visibility-narrowed'
  *   | 'hash-selector-unmapped'
@@ -299,6 +300,9 @@ const WORDING = {
     tn(count,
       'LOSAT cache: {count} saved value ({path}) could not be read and was dropped.',
       'LOSAT cache: {count} saved values ({path}) could not be read and were dropped.', { path }))),
+  // OV-3545: Python could not read a Session 46-50's saved LOSAT rows; the drawing keeps its LOSATP search.
+  'saved-comparison-results-unread': (repairs) => repairs.map(({ path }) => (
+    t('Saved diagram: the LOSAT results saved for its protein comparison ({path}) could not be read. Click Generate to run the comparison again before you edit the diagram.', { path }))),
   'feature-recovery-failed': () => [
     t('Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it.')
   ],

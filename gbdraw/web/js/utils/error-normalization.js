@@ -12,7 +12,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
   'planRecordPlaces', 'planRingScales',
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readEmbedSequences', 'readFeatureOverrideTable', 'readFeatureSequences', 'readMatchSequences', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
-  'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesisQualifiers', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
+  'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesisQualifiers', 'synthesizeColorRules', 'storeSavedProteinResults', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse', 'drawing-list']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
