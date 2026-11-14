@@ -18,8 +18,8 @@ import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
 import { ownEntry } from '../../utils/own-entry.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import {
-  ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LABEL_FEATURE_ID_ATTRIBUTE, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
-  TICK_GROUPS, trackGroupSelector
+  ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, FEATURE_LABEL_SELECTOR, LABEL_FEATURE_ID_ATTRIBUTE, LENGTH_BAR_ID,
+  REGION_LABEL_FRONT_SELECTOR, TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
 
@@ -72,17 +72,31 @@ const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview
 const VISIBILITY_LABEL_SELECTOR = `${EDITABLE_LABEL_SELECTOR}, `
   + `text[${LABEL_BINDING_SCHEMA_ATTRIBUTE}="${LABEL_BINDING_SCHEMA}"][${LABEL_FEATURE_ID_ATTRIBUTE}]`;
 
+// The feature a mounted label names by rendered ID: the Result's catalog binds
+// that ID to the feature's source identity (R3); without a catalog, the
+// extracted feature of that SVG ID.
+/**
+ * @param {unknown} featureIdRaw
+ * @param {Map<string, LabelFeature> | null} catalog
+ * @param {readonly (LabelFeature | null | undefined)[]} [extracted]
+ * @returns {LabelFeature | null}
+ */
+const featureOfLabelId = (featureIdRaw, catalog, extracted = []) => {
+  const featureId = String(featureIdRaw || '').trim();
+  if (!featureId) return null;
+  if (catalog) return catalog.get(featureId) || null;
+  const key = normalizeKeyToken(featureId);
+  return extracted.find((feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
+};
 // The locator of a feature whose label binding failed: its rendered ID, type,
-// and one-based span from the displayed feature catalog (R6).
+// and one-based span, from the extracted feature of that rendered ID (R6).
 /**
  * @param {unknown} featureId
  * @param {(LabelFeature | null | undefined)[] | null | undefined} features
  * @param {number} count
  */
 const labelBindingLocator = (featureId, features, count) => {
-  const key = normalizeKeyToken(featureId);
-  const feature = (Array.isArray(features) ? features : [])
-    .find((item) => normalizeKeyToken(item?.svg_id) === key);
+  const feature = featureOfLabelId(featureId, null, Array.isArray(features) ? features : []);
   const start = Number(feature?.start);
   const end = Number(feature?.end);
   return {
@@ -565,7 +579,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
     .filter(Boolean));
 
   labelMeta.forEach((meta) => {
-    const existingId = String(meta.textEl.getAttribute('data-label-feature-id') || '').trim();
+    const existingId = String(meta.textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
     if (!existingId || !featureIds.has(existingId)) return;
     if (!meta.candidateById.has(existingId)) return;
     if (usedFeatureIds.has(existingId)) return;
@@ -634,24 +648,6 @@ const rowOf = (drawing, feature) => {
   const key = featureIdentityKeyOf(feature);
   return key ? drawing.featureOverrides[key] || null : null;
 };
-// The feature a mounted label names by rendered ID: the Result's catalog binds
-// that ID to the feature's source identity (R3); without a catalog, the
-// extracted feature of that SVG ID.
-/**
- * @param {unknown} featureIdRaw
- * @param {Map<string, LabelFeature> | null} catalog
- * @param {readonly (LabelFeature | null | undefined)[]} [extracted]
- * @returns {LabelFeature | null}
- */
-const featureOfLabelId = (featureIdRaw, catalog, extracted = []) => {
-  const featureId = String(featureIdRaw || '').trim();
-  if (!featureId) return null;
-  if (catalog) return catalog.get(featureId) || null;
-  const key = normalizeKeyToken(featureId);
-  return extracted.find((feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
-};
-// The labels the renderer bound to features in a committed Result's text.
-const BOUND_LABEL_SELECTOR = `text[${LABEL_FEATURE_ID_ATTRIBUTE}]`;
 // A Label TSV row selects labels in every Result of a batch: after the
 // displayed Result's labels, once per feature, the labels the renderer bound
 // in the committed content of each other Result (B6).
@@ -667,7 +663,7 @@ const withBatchLabelTargets = (state, drawing, targets) => {
     if (index === state.selectedResultIndex.value || typeof result.content !== 'string') return;
     const features = resultRenderedFeatures(state, drawing.mode, index);
     const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
-    root.querySelectorAll(BOUND_LABEL_SELECTOR).forEach((element) => {
+    root.querySelectorAll(FEATURE_LABEL_SELECTOR).forEach((element) => {
       const featureId = String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
       const feature = featureOfLabelId(featureId, features);
       const key = featureIdentityKeyOf(feature);
@@ -989,7 +985,7 @@ export const createFeatureLabelActions = ({
       if (!key) return;
       const text = getLabelText(textEl);
       const sourceText = textEl.getAttribute('data-label-source-text') || text;
-      const featureId = textEl.getAttribute('data-label-feature-id') || '';
+      const featureId = textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '';
       const kind = textEl.querySelector('textPath') ? 'embedded' : 'regular';
       nextEntries.push({
         key,
@@ -1135,9 +1131,9 @@ export const createFeatureLabelActions = ({
       }
       const featureId = featureAssignments.get(textEl);
       if (featureId) {
-        textEl.setAttribute('data-label-feature-id', featureId);
+        textEl.setAttribute(LABEL_FEATURE_ID_ATTRIBUTE, featureId);
       } else {
-        textEl.removeAttribute('data-label-feature-id');
+        textEl.removeAttribute(LABEL_FEATURE_ID_ATTRIBUTE);
       }
     });
     requireUniqueEditableLabelBindings(labelElements, requiredFeatureIds, { features });
@@ -1518,7 +1514,7 @@ export const createFeatureLabelActions = ({
       || state.resultGenerationKey.value !== generationKey) return null;
     const root = new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml').documentElement;
     const key = normalizeKeyToken(featureId);
-    return Array.from(root.querySelectorAll(BOUND_LABEL_SELECTOR))
+    return Array.from(root.querySelectorAll(FEATURE_LABEL_SELECTOR))
       .some((element) => normalizeKeyToken(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE)) === key);
   };
 
@@ -1633,7 +1629,7 @@ export const createFeatureLabelActions = ({
         const candidateSource = textEl.getAttribute('data-label-source-text') || '';
         if (candidateSource !== sourceText) return;
         matchedCount += 1;
-        const candidate = labelFeature(drawing, textEl.getAttribute('data-label-feature-id'), displayed);
+        const candidate = labelFeature(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
         if (featureIdentityKeyOf(candidate)) {
           applyLabelTextEdit(drawing, candidate, newText, candidateSource);
         } else {
