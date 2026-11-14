@@ -9,8 +9,8 @@ import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './s
 import { ensureSvgDefs } from './svg-serialization.js';
 import { ANNOTATION_SELECTOR } from './drawn-groups.js';
 import {
-  MATCH_FRAGMENT_OWN_ATTRIBUTES, MATCH_SPAN_REASON_TEXTS, STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT,
-  STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT
+  BASE_COMPLEMENTS, MATCH_FRAGMENT_OWN_ATTRIBUTES, MATCH_SPAN_REASON_TEXTS, STANDALONE_BASE_COMPLEMENTS_SLOT,
+  STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT
 } from './drawn-attributes.generated.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -623,11 +623,13 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   const script = document.createElementNS(SVG_NS, 'script');
   script.setAttribute('id', INTERACTIVE_SCRIPT_ID);
   script.setAttribute('type', 'application/ecmascript');
-  // The script checks the fragments of a match with Python's list of the attributes a fragment holds on its own, and
-  // shows Python's sentence for each reason a match span cannot be read; Python writes both in the same way.
+  // The script checks the fragments of a match with Python's list of the attributes a fragment holds on its own,
+  // shows Python's sentence for each reason a match span cannot be read, and reverse-complements a span with Python's
+  // base complements; Python writes all three in the same way.
   script.textContent = [
     [STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, JSON.stringify(MATCH_FRAGMENT_OWN_ATTRIBUTES)],
-    [STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, JSON.stringify(MATCH_SPAN_REASON_TEXTS)]
+    [STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, JSON.stringify(MATCH_SPAN_REASON_TEXTS)],
+    [STANDALONE_BASE_COMPLEMENTS_SLOT, JSON.stringify(BASE_COMPLEMENTS)]
   ].reduce((text, [slot, json]) => {
     const parts = text.split(slot);
     if (parts.length !== 2) throw new Error('Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT');

@@ -101,6 +101,7 @@ from gbdraw.api.options import (
     LinearMultiRecordOptions,
     LinearRecordTranslation,
     LosatRuntimeOptions,
+    LOSATP_NO_SEARCH_MODE,
     LosatSearchOptions,
     losatp_analysis_mode,
     resolve_circular_diagram_options,
@@ -1953,7 +1954,7 @@ def _linear_has_comparisons(
         or linear_comparisons
         or protein_comparisons
         or collinearity_blocks
-        or losatp_analysis_mode(losat_search) != "none"
+        or losatp_analysis_mode(losat_search) != LOSATP_NO_SEARCH_MODE
     )
 
 
@@ -2302,7 +2303,7 @@ def assemble_linear_diagram_from_records(
     row_comparison_pairs: tuple[tuple[int, int], ...] | None = None
     if (
         (
-            normalized_protein_blastp_mode in {"orthogroup", "collinear", "pairwise"}
+            normalized_protein_blastp_mode != LOSATP_NO_SEARCH_MODE
             or inputs.collinearity_blocks is not None
         )
         and layout is not None
@@ -2314,17 +2315,17 @@ def assemble_linear_diagram_from_records(
         row_comparison_pairs = grid_display_pairs(analysis_rows)
     if int(inputs.collinear_max_paralog_links_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-    if normalized_protein_blastp_mode != "none" and inputs.protein_comparisons is not None:
+    if normalized_protein_blastp_mode != LOSATP_NO_SEARCH_MODE and inputs.protein_comparisons is not None:
         raise ValidationError("Pass either a LOSATP losat_search or protein_comparisons, not both.")
     if inputs.collinearity_blocks is not None and (
-        normalized_protein_blastp_mode != "none" or inputs.protein_comparisons is not None or inputs.blast_files
+        normalized_protein_blastp_mode != LOSATP_NO_SEARCH_MODE or inputs.protein_comparisons is not None or inputs.blast_files
     ):
         raise ValidationError(
             "Pass collinearity_blocks without a LOSATP losat_search, protein_comparisons, or blast_files."
         )
-    if normalized_protein_blastp_mode != "none" and inputs.blast_files:
+    if normalized_protein_blastp_mode != LOSATP_NO_SEARCH_MODE and inputs.blast_files:
         raise ValidationError("A LOSATP losat_search cannot be used with blast_files.")
-    if normalized_protein_blastp_mode != "none" and len(records) < 2:
+    if normalized_protein_blastp_mode != LOSATP_NO_SEARCH_MODE and len(records) < 2:
         raise ValidationError("A LOSATP losat_search requires at least two records")
     if inputs.similarity_alignment is not None and not isinstance(
         inputs.similarity_alignment, SimilarityAlignmentPlan

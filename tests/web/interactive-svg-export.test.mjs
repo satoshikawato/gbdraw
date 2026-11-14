@@ -3,6 +3,7 @@
 // builds the file, and the file embeds the item with what Python returned under the export schema
 // (INTERACTIVE_EMBED_SCHEMA), not the stored catalog schema. A failed read writes no file; a read that another Result outlived writes nothing and says nothing.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 
 import { FEATURE_CATALOG_SCHEMA, INTERACTIVE_EMBED_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
@@ -133,6 +134,37 @@ test('the file embeds the item Python encoded, under the export schema, byte for
   for (const options of [{ catalogItem: storedItem }, { embeddedSequences }]) {
     assert.equal(enrichSvgWithStandaloneInteractivity(new FakeElement('svg'), options), false);
   }
+});
+
+// The viewer script of an exported file holds Python's values in its slots: the CLI and Python export write them
+// (`_load_standalone_assets`), the Web export writes them from the generated module, and both write the same script.
+// The base complements its reverse-complemented spans read are Python's mapping.
+test('the Web export writes the viewer script Python writes, with Python\'s base complements', () => {
+  const python = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
+import json
+from gbdraw.render.interactive_svg import _load_standalone_assets
+from gbdraw.web_support.feature_catalog import BASE_COMPLEMENTS
+print(json.dumps({"script": _load_standalone_assets()[1], "complements": BASE_COMPLEMENTS}))
+`], { encoding: 'utf8' }));
+  const svg = new FakeElement('svg');
+  assert.equal(enrichSvgWithStandaloneInteractivity(svg, { catalogItem: storedItem, embeddedSequences }), true);
+  const script = svg.childNodes.find((child) => child.localName === 'script').textContent;
+  assert.equal(script, python.script);
+  const complements = /\n {2}var BASE_COMPLEMENTS = ([^\n]*);\n/.exec(script);
+  assert.deepEqual(JSON.parse(complements?.[1] ?? 'null'), python.complements);
+});
+
+// OV-3575: the asset's template literal held `\|`, which JavaScript reads as `|` (Python's export kept `\|`), so the
+// viewer of a Web-exported file took any text with an "@" for an internal protein ID and showed none of it.
+test('the Web export\'s viewer takes only an internal protein ID for one, as the CLI export\'s does', () => {
+  const svg = new FakeElement('svg');
+  assert.equal(enrichSvgWithStandaloneInteractivity(svg, { catalogItem: storedItem, embeddedSequences }), true);
+  const script = svg.childNodes.find((child) => child.localName === 'script').textContent;
+  const source = /\n {2}function isInternalProteinDisplayId\(value\) \{[\s\S]*?\n {2}\}\n/.exec(script)?.[0];
+  const isInternal = new Function(`${source}\nreturn isInternalProteinDisplayId;`)();
+  assert.equal(isInternal('rpoB@2'), false);
+  assert.equal(isInternal('product@site'), false);
+  assert.equal(isInternal(`record@key|unit~f_${'a'.repeat(64)}`), true);
 });
 
 test('an item whose matches read no source embeds no sequenceSources or matchSpanReads key, as Python writes it', () => {

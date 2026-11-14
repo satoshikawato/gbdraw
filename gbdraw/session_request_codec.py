@@ -171,6 +171,7 @@ from .api.options import (
     LinearOutputOptions,
     LinearRequestTrackOptions,
     LOSATP_MODE_WIRE,
+    LOSATP_NO_SEARCH_MODE,
     LosatRuntimeOptions,
     LosatSearchOptions,
     _invalid_input,
@@ -4570,7 +4571,7 @@ def _encode_comparisons(
     # A request that sets its collinearity parameters (the CLI and the Web
     # always do) keeps its pipeline settings, as one that changes any other.
     if (
-        protein_mode != "none"
+        protein_mode != LOSATP_NO_SEARCH_MODE
         or pairs is not None
         or options.collinearity_params is not None
         or settings != _encode_protein_settings(_DEFAULT_LINEAR_OPTIONS)

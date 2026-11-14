@@ -567,6 +567,30 @@ def test_the_gallery_drawn_drawing_count_has_one_python_owner() -> None:
     assert "drawn.length !== GALLERY_SESSION_DRAWN_DRAWINGS" in publication
 
 
+@pytest.mark.browser
+def test_the_losatp_no_search_spelling_has_one_python_owner() -> None:
+    """Whether a request runs a LOSATP search reads Python's spelling of "no search" from the generator."""
+    from gbdraw.api.options import LOSATP_MODE_WIRE, LOSATP_NO_SEARCH_MODE
+
+    assert LOSATP_NO_SEARCH_MODE == LOSATP_MODE_WIRE["none"]
+    generated = (REPO_ROOT / "gbdraw/web/js/contracts/schema.generated.js").read_text(encoding="utf-8")
+    assert f"export const LOSATP_NO_SEARCH_MODE = '{LOSATP_NO_SEARCH_MODE}';" in generated
+    reader = (REPO_ROOT / "gbdraw/web/js/services/session-request.js").read_text(encoding="utf-8")
+    assert "comparison.mode !== LOSATP_NO_SEARCH_MODE" in reader
+
+
+@pytest.mark.browser
+def test_the_viewer_base_complements_have_one_python_owner() -> None:
+    """The exported viewer reverse-complements with Python's table: the asset holds a slot, not a copy."""
+    from gbdraw.render.interactive_svg import STANDALONE_BASE_COMPLEMENTS_SLOT
+    from gbdraw.web_support.feature_catalog import BASE_COMPLEMENTS, _reverse_complement_sequence
+
+    assert _reverse_complement_sequence("".join(BASE_COMPLEMENTS)) == "".join(reversed(BASE_COMPLEMENTS.values()))
+    asset = (REPO_ROOT / "gbdraw/web/js/services/standalone-interactivity-assets.js").read_text(encoding="utf-8")
+    assert asset.count(f"var BASE_COMPLEMENTS = {STANDALONE_BASE_COMPLEMENTS_SLOT};") == 1
+    assert "A:'T'" not in asset
+
+
 def test_the_derived_result_shape_module_is_the_description_as_frozen_data() -> None:
     source = _generator().render_derived_result_shape_module()
 

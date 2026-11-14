@@ -6737,3 +6737,21 @@ for (const { name, record, windows, promotedSelector, refused } of REGION_WINDOW
   assert.equal(promoted.region, undefined, `${name}: region is removed`);
   assert.deepEqual(promoted.selector ?? null, promotedSelector, `${name}: selector`);
 }
+
+// Whether a request runs a LOSATP search reads Python's spelling of "no search" (`LOSATP_MODE_WIRE`, generated as
+// LOSATP_NO_SEARCH_MODE): every other protein pipeline mode runs one, an unvalidated spelling included.
+{
+  const { requestRunsProteinSearch } = await import(pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js')));
+  const { LOSATP_NO_SEARCH_MODE } = await import(pathToFileURL(join(tempRoot, 'js', 'contracts', 'schema.generated.js')));
+  const runs = (mode, extra = {}) => requestRunsProteinSearch({
+    mode: 'linear', comparisons: [{ kind: 'generatedProteinComparison', mode }], ...extra
+  });
+  assert.equal(typeof LOSATP_NO_SEARCH_MODE, 'string');
+  assert.equal(runs(LOSATP_NO_SEARCH_MODE), false);
+  for (const mode of ['orthogroup', 'collinear', 'pairwise', 'NONE', '', undefined, null, 0]) {
+    assert.equal(runs(mode), true, String(mode));
+  }
+  assert.equal(runs('pairwise', { mode: 'circular' }), false);
+  assert.equal(requestRunsProteinSearch({ mode: 'linear', comparisons: [{ kind: 'blast', mode: 'pairwise' }] }), false);
+  assert.equal(requestRunsProteinSearch(null), false);
+}

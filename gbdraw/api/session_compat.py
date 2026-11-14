@@ -51,7 +51,12 @@ from gbdraw.session_io import (
 )
 
 from .migration_report import SessionMigrationReport
-from .options import LinearMultiRecordOptions, LinearRecordTranslation, losatp_analysis_mode
+from .options import (
+    LOSATP_NO_SEARCH_MODE,
+    LinearMultiRecordOptions,
+    LinearRecordTranslation,
+    losatp_analysis_mode,
+)
 from .record_planning import (
     _SOURCE_BINDING_COLUMNS,
     ResolvedRecordCollection,
@@ -381,7 +386,7 @@ def _legacy_candidate_attempt_pairs(
     if search is None or search.program != "losatp":
         return ()
     mode = losatp_analysis_mode(search)
-    if mode == "none":
+    if mode == LOSATP_NO_SEARCH_MODE:
         options = request.options
         mode = stored_result_mode or (
             "collinear"

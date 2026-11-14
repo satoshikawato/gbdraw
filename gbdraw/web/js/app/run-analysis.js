@@ -211,6 +211,7 @@ import {
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
+  LOSATP_NO_SEARCH_MODE,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
   ORTHOGROUP_INFERENCE_VERSION,
   PROTEIN_LOSAT_CACHE_SCHEMA,
@@ -811,11 +812,11 @@ const canReuseResolvedProteinArtifacts = ({
     ? committedRequest.comparisons
     : [];
   const persistedMarker = persisted.find((comparison) => (
-    comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+    comparison?.kind === 'generatedProteinComparison' && comparison.mode === LOSATP_NO_SEARCH_MODE
   ));
   // The test of `kind` is the type.
   const committedMarker = /** @type {CanonicalGeneratedProteinComparison | undefined} */ (committed.find((comparison) => (
-    comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+    comparison?.kind === 'generatedProteinComparison' && comparison.mode === LOSATP_NO_SEARCH_MODE
   )));
   // A committed marker implies a committed request; the test only states it.
   if (!committedRequest || !persistedMarker || !committedMarker || !active) return false;
