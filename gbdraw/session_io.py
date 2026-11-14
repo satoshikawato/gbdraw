@@ -5451,10 +5451,8 @@ class _LegacyComparisonPlanBuilder:
         return comparison_file.file
 
     def _positional_file(self, index: int) -> object:
-        """The file of the adjacent pair at gap ``index``; it consumes the binding of that pair."""
+        """The file of the adjacent pair at gap ``index`` (a row with a next row); it consumes the binding of that pair."""
 
-        if not 0 <= index < len(self.rows) - 1:
-            return None
         row = self.rows[index]
         endpoint_binding = self.file_by_pair.get((row.uid, self.rows[index + 1].uid))
         if row.blast:
@@ -5486,9 +5484,12 @@ class _LegacyComparisonPlanBuilder:
             subject_uid, subject_index = self._selected_endpoint(
                 comparison, "subjectUid", "subjectIndex"
             )
+            # An adjacent pair is a gap between two rows: its file and LOSAT file name are those of the row.
             adjacent_gap = (
                 query_index
-                if query_index is not None and subject_index == query_index + 1
+                if query_index is not None
+                and subject_index == query_index + 1
+                and 0 <= query_index < len(self.rows) - 1
                 else None
             )
             file_entry = (
