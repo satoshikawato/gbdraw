@@ -506,6 +506,42 @@ def test_web_reply_words_a_stored_protein_pair_without_a_match_as_the_cli(
     assert summary["lines"] == list(input_summary_lines(rendered.input_summary))
 
 
+def test_a_protein_comparison_of_listed_record_pairs_keeps_its_protein_wording(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """LOSATP Pairwise with listed pairs: the pair comparisons are protein comparisons, one with no match."""
+
+    from dataclasses import replace
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    def search(query_fasta: str, subject_fasta: str, **kwargs) -> object:
+        # Record #3 (rec2) shares no protein with record #2: that pair finds nothing.
+        if "rec2_" in subject_fasta:
+            kwargs["raw_output_callback"]("")
+            kwargs["runtime_callback"]({"kind": "losat", "version": "test", "program": "blastp"})
+            return protein_colinearity_module.parse_losatp_outfmt6("")
+        return _fake_losatp(query_fasta, subject_fasta, **kwargs)
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", search)
+    request, _identities = _request("pairwise", tmp_path)
+    options = replace(
+        request.options,
+        losat_search=replace(request.options.losat_search, pairs=((0, 1), (1, 2))),
+    )
+    request = replace(request, options=options, output=RenderOutputRequest(
+        output_prefix="pairs", formats=("svg",), output_directory=tmp_path / "out",
+    ))
+    summary = render_request(request).input_summary
+
+    lines = [line for line in input_summary_lines(summary) if "omparison of" in line]
+    assert "Protein comparison of record #1 rec0 and record #2 rec1: drew 3 protein matches." in lines, lines
+    assert "Protein comparison of record #2 rec1 and record #3 rec2: drew 0 protein matches." in lines, lines
+    warnings = [item.message for item in input_warnings(summary)]
+    assert len(warnings) == 1 and warnings[0].endswith("has no protein match to draw."), warnings
+
+
 def test_a_cropped_record_with_nothing_to_draw_names_its_region() -> None:
     from gbdraw.api.input_summary import FeatureTypeTally, InputSummary, RecordInputSummary
 
