@@ -199,6 +199,8 @@ const create = ({
     state: controllerState,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
     getEnrichedOrthogroupMembers: () => { enrichCalls += 1; return currentGroup.members; },
+    // The orthogroup owner's drawn IDs of an anchor's feature; this Result names its records by key.
+    drawnFeatureIdsOf: () => [],
     // The orthogroup owner's detail of the selected group (OV-920).
     selectedOrthogroupDetail: { get value() {
       return { group: currentGroup, id: currentGroup.id, members: currentGroup.members };

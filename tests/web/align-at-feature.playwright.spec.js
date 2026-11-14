@@ -218,3 +218,82 @@ test('Align at feature over an active Similarity alignment clears it in the same
   await expect(page.locator('[data-similarity-alignment-notice]')).toHaveCount(0);
   await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveCount(0);
 });
+
+// OV-3538: a Session an older gbdraw saved (Session 39) names its alignment's anchors by stable IDs, and its Result
+// draws the reverse-complemented BGC0000713 under other hashes. Before the first Generate, a record drag, an
+// alignment review and Align at feature bind the plan's records through the drawn IDs of the features Load read
+// again from the sources, as on a current Session.
+test('on a Session 39 with an active alignment, a record drag, a review and Align at feature work before the first Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await openFresh(page);
+  await loadSessionFile(page, path.join(root, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz'));
+  const before = await placement(page);
+  expect(JSON.parse(before.plan)?.groupId).toBe('og_1');
+  // The x each record is drawn at in this Result, which names no record by key: the last translate of its group (the
+  // first is the composition's own offset).
+  const legacyXs = await page.evaluate(() => [...window.__GBDRAW_APP__.svgContainer
+    .querySelectorAll('svg g[id^="record_group"][data-gbdraw-record-index]')]
+    .map((group) => Number([...group.getAttribute('transform').matchAll(/translate\(([-\d.e]+)/g)].at(-1)[1])));
+  expect(legacyXs).toHaveLength(5);
+
+  await test.step('a record drag moves the record and clears the alignment', async () => {
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      app.layoutRepositionMode = true;
+      await window.Vue.nextTick();
+      // A press on a feature opens its popup; the record is dragged by its other parts (its axis).
+      const target = [...app.svgContainer.querySelectorAll('svg g[id^="record_group"][data-gbdraw-record-index="4"] *')]
+        .find((element) => !element.closest('path[id^="f"], polygon[id^="f"], rect[id^="f"], text, g[id^="f"]')
+          && element.getBoundingClientRect().width > 20);
+      const bounds = target.getBoundingClientRect();
+      const x = bounds.left + bounds.width / 2;
+      const y = bounds.top + bounds.height / 2;
+      const event = (type, clientX, buttons) => new MouseEvent(type, {
+        bubbles: true, cancelable: true, clientX, clientY: y, buttons, view: window
+      });
+      target.dispatchEvent(event('mousedown', x, 1));
+      await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
+      document.dispatchEvent(event('mousemove', x + 40, 1));
+      await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
+      document.dispatchEvent(event('mouseup', x + 40, 0));
+    });
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label || ''))
+      .toBe('Move record');
+    await expect(page.locator('[data-similarity-alignment-notice]')).toHaveText('Alignment cleared: record moved manually.');
+    const moved = await page.evaluate(async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return { plan: state.similarityAlignmentPlan.value, xs: state.linearRecordTranslations.value.map(({ x }) => x) };
+    });
+    expect(moved.plan).toBeNull();
+    // The other records keep the places the Result draws them at.
+    moved.xs.slice(0, 4).forEach((x, index) => expect(x).toBeCloseTo(legacyXs[index], 6));
+    expect(moved.xs[4]).toBeGreaterThan(legacyXs[4]);
+    await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await settle(page);
+    expect((await placement(page)).plan).toBe(before.plan);
+  });
+
+  await test.step('Review alignment options opens the review', async () => {
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+    await page.locator('.right-drawer').getByRole('button', { name: 'Review alignment options…', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentStatus), { timeout: 180_000 }).toBe('reviewing');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError)).toBeNull();
+    await page.evaluate(() => window.__GBDRAW_APP__.cancelSimilarityAlignmentDialog());
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentStatus)).toBe('idle');
+  });
+
+  await test.step('Align at feature applies from the places the Result draws', async () => {
+    const preview = await resolveSelector(page, 'protein_id=CAF33300.1');
+    await expect(preview).toContainText('Apply clears the active similarity alignment.');
+    await page.getByTestId('linear-anchor-feature-apply').click();
+    await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at protein_id=CAF33300.1.', { timeout: 180_000 });
+    const after = await placement(page);
+    expect(after.plan).toBe('null');
+    expect(xs(after.committed, 5).every(Number.isFinite)).toBe(true);
+  });
+  expect(errors).toEqual([]);
+});

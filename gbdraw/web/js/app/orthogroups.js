@@ -37,7 +37,7 @@ import {
 } from '../services/feature-identity.js';
 import { msg, t, tm } from '../utils/i18n.js';
 
-/** @import { FeatureIdentity } from '../services/feature-identity.js' */
+/** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureSvgRoot } from '../services/feature-dom.js' */
 /** @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js' */
 /** @import { FeatureLike } from '../services/feature-utils.js' */
@@ -337,6 +337,19 @@ const catalogRowLookupOf = ({ extractedFeatures, biologicalFeatures }, getCommit
     Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [],
     recordKeys.value
   ));
+};
+
+/**
+ * The drawn element ID of an alignment anchor's feature, from the one catalog row the anchor names (`catalogRowLookup`).
+ * The alignment binds a Result an older gbdraw drew through it: a record drawn reverse complemented there draws its
+ * features under their hash in the drawn record, not under the stable ID the anchor names (OV-3538).
+ * @param {{ readonly value: ReturnType<typeof catalogRowLookup> }} lookup
+ * @returns {(anchor: AliasSource) => string[]}
+ */
+const anchorDrawnFeatureIds = (lookup) => (anchor) => {
+  const matches = lookup.value(featureIdentity(anchor));
+  const renderedId = matches.length === 1 ? matches[0].identity.renderedId : null;
+  return renderedId !== null && renderedId.supplied ? [renderedId.value] : [];
 };
 
 /** @param {FeatureSvgRoot | null | undefined} svg @param {(Record<string, unknown> | null | undefined)[] | null} [features] */
@@ -925,6 +938,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     selectedOrthogroup,
     selectedOrthogroupDetail,
     getEnrichedOrthogroupMembers,
+    drawnFeatureIdsOf: anchorDrawnFeatureIds(featureCatalogLookup),
     groupOrthogroupMembersByRecord,
     // The location text of a member row of `groupOrthogroupMembersByRecord`.
     memberRangeText: locationRangeText,

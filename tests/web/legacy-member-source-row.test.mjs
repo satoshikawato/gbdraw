@@ -122,3 +122,20 @@ test('the row lookup is rebuilt when the record keys change, not on every commit
   assert.deepEqual(strands(), ['-', undefined]);
   assert.ok(reads > built, 'other record keys: the rows are read again');
 });
+
+// OV-3538: the saved alignment of such a Session names each anchor by its stable ID, which a record drawn reverse
+// complemented does not draw. The anchor's drawn feature ID comes from the same lookup, so the shown Result binds each
+// record by it (the resolver port of the composition binding).
+test('an anchor of a saved alignment resolves the drawn feature ID of its feature read again', () => {
+  const editor = editorFor([livA, racM]);
+  const plan = materializeLegacySimilarityAlignment({
+    target: 'og_18', records, featureCatalog: null,
+    legacyOrthogroupState: { groups: [{ id: 'og_18', members: [
+      savedMember('stable-liva', 0, '-', 100, 400), savedMember('stable-racm', 1, '+', 3520, 5023)
+    ] }] }
+  });
+  assert.deepEqual(plan.records.map(({ anchor }) => editor.drawnFeatureIdsOf(anchor)), [['stable-liva'], ['drawn-racm_record_2']]);
+  // An anchor no feature read again names resolves no drawn ID.
+  assert.deepEqual(editor.drawnFeatureIdsOf({ recordKey: 'linear-seq-b', biologicalFeatureId: 'gone',
+    stableFeatureSvgId: 'gone', sourceFeatureIndex: null }), []);
+});

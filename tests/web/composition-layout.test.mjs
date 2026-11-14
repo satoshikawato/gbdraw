@@ -469,6 +469,28 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
     ),
     /cannot bind alignment record "record-a"/
   );
+
+  // OV-3538: a record an older gbdraw drew reverse complemented draws its features under their hash in the drawn
+  // record, not under the stable ID the plan's anchor names. The anchor's drawn feature ID, which the features Load
+  // read again from the sources give (the resolver port), binds the record group instead.
+  primaryB.appendChild(new FakeElement({
+    attributes: { 'data-gbdraw-feature-id': 'drawn-a_record_1', 'data-gbdraw-stable-feature-id': 'drawn-a' }
+  }));
+  const drawnFeatureIdsOf = (anchor) => (anchor.biologicalFeatureId === 'feature-a' ? ['drawn-a_record_1'] : []);
+  const base = [{ recordKey: 'record-a', x: 0, y: 2 }, { recordKey: 'record-b', x: 0, y: 5 }];
+  assert.deepEqual(
+    materializeRecordTranslations(svg, base, ['record-a', 'record-b'], plan, drawnFeatureIdsOf),
+    [
+      { recordKey: 'record-a', x: -20, y: 2 },
+      { recordKey: 'record-b', x: 105, y: 2 }
+    ]
+  );
+  // A drawn ID that names a feature of another record group binds no record twice.
+  primaryA.appendChild(new FakeElement({ attributes: { 'data-gbdraw-feature-id': 'drawn-a_record_1' } }));
+  assert.throws(
+    () => materializeRecordTranslations(svg, base, ['record-a', 'record-b'], plan, drawnFeatureIdsOf),
+    /binds one record group to multiple alignment records|duplicate record key "record-a"/
+  );
 }
 
 {
