@@ -1,0 +1,1 @@
+- Fixed: A screen reader again announces the changed "and N more" line of a notice in the Web app.

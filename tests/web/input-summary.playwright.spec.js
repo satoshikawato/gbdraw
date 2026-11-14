@@ -84,7 +84,7 @@ test('a record with no feature to draw: the status area says so and Run Info lis
 
   // OV-3562: the notice of skipped annotation rows (one line per row) and the notice of comparison rows placed by
   // position (one line per record pair) show their first lines the same way. Each notice stays one atomic live
-  // region; the rest is a region of its own with aria-live off, so opening it does not read the notice again.
+  // region; the box of the rest is a region of its own with aria-live off, so opening it does not read the notice again.
   await page.evaluate(async () => {
     const { state } = await import(new URL('js/state.js', document.baseURI).href);
     const [result] = window.__GBDRAW_APP__.currentResults();
@@ -108,7 +108,12 @@ test('a record with no feature to draw: the status area says so and Run Info lis
     await expect(shown.locator('p:visible')).toHaveCount(4); // the heading and three lines
     await expect(shown.locator('p').nth(1)).toHaveText(first);
     const rest = shown.locator('[data-notice-lines-rest]');
-    await expect(rest).toHaveAttribute('aria-live', 'off');
+    await expect(rest.locator('[data-notice-lines-box]')).toHaveAttribute('aria-live', 'off');
+    // The summary is not under an aria-live="off" element below the notice.
+    expect(await rest.locator('> summary').evaluate((node, notice) => {
+      for (let up = node.parentElement; up && up !== notice; up = up.parentElement) if (up.getAttribute('aria-live') === 'off') return true;
+      return false;
+    }, await shown.elementHandle())).toBe(false);
     await expect(rest.locator('> summary')).toHaveText(`and ${count - 3} more`);
     await rest.locator('> summary').click();
     await expect(shown.locator('p:visible')).toHaveCount(count + 1);
