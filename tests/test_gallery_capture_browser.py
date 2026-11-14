@@ -576,3 +576,115 @@ def test_svg_text_in_a_tspan_or_on_a_text_path_is_seen() -> None:
     assert sorted(seen) == ["16 kbp", "Homo", "sapiens"]
     for text, area in whole.items():
         assert seen[text] >= area - 0.5, text
+
+
+def test_a_highlight_frame_never_moves_in_over_the_elements_own_caption() -> None:
+    """L2: a highlighted row's own caption, 1.5 px inside its top edge, is text a frame must keep off
+    like any other: with a neighbour's label 1 px above the row, no outline position is clear, so
+    the capture fails and names the caption; a frame forced inside the row fails the guard."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:14px sans-serif'>"
+        "<span id='above' style='position:absolute;left:20px;top:0;line-height:20px'>Records</span>"
+        "<div id='row' style='position:absolute;left:20px;top:40px;width:300px;height:40px;background:#f8fafc'>"
+        "<span id='caption' style='position:absolute;left:8px;top:6px'>NC_000913 chromosome</span></div>"
+        "</body></html>"
+    )
+    # The label's text box ends 1 px above the row; the caption's text box starts 1.5 px inside it.
+    place = """() => {
+      const box = (id) => { const range = document.createRange();
+        range.selectNodeContents(document.getElementById(id).firstChild); return range.getBoundingClientRect(); };
+      const row = document.getElementById('row');
+      row.style.top = `${box('above').bottom + 1}px`;
+      const caption = document.getElementById('caption');
+      caption.style.top = `${parseFloat(caption.style.top) + row.getBoundingClientRect().top + 1.5 - box('caption').top}px`;
+    }"""
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 200})
+            page.set_content(html)
+            page.evaluate(place)
+            with pytest.raises(RuntimeError, match="'NC_000913 chromosome'"):
+                capture_tool.draw_highlight_frames(page, "#row")
+            page.evaluate(
+                "(css) => { document.getElementById('row').style.cssText += `; ${css}`; }",
+                capture_tool.highlight_frame_css(-3.0, 0.0),
+            )
+            with pytest.raises(RuntimeError, match="covers text: 'NC_000913 chromosome'"):
+                capture_tool.assert_highlight_frames_cover_no_text(page, "#row")
+        finally:
+            browser.close()
+
+
+def test_the_frame_guard_sees_a_frame_on_an_element_that_eases_its_style() -> None:
+    """Review M1: a field that eases every property (`transition: all`, here with a delay) still
+    shows the guard the frame it paints: a frame forced over the label above it fails the guard."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:16px sans-serif'>"
+        "<label style='position:absolute;left:20px;top:20px;line-height:20px'>Head Length Ratio</label>"
+        "<input aria-label='ratio' value='0.64' style='position:absolute;left:20px;top:42px;width:120px;"
+        "height:24px;transition:all 300ms 300ms'>"
+        "</body></html>"
+    )
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 200})
+            page.set_content(html)
+            page.evaluate(
+                "(css) => { document.querySelector('input').style.cssText += `; ${css}`; }",
+                capture_tool.highlight_frame_css(3.0, 4.0),
+            )
+            capture_tool.wait_for_css_transitions(page)
+            with pytest.raises(RuntimeError, match="covers text: 'Head Length Ratio'"):
+                capture_tool.assert_highlight_frames_cover_no_text(page, "input")
+            # The guard leaves the frame drawn and starts no transition.
+            settled = page.evaluate(
+                """() => { const input = document.querySelector('input');
+                  return [getComputedStyle(input).outlineColor, input.getAnimations().length]; }"""
+            )
+        finally:
+            browser.close()
+
+    assert settled == ["rgb(245, 158, 11)", 0]
+
+
+def test_a_capture_scroll_after_the_record_read_is_not_undone() -> None:
+    """HmmtDNA basic 3-1: a record read that opens the single-record panel puts the Settings pane
+    back where it was two frames after the records are read (the app's scroll restore). The read
+    waits for that, so a scroll the capture's actions make right after it stays."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0'>"
+        "<div class='settings-scroll' style='height:200px;overflow:auto'>"
+        "<div style='height:1000px'></div><div id='preset'>Track Preset</div><div style='height:1000px'></div>"
+        "</div><script>"
+        "const discovery = { hasInput: true, status: 'pending' };"
+        "window.__GBDRAW_APP__ = { mode: 'circular', circularRecordDiscoveryState: discovery,"
+        "  async inspectCircularSourceRecords() {"
+        "    const pane = document.querySelector('.settings-scroll'); const saved = pane.scrollTop;"
+        "    setTimeout(() => { discovery.status = 'ready';"
+        "      queueMicrotask(() => requestAnimationFrame(() => requestAnimationFrame(() => { pane.scrollTop = saved; })));"
+        "    }, 30);"
+        "  } };"
+        "</script></body></html>"
+    )
+    frames = "() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))))"
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 300})
+            page.set_content(html)
+            capture_tool.inspect_shown_records(page)
+            page.evaluate("() => document.getElementById('preset').scrollIntoView({ block: 'center' })")
+            page.evaluate(frames)
+            scroll_top = page.evaluate("() => document.querySelector('.settings-scroll').scrollTop")
+        finally:
+            browser.close()
+
+    assert scroll_top > 800

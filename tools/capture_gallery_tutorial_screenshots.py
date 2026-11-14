@@ -101,7 +101,7 @@ CROP_EDGE_MARGIN = 4.0
 CROP_EDGE_TOLERANCE = 0.1
 CROP_EDGE_ROUNDS = 8
 # The frame a capture draws around its highlightSelector never covers text or a control a reader
-# sees other than the highlighted element's own (OV-3492): an outline HIGHLIGHT_FRAME_WIDTH px wide,
+# sees, the highlighted element's own text included (OV-3492): an outline HIGHLIGHT_FRAME_WIDTH px wide,
 # drawn HIGHLIGHT_FRAME_OFFSET px outside the element, with a glow HIGHLIGHT_FRAME_GLOW px wide
 # (HTML elements only), moves in (down to just inside the element's edge) where text outside sits
 # closer, and stays HIGHLIGHT_FRAME_CLEARANCE px clear of it; text inside the element does not move
@@ -802,6 +802,11 @@ def inspect_shown_records(page) -> None:
         page.wait_for_function(SHOWN_RECORDS_READ_SCRIPT, timeout=DEFAULT_GENERATE_TIMEOUT_MS)
     except Exception as error:
         raise RuntimeError(f"Could not read the records of the capture session: {error}") from error
+    # A read that opens the single-record panel puts the Settings pane back where it was scrolled
+    # two frames later (circular-record-controls.js, after nextTick and afterPaint). Let those
+    # frames pass, so the restore never undoes a scroll the capture's actions make (HmmtDNA basic
+    # 3-1: the Layout card ended up below the page).
+    page.evaluate("() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
 
 
 def assert_capture_records_read(page) -> None:
@@ -1399,7 +1404,6 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
     const owner = node.parentElement;
     const text = normalize(node.nodeValue);
     if (!text || !owner || owner.closest('script, style, template, noscript, select, textarea, title')) continue;
-    if (exclude && exclude.contains(node)) continue;
     if (!shown(owner)) continue;
     const range = document.createRange();
     range.selectNodeContents(node);
@@ -1427,7 +1431,7 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
   };
   for (const control of document.querySelectorAll(CONTROLS)) {
     // A drawn group that opens settings (role="button") is figure: its labels count as text.
-    if (control instanceof SVGElement || !shown(control) || (exclude && exclude.contains(control))) continue;
+    if (control instanceof SVGElement || !shown(control) || control === exclude) continue;
     const name = normalize(control.getAttribute('aria-label') || control.textContent || control.value);
     const { owner, rect } = shapeOf(control);
     add(owner, rect, `${control.tagName.toLowerCase()}: ${name}`);
@@ -1516,7 +1520,8 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
 
 def visible_text_boxes(page, region: dict[str, float], exclude: ElementHandle | None = None) -> list[TextBox]:
     """The lines of text and the controls a reader sees in ``region`` (VISIBLE_TEXT_BOXES_SCRIPT),
-    less those inside the element ``exclude`` (an element handle) when one is given."""
+    less the shape of the control ``exclude`` (an element handle: a highlighted field, whose own box
+    and the pill that draws it are what its frame goes around) when one is given. Text inside it counts."""
 
     return page.evaluate(VISIBLE_TEXT_BOXES_SCRIPT, {"region": region, "exclude": exclude})
 
@@ -1737,12 +1742,13 @@ def highlight_frame_cuts(
 def highlight_frame_style(element: dict[str, float], boxes: list[TextBox], *, glow: bool = True) -> FrameStyle | None:
     """The frame nearest its full size (an outline HIGHLIGHT_FRAME_OFFSET px out, a glow
     HIGHLIGHT_FRAME_GLOW px wide) that stays HIGHLIGHT_FRAME_CLEARANCE px clear of every box of
-    text other than the element's own (``boxes`` holds none of those), or as clear as the element's
-    own edge allows, or None when no outline position within its reach meets none (OV-3492).
+    text, the element's own included (``boxes`` holds no box of the element's own control shape), or
+    as clear as the element's own edge allows, or None when no outline position within its reach
+    meets none (OV-3492).
 
     The outline moves in, down to the element's own edge inside it, where text outside the element
     sits closer; it keeps a box outside the element outside, and a box inside the element (a label
-    on a figure path) inside. A box across the element's edge is passed on its outer side when the
+    on a figure path, the element's own caption) inside. A box across the element's edge is passed on its outer side when the
     outline still lies within its reach; the glow narrows, or goes, where text sits in it. ``glow``
     False: the element draws no glow (an SVG element), so none is planned or kept clear."""
 
@@ -1808,6 +1814,16 @@ _CLEAR_FRAME_SCRIPT = """(element) => {
   if (shadow !== 'none') element.style.setProperty('box-shadow', shadow.replace(/rgba?\\([^)]*\\)/g, 'rgba(0, 0, 0, 0)'), 'important');
 }"""
 _ADD_STYLE_SCRIPT = "(element, css) => { element.style.cssText += `; ${css}`; }"
+# While a frame is drawn clear and in colour, the element runs no transition or animation (a field
+# or a button eases every property over 150 ms), so each screenshot shows the style it was given.
+_STILL_CSS = "transition: none !important; animation: none !important;"
+# Back to the saved style without a transition: first the saved values with none, then the saved
+# transitions, once the browser has taken those values.
+_RESTORE_STILL_SCRIPT = """([element, css, still]) => {
+  element.style.cssText = `${css}; ${still}`;
+  getComputedStyle(element).outlineColor;
+  element.style.cssText = css;
+}"""
 _SAVE_STYLE_SCRIPT = "(element) => element.style.cssText"
 _RESTORE_STYLE_SCRIPT = "(element, css) => { element.style.cssText = css; }"
 
@@ -1843,17 +1859,18 @@ def _painted_by(page, handle: ElementHandle, clip: dict[str, float], clear: str,
 
     saved = handle.evaluate(_SAVE_STYLE_SCRIPT)
     try:
+        handle.evaluate(_ADD_STYLE_SCRIPT, _STILL_CSS)
         if clear.startswith("("):
             handle.evaluate(clear)
         else:
             handle.evaluate(_ADD_STYLE_SCRIPT, clear)
         unpainted = shot()
-        handle.evaluate(_RESTORE_STYLE_SCRIPT, saved)
+        handle.evaluate(_RESTORE_STYLE_SCRIPT, f"{saved}; {_STILL_CSS}")
         if drawn is not None:
             handle.evaluate(_ADD_STYLE_SCRIPT, drawn)
         painted = shot()
     finally:
-        handle.evaluate(_RESTORE_STYLE_SCRIPT, saved)
+        page.evaluate(_RESTORE_STILL_SCRIPT, [handle, saved, _STILL_CSS])
     red, green, blue = ImageChops.difference(unpainted, painted).split()
     return ImageChops.lighter(ImageChops.lighter(red, green), blue), painted.width / float(clip["width"])
 
@@ -1887,8 +1904,8 @@ def _quoted_texts(boxes: list[TextBox]) -> str:
 
 
 def draw_highlight_frames(page, selector: str) -> None:
-    """Frame each element ``selector`` matches, clear of the text a reader sees around it other
-    than its own (highlight_frame_style). Run it on the page as it is captured (after the pointer
+    """Frame each element ``selector`` matches, clear of the text a reader sees around and inside it
+    (highlight_frame_style). Run it on the page as it is captured (after the pointer
     park, the scroll resets, the hidden panes and the open-select overlays), so the frame is placed
     on what the crop shows. A frame that no position within its reach keeps off text fails the
     capture (OV-3492)."""
@@ -1914,8 +1931,8 @@ def draw_highlight_frames(page, selector: str) -> None:
 
 def assert_highlight_frames_cover_no_text(page, selector: str) -> None:
     """Refuse a capture whose drawn highlight frame paints a pixel of text or a control a reader
-    sees other than the element's own (OV-3492): the pixels the frame paints are those that change
-    when it is taken off. Run it on the page as it is captured, after the CSS transitions."""
+    sees, the element's own text included (OV-3492): the pixels the frame paints are those that
+    differ between the frame drawn clear and drawn in its colour. Run it on the page as it is captured, after the CSS transitions."""
 
     for handle in page.query_selector_all(selector):
         around = _grown(handle.evaluate(HIGHLIGHT_ELEMENT_BOX_SCRIPT), HIGHLIGHT_OUTLINE_SEARCH + _FRAME_REACH)
