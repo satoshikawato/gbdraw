@@ -110,9 +110,10 @@ const buildHarness = ({
     errorLog: ref(null), processing: ref(false), labelReflowProcessing: ref(false), resultGenerationKey: ref(0)
   };
   const computed = get => ({ get value() { return get(); } });
+  const appState = withDrawings(state);
   const labelActions = createFeatureLabelActions({
     computed,
-    state: withDrawings(state),
+    state: appState,
     commitActiveResultEdit(reason) {
       assert.equal(reason, 'feature-label');
       mutations.commit += 1;
@@ -124,8 +125,8 @@ const buildHarness = ({
   });
   // The label table owner, wired as app/feature-editor.js wires it.
   const labelTableActions = createLabelTableActions({
-    state, ref, computed, isRuleInputCurrent, snapshotRuleInputs, evaluateLabelRules, showNotice,
-    displayedFeatures: labelActions.displayedFeatures, labelFeature: labelActions.labelFeature, rowOf: labelActions.rowOf,
+    state: appState, ref, computed, isRuleInputCurrent, snapshotRuleInputs, evaluateLabelRules, showNotice,
+    labelTargetsOf: labelActions.labelTargetsOf, labelSourceText: labelActions.labelSourceText,
     applyLabelTable: labelActions.applyLabelTable, rememberLabelImportNotice: labelActions.rememberLabelImportNotice
   });
   const actions = { ...labelActions, ...labelTableActions };
@@ -721,6 +722,58 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
   assert.deepEqual(harness.mutations, { commit: 1 });
   assert.deepEqual(messages, [{ text: 'Loaded 2 rows. Applied to 2 labels.', items: [] }]);
+});
+
+// R4: a `location` or `record_location` row cannot be decided for a label
+// whose drawn values the Result does not record (its catalog feature has a
+// `drawnSelector` key without values), so the load is declined whole: the
+// label edits stay, no rule is evaluated into an edit, and History records no step.
+test('a Label TSV load with a location row is declined for a label whose drawn values are unknown (R4)', async () => {
+  const svg = new DOMParser().parseFromString(
+    `<svg>${batchLabel('fa', 'alpha', 'dominant-baseline="central" ')}</svg>`, 'image/svg+xml'
+  ).documentElement;
+  const messages = [];
+  const harness = buildHarness({
+    svg,
+    featureId: 'fa',
+    showNotice: (notice) => messages.push(notice),
+    snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
+    evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
+  });
+  const { state, actions } = harness;
+  state.errorLog = ref(null);
+  // The drawn feature names another selector hash and records no drawn values.
+  state.extractedFeatures.value = [{ ...featureFor('fa'), selector: { hash: 'bio-fa', qualifiers: {} }, drawnSelector: null }];
+  setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' });
+  const before = structuredClone({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides });
+  await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => '*\tCDS\tlocation\t.*\tZZ\n' }], value: 'labels.tsv' } });
+  assert.deepEqual({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides }, before);
+  assert.deepEqual(harness.mutations, { commit: 0 });
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].text, 'Loaded 1 row. Not applied.');
+  assert.match(messages[0].items[0], /^location and record_location rows cannot be matched to 1 label on a cropped/);
+});
+
+// Export Label TSV names its file after the displayed Result.
+test('Export Label TSV writes <result>.label_table.tsv with the bulk label edits', () => {
+  const { state, actions } = buildHarness();
+  state.results.value = [{ name: 'my genome/a.svg', content: '<svg></svg>' }];
+  state.labelTextBulkOverrides.alpha = 'A';
+  const saved = { name: null, blob: null };
+  const createObjectURL = URL.createObjectURL;
+  const revokeObjectURL = URL.revokeObjectURL;
+  URL.createObjectURL = (blob) => { saved.blob = blob; return 'blob:label-table'; };
+  URL.revokeObjectURL = () => {};
+  globalThis.document = { createElement: () => ({ href: '', set download(value) { saved.name = value; }, click: () => {} }) };
+  try {
+    actions.downloadLabelOverrideTable();
+  } finally {
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
+    delete globalThis.document;
+  }
+  assert.equal(saved.name, 'my_genome_a.svg.label_table.tsv');
+  assert.equal(saved.blob.type, 'text/tab-separated-values');
 });
 
 // OV-131: a Label TSV that applies to no label changes nothing. The import
