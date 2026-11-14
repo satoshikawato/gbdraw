@@ -711,8 +711,9 @@ def test_circular_auto_head_length_grows_as_shaft_narrows() -> None:
 @pytest.mark.parametrize(
     ("strand", "coord_start", "coord_end"),
     [
-        ("positive", 501, 500),
-        ("negative", 501, 500),
+        # A one-base gap between two parts is [500, 501) (``get_intron_coordinate``).
+        ("positive", 500, 501),
+        ("negative", 500, 501),
     ],
 )
 def test_intron_one_bp_gap_is_not_rendered_as_near_full_circle(

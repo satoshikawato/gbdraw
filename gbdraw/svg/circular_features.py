@@ -94,10 +94,8 @@ def generate_circular_intron_path_with_radii(
     raw_start = int(coord_dict["coord_start"])
     raw_end = int(coord_dict["coord_end"])
     arc_start = raw_start % total_length
+    # A connector spans the half-open gap between two parts (``_unrotated_connector_gaps``), start < end.
     coord_len_bp = (raw_end % total_length - arc_start) % total_length
-    # BioPython encodes an effective 1 bp intron as start = end + 1; it is not a near-full circle.
-    if raw_start == raw_end + 1:
-        coord_len_bp = 1
     # Introns follow the axis direction (clockwise in this coordinate system).
     feature_path = (
         f"M {_point(center_radius_px, arc_start, total_length)} "
