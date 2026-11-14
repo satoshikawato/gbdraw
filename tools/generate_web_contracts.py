@@ -70,6 +70,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DISPLAY_PLACEMENT_SCHEMA", "gbdraw.session_request_codec", "DISPLAY_PLACEMENT_SCHEMA"),
     ("FEATURE_OVERRIDE_SCHEMA", "gbdraw.session_request_codec", "FEATURE_OVERRIDE_SCHEMA"),
     ("STORED_REGION_FIELDS", "gbdraw.session_request_codec", "STORED_REGION_FIELDS"),
+    # The columns of a BLAST table: Load reads a schema 5-9 protein table with exactly these as a BLAST table (OV-3573).
+    ("COMPARISON_COLUMNS", "gbdraw.io.comparisons", "COMPARISON_COLUMNS"),
     ("SUPPORTED_CANONICAL_REQUEST_SCHEMAS", "gbdraw.session_request_codec", "SUPPORTED_CANONICAL_REQUEST_SCHEMAS"),
     ("SIMILARITY_ALIGNMENT_PLAN_SCHEMA", "gbdraw.layout.similarity_alignment", "SIMILARITY_ALIGNMENT_PLAN_SCHEMA"),
     ("FEATURE_CATALOG_SCHEMA", "gbdraw.session_io", "CURRENT_FEATURE_CATALOG_SCHEMA"),

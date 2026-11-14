@@ -55,6 +55,10 @@ export const FEATURE_OVERRIDE_SCHEMA = 9;
 /** @type {readonly string[]} */
 export const STORED_REGION_FIELDS = Object.freeze(['end', 'reverseComplement', 'selector', 'start']);
 
+// gbdraw/io/comparisons.py: COMPARISON_COLUMNS
+/** @type {readonly ['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']} */
+export const COMPARISON_COLUMNS = Object.freeze(['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']);
+
 // gbdraw/session_request_codec.py: SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 /** @type {readonly number[]} */
 export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7, 8, 9, 10]);

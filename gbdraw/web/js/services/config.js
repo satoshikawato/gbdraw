@@ -108,6 +108,7 @@ import {
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
   readEditorTableTexts,
+  readStoredBlastTables,
   readStoredRenderRequest,
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
@@ -7522,6 +7523,25 @@ const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) =
 };
 
 /**
+ * The file's document with each BLAST table that a request of schema 5 to 9
+ * stored as a protein table read as a BLAST table (`readStoredBlastTables`,
+ * OV-3573): the one step before every reader of Load, the comparison
+ * classifier's included. The same document when no set stores one.
+ * @template {SessionInput} T
+ * @param {T} document The file's document as the file holds it.
+ * @returns {T}
+ */
+const withStoredBlastTables = (document) => {
+  const sets = storedResultSets(document);
+  const read = readStoredBlastTables(sets.map(({ set }) => set.renderRequest), document.resources);
+  if (read.resources === document.resources) return document;
+  return sets.reduce((next, { at, set }, index) => (read.requests[index] === set.renderRequest ? next
+    // The top-level set is the document itself, whose resources changed.
+    : withStoredResultSet(next, at, { ...(at === '' ? next : set), renderRequest: read.requests[index] })),
+  /** @type {T} */ ({ ...document, resources: read.resources }));
+};
+
+/**
  * A Session 46-50 as Load reads it (OV-3545): each Linear drawing whose
  * committed LOSATP search the file's saved LOSAT rows answer holds their
  * results, as a Generate commits them, so the browser's render redraws it
@@ -7666,7 +7686,7 @@ const importSessionDocument = async (e, options = {}) => {
     // Session 51 in one Worker call, which Load reads as it reads a Session 51
     // file; the drawing that opens is Python's. A retry of the Load (A20)
     // keeps the stored figure and reads the file again.
-    const fileDocument = readSessionInput(parsed);
+    const fileDocument = withStoredBlastTables(readSessionInput(parsed));
     if (!versionKeepsModeSlices(fileDocument.version)) {
       const fileRead = readSessionDocument(fileDocument);
       /** @type {LoadRepair[]} */

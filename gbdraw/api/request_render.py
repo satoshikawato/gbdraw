@@ -2689,10 +2689,11 @@ def stored_protein_result_request(
     Session writer does after a Generate (OV-1068): the pipeline marker of
     mode ``"none"`` reuses the stored result; Pairwise and Similarity groups
     store each drawn pair's table, Similarity groups also its typed result,
-    Collinear only its typed result. A Pairwise search over records that
-    share one row compares no pair, and its stored result holds no table
-    (OV-3511). So a Session draws its comparison without LOSAT, the Web's
-    included. Any other request is stored as given.
+    Collinear only its typed result. So a Session draws its comparison
+    without LOSAT, the Web's included. A Pairwise search that compared no
+    pair (every record in one row, OV-3511) is stored as asked, the Web's
+    included (OV-3566): its replay compares no pair either, and a Load keeps
+    the mode for rows that do. Any other request is stored as given.
     ``metadata`` is the render's; nothing is computed again. The drawn
     results are stored in each record's search frame (R5, OV-1145).
     """
@@ -2710,6 +2711,10 @@ def stored_protein_result_request(
         "collinear": metadata.collinearity_result is not None,
     }[mode]:
         raise ValueError(f"computed no {mode} result")
+    if mode == "pairwise" and not metadata.protein_comparisons and not _stored_linear_comparisons(
+        options, metadata
+    )[len(options.linear_comparisons or ()):]:
+        return request
     metadata = _search_frame_metadata(metadata)
     stored = replace(options, losat_search=_resolved_losat_search(options.losat_search))
     return replace(

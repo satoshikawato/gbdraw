@@ -703,9 +703,10 @@ def test_a_cli_similarity_groups_session_on_a_row_layout_replays_its_links(
 def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """OV-3511: with every record in one row, Pairwise compares no pair. The
-    Session stores that empty result, so its replay draws the same figure and
-    searches nothing."""
+    """OV-3511: with every record in one row, Pairwise compares no pair, so
+    its replay draws the same figure and searches nothing. OV-3566: the Session
+    keeps the Pairwise search it asked for (mode 'pairwise', no pairs), not the
+    marker of no comparison, so a Load can still run it for new rows."""
 
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module
     from tests.test_render_stage_protein_analysis import _no_search
@@ -716,7 +717,8 @@ def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
         *(argument for position in rows for argument in ("--multi_record_position", position)),
     )
     session = drawing_view(read_session_payload(sidecar), mode="linear")
-    assert _protein_comparison_kinds(session) == [("generatedProteinComparison", "none")]
+    assert _protein_comparison_kinds(session) == [("generatedProteinComparison", "pairwise")]
+    assert session["renderRequest"]["comparisons"][0]["pairs"] == []
     fresh = (tmp_path / "fresh.svg").read_text(encoding="utf-8")
     assert "data-query-record-index=" not in fresh
 
@@ -726,7 +728,7 @@ def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
          "-f", "svg", "--session_output", str(resaved))
     assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == fresh
     replayed = drawing_view(read_session_payload(resaved), mode="linear")
-    assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "none")]
+    assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "pairwise")]
 
 
 def test_a_cli_session_replays_a_comparison_table_as_a_table_not_a_protein_comparison(

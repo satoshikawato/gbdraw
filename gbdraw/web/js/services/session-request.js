@@ -176,6 +176,7 @@ import { featureDensityTrackIds, projectFeatureDensityTracks, requestFeatureDens
 import { NO_STORED_READINGS, storedRecordIdOf } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
+  COMPARISON_COLUMNS,
   CONFIG_UNSET_NUMBER_PATHS,
   CONFIG_UNSET_NUMBER_SPELLINGS,
   EXPANDED_RECORD_KEY_SEPARATOR,
@@ -264,7 +265,9 @@ import {
   webBindingInputSlot,
   webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
-import { LINEAR_COMPARISON_SOURCES, normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import {
+  LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, normalizeLinearComparisonPlan
+} from './linear-comparisons.js';
 import { createDefaultAdv, createDefaultForm, createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
@@ -3345,14 +3348,38 @@ const drawsNoComparison = (comparisons) => comparisons.length > 0
  * pipeline's mode `none`, and Load answers a search with the rows a Session
  * saved (OV-3545), so only a search no saved rows answered stays. The
  * browser's Python has no LOSAT: such a request is drawn only by Generate.
+ * A Pairwise pipeline without pairs searches the pairs of adjacent rows, which
+ * records that all share one row do not have (OV-3566): it searches nothing
+ * (`requestRowCount`).
  * @param {unknown} request A request as a file stores it or as it is committed.
  */
 export const requestRunsProteinSearch = (request) => {
   const stored = /** @type {UnvalidatedFields<'mode' | 'comparisons'>} */ (request);
   return stored?.mode === 'linear' && Array.isArray(stored.comparisons) && stored.comparisons.some((item) => {
-    const comparison = /** @type {UnvalidatedFields<'kind' | 'mode'>} */ (item);
-    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== 'none';
+    const comparison = /** @type {UnvalidatedFields<'kind' | 'mode' | 'pairs'>} */ (item);
+    if (comparison?.kind !== 'generatedProteinComparison' || comparison.mode === 'none') return false;
+    return comparison.mode !== 'pairwise' || (Array.isArray(comparison.pairs) && comparison.pairs.length > 0)
+      || requestRowCount(request) > 1;
   });
+};
+
+/**
+ * How many rows a Linear request's records take, as the Load projection reads them: their grid rows when a record
+ * has one, else the rows of `layout.multiRecordPositions`, else one row per record.
+ * @param {unknown} request A request as a file stores it or as it is committed (unvalidated).
+ * @returns {number}
+ */
+const requestRowCount = (request) => {
+  const stored = /** @type {UnvalidatedFields<'records' | 'layout'>} */ (request);
+  const records = Array.isArray(stored?.records) ? stored.records : [];
+  const gridRows = records.map((record) => (
+    /** @type {UnvalidatedFields<'presentation', UnvalidatedFields<'gridRow'>>} */ (record)?.presentation?.gridRow));
+  const tokens = /** @type {UnvalidatedFields<'multiRecordPositions'>} */ (stored?.layout)?.multiRecordPositions;
+  const rows = gridRows.some((row) => row != null) ? gridRows
+    : Array.isArray(tokens) && tokens.length > 0
+      ? tokens.map((token) => String(token).slice(String(token).lastIndexOf('@') + 1))
+      : records.map((_record, index) => index + 1);
+  return new Set(rows.map(String)).size;
 };
 
 /**
@@ -4112,8 +4139,31 @@ const addCanonicalInputProteinComparisonResource = ({
 });
 
 /**
+ * The comparisons of an empty plan (No comparison, or no pairs): none, except a LOSATP Pairwise search over adjacent
+ * rows of two or more records that has no pair to compare (every record in one row). It is stored as asked, the
+ * pipeline of mode `pairwise` without pairs and with the draft's settings, as the CLI stores it
+ * (`stored_protein_result_request`, OV-3566): a Load keeps the mode, and a render of it compares no pair, so it runs
+ * no LOSAT.
+ * @param {{ state: RequestState, drawing: RequestDrawing, snapshot: LinearComparisonResolution,
+ *   recordCount: number }} input
+ * @returns {{ kind: 'generatedProteinComparison', mode: 'pairwise', pairs: never[],
+ *   settings: ReturnType<typeof generatedProteinSettings> }[]}
+ */
+const pairlessComparisons = ({ state, drawing, snapshot, recordCount }) => (
+  snapshot.mode === LINEAR_COMPARISON_MODES.ADJACENT && snapshot.defaultSource === LINEAR_COMPARISON_SOURCES.LOSAT
+  && drawing.losatProgram?.value === 'blastp' && recordCount > 1
+  && String(drawing.losat?.blastp?.mode || '').trim().toLowerCase() === 'pairwise'
+    ? [{
+        kind: 'generatedProteinComparison', mode: 'pairwise', pairs: [],
+        settings: generatedProteinSettings(drawing, state.losatExecution)
+      }]
+    : []
+);
+
+/**
  * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
- *   resources: ResourceBuilder, comparisonPlanSnapshot: LinearComparisonResolution | null, resolvedComparisons?: Record<string, any>[] }} input
+ *   resources: ResourceBuilder, comparisonPlanSnapshot: LinearComparisonResolution | null,
+ *   resolvedComparisons?: Record<string, any>[], recordCount: number }} input
  */
 const buildComparisons = ({
   state,
@@ -4121,7 +4171,8 @@ const buildComparisons = ({
   filesData,
   resources,
   comparisonPlanSnapshot,
-  resolvedComparisons = []
+  resolvedComparisons = [],
+  recordCount
 }) => {
   const mode = requestDrawingMode(drawing);
   if (mode !== 'linear') return [];
@@ -4129,7 +4180,9 @@ const buildComparisons = ({
   const edges = orderedComparisonPlanEdges(snapshot);
   // The plan is the permission boundary. Do not inspect dormant uploads,
   // committed artifacts, or generated-protein metadata for an empty plan.
-  if (snapshot.mode === 'none' || edges.length === 0) return [];
+  if (snapshot.mode === 'none' || edges.length === 0) {
+    return pairlessComparisons({ state, drawing, snapshot, recordCount });
+  }
 
   const comparisons = [];
   /** @type {RequestComparisonRef[]} */
@@ -5197,7 +5250,8 @@ const projectCanonicalRenderInput = ({
       filesData,
       resources,
       comparisonPlanSnapshot,
-      resolvedComparisons
+      resolvedComparisons,
+      recordCount: records.length
     }),
       output
     }),
@@ -7928,6 +7982,80 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   promoteRingFilesToLists(promoted.diagramOptions);
   promoted.schema = CANONICAL_REQUEST_SCHEMA;
   return promoted;
+};
+
+/** The header of a canonical TSV that holds the BLAST columns alone (`COMPARISON_COLUMNS`). */
+const BLAST_TABLE_HEADER = COMPARISON_COLUMNS.join('\t');
+/** The request schemas whose writers stored a BLAST table as a protein table (released 0.14.0 to 0.14.5). */
+const STORED_BLAST_TABLE_SCHEMAS = Object.freeze([5, 6, 7, 8, 9]);
+
+/**
+ * The BLAST rows of a stored canonical TSV whose header is the BLAST columns alone, or null for any other resource
+ * (a protein table has its protein columns too; a resource held by a File is not one an older JSON Session stored).
+ * @param {unknown} resource A Session resource (unvalidated).
+ * @returns {string | null}
+ */
+const storedBlastTableRows = (resource) => {
+  const entry = /** @type {UnvalidatedFields<'kind' | 'encoding' | 'data'>} */ (resource);
+  if (entry?.kind !== 'canonical-tsv' || entry.encoding !== 'base64' || typeof entry.data !== 'string') return null;
+  let text;
+  try {
+    text = bytesToText(base64ToBytes(entry.data), { fatal: true });
+  } catch {
+    return null;
+  }
+  const lineEnd = text.indexOf('\n');
+  const header = (lineEnd < 0 ? text : text.slice(0, lineEnd)).replace(/\r$/, '');
+  return header === BLAST_TABLE_HEADER ? (lineEnd < 0 ? '' : text.slice(lineEnd + 1)) : null;
+};
+
+/**
+ * OV-3573: a request of schema 5 to 9 stored a BLAST table that a CLI or Python render drew from a comparisons
+ * table as a `precomputedProteinComparison`, the kind of a protein table, in a canonical TSV of the BLAST columns
+ * alone (`COMPARISON_COLUMNS`). Load reads each such comparison as the BLAST comparison it is, before any reader
+ * sees the file: `nucleotideBlast`, its resource the same rows as a BLAST table (`nucleotide-blast`, without the
+ * header line), as the current writers store one. Python's decoder reads these tables by the same columns. A
+ * protein table and a request of any other schema are left as stored; nothing changes when no table is rewritten.
+ * @param {readonly unknown[]} requests The stored requests (unvalidated).
+ * @param {unknown} resources The Session's resources (unvalidated).
+ * @returns {{ requests: unknown[], resources: unknown }} The same values when nothing changed.
+ */
+export const readStoredBlastTables = (requests, resources) => {
+  /** @type {Map<string, string>} */
+  const rowsById = new Map();
+  const blastRowsOf = (/** @type {unknown} */ resourceId) => {
+    if (typeof resourceId !== 'string' || !isPlainObject(resources)) return null;
+    if (!rowsById.has(resourceId)) {
+      const rows = storedBlastTableRows(ownEntry(resources, resourceId));
+      if (rows === null) return null;
+      rowsById.set(resourceId, rows);
+    }
+    return rowsById.get(resourceId) ?? null;
+  };
+  const read = requests.map((request) => {
+    const stored = /** @type {UnvalidatedFields<'schema' | 'comparisons'>} */ (request);
+    const storedComparisons = stored?.comparisons;
+    if (!STORED_BLAST_TABLE_SCHEMAS.includes(/** @type {number} */ (stored?.schema))
+      || !Array.isArray(storedComparisons)) return request;
+    const comparisons = storedComparisons.map((/** @type {unknown} */ item) => {
+      const comparison = /** @type {UnvalidatedFields<'kind' | 'encoding' | 'resourceId'>} */ (item);
+      if (comparison?.kind !== 'precomputedProteinComparison' || comparison.encoding !== 'canonicalTsv'
+        || blastRowsOf(comparison.resourceId) === null) return item;
+      const { encoding: _encoding, ...kept } = /** @type {Record<string, unknown>} */ (item);
+      return { ...kept, kind: 'nucleotideBlast' };
+    });
+    return comparisons.some((item, index) => item !== storedComparisons[index])
+      ? { .../** @type {object} */ (request), comparisons } : request;
+  });
+  if (rowsById.size === 0 || !isPlainObject(resources)) return { requests: read, resources };
+  const rewritten = { ...resources };
+  for (const [resourceId, rows] of rowsById) {
+    // A stored checksum named the canonical TSV's bytes.
+    const { checksum: _checksum, ...entry } = /** @type {Record<string, unknown>} */ (ownEntry(resources, resourceId));
+    const bytes = textToBytes(rows);
+    rewritten[resourceId] = { ...entry, kind: 'nucleotide-blast', size: bytes.byteLength, data: bytesToBase64(bytes) };
+  }
+  return { requests: read, resources: rewritten };
 };
 
 /**

@@ -346,12 +346,12 @@ export const storedProteinResultMode = (comparisons) => {
   return stores('precomputedProteinComparison') ? 'pairwise' : '';
 };
 
-/** @param {{ comparisons: SavedComparison[], pipeline: SavedPipeline }} saved Its rows are editable. */
+/**
+ * A Pairwise pipeline without pairs is the LOSATP Pairwise search over adjacent rows, which the controls hold for
+ * records drawn whole (OV-3566): a CLI writes it, and a writer that compared no pair stores it so.
+ * @param {{ comparisons: SavedComparison[], pipeline: SavedPipeline }} saved Its rows are editable.
+ */
 const generatedPipelineIsProjectable = ({ comparisons, pipeline }) => {
-  const endpoints = comparisons.filter((comparison) => ENDPOINT_KINDS.has(comparison.kind));
-  if (pipeline.mode === 'pairwise' && pipeline.pairs.length === 0 && endpoints.length === 0) {
-    return false;
-  }
   // A disabled pipeline can carry CLI settings without any comparison work.
   if (pipeline.mode === 'none' && !storedProteinResultMode(comparisons)
     && (comparisons.length !== 1 || pipeline.pairs.length !== 0)) return false;
@@ -488,8 +488,9 @@ export const classifyImportedComparisonIntent = ({
     );
   }
   // The controls and their projection hold record pairs; the comparisons of a drawing with a record drawn in several
-  // windows join drawn units, and run as saved through Inherit.
-  if (drawsSeveralUnits(unitInputs) && executableEndpoints.length > 0) {
+  // windows join drawn units, and run as saved through Inherit: listed pairs, and a Pairwise search of the pairs of
+  // adjacent rows, which there are pairs of units.
+  if (drawsSeveralUnits(unitInputs) && (executableEndpoints.length > 0 || pipeline?.mode === 'pairwise')) {
     return preserved(
       msg('The saved comparison can run, but the current controls cannot edit the comparisons of records drawn in several windows.')
     );
