@@ -411,12 +411,16 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     target: { renderRequest: targetRequest, resourceIds: { 'record-1-genbank': 'paste-target-1' } } };
   assert.deepEqual(stagedHelperReferences(region, { canonicalRequest, copy: paste }), [canonicalRequest, { resourceId: 'paste-target-1' }]);
   const staged = { 'record-1-genbank': '/w/request/a.gb', 'paste-target-1': '/w/request/b.gb' };
-  assert.deepEqual(pasteTargetPaths(paste, staged), {
+  // OV-3535: Python reads the inputs a Generate prepared only under identities of exactly the paths it is given
+  // (`prepared_input_lookup`), so the source's identities leave the target's staging IDs out too.
+  const identities = { 'record-1-genbank': { token: 't' }, 'paste-target-1': { token: 't' } };
+  assert.deepEqual(pasteTargetPaths(paste, staged, identities), {
     copy: { into: 'existing', edits: 'edits', duplicates: 'skip',
       target: { renderRequest: targetRequest, resourcePaths: { 'record-1-genbank': '/w/request/b.gb' } } },
-    sourcePaths: { 'record-1-genbank': '/w/request/a.gb' }
+    sourcePaths: { 'record-1-genbank': '/w/request/a.gb' },
+    sourceIdentities: { 'record-1-genbank': { token: 't' } }
   });
-  assert.deepEqual(pasteTargetPaths(newDrawing, staged), { copy: newDrawing, sourcePaths: staged });
+  assert.deepEqual(pasteTargetPaths(newDrawing, staged, identities), { copy: newDrawing, sourcePaths: staged, sourceIdentities: identities });
 }
 
 // D7: a Cancel drains the queue. The interrupt and then Python's cancel flag

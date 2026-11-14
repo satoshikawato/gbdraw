@@ -9895,7 +9895,7 @@
              data-region-drawing-dialog
              @cancel="regionDrawings.close()" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="region-drawing-title" class="text-base font-bold text-slate-800">{{ t('Copy to another drawing') }} <help-tip id="help-region-drawing" :text="t('Copies the chosen records or regions of the shown drawing to a new drawing. Whole records keep the drawing mode, several Circular records as one Multi-Record Canvas; a range makes a Linear drawing unless one range alone is drawn Circular. Coordinates are 1-based and inclusive, in source coordinates.')"></help-tip></h2>
+            <h2 id="region-drawing-title" class="text-base font-bold text-slate-800">{{ t('Copy to another drawing') }} <help-tip id="help-region-drawing" :text="t('Copies the chosen records or regions of the shown drawing to a new drawing, or adds them below the records of an existing drawing. In a new drawing, whole records keep the drawing mode, several Circular records as one Multi-Record Canvas; a range makes a Linear drawing unless one range alone is drawn Circular. Coordinates are 1-based and inclusive, in source coordinates.')"></help-tip></h2>
             <p id="region-drawing-description" class="mt-1 text-sm leading-relaxed text-slate-600">{{ t('Choose the records and the region of each, and where they go.') }}</p>
             <ul data-region-drawing-rows class="mt-2 max-h-[40vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
                 <li v-for="row in regionDrawings.dialog.rows" :key="row.recordKey" :data-region-drawing-row="row.recordKey" class="px-2 py-1.5 text-xs">
@@ -9942,18 +9942,38 @@
                 <!-- Where the copy goes and what it brings: the choices are the owner's (setChoice), each derives again. -->
                 <fieldset data-region-drawing-target class="mt-2">
                     <legend class="font-semibold text-slate-700">{{ t('Copy to') }}</legend>
-                    <label class="mt-1 flex items-center gap-2">
-                        <span>{{ t('A new drawing') }}</span>
+                    <div class="mt-1 flex flex-wrap items-center gap-2">
+                        <label class="flex items-center gap-2">
+                            <input type="radio" name="region-drawing-target" value="new" data-history-ignore data-region-drawing-target-new class="form-radio shrink-0"
+                                   :checked="regionDrawings.dialog.target === 'new'" @change="regionDrawings.setChoice({ target: 'new' })">
+                            <span>{{ t('A new drawing') }}</span>
+                        </label>
                         <select data-history-ignore data-region-drawing-mode class="rounded border p-1 text-xs" :aria-label="t('Mode of the new drawing')"
+                                :disabled="regionDrawings.dialog.target !== 'new'"
                                 :value="regionDrawings.dialog.newMode ?? regionDrawings.dialog.mode ?? ''"
                                 @change="regionDrawings.setChoice({ newMode: $event.target.value })">
                             <option value="" disabled></option>
                             <option value="circular">{{ t('Circular') }}</option>
                             <option value="linear">{{ t('Linear') }}</option>
                         </select>
-                    </label>
+                    </div>
+                    <!-- Every drawing but the shown one, in tab order (D-18); none when the Session has one drawing. -->
+                    <div class="mt-1 flex flex-wrap items-center gap-2">
+                        <label class="flex items-center gap-2">
+                            <input type="radio" name="region-drawing-target" value="existing" data-history-ignore data-region-drawing-target-existing class="form-radio shrink-0"
+                                   :disabled="!regionDrawings.dialog.targets.length" :checked="regionDrawings.dialog.target !== 'new'"
+                                   @change="regionDrawings.setChoice({ target: regionDrawings.dialog.targets[0].id })">
+                            <span :class="regionDrawings.dialog.targets.length ? '' : 'text-slate-400'">{{ t('An existing drawing') }}</span>
+                        </label>
+                        <select data-history-ignore data-region-drawing-existing class="rounded border p-1 text-xs" :aria-label="t('Existing drawing to copy to')"
+                                :disabled="regionDrawings.dialog.target === 'new'"
+                                :value="regionDrawings.dialog.target === 'new' ? (regionDrawings.dialog.targets[0]?.id ?? '') : regionDrawings.dialog.target"
+                                @change="regionDrawings.setChoice({ target: $event.target.value })">
+                            <option v-for="drawing in regionDrawings.dialog.targets" :key="drawing.id" :value="drawing.id">{{ drawing.name }}</option>
+                        </select>
+                    </div>
                 </fieldset>
-                <fieldset data-region-drawing-settings class="mt-2">
+                <fieldset v-if="regionDrawings.dialog.target === 'new'" data-region-drawing-settings class="mt-2">
                     <legend class="font-semibold text-slate-700">{{ t('Settings and edits') }}</legend>
                     <label class="mt-1 flex items-center gap-2">
                         <input type="radio" name="region-drawing-settings" value="keep" data-history-ignore class="form-radio shrink-0"
@@ -9966,23 +9986,62 @@
                         <span>{{ (regionDrawings.dialog.newMode ?? regionDrawings.dialog.mode) === 'circular' ? t('Start from the Circular defaults') : t('Start from the Linear defaults') }}</span>
                     </label>
                 </fieldset>
+                <fieldset v-else data-region-drawing-edits class="mt-2">
+                    <legend class="font-semibold text-slate-700">{{ t('Settings and edits') }}</legend>
+                    <label class="mt-1 flex items-center gap-2">
+                        <input type="radio" name="region-drawing-edits" value="edits" data-history-ignore class="form-radio shrink-0"
+                               :checked="regionDrawings.dialog.edits === 'edits'" @change="regionDrawings.setChoice({ edits: 'edits' })">
+                        <span>{{ t('Bring the edits of these records (colors, labels, hidden features)') }}</span>
+                    </label>
+                    <label class="mt-1 flex items-center gap-2">
+                        <input type="radio" name="region-drawing-edits" value="records" data-history-ignore class="form-radio shrink-0"
+                               :checked="regionDrawings.dialog.edits === 'records'" @change="regionDrawings.setChoice({ edits: 'records' })">
+                        <span>{{ t('Copy the records only') }}</span>
+                    </label>
+                    <p class="mt-1 text-slate-500">{{ t('{drawing} keeps its own settings. The records are added below its records.', { drawing: regionDrawings.dialog.targets.find((drawing) => drawing.id === regionDrawings.dialog.target)?.name ?? '' }) }}</p>
+                </fieldset>
+                <!-- What the existing drawing has already: one choice for all of it, "Skip it" first (PD-OI-090 (4)). -->
+                <div v-if="regionDrawings.dialog.alreadyPresent.length" data-region-drawing-already class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5">
+                    <p v-for="(line, index) in regionDrawings.dialog.alreadyPresent" :key="index" class="font-semibold text-amber-900">{{ line }}</p>
+                    <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                        <label class="flex items-center gap-2">
+                            <input type="radio" name="region-drawing-duplicates" value="skip" data-history-ignore data-region-drawing-skip class="form-radio shrink-0"
+                                   :checked="regionDrawings.dialog.duplicates === 'skip'" @change="regionDrawings.setChoice({ duplicates: 'skip' })">
+                            <span>{{ t('Skip it') }}</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="radio" name="region-drawing-duplicates" value="add" data-history-ignore data-region-drawing-add-again class="form-radio shrink-0"
+                                   :checked="regionDrawings.dialog.duplicates === 'add'" @change="regionDrawings.setChoice({ duplicates: 'add' })">
+                            <span>{{ t('Add it again') }}</span>
+                        </label>
+                    </div>
+                </div>
                 <template v-if="regionDrawings.dialog.status === 'derived' || regionDrawings.dialog.status === 'creating'">
-                    <p v-if="regionDrawings.dialog.settings === 'defaults'" class="mt-2">{{ t('The records are drawn with the defaults of the mode: no palette, color rules, label rules or edits of this drawing.') }}</p>
-                    <div v-else-if="regionDrawings.dialog.returnedToAuto.length" data-region-drawing-returned>
-                        <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
+                    <template v-if="regionDrawings.dialog.target === 'new'">
+                        <p v-if="regionDrawings.dialog.settings === 'defaults'" class="mt-2">{{ t('The records are drawn with the defaults of the mode: no palette, color rules, label rules or edits of this drawing.') }}</p>
+                        <div v-else-if="regionDrawings.dialog.returnedToAuto.length" data-region-drawing-returned>
+                            <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
+                            <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                                <li v-for="item in regionDrawings.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
+                            </ul>
+                        </div>
+                        <p v-else class="mt-2">{{ t('Every setting is carried over.') }}</p>
+                    </template>
+                    <div v-if="regionDrawings.dialog.leftOut.length" data-region-drawing-left-out class="mt-2">
+                        <p class="font-semibold text-slate-700">{{ t('Not added:') }}</p>
                         <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
-                            <li v-for="item in regionDrawings.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
+                            <li v-for="(line, index) in regionDrawings.dialog.leftOut" :key="index" class="break-words">{{ line }}</li>
                         </ul>
                     </div>
-                    <p v-else class="mt-2">{{ t('Every setting is carried over.') }}</p>
                     <div v-if="regionDrawings.dialog.notCarried.length" data-region-drawing-not-carried class="mt-2">
-                        <p class="font-semibold text-slate-700">{{ t('Not carried to the new drawing:') }}</p>
+                        <p class="font-semibold text-slate-700">{{ regionDrawings.dialog.target === 'new' ? t('Not carried to the new drawing:') : t('Not carried to {drawing}:', { drawing: regionDrawings.dialog.targets.find((drawing) => drawing.id === regionDrawings.dialog.target)?.name ?? '' }) }}</p>
                         <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
                             <li v-for="(line, index) in regionDrawings.dialog.notCarried" :key="index">{{ line }}</li>
                         </ul>
                     </div>
+                    <p v-if="regionDrawings.dialog.target !== 'new'" data-region-drawing-paste-note class="mt-2">{{ regionDrawings.dialog.edits === 'edits' ? t('The colors, labels and hidden features of these records come along. Undo removes the copied records in one step.') : t('Only the records are added. Undo removes them in one step.') }}</p>
                 </template>
-                <label v-if="regionDrawings.dialog.settings === 'keep' && (regionDrawings.dialog.status === 'derived' || regionDrawings.dialog.keepValues)" class="mt-2 flex items-center gap-2 font-semibold text-slate-700">
+                <label v-if="regionDrawings.dialog.target === 'new' && regionDrawings.dialog.settings === 'keep' && (regionDrawings.dialog.status === 'derived' || regionDrawings.dialog.keepValues)" class="mt-2 flex items-center gap-2 font-semibold text-slate-700">
                     <input type="checkbox" data-history-ignore data-region-drawing-keep class="form-checkbox shrink-0"
                            :checked="regionDrawings.dialog.keepValues" @change="regionDrawings.setChoice({ keepValues: $event.target.checked })">
                     <span>{{ t('Keep my values') }}</span>

@@ -1258,7 +1258,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => {
       const staged = await prepareCanonicalResources(pyodide, `${workspace}/request`, payload);
-      const { copy, sourcePaths } = pasteTargetPaths(payload.copy, staged);
+      const { copy, sourcePaths, sourceIdentities } = pasteTargetPaths(
+        payload.copy, staged, buildPreparedResourceIdentityMap(payload.resourceManifest));
       return callJsonHelper(pyodide, 'derive_web_region_drawing_json', [
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(sourcePaths, {}),
@@ -1266,7 +1267,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(payload.regions, []),
         jsonArgument(payload.adaptSizes, true),
         jsonArgument(copy, null),
-        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+        jsonArgument(sourceIdentities, {})
       ]);
     }
   },

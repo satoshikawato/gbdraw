@@ -444,23 +444,30 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * The copy Python reads (`CopyChoice`) and the staged paths of the source drawing's resources, from the copy the page
- * sent and the staged paths of the payload's one resource table: a paste's target (`PageExistingDrawingCopy`) takes
- * the staged path of each of its resources by its own ID (`PasteTarget.resourcePaths`), and the source's paths leave
- * the target's staging IDs out. A new drawing's copy passes as it is.
+ * The copy Python reads (`CopyChoice`), and the staged paths and prepared-input identities of the source drawing's
+ * resources, from the copy the page sent and the payload's one resource table: a paste's target
+ * (`PageExistingDrawingCopy`) takes the staged path of each of its resources by its own ID
+ * (`PasteTarget.resourcePaths`), and the source's paths and identities leave the target's staging IDs out (Python
+ * reads prepared inputs only under identities of exactly its paths, OV-3535). A new drawing's copy passes as it is.
+ * @template {Readonly<Record<string, unknown>>} Identities
  * @param {NewDrawingCopy | PageExistingDrawingCopy} copy
  * @param {Readonly<Record<string, string>>} staged The staged path of each resource ID of the table.
- * @returns {{ copy: NewDrawingCopy | ExistingDrawingCopy, sourcePaths: Readonly<Record<string, string>> }}
+ * @param {Identities} identities The prepared-input identity of each resource ID of the table.
+ * @returns {{ copy: NewDrawingCopy | ExistingDrawingCopy, sourcePaths: Readonly<Record<string, string>>,
+ *   sourceIdentities: Identities }}
  */
-export const pasteTargetPaths = (copy, staged) => {
-  if (copy.into !== 'existing') return { copy, sourcePaths: staged };
+export const pasteTargetPaths = (copy, staged, identities) => {
+  if (copy.into !== 'existing') return { copy, sourcePaths: staged, sourceIdentities: identities };
   const { renderRequest, resourceIds } = copy.target;
   const stagingIds = new Set(Object.values(resourceIds));
+  /** @template {Readonly<Record<string, unknown>>} T @param {T} table @returns {T} */
+  const ofSource = (table) => /** @type {T} */ (Object.fromEntries(Object.entries(table).filter(([resourceId]) => !stagingIds.has(resourceId))));
   const resourcePaths = Object.fromEntries(Object.entries(resourceIds)
     .flatMap(([resourceId, stagingId]) => (Object.hasOwn(staged, stagingId) ? [[resourceId, staged[stagingId]]] : [])));
   return {
     copy: { ...copy, target: { renderRequest, resourcePaths } },
-    sourcePaths: Object.fromEntries(Object.entries(staged).filter(([resourceId]) => !stagingIds.has(resourceId)))
+    sourcePaths: ofSource(staged),
+    sourceIdentities: ofSource(identities)
   };
 };
 
