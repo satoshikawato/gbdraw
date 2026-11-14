@@ -867,18 +867,21 @@ def render_session_drawings_cli(
                     overwrite=overwrite,
                 )
             preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
-            rendered = _render_session_drawing_plans(
-                materialized,
-                plans,
-                include_feature_catalog=save,
-            )
-        # Each drawing logs as its mode command logs its run: a Circular batch
-        # writes a warning of an input its Results share once.
-        for result in rendered.values():
-            if isinstance(result, CircularBatchRenderResult):
-                log_render_notices(result.items, warned=set())
-            else:
-                log_render_notices((result,))
+            # Each drawing is rendered and then logs its notices, as its mode
+            # command logs its run: after its own figures, and before a later
+            # drawing can fail.
+            rendered: dict[str, RequestRenderResult | CircularBatchRenderResult] = {}
+            for plan in plans:
+                result = _render_session_drawing_plans(
+                    materialized,
+                    (plan,),
+                    include_feature_catalog=save,
+                )[plan.drawing.id]
+                rendered[plan.drawing.id] = result
+                log_render_notices(
+                    result.items if isinstance(result, CircularBatchRenderResult) else (result,),
+                    warned=set(),
+                )
         if sidecar is None:
             return
         sidecar_path, title_fallback = sidecar

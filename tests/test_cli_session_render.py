@@ -1561,23 +1561,33 @@ _REGION_TABLE = (
 )
 
 
-def _render_notices(caplog: pytest.LogCaptureFixture) -> list[str]:
-    """The annotation warnings and input summary lines of the runs since the last ``caplog.clear()``."""
+def _log_lines(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Every line logged since the last ``caplog.clear()``, with its level, as the command writes it."""
 
-    return [
-        record.getMessage()
-        for record in caplog.records
-        if record.getMessage().startswith(("out_of_bounds_clipped:", "feature_selector_unmatched:", "Record "))
-    ]
+    return [f"{record.levelname}: {record.getMessage()}" for record in caplog.records]
+
+
+def _render_notices(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Every line logged after the last "Generated" line: the render's notices."""
+
+    lines = _log_lines(caplog)
+    generated = [index for index, line in enumerate(lines) if line.startswith("INFO: Generated ")]
+    assert generated
+    return lines[generated[-1] + 1:]
 
 
 @pytest.mark.parametrize(
-    ("mode", "files"),
-    [("circular", ("NC_001416.gb",)), ("linear", ("NC_001416.gb",)), ("circular", ("a.gb", "b.gb"))],
-    ids=["circular", "linear", "circular-batch"],
+    ("mode", "files", "options"),
+    [
+        ("circular", ("NC_001416.gb",), ("--annotation_table", "{table}")),
+        ("linear", ("NC_001416.gb",), ("--annotation_table", "{table}")),
+        ("linear", ("NC_001416.gb",), ("--wrap_length", "10000")),
+        ("circular", ("a.gb", "b.gb"), ("-k", "tRNA")),
+    ],
+    ids=["circular", "linear", "linear-wrap", "circular-batch"],
 )
 def test_a_session_render_logs_the_notices_of_the_direct_command(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, mode: str, files: tuple[str, ...]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, mode: str, files: tuple[str, ...], options: tuple[str, ...]
 ) -> None:
     source = REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"
     gbks = []
@@ -1586,11 +1596,11 @@ def test_a_session_render_logs_the_notices_of_the_direct_command(
         gbks.append(str(tmp_path / name))
     table = tmp_path / "regions.tsv"
     table.write_text(_REGION_TABLE, encoding="utf-8")
+    arguments = [option.format(table=table) for option in options]
     command = circular_main if mode == "circular" else linear_main
-    annotations = ["--annotation_table", str(table)] if len(files) == 1 else []
     caplog.set_level("INFO")
 
-    command(["--gbk", *gbks, *annotations, "-o", str(tmp_path / "direct"), "--save_session"])
+    command(["--gbk", *gbks, *arguments, "-o", str(tmp_path / "direct"), "--save_session"])
     direct = _render_notices(caplog)
     session = str(tmp_path / "direct.gbdraw")
     caplog.clear()
@@ -1600,6 +1610,32 @@ def test_a_session_render_logs_the_notices_of_the_direct_command(
     command(["--session", session, "-o", str(tmp_path / "replay")])
     replayed = _render_notices(caplog)
 
-    assert len(direct) == (3 if annotations else 2)
+    assert sum(line.startswith("INFO: Record ") for line in direct) == len(files)
+    if "--wrap_length" in options:
+        assert direct[-1] == "INFO: Wrapping at 10 kb per row: 5 rows"
+    else:
+        assert sum(line.startswith("WARNING: ") for line in direct) == 2
     assert rendered == direct
     assert replayed == direct
+
+
+def test_each_drawing_of_a_session_logs_its_notices_after_its_own_figure(
+    two_drawings: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("INFO")
+    alone = {}
+    for drawing in ("circular", "linear"):
+        caplog.clear()
+        render_main(["--session", str(two_drawings), "--drawing", drawing, "-o", str(tmp_path / drawing), "-f", "svg"])
+        alone[drawing] = _render_notices(caplog)
+        assert any(line.startswith("INFO: Record ") for line in alone[drawing])
+
+    caplog.clear()
+    render_main(["--session", str(two_drawings), "-o", str(tmp_path / "both"), "-f", "svg"])
+    lines = _log_lines(caplog)
+    generated = [index for index, line in enumerate(lines) if line.startswith("INFO: Generated ")]
+
+    assert [lines[index].rsplit("_", 1)[-1] for index in generated] == ["circular.svg", "linear.svg"]
+    circular_notices = lines[generated[0] + 1:generated[0] + 1 + len(alone["circular"])]
+    assert circular_notices == alone["circular"]
+    assert lines[generated[1] + 1:] == alone["linear"]

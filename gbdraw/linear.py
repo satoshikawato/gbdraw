@@ -1847,8 +1847,6 @@ def _linear_run_result(
     """The run's SVG, feature metadata, LOSAT results and the request the Session saves, after the render's log."""
 
     log_render_notices((render_result,))
-    if render_result.linear_metadata is not None and render_result.linear_metadata.wrap is not None:
-        logger.info(render_result.linear_metadata.wrap.message)
     interactive_context = render_result.interactive_context
     rendered_svg = make_rendered_svg(args.output, Path(str(args.output)).name)
     # A Session replay keeps the protein evidence the Session saved.
