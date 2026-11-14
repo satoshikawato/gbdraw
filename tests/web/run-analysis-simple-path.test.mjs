@@ -2624,13 +2624,17 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       recordKey,
       reverseComplement: recordKey !== 'third'
     }));
+    // The committed Session as a browser Generate leaves it: the stub Worker drew the search, which a browser Generate
+    // runs first and commits as its results (`committedRenderRequest`); a redraw refuses a search (OV-3541).
+    const committedWithResults = () => ({ ...committedCanonicalSession,
+      renderRequest: { ...committedCanonicalSession.renderRequest, comparisons: committedRenderRequest.comparisons } });
     const helperRequestsBeforeAlignment = workerMessages.filter(({ type }) => type === 'helper')
       .length;
     const alignedResult = result('lazy-linear-aligned.svg', 'lazy-linear-aligned');
     workerResponses.push(response(alignedResult, validCatalog(alignedResult.name)));
     assert.deepEqual(
       await runner.runCommittedCanonicalCandidate({
-        canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations,starts:[]}),
+        canonical:runner.projectCommittedSimilarityAlignment({committed:committedWithResults(),plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations,starts:[]}),
         label:'Align Similarity Group',
         commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.activeDrawing().linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
       }),
@@ -2678,7 +2682,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       validCatalog(rejectedAlignedResult.name)
     ));
     assert.deepEqual(
-      (await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations,starts:[]})})).status,
+      (await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedWithResults(),plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations,starts:[]})})).status,
       'error'
     );
     failLateArtifactAdoption = false;

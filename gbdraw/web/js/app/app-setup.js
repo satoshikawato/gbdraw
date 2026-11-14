@@ -1770,6 +1770,7 @@ export const createAppSetup = () => {
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
     projectCommittedSimilarityAlignment,
+    requireRedrawableCommittedSession,
     cancelRunAnalysis,
     runLabelReflow,
     holdAutomaticRerender,
@@ -2859,6 +2860,7 @@ export const createAppSetup = () => {
   };
   const featureAnchor = createFeatureAnchorAction({
     materializedSession: similarityAlignmentActions.materializedSession,
+    requireRedrawable: requireRedrawableCommittedSession,
     hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR,

@@ -145,9 +145,10 @@ test('a reply of another shape, one that adds a resource the file holds, or one 
 // OV-3541: a committed request whose LOSATP search no saved rows answered (a Session saved before any run) cannot be
 // redrawn in the browser, which has no LOSAT. Every committed redraw (the label rerender, Reset record positions,
 // Align at feature, a record rotation) renders the request `projectCommittedEditorIntent` projects, which refuses it
-// with a notice to Generate once; a Session whose rows answered its search redraws.
+// with a notice to Generate once, and Align at feature's helper reads the Session through the same refusal; a Session
+// whose rows answered its search redraws.
 test('a committed redraw of a search no saved rows answered asks for one Generate (OV-3541)', async () => {
-  const { projectCommittedEditorIntent } = await import('../../gbdraw/web/js/services/session-request.js');
+  const { projectCommittedEditorIntent, requireRedrawableCommittedSession } = await import('../../gbdraw/web/js/services/session-request.js');
   const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
   const redraw = () => projectCommittedEditorIntent({
     committed: sessionConfig.getCommittedCanonicalSession(), state, drawing: state.activeDrawing()
@@ -163,7 +164,11 @@ test('a committed redraw of a search no saved rows answered asks for one Generat
   assert.deepEqual(notice.actions, ['generate']);
   assert.match(notice.summary, /no saved comparison results/);
   assert.doesNotMatch(notice.summary, /LOSAT|BLAST\+/);
+  assert.throws(() => requireRedrawableCommittedSession(sessionConfig.getCommittedCanonicalSession()),
+    { code: 'COMPARISON_REQUIRES_GENERATE' });
   const answered = await load(fixture('BGC0000711-BGC0000713-losatp-cli.v47'));
   assert.equal(answered.status, 'ok', JSON.stringify(answered.error));
   assert.deepEqual(comparisonKinds(redraw().renderRequest).at(-1), ['generatedProteinComparison', 'none']);
+  const committed = sessionConfig.getCommittedCanonicalSession();
+  assert.equal(requireRedrawableCommittedSession(committed), committed);
 });
