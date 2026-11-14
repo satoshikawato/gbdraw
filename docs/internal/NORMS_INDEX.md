@@ -586,6 +586,8 @@ under "Cited ids without a record".
   - `tests/test_session_compat.py`
   - `tests/test_session_drawings.py`
   - `tests/test_session_io.py`
+  - `tests/web/alignment-per-drawing.playwright.spec.js`
+  - `tests/web/alignment-per-drawing.test.mjs`
   - `tests/web/annotation-feature-identity.playwright.spec.js`
   - `tests/web/artifact-slots.test.mjs`
   - `tests/web/auxiliary-file-history.playwright.spec.js`
