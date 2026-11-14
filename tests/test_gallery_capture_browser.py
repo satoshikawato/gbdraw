@@ -688,3 +688,48 @@ def test_a_capture_scroll_after_the_record_read_is_not_undone() -> None:
             browser.close()
 
     assert scroll_top > 800
+
+
+def test_text_under_an_opaque_drawer_is_not_seen_past_its_edge() -> None:
+    """HmmtDNA_ATskew post 2-1: figure labels run under the Editor drawer (opaque, a 1 px border).
+    The hit test snaps a point less than half a pixel left of the drawer onto it, and the drawer
+    hides that point: the part a reader sees ends at the drawer's edge, so a crop edge 1 px inside
+    the drawer cuts nothing."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:13px sans-serif'>"
+        "<svg width='400' height='200' style='position:absolute;left:0;top:0'>"
+        "<text x='40' y='60' font-size='13' style='pointer-events:none'>tRNA-Phe tRNA-Phe tRNA-Phe</text></svg>"
+        "<div id='drawer' style='position:absolute;left:0;top:0;width:280px;height:200px;background:#fff;"
+        "border-left:1px solid #e2e8f0;z-index:30'></div>"
+        "</body></html>"
+    )
+    # The drawer starts where the measure samples the label 0.5-1 px short of a whole pixel.
+    place = """() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelector('text').firstChild);
+      const rect = range.getBoundingClientRect();
+      const columns = Math.min(200, Math.max(3, Math.ceil(rect.width / 2)));
+      for (let k = Math.floor(columns / 2); k < columns; k += 1) {
+        const x = rect.left + (k / columns) * rect.width;
+        if (x - Math.floor(x) >= 0.55 && x - Math.floor(x) <= 0.9) {
+          document.getElementById('drawer').style.left = `${Math.ceil(x)}px`;
+          return Math.ceil(x);
+        }
+      }
+      throw new Error('no sample point to place the drawer at');
+    }"""
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 200})
+            page.set_content(html)
+            left = float(page.evaluate(place))
+            boxes = _boxes_of(page, {"x": 0.0, "y": 0.0, "width": 400.0, "height": 200.0})
+        finally:
+            browser.close()
+
+    assert boxes
+    clip = {"x": left + 1.0, "y": 0.0, "width": 200.0, "height": 200.0}
+    assert capture_tool.crop_edge_cuts(clip, boxes, {"width": 400.0, "height": 200.0}) == []

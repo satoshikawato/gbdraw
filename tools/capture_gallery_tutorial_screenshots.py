@@ -1324,11 +1324,12 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
   const opaqueParts = (element) => {
     if (opaqueCache.has(element)) return opaqueCache.get(element);
     const parts = [];
+    const box = element.getBoundingClientRect();
     let solid = true;
     for (let layer = element; layer && solid; layer = layer.parentElement) solid = getComputedStyle(layer).opacity === '1';
     if (solid) {
       const style = getComputedStyle(element);
-      const rect = element.getBoundingClientRect();
+      const rect = box;
       const [top, right, bottom, left] = SIDES.map((side) => parseFloat(style[`border${side}Width`]) || 0);
       if (REPLACED.has(element.tagName) || style.backgroundImage !== 'none') parts.push(rect);
       else if (alphaOf(style.backgroundColor) === 1) {
@@ -1348,12 +1349,17 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
         }
       });
     }
-    opaqueCache.set(element, parts);
-    return parts;
+    opaqueCache.set(element, { box, parts });
+    return opaqueCache.get(element);
   };
+  // The hit test found `layer` at the point, which it may have snapped to the pixel grid (a point
+  // 0.4 px left of a drawer hits the drawer): the point counts where it lies within the layer's box.
   const hides = (layer, x, y) => {
     if (layer instanceof SVGElement) return paints(layer);
-    return opaqueParts(layer).some((rect) => x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom);
+    const { box, parts } = opaqueParts(layer);
+    const px = Math.min(Math.max(x, box.left), box.right - 1e-6);
+    const py = Math.min(Math.max(y, box.top), box.bottom - 1e-6);
+    return parts.some((rect) => px >= rect.left && px < rect.right && py >= rect.top && py < rect.bottom);
   };
   // The boxes that clip an owner, its own included (a scrolled list, an svg, a screen-reader
   // line in a 1 px box or under `clip: rect(0 0 0 0)`): its text outside them is not seen. A
