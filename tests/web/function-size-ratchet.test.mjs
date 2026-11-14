@@ -117,7 +117,7 @@ const FUNCTION_STATEMENTS = {
   'app/run-info.js::appendInputArgs': 92,
   'app/sequence-search.js::createSequenceSearch': 89,
   'app/settings-pane.js::createSettingsPaneController': 123,
-  'app/similarity-alignment.js::createSimilarityAlignmentActions': 587,
+  'app/similarity-alignment.js::createSimilarityAlignmentActions': 586,
   'app/svg-styles.js::createSvgStyles': 97,
   'app/svg-styles.js::createSvgStyles.applyPaletteToSvg': 87,
   'app/ui.js::createPreviewTransformInteraction': 88,

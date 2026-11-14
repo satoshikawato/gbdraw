@@ -17,7 +17,7 @@ import {
   featureIdentity,
   orthogroupIdStatus
 } from '../services/feature-identity.js';
-import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
+import { CompositionMetadataError, materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId, locationPartBound } from '../services/feature-utils.js';
 import { describeDirectionPreview, recordsNeedingChoice, resetPreviewView, shortRecordName } from '../services/alignment-review-view.js';
 import {
@@ -42,7 +42,7 @@ const { computed, ref, watch } = window.Vue;
  * @typedef {{
  *   gene?: unknown, locus_tag?: unknown, locusTag?: unknown, product?: unknown, protein_id?: unknown,
  *   proteinId?: unknown, displayProteinId?: unknown, sourceProteinId?: unknown, start?: unknown,
- *   end?: unknown, type?: unknown, qualifiers?: Record<string, unknown> | null,
+ *   end?: unknown, strand?: unknown, type?: unknown, qualifiers?: Record<string, unknown> | null,
  *   sequenceFeature?: FeatureFacts | null
  * }} FeatureFacts
  * @typedef {{ label: string, name: string, detail: string }} RecordNameEntry A record's name for the Review panel and the Reset preview.
@@ -286,6 +286,15 @@ const displayText = (...values) => values
   .map((value) => String(value ?? '').trim())
   .find((value) => value && !isInternalProteinDisplayId(value)) || '';
 
+/**
+ * The facts of a feature's source: an enriched member's catalog feature (`sequenceFeature`, which the orthogroup owner
+ * finds by identity), else the facts given. A member's own copy may be stale: a Session an older gbdraw wrote saved
+ * its strand in the drawn direction (OV-3442).
+ * @param {FeatureFacts} facts
+ * @returns {FeatureFacts}
+ */
+const sourceFeature = (facts) => facts.sequenceFeature || facts;
+
 // Human-readable names shared by Review, the direction and Reset previews, and
 // the active-plan inspector. Record keys and feature hashes stay binding-only.
 /**
@@ -294,7 +303,7 @@ const displayText = (...values) => values
  * @param {string} [fallback]
  */
 export const featureNameParts = (anchor, facts = {}, fallback = '') => {
-  const feature = facts.sequenceFeature || facts;
+  const feature = sourceFeature(facts);
   const qualifiers = feature.qualifiers || {};
   const gene = displayText(feature.gene, facts.gene, qualifiers.gene);
   const locusTag = displayText(feature.locus_tag, feature.locusTag,
@@ -1042,6 +1051,36 @@ const strandValue = (value, path) => {
 };
 
 /**
+ * A feature's source location as an option names it, `start..end (strand)`, from the facts its name reads.
+ * @param {FeatureFacts} facts
+ */
+const sourceLocationText = (facts) => {
+  const feature = sourceFeature(facts);
+  const start = locationPartBound(feature, 'start');
+  const end = locationPartBound(feature, 'end');
+  return `${Number.isSafeInteger(start) ? numberText(start + 1) : ''}..`
+    + `${Number.isSafeInteger(end) ? numberText(end) : ''} `
+    + `(${strandLabel(strandValue(feature.strand, 'Drawer reference strand'))})`;
+};
+
+/**
+ * The baseline a repair starts from: the records where the shown Result draws them. A Result an older gbdraw drew has
+ * no record keys to read a stale plan's placements by; the repair then starts from the committed placements, which
+ * the next Generate draws (OV-3440; PD-OI-028: a stale plan is repaired, the Result kept).
+ * @template T
+ * @param {(options: { materializePlan: boolean, fromResult?: boolean }) => T} baseline
+ * @returns {T}
+ */
+const repairBaseline = (baseline) => {
+  try {
+    return baseline({ materializePlan: true });
+  } catch (cause) {
+    if (!(cause instanceof CompositionMetadataError)) throw cause;
+    return baseline({ materializePlan: true, fromResult: false });
+  }
+};
+
+/**
  * @param {{
  *   group: AliasSource | null | undefined, members: OrthogroupMemberFacts[],
  *   reference: AliasSource | null | undefined, request: CommittedAlignmentRequest, choices: AlignmentChoice[]
@@ -1700,16 +1739,14 @@ export const createSimilarityAlignmentActions = ({
       try {
         const anchor = anchorFromSource(member, 'Drawer reference');
         const record = shortRecordName(records.get(anchor.recordKey)) || t('Unavailable record');
-        const start = locationPartBound(member, 'start');
-        const end = locationPartBound(member, 'end');
+        // The option's name and location read one value: the catalog row of the anchor, else the member's own.
+        const facts = factsOf(anchor) || member;
         return {
           anchor,
           canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
           key: anchorKey(anchor),
-          label: `${record} · ${featureNameParts(anchor, factsOf(anchor) || member).name}`,
-          location: `${Number.isSafeInteger(start) ? numberText(start + 1) : ''}..`
-            + `${Number.isSafeInteger(end) ? numberText(end) : ''} `
-            + `(${strandLabel(strandValue(member?.strand, 'Drawer reference strand'))})`
+          label: `${record} · ${featureNameParts(anchor, facts).name}`,
+          location: sourceLocationText(facts)
         };
       } catch (_error) {
         return null;
@@ -1921,7 +1958,7 @@ export const createSimilarityAlignmentActions = ({
       choices: planChoices(plan, staleRecordKeys)
     });
     let response;
-    activeBaseline = baseline({materializePlan:true});
+    activeBaseline = repairBaseline(baseline);
     try {
       const helper = await runHelperOperation(resolveOperation, { request: repairRequest,
         projection:{canonicalRequest:activeBaseline.request, orientations:null}, resources:activeBaseline.canonical.resources });
