@@ -5,14 +5,13 @@
 // Load of a Session 46-50 whose Linear request holds a LOSATP search: Python
 // gives the request the results of the LOSAT rows the file saved, as it does
 // in a Session 27-44's move (`saved_protein_results_json`, OV-3545).
-// This module holds the ports the composition root sets and reads the replies.
+// This module holds the port the composition root sets, which runs the
+// operation each step names, and reads the replies.
 import { diagnosticError } from '../utils/error-normalization.js';
 import { readSentLoadRepair } from '../utils/load-repairs.js';
-import { isModeScopedBand, storedResultSets, withStoredResultSet } from './session-authority.js';
 
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
-/** @import { SessionChecked, SessionEnvelope } from '../contracts/session.generated.js' */
-/** @import { UnvalidatedFields } from './session-authority.js' */
+/** @import { SessionEnvelope } from '../contracts/session.generated.js' */
 
 /**
  * Python's reply: the Session 51, the stored Results a Session 51 cannot
@@ -37,7 +36,15 @@ import { isModeScopedBand, storedResultSets, withStoredResultSet } from './sessi
  * null for the document's own.
  * @typedef {{ document: unknown, storedRequestSchema: number | null }} LegacySessionUpgradeRequest
  */
-/** @typedef {(request: LegacySessionUpgradeRequest) => Promise<unknown>} LegacySessionUpgrader */
+/** What Load sends Python for a Session 46-50: the file's document as the file holds it. @typedef {{ document: SessionEnvelope }} SavedProteinResultsRequest */
+/**
+ * The Worker port of Load's Python steps for an older Session: it runs the
+ * helper operation it is given with that operation's request.
+ * @typedef {{
+ *   (operation: 'upgradeLegacySession', request: LegacySessionUpgradeRequest): Promise<unknown>,
+ *   (operation: 'storeSavedProteinResults', request: SavedProteinResultsRequest): Promise<unknown>
+ * }} LegacySessionUpgrader
+ */
 
 /** @type {LegacySessionUpgrader | null} */
 let legacySessionUpgrader = null;
@@ -62,7 +69,7 @@ const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Arra
  */
 export const upgradeLegacySession = async (document, { storedRequestSchema = null, upgrade = legacySessionUpgrader } = {}) => {
   if (!upgrade) throw diagnosticError('HELPER_PROTOCOL', {}, LEGACY_SESSION_UPGRADE);
-  const response = await upgrade({
+  const response = await upgrade(LEGACY_SESSION_UPGRADE.operation, {
     document,
     storedRequestSchema: Number.isSafeInteger(storedRequestSchema) ? Number(storedRequestSchema) : null
   });
@@ -106,72 +113,28 @@ export const upgradeLegacySession = async (document, { storedRequestSchema = nul
  * @property {Readonly<Record<string, Record<string, unknown>>>} requests
  * @property {Readonly<Record<string, Record<string, unknown>>>} resources
  */
-/** What Load sends Python: the file's document as the file holds it. @typedef {{ document: SessionEnvelope }} SavedProteinResultsRequest */
-/** @typedef {(request: SavedProteinResultsRequest) => Promise<unknown>} SavedProteinResultReader */
-
-/** @type {SavedProteinResultReader | null} */
-let savedProteinResultReader = null;
-/** @param {SavedProteinResultReader | null} reader */
-export const setSavedProteinResultReader = (reader) => {
-  savedProteinResultReader = typeof reader === 'function' ? reader : null;
-};
 
 const SAVED_PROTEIN_RESULTS = /** @type {const} */ ({ stage: 'helper', operation: 'storeSavedProteinResults' });
 
 /**
- * Whether a stored request is a Linear one whose LOSATP comparison is a
- * search; Python decides whether the saved rows answer it.
- * @param {unknown} stored
- */
-const searchesProteins = (stored) => {
-  const request = /** @type {UnvalidatedFields<'mode' | 'comparisons'>} */ (stored);
-  return request?.mode === 'linear' && Array.isArray(request.comparisons) && request.comparisons.some((item) => {
-    const comparison = /** @type {UnvalidatedFields<'kind' | 'mode'>} */ (item);
-    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== 'none';
-  });
-};
-
-/**
- * A Session 46-50 as Load reads it: a Linear drawing whose committed LOSATP
- * search the file's saved LOSAT rows answer holds their results, as a
- * Generate commits them, so the browser's render redraws it before the first
- * Generate (OV-3545). One Worker call, only for a file whose Linear request
- * holds a search and that saved LOSAT rows; any other document is returned as
- * given. A Worker failure throws its own diagnostic; a reply of another shape
- * throws RESULT_INVALID of this operation; without the port, HELPER_PROTOCOL.
+ * The requests of a Session 46-50 that take the results of its saved LOSAT
+ * rows, from Python, once (OV-3545); Load replaces them in their drawings. A
+ * Worker failure throws its own diagnostic; a reply of another shape, or one
+ * that adds a resource the file holds, throws RESULT_INVALID of this
+ * operation; without the port, HELPER_PROTOCOL.
  * @param {SessionEnvelope} document The file's document as the file holds it.
- * @param {{ read?: SavedProteinResultReader | null }} [options]
- * @returns {Promise<SessionEnvelope>}
+ * @param {{ upgrade?: LegacySessionUpgrader | null }} [options]
+ * @returns {Promise<SavedProteinResultRequests>}
  */
-export const withSavedProteinResults = async (document, { read = savedProteinResultReader } = {}) => {
-  if (!isModeScopedBand(/** @type {SessionChecked} */ (/** @type {unknown} */ (document)))) return document;
-  const searches = storedResultSets(document).filter(({ set }) => searchesProteins(set.renderRequest));
-  // A Session 46-50 keeps its LOSAT caches at the top level, which every drawing reads.
-  const { losatCache } = /** @type {{ losatCache?: unknown }} */ (document);
-  const rows = /** @type {UnvalidatedFields<'entries'>} */ (losatCache)?.entries;
-  if (searches.length === 0 || !Array.isArray(rows) || rows.length === 0) return document;
-  if (!read) throw diagnosticError('HELPER_PROTOCOL', {}, SAVED_PROTEIN_RESULTS);
-  const response = await read({ document });
+export const readSavedProteinResults = async (document, { upgrade = legacySessionUpgrader } = {}) => {
+  if (!upgrade) throw diagnosticError('HELPER_PROTOCOL', {}, SAVED_PROTEIN_RESULTS);
+  const response = await upgrade(SAVED_PROTEIN_RESULTS.operation, { document });
   const reply = isRecord(response) ? response.result : null;
-  const invalid = () => diagnosticError('RESULT_INVALID', {}, SAVED_PROTEIN_RESULTS);
   const held = isRecord(document.resources) ? document.resources : {};
   if (!isRecord(reply) || !isRecord(reply.requests) || !isRecord(reply.resources)
     || !Object.values(reply.requests).every(isRecord)
     || !Object.entries(reply.resources).every(([id, resource]) => isRecord(resource) && !Object.hasOwn(held, id))) {
-    throw invalid();
+    throw diagnosticError('RESULT_INVALID', {}, SAVED_PROTEIN_RESULTS);
   }
-  const { requests, resources } = /** @type {SavedProteinResultRequests} */ (reply);
-  if (Object.keys(requests).length === 0) return document;
-  // The projected set comes first (`storedResultSets`), so replacing it keeps the other mode's set.
-  let next = document;
-  const replaced = new Set();
-  for (const { at, set } of searches) {
-    const drawingId = String(/** @type {UnvalidatedFields<'mode'>} */ (set.renderRequest)?.mode);
-    if (!Object.hasOwn(requests, drawingId)) continue;
-    next = withStoredResultSet(next, at, { ...set, renderRequest: requests[drawingId] });
-    replaced.add(drawingId);
-  }
-  // Python returns a request only for a drawing Load sent with a search.
-  if (replaced.size !== Object.keys(requests).length) throw invalid();
-  return { ...next, resources: { ...held, ...resources } };
+  return /** @type {SavedProteinResultRequests} */ (reply);
 };

@@ -175,29 +175,24 @@ export const groupColorRulesOver = (preparation, labelsOf = () => [], rowRules =
   return synthesizedRuleTable(table, current);
 };
 
-// Load of a Session 27-44 (DESIGN 4.3): the Worker port as the composition
-// root sets it, with Python's upgrade evaluated here; a helper error is
-// thrown as the Worker client throws it. `calls` collects each document sent.
-export const pythonLegacySessionUpgrader = (calls = []) => async ({ document, storedRequestSchema }) => {
+// Load's Python steps of an older Session (DESIGN 4.3): the Worker port as
+// the composition root sets it, with Python's step of each operation
+// evaluated here (a Session 27-44's move, a Session 46-50's saved LOSATP rows,
+// OV-3545); a helper error is thrown as the Worker client throws it. `calls`
+// collects each document sent; `operations` the operation of each call.
+export const pythonLegacySessionUpgrader = (calls = [], operations = []) => async (operation, { document, storedRequestSchema }) => {
   calls.push(document);
-  const reply = JSON.parse(await evaluatePython(`
+  operations.push(operation);
+  const reply = JSON.parse(await evaluatePython(operation === 'storeSavedProteinResults' ? `
+import json
+from gbdraw.web_support.legacy_session import saved_protein_results_json
+result = saved_protein_results_json(json.dumps(json.loads(payload)["document"]))
+` : `
 import json
 from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
 request = json.loads(payload)
 result = legacy_session_to_drawings_json(json.dumps(request["document"]), json.dumps(request["storedRequestSchema"]))
 `, JSON.stringify({ document, storedRequestSchema: storedRequestSchema ?? null })));
-  if (reply.error) throw reply.error;
-  return { result: reply };
-};
-
-// Load of a Session 46-50 whose Linear request holds a LOSATP search (OV-3545): the Worker port as the composition
-// root sets it, with Python's step evaluated here. `calls` collects each document sent.
-export const pythonSavedProteinResultReader = (calls = []) => async ({ document }) => {
-  calls.push(document);
-  const reply = JSON.parse(await evaluatePython(`
-from gbdraw.web_support.legacy_session import saved_protein_results_json
-result = saved_protein_results_json(payload)
-`, JSON.stringify(document)));
   if (reply.error) throw reply.error;
   return { result: reply };
 };

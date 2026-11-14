@@ -135,7 +135,7 @@ import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
   setStoredProteinResultFrameConverter
 } from '../services/main-session-comparison-frame.js';
-import { setLegacySessionUpgrader, setSavedProteinResultReader } from '../services/legacy-session-upgrade.js';
+import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
 import { bindDrawingInputFileTree, createLinearSeq, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
@@ -490,14 +490,8 @@ export const createAppSetup = () => {
     DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES,
     payload
   ));
-  setLegacySessionUpgrader((payload) => runDiagramHelperOperation(
-    DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION,
-    payload
-  ));
-  setSavedProteinResultReader((payload) => runDiagramHelperOperation(
-    DIAGRAM_HELPER_OPERATIONS.STORE_SAVED_PROTEIN_RESULTS,
-    payload
-  ));
+  // Load's Python steps of an older Session name their own operation (a Session 27-44's move, a 46-50's saved rows).
+  setLegacySessionUpgrader((operation, payload) => runDiagramHelperOperation(operation, payload));
   const {
     processing,
     processingStatus,
@@ -1351,7 +1345,6 @@ export const createAppSetup = () => {
     setUnmanagedConfigOverrideValidator(null);
     setStoredProteinResultFrameConverter(null);
     setLegacySessionUpgrader(null);
-    setSavedProteinResultReader(null);
     setDiagramWorkerFontSource(null);
     setDiagramResourceRetainSource(null);
     disposeSessionOperations();
