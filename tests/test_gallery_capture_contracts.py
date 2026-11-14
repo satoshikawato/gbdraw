@@ -839,7 +839,7 @@ def test_upload_action_chooses_the_file_through_the_named_button() -> None:
             return FakeLocator(selector)
 
         def evaluate(self, script: str) -> None:
-            events.append("wait for transitions")
+            events.append("wait for scroll anchor" if script == capture_tool.RECORD_SCROLL_ANCHOR_SCRIPT else "wait for transitions")
 
     selector = "role=button[name='Choose Priority File (TSV)']"
     capture_tool.apply_capture_action(
@@ -852,6 +852,7 @@ def test_upload_action_chooses_the_file_through_the_named_button() -> None:
         ("click", selector),
         "file_chooser_opened",
         ("set_files", str(expected)),
+        "wait for scroll anchor",
         "wait for transitions",
     ]
 
@@ -1084,7 +1085,10 @@ def test_each_capture_action_lets_its_transitions_end_before_the_next() -> None:
     capture_tool.apply_capture_action(FakePage(), {"type": "evaluate", "script": "app.zoom = 1.15"})
 
     assert events[0] == "app.zoom = 1.15"
-    assert len(events) == 2 and "CSSTransition" in events[1] and ".finished" in events[1]
+    # A Record choice opens the single-record panel, and the app then puts the Settings pane back
+    # where it was: the next action scrolls only after that (OV-3547).
+    assert events[1] == capture_tool.RECORD_SCROLL_ANCHOR_SCRIPT
+    assert len(events) == 3 and "CSSTransition" in events[2] and ".finished" in events[2]
 
 
 class _PreparePage:
@@ -1386,35 +1390,59 @@ def test_highlight_frame_moves_in_where_text_sits_closer_than_its_reach() -> Non
     element, less where a box of text outside the element sits closer, and never covers it."""
 
     field = {"x": 100.0, "y": 100.0, "width": 120.0, "height": 24.0}
-    room = capture_tool.highlight_frame_room
     style = capture_tool.highlight_frame_style
     width = capture_tool.HIGHLIGHT_FRAME_WIDTH
     clearance = capture_tool.HIGHLIGHT_FRAME_CLEARANCE
+    full = {"offset": capture_tool.HIGHLIGHT_FRAME_OFFSET, "glow": capture_tool.HIGHLIGHT_FRAME_GLOW}
 
-    assert room(field, []) == float("inf")
-    assert style(float("inf")) == {
-        "offset": capture_tool.HIGHLIGHT_FRAME_OFFSET,
-        "glow": capture_tool.HIGHLIGHT_FRAME_GLOW,
-    }
-    # A neighbour's label across the element's box (a figure path's bounding box) leaves no room:
-    # the frame lies on the element's own edge. The element's own text is not measured at all
-    # (draw_highlight_frames passes the element to visible_text_boxes as `exclude`).
-    across = {"x": 200.0, "y": 110.0, "width": 60.0, "height": 16.0, "text": "dnaA"}
-    assert room(field, [across]) == 0.0
+    assert style(field, []) == full
     # A label whose descenders end 3 px above the field: the frame stops 1 px short of them.
     label = {"x": 100.0, "y": 79.0, "width": 140.0, "height": 18.0, "text": "Head Length Ratio"}
-    assert room(field, [label]) == 3.0
-    near = style(3.0)
-    assert near["offset"] + width == 3.0 - clearance and near["glow"] == 3.0 - clearance
-    # Box edges in fractional px: a room a hair under 4 gives the frame of a room of 4, never an
+    near = style(field, [label])
+    assert near == {"offset": 3.0 - clearance - width, "glow": 3.0 - clearance}
+    assert capture_tool.highlight_frame_cuts(field, near, [label], clearance) == []
+    # Box edges in fractional px: a gap a hair under 4 gives the frame of a gap of 4, never an
     # offset of -1e-14 px (Chrome floors it to -1 px, ATskew 7-1).
-    assert style(4.0 - 1.4e-14) == style(4.0) == {"offset": 0.0, "glow": 3.0}
-    assert str(style(4.0 - 1.4e-14)["offset"]) == "0.0"
+    hair = dict(label, height=17.0 + 1.4e-14)
+    assert style(field, [hair]) == style(field, [dict(label, height=17.0)]) == {"offset": 0.0, "glow": 3.0}
+    assert str(style(field, [hair])["offset"]) == "0.0"
     # Text touching the field: the frame lies on the field's own edge, with no glow.
-    assert style(0.0) == {"offset": -width, "glow": 0.0}
+    touching = dict(label, height=21.0)
+    assert style(field, [touching]) == {"offset": -width, "glow": 0.0}
+    assert capture_tool.highlight_frame_cuts(field, style(field, [touching]), [touching], 0.0) == []
     # A box off a corner limits the frame by the larger of its two gaps.
     corner = {"x": 230.0, "y": 60.0, "width": 40.0, "height": 20.0, "text": "x"}
-    assert room(field, [corner]) == 20.0
+    assert style(field, [corner]) == full
+
+
+def test_highlight_frame_keeps_off_text_inside_and_across_its_element() -> None:
+    """OV-3492: a label wholly inside the highlighted element (a feature's label on its arc, ATskew
+    10-1) leaves the frame its full size; a label across the element's edge is passed on its outer
+    side when the outline still lies within its reach (it loses its glow), and otherwise no frame is
+    drawn; a thin box just outside the element is never taken inside the frame."""
+
+    arc = {"x": 40.0, "y": 40.0, "width": 320.0, "height": 60.0}
+    style = capture_tool.highlight_frame_style
+    full = {"offset": capture_tool.HIGHLIGHT_FRAME_OFFSET, "glow": capture_tool.HIGHLIGHT_FRAME_GLOW}
+
+    inside = {"x": 180.0, "y": 56.0, "width": 34.0, "height": 16.0, "text": "l-rRNA"}
+    assert style(arc, [inside]) == full
+    # Inside, but 2 px from the bottom edge: the outline stays out, the glow is outside the element.
+    assert style(arc, [dict(inside, y=82.0)]) == full
+    # Across the bottom edge by 1 px: the outline passes it at its usual place, with no glow.
+    across_1 = dict(inside, y=85.0)
+    assert style(arc, [across_1]) == {"offset": 3.0, "glow": 0.0}
+    assert capture_tool.highlight_frame_cuts(arc, {"offset": 3.0, "glow": 0.0}, [across_1], 1.0) == []
+    # Across it by 2.5 px: the outline would have to leave its reach.
+    assert style(arc, [dict(inside, y=86.5)]) is None
+    # Across it by 8 px: no outline within the reach stays off it.
+    across_8 = dict(inside, y=92.0)
+    assert style(arc, [across_8]) is None
+    for offset in (-3.0, 0.0, 3.0):
+        assert capture_tool.highlight_frame_cuts(arc, {"offset": offset, "glow": 0.0}, [across_8], 0.0) == [across_8]
+    # A box 1 px tall, 1 px below the element: the frame moves in, not past it.
+    rule = {"x": 100.0, "y": 101.0, "width": 40.0, "height": 1.0, "text": "rule"}
+    assert style(arc, [rule]) == {"offset": -3.0, "glow": 0.0}
 
 
 def test_every_frame_a_capture_draws_takes_its_colour_and_width_from_one_function() -> None:
@@ -1445,7 +1473,8 @@ def test_highlight_frames_are_drawn_on_the_page_as_it_is_captured(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The frame room is measured after the pointer park, the hidden panes and the open-select
-    overlays, just before the crop (a later step could add or move text next to the frame)."""
+    overlays, just before the crop (a later step could add or move text next to the frame), and the
+    drawn frame is checked against the text once the CSS transitions have ended (OV-3492)."""
 
     events: list[object] = []
 
@@ -1470,6 +1499,9 @@ def test_highlight_frames_are_drawn_on_the_page_as_it_is_captured(
     monkeypatch.setattr(capture_tool, "apply_open_select_overlays", lambda page, spec: events.append("overlays"))
     monkeypatch.setattr(capture_tool, "wait_for_css_transitions", lambda page: events.append("transitions"))
     monkeypatch.setattr(capture_tool, "draw_highlight_frames", lambda page, selector: events.append(("frames", selector)))
+    monkeypatch.setattr(
+        capture_tool, "assert_highlight_frames_cover_no_text", lambda page, selector: events.append(("guard", selector))
+    )
     monkeypatch.setattr(capture_tool, "visible_text_boxes", lambda page, region: events.append("measure text") or [])
     monkeypatch.setattr(capture_tool, "output_path_for_operation", lambda operation: tmp_path / "crop.webp")
     operation = {"capture": {"boundingBox": {"x": 0, "y": 100, "width": 200, "height": 100},
@@ -1478,4 +1510,4 @@ def test_highlight_frames_are_drawn_on_the_page_as_it_is_captured(
     capture_tool.capture_operation(FakePage(), {}, operation, "http://127.0.0.1", 90)
 
     assert events == ["prepare", "park pointer", "hide pane", "overlays", ("frames", "#field"), "transitions",
-                      "measure text"]
+                      ("guard", "#field"), "measure text"]

@@ -349,6 +349,58 @@ export const createCircularSourceEdits = ({
  */
 
 /**
+ * @typedef {object} RecordPresentationScrollPorts
+ * @property {() => unknown[]} presentation The mode, whether one record is presented, the cards' files
+ *   (`inputKey`, third) and the record selector: a change of any opens the panel.
+ * @property {() => string} inputKey The shown drawing's cards and their files.
+ * @property {{ readonly value: boolean }} circularSingleRecordPresentationEnabled
+ * @property {{ readonly value: HTMLDetailsElement | null }} circularRecordPresentationPanel
+ * @property {() => Promise<unknown>} afterPaint Settles after the next paint.
+ */
+
+/**
+ * The scroll anchoring when the record presentation panel appears: the Settings pane keeps the
+ * focused control where it was (or its scroll position) once the panel has opened and painted.
+ * @param {RecordPresentationScrollPorts} ports
+ * @returns {() => Promise<unknown>} Settles once the pane is back where every change so far found
+ *   it; a capture tool awaits it after an operation instead of counting the frames it takes.
+ */
+const anchorScrollOnRecordPresentation = ({
+  presentation, inputKey, circularSingleRecordPresentationEnabled, circularRecordPresentationPanel, afterPaint
+}) => {
+  /** @type {Promise<unknown>} */
+  let anchoring = Promise.resolve();
+  /** @param {unknown[]} current */
+  const anchor = async (current) => {
+    const origin = document.activeElement;
+    const pane = document.querySelector('.settings-scroll');
+    const scrollOwner = pane ? settingsScrollOwner(pane) : document.scrollingElement;
+    const anchored = origin && pane?.contains(origin) && origin.getClientRects().length;
+    const top = anchored ? origin.getBoundingClientRect().top : null;
+    const scrollTop = scrollOwner?.scrollTop;
+    await nextTick();
+    if (!circularSingleRecordPresentationEnabled.value || inputKey() !== current[2]) return;
+    if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = true;
+    await afterPaint();
+    if (scrollOwner && document.activeElement === origin) {
+      // `top` is a number whenever `anchored` is truthy; `scrollTop` was read from
+      // the same non-null `scrollOwner`.
+      scrollOwner.scrollTop = anchored && origin.isConnected
+        ? scrollOwner.scrollTop + origin.getBoundingClientRect().top - /** @type {number} */ (top)
+        : /** @type {number} */ (scrollTop);
+    }
+  };
+  watch(presentation, (/** @type {unknown[]} */ current, /** @type {unknown[]} */ previous = []) => {
+    if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return undefined;
+    const run = anchor(current);
+    // Vue reports a failed run, as it did when the watch itself was async; the wait still settles.
+    anchoring = Promise.all([anchoring, run.catch(() => undefined)]);
+    return run;
+  }, { flush: 'sync' });
+  return () => anchoring;
+};
+
+/**
  * Registers the `circularRecordSelectionEnabled` computed and the scroll
  * anchoring watch; the root calls it where they stood.
  * @param {CircularRecordDisplayPorts} ports
@@ -434,29 +486,13 @@ export const createCircularRecordDisplay = ({
   // The shown drawing's cards and their files, as one value a watch compares.
   const inputKey = () => circularRecordDiscoveryState.value.inputs
     .map(({ uid, primaryFile, pairedFile }) => `${uid}/${primaryFile?.fileId ?? ''}/${pairedFile?.fileId ?? ''}`).join('|');
-  watch(() => [mode.value, circularSingleRecordPresentationEnabled.value, inputKey(),
-    state.activeDrawing().form.circular_record_selector], async (/** @type {unknown[]} */ current, /** @type {unknown[]} */ previous = []) => {
-    if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return;
-    const origin = document.activeElement;
-    const pane = document.querySelector('.settings-scroll');
-    const scrollOwner = pane ? settingsScrollOwner(pane) : document.scrollingElement;
-    const anchored = origin && pane?.contains(origin) && origin.getClientRects().length;
-    const top = anchored ? origin.getBoundingClientRect().top : null;
-    const scrollTop = scrollOwner?.scrollTop;
-    await nextTick();
-    if (!circularSingleRecordPresentationEnabled.value || inputKey() !== current[2]) return;
-    if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = true;
-    await afterPaint();
-    if (scrollOwner && document.activeElement === origin) {
-      // `top` is a number whenever `anchored` is truthy; `scrollTop` was read from
-      // the same non-null `scrollOwner`.
-      scrollOwner.scrollTop = anchored && origin.isConnected
-        ? scrollOwner.scrollTop + origin.getBoundingClientRect().top - /** @type {number} */ (top)
-        : /** @type {number} */ (scrollTop);
-    }
-  }, { flush: 'sync' });
+  const waitForCircularRecordScrollAnchor = anchorScrollOnRecordPresentation({
+    presentation: () => [mode.value, circularSingleRecordPresentationEnabled.value, inputKey(),
+      state.activeDrawing().form.circular_record_selector],
+    inputKey, circularSingleRecordPresentationEnabled, circularRecordPresentationPanel, afterPaint
+  });
   return {
     circularRecordSelectionEnabled, setCircularRecordPresentationSelector, showCircularCanvasSetting,
-    showCircularTicksSlot
+    showCircularTicksSlot, waitForCircularRecordScrollAnchor
   };
 };
