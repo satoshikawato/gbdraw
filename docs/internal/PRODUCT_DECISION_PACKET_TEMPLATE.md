@@ -156,3 +156,10 @@ Decision date: <YYYY-MM-DD>
 A choice letter or value alone is insufficient. Complete wording controls. A
 coding agent may serialize this explicit receipt but must not infer omitted
 rationale, preservation intent, retirement scope, risk, owner, or date.
+
+A receipt for the static Product Contract goes into its record as
+[Recording a revision](./OPTION_INTEGRITY_PRODUCT_CONTRACT.md#recording-a-revision)
+says: the revision is named after the pull request that records it, so the
+receipt itself never names a Contract revision. A new record is numbered after
+the pull request that adds it; a receipt approved before that pull request is
+open names the record by its concern key.
