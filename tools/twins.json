@@ -1460,6 +1460,34 @@
       "reason": "Session Load reads a CLI Session's ring scheme colours and the 0.14.5 Web fill (D-38) from the stored request without starting the Python Worker, and the Web re-assigns scheme colours in the drawn order on a reorder; the vector pins the Web's drawn positions over a stack (or none) to the order Python draws the rings in.",
       "retireWhen": "the Session or the request carries each ring's drawn position from Python, or Load asks the Python owner (Worker)",
       "source": "#1860 fix round 13 review"
+    },
+    {
+      "id": "concern:match-span-read",
+      "concern": "Which record a comparison match span reads, or why none can be read, from the match's identity (match kind, reference side, record and source indexes, record IDs) and the drawn units",
+      "pythonOwner": [
+        "gbdraw/web_support/feature_catalog.py:_embedded_match_span"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/pairwise-match-popup.js:matchSpanRead"
+      ],
+      "vector": "tests/fixtures/embedded-match-span-cases.json",
+      "reason": "The Web match popup names each span when it opens, without the Python Worker, so a span that cannot be read shows its reason at once, also while a Generate holds the Worker and on a Result that Session Load restored without starting the Worker; Python names the same spans for an exported Interactive SVG. tests/web/embedded-match-spans.test.mjs runs the popup over every span of the fixture and fails when it reads another record or shows another reason than Python's export.",
+      "retireWhen": "the popup asks the Python owner (Worker) when it opens, or every stored Result carries the span reads Python wrote",
+      "source": "#2019 review"
+    },
+    {
+      "id": "concern:record-source-interval",
+      "concern": "A Linear match's input-file coordinates on a cropped or reversed record (PD-OI-076), from its drawn coordinates and the record's source span",
+      "pythonOwner": [
+        "gbdraw/web_support/feature_catalog.py:_record_source_interval_fields"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/record-source-coordinates.js:recordSourceInterval"
+      ],
+      "vector": null,
+      "reason": "The Web match popup shows a span's input-file coordinates, and writes them into its FASTA header, when it opens, from the source span the drawn record group carries, without the Python Worker; Python writes the same fields into the catalog that an exported Interactive SVG reads. No shared vector: tests/test_web_feature_catalog.py pins Python's values to the ones the Web function gives for the same input.",
+      "retireWhen": "the popup reads the coordinates Python wrote for the match, on every Result it can show",
+      "source": "found while registering the match span read (#2019 review)"
     }
   ]
 }
