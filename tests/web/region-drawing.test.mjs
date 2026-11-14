@@ -27,6 +27,9 @@ globalThis.File = File;
 const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { createRegionDrawing } = await import('../../gbdraw/web/js/app/region-drawing.js');
+const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-drawing/paste-into.js');
+const { DIAGRAM_HELPER_OPERATIONS, pasteTargetPaths, stagedHelperReferences } = await import(
+  '../../gbdraw/web/js/services/diagram-worker-protocol.js');
 const { createDrawingList } = await import('../../gbdraw/web/js/app/drawing-list.js');
 const { allocateDrawingId, defaultDrawingName } = await import('../../gbdraw/web/js/services/drawing-view.js');
 const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
@@ -100,6 +103,11 @@ result = json.dumps({
 
 /** The copy the dialog sends by default: a new drawing, keeping the settings, of Python's default mode. */
 const NEW_DRAWING = Object.freeze({ into: 'new', settings: 'keep', mode: null });
+/** The existing drawings for a case that copies into a new drawing only. */
+const NO_PASTE = Object.freeze({
+  tabs: () => state.drawingTabs.value, drawingOf: (id) => state.drawingOf(id),
+  projectDrawing: async () => { throw new Error('no paste'); }, pasteInto: async () => { throw new Error('no paste'); }
+});
 
 /** The Worker helper `deriveRegionDrawing`, run by the real Python owner over staged resources. */
 const deriveInPython = async (payload) => ({ result: JSON.parse(await evaluatePython(`${STAGE}
@@ -278,7 +286,8 @@ test('(c) a start after the end of a linear record is refused: no drawing, the t
     shownDrawingId: () => state.activeDrawingId.value,
     projectShownRequest: () => projectOf(state.activeDrawing()),
     deriveRegion: deriveInPython,
-    newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; }
+    newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; },
+    pasteTargets: NO_PASTE
   });
   const offer = await regions.deriveFromShown([{ recordKey: 'record-1', start: 900, end: 100 }], true, NEW_DRAWING);
   assert.deepEqual(offer, { status: 'refused', reason: 'START_AFTER_END', recordKey: 'record-1', start: 900, end: 100 });
@@ -326,7 +335,8 @@ const regionDrawingsOf = () => createRegionDrawing({
   shownDrawingId: () => state.activeDrawingId.value,
   projectShownRequest: () => projectOf(state.activeDrawing()),
   deriveRegion: deriveInPython,
-  newDrawingFromRegion: drawingList.newDrawingFromRegion
+  newDrawingFromRegion: drawingList.newDrawingFromRegion,
+  pasteTargets: NO_PASTE
 });
 
 test('(d) the drawing list with makeRegionDrawing: Create adds the region drawing as New does; Undo removes it, Redo brings it back', async () => {
@@ -952,4 +962,57 @@ result = json.dumps(exact_value_pattern(feature_instance(payload['id'], 'record-
   recordsOnly.made.manualSpecificRules.splice(0, Infinity, own);
   await pasteAndInstall(source, recordsOnly.made, [{ recordKey: 'record-1', start: 301, end: 800 }], { edits: 'records' });
   assert.deepEqual(recordsOnly.made.manualSpecificRules.map(({ cap }) => cap), ['Mine']);
+});
+
+// The Worker's `deriveRegionDrawing`: it stages the payload's one resource table and gives Python the copy with the
+// target's staged paths (`pasteTargetPaths`); here the real Python owner runs it.
+const deriveAsWorker = async (payload) => {
+  const references = stagedHelperReferences(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, payload);
+  const staged = JSON.parse(await evaluatePython(`${STAGE}
+result = json.dumps(paths)
+`, { staged: await stagedFiles(references, payload.resources) }));
+  const { copy, sourcePaths } = pasteTargetPaths(payload.copy, staged);
+  return { result: JSON.parse(await evaluatePython(`
+import json, tempfile
+from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+result = derive_web_region_drawing_json(
+    json.dumps(payload['canonicalRequest']), json.dumps(payload['paths']), tempfile.mkdtemp(),
+    json.dumps(payload['regions']), json.dumps(payload['adaptSizes']), json.dumps(payload['copy']))
+`, { canonicalRequest: payload.canonicalRequest, paths: sourcePaths, regions: payload.regions, adaptSizes: payload.adaptSizes, copy })) };
+};
+
+test('Copy into an existing drawing: one History step of that drawing, shown; its Undo restores it; the source is unchanged', async () => {
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-45');
+  state.addDrawing(target, 'paste here'); history.addMember(target.id);
+  app.selectDrawing(source.id);
+  const sourceHash = hashOf(source.id);
+  const targetHash = hashOf(target.id);
+  const rowsBefore = target.linearSeqs.length;
+  const owner = createRegionDrawing({
+    shownDrawingId: () => state.activeDrawingId.value,
+    projectShownRequest: () => projectOf(state.activeDrawing()),
+    deriveRegion: deriveAsWorker,
+    newDrawingFromRegion: drawingList.newDrawingFromRegion,
+    readRecordSources: async () => ({ mode: 'circular', cards: new Map([['record-1', [
+      { sourceIndex: 0, selector: '#1', recordId: 'recA', recordLength: 1200 }]]]) }),
+    resultFeatures: () => null,
+    committedRecordKeyOf: () => null,
+    pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
+      readRecords: async () => undefined, project: projectOf, show: app.selectDrawing, runUndoable: history.runUndoable,
+      prepare: preparePastedRecords, install: installPastedRecords })
+  });
+  await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'coordinates', start: '301', end: '800' } });
+  await owner.setChoice({ target: target.id });
+  assert.equal(owner.dialog.status, 'derived', owner.dialog.message);
+  assert.deepEqual(owner.dialog.notCarried, ['Annotations of these records (1)']);
+  await owner.confirm();
+  assert.equal(state.activeDrawingId.value, target.id, 'the target drawing is shown');
+  assert.equal(target.linearSeqs.length, rowsBefore + 1, 'the region is appended');
+  assert.equal(history.managerOf(target.id).getUndoCount(), 1, 'one step of the target drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Copy to another drawing');
+  assert.equal(hashOf(source.id), sourceHash, 'the source drawing is unchanged');
+  await history.undo();
+  assert.equal(hashOf(target.id), targetHash, 'Undo restores the drawing as it was');
+  app.selectDrawing(source.id);
 });

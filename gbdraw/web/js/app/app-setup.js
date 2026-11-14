@@ -73,6 +73,7 @@ import { createDrawingSwitch } from './drawing-switch.js';
 import { createInputReplacementPorts } from './input-replacement-ports.js';
 import { createDrawingReset, createResetSettings } from './reset-settings.js';
 import { createRegionDrawing } from './region-drawing.js';
+import { createPasteTargets } from './region-drawing/paste-into.js';
 import { createFindInOtherFiles } from './find-in-other-files.js';
 import { createRegionSelect } from './region-select.js';
 import { readRegionAxisRecords, shownAxisRecords as shownAxisRecordsOf } from '../services/region-axis.js';
@@ -118,6 +119,8 @@ import {
   writeSessionDocumentFile,
   projectDraftRequest,
   makeRegionDrawing,
+  installPastedRecords,
+  preparePastedRecords,
   heldDepthFiles,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
@@ -3405,7 +3408,10 @@ export const createAppSetup = () => {
     newDrawingFromRegion: drawingList.newDrawingFromRegion,
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures,
-    committedRecordKeyOf: previewItemPopup.committedRecordKeyOf
+    committedRecordKeyOf: previewItemPopup.committedRecordKeyOf,
+    pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
+      readRecords: readDrawingRecordIdentities, project: projectRequestOf, show: selectDrawing, runUndoable: history.runUndoable,
+      prepare: preparePastedRecords, install: installPastedRecords })
   });
   const findInOtherFiles = createFindInOtherFiles({
     shownDrawingId: () => state.activeDrawingId.value, projectShownRequest: () => projectRequestOf(state.activeDrawing()),
