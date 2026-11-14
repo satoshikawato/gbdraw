@@ -156,9 +156,12 @@ test('a schema-6 catalog is admitted as written and refused when it stores a seq
     invalid.items[0].biologicalFeatures[0][key] = value;
     assert.throws(() => validateFeatureCatalog(invalid, results), undefined, key);
   }
-  const withSources = structuredClone(current);
-  withSources.items[0].sequenceSources = [];
-  assert.throws(() => validateFeatureCatalog(withSources, results));
+  // Nor the item keys of an export: its whole-record sources and what its match spans read.
+  for (const key of ['sequenceSources', 'matchSpanReads']) {
+    const withExportKey = structuredClone(current);
+    withExportKey.items[0][key] = key === 'sequenceSources' ? [] : {};
+    assert.throws(() => validateFeatureCatalog(withExportKey, results), undefined, key);
+  }
 });
 
 // PD-OI-069 revision 2: a stored catalog holds no feature instance. Python

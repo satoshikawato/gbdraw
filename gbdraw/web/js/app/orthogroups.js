@@ -32,7 +32,8 @@ import {
   orthogroupIdStatus,
   renderedFeatureIdentity,
   textAliasStatus,
-  uniqueOrthogroupEntries
+  uniqueOrthogroupEntries,
+  withLegacyCanonicalIdentity
 } from '../services/feature-identity.js';
 import { msg, t, tm } from '../utils/i18n.js';
 
@@ -280,6 +281,64 @@ const domIdentityAgrees = (element, candidate) => {
   return true;
 };
 
+/**
+ * The lookup of the catalog rows a feature identity names: the biological rows, else the drawn ones, each under its
+ * identity with the drawn ID its one drawn row gives it. A row Load read again for a Session before 40 keeps that
+ * Session's names (record index and stable ID) and its own edit keys; a member Load gave canonical names finds it
+ * under the same names, read for the row from the committed request by the one rule (`withLegacyCanonicalIdentity`,
+ * OV-3539).
+ * @param {readonly Record<string, unknown>[] | null | undefined} biological
+ * @param {readonly Record<string, unknown>[]} extracted
+ * @param {readonly unknown[]} recordKeys The committed request's record keys, in record order.
+ */
+const catalogRowLookup = (biological, extracted, recordKeys) => {
+  const hasBiologicalFeatures = Array.isArray(biological) && biological.length > 0;
+  const features = hasBiologicalFeatures ? biological : extracted;
+  const renderedIdentities = extracted
+    .map(renderedFeatureIdentity)
+    .filter((identity) => identity.usable);
+  const findRendered = indexFeatureIdentities(renderedIdentities, (identity) => identity);
+  const entries = features.map((feature) => {
+    const identity = hasBiologicalFeatures
+      ? featureIdentity(feature, { allowLegacySvgStable: true })
+      : renderedFeatureIdentity(feature);
+    const renderedMatches = findRendered(identity);
+    const renderedIdentityInvalid = renderedMatches.length > 1 || (
+      identity.renderedId.supplied && renderedMatches.length !== 1
+    );
+    const resolvedIdentity = renderedIdentityInvalid
+      ? { ...identity, usable: false }
+      : (
+          renderedMatches.length === 1 && !identity.renderedId.supplied
+            ? { ...identity, renderedId: renderedMatches[0].renderedId }
+            : identity
+        );
+    return { identity: withLegacyCanonicalIdentity(resolvedIdentity, recordKeys), feature };
+  });
+  return indexFeatureIdentities(entries, (entry) => entry.identity);
+};
+
+/**
+ * The catalog row lookup (`catalogRowLookup`) of the shown rows, rebuilt only when the rows or the committed request's
+ * record keys change. It depends on the two array refs, which every writer replaces (services/config.js,
+ * services/history-snapshot.js), and reads the rows through `toRaw`, as state.js does, so Vue records no dependency on
+ * each alias key of every row that `featureIdentity` reads. The record keys stay the same list while a committed change
+ * keeps them (a placement, a setting), so such a change does not read every row again.
+ * @param {Pick<WebState, 'extractedFeatures' | 'biologicalFeatures'>} rows
+ * @param {CommittedRequestPort} getCommittedRequest
+ */
+const catalogRowLookupOf = ({ extractedFeatures, biologicalFeatures }, getCommittedRequest) => {
+  const recordKeys = computed((/** @type {unknown[] | undefined} */ previous) => {
+    const keys = (getCommittedRequest()?.records || []).map((record) => record.recordKey);
+    return previous?.length === keys.length && keys.every((key, index) => key === previous[index]) ? previous : keys;
+  });
+  return computed(() => catalogRowLookup(
+    toRaw(biologicalFeatures.value),
+    Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [],
+    recordKeys.value
+  ));
+};
+
 /** @param {FeatureSvgRoot | null | undefined} svg @param {(Record<string, unknown> | null | undefined)[] | null} [features] */
 const buildRenderedFeatureIndex = (svg, features = []) => {
   /** @type {Map<string, FeatureIdentity[]>} */
@@ -382,8 +441,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     showRightDrawer,
     rightDrawerTab,
     svgContainer,
-    extractedFeatures,
-    biologicalFeatures
+    extractedFeatures
   } = state;
 
   const sequenceActions = makeMemberSequenceActions(memberAction);
@@ -616,37 +674,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     }));
   });
 
-  // The catalog row of a member, by its identity. The lookup depends on the two array refs, which every writer replaces (services/config.js,
-  // services/history-snapshot.js); it reads the rows through `toRaw`, as state.js does, so Vue records no dependency
-  // on each alias key of every row that `featureIdentity` reads.
-  const featureCatalogLookup = computed(() => {
-    const biological = toRaw(biologicalFeatures.value);
-    const extracted = Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [];
-    const hasBiologicalFeatures = Array.isArray(biological) && biological.length > 0;
-    const features = hasBiologicalFeatures ? biological : extracted;
-    const renderedIdentities = extracted
-      .map(renderedFeatureIdentity)
-      .filter((identity) => identity.usable);
-    const findRendered = indexFeatureIdentities(renderedIdentities, (identity) => identity);
-    const entries = features.map((feature) => {
-      const identity = hasBiologicalFeatures
-        ? featureIdentity(feature, { allowLegacySvgStable: true })
-        : renderedFeatureIdentity(feature);
-      const renderedMatches = findRendered(identity);
-      const renderedIdentityInvalid = renderedMatches.length > 1 || (
-        identity.renderedId.supplied && renderedMatches.length !== 1
-      );
-      const resolvedIdentity = renderedIdentityInvalid
-        ? { ...identity, usable: false }
-        : (
-            renderedMatches.length === 1 && !identity.renderedId.supplied
-              ? { ...identity, renderedId: renderedMatches[0].renderedId }
-              : identity
-          );
-      return { identity: resolvedIdentity, feature };
-    });
-    return indexFeatureIdentities(entries, (entry) => entry.identity);
-  });
+  // The catalog row of a member, by its identity.
+  const featureCatalogLookup = catalogRowLookupOf(state, getCommittedRequest);
 
   // A member with the catalog row it resolved to (`sequenceFeature`); it carries no sequence (D5).
   /** @param {OrthogroupMember} member @returns {OrthogroupMember} */

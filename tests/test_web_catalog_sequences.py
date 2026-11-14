@@ -34,10 +34,14 @@ from gbdraw.web_support.feature_catalog import (
     FEATURE_CATALOG_SCHEMA,
     STORED_SEQUENCE_KEYS,
     embed_catalog_item,
+    embed_catalog_part,
     match_sequence_sources,
+    match_span_source,
     materialize_catalog_nucleotide_sequence,
     promote_legacy_feature_catalog,
     read_match_span,
+    registered_match_sources,
+    span_reason,
 )
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 from tests.utils.session_drawing_view import drawing_view
@@ -125,6 +129,7 @@ def _assembled_from_parts(item: Mapping[str, object], read_part: object) -> dict
     order = list(dict.fromkeys(str(windows.get(key, key)) for key in item["recordKeys"]))  # type: ignore[union-attr, attr-defined]
     rows: list[dict[str, object]] = []
     sources: dict[int, dict[str, object]] = {}
+    reads = None
     counts = set()
     for position, key in enumerate(order):
         part_rows = [row for row in item["biologicalFeatures"] if row["recordKey"] == key]  # type: ignore[attr-defined]
@@ -141,11 +146,16 @@ def _assembled_from_parts(item: Mapping[str, object], read_part: object) -> dict
         for entry in reply["sequenceSources"]:
             assert entry["index"] not in sources
             sources[entry["index"]] = entry["source"]
+        # Only the last part, which holds the comparison sources, holds what the match spans read.
+        assert reply["matchSpanReads"] is None or position == len(order) - 1
+        reads = reply["matchSpanReads"]
     [count] = counts
     assert sorted(sources) == list(range(count))
     embedded: dict[str, object] = {**item, "biologicalFeatures": rows}
     if sources:
         embedded["sequenceSources"] = [sources[index] for index in range(count)]
+    if reads is not None:
+        embedded["matchSpanReads"] = reads
     return embedded
 
 
@@ -219,7 +229,45 @@ def test_the_worker_reply_of_an_embed_part_is_the_text_the_file_embeds(tmp_path:
             {"index": entry["index"], "source": _compact(entry["source"])} for entry in objects["sequenceSources"]
         ],
         "sourceCount": 5,
+        # A similarity group ribbon names no span.
+        "matchSpanReads": None,
     }
+
+
+def test_the_export_writes_what_each_match_span_reads_with_the_comparison_sources() -> None:
+    """The export finds each span's record as the Worker's read does (OV-3542): a band that names no source reads its
+    record from any source, and a span that names no record reads none, even when only one record could be read: the
+    reference says it names none, as the Web's match popup does, and the comparison side that the record is unknown.
+    Only the part that holds the comparison sources (the last) carries the reads; the whole item carries the same."""
+
+    records = CatalogSequenceRecords(
+        mode="circular",
+        records=(SeqRecord(Seq("AACCGGTT"), id="ref", name="REF"),),
+        unit_keys=("ref-key",),
+        comparison_records=((), (SeqRecord(Seq("TTGCAACC"), id="cmp", name="CMP"),)),
+    )
+    band = {"match_kind": "homology", "reference_side": "query", "qstart": "1", "qend": "2", "sstart": "4", "send": "1"}
+    item = {"recordKeys": ["ref-key"], "biologicalFeatures": [], "comparisonMatches": [
+        {**band, "id": "any-source", "query_record_id": "ref", "subject_record_id": "cmp"},
+        {**band, "id": "no-record", "source_index": "1"},
+    ]}
+
+    first = embed_catalog_part(item, records, source_record_keys=["ref-key"], comparison_sources=False)
+    last = embed_catalog_part(item, records, source_record_keys=[], comparison_sources=True)
+    whole = embed_catalog_item(item, records)
+
+    assert first["matchSpanReads"] is None
+    assert last["matchSpanReads"] == whole["matchSpanReads"] == {
+        "any-source": {"query": {"source": 0}, "subject": {"source": 1}},
+        "no-record": {
+            "query": {"reason": "RECORD_UNNAMED", "sourceLength": 0},
+            "subject": {"reason": "RECORD_UNKNOWN", "sourceLength": 0},
+        },
+    }
+    assert [source["key"] for source in whole["sequenceSources"]] == [  # type: ignore[attr-defined]
+        "circular:record:0", "homology:comparison:1:cmp",
+    ]
+    assert read_match_span(whole["sequenceSources"][1]["sequence"], 4, 1) == "GCAA"  # type: ignore[index]
 
 
 def test_whole_record_sources_equal_stored_sequence_sources(tmp_path: Path) -> None:
@@ -391,14 +439,12 @@ def test_a_span_of_an_empty_source_and_a_coordinate_below_one_have_their_reasons
     """The coordinate reasons in the order the match popup checked them before D5: not a whole number, below 1, past
     the record's end (a record without bases is no source, as the match registry held none)."""
 
-    from gbdraw.web_support.catalog_sequences import _span_reason
-
-    assert _span_reason("ACGT", None, 2) == "COORDINATE_NOT_WHOLE"
-    assert _span_reason("", 0, None) == "COORDINATE_NOT_WHOLE"
-    assert _span_reason("ACGT", 0, 2) == "COORDINATE_BELOW_ONE"
-    assert _span_reason("", 0, 2) == "COORDINATE_BELOW_ONE"
-    assert _span_reason("ACGT", 2, 5) == "OUT_OF_RANGE"
-    assert _span_reason("ACGT", 4, 1) is None
+    assert span_reason("ACGT", None, 2) == "COORDINATE_NOT_WHOLE"
+    assert span_reason("", 0, None) == "COORDINATE_NOT_WHOLE"
+    assert span_reason("ACGT", 0, 2) == "COORDINATE_BELOW_ONE"
+    assert span_reason("", 0, 2) == "COORDINATE_BELOW_ONE"
+    assert span_reason("ACGT", 2, 5) == "OUT_OF_RANGE"
+    assert span_reason("ACGT", 4, 1) is None
 
 
 def test_a_coordinate_that_is_not_whole_is_judged_after_the_record(tmp_path: Path) -> None:
@@ -479,8 +525,6 @@ def test_a_reference_span_that_names_its_unit_reads_that_unit_only(tmp_path: Pat
 
 
 def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
-    from gbdraw.web_support.catalog_sequences import _match_source, _registered
-
     records = CatalogSequenceRecords(
         mode="circular",
         records=(
@@ -492,10 +536,10 @@ def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
         ),
         unit_keys=("key-0", "key-1", "key-2", "key-3", "key-4"),
     )
-    sources = _registered(match_sequence_sources(records))
+    sources = registered_match_sources(match_sequence_sources(records))
 
     def found(record_id: str) -> tuple[object, object]:
-        source, reason = _match_source(records, sources, {
+        source, reason = match_span_source(records, sources, {
             "kind": "reference", "recordId": record_id, "recordKey": None, "start": 1, "end": 2,
         })
         return (None if source is None else source["sequence"]), reason
@@ -515,8 +559,6 @@ def test_a_comparison_span_found_by_id_then_alias_with_its_own_reason() -> None:
     none) says its FASTA was not supplied; a source whose FASTA lacks the record gives the record's own reason, as a
     drawn record does: unknown, ambiguous ID or alias (OV-2755)."""
 
-    from gbdraw.web_support.catalog_sequences import _match_source, _registered
-
     def record(record_id: str, name: str, sequence: str) -> SeqRecord:
         return SeqRecord(Seq(sequence), id=record_id, name=name)
 
@@ -534,10 +576,10 @@ def test_a_comparison_span_found_by_id_then_alias_with_its_own_reason() -> None:
             (),
         ),
     )
-    sources = _registered(match_sequence_sources(records))
+    sources = registered_match_sources(match_sequence_sources(records))
 
     def found(record_id: str, source_index: int | None = 0) -> object:
-        source, reason = _match_source(records, sources, {
+        source, reason = match_span_source(records, sources, {
             "kind": "comparison", "sourceIndex": source_index, "recordId": record_id, "start": 1, "end": 2,
         })
         return reason if source is None else source["sequence"]
@@ -555,7 +597,7 @@ def test_a_comparison_span_found_by_id_then_alias_with_its_own_reason() -> None:
         mode="circular", records=records.records, unit_keys=records.unit_keys, comparison_records=((), ()),
     )
     for source_index in (None, 0, 1):
-        assert _match_source(without_fasta, _registered(match_sequence_sources(without_fasta)), {
+        assert match_span_source(without_fasta, registered_match_sources(match_sequence_sources(without_fasta)), {
             "kind": "comparison", "sourceIndex": source_index, "recordId": "c1", "start": 1, "end": 2,
         }) == (None, "NEVER_SUPPLIED"), source_index
 

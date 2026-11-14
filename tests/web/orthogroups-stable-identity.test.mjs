@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-orthogroup-stable-identity-'));
@@ -494,7 +495,9 @@ assert.equal(endpointlessCatalogHomology._gbdraw_query_endpoint_resolved, false)
 assert.equal(endpointlessCatalogHomology.query_record_id, 'reference');
 assert.equal(endpointlessCatalogHomology.subject_record_id, 'comparison');
 assert.equal(endpointlessCatalogHomology.query_feature_svg_id, undefined);
-const catalogEndpointRuntime = new Function('featuresById', 'sequenceSources', `
+const spanReads = {};
+const catalogEndpointRuntime = new Function('featuresById', 'sequenceSources', 'matchSpanReads', 'MATCH_SPAN_REASON_TEXTS',
+  'numberText', `
   ${[
     'catalogFeatureKey',
     'catalogCanonicalFeatureIdentity',
@@ -505,17 +508,24 @@ const catalogEndpointRuntime = new Function('featuresById', 'sequenceSources', `
     'biologicalFeatureStableSvgId',
     'resolvedCatalogMatchFeature',
     'catalogMatchEndpointResolved',
-    'matchSourceAliases',
-    'resolveEmbeddedMatchSource'
+    'embeddedMatchSpanRead'
   ].map(embeddedFunctionSource).join('\n')}
-  return { resolvedCatalogMatchFeature, resolveEmbeddedMatchSource };
+  return { resolvedCatalogMatchFeature, embeddedMatchSpanRead };
 `)(
   new Map([
     ['rendered-a', expandedCatalogItem.features[0]],
     ['rendered-b', expandedDuplicateLocationCatalog.features[1]]
   ]),
-  [{ origin: 'linear-record', recordIndex: 0, recordId: 'record-a', sequence: 'ACGT' }]
+  [{ origin: 'linear-record', recordIndex: 0, recordId: 'record-a', sequence: 'ACGT' }],
+  spanReads,
+  MATCH_SPAN_REASON_TEXTS,
+  String
 );
+// Every span reads the record source here, so only the endpoint check of the file's own catalog can refuse one.
+const spanRead = (match, role) => {
+  spanReads[String(match.id)] = { query: { source: 0 }, subject: { source: 0 } };
+  return catalogEndpointRuntime.embeddedMatchSpanRead(match, role);
+};
 assert.equal(
   catalogEndpointRuntime.resolvedCatalogMatchFeature(
     expandedCatalogItem.matches[0],
@@ -524,10 +534,7 @@ assert.equal(
   expandedCatalogItem.features[0]
 );
 assert.equal(
-  catalogEndpointRuntime.resolveEmbeddedMatchSource(
-    expandedCatalogItem.matches[0],
-    'query'
-  ).source.sequence,
+  spanRead(expandedCatalogItem.matches[0], 'query').source.sequence,
   'ACGT'
 );
 // A collinear block names several anchor features; its span is the envelope
@@ -544,18 +551,15 @@ const collinearBlock = collinearBlockCatalog(
   duplicateLocationCatalog.comparisonMatches[0].queryFeatureReferences
 );
 assert.equal(collinearBlock._gbdraw_query_endpoint_resolved, true);
-assert.equal(
-  catalogEndpointRuntime.resolveEmbeddedMatchSource(collinearBlock, 'query').source.sequence,
-  'ACGT'
-);
+assert.equal(spanRead(collinearBlock, 'query').source.sequence, 'ACGT');
 const collinearBlockMissingMember = collinearBlockCatalog([
   duplicateLocationCatalog.comparisonMatches[0].queryFeatureReferences[0],
   { recordKey: 'record-a', biologicalFeatureId: 'missing-feature' }
 ]);
 assert.equal(collinearBlockMissingMember._gbdraw_query_endpoint_resolved, false);
-assert.equal(
-  catalogEndpointRuntime.resolveEmbeddedMatchSource(collinearBlockMissingMember, 'query').source,
-  null
+assert.deepEqual(
+  spanRead(collinearBlockMissingMember, 'query'),
+  { source: null, reason: 'Match feature endpoint identity is invalid.' }
 );
 assert.equal(
   catalogEndpointRuntime.resolvedCatalogMatchFeature(
@@ -564,13 +568,7 @@ assert.equal(
   ),
   null
 );
-assert.equal(
-  catalogEndpointRuntime.resolveEmbeddedMatchSource(
-    conflictingCatalogEndpoint,
-    'query'
-  ).source,
-  null
-);
+assert.equal(spanRead(conflictingCatalogEndpoint, 'query').source, null);
 
 assert.equal(isInternalProteinDisplayId(`h_${'c'.repeat(26)}`), true);
 assert.equal(isInternalProteinDisplayId(`f_${'d'.repeat(64)}`), true);
@@ -1527,113 +1525,6 @@ assert.equal(
   ''
 );
 
-const embeddedIdentityHelpers = [
-  embeddedFunctionSource('consistentTextIdentity'),
-  embeddedFunctionSource('nonnegativeIntegerIdentity'),
-  embeddedFunctionSource('matchSourceAliases'),
-  embeddedFunctionSource('resolveEmbeddedMatchSource')
-].join('\n');
-const createEmbeddedMatchSourceResolver = (sequenceSources) => new Function(
-  'sequenceSources',
-  `${embeddedIdentityHelpers}; return resolveEmbeddedMatchSource;`
-)(sequenceSources);
-const embeddedLinearSource = {
-  origin: 'linear-record',
-  recordIndex: 0,
-  recordId: 'record-a',
-  aliases: ['alias-a'],
-  sequence: 'ACGT'
-};
-let embeddedMatchSourceResolver = createEmbeddedMatchSourceResolver([embeddedLinearSource]);
-assert.equal(
-  embeddedMatchSourceResolver({
-    match_kind: 'pairwise',
-    query_record_index: 0,
-    query_record_id: 'alias-a'
-  }, 'query').source,
-  embeddedLinearSource
-);
-assert.equal(
-  embeddedMatchSourceResolver({
-    match_kind: 'pairwise',
-    query_record_index: 0,
-    query_record_id: 'record-b'
-  }, 'query').source,
-  null
-);
-assert.equal(
-  embeddedMatchSourceResolver({
-    match_kind: 'pairwise',
-    query_record_index: 0,
-    query_record_id: 'record-a',
-    queryRecordId: 'record-b'
-  }, 'query').source,
-  null
-);
-assert.equal(
-  embeddedMatchSourceResolver({
-    match_kind: 'pairwise',
-    query_record_index: '0.5',
-    query_record_id: 'record-a'
-  }, 'query').source,
-  null
-);
-embeddedMatchSourceResolver = createEmbeddedMatchSourceResolver([
-  embeddedLinearSource,
-  { ...embeddedLinearSource, recordId: 'record-b', aliases: [] }
-]);
-assert.equal(
-  embeddedMatchSourceResolver({
-    match_kind: 'pairwise',
-    query_record_index: 0
-  }, 'query').source,
-  null
-);
-embeddedMatchSourceResolver = createEmbeddedMatchSourceResolver([
-  embeddedLinearSource,
-  { ...embeddedLinearSource, recordId: 'record-b', aliases: ['record-a'] }
-]);
-assert.equal(
-  embeddedMatchSourceResolver({
-    match_kind: 'pairwise',
-    query_record_index: 0,
-    query_record_id: 'record-a'
-  }, 'query').source,
-  null
-);
-const embeddedHomologyReference = {
-  origin: 'circular-reference',
-  recordIndex: 0,
-  recordId: 'reference',
-  sequence: 'AACCGGTT'
-};
-const embeddedHomologyComparison = {
-  origin: 'homology-comparison',
-  sourceIndex: 0,
-  recordId: 'comparison',
-  sequence: 'TTGCAACC'
-};
-embeddedMatchSourceResolver = createEmbeddedMatchSourceResolver([
-  embeddedHomologyReference,
-  embeddedHomologyComparison
-]);
-const endpointlessHomologyMatch = {
-  match_kind: 'homology',
-  _gbdraw_catalog_endpoint_contract: true,
-  reference_side: 'query',
-  query_record_id: 'reference',
-  subject_record_id: 'comparison',
-  source_index: 0
-};
-assert.equal(
-  embeddedMatchSourceResolver(endpointlessHomologyMatch, 'query').source,
-  embeddedHomologyReference
-);
-assert.equal(
-  embeddedMatchSourceResolver(endpointlessHomologyMatch, 'subject').source,
-  embeddedHomologyComparison
-);
-
 const scopedFeature = {};
 const otherScopedFeature = {};
 const embeddedGroupMemberResolver = new Function(
@@ -1661,7 +1552,6 @@ assert.match(
   /!hasSourceIdentity && !recordKey\.value/
 );
 assert.match(standaloneAssetSource, /resultIndexIdentity/);
-assert.match(standaloneAssetSource, /Match sequence source identity is invalid/);
 assert.doesNotMatch(standaloneAssetSource, /recordIndexText \? Number\(recordIndexText\)/);
 assert.doesNotMatch(
   standaloneAssetSource,

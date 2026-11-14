@@ -2869,7 +2869,7 @@ export const createAppSetup = () => {
   });
   // Reset record positions writes x 0 for every record through the channel Align at feature's Apply writes through.
   const recordPositionReset = createRecordPositionReset({
-    materializedSession: similarityAlignmentActions.materializedSession,
+    materializedSession: similarityAlignmentActions.repairBaseSession,
     hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
     notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
     runPlacement: runRecordPlacement,

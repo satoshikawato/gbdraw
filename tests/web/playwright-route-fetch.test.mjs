@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 
-const { fetchRoute } = createRequire(import.meta.url)('./helpers/app-lifecycle.cjs');
+const { fetchRoute, routeCrossOriginIsolated } = createRequire(import.meta.url)('./helpers/app-lifecycle.cjs');
 
 const fakeRoute = (...outcomes) => {
   const calls = [];
@@ -46,6 +46,25 @@ test('fetchRoute rethrows a second connection error and any other error unchange
   const once = fakeRoute(other, 'unused');
   await assert.rejects(fetchRoute(once), (error) => error === other);
   assert.equal(once.calls.length, 1);
+});
+
+// Run 43572887428 (2026-11-14): a font request still in flight when its test
+// ended failed the shard outside any test with "route.fetch: Test ended".
+test('the cross-origin isolated route drops a request that outlives its test and rethrows other errors', async () => {
+  let serve;
+  await routeCrossOriginIsolated({ route: async (_pattern, handler) => { serve = handler; } });
+  const routeFailingWith = (message) => ({
+    ...fakeRoute(new Error(message)),
+    request: () => ({ url: () => 'http://127.0.0.1:4173/gbdraw/web/vendor/fonts/font.woff2' }),
+    fulfill: async () => assert.fail('fulfilled a failed fetch')
+  });
+  for (const message of [
+    'route.fetch: Test ended.',
+    'route.fetch: Target page, context or browser has been closed'
+  ]) {
+    assert.equal(await serve(routeFailingWith(message)), undefined, message);
+  }
+  await assert.rejects(serve(routeFailingWith('route.fetch: net::ERR_FAILED')), /ERR_FAILED/);
 });
 
 test('browser tests call route.fetch only through fetchRoute', () => {

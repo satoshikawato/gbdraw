@@ -100,7 +100,7 @@ const FUNCTION_STATEMENTS = {
   'app/linear-comparison-edits.js::createLinearComparisonPairEdits': 102,
   'app/linear-record-selector.js::createLinearRecordSelector': 154,
   'app/linear-track-slots.js::createLinearTrackSlotEditor': 649,
-  'app/orthogroups.js::createOrthogroupEditor': 275,
+  'app/orthogroups.js::createOrthogroupEditor': 259,
   'app/preview-runtime.js::createPreviewRuntime': 381,
   'app/record-display-options.js::createRecordDisplayControls': 307,
   'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 165,

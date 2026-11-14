@@ -1266,3 +1266,13 @@ test('Retry of a failed Label TSV import reads the copy of a file that changed o
     useInputCopyStore(null);
   }
 });
+
+test('the Web finds the labels Python bound to features only by the drawn-groups selector', async () => {
+  const { readdirSync } = await import('node:fs');
+  const root = new URL('../../gbdraw/web/js/', import.meta.url);
+  const spellings = /text\[(?:\$\{LABEL_FEATURE_ID_ATTRIBUTE\}|data-label-feature-id)\]/;
+  const copies = readdirSync(root, { recursive: true })
+    .filter((path) => path.endsWith('.js') && path !== 'services/drawn-groups.js')
+    .filter((path) => spellings.test(readFileSync(new URL(path, root), 'utf8')));
+  assert.deepEqual(copies, []);
+});

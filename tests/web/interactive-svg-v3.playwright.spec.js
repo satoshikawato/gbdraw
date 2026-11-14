@@ -1144,7 +1144,9 @@ test('browser export embeds the exact selected current-schema item and expands r
     const enriched = enrichSvgWithStandaloneInteractivity(svg, {
       popupMode: 'rich',
       catalogItem: catalog.items[0],
-      embeddedSequences: { biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null },
+      embeddedSequences: {
+        biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null, matchSpanReads: null
+      },
       labelTextFeatureOverrides: {
         'rendered-visible': 'Edited visible label'
       },
@@ -1562,7 +1564,9 @@ test('standalone rejects conflicting compact provenance markers', async ({
       enrichSvgWithStandaloneInteractivity(svg, {
         popupMode: 'rich',
         catalogItem: catalog.items[0],
-        embeddedSequences: { biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null }
+        embeddedSequences: {
+          biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null, matchSpanReads: null
+        }
       });
       return {
         name,
@@ -1690,7 +1694,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       const captured = captureSvgExport(state, state.drawingOf(state.generatedDrawingId.value), { interactive: true });
       const rows = JSON.stringify(captured.interactivity.catalogItem.biologicalFeatures);
       await downloadInteractiveSVG({
-        ...captured, interactivity: { ...captured.interactivity, embeddedSequences: { biologicalFeatures: rows, sequenceSources: null } }
+        ...captured, interactivity: { ...captured.interactivity, embeddedSequences: { biologicalFeatures: rows, sequenceSources: null, matchSpanReads: null } }
       });
       const svgText = await downloadedBlob.text();
       const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');

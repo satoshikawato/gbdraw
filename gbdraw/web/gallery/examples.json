@@ -166,7 +166,7 @@
     "featureSources": [
       "NC_002695.2.gbk"
     ],
-    "fileSizeLabel": "25.4 MB",
+    "fileSizeLabel": "25.5 MB",
     "command": "gbdraw circular --gbk NC_002695.2.gbk -o ecoli_o157_sakai_rings -f interactive_svg -l left --separate_strands --losat losatn --conservation_sequence NZ_CP008957.1.fna NC_000913.3.fna NC_004431.1.fna --conservation_labels 'O157:H7 EDL933' 'K-12 MG1655' 'CFT073 (UPEC)' --conservation_colors '#81a5cc' '#e5a972' '#7cb075' --annotation_table ecoli_o157_sakai_islands.tsv --circular_track_axis_index 1 --circular_track_slot 'islands:annotations@set_id=islands,side=outside' --circular_track_slot 'features:features@lane_direction=inside' --circular_track_slot 'conservation_1:sequence_conservation@track_index=1,source_index=0' --circular_track_slot 'conservation_2:sequence_conservation@track_index=2,source_index=1' --circular_track_slot 'conservation_3:sequence_conservation@track_index=3,source_index=2' --circular_track_slot 'ticks:ticks@tick_label_layout=label_in_tick_out' --circular_track_slot 'gc_content:dinucleotide_content' --circular_track_slot 'gc_skew:dinucleotide_skew' --circular_track_slot 'islands_tint:annotations@set_id=islands_tint,side=overlay,anchor_slot=features,to_slot=conservation_3,layer=foreground,z=1'",
     "commandKind": "runnable",
     "commandNote": "Download the four genomes and ecoli_o157_sakai_islands.tsv from Files, then run this command in the same directory.",

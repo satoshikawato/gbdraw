@@ -215,7 +215,7 @@ const legacyAnchorProfile = (feature) => {
 
 // What a catalog of schema 5 or older stored of the sequences is Python's
 // `STORED_SEQUENCE_KEYS` (generated): a schema 6 row holds none of it, and a
-// schema 6 item no `sequenceSources`.
+// schema 6 item no `sequenceSources` and no `matchSpanReads` (what an export's match spans read).
 
 /**
  * The amino acid sequence a row stored, by the alias the writer used.
@@ -276,6 +276,7 @@ const checkStoredSequences = (item) => {
  */
 const dropStoredSequences = (item) => {
   delete item.sequenceSources;
+  delete item.matchSpanReads;
   requireArray(item.biologicalFeatures).forEach((feature) => {
     if (feature.translationFromAminoAcidSequence === true) {
       const qualifiers = isObject(feature.qualifiers) ? feature.qualifiers : {};
@@ -584,8 +585,10 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   });
   const recordUnits = catalogRecordUnits(item, recordKeys);
   itemRecordIndexes(recordUnits, recordKeys, context);
-  // Schema 6 stores no sequence (a promoted older catalog dropped them).
-  if (Object.prototype.hasOwnProperty.call(item, 'sequenceSources')) throw catalogError();
+  // Schema 6 stores no sequence (a promoted older catalog dropped them), nor what an export's match spans read.
+  if (Object.prototype.hasOwnProperty.call(item, 'sequenceSources') || Object.prototype.hasOwnProperty.call(item, 'matchSpanReads')) {
+    throw catalogError();
+  }
   const biologicalFeatures = requireArray(item.biologicalFeatures);
   const knownFeatures = new Set();
   /** @type {Map<string, (number | null)[]>} */
