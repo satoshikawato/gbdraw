@@ -117,6 +117,10 @@ assert.doesNotMatch(selectedPairs.summary, /does not run LOSAT/);
 // A PNG export never names the SVG embedding opt-out, which does not change PNG.
 const pngFont = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'helper', context: { reason: 'FONT_RASTER' } });
 assert.match(pngFont.summary, /Choose another font/);
+// A Linear row whose window marks need its whole width (OV-3456): the Web says why, not only the exception's class.
+const rowWidth = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'render', context: { reason: 'ROW_WIDTH' } });
+assert.match(rowWidth.summary, /need more width than the figure has\. Move some windows or records to another row in Record Layout/);
+assert.doesNotMatch(rowWidth.summary, /Python exception/);
 assert.doesNotMatch(pngFont.summary, /Embed font/);
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);

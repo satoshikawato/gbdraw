@@ -69,6 +69,10 @@ def _x_for_position(x: float, px_per_bp: float, position: float) -> float:
 # writes (``PATH_DECIMALS``), far above the float noise (about 1e-13 px) that two equal ribbon heights reached by
 # different sums of canvas ys carry. Rows that move without changing a ribbon then leave its key equal (OV-2089).
 COMPARISON_FRAME_DECIMALS = 9
+# The most of a Linear row's width its record gaps take: a row of many records (the contigs of a draft assembly)
+# shrinks its gaps to share this, so any number of records draws and they keep most of the row (OV-3456). The
+# committed figures use at most 0.12 of a row for gaps, so they keep the gap they ask for.
+ROW_GAPS_MAX_SHARE = 0.25
 
 
 def comparison_frame_px(value: float) -> float:
@@ -327,6 +331,28 @@ def place_record_vertically(
     )
 
 
+def _row_gaps(
+    grouped: Sequence[Sequence[LinearRecordMeasurement]], gap: float, width: float
+) -> tuple[list[float], list[list[float]]]:
+    """Each row's record gap and the gaps between its records, in drawing order.
+
+    A row's record gap is ``gap``, or less when the row's gaps would take more than ``ROW_GAPS_MAX_SHARE`` of
+    ``width``. Two records keep at least the room their facing insets ask for (the marks of a windowed row) apart.
+    """
+
+    record_gaps = [
+        min(gap, ROW_GAPS_MAX_SHARE * width / (len(row_items) - 1)) if len(row_items) > 1 else gap
+        for row_items in grouped
+    ]
+    return record_gaps, [
+        [
+            max(row_gap, row_items[index].right_inset + row_items[index + 1].left_inset)
+            for index in range(len(row_items) - 1)
+        ]
+        for row_items, row_gap in zip(grouped, record_gaps)
+    ]
+
+
 def solve_linear_horizontal_layout(
     measurements: Sequence[LinearRecordMeasurement],
     rows_by_record: Sequence[int],
@@ -383,24 +409,20 @@ def solve_linear_horizontal_layout(
         raise ValidationError(
             "normalize_length=True cannot be combined with multiple records in one Linear row."
         )
-    # Two records keep at least the room their facing insets ask for (the marks of a windowed row) apart.
-    row_gaps = [
-        [
-            max(gap, row_items[index].right_inset + row_items[index + 1].left_inset)
-            for index in range(len(row_items) - 1)
-        ]
-        for row_items in grouped
-    ]
+    record_gaps, row_gaps = _row_gaps(grouped, gap, width)
     row_px: list[float] = []
     row_bp: list[int] = []
-    for row_items, effective_gaps in zip(grouped, row_gaps):
+    for row_items, row_gap, effective_gaps in zip(grouped, record_gaps, row_gaps):
         # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
-        gap_width = gap * max(0, len(row_items) - 1) + compensated_sum(value - gap for value in effective_gaps)
+        gap_width = row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
         if width <= gap_width:
+            # Only the marks of a windowed row can take the whole width: the record gaps keep to their share.
             raise ValidationError(
                 "Linear row cannot fit a positive bp scale: "
-                f"record_count={len(row_items)}, record_gap_px={gap:g}, "
-                f"available_width={width:g}."
+                f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
+                f"gaps_with_window_marks_px={gap_width:g}, available_width={width:g}. "
+                "Move some windows or records to another row, or draw fewer windows in the row.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WIDTH"},
             )
         row_px.append(width - gap_width)
         row_bp.append(sum(item.sequence_length for item in row_items))
@@ -623,6 +645,7 @@ __all__ = [
     "RecordKey",
     "parse_record_row_position",
     "COMPARISON_FRAME_DECIMALS",
+    "ROW_GAPS_MAX_SHARE",
     "comparison_frame_px",
     "drawn_unit_rows",
     "grid_display_pairs",

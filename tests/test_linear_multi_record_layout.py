@@ -33,6 +33,7 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.linear_multi_record import (
+    ROW_GAPS_MAX_SHARE,
     LinearLayoutPlan,
     LinearRecordMeasurement,
     RecordKey,
@@ -54,6 +55,7 @@ from gbdraw.layout.linear import CollisionBand
 from gbdraw.render.groups.linear.definition import DefinitionGroup, LinearDefinitionStyle
 from gbdraw.layout.record_placement import parse_record_row_position
 from gbdraw.api.assembly_inputs import LinearAssemblyInputs
+from gbdraw.web_support.error_adapter import serialize_web_error
 
 
 def _records(*lengths: int) -> list[SeqRecord]:
@@ -329,18 +331,62 @@ def test_drawn_unit_rows_read_grid_rows_else_one_row_per_record_shared_by_its_wi
         drawn_unit_rows((1, None), ("a", "b"))
 
 
-def test_layout_rejects_gap_that_consumes_available_width() -> None:
+def test_layout_refuses_a_row_whose_window_marks_take_its_width() -> None:
+    """The room a windowed row's marks need is not shrunk: a row whose marks take the whole width is refused, and
+    the Web says why (OV-3456)."""
+
     measurements = (
-        LinearRecordMeasurement(0, RecordKey("a"), 10),
-        LinearRecordMeasurement(1, RecordKey("b"), 10),
+        LinearRecordMeasurement(0, RecordKey("a"), 10, right_inset=20.0),
+        LinearRecordMeasurement(1, RecordKey("b"), 10, left_inset=20.0),
     )
-    with pytest.raises(ValidationError, match="record_count=2"):
+    with pytest.raises(ValidationError, match="record_count=2") as refused:
         solve_linear_horizontal_layout(
             measurements,
             (0, 0),
-            available_width=24,
+            available_width=40,
             record_gap_px=24,
         )
+    payload = serialize_web_error(refused.value, operation="generate", stage="render")
+    assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": "ROW_WIDTH"})
+
+
+@pytest.mark.parametrize("count", (2, 74, 97, 400))
+def test_the_gaps_of_a_row_take_at_most_their_share_of_its_width(count: int) -> None:
+    """OV-3456: 97 records in one 2000 px row drew nothing, because 96 gaps of 24 px took the whole width, and
+    74 records drew at a tiny scale. A row's gaps take at most ``ROW_GAPS_MAX_SHARE`` of its width, so any number
+    of records draws and they keep most of the row; a row whose gaps fit keeps the record gap."""
+
+    width = 2000.0
+    measurements = [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), 1000 + index) for index in range(count)]
+    horizontal = solve_linear_horizontal_layout(
+        measurements, (0,) * count, available_width=width, record_gap_px=24, align_center=False
+    )
+    places = [horizontal.placement_for_index(index) for index in range(count)]
+    gaps = [right.x - (left.x + left.sequence_width) for left, right in zip(places, places[1:])]
+    gap = min(24.0, ROW_GAPS_MAX_SHARE * width / (count - 1))
+    assert gaps == pytest.approx([gap] * (count - 1))
+    assert sum(place.sequence_width for place in places) == pytest.approx(width - gap * (count - 1))
+    assert sum(gaps) <= ROW_GAPS_MAX_SHARE * width + 1e-9
+
+
+def test_a_row_of_many_records_draws_and_its_gaps_follow_the_shared_rule() -> None:
+    """The 97-record row of OV-3456 draws through the assembler, every record at one scale."""
+
+    count = 97
+    records = _records(*(1000 for _index in range(count)))
+    svg = assemble_linear_diagram_from_records(
+        records,
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None, {"labels.linear.scope": "none", "canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            legend="none",
+        ),
+        layout=LinearMultiRecordOptions(
+            record_gap_px=24, multi_record_positions=tuple(f"#{index}@1" for index in range(1, count + 1))
+        ),
+    ).tostring()
+    assert svg.count("data-record-row=") == count
 
 
 @pytest.mark.parametrize("available_width", (1000.0, 997.3))
