@@ -358,20 +358,25 @@ const failRendererAfterMigration = async (page) => evaluateWithRetainedPromise(p
   return contract.failRendererAfterMigration();
 });
 
-const assertExpectedTelemetry = (run, migrationExpected = expected) => {
+// Load's upgrade (Python, shared with the command line) promotes the stored searches and retires the copies of the
+// searches they answer (OV-3561), so Load leaves no legacy candidate: a Generate draws from the Session's resolved
+// comparisons, as after the Load of a current Session, and runs no LOSAT pass, so it reports no LOSAT telemetry.
+const assertResolvedComparisonsReused = (run) => {
   const diagnostics = `Generation diagnostics:\n${JSON.stringify(run, null, 2)}`;
   expect(run.result, diagnostics).toEqual({ status: 'ok' });
   expect(run.errorSummary, diagnostics).toBe('');
   expect(run.errorDetails, diagnostics).toEqual([]);
-  expect(run.telemetry, diagnostics).toMatchObject({
-    totalPairs: migrationExpected.totalPairs,
-    cacheHits: migrationExpected.cacheHits,
-    cacheMisses: migrationExpected.cacheMisses,
-    uniqueJobs: migrationExpected.uniqueJobs,
-    workerCalls: migrationExpected.workerCalls
-  });
-  expect(run.executorCalls, diagnostics).toBe(migrationExpected.workerCalls);
+  expect(run.telemetry, diagnostics).toBeNull();
+  expect(run.executorCalls, diagnostics).toBe(expected.workerCalls);
 };
+
+const loadedLosatArtifacts = async (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return {
+    legacyCandidates: state.legacyProteinRawCandidates.value?.entries?.length ?? null,
+    cacheEntries: state.losatCache.value.size
+  };
+});
 
 const inspectLayout = async (page) => {
   return page.evaluate(async () => {
@@ -685,6 +690,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, fixturePath);
+  expect(await loadedLosatArtifacts(page)).toEqual({ legacyCandidates: 0, cacheEntries: expected.totalPairs });
 
   const renamed = await page.evaluate(async () => {
     // A row's file field holds an InputFileRef of the project's file store;
@@ -749,7 +755,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   expect(await migrationUiSnapshot(page)).toEqual(legacyUiBeforeRenderError);
   const migratedRun = await generateWithTelemetry(page);
   await settleAppRender(page);
-  assertExpectedTelemetry(migratedRun);
+  assertResolvedComparisonsReused(migratedRun);
   const firstLayout = await inspectLayout(page);
   assertLayout(firstLayout);
   await assertSvgGeometryParity(page, await downloadSvg(page));
@@ -766,12 +772,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await importSession(page, migratedPath);
   const regeneratedRun = await generateWithTelemetry(page);
   await settleAppRender(page);
-  assertExpectedTelemetry(regeneratedRun);
-  expect(regeneratedRun.telemetry?.proteinDerivedPayloadCacheMisses).toBeGreaterThan(0);
-  expect(await page.evaluate(async () => {
-    const { state } = await import('/gbdraw/web/js/state.js');
-    return state.losatDerivedCache.value.size;
-  })).toBeGreaterThan(0);
+  assertResolvedComparisonsReused(regeneratedRun);
   const secondLayout = await inspectLayout(page);
   assertLayout(secondLayout);
   expect(secondLayout.geometrySignature).toBe(firstLayout.geometrySignature);
