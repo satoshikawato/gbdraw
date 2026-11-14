@@ -1,5 +1,5 @@
 // @ts-check
-import { featureIdentity } from './feature-identity.js';
+import { featureIdentity, withLegacyCanonicalIdentity } from './feature-identity.js';
 import { LEGACY_FEATURE_CATALOG_SCHEMA, SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 
 // The released Sessions this module reads were not validated: every field is
@@ -271,19 +271,16 @@ export const migrateLegacyOrthogroupMembers = (groups, records) => {
       Array.isArray(group?.members) ? group.members : []
     )).map((member) => {
       const identity = featureIdentity(member);
-      // `recordIndex.supplied` is checked below, and a supplied valid index has a number value.
-      if (!identity.valid || identity.recordKey.supplied || identity.biologicalId.supplied ||
-          !identity.recordIndex.supplied || !identity.sourceIndex.supplied ||
-          !identity.stableId.supplied || typeof recordKeys[/** @type {number} */ (identity.recordIndex.value)] !== 'string' ||
-          !recordKeys[/** @type {number} */ (identity.recordIndex.value)]) return member;
-      // Every operand above held, so `featureIdentity` read supplied fields of an object member.
+      const canonical = withLegacyCanonicalIdentity(identity, recordKeys);
+      if (canonical === identity || !identity.sourceIndex.supplied) return member;
+      // The identity took its canonical names, so `featureIdentity` read supplied fields of an object member.
       const { featureIndex: _legacyIndex, feature_index: _legacySnakeIndex,
         sourceFeatureIndex: _legacySourceIndex,
         source_feature_index: _legacySnakeSourceIndex, ...stableMember } = /** @type {Record<string, unknown>} */ (member);
       return {
         ...stableMember,
-        recordKey: recordKeys[/** @type {number} */ (identity.recordIndex.value)],
-        biologicalFeatureId: identity.stableId.value
+        recordKey: canonical.recordKey.value,
+        biologicalFeatureId: canonical.biologicalId.value
       };
     })
   }));

@@ -1081,6 +1081,15 @@ const repairBaseline = (baseline) => {
 };
 
 /**
+ * The materialized Session for an operation that replaces every record placement, such as Reset record positions: a
+ * Result an older gbdraw drew gives the committed placements, as a repair does (`repairBaseline`, OV-3538).
+ * @param {(options: { materializePlan: boolean, fromResult?: boolean }) => { canonical: unknown }} baseline
+ * @returns {() => CommittedCanonicalSession}
+ */
+const repairBaseSessionReader = (baseline) => () => /** @type {CommittedCanonicalSession} */ (
+  repairBaseline(baseline).canonical);
+
+/**
  * @param {{
  *   group: AliasSource | null | undefined, members: OrthogroupMemberFacts[],
  *   reference: AliasSource | null | undefined, request: CommittedAlignmentRequest, choices: AlignmentChoice[]
@@ -2161,6 +2170,7 @@ export const createSimilarityAlignmentActions = ({
      * @returns {CommittedCanonicalSession}
      */
     materializedSession: () => /** @type {CommittedCanonicalSession} */ (baseline({ materializePlan: true }).canonical),
+    repairBaseSession: repairBaseSessionReader(baseline),
     retainForStableReorder,
     beforeRecordDrag,
     afterRecordDrag,

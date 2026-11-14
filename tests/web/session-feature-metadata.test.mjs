@@ -111,6 +111,7 @@ const {
   migrateFeatureOverrideState,
   normalizeRecordIndex
 } = await import(pathToFileURL(join(tempDir, 'services', 'session-feature-recovery.js')));
+const { featureIdentity } = await import(pathToFileURL(join(tempDir, 'services', 'feature-identity.js')));
 const { collectRenderedFeatureIdentitiesFromSvgRoot } = await import(
   pathToFileURL(join(tempDir, 'services', 'session-feature-metadata.js'))
 );
@@ -873,9 +874,14 @@ for (const invalidRecordIndex of [
   const features = plan.recoveredFeatureState.extractedFeatures;
   assert.deepEqual(features.map((feature) => feature.rendered_svg_id), ['a_record_1', 'a2_record_2', 'b_record_3']);
   assert.deepEqual(features.map((feature) => feature.rendered_feature_svg_id), ['a_record_1', 'a2_record_2', 'b_record_3']);
-  // The features keep the extraction's reading of their records, which the
-  // rendered-ID edit migration reads (services/feature-edit-migration.js).
-  assert.deepEqual(features.map((feature) => [feature.fileIdx, feature.record_idx]), [[0, 0], [0, 1], [1, 0]]);
+  // Load installs them naming their drawn record under every record index
+  // key, as the catalog's features do, so each has one valid identity
+  // (OV-3539: input 1's feature read input 1 and record 0 as a conflict).
+  for (const recovered of [features, plan.recoveredFeatureState.biologicalFeatures]) {
+    assert.deepEqual(recovered.map((feature) => [feature.fileIdx, feature.record_idx]), [[0, 0], [1, 1], [2, 2]]);
+    assert.deepEqual(recovered.map((feature) => featureIdentity(feature).recordIndex), [0, 1, 2]
+      .map((value) => ({ valid: true, supplied: true, value })));
+  }
 }
 
 {

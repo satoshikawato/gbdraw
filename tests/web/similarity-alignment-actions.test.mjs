@@ -832,6 +832,22 @@ test('the stale-target repair starts from the committed placements when the show
   assert.equal(fixture.state.similarityAlignmentPlan.value.records[1].anchor.biologicalFeatureId, 'target-b');
 });
 
+// OV-3538: Reset record positions replaces every placement, so a Result an older gbdraw drew, which names no record by
+// key, gives it the committed Session through the stale-target repair's rule instead of refusing it.
+test('the repair base Session reads the committed placements when the shown Result cannot be read', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const committedTranslations = structuredClone(fixture.state.linearRecordTranslations.value);
+  fixture.showResultSvg(new Proxy({}, { get: () => {
+    throw new CompositionMetadataError('Composition metadata cannot bind alignment record "b".');
+  } }));
+  assert.throws(() => fixture.actions.materializedSession(), CompositionMetadataError);
+  const { renderRequest } = fixture.actions.repairBaseSession();
+  assert.deepEqual(renderRequest.layout.recordTranslations, committedTranslations);
+  assert.equal(renderRequest.layout.similarityAlignment, null);
+});
+
 test('drawer requires a unique exact reference before starting the Worker', async () => {
   const fixture = create();
   assert.match(fixture.actions.drawerDisabledReason('og-1'), /Select an exact reference/);

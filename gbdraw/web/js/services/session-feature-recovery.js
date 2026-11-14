@@ -249,6 +249,33 @@ const extractedFeatureReader = ({ recordInputs, drawnFeatures }) => {
 };
 
 /**
+ * The features read again as Load installs them: each names its drawn record
+ * under every record index key it carries, as the catalog's features and a
+ * Circular extraction's do, so that every identity reader reads one record
+ * index (OV-3539: a Linear feature of input 4 read input 4 and record 0 as a
+ * conflict). The edit migration matched them before by the extraction's own
+ * reading, an input and its record, which older Sessions saved.
+ * @template {RecoveryFeatureState} S
+ * @param {S} featureState
+ * @param {AlignmentReader} readFeature
+ * @returns {S}
+ */
+const withDrawnRecordIndexes = (featureState, readFeature) => {
+  /** @param {ExtractedFeature} feature @returns {ExtractedFeature} */
+  const drawn = (feature) => {
+    const { value } = readFeature(feature).recordIndex;
+    if (value === null) return feature;
+    const keys = RECORD_INDEX_KEYS.filter((key) => nonnegativeIntegerAliasStatus(feature, [key]).supplied
+      && feature[key] !== value);
+    return keys.length ? { ...feature, ...Object.fromEntries(keys.map((key) => [key, value])) } : feature;
+  };
+  /** @param {ExtractedFeature[] | undefined} features */
+  const each = (features) => (Array.isArray(features) ? features.map(drawn) : features);
+  return { ...featureState, extractedFeatures: each(featureState.extractedFeatures),
+    biologicalFeatures: each(featureState.biologicalFeatures) };
+};
+
+/**
  * Whether a feature can be the drawn element `identity`. An ID of the feature
  * that names no drawn element (an extraction's prediction, an older render)
  * says nothing about which element it is.
@@ -1223,14 +1250,15 @@ export const buildSessionFeatureRecoveryPlan = async ({
     });
 
     const recoveredFeatureState = buildRecoveredFeatureState(snapshot, payload);
+    const readFeature = extractedFeatureReader({
+      recordInputs: payload.featureRecordInputs,
+      drawnFeatures: recoveredFeatureState.extractedFeatures
+    });
     const recoveredAlignment = alignFeatureStateToRenderedSvg({
       snapshot,
       featureState: recoveredFeatureState,
       selectedResultIndex: validation.selectedResultIndex,
-      readFeature: extractedFeatureReader({
-        recordInputs: payload.featureRecordInputs,
-        drawnFeatures: recoveredFeatureState.extractedFeatures
-      })
+      readFeature
     });
     const alignedRecoveredFeatureState = recoveredAlignment.alignedFeatureState;
     const recoveredValidation = recoveredAlignment.alignedValidation;
@@ -1265,7 +1293,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
         reason: 'stale-metadata-recovered',
         validation,
         recoveredValidation,
-        recoveredFeatureState: migrated.featureState,
+        recoveredFeatureState: withDrawnRecordIndexes(migrated.featureState, readFeature),
         migratedEditorState: migrated.editorState,
         warning: migrated.warnings[0] || null,
         errors: payload.errors || []
@@ -1278,7 +1306,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
       validation,
       recoveredValidation,
       alignment: recoveredAlignment.alignment,
-      recoveredFeatureState: alignedRecoveredFeatureState,
+      recoveredFeatureState: withDrawnRecordIndexes(alignedRecoveredFeatureState, readFeature),
       migratedEditorState: null,
       warning: null,
       errors: payload.errors || []
