@@ -993,6 +993,8 @@ const exercisePairLoop = async ({failure = null, promote = false} = {}) => {
   const entries = [proteinEntry, reverseEntry, {...proteinEntry, text: ''}].map((entry) => ({...entry}));
   const cacheMap = new Map(promote ? [] : entries.map((entry, index) => [String(index), entry]));
   let reads = 0;
+  /** @type {boolean[]} */
+  const promotionCalls = [];
   const cancellation = new Error('canceled inside pair preparation');
   const context = {
     useProteinBlastp: true,
@@ -1017,8 +1019,11 @@ const exercisePairLoop = async ({failure = null, promote = false} = {}) => {
     getReusableLosatCacheEntry(map, key, metadata, identity) {
       return counted.getCurrentRawLosatCacheEntry(map, key, metadata, identity);
     },
-    async tryPromoteLegacyProteinEntry({cacheKey, metadata}) {
+    async tryPromoteLegacyProteinEntry({cacheKey, metadata, answered}) {
+      promotionCalls.push(answered);
       await Promise.resolve();
+      // A search with a current entry promotes nothing; its legacy copies retire (OV-3561).
+      if (answered) return null;
       cacheMap.set(cacheKey, entries[Number(cacheKey)]);
       return counted.getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, workingManifest);
     },
@@ -1041,6 +1046,8 @@ const exercisePairLoop = async ({failure = null, promote = false} = {}) => {
   assert.equal(counted.counts.tsv, failure ? 1 : 3, 'one TSV validation for every hit, including promotion');
   if (failure) return;
   assert.equal(context.losatTiming.cacheHits, 3);
+  // OV-3561: every protein search asks about the legacy candidates, a cached one as answered, and keeps its entry.
+  assert.deepEqual(promotionCalls.splice(0), Array(3).fill(!promote));
   // OV-1553, OV-1554: the next Generate, past the identical-Generate skip, with the same extractions and cache.
   const nextGenerate = (workingProteinIdentityManifest) => Object.assign(context, {
     workingProteinIdentityManifest,

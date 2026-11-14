@@ -34,7 +34,6 @@ const CURRENT_PROTEIN_RAW_SCHEMA = generatedConstant('PROTEIN_LOSAT_CACHE_SCHEMA
 const CURRENT_PROTEIN_DERIVED_SCHEMA = generatedConstant('LOSAT_DERIVED_CACHE_SCHEMA');
 const CURRENT_PROTEIN_IDENTITY_MANIFEST_SCHEMA = generatedConstant('PROTEIN_IDENTITY_MANIFEST_SCHEMA');
 
-let sourceSession;
 let savedSessionCount = 0;
 let savedSessionDir;
 
@@ -269,17 +268,11 @@ const assertCurrentProteinArtifacts = (session) => {
     entry?.program === 'blastp'
   ))).toBe(true);
   expect(derivedEntries).toEqual([]);
-  const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
-  expect(legacyCandidates)
-    .toHaveLength(expected.storedRawEntries - expected.totalPairs);
-  expect(legacyCandidates.every((candidate) => (
-    candidate.state === 'pending' &&
-    (sourceSession.losatCache?.entries || []).some(
-      (entry) => JSON.stringify(entry) === JSON.stringify(candidate.originalEntry)
-    )
-  ))).toBe(true);
-  expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || [])
-    .toEqual(sourceSession.losatDerivedCache?.entries || []);
+  // OV-3561: the stored entries the searches did not promote are second copies of searches they answer
+  // (storedRawEntries - totalPairs of them); they retire with the promotions, and the legacy evidence goes.
+  expect(expected.storedRawEntries).toBeGreaterThan(expected.totalPairs);
+  expect(session.legacyArtifacts?.proteinRawCandidates?.entries || []).toEqual([]);
+  expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || []).toEqual([]);
 
   const runtimeOwners = new Map();
   for (const [instanceKey, instance] of Object.entries(manifest.recordInstances || {})) {
@@ -365,20 +358,25 @@ const failRendererAfterMigration = async (page) => evaluateWithRetainedPromise(p
   return contract.failRendererAfterMigration();
 });
 
-const assertExpectedTelemetry = (run, migrationExpected = expected) => {
+// Load's upgrade (Python, shared with the command line) promotes the stored searches and retires the copies of the
+// searches they answer (OV-3561), so Load leaves no legacy candidate: a Generate draws from the Session's resolved
+// comparisons, as after the Load of a current Session, and runs no LOSAT pass, so it reports no LOSAT telemetry.
+const assertResolvedComparisonsReused = (run) => {
   const diagnostics = `Generation diagnostics:\n${JSON.stringify(run, null, 2)}`;
   expect(run.result, diagnostics).toEqual({ status: 'ok' });
   expect(run.errorSummary, diagnostics).toBe('');
   expect(run.errorDetails, diagnostics).toEqual([]);
-  expect(run.telemetry, diagnostics).toMatchObject({
-    totalPairs: migrationExpected.totalPairs,
-    cacheHits: migrationExpected.cacheHits,
-    cacheMisses: migrationExpected.cacheMisses,
-    uniqueJobs: migrationExpected.uniqueJobs,
-    workerCalls: migrationExpected.workerCalls
-  });
-  expect(run.executorCalls, diagnostics).toBe(migrationExpected.workerCalls);
+  expect(run.telemetry, diagnostics).toBeNull();
+  expect(run.executorCalls, diagnostics).toBe(expected.workerCalls);
 };
+
+const loadedLosatArtifacts = async (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return {
+    legacyCandidates: state.legacyProteinRawCandidates.value?.entries?.length ?? null,
+    cacheEntries: state.losatCache.value.size
+  };
+});
 
 const inspectLayout = async (page) => {
   return page.evaluate(async () => {
@@ -650,7 +648,6 @@ test.beforeAll(async () => {
   expect(existsSync(fixturePath)).toBe(true);
   const fixtureBytes = expandedSessionBytes(fixturePath);
   const fixture = JSON.parse(fixtureBytes.toString('utf8'));
-  sourceSession = fixture;
   expect(createHash('sha256').update(fixtureBytes).digest('hex')).toBe(expected.sourceSha256);
   expect(fixture.version).toBe(expected.sessionVersion);
   expect(fixture.renderRequest?.schema).toBe(expected.renderRequestSchema);
@@ -693,6 +690,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, fixturePath);
+  expect(await loadedLosatArtifacts(page)).toEqual({ legacyCandidates: 0, cacheEntries: expected.totalPairs });
 
   const renamed = await page.evaluate(async () => {
     // A row's file field holds an InputFileRef of the project's file store;
@@ -757,7 +755,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   expect(await migrationUiSnapshot(page)).toEqual(legacyUiBeforeRenderError);
   const migratedRun = await generateWithTelemetry(page);
   await settleAppRender(page);
-  assertExpectedTelemetry(migratedRun);
+  assertResolvedComparisonsReused(migratedRun);
   const firstLayout = await inspectLayout(page);
   assertLayout(firstLayout);
   await assertSvgGeometryParity(page, await downloadSvg(page));
@@ -774,12 +772,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await importSession(page, migratedPath);
   const regeneratedRun = await generateWithTelemetry(page);
   await settleAppRender(page);
-  assertExpectedTelemetry(regeneratedRun);
-  expect(regeneratedRun.telemetry?.proteinDerivedPayloadCacheMisses).toBeGreaterThan(0);
-  expect(await page.evaluate(async () => {
-    const { state } = await import('/gbdraw/web/js/state.js');
-    return state.losatDerivedCache.value.size;
-  })).toBeGreaterThan(0);
+  assertResolvedComparisonsReused(regeneratedRun);
   const secondLayout = await inspectLayout(page);
   assertLayout(secondLayout);
   expect(secondLayout.geometrySignature).toBe(firstLayout.geometrySignature);

@@ -23,6 +23,7 @@ from gbdraw.analysis.protein_colinearity import (
     make_legacy_protein_raw_candidate,
     promote_legacy_protein_raw_cache_entries,
     proteins_to_fasta,
+    search_frame_extraction,
     validate_legacy_protein_raw_candidate_envelope,
     validate_protein_raw_entry_references,
 )
@@ -351,9 +352,10 @@ def written_legacy_protein_artifacts(
     """The legacy protein raw candidates and derived evidence a written Session keeps.
 
     ``candidates`` are in their states after this write's attempts and
-    ``promoted`` are the indexes it promoted: a promoted candidate leaves the
-    envelope (its entry is a current raw entry now); every other candidate
-    stays, ``pending`` or ``rejected``. The evidence goes when this write
+    ``promoted`` are the indexes it promoted or retired: such a candidate
+    leaves the envelope (its entry, or another copy of its search, is a
+    current raw entry now, OV-3561); every other candidate stays, ``pending``
+    or ``rejected``. The evidence goes when this write
     promoted a candidate and left none pending, or when the written Session
     holds or built current derived entries (OV-1129); else it stays. The Web
     twin is ``writtenLegacyProteinArtifacts`` (``services/losat-cache.js``);
@@ -400,16 +402,25 @@ def _promote_legacy_candidates(
     candidates: Sequence[Mapping[str, Any]],
     extraction: ProteinExtractionResult,
     pairs: Sequence[tuple[int, int]],
+    *,
+    answered_keys: Collection[str] = frozenset(),
 ) -> tuple[
     tuple[Mapping[str, Any], ...],
     frozenset[int],
     Mapping[str, str],
 ]:
-    """Try each ``pending`` candidate on the searched record ``pairs``.
+    """Try each ``pending`` candidate on the searched record ``pairs`` of
+    ``extraction``, which lists each record's proteins in its search frame
+    (``search_frame_extraction``), as the Web's does.
 
     Returns the promoted current raw entries, the indexes of the candidates
-    they came from and the legacy-to-current protein ID map. An unmatched
-    candidate stays as it is; a ``rejected`` one is not tried again.
+    that leave the envelope and the legacy-to-current protein ID map. As in
+    the Web, only a search without a current entry (its key is not in
+    ``answered_keys``) is answered, by the first candidate that matches it. A
+    candidate that matches only searches answered already (the same record
+    pair written again, in another frame) is a duplicate and leaves with the
+    promoted ones (OV-3561). An unmatched candidate stays as it is; a
+    ``rejected`` one is not tried again.
     """
 
     manifest = extraction.identity_manifest
@@ -418,6 +429,8 @@ def _promote_legacy_candidates(
     fastas = tuple(proteins_to_fasta(items) for items in extraction.proteins_by_record)
     promoted_entries: list[Mapping[str, Any]] = []
     promoted_indexes: set[int] = set()
+    promoted_keys: set[str] = set(answered_keys)
+    duplicate_indexes: set[int] = set()
     id_map: dict[str, str] = {}
 
     for candidate_index, candidate in enumerate(candidates):
@@ -449,9 +462,12 @@ def _promote_legacy_candidates(
                     expected_args=expected_args,
                     expected_program=str(original.get("program") or "blastp"),
                     expected_outfmt=str(original.get("outfmt") or "6"),
+                    answered_keys=promoted_keys,
                 )
             except ValidationError:
                 continue
+            if scan.duplicates:
+                duplicate_indexes.add(candidate_index)
             if scan.promotion is not None:
                 promotion = scan.promotion
                 break
@@ -464,13 +480,14 @@ def _promote_legacy_candidates(
             )
         promoted_entries.append(promotion.entry)
         promoted_indexes.add(candidate_index)
+        promoted_keys.add(str(promotion.entry["key"]))
         _merge_promoted_tsv_id_map(
             id_map,
             legacy_text=str(original.get("text") or ""),
             current_text=promotion.rewritten_tsv,
         )
 
-    return tuple(promoted_entries), frozenset(promoted_indexes), id_map
+    return tuple(promoted_entries), frozenset(promoted_indexes | duplicate_indexes), id_map
 
 
 def _rewrite_protein_reference_string(
@@ -1646,15 +1663,26 @@ def _adapt_session_plan(
             )
             extracted_manifest = extraction.identity_manifest
             assert extracted_manifest is not None
+            reusable_current = tuple(
+                entry
+                for entry in current_protein
+                if validate_protein_raw_entry_references(
+                    entry,
+                    extracted_manifest,
+                )
+            )
+            # The legacy readers take each record in its search frame, as the Web extracts it (OV-3494).
+            legacy_extraction = search_frame_extraction(plan.records, extraction)
             promoted, promoted_indexes, promoted_id_map = _promote_legacy_candidates(
                 source.legacy_candidates,
-                extraction,
+                legacy_extraction,
                 attempt_pairs,
+                answered_keys=frozenset(str(entry.get("key") or "") for entry in reusable_current),
             )
             id_map.update(promoted_id_map)
             if reference_ids:
                 artifact_id_map = build_legacy_protein_reference_map(
-                    extraction,
+                    legacy_extraction,
                     sorted(reference_ids),
                 )
                 for old_id, runtime_handle in artifact_id_map.items():
@@ -1664,14 +1692,6 @@ def _adapt_session_plan(
                             f"Protein ID {old_id!r} resolves to multiple runtime handles."
                         )
                     id_map[old_id] = runtime_handle
-            reusable_current = tuple(
-                entry
-                for entry in current_protein
-                if validate_protein_raw_entry_references(
-                    entry,
-                    extracted_manifest,
-                )
-            )
             nucleotide = tuple(
                 entry
                 for entry in current_raw

@@ -42,7 +42,7 @@ import {
 import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatSearchSequences, nucleotideLosatArgs, prepareLosatSourceBatches, proteinLosatArgs, requireLosatGeneticCode,
-  searchedLosatGencode,
+  runSearchableLosatSourceJobs, searchedLosatGencode,
   splitLosatSourceResult
 } from '../services/linear-sources.js';
 import {
@@ -712,6 +712,34 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
 
 /** @param {unknown} key */
 const isHexDigest = (key) => typeof key === 'string' && /^[0-9a-f]{64}$/.test(key);
+
+/**
+ * A legacy candidate that the `promoteLegacyLosatpCache` helper could not promote for a search
+ * (`LegacyProteinRawCacheRejection`), by its index in the candidate envelope.
+ * @typedef {{ candidateIndex: number, reason: string }} LegacyLosatpPromotionRejection
+ */
+
+/**
+ * The search the `promoteLegacyLosatpCache` helper verifies legacy candidates for (its `expectedOptions`): program,
+ * output format and arguments, and the search's key when a current entry answers it (`answeredKeys`), so that no
+ * candidate is promoted to it.
+ * @typedef {object} LegacyLosatpPromotionOptions
+ * @property {string} program
+ * @property {string} [outfmt]
+ * @property {string[]} args
+ * @property {string[]} answeredKeys
+ */
+
+/**
+ * The reply of the `promoteLegacyLosatpCache` helper (`promote_legacy_losatp_cache_candidates` in
+ * app/python-helpers.js, its one producer). Every reply names the candidates that verify for the search without
+ * answering it (`duplicates`, which retire, OV-3561) and the candidates it rejected; a promotion also carries the
+ * promoted candidate, its current schema-4 entry and its rewritten TSV. The helper's error reply never reaches the
+ * page: the Worker turns it into a rejected request (`callJsonHelper`).
+ * @typedef {{ status: 'no-match', rejections: LegacyLosatpPromotionRejection[], duplicates: number[] }
+ *   | { status: 'promoted', candidateIndex: number, entry: RawLosatCacheEntry & { key: string }, text: string,
+ *     rejections: LegacyLosatpPromotionRejection[], duplicates: number[] }} LegacyLosatpPromotionReply
+ */
 
 /**
  * The keys of the `buildProteinLosatCacheKeys` reply: one raw key per pair, and the key of the derived payload
@@ -3068,6 +3096,10 @@ export const createRunAnalysis = ({
     let structuredLosatTelemetry = null;
     /** @type {{ cacheMap: Map<string, RawLosatCacheEntry>, cacheKey: string, candidateIndex: number }[]} */
     const legacyPromotionTransaction = [];
+    // Legacy candidates that verified for a search this Generate answers with another entry: they leave with its
+    // commit, unless a later search promotes them (OV-3561).
+    /** @type {number[]} */
+    const legacyRetiredCandidateIndexes = [];
     let legacyPromotionCommitted = false;
     /** @type {((candidateOwnerSet: Record<string, any>) => Record<string, any>) | null} */
     let commitProteinMigration = null;
@@ -4197,13 +4229,17 @@ export const createRunAnalysis = ({
         };
 
         /**
-         * @param {{ cacheKey: string, metadata: LosatCacheMetadata, queryEntry: LosatSeqEntry, subjectEntry: LosatSeqEntry }} candidate
+         * A search with a current entry (`answered`) promotes nothing; the Python owner reports, for any search, the
+         * candidates that verify for it without answering it, which retire (OV-3561).
+         * @param {{ cacheKey: string, metadata: LosatCacheMetadata, queryEntry: LosatSeqEntry, subjectEntry: LosatSeqEntry,
+         *   answered: boolean }} candidate
          */
         const tryPromoteLegacyProteinEntry = async ({
           cacheKey,
           metadata,
           queryEntry,
-          subjectEntry
+          subjectEntry,
+          answered
         }) => {
           if (
             metadata?.identityKind !== 'protein' ||
@@ -4219,6 +4255,13 @@ export const createRunAnalysis = ({
             }));
           if (pending.length === 0) return null;
 
+          /** @type {LegacyLosatpPromotionOptions} */
+          const expectedOptions = {
+            program: metadata.program,
+            outfmt: metadata.outfmt,
+            args: normalizeLosatArgs(metadata.args),
+            answeredKeys: answered ? [cacheKey] : []
+          };
           const response = await runDiagramHelperOperation(
             DIAGRAM_HELPER_OPERATIONS.PROMOTE_LEGACY_LOSATP_CACHE,
             {
@@ -4228,27 +4271,14 @@ export const createRunAnalysis = ({
               queryProteinMap: cloneJsonData(queryEntry?.proteinMap || {}),
               subjectProteinMap: cloneJsonData(subjectEntry?.proteinMap || {}),
               identityManifest: cloneJsonData(workingProteinIdentityManifest),
-              expectedOptions: {
-                program: metadata.program,
-                outfmt: metadata.outfmt,
-                args: normalizeLosatArgs(metadata.args)
-              }
+              expectedOptions
             }
           );
-          const result = response.result;
-          if (result.status === 'error') {
-            throw result.error || new Error('Legacy protein cache migration failed.');
-          }
-          const candidateIndex = Number(result.candidateIndex);
-          if (
-            result.status !== 'promoted' ||
-            !Number.isInteger(candidateIndex) ||
-            candidateIndex < 0 ||
-            typeof result.text !== 'string' ||
-            !result.entry ||
-            typeof result.entry !== 'object'
-          ) return null;
-          if (String(result.entry.key || '') !== cacheKey) {
+          const result = /** @type {LegacyLosatpPromotionReply} */ (response.result);
+          legacyRetiredCandidateIndexes.push(...result.duplicates);
+          if (result.status !== 'promoted') return null;
+          const { candidateIndex } = result;
+          if (result.entry.key !== cacheKey) {
             workingLegacyProteinRawCandidates = transitionLegacyProteinCandidate(
               envelope,
               candidateIndex,
@@ -4258,14 +4288,9 @@ export const createRunAnalysis = ({
             return null;
           }
 
-          const promoted = {
-            ...result.entry,
-            text: result.text,
-            migratedFromSchema: LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA
-          };
-          delete promoted.key;
-          delete promoted.filename;
-          delete promoted.display;
+          // The cache map holds an entry without its key, file name and display flag.
+          const { key: _key, filename: _filename, display: _display, ...stored } = result.entry;
+          const promoted = { ...stored, text: result.text, migratedFromSchema: LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA };
           cacheMap.set(cacheKey, promoted);
           const verified = getCurrentRawLosatCacheEntry(
             cacheMap,
@@ -4566,13 +4591,14 @@ export const createRunAnalysis = ({
               cacheMetadata,
               workingProteinIdentityManifest
             );
-            if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
+            if (useProteinBlastp && !cacheMetadata.searchContext) {
               cached = await tryPromoteLegacyProteinEntry({
                 cacheKey,
                 metadata: cacheMetadata,
                 queryEntry,
-                subjectEntry
-              });
+                subjectEntry,
+                answered: Boolean(cached)
+              }) || cached;
               throwIfGenerationCanceled();
             }
             const hasCachedText = Boolean(cached);
@@ -4684,7 +4710,7 @@ export const createRunAnalysis = ({
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
             setProcessingStatus(tn(sourceJobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed: 0, total: sourceJobs.length }));
             const executionStartedAt = getNow();
-            const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
+            const sourceResults = await runSearchableLosatSourceJobs(sourceJobs, executeLosatJobs, {
               concurrency: requestedLosatParallelWorkers(state.losatExecution),
               executionMode: losatExecutionMode,
               totalThreadBudget: losatRequestedTotalThreadBudget,
@@ -4947,7 +4973,7 @@ export const createRunAnalysis = ({
             }
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
-          if (legacyPromotionTransaction.length > 0) {
+          if (legacyPromotionTransaction.length + legacyRetiredCandidateIndexes.length > 0) {
             // A promotion changes only the cache entries and their candidate records. The features and orthogroups
             // of this Generate come from its own catalog and results, which name proteins by current handles, and the
             // selected alignment feature was resolved before the run: the candidate keeps the catalog's own feature
@@ -4956,7 +4982,10 @@ export const createRunAnalysis = ({
               const written = writtenLegacyProteinArtifacts({
                 candidates: candidateOwnerSet.legacyProteinRawCandidates,
                 evidence: candidateOwnerSet.legacyProteinDerivedEvidence,
-                promoted: legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
+                promoted: [
+                  ...legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
+                  ...legacyRetiredCandidateIndexes
+                ],
                 hasCurrentDerived: false
               });
               legacyPromotionCommitted = true;

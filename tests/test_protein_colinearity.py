@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from types import SimpleNamespace
+from collections.abc import Sequence
 from typing import cast
 
 import pandas as pd
@@ -29,7 +30,10 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.analysis.protein_colinearity import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
+    CdsProtein,
+    LegacyProteinRawCachePromotionScan,
     LosatpCacheManager,
+    ProteinExtractionResult,
     ProteinIdentityManifest,
     build_legacy_protein_reference_map,
     build_protein_export_id_map,
@@ -2523,8 +2527,6 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
         records,
         record_instance_keys=("r_left", "r_right"),
     )
-    query_fasta = proteins_to_fasta(extraction.proteins_by_record[0])
-    subject_fasta = proteins_to_fasta(extraction.proteins_by_record[1])
     query_id = extraction.proteins_by_record[0][0].protein_id
     subject_id = extraction.proteins_by_record[1][0].protein_id
     pair_identity = build_protein_losat_pair_identity(
@@ -2591,17 +2593,13 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
         {**entries[0], "text": raw_text.replace(subject_id, "outside-binding")},
         extraction.identity_manifest,
     )
-    with pytest.raises(ValidationError, match="IDs and sequences"):
-        cache._pair_identity_from_fasta(
-            query_fasta.replace("\nMK\n", "\nMA\n"),
-            subject_fasta,
-        )
+    # The cache names a search's records by their record-instance keys (OV-3493), from the manifest alone.
+    with pytest.raises(ValidationError, match="no record instance"):
+        cache._pair_identity("outside-manifest", extraction.record_instance_keys[1])
 
 
 @pytest.mark.linear
-def test_pairwise_blastp_reuses_only_verified_legacy_web_losat_cache(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_verified_legacy_web_losat_cache_entry_promotes_to_current_handles() -> None:
     records = [
         _record("record_a", features=[_cds(0, 9)]),
         _record("record_b", features=[_cds(9, 18)]),
@@ -2655,30 +2653,249 @@ def test_pairwise_blastp_reuses_only_verified_legacy_web_losat_cache(
     )
     assert promotion.promotion is not None
     assert legacy_query[0].protein_id not in promotion.promotion.rewritten_tsv
-    cache = LosatpCacheManager([legacy_entry], threads_per_job=32)
-    cache.set_protein_extraction(extraction)
+    assert f"{query_id}\t{subject_id}\t" in promotion.promotion.rewritten_tsv
+    assert promotion.promotion.entry["key"] != legacy_key
+    assert promotion.promotion.entry["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA
 
-    def fail_run(*_args, **_kwargs):
-        raise AssertionError("LOSATP should not run on a legacy cache hit")
 
-    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fail_run)
+def _drawn_reversed_extractions() -> tuple[SeqRecord, SeqRecord, ProteinExtractionResult, ProteinExtractionResult]:
+    """A query record drawn reversed, as the Web extracts it (its search region) and as the CLI does (drawn); its
+    source order is not its start order, so the two frames list its proteins differently."""
 
-    result = build_pairwise_protein_blastp_comparisons(
-        records,
-        losatp_cache=cache,
-        protein_extraction=extraction,
-        cache_filenames=("record_a.record_b.losatp.tsv",),
+    record = _record(
+        "drawn-reversed",
+        sequence="ATG" * 40,
+        features=[
+            _cds(30, 45, qualifiers={"translation": ["MAAAA"], "locus_tag": ["q3"]}),
+            _cds(0, 9, qualifiers={"translation": ["MKT"], "locus_tag": ["q1"]}),
+            _cds(12, 24, strand=-1, qualifiers={"translation": ["MGGG"], "locus_tag": ["q2"]}),
+        ],
+    )
+    subject = _record("subject", features=[_cds(9, 18, qualifiers={"translation": ["MKV"], "locus_tag": ["s1"]})])
+    keys = ("query-row", "subject-row")
+    drawn_record = reverse_records([record], True)[0]
+    web = extract_protein_identity_manifest([record, subject], record_instance_keys=keys)
+    cli = extract_protein_identity_manifest([drawn_record, subject], record_instance_keys=keys)
+    return record, drawn_record, web, cli
+
+
+_LEGACY_REVERSED_ARGS = ["--max-hsps-per-subject", "1"]
+
+
+def _legacy_reversed_entry(
+    legacy_query: Sequence[CdsProtein], legacy_subject: Sequence[CdsProtein]
+) -> dict[str, object]:
+    """A schema-2 entry whose rows list ``legacy_query`` in order, as its writer's search did."""
+
+    key, query_hash, subject_hash = build_web_losat_cache_key(
+        query_fasta=proteins_to_fasta(legacy_query),
+        subject_fasta=proteins_to_fasta(legacy_subject),
+        args=_LEGACY_REVERSED_ARGS,
+    )
+    return {
+        "schema": 2,
+        "kind": "raw-losat",
+        "key": key,
+        "text": _legacy_reversed_rows(legacy_query, legacy_subject[0].protein_id),
+        "program": "blastp",
+        "outfmt": "6",
+        "args": list(_LEGACY_REVERSED_ARGS),
+        "queryCanonicalHash": query_hash,
+        "subjectCanonicalHash": subject_hash,
+    }
+
+
+def _legacy_reversed_rows(query: Sequence[CdsProtein], subject_id: str) -> str:
+    return "".join(f"{protein.protein_id}\t{subject_id}\t90\t3\t0\t0\t1\t3\t1\t3\t1e-5\t20\n" for protein in query)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("surface", ["web", "cli"])
+def test_legacy_promotion_reads_a_reversed_record_in_the_frame_its_writer_hashed(surface: str) -> None:
+    """OV-3494: for a record drawn reversed, the 0.11.0-0.13.0 Web hashed its proteins in the search frame and the
+    0.13.0 CLI in the drawn frame. Both promote, from the Web's and the CLI's extraction alike, to the rows a fresh
+    search writes; an entry hashed in neither frame stays pending."""
+
+    _record_in_source, drawn_record, web, cli = _drawn_reversed_extractions()
+    if surface == "web":
+        extraction = web
+        query = list(web.proteins_by_record[0])
+    else:
+        extraction = cli
+        query = protein_colinearity_module.search_frame_proteins(drawn_record, cli.proteins_by_record[0])
+    subject = extraction.proteins_by_record[1]
+    # The Web's proteins are the search frame already; the CLI's, listed in it, are the same proteins in one order.
+    assert [(p.protein_id, p.start, p.end, p.strand) for p in query] == [
+        (p.protein_id, p.start, p.end, p.strand) for p in web.proteins_by_record[0]
+    ]
+    legacy_subject = protein_colinearity_module._with_stable_web_protein_ids(subject, "r_subject")
+    search_frame = protein_colinearity_module._with_stable_web_protein_ids(web.proteins_by_record[0], "r_query")
+    drawn_frame = protein_colinearity_module._with_stable_web_protein_ids(cli.proteins_by_record[0], "r_query")
+    neither = protein_colinearity_module._with_stable_web_protein_ids(
+        list(reversed(web.proteins_by_record[0])), "r_query"
+    )
+    assert [p.sequence for p in search_frame] != [p.sequence for p in drawn_frame]
+
+    def promote(legacy_query: Sequence[CdsProtein]) -> LegacyProteinRawCachePromotionScan:
+        return promote_legacy_protein_raw_cache_entries(
+            [_legacy_reversed_entry(legacy_query, legacy_subject)],
+            query_proteins=query,
+            subject_proteins=subject,
+            query_fasta=proteins_to_fasta(query),
+            subject_fasta=proteins_to_fasta(subject),
+            identity_manifest=extraction.identity_manifest,
+            expected_args=_LEGACY_REVERSED_ARGS,
+        )
+
+    current_by_sequence = {protein.sequence: protein for protein in query}
+    subject_id = subject[0].protein_id
+    fresh_search = _legacy_reversed_rows(query, subject_id)
+    for legacy_query in (search_frame, drawn_frame):
+        scan = promote(legacy_query)
+        assert scan.promotion is not None, scan.rejections
+        assert scan.promotion.rewritten_tsv == _legacy_reversed_rows(
+            [current_by_sequence[protein.sequence] for protein in legacy_query], subject_id
+        )
+    # The search-frame entry lists its rows as a fresh search of the current writer does.
+    assert promote(search_frame).promotion.rewritten_tsv == fresh_search  # type: ignore[union-attr]
+    pending = promote(neither)
+    assert pending.promotion is None
+    assert [rejection.reason for rejection in pending.rejections] == ["Legacy query FASTA hash does not match."]
+
+
+@pytest.mark.linear
+def test_the_cli_resolves_legacy_references_of_a_record_drawn_reversed_in_both_frames() -> None:
+    """OV-3526: the CLI extracts from the drawn records; read in the search frame, as the Web extracts, its
+    extraction resolves the references the old Web wrote (search frame) and the 0.13.0 CLI wrote (drawn frame)."""
+
+    record, drawn_record, web, cli = _drawn_reversed_extractions()
+    subject = _record("subject", features=[_cds(9, 18, qualifiers={"translation": ["MKV"], "locus_tag": ["s1"]})])
+    legacy_extraction = protein_colinearity_module.search_frame_extraction([drawn_record, subject], cli)
+    assert [(p.protein_id, p.start, p.end, p.strand) for p in legacy_extraction.proteins_by_record[0]] == [
+        (p.protein_id, p.start, p.end, p.strand) for p in web.proteins_by_record[0]
+    ]
+    current_by_sequence = {protein.sequence: protein.protein_id for protein in cli.proteins_by_record[0]}
+    for written in (web.proteins_by_record[0], cli.proteins_by_record[0]):
+        legacy = protein_colinearity_module._with_stable_web_protein_ids(written, "r_query")
+        assert build_legacy_protein_reference_map(legacy_extraction, [p.protein_id for p in legacy]) == {
+            protein.protein_id: current_by_sequence[protein.sequence] for protein in legacy
+        }
+
+
+@pytest.mark.linear
+def test_the_web_promotes_a_cli_entry_of_a_record_drawn_reversed() -> None:
+    """OV-3494: the Web helper promotes, through the Python owner, an entry the 0.13.0 CLI hashed in the drawn
+    frame, from the proteins the Web extracts (the search frame)."""
+
+    record, _drawn_record, web, cli = _drawn_reversed_extractions()
+    subject_record = _record("subject", features=[_cds(9, 18, qualifiers={"translation": ["MKV"], "locus_tag": ["s1"]})])
+    manifest = web.identity_manifest
+    assert manifest is not None
+    legacy_subject = protein_colinearity_module._with_stable_web_protein_ids(web.proteins_by_record[1], "r_subject")
+    drawn_frame = protein_colinearity_module._with_stable_web_protein_ids(cli.proteins_by_record[0], "r_query")
+    helpers = _load_web_helper_namespace()
+    serialize_protein = helpers["_serialize_cds_protein"]
+    maps = [
+        json.dumps({protein.protein_id: serialize_protein(protein, source) for protein in proteins})
+        for source, proteins in zip((record, subject_record), web.proteins_by_record, strict=True)
+    ]
+    reply = json.loads(
+        helpers["promote_legacy_losatp_cache_candidates"](
+            json.dumps([{"candidateIndex": 0, "entry": _legacy_reversed_entry(drawn_frame, legacy_subject)}]),
+            proteins_to_fasta(web.proteins_by_record[0]),
+            proteins_to_fasta(web.proteins_by_record[1]),
+            maps[0],
+            maps[1],
+            json.dumps(manifest.to_dict()),
+            json.dumps({"args": _LEGACY_REVERSED_ARGS}),
+        )
+    )
+    current_by_sequence = {protein.sequence: protein for protein in web.proteins_by_record[0]}
+    assert reply["status"] == "promoted", reply
+    assert reply["text"] == _legacy_reversed_rows(
+        [current_by_sequence[protein.sequence] for protein in drawn_frame], web.proteins_by_record[1][0].protein_id
     )
 
-    assert result.comparisons[0].iloc[0]["query_protein_id"] == query_id
-    assert result.comparisons[0].iloc[0]["subject_protein_id"] == subject_id
-    entries = cache.session_entries()
-    assert entries[0]["key"] != legacy_key
-    assert entries[0]["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA
-    assert entries[0]["display"] is True
-    assert entries[0]["args"] == ["--max-hsps-per-subject", "1"]
-    assert entries[0]["outfmt"] == "6"
-    assert cache.has_legacy_candidates is False
+
+
+def _two_copies_of_one_search() -> tuple[ProteinExtractionResult, list[dict[str, object]]]:
+    """The Web's extraction of a record drawn reversed and two schema-2 copies of its one search: the 0.11-0.13 Web's
+    (search frame) and the 0.13.0 CLI's (drawn frame), in the order a 0.13.0 Session lists them."""
+
+    _record_in_source, _drawn_record, web, cli = _drawn_reversed_extractions()
+    legacy_subject = protein_colinearity_module._with_stable_web_protein_ids(web.proteins_by_record[1], "r_subject")
+    copies = [
+        _legacy_reversed_entry(
+            protein_colinearity_module._with_stable_web_protein_ids(proteins, "r_query"), legacy_subject
+        )
+        for proteins in (web.proteins_by_record[0], cli.proteins_by_record[0])
+    ]
+    return web, copies
+
+
+@pytest.mark.linear
+def test_legacy_promotion_reports_the_other_copies_of_the_search_it_answers() -> None:
+    """OV-3561: the owner answers a search with its first verified candidate and reports the other candidates that
+    verify for the same search; for a search with a current entry (``answered_keys``) it promotes none and reports
+    every verified candidate. Both surfaces retire what it reports, so no copy stays pending forever."""
+
+    web, copies = _two_copies_of_one_search()
+    unrelated = {**copies[0], "args": ["--other"]}
+
+    def scan(answered_keys: Sequence[str] = ()) -> LegacyProteinRawCachePromotionScan:
+        return promote_legacy_protein_raw_cache_entries(
+            [*copies, unrelated],
+            query_proteins=web.proteins_by_record[0],
+            subject_proteins=web.proteins_by_record[1],
+            query_fasta=proteins_to_fasta(web.proteins_by_record[0]),
+            subject_fasta=proteins_to_fasta(web.proteins_by_record[1]),
+            identity_manifest=web.identity_manifest,
+            expected_args=_LEGACY_REVERSED_ARGS,
+            answered_keys=answered_keys,
+        )
+
+    first = scan()
+    assert first.promotion is not None and first.promotion.candidate_index == 0
+    assert first.duplicates == (1,)
+    assert [rejection.candidate_index for rejection in first.rejections] == [2]
+    answered = scan([str(first.promotion.entry["key"])])
+    assert (answered.promotion, answered.duplicates) == (None, (0, 1))
+
+
+@pytest.mark.linear
+def test_the_web_helper_reports_the_copies_of_a_search_to_retire() -> None:
+    """OV-3561: the Web helper carries the owner's report: the candidates to retire, by their envelope indexes, and,
+    for a search with a current entry (its key in ``answeredKeys``), no promotion."""
+
+    web, copies = _two_copies_of_one_search()
+    record, _drawn_record, _web, _cli = _drawn_reversed_extractions()
+    subject_record = _record("subject", features=[_cds(9, 18, qualifiers={"translation": ["MKV"], "locus_tag": ["s1"]})])
+    manifest = web.identity_manifest
+    assert manifest is not None
+    helpers = _load_web_helper_namespace()
+    serialize_protein = helpers["_serialize_cds_protein"]
+    maps = [
+        json.dumps({protein.protein_id: serialize_protein(protein, source) for protein in proteins})
+        for source, proteins in zip((record, subject_record), web.proteins_by_record, strict=True)
+    ]
+
+    def reply(answered_keys: list[str]) -> dict[str, object]:
+        return cast(dict[str, object], json.loads(
+            helpers["promote_legacy_losatp_cache_candidates"](
+                json.dumps([{"candidateIndex": 3 + index, "entry": copy} for index, copy in enumerate(copies)]),
+                proteins_to_fasta(web.proteins_by_record[0]),
+                proteins_to_fasta(web.proteins_by_record[1]),
+                maps[0],
+                maps[1],
+                json.dumps(manifest.to_dict()),
+                json.dumps({"args": _LEGACY_REVERSED_ARGS, "answeredKeys": answered_keys}),
+            )
+        ))
+
+    promoted = reply([])
+    assert (promoted["status"], promoted["candidateIndex"], promoted["duplicates"]) == ("promoted", 3, [4])
+    entry = cast(dict[str, object], promoted["entry"])
+    assert reply([str(entry["key"])]) == {"status": "no-match", "rejections": [], "duplicates": [3, 4]}
 
 
 @pytest.mark.linear
@@ -2747,9 +2964,9 @@ def test_legacy_protein_cache_promotion_rejects_hash_args_and_ambiguous_empty_ou
     assert "args" in scan.rejections[0].reason
     assert "hash" in scan.rejections[1].reason
     assert "Empty" in scan.rejections[2].reason
+    # The raw cache holds current entries only; legacy candidates are the Session migration's (session_compat).
     cache = LosatpCacheManager(candidates, identity_manifest=extraction.identity_manifest)
     assert cache.session_entries() == ()
-    assert len(cache.legacy_candidate_envelope()["entries"]) == 3
 
     empty_with_evidence = promote_legacy_protein_raw_cache_entries(
         [

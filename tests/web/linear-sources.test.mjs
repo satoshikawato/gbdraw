@@ -439,7 +439,8 @@ test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
       subjectIds: Object.fromEntries([...batch.subject.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
       queryHash: batch.query.hash,
       subjectHash: batch.subject.hash,
-      searchContext: batch.searchContext
+      searchContext: batch.searchContext,
+      searchable: batch.searchable
     })), vector.expected.jobs, vector.name);
     const rawKeys = [];
     for (const spec of specs) {
@@ -504,7 +505,8 @@ test('shared LOSATP specs and job plan vectors', async () => {
       subjectIds: Object.fromEntries([...batch.subject.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
       queryHash: batch.query.hash,
       subjectHash: batch.subject.hash,
-      searchContext: batch.searchContext
+      searchContext: batch.searchContext,
+      searchable: batch.searchable
     })), vector.expected.jobs, vector.name);
   }
 });

@@ -1043,10 +1043,10 @@ def test_released_schema_v2_fixture_promotes_to_current_typed_artifacts(
     assert len(protein_entries) == 25
     assert {entry["schema"] for entry in protein_entries} == {4}
     assert adapted.migration_report.protein_id_map
-    # OV-1143: the 9 candidates no planned search matches stay pending, as after a Web Generate.
-    assert [
-        candidate["state"] for candidate in adapted.migration_report.protein_raw_candidates
-    ] == ["pending"] * 9
+    # OV-3561: the other 9 candidates are second copies of searches these answer; they leave, as after a Web
+    # Generate, and the legacy derived evidence with them.
+    assert adapted.migration_report.protein_raw_candidates == ()
+    assert adapted.migration_report.protein_derived_evidence == ()
 
 
 def test_released_schema_v2_typed_alignment_survives_protein_artifact_promotion(

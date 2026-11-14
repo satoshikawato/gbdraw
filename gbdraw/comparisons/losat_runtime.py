@@ -759,7 +759,7 @@ def run_losat_search(
 # Raw cache store.
 
 
-LosatCacheWriteKind = Literal["entry", "display", "retire-legacy"]
+LosatCacheWriteKind = Literal["entry", "display"]
 
 
 @dataclass(frozen=True)
@@ -767,8 +767,7 @@ class LosatCacheWrite:
     """One write a lookup or a search made into a loaded raw cache.
 
     ``entry`` stores ``entry`` under ``key``; ``display`` shows ``key`` under
-    ``filename``; ``retire-legacy`` drops legacy candidate ``index`` (protein
-    caches). Replayed in order on a cache in the same state, the writes give
+    ``filename``. Replayed in order on a cache in the same state, the writes give
     the same Session entries (``LosatRawCache.apply_writes``).
     """
 
@@ -776,7 +775,6 @@ class LosatCacheWrite:
     key: str = ""
     entry: Mapping[str, object] | None = None
     filename: str = ""
-    index: int = -1
 
 
 class LosatRawCache:
