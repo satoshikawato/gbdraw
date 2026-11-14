@@ -11,7 +11,7 @@ classification rules.
 | --- | --- | --- |
 | PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; [examples freshness](#examples-freshness) for changes that can alter rendering; all functional Playwright in eight shards, plus the performance smoke, for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Core on Python 3.10, and on 3.10–3.14 for [version-dependent changes](#python-version-coverage); other jobs on 3.11 |
 | Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10–3.14, with line coverage on 3.14; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
-| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
+| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), the render-stage universe (`render-stage-universe-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
 PR feedback targets 20 minutes without functional Playwright and 35 minutes
 with it: the median wall time, from the first job's start to the last job's
@@ -94,6 +94,18 @@ recent integrated runs found failures uniquely in that path.
 minutes) runs in the release-only `vibrio-generate-release` job and in the
 main-push `deploy_web.yml` verification. Before this, only main saw it, so a
 stale expectation (T13, request schema 7) surfaced after promotion.
+
+The render-stage universe (`--render-stage-universe -m render_stage_universe`:
+every option state of the six cases in `tests/utils/render_stage_equivalence.py`,
+warm render against cold, with the declaration and expected-build checks) runs in
+the release-only `render-stage-universe-release` job on Python 3.11, three
+workers with `--dist loadscope` (the chains of a module share one module-scoped
+fixture), up to 120 minutes. `slow-main` collects these tests but skips them
+without the flag; running them there would cost about an hour on each of three
+Python versions on every `dev` push. Before this job, no run used the flag, and
+three stages that the base of a case could not cache went unseen (OV-3112). Core
+renders each case base once (`test_each_case_base_has_no_undeclared_read_or_uncacheable_stage`)
+so a base that cannot cache a stage fails on the pull request.
 
 ## Changed paths → capabilities → required jobs
 
@@ -423,6 +435,8 @@ for a Web test, does not matter.
 | `localTestEvidenceCarries` | Metadata; documentation and policy documentation outside `docs/recipes/`; leaf tests, except `tests/test_*.py` files with a `slow` marker or unreadable markers | Recipe runs (`run_cli_scenarios.py` and `run_python_scenarios.py` with `--all --check`), `TestOutputComparison`, the `tools/audit/` sweeps, and the `main`-written Session fixture tests |
 
 The release tier runs the Vibrio full-generation spec (`vibrio-generate-release`),
+the render-stage universe (`render-stage-universe-release`; its test files spell
+their `slow` mark, so a change to them carries no release evidence),
 tests marked `slow` (`slow-main`), tests marked `recipe`, `gallery`, or
 `browser` on Python 3.10 and 3.12 (`acceptance-supported-main`), and the
 promotion audit jobs (`promotion-audit-*`: the recipe runners under

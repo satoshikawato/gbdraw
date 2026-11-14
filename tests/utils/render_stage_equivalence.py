@@ -32,7 +32,6 @@ from unittest import mock
 
 import numpy as np
 import pandas as pd
-import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
@@ -887,6 +886,8 @@ UNIVERSE: tuple[OptionSpec, ...] = (
     _opt("depth_width", _C, ["--depth_width", "20"], ["--depth_width", "80"], cases=["C3"]),
     _opt("conservation_labels", _C, ["--conservation_labels", "Other"], cases=["C3"]),
     _opt("conservation_colors", _C, ["--conservation_colors", "#ff0000"], cases=["C3"]),
+    # A ring without a colour of its own takes the scheme's colour (OV-3112: the rings stay the stage's tracks).
+    _opt("conservation_color_scheme", _C, ["--conservation_color_scheme", "ten"], cases=["C3"]),
     _opt("conservation_ring_width", _C, ["--conservation_ring_width", "15"],
          ["--conservation_ring_width", "60"], cases=["C3"]),
     _opt("conservation_ring_gap", _C, ["--conservation_ring_gap", "2"],
@@ -1256,9 +1257,6 @@ WALK_INPUT_ERRORS: frozenset[tuple[str, str, str]] = frozenset({
 })
 # The estimated time of one chunk.
 CHUNK_BUDGET_SECONDS = 120.0
-# The universe tests are slow and run only with ``--render-stage-universe``
-# (tests/conftest.py); ``slow`` also keeps them out of the release job.
-UNIVERSE_MARKS = (pytest.mark.slow, pytest.mark.render_stage_universe)
 
 
 @dataclass(frozen=True)
@@ -1403,6 +1401,23 @@ def declaration_failures(results: Sequence[StepResult]) -> list[str]:
                 f"uncacheable {counts.uncacheable_total} {dict(counts.uncacheable)}"
             )
     return failures + error_rule_failures(base, outcomes)
+
+
+def base_declaration_failures(
+    case: Case, placeholders: Placeholders, output: Path, extra: Sequence[str] = ()
+) -> list[str]:
+    """Render a case base (with ``extra``) once on a new cache; name its error, each undeclared read and each
+    uncacheable stage (``declaration_failures``).
+
+    The universe checks every state of a case but runs only with ``--render-stage-universe``; this check runs
+    with the other tests, so a stage a base cannot cache fails at once (OV-3112).
+    """
+
+    label = " ".join((f"{case.case_id} base", *extra))
+    outcome = EquivalenceHarness(case.mode, output).warm([*placeholders.expand(case, case.base), *extra])
+    if outcome.error is not None:
+        return [f"{label}: render failed with {outcome.error!r}"]
+    return declaration_failures([StepResult(label, tuple(extra), outcome, outcome)])
 
 
 # --- Synthetic inputs for the identity cases ------------------------------------------------------

@@ -206,6 +206,9 @@ class CircularRecordContext:
     # The record's feature density layers, on the scale of the canvas's shared legend; None: the record's own.
     feature_density: Mapping[str, FeatureDensityLayer] | None = None
     precomputed_conservation_tracks: Sequence[ConservationTrack] | None = None
+    # Each ring's Legend name by ``track_index`` (``LegendTable.ring_names`` of a Multi-Record Canvas's shared
+    # Legend); None: the record names its rings from its own Legend.
+    conservation_ring_names: Mapping[int, str] | None = None
     annotation_record_index: int = 0
     definition_group_id: str | None = None
     record_transform: RecordDisplayTransform | None = None

@@ -1674,6 +1674,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'acceptance-supported-main',
     'slow-main',
     'vibrio-generate-release',
+    'render-stage-universe-release',
     'losat-cache-browser-acceptance'
   ]) {
     const job = workflowJob(jobId);
@@ -1770,6 +1771,7 @@ test('exact dev staging routes every job through the protected-branch plan', () 
     'acceptance-supported-main',
     'slow-main',
     'vibrio-generate-release',
+    'render-stage-universe-release',
     'lint',
     'losat-cache-browser-acceptance'
   ]);
@@ -2110,7 +2112,7 @@ test('dev staging Web checks scope only the newly integrated change', () => {
 });
 
 test('supported-version and slow matrices are mandatory in explicit release acceptance', () => {
-  for (const jobName of ['acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
+  for (const jobName of ['acceptance-supported-main', 'slow-main', 'vibrio-generate-release', 'render-stage-universe-release']) {
     const job = TEST_WORKFLOW.match(
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
@@ -2141,7 +2143,8 @@ test('release acceptance runs the Vibrio full-generation suite that main deploy 
   assert.deepEqual(knownJobsFor('release').filter((id) => !knownJobsFor('dev').includes(id)), [
     'acceptance-supported-main',
     'slow-main',
-    'vibrio-generate-release'
+    'vibrio-generate-release',
+    'render-stage-universe-release'
   ]);
   // Both aggregate gates list it, so a skipped or failed run blocks release evidence.
   for (const gateId of ['release-gate', 'dev-staging-gate']) {

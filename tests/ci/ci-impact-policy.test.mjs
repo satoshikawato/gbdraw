@@ -447,9 +447,13 @@ test('functional Playwright joins PR plans only through runtime-facing capabilit
   }
 });
 
-test('release retains every dev functional job plus supported-version, slow, and Vibrio generation acceptance', () => {
-  assert.deepEqual(knownJobsFor('release'), [...knownJobsFor('dev'), 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']);
+test('release retains every dev functional job plus supported-version, slow, Vibrio generation, and universe acceptance', () => {
+  assert.deepEqual(knownJobsFor('release'), [
+    ...knownJobsFor('dev'), 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release',
+    'render-stage-universe-release'
+  ]);
   assert.equal(knownJobsFor('dev').includes('vibrio-generate-release'), false, 'Vibrio generation is release-only');
+  assert.equal(knownJobsFor('dev').includes('render-stage-universe-release'), false, 'The universe is release-only');
   assert.throws(() => requiredJobsFor({ profile: 'release', impact: 'documentation', decision: 'selective' }), /full coverage/);
   assert.throws(() => requiredJobsFor({ profile: 'dev', impact: 'web-runtime', decision: 'selective' }), /full coverage/);
 });

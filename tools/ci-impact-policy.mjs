@@ -48,7 +48,10 @@ const DEV_JOBS = freeze([
 const PROFILE_REQUIRED_JOBS = freeze({
   pr: PR_KNOWN_JOBS,
   dev: DEV_JOBS,
-  release: freeze([...DEV_JOBS, 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']),
+  release: freeze([
+    ...DEV_JOBS, 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release',
+    'render-stage-universe-release'
+  ]),
   gallery: freeze(['browser', 'performance'])
 });
 const PR_CAPABILITY_JOBS = freeze({

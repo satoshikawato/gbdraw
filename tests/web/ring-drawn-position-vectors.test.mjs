@@ -1,5 +1,5 @@
 // The Web's side of the shared ring drawn-position vectors (tests/fixtures/ring_drawn_position_vectors.json, written by
-// tools/generate_ring_drawn_position_vectors.py from Python's `_drawn_ring_colors`). `ringDrawnPositions` gives each
+// tools/generate_ring_drawn_position_vectors.py from Python's `resolve_drawn_conservation_rings`). `ringDrawnPositions` gives each
 // ring Python draws its place in Python's drawn order, outermost first, and the rings Python does not draw the
 // positions after them, in series order (the Web's own rule: such a ring draws nothing).
 import assert from 'node:assert/strict';

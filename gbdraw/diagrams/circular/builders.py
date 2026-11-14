@@ -14,7 +14,7 @@ from svgwrite.container import Group
 
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
-from ...analysis.conservation import ConservationTrack
+from ...analysis.conservation import DrawnConservationRing
 from ...render.drawers.circular.annotations import LeaderSegment
 from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGroup
 from ...features.factory import FeatureBuildResult
@@ -206,7 +206,7 @@ def add_feature_density_heatmap_on_canvas(
 def add_conservation_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
-    conservation_track: ConservationTrack,
+    ring: DrawnConservationRing,
     canvas_config: CircularCanvasConfigurator,
     *,
     group_key: GroupKey,
@@ -218,12 +218,15 @@ def add_conservation_group_on_canvas(
     record_transform: RecordDisplayTransform | None = None,
     record_index: int = 0,
 ) -> Drawing:
-    """Adds one circular conservation ring group to the canvas."""
+    """Adds one circular conservation ring group to the canvas.
+
+    The stage keys the ring's track by its identity, and its drawn colour and Legend name by value.
+    """
     content = render_stage(
         "conservation_content",
         build_group_content,
         ConservationGroup,
-        track=conservation_track,
+        ring=ring,
         total_length=len(gb_record.seq),
         inner_radius_px=inner_radius_px,
         outer_radius_px=outer_radius_px,

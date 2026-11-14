@@ -3,7 +3,7 @@
 ``tests/fixtures/ring_drawn_position_vectors.json``
 (``tools/generate_ring_drawn_position_vectors.py``) holds the series places of
 the comparison rings Python draws, outermost first, for a few stacks. The stored
-file must equal what ``_drawn_ring_colors`` gives now, so a change to Python's
+file must equal what ``resolve_drawn_conservation_rings`` gives now, so a change to Python's
 drawn order fails here until the vectors and the Web follow it
 (``tests/web/ring-drawn-position-vectors.test.mjs``).
 """

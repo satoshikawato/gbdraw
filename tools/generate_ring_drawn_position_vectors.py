@@ -3,7 +3,7 @@
 
 ``tests/fixtures/ring_drawn_position_vectors.json`` holds, per case, a number of
 comparison rings, a track stack (or none), and the series places of the rings
-Python draws, outermost first: ``_drawn_ring_colors`` in
+Python draws, outermost first: ``resolve_drawn_conservation_rings`` in
 ``gbdraw/analysis/conservation.py``, the order the scheme colours follow
 (PD-OI-110). A case without a stack draws over the slots Python makes for the
 rings (``_conservation_slots_for_tracks`` inserted into the default stack by
@@ -34,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "tests" / "fixtures" / "ring_drawn_position_vectors.json"
 sys.path.insert(0, str(REPO_ROOT))
 
-from gbdraw.analysis.conservation import ConservationTrack, _drawn_ring_colors  # noqa: E402
+from gbdraw.analysis.conservation import ConservationTrack, resolve_drawn_conservation_rings  # noqa: E402
 from gbdraw.api.diagram import _conservation_slots_for_tracks, _insert_conservation_slots  # noqa: E402
 from gbdraw.config.models.root import GbdrawConfig  # noqa: E402
 from gbdraw.config.toml import load_config_toml  # noqa: E402
@@ -77,7 +77,7 @@ def _drawn_places(case: dict[str, Any], cfg: GbdrawConfig) -> list[int]:
     else:
         slots = [CircularTrackSlot(id=row["id"], renderer=row["renderer"], enabled=row["enabled"], params=row["params"])
                  for row in case["slots"]]
-    return [int(track.track_index) - 1 for track, _color in _drawn_ring_colors("ten", slots, tracks)]
+    return [int(ring.track.track_index) - 1 for ring in resolve_drawn_conservation_rings("ten", slots, tracks)]
 
 
 def render() -> str:

@@ -688,9 +688,9 @@ def test_a_conservation_background_counts_only_when_it_shows(background: Mapping
     from gbdraw.render.groups.circular.conservation import conservation_ring_ink
 
     cfg = _base_config({f"objects.conservation.{key}": value for key, value in background.items()})
-    track = types.SimpleNamespace(track_color=None, hits=pd.DataFrame())
+    ring = types.SimpleNamespace(track=types.SimpleNamespace(hits=pd.DataFrame()), color=None)
     inks = conservation_ring_ink(
-        track, total_length=1000, inner_radius_px=90.0, outer_radius_px=110.0, min_identity=70.0, cfg=cfg
+        ring, total_length=1000, inner_radius_px=90.0, outer_radius_px=110.0, min_identity=70.0, cfg=cfg
     )
     assert _lines_at(inks, 100.0, 0.5) == lines
 
