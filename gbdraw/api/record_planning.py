@@ -1638,14 +1638,23 @@ class SourceFileContents:
                 self._sizes[path] = Path(path).stat().st_size
         return tuple(self._sizes[path] for path in paths)
 
+    @staticmethod
+    def fingerprint(chunks: Iterable[bytes]) -> str:
+        """The content identity of one source file, given as its bytes in one or more chunks: their SHA-256.
+
+        The one owner of this value for files on disk (:meth:`digests`) and for
+        the bytes a Session holds (an alignment reset receipt's binding).
+        """
+        hasher = hashlib.sha256()
+        for chunk in chunks:
+            hasher.update(chunk)
+        return hasher.hexdigest()
+
     def digests(self, paths: Sequence[str]) -> tuple[str, ...]:
         for path in paths:
             if path not in self._digests:
-                hasher = hashlib.sha256()
                 with open(path, "rb") as handle:
-                    for chunk in iter(lambda: handle.read(1 << 20), b""):
-                        hasher.update(chunk)
-                self._digests[path] = hasher.hexdigest()
+                    self._digests[path] = self.fingerprint(iter(lambda: handle.read(1 << 20), b""))
         return tuple(self._digests[path] for path in paths)
 
     def same(self, first: Sequence[str], second: Sequence[str]) -> bool:

@@ -1757,6 +1757,7 @@ def _validate_alignment_reset_receipt(
             or not math.isfinite(delta["deltaX"]) or delta["deltaX"] == 0):
         invalid()
     fingerprints: dict[str, str] = {}
+    from .api.record_planning import SourceFileContents
 
     def source_identity(source: Mapping[str, Any]) -> dict[str, str]:
         identity = {}
@@ -1772,7 +1773,7 @@ def _validate_alignment_reset_receipt(
                         content = read_resource_bytes(SessionResources(descriptors, sources), value)
                     except (ValidationError, TypeError, KeyError) as exc:
                         raise ValidationError("Alignment reset receipt resource is invalid.") from exc
-                    fingerprints[value] = hashlib.sha256(content).hexdigest()
+                    fingerprints[value] = SourceFileContents.fingerprint((content,))
                 identity[key] = fingerprints[value]
         return identity
 

@@ -412,7 +412,7 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
   }
 });
 
-// The shown Result as the region tools (Select region, New drawing from region) and Sequence search read it.
+// The shown Result as the region tools (Select region, Copy to another drawing) and Sequence search read it.
 /** The mounted root of the shown Result, which the band of Select region and the outline of search hits follow. */
 const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? null;
 // The Worker helper that plans a Linear request's drawn units (`planLinearUnitSearch`).
@@ -1171,7 +1171,7 @@ export const createAppSetup = () => {
   // The records of the shown Result whose axis Python wrote: Select region and Shift+click range selection read them.
   const shownAxisRecords = () => shownAxisRecordsOf(state);
   const {
-    consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
+    consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, selectedRecords, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
     syncFeatureSelectionClasses, replaceSelectedFeatureIds, featureSelectionMarqueeStyle, featureSelectionToolbarStyle, startToolbarDrag
   } = createFeatureSelection({
     state, onMounted, onUnmounted, previewPopupsHeld,
@@ -3324,7 +3324,7 @@ export const createAppSetup = () => {
     state, linearComparisonGlobalAction, userDefaultColorRows: resultsManager.userDefaultColorRows
   });
 
-  // New drawing from a region and Find in other files: the shown drawing's draft request, as Save stores it, goes to Python.
+  // Copy to another drawing and Find in other files: the shown drawing's draft request, as Save stores it, goes to Python.
   const projectShownRequest = async () => {
     const drawing = state.activeDrawing();
     const { catalog, error } = drawing.mode === 'linear'
@@ -3345,7 +3345,8 @@ export const createAppSetup = () => {
       resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
     newDrawingFromRegion: drawingList.newDrawingFromRegion,
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
-    resultFeatures: shownResultFeatures
+    resultFeatures: shownResultFeatures,
+    committedRecordKeyOf: previewItemPopup.committedRecordKeyOf
   });
   const findInOtherFiles = createFindInOtherFiles({
     shownDrawingId: () => state.activeDrawingId.value, projectShownRequest, runInOverlay: runInLosatOverlay,
@@ -4087,7 +4088,7 @@ export const createAppSetup = () => {
     selectedFeatureCount,
     selectedFeatures,
     hasFeatureSelection,
-    featureSelectionMarqueeStyle, featureSelectionToolbarStyle, startFeatureSelectionToolbarDrag: startToolbarDrag, clearFeatureSelection,
+    featureSelectionMarqueeStyle, featureSelectionToolbarStyle, startFeatureSelectionToolbarDrag: startToolbarDrag, clearFeatureSelection, selectedRecords,
     openFirstSelectedFeature,
     selectedFeatureBulkColor,
     selectedFeatureBulkCaption,

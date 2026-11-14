@@ -915,9 +915,14 @@ def _web_region(request: DiagramRequest, regions: list[dict[str, Any]], tmp_path
 
     payload, paths = _web_source(request)
     reply = json.loads(derive_web_region_drawing_json(
-        json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(adapt_sizes)
+        json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(adapt_sizes),
+        json.dumps(NEW_DRAWING),
     ))
     return payload, paths, reply
+
+
+# The copy the Web's dialog sends by default: a new drawing, keeping the settings, of the mode Python chooses.
+NEW_DRAWING = {"into": "new", "settings": "keep", "mode": None}
 
 
 def test_the_web_helper_derives_one_record_of_a_circular_drawing(tmp_path: Path) -> None:
@@ -1620,14 +1625,13 @@ def test_a_paste_through_the_drawings_api_keeps_the_target_drawing_and_the_sessi
 
 
 def _web_copy(
-    source: DiagramRequest, regions: list[dict[str, Any]], tmp_path: Path, copy: dict[str, Any] | None
+    source: DiagramRequest, regions: list[dict[str, Any]], tmp_path: Path, copy: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, str], dict[str, Any]]:
     from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 
     payload, paths = _web_source(source)
-    arguments = [json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(True)]
-    if copy is not None:
-        arguments.append(json.dumps(copy))
+    arguments = [json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(True),
+                 json.dumps(copy)]
     return payload, paths, json.loads(derive_web_region_drawing_json(*arguments))
 
 
@@ -1644,11 +1648,11 @@ def _staged(request: DiagramRequest, folder: Path) -> tuple[dict[str, Any], dict
     return payload, staged
 
 
-def test_the_web_helper_without_a_copy_keeps_new_drawing_from_a_region(tmp_path: Path) -> None:
-    # The page's call before Copy to another drawing: two whole records of a canvas still make a Linear drawing.
+def test_the_web_helper_copies_into_a_new_drawing_of_the_chosen_settings_and_mode(tmp_path: Path) -> None:
     whole = [{"recordKey": "pair:1", "start": 1, "end": 4000}, {"recordKey": "pair:2", "start": 1, "end": 4000}]
-    legacy = _web_copy(_vnig_like_canvas(), whole, tmp_path, None)[2]
-    assert (legacy["status"], legacy["mode"]) == ("derived", "linear")
+    # The Web always sends its copy choice.
+    with pytest.raises(ValidationError):
+        _web_copy(_vnig_like_canvas(), whole, tmp_path, None)
     copied = _web_copy(_vnig_like_canvas(), whole, tmp_path, {"into": "new", "settings": "keep", "mode": None})[2]
     assert (copied["status"], copied["mode"], copied["renderRequest"]["grouping"]) == ("derived", "circular", "grid")
     assert copied["renderRequest"]["layout"]["multiRecordSizeMode"] == "equal"
@@ -1659,69 +1663,6 @@ def test_the_web_helper_without_a_copy_keeps_new_drawing_from_a_region(tmp_path:
         {"into": "new", "settings": "keep", "mode": "circular"},
     )[2]
     assert refused == {"status": "refused", "reason": "CIRCULAR_WHOLE_RECORDS"}
-
-
-def _legacy_cases() -> dict[str, tuple[DiagramRequest, list[dict[str, Any]]]]:
-    """The page's New drawing from a region calls whose replies on dev 49fe0bace (before Copy to another drawing)
-    tests/fixtures/region_drawing_legacy_replies.json holds."""
-    from gbdraw.api import CircularMultiRecordOptions, RecordDisplayOptions
-
-    examples = REPO / "examples"
-    sized = {"labels.font_size.short": 16, "labels.font_size.long": 16}
-    canvas = CircularDiagramRequest(
-        records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)],
-        layout=CircularMultiRecordOptions(multi_record_size_mode="equal", multi_record_positions=("#1@1", "#2@2")),
-        options=CircularDiagramOptions(config_overrides=sized),
-    )
-    mito = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="mito")])
-    return {
-        "mito-range": (
-            CircularDiagramRequest(
-                records=[RecordInput(GenBankInputSource(MITO), record_key="mito",
-                                     presentation=RecordPresentation(reverse_complement=True))],
-                options=CircularDiagramOptions(config_overrides=sized),
-            ),
-            [{"recordKey": "mito", "start": 100, "end": 900}],
-        ),
-        "mito-whole": (mito, [{"recordKey": "mito", "start": 1, "end": 16569}]),
-        "mito-origin": (mito, [{"recordKey": "mito", "start": 16000, "end": 200}]),
-        "canvas-two-whole": (canvas, [{"recordKey": "pair:1", "start": 1, "end": 4000},
-                                      {"recordKey": "pair:2", "start": 1, "end": 4000}]),
-        "canvas-one-whole": (canvas, [{"recordKey": "pair:2", "start": 1, "end": 4000}]),
-        "canvas-range": (canvas, [{"recordKey": "pair:1", "start": 1, "end": 4000},
-                                  {"recordKey": "pair:2", "start": 5, "end": 400}]),
-        "linear-blast": (
-            LinearDiagramRequest(
-                records=[RecordInput(GenBankInputSource(examples / "MjeNMV.gb"), record_key="a"),
-                         RecordInput(GenBankInputSource(examples / "MelaMJNV.gb"), record_key="b")],
-                options=LinearDiagramOptions(blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")]),
-            ),
-            [{"recordKey": "a", "start": 1, "end": 30000}, {"recordKey": "b", "start": 1, "end": 30000}],
-        ),
-        "linear-two-records-of-a-file": (
-            LinearDiagramRequest(records=canvas.records),
-            [{"recordKey": "pair:1", "start": 1, "end": 40}, {"recordKey": "pair:2", "start": 1, "end": 4000}],
-        ),
-        "linear-refused": (
-            LinearDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="mito",
-                                                      display=RecordDisplayOptions(is_circular=False))]),
-            [{"recordKey": "mito", "start": 16000, "end": 200}],
-        ),
-    }
-
-
-def test_the_web_helper_answers_todays_call_as_before_copy_to_another_drawing(tmp_path: Path) -> None:
-    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
-
-    expected = json.loads((REPO / "tests" / "fixtures" / "region_drawing_legacy_replies.json").read_text(encoding="utf-8"))
-    replies = {}
-    for name, (request, regions) in _legacy_cases().items():
-        payload, paths = _web_source(request)
-        for adapt in (True, False):
-            replies[f"{name}/{adapt}"] = json.loads(derive_web_region_drawing_json(
-                json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(adapt)
-            ))
-    assert replies == expected
 
 
 def test_the_web_helper_pastes_with_the_resources_of_both_drawings(tmp_path: Path) -> None:
@@ -1874,3 +1815,60 @@ def test_a_paste_gives_the_pasted_records_no_depth_or_genetic_code_of_the_target
     assert pasted.request.options.depth_track_files is None
     assert tuple(pasted.request.options.losat_search.record_gencodes) == (2, 2, None)
     assert len(resolve_request_records(pasted.request).records) == 3
+
+
+def test_a_paste_into_a_target_with_an_anchor_feature_aligns_the_pasted_records_too() -> None:
+    from gbdraw.api.region_drawing import paste_region_request
+    from gbdraw.api.request_render import plan_linear_request
+
+    # `anchor_feature` acts on every record a request draws; a paste keeps the target's option, so the pasted record
+    # is aligned with the others (only stored translations and a Similarity alignment plan leave it where it is).
+    target = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(MITO), record_key="mito")],
+        options=LinearDiagramOptions(anchor_feature="gene=COX1"),
+    )
+    source = LinearDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="m")])
+    pasted = paste_region_request(source, [RegionSelection("m", 1, 16569)], target, duplicates="add")
+    assert pasted.request.options.anchor_feature == target.options.anchor_feature
+    assert plan_linear_request(pasted.request).feature_anchor.statuses == ("rotated", "rotated")
+
+
+def test_same_file_contents_reads_sizes_first_and_hashes_only_files_of_equal_size(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gbdraw.api.record_planning import SourceFileContents
+
+    first, second, third = (tmp_path / name for name in ("a.gbk", "b.gbk", "c.gbk"))
+    first.write_bytes(b"LOCUS one\n")
+    second.write_bytes(b"LOCUS two, longer\n")
+    third.write_bytes(b"LOCUS one\n")
+    contents = SourceFileContents()
+    hashed: list[str] = []
+    digests = contents.digests
+    monkeypatch.setattr(contents, "digests", lambda paths: (hashed.extend(paths), digests(paths))[1])
+    assert not contents.same([str(first)], [str(second)])
+    assert hashed == []
+    assert contents.same([str(first)], [str(third)])
+    assert hashed == [str(first), str(third)]
+    # One fingerprint for files on disk and for bytes held in memory, however they are chunked.
+    assert SourceFileContents.fingerprint((b"LOCUS ", b"one\n")) == digests([str(first)])[0]
+
+
+def test_a_pasted_drawing_is_saved_through_the_public_session_writer(tmp_path: Path) -> None:
+    from gbdraw.api import SessionDrawingSpec, paste_region_drawing, save_session_document
+    from gbdraw.session import SessionFormatError, session_to_request
+
+    document = build_session_document(drawings=[
+        SessionDrawingSpec(request=_vnig_like_canvas()),
+        SessionDrawingSpec(request=LinearDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="m")])),
+    ], title="Copy")
+    with materialize_session(document, output_directory=tmp_path / "out") as materialized:
+        pasted = paste_region_drawing(materialized, [RegionSelection("pair:1", 1, 400)], drawing="circular", target="linear")
+    with pytest.raises(SessionFormatError, match="alone"):
+        save_session_document(tmp_path / "x.gbdraw", document=pasted.document, title="Other")
+    written = save_session_document(tmp_path / "copy.gbdraw", document=pasted.document)
+    assert written is pasted.document
+    loaded = load_session_document(tmp_path / "copy.gbdraw")
+    assert loaded.to_dict()["title"] == "Copy"
+    with materialize_session(loaded, output_directory=tmp_path / "out2") as materialized:
+        assert [record.record_key for record in session_to_request(materialized, drawing="linear").records] == ["m", "pair:1"]

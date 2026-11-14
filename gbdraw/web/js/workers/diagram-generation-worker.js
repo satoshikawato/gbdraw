@@ -1248,10 +1248,10 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
-  // New drawing from a region: Python derives the drawing from the source
+  // Copy to another drawing: Python derives the drawing from the source
   // drawing's draft projection and returns it with its resource sources.
   [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: {
-    keys: ['canonicalRequest', 'regions', 'adaptSizes'],
+    keys: ['canonicalRequest', 'regions', 'adaptSizes', 'copy'],
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'derive_web_region_drawing_json', [
@@ -1260,6 +1260,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         `${workspace}/output`,
         jsonArgument(payload.regions, []),
         jsonArgument(payload.adaptSizes, true),
+        jsonArgument(payload.copy, null),
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )

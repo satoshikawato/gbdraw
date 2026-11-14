@@ -1,5 +1,5 @@
 // @ts-check
-// The steps of the drawing menu's "New drawing from a region…" dialog
+// The steps of the drawing menu's "Copy to another drawing…" dialog
 // (app/region-drawing.js) that several specs take.
 const { expect } = require('@playwright/test');
 
@@ -7,7 +7,7 @@ const { expect } = require('@playwright/test');
 const openRegionDialog = async (page) => {
   const menu = page.locator('.drawing-bar-menu');
   await menu.locator('summary').click();
-  await menu.getByRole('button', { name: 'New drawing from a region…', exact: true }).click();
+  await menu.getByRole('button', { name: 'Copy to another drawing…', exact: true }).click();
   const dialog = page.locator('[data-region-drawing-dialog]');
   // The rows wait for the shown drawing's request, which Python projects (the first call boots it).
   await expect(dialog.locator('[data-region-drawing-row]')).not.toHaveCount(0, { timeout: 180_000 });

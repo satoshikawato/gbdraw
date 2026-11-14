@@ -120,7 +120,7 @@ Use `render_session()` for a supported saved session and
 | Function | Purpose |
 |---|---|
 | `build_session_document()` | resolve one request, or several drawings, and embed their resources in a session document |
-| `save_session_document()` | build and write the document |
+| `save_session_document()` | build and write the document, or write a built one (`document=`) |
 | `load_session_document()` | parse and validate a saved document |
 | `upgrade_session_document()` | return a readable Session 31–47 in the current version without rendering it, with a warning for each dropped Result |
 | `materialize_session()` | expose embedded resources as temporary paths |
@@ -209,7 +209,8 @@ change:
   every other drawing, the title, and the resources as they were. When
   records were pasted, the target's saved Result drew the old request, so
   it is dropped (`result_dropped` is true) and the next render draws the
-  drawing again. Use `document` while `materialized` is active.
+  drawing again. Use `document` while `materialized` is active; write it
+  with `save_session_document(path, document=pasted.document)`.
 
 - Each pasted record takes a record key of its own in the target
   (`pasted_record_keys`). A Linear target that places its records by row gives
@@ -222,9 +223,12 @@ change:
   `CIRCULAR_WHOLE_RECORDS`) while the whole records are pasted, and the paste
   raises `CopyRefused` when no whole record is selected (reason
   `CIRCULAR_WHOLE_RECORDS`) or the target draws a range (reason
-  `CIRCULAR_RANGE_TARGET`). A Linear target aligned
-  at a feature or by a Similarity alignment keeps its alignment, and the
-  pasted records are drawn where they are, without a move of their own.
+  `CIRCULAR_RANGE_TARGET`). A Linear target aligned by stored record
+  translations or by a Similarity alignment plan (what the Web's Align at
+  feature and Similarity alignment write) keeps its alignment, and the pasted
+  records are drawn where they are, without a move of their own. A target
+  whose options set `anchor_feature` aligns the pasted records as it aligns
+  all of its records.
 - With `edits="edits"` (the default) each record comes as the source draws it,
   with its per-feature color, label, and visibility edits inside the regions
   moved to its new key. A per-feature color is a `hash` row of the color

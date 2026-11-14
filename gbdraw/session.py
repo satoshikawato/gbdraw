@@ -1663,14 +1663,24 @@ def save_session_document(
     request: DiagramRequest | None = None,
     *,
     drawings: Sequence[DiagramRequest | SessionDrawingSpec] | None = None,
+    document: SessionDocument | None = None,
     title: str | None = None,
     created_at: datetime | None = None,
     active_drawing: str | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
     overwrite: bool = False,
 ) -> SessionDocument:
-    """Build and write a current canonical session through a staged commit."""
+    """Build and write a current canonical session through a staged commit.
 
+    Pass ``document`` alone to write a document that is built already (the
+    ``document`` of :func:`paste_region_drawing` or of
+    :func:`upgrade_session_document`) as it is.
+    """
+
+    if document is not None:
+        if any(value is not None for value in (request, drawings, title, created_at, active_drawing, web_file_inventory)):
+            raise SessionFormatError("A built Session document is saved alone, without a request, drawings or fields.")
+        return _write_session_document(path, document, overwrite=overwrite)
     try:
         # A refused output is reported before the drawings are rendered.
         _preflight_session_output(path, overwrite=overwrite)

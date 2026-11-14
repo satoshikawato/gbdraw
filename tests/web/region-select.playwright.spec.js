@@ -211,7 +211,7 @@ test('Circular: a loaded Result without axis disables Select region; after Gener
     await expect(page.locator('[data-region-feature-count]')).toHaveText(/^\d+ features?$/);
     // The actions, one button each, in the approved order (PD-OI-115).
     expect(await popup.locator('button').evaluateAll((buttons) => buttons.map((button) => button.textContent.trim())))
-      .toEqual(['Copy FASTA', expect.stringMatching(/^Select \d+ features?$/), 'Add to annotation set', 'New drawing from region', 'Use as search query']);
+      .toEqual(['Copy FASTA', expect.stringMatching(/^Select \d+ features?$/), 'Add to annotation set', 'Copy to another drawing…', 'Use as search query']);
     await expect(popup.locator('[data-region-new-drawing]')).toBeEnabled();
     expect(record).toBe(16_569);
     // The selection is transient: the drag and the popup add no History step (Q-A4).
@@ -247,7 +247,7 @@ test('Circular: a loaded Result without axis disables Select region; after Gener
   }
 });
 
-test('Circular: a span across the origin says so and leaves New drawing from region enabled', async ({ browser }) => {
+test('Circular: a span across the origin says so and leaves Copy to another drawing enabled', async ({ browser }) => {
   test.setTimeout(420_000);
   const page = await load(browser, seeds.circular);
   try {

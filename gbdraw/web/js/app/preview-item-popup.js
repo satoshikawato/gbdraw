@@ -256,6 +256,8 @@ const buildRecordDefinitionView = ({
     dialogLabel: t('Record {accession}', { accession }),
     scope,
     recordIndex,
+    // The drawn record's identity with `recordIndex` (Copy to another drawing opens on it).
+    recordId,
     title: name || accession,
     subtitle: [text(drawn.subtitle), named ? accession : ''].filter(Boolean).join(' · '),
     facts,
@@ -612,5 +614,19 @@ export const createPreviewItemPopup = (options) => {
     return result;
   };
 
-  return { view, setRecordField, showRecordSettings, showRecordTextSettings, renameLegendRow: renameLegendEntry, commitField };
+  /**
+   * The record key, in the shown Result's committed request, of a drawn record (its definition group's index and ID),
+   * found as the record popup finds its record; null when that names no request record.
+   * @param {{ recordIndex: number, recordId: string }} item @returns {string | null}
+   */
+  const committedRecordKeyOf = (item) => {
+    const scope = state.mode.value === 'circular' ? 'circular' : 'linear';
+    const { record } = drawnRequestRecord(scope, item, getCommittedRequest()?.records || [], readCommittedRecordRows);
+    return record ? text(record.recordKey) || null : null;
+  };
+
+  return {
+    view, setRecordField, showRecordSettings, showRecordTextSettings, renameLegendRow: renameLegendEntry, commitField,
+    committedRecordKeyOf
+  };
 };

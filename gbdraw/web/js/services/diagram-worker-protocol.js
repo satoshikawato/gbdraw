@@ -194,13 +194,16 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
 /**
  * The payload of `deriveRegionDrawing`: the source drawing's draft projection
  * (its canonical request as the next Generate would send it), whose resources
- * the page stages, the regions, and whether hand-set sizes return to Auto.
+ * the page stages, the regions, whether hand-set sizes return to Auto, and where
+ * the copy goes (`NewDrawingCopy`, declared in Python).
  * @typedef {object} RegionDrawingHelperPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
  * @property {readonly RegionDrawingRegion[]} regions
  * @property {boolean} adaptSizes
+ * @property {NewDrawingCopy} copy
  */
+/** @import { NewDrawingCopy } from '../contracts/locate.generated.js' */
 
 /*
  * The derived drawing (`DerivedRegionDrawing`: its mode, its canonical request as a Session stores a committed one,

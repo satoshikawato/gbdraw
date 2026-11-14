@@ -96,12 +96,15 @@ result = json.dumps({
 })
 `, { canonicalRequest: renderRequest, staged: await stagedFiles(renderRequest, resources) }));
 
+/** The copy the dialog sends by default: a new drawing, keeping the settings, of Python's default mode. */
+const NEW_DRAWING = Object.freeze({ into: 'new', settings: 'keep', mode: null });
+
 /** The Worker helper `deriveRegionDrawing`, run by the real Python owner over staged resources. */
 const deriveInPython = async (payload) => ({ result: JSON.parse(await evaluatePython(`${STAGE}
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 result = derive_web_region_drawing_json(
     json.dumps(payload['canonicalRequest']), json.dumps(paths), directory,
-    json.dumps(payload['regions']), json.dumps(payload['adaptSizes']))
+    json.dumps(payload['regions']), json.dumps(payload['adaptSizes']), json.dumps(payload['copy']))
 `, { ...payload, resources: undefined, staged: await stagedFiles(payload.canonicalRequest, payload.resources) })) });
 
 const noWorker = () => { throw new Error('the records are read by the fast path'); };
@@ -145,7 +148,7 @@ const circularSource = (records, form = {}) => {
 const deriveAndInstall = async (source, regions, adaptSizes = true, drawingId = 'region-test') => {
   const sent = await projectOf(source);
   const { renderRequest, resources } = sent.envelope;
-  const { result: derived } = await deriveInPython({ canonicalRequest: renderRequest, resources, regions, adaptSizes });
+  const { result: derived } = await deriveInPython({ canonicalRequest: renderRequest, resources, regions, adaptSizes, copy: NEW_DRAWING });
   assert.equal(derived.status, 'derived', JSON.stringify(derived));
   const prepared = await prepareRegionDrawing({ derived, sent });
   const made = createDrawingState(drawingId, prepared.mode);
@@ -231,7 +234,7 @@ test('(b) a derived request the Load readers would repair is refused, not instal
   const sent = await projectOf(source);
   const { renderRequest, resources } = sent.envelope;
   const { result: derived } = await deriveInPython({
-    canonicalRequest: renderRequest, resources, regions: [{ recordKey: 'record-1', start: 1, end: 1200 }], adaptSizes: true
+    canonicalRequest: renderRequest, resources, regions: [{ recordKey: 'record-1', start: 1, end: 1200 }], adaptSizes: true, copy: NEW_DRAWING
   });
   assert.equal(derived.status, 'derived', JSON.stringify(derived));
   // A GC content minimum above its maximum: the Web's config reader replaces the maximum.
@@ -273,7 +276,7 @@ test('(c) a start after the end of a linear record is refused: no drawing, the t
     deriveRegion: deriveInPython,
     newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; }
   });
-  const offer = await regions.deriveFromShown([{ recordKey: 'record-1', start: 900, end: 100 }], true);
+  const offer = await regions.deriveFromShown([{ recordKey: 'record-1', start: 900, end: 100 }], true, NEW_DRAWING);
   assert.deepEqual(offer, { status: 'refused', reason: 'START_AFTER_END', recordKey: 'record-1', start: 900, end: 100 });
   assert.equal('create' in offer, false, 'a refusal offers no Create');
   assert.deepEqual(created, []);
@@ -326,7 +329,7 @@ test('(d) the drawing list with makeRegionDrawing: Create adds the region drawin
   const source = circularSource([recordA]);
   const sourceHash = hashOf(source.id);
   const before = listView();
-  const offer = await regionDrawingsOf().deriveFromShown([{ recordKey: 'record-1', start: 301, end: 700 }], true);
+  const offer = await regionDrawingsOf().deriveFromShown([{ recordKey: 'record-1', start: 301, end: 700 }], true, NEW_DRAWING);
   assert.equal(offer.status, 'derived');
   assert.equal(offer.mode, 'linear', 'a part of a record is drawn Linear');
   const drawingId = allocateDrawingId('linear', before.tabs.map(({ id }) => id));
@@ -338,7 +341,7 @@ test('(d) the drawing list with makeRegionDrawing: Create adds the region drawin
     [...before.tabs, { id: drawingId, name: defaultDrawingName('linear', drawingId) }], 'the ID and name New gives');
   assert.equal(state.activeDrawingId.value, drawingId, 'the new drawing is shown');
   assert.equal(state.drawingOf(drawingId).mode, 'linear');
-  assert.equal(history.timeline().undo[0]?.label, 'New drawing from a region');
+  assert.equal(history.timeline().undo[0]?.label, 'Copy to another drawing');
   assert.equal(history.managerOf(drawingId).getUndoCount(), 0, 'its History starts empty');
   assert.equal(hashOf(source.id), sourceHash, 'the source drawing is unchanged');
 

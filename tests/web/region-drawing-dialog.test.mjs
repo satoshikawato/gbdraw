@@ -1,5 +1,5 @@
-// The New drawing from a region dialog's owner: open, derive (newest wins),
-// Keep my values, refusal, Create as one step, Cancel records nothing.
+// The Copy to another drawing dialog's owner: open (on the shown records, a region, or drawn records), derive
+// (newest wins), the choices, refusal, Copy as one step, Cancel records nothing.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -54,7 +54,9 @@ const harness = ({ reply = null, refusal = 'START_AFTER_END' } = {}) => {
       return { drawingId: 'linear' };
     },
     readRecordSources,
-    resultFeatures
+    resultFeatures,
+    // The record popup's finding: drawn record index i is the request's record-(i+1) (the committed key).
+    committedRecordKeyOf: ({ recordIndex }) => (recordIndex < 2 ? `record-${recordIndex + 1}` : null)
   });
   return { owner, calls, pending };
 };
@@ -204,7 +206,7 @@ test('without a Result the records come from the request and discovery, with no 
   ];
   const asked = [];
   const records = regionSourceRecords(requestRecords, sources, (recordKey) => { asked.push(recordKey); return null; });
-  assert.deepEqual(records, [{ recordKey: 'record-1:1', caption: 'NC_1', length: 1200, features: null }]);
+  assert.deepEqual(records, [{ recordKey: 'record-1:1', aliases: ['record-1:1'], caption: 'NC_1', length: 1200, features: null }]);
   assert.equal(asked[0], 'record-1:1');
 });
 
@@ -224,7 +226,10 @@ test('a record drawn alone after a Multi-Record Canvas Generate offers the featu
   const catalog = new Map([['record-1', [{ featureId: 'f1', label: 'dnaA' }]], ['record-2', [{ featureId: 'f2', label: 'recA' }]]]);
   const records = regionSourceRecords([{ recordKey: draftKey, selector: { kind: 'recordIndex', index: 1 } }], sources,
     (recordKey) => catalog.get(recordKey) ?? null);
-  assert.deepEqual(records, [{ recordKey: draftKey, caption: 'NC_2', length: 900, features: [{ featureId: 'f2', label: 'recA' }] }]);
+  assert.deepEqual(records, [{
+    recordKey: draftKey, aliases: ['record-1:2', 'record-2', 'circular-NC_2-#2'], caption: 'NC_2', length: 900,
+    features: [{ featureId: 'f2', label: 'recA' }]
+  }]);
 });
 
 test('every setting that can return to Auto is named by an English UI text, never its ID', async () => {
@@ -315,7 +320,7 @@ test('a Create that fails shows its reason and stays open', async () => {
 });
 
 // The owner holds every dialog transition: the template calls editRow and
-// setKeepValues and assigns no dialog state.
+// setChoice and assigns no dialog state.
 test('an edit through the owner writes the row found by its record key and derives again', async () => {
   const { owner, calls } = harness();
   await owner.open();
@@ -323,7 +328,7 @@ test('an edit through the owner writes the row found by its record key and deriv
   assert.deepEqual(calls.derive.at(-1).regions, [{ recordKey: 'record-2', start: 11, end: 20 }]);
   assert.deepEqual([owner.dialog.rows[0].checked, owner.dialog.rows[1].start], [false, '11']);
   assert.equal(owner.dialog.status, 'derived');
-  await owner.setKeepValues(true);
+  await owner.setChoice({ keepValues: true });
   assert.equal(owner.dialog.keepValues, true);
   assert.equal(calls.derive.at(-1).adaptSizes, false);
 });
@@ -429,4 +434,41 @@ test('each setting is named by the label of the pane control that writes it', as
       }
     }
   }
+});
+
+test('the copy goes to a new drawing: the default copy, then the mode and settings the user chose', async () => {
+  const { owner, calls } = harness();
+  await owner.open();
+  await owner.editRow('record-1', { checked: true });
+  assert.deepEqual(calls.derive.at(-1).copy, { into: 'new', settings: 'keep', mode: null }, "Python's default mode");
+  assert.equal(owner.dialog.mode, 'linear', 'the mode choice shows the mode of the derived drawing');
+  await owner.setChoice({ newMode: 'circular', settings: 'defaults' });
+  assert.deepEqual(calls.derive.at(-1).copy, { into: 'new', settings: 'defaults', mode: 'circular' });
+  owner.close();
+  await owner.open();
+  assert.deepEqual([owner.dialog.newMode, owner.dialog.settings], [null, 'keep'], 'a new open starts from the defaults');
+});
+
+test('the record popup and a Shift+drag open the dialog with their records whole, found by the committed key', async () => {
+  const { owner, calls } = harness();
+  await owner.openWithRecords([{ recordIndex: 1, recordId: 'NC_2' }, { recordIndex: 7, recordId: 'gone' }]);
+  assert.deepEqual(owner.dialog.rows.map((row) => [row.recordKey, row.checked, row.kind]),
+    [['record-1', false, 'whole'], ['record-2', true, 'whole']], 'a drawn record the request lacks chooses nothing');
+  assert.deepEqual(calls.derive.at(-1).regions, [{ recordKey: 'record-2', start: 1, end: 900 }]);
+  assert.equal(owner.dialog.status, 'derived');
+});
+
+test('a refused copy is worded from its reason', async () => {
+  const { owner } = harness();
+  const refusing = createRegionDrawing({
+    shownDrawingId: () => 'circular', projectShownRequest, readRecordSources, resultFeatures,
+    deriveRegion: async () => ({ result: { status: 'refused', reason: 'CIRCULAR_WHOLE_RECORDS' } }),
+    newDrawingFromRegion: async () => ({ drawingId: 'linear' }), committedRecordKeyOf: () => null
+  });
+  await refusing.open();
+  await refusing.setChoice({ newMode: 'circular' });
+  await refusing.editRow('record-1', { checked: true });
+  assert.equal(refusing.dialog.status, 'refused');
+  assert.equal(refusing.dialog.message, 'A Circular drawing draws several whole records, or one record or range alone.');
+  owner.close();
 });

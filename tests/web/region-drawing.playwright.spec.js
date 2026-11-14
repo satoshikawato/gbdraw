@@ -1,8 +1,12 @@
-// New drawing from a region (PD-OI-090 (4)): the drawing menu's "New drawing
-// from a region…" opens the dialog of app/region-drawing.js, which derives the
-// new drawing from the shown one in Python and adds it as one project step.
-// The cases find the new drawing by its drawing ID, never by its tab text.
+// Copy to another drawing (PD-OI-090 (4), PD-OI-115): the drawing menu, a
+// record's popup and the records a Shift+drag selects open the dialog of
+// app/region-drawing.js, which derives the new drawing from the shown one in
+// Python and adds it as one project step. The cases find the new drawing by
+// its drawing ID, never by its tab text.
 const { execFileSync } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
+const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { test, expect } = require('@playwright/test');
 const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
@@ -59,7 +63,7 @@ test('a region of a Circular record becomes a Linear drawing that Generate draws
     await expect(drawingTab(page, added)).toBeVisible();
     await expect(drawingTab(page, added)).toHaveAttribute('aria-selected', 'true');
     expect(await shownDrawing(page)).toEqual({ id: added, kind: 'linear' });
-    expect((await undoLabels(page))[0], 'Create is one project step').toBe('New drawing from a region');
+    expect((await undoLabels(page))[0], 'Create is one project step').toBe('Copy to another drawing');
 
     await generate(page);
     const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')));
@@ -71,7 +75,7 @@ test('a region of a Circular record becomes a Linear drawing that Generate draws
     // Generate is a step of its own: the first Undo takes the figure back, the second the new drawing.
     const undo = page.getByRole('button', { name: 'Undo', exact: true });
     await undo.click();
-    await expect.poll(async () => (await undoLabels(page))[0]).toBe('New drawing from a region');
+    await expect.poll(async () => (await undoLabels(page))[0]).toBe('Copy to another drawing');
     expect(await drawingIds(page), 'Undo of Generate keeps the new drawing').toEqual([source, added]);
     await undo.click();
     await expect.poll(() => drawingIds(page)).toEqual([source]);
@@ -210,4 +214,117 @@ test('A Circular Session whose record has one window across the origin loads it,
     .toEqual([[{ ...originWindow, reverseComplement: true }], false]);
   await expect(page.locator('[data-circular-record-presentation] [data-record-window]'))
     .toHaveText([/^16,000\u2013100 \(Reverse complement\)\s*670 bp$/]);
+});
+
+/** A 4 kb circular record with two CDS. @param {string} id */
+const smallGenbank = (id) => {
+  const sequence = 'ACGTTGCA'.repeat(500);
+  const origin = sequence.match(/.{1,60}/g).map((chunk, index) => (
+    `${String(index * 60 + 1).padStart(9)} ${chunk.match(/.{1,10}/g).join(' ')}`
+  )).join('\n');
+  return `LOCUS       ${id}                    4000 bp    DNA     circular UNA 01-JAN-2000
+DEFINITION  Two CDS.
+ACCESSION   ${id}
+VERSION     ${id}
+FEATURES             Location/Qualifiers
+     CDS             101..600
+                     /gene="${id.toLowerCase()}A"
+     CDS             complement(1001..1600)
+                     /gene="${id.toLowerCase()}B"
+ORIGIN
+${origin}
+//
+`;
+};
+
+/** The screen box of each drawn record name (its definition group), in drawn order. @param {import('@playwright/test').Page} page */
+const recordNameBoxes = (page) => page.evaluate(() => [...document.querySelectorAll(
+  '.gbdraw-preview-surface [data-gbdraw-role="record-definition"][data-gbdraw-record-id]'
+)].map((group) => {
+  const { left, top, right, bottom } = group.getBoundingClientRect();
+  return { id: group.getAttribute('data-gbdraw-record-id'), left, top, right, bottom };
+}));
+
+/** Rows of the dialog as [record key, checked, kind]. @param {import('@playwright/test').Page} page */
+const dialogRows = (page) => page.evaluate(() => window.__GBDRAW_APP__.regionDrawings.dialog.rows
+  .map((row) => [row.caption, row.checked, row.kind]));
+
+test('a record popup and the records of a Shift+drag open Copy to another drawing with them whole; two whole records make one Multi-Record Canvas that Undo removes', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  const input = testInfo.outputPath('two-records.gbk');
+  writeFileSync(input, smallGenbank('RECA') + smallGenbank('RECB'));
+  await openWithGenBank(page, input, () => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await generateAndWaitForResult(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await expect.poll(async () => (await recordNameBoxes(page)).map(({ id }) => id)).toEqual(['RECA', 'RECB']);
+  const source = (await shownDrawing(page)).id;
+  const dialog = page.locator('[data-region-drawing-dialog]');
+
+  // The record popup: that record chosen whole; one whole record keeps the drawing's mode.
+  await page.locator('.gbdraw-preview-surface [data-gbdraw-role="record-definition"][data-gbdraw-record-id="RECA"] text').first().click();
+  const copyRecord = page.locator('[data-record-copy-to-drawing]');
+  await expect(copyRecord).toBeVisible();
+  await copyRecord.click();
+  await expect(copyRecord, 'the popup closes as the dialog opens').toHaveCount(0);
+  await expect.poll(() => dialogRows(page), { timeout: 180_000 })
+    .toEqual([['RECA', true, 'whole'], ['RECB', false, 'whole']]);
+  await expect.poll(() => regionStatus(page), { timeout: 180_000 }).toBe('derived');
+  await expect(dialog.locator('[data-region-drawing-mode]')).toHaveValue('circular');
+  await dialog.locator('[data-region-drawing-cancel]').click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+
+  // Shift+drag over both names selects the records (and the features in the box); Clear clears both. The box
+  // starts and ends on the blank canvas inside the circles: a press on a name opens its popup.
+  const shiftDragOverNames = async () => {
+    // The fit animates the preview transform: the names are read once they stand still.
+    let last = '';
+    await expect.poll(async () => {
+      const now = JSON.stringify(await recordNameBoxes(page));
+      const settled = now === last;
+      last = now;
+      return settled;
+    }, { intervals: [250] }).toBe(true);
+    const boxes = JSON.parse(last);
+    const left = Math.min(...boxes.map((box) => box.left)) - 24;
+    const top = Math.min(...boxes.map((box) => box.top)) - 24;
+    const right = Math.max(...boxes.map((box) => box.right)) + 24;
+    const bottom = Math.max(...boxes.map((box) => box.bottom)) + 24;
+    await page.keyboard.down('Shift');
+    await page.mouse.move(left, top);
+    await page.mouse.down();
+    await page.mouse.move(right, bottom, { steps: 8 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+  };
+  await shiftDragOverNames();
+  const records = page.locator('[data-selected-records]');
+  await expect(records).toContainText('2 records: RECA, RECB');
+  await page.getByRole('button', { name: 'Clear selected features', exact: true }).click();
+  await expect(records).toHaveCount(0);
+  expect(await undoLabels(page), 'a selection is no History step').not.toContain('Copy to another drawing');
+
+  await shiftDragOverNames();
+  await records.locator('[data-selected-records-copy]').click();
+  await expect.poll(() => dialogRows(page), { timeout: 180_000 })
+    .toEqual([['RECA', true, 'whole'], ['RECB', true, 'whole']]);
+  await expect.poll(() => regionStatus(page), { timeout: 180_000 }).toBe('derived');
+  await expect(dialog.locator('[data-region-drawing-mode]')).toHaveValue('circular');
+  await dialog.locator('[data-region-drawing-create]').click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(async () => (await drawingIds(page)).length).toBe(2);
+  const [added] = (await drawingIds(page)).filter((id) => id !== source);
+  expect(await shownDrawing(page)).toEqual({ id: added, kind: 'circular' });
+  expect((await undoLabels(page))[0], 'Copy is one project step').toBe('Copy to another drawing');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.multi_record_canvas), 'one Multi-Record Canvas').toBe(true);
+  await generateAndWaitForResult(page);
+  const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')));
+  expect(drawn, 'one figure of both records').toHaveLength(1);
+  for (const id of ['RECA', 'RECB']) expect(drawn[0]).toContain(`data-gbdraw-record-id="${id}"`);
+
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  await undo.click();
+  await expect.poll(async () => (await undoLabels(page))[0]).toBe('Copy to another drawing');
+  await undo.click();
+  await expect.poll(() => drawingIds(page)).toEqual([source]);
 });

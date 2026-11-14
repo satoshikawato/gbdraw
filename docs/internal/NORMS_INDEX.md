@@ -815,6 +815,7 @@ under "Cited ids without a record".
   - `tests/test_web_record_spans.py`
   - `tests/web/annotations.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`
+  - `tests/web/region-drawing.playwright.spec.js`
   - `tests/web/region-select.playwright.spec.js`
   - `tests/web/region-select.test.mjs`
   - `tests/web/sequence-search.test.mjs`

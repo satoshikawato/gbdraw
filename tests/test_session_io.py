@@ -1127,6 +1127,20 @@ def test_alignment_reset_receipt_binds_the_request_as_stored(schema: int, placem
         *session_io_module.split_resource_bytes(_receipt_session(schema, placement, binding)))
 
 
+def test_alignment_reset_receipt_fingerprints_its_sources_through_the_one_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The receipt's Similarity alignment side writes its source fingerprints through SourceFileContents; the check
+    # reads the Session's bytes through the same owner, so the two cannot drift apart.
+    from gbdraw.api.record_planning import SourceFileContents
+
+    seen: list[bytes] = []
+    fingerprint = SourceFileContents.fingerprint
+    monkeypatch.setattr(SourceFileContents, "fingerprint",
+                        staticmethod(lambda chunks: fingerprint(seen.append(b"".join(chunks)) or seen[-1:])))
+    session_io_module._validate_alignment_reset_receipt(
+        *session_io_module.split_resource_bytes(_receipt_session(9, "record", _RECORD_SELECTOR_BINDING)))
+    assert len(seen) == 1
+
+
 def test_alignment_reset_receipt_of_a_region_selector_is_not_the_promoted_binding() -> None:
     with pytest.raises(ValidationError, match="binding changed"):
         session_io_module._validate_alignment_reset_receipt(
