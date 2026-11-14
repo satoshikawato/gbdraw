@@ -625,6 +625,7 @@ under "Cited ids without a record".
   - `tests/web/per-mode-results.playwright.spec.js`
   - `tests/web/region-drawing.playwright.spec.js`
   - `tests/web/region-drawing.test.mjs`
+  - `tests/web/region-select.playwright.spec.js`
   - `tests/web/scale-visibility.playwright.spec.js`
   - `tests/web/session-active-mode.playwright.spec.js`
   - `tests/web/session-loading-feedback.playwright.spec.js`
