@@ -46,6 +46,7 @@ from gbdraw.cli_utils.session import render_main
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.linear import linear_main
 from gbdraw.session import (
+    SessionRenderError,
     read_session_png_dpi,
     render_session,
     render_session_drawings,
@@ -1577,17 +1578,24 @@ def _render_notices(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    ("mode", "files", "options"),
+    ("mode", "files", "options", "warnings"),
     [
-        ("circular", ("NC_001416.gb",), ("--annotation_table", "{table}")),
-        ("linear", ("NC_001416.gb",), ("--annotation_table", "{table}")),
-        ("linear", ("NC_001416.gb",), ("--wrap_length", "10000")),
-        ("circular", ("a.gb", "b.gb"), ("-k", "tRNA")),
+        ("circular", ("NC_001416.gb",), ("--annotation_table", "{table}"), 2),
+        ("linear", ("NC_001416.gb",), ("--annotation_table", "{table}"), 2),
+        ("linear", ("NC_001416.gb",), ("--wrap_length", "10000"), 0),
+        ("circular", ("a.gb", "b.gb"), ("-k", "tRNA"), 2),
+        # One file given twice: its warning is logged once, as for any input a run reads twice.
+        ("linear", ("a.gb", "a.gb"), ("-k", "tRNA"), 1),
     ],
-    ids=["circular", "linear", "linear-wrap", "circular-batch"],
+    ids=["circular", "linear", "linear-wrap", "circular-batch", "linear-same-file"],
 )
 def test_a_session_render_logs_the_notices_of_the_direct_command(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, mode: str, files: tuple[str, ...], options: tuple[str, ...]
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    mode: str,
+    files: tuple[str, ...],
+    options: tuple[str, ...],
+    warnings: int,
 ) -> None:
     source = REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"
     gbks = []
@@ -1610,13 +1618,12 @@ def test_a_session_render_logs_the_notices_of_the_direct_command(
     command(["--session", session, "-o", str(tmp_path / "replay")])
     replayed = _render_notices(caplog)
 
+    assert rendered == direct
+    assert replayed == direct
     assert sum(line.startswith("INFO: Record ") for line in direct) == len(files)
     if "--wrap_length" in options:
         assert direct[-1] == "INFO: Wrapping at 10 kb per row: 5 rows"
-    else:
-        assert sum(line.startswith("WARNING: ") for line in direct) == 2
-    assert rendered == direct
-    assert replayed == direct
+    assert sum(line.startswith("WARNING: ") for line in direct) == warnings
 
 
 def test_each_drawing_of_a_session_logs_its_notices_after_its_own_figure(
@@ -1639,3 +1646,31 @@ def test_each_drawing_of_a_session_logs_its_notices_after_its_own_figure(
     circular_notices = lines[generated[0] + 1:generated[0] + 1 + len(alone["circular"])]
     assert circular_notices == alone["circular"]
     assert lines[generated[1] + 1:] == alone["linear"]
+
+
+def test_a_drawing_that_fails_to_render_leaves_the_notices_of_the_drawings_before_it(
+    two_drawings: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gbdraw.api.session_compat as session_compat
+
+    caplog.set_level("INFO")
+    render_main(["--session", str(two_drawings), "--drawing", "circular", "-o", str(tmp_path / "alone"), "-f", "svg"])
+    alone = _render_notices(caplog)
+    assert any(line.startswith("INFO: Record ") for line in alone)
+
+    render = session_compat.render_session_compatible_request
+
+    def render_or_fail(request: Any, *args: Any, **kwargs: Any) -> Any:
+        if type(request).__name__.startswith("Linear"):
+            raise RuntimeError("the Linear drawing fails")
+        return render(request, *args, **kwargs)
+
+    monkeypatch.setattr(session_compat, "render_session_compatible_request", render_or_fail)
+    caplog.clear()
+    with pytest.raises(SessionRenderError, match="the Linear drawing fails"):
+        render_main(["--session", str(two_drawings), "-o", str(tmp_path / "both"), "-f", "svg"])
+    lines = _log_lines(caplog)
+    generated = [index for index, line in enumerate(lines) if line.startswith("INFO: Generated ")]
+
+    assert [lines[index].rsplit("_", 1)[-1] for index in generated] == ["circular.svg"]
+    assert lines[generated[0] + 1:generated[0] + 1 + len(alone)] == alone

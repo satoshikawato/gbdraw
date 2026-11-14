@@ -333,6 +333,31 @@ def test_python_api_logs_a_region_set_the_track_stack_leaves_out(
         REGION_SET_LEFT_OUT_WARNING.removeprefix("WARNING: ")
     ]
 
+
+def test_one_file_given_twice_warns_once_in_the_python_api_and_the_web(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """``draw_linear`` logs, and the Web reply carries, one warning of one input, as ``gbdraw linear`` logs it."""
+    from gbdraw import read_genbank
+
+    records = read_genbank(str(ZERO_FEATURES))
+    with caplog.at_level("WARNING", logger="gbdraw.api.input_summary"):
+        gbdraw.draw_linear(records + records)
+    document = _embedded(build_session_document(LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(ZERO_FEATURES)),) * 2,
+        output=RenderOutputRequest(output_prefix="twice", formats=("svg",)),
+    )))
+    reply = render_embedded_canonical_web_request(
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+    )
+
+    assert [record.getMessage() for record in caplog.records if record.levelname == "WARNING"] == [
+        ZERO_FEATURES_WARNING.removeprefix("WARNING: ").replace("(zero_features_record.gb)", "(in-memory record)")
+    ]
+    assert reply["metadata"]["inputSummaries"][0]["warnings"] == [
+        {"code": "no_drawable_features", "message": ZERO_FEATURES_WARNING.removeprefix("WARNING: ")}
+    ]
+
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_web_reply_names_a_region_set_the_track_stack_leaves_out(tmp_path: Path, mode: str) -> None:
     """The Web shows the warning the CLI logs, from the same owner (OV-3007)."""

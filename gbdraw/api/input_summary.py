@@ -416,7 +416,8 @@ def _no_feature_reason(record: RecordInputSummary) -> str:
 
 def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     """The reasons the drawing shows nothing of a record, of a comparison table, or of a region annotation set, and
-    the comparison files whose hover and span export name some records ambiguously."""
+    the comparison files whose hover and span export name some records ambiguously: one per input and code, so one
+    file given twice warns once."""
 
     warnings = [
         InputWarning(
@@ -460,7 +461,10 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message, (item.source_path,))
         for item in summary.repeated_comparison_ids
     )
-    return tuple(warnings)
+    unique: dict[InputWarningKey, InputWarning] = {}
+    for warning in warnings:
+        unique.setdefault((warning.code, warning.subject), warning)
+    return tuple(unique.values())
 
 
 def log_input_warnings(summary: InputSummary, *, warned: set[InputWarningKey] | None = None) -> None:
