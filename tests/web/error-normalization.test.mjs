@@ -445,8 +445,19 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   const exportInput = normalizeUserFacingError({ code: 'EXPORT_INPUT' }, { operation: 'export-png' });
   assert.ok(exportInput.actions.includes('generate'));
   const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  // E1: an error about the other mode's Result runs Generate in that mode.
-  assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\) && errorDisplay\.operation !== 'generate'" type="button" @click="generateFromError"/);
+  // E1: an error about the other mode's Result runs Generate in that mode. The panel offers Generate for every error
+  // whose action is Generate, unless it already offers Retry Generate (a failed Generate that may succeed again).
+  const generateShown = new Function('errorDisplay', `return ${
+    indexHtml.match(/<button v-if="([^"]+)" type="button" @click="generateFromError"/)[1]};`);
+  assert.equal(generateShown(exportInput), true);
+  // OV-3541: a redraw (Reset record positions, Align, a record rotation) of a Session whose LOSATP search has no saved
+  // results stops with operation generate; its one action is the Generate it asks for.
+  const searchFirst = normalizeUserFacingError(diagnosticError('COMPARISON_REQUIRES_GENERATE'), { operation: 'generate' });
+  assert.deepEqual([searchFirst.operation, searchFirst.actions], ['generate', ['generate']]);
+  assert.equal(generateShown(searchFirst), true);
+  const retried = normalizeUserFacingError({ code: 'OUT_OF_MEMORY' }, { operation: 'generate' });
+  assert.equal(generateShown(retried), false);
+  assert.equal(generateShown({ ...retried, actions: [...retried.actions, 'generate'] }), false);
   const hiddenMode = normalizeUserFacingError(diagnosticError(
     'SESSION_SAVE_REQUIRES_GENERATE', { diagramMode: 'linear' }, { operation: 'session-save', stage: 'result-admission' }
   ));
