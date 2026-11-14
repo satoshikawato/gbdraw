@@ -270,6 +270,9 @@ export const DEFAULT_PNG_DPI = 300;
 // gbdraw/session_legacy_values.py: LEGACY_SCALAR_AXIS_LABELS
 export const LEGACY_SCALAR_AXIS_LABELS = 'numbered';
 
+// gbdraw/session_legacy_values.py: LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX
+export const LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX = 'comparison-explicit-';
+
 // gbdraw/tracks/circular.py: CIRCULAR_SLOT_UNREAD_PARAM_KEYS
 /** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features' | 'ticks' | 'sequence_conservation', readonly string[]>>} */
 export const CIRCULAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({

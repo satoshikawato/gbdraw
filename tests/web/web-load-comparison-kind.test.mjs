@@ -4,9 +4,13 @@
 // OV-3566: a LOSATP Pairwise search that compared no pair (every record in one row) is stored as the Pairwise
 // pipeline without pairs; the controls hold it, and a redraw of it searches nothing.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { gunzipSync } from 'node:zlib';
 
-import { COMPARISON_COLUMNS } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import {
+  COMPARISON_COLUMNS, LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX
+} from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
   readStoredBlastTables, requestRunsProteinSearch
 } from '../../gbdraw/web/js/services/session-request.js';
@@ -21,23 +25,39 @@ const table = (header, rows = BLAST_ROWS) => ({
   kind: 'canonical-tsv', name: 'comparison-explicit-1.tsv', type: 'text/tab-separated-values',
   size: 0, lastModified: 0, encoding: 'base64', data: base64(`${header}\n${rows}`)
 });
-const comparison = (resourceId, queryRecordIndex = 0, subjectRecordIndex = 1) => ({
-  kind: 'precomputedProteinComparison', resourceId, encoding: 'canonicalTsv', queryRecordIndex, subjectRecordIndex
-});
 
-test('a schema 5-9 protein table of the BLAST columns alone loads as a BLAST table; any other stays as stored', () => {
+const given = (number) => `${LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX}${number}`;
+
+test('a schema 5-9 protein table of the BLAST columns alone under a given table\'s ID loads as a BLAST table', () => {
+  assert.equal(given(1), 'comparison-explicit-1', 'the ID 0.14.x CLI and Python renders gave a table they were given');
   const marker = { kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: {} };
+  const blastHeader = COMPARISON_COLUMNS.join('\t');
   const resources = {
-    blast: table(COMPARISON_COLUMNS.join('\t')),
-    crlf: table(`${COMPARISON_COLUMNS.join('\t')}\r`),
-    protein: table([...COMPARISON_COLUMNS, 'query_protein_id', 'subject_protein_id'].join('\t'))
+    blast: table(blastHeader),
+    crlf: table(`${blastHeader}\r`),
+    protein: table([...COMPARISON_COLUMNS, 'query_protein_id', 'subject_protein_id'].join('\t')),
+    // The IDs the Web and the CLI gave LOSATP tables: never read by the columns alone.
+    webLosatp: table(blastHeader),
+    cliLosatp: table(blastHeader),
+    resolved: table(blastHeader),
+    notNumbered: table(blastHeader)
   };
+  const ids = {
+    blast: given(1), crlf: given(2), protein: given(3), webLosatp: 'comparison-canonical-protein-1',
+    cliLosatp: 'comparison-protein-1', resolved: 'comparison-resolved-1', notNumbered: given('1-copy')
+  };
+  Object.assign(resources, Object.fromEntries(Object.entries(ids).map(([key, id]) => [id, resources[key]])));
+  for (const key of Object.keys(ids)) delete resources[key];
+  const comparison = (key, queryRecordIndex = 0, subjectRecordIndex = 1) => ({
+    kind: 'precomputedProteinComparison', resourceId: ids[key], encoding: 'canonicalTsv', queryRecordIndex,
+    subjectRecordIndex
+  });
   const stored = { schema: 9, mode: 'linear', comparisons: [comparison('blast'), comparison('protein', 1, 2), marker] };
   const crlf = { schema: 5, mode: 'linear', comparisons: [comparison('crlf')] };
   const current = { schema: 10, mode: 'linear', comparisons: [comparison('blast')] };
   const read = readStoredBlastTables([stored, crlf, current], resources);
   assert.deepEqual(read.requests[0].comparisons, [
-    { kind: 'nucleotideBlast', resourceId: 'blast', queryRecordIndex: 0, subjectRecordIndex: 1 },
+    { kind: 'nucleotideBlast', resourceId: ids.blast, queryRecordIndex: 0, subjectRecordIndex: 1 },
     stored.comparisons[1],
     marker
   ]);
@@ -45,20 +65,28 @@ test('a schema 5-9 protein table of the BLAST columns alone loads as a BLAST tab
   assert.equal(read.requests[1].comparisons[0].kind, 'nucleotideBlast');
   // The request of the current schema is never rewritten.
   assert.equal(read.requests[2], current);
-  for (const resourceId of ['blast', 'crlf']) {
-    const resource = read.resources[resourceId];
+  for (const key of ['blast', 'crlf']) {
+    const resource = read.resources[ids[key]];
     assert.equal(resource.kind, 'nucleotide-blast');
     assert.equal(text(resource.data), BLAST_ROWS);
     assert.equal(resource.size, Buffer.byteLength(BLAST_ROWS));
     assert.equal(resource.name, 'comparison-explicit-1.tsv');
   }
-  assert.equal(read.resources.protein, resources.protein);
+  for (const key of ['protein', 'webLosatp', 'cliLosatp', 'resolved', 'notNumbered']) {
+    assert.equal(read.resources[ids[key]], resources[ids[key]], key);
+  }
+  const losatp = readStoredBlastTables([{ schema: 9, mode: 'linear', comparisons: [
+    comparison('webLosatp'), comparison('cliLosatp', 1, 2), comparison('resolved', 2, 3),
+    comparison('notNumbered', 3, 4)
+  ] }], resources);
+  assert.equal(losatp.resources, resources);
+  assert.ok(losatp.requests[0].comparisons.every((item) => item.kind === 'precomputedProteinComparison'));
   // The file's own values are not edited.
-  assert.equal(resources.blast.kind, 'canonical-tsv');
+  assert.equal(resources[ids.blast].kind, 'canonical-tsv');
   assert.equal(stored.comparisons[0].kind, 'precomputedProteinComparison');
 
-  const unchanged = readStoredBlastTables([current, { schema: 9, mode: 'linear', comparisons: [comparison('protein')] }],
-    resources);
+  const protein = { schema: 9, mode: 'linear', comparisons: [comparison('protein')] };
+  const unchanged = readStoredBlastTables([current, protein], resources);
   assert.equal(unchanged.resources, resources);
   assert.equal(unchanged.requests[1].comparisons[0].kind, 'precomputedProteinComparison');
 });
@@ -97,4 +125,23 @@ test('a Pairwise pipeline without pairs is the controls\' LOSATP Pairwise; over 
   assert.equal(requestRunsProteinSearch(pairwiseRequest({
     positions: ['#1@1', '#2@1'], pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }]
   })), true);
+});
+
+// A Web LOSATP Session that main's Gallery shipped (Session 40, request schema 5; provenance in its
+// .provenance.json): its protein tables start with the BLAST columns too. Load keeps them protein tables.
+test('a released Web LOSATP Session keeps its protein tables and its LOSATP pipeline', () => {
+  const fixture = new URL('../fixtures/performance/hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz',
+    import.meta.url);
+  const session = JSON.parse(gunzipSync(readFileSync(fixture)).toString('utf8'));
+  const stored = session.renderRequest;
+  assert.equal(stored.schema, 5);
+  const tables = stored.comparisons.filter((item) => item.kind === 'precomputedProteinComparison');
+  assert.equal(tables.length, 4);
+  for (const { resourceId } of tables) {
+    assert.ok(text(session.resources[resourceId].data).startsWith(`${COMPARISON_COLUMNS.join('\t')}\t`));
+  }
+  // The pre-pass hands Load the very request and resources the file holds, so Load reads them as before.
+  const read = readStoredBlastTables([stored], session.resources);
+  assert.equal(read.requests[0], stored);
+  assert.equal(read.resources, session.resources);
 });

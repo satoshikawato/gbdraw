@@ -33,8 +33,13 @@ SCALAR_AXIS_LABEL_PATHS: tuple[str, ...] = tuple(
     f"objects.{section}.axis_labels" for section in LEGACY_SCALAR_AXIS_LABEL_SECTIONS
 )
 LEGACY_SCALAR_AXIS_LABELS = "numbered"
+# The resource IDs under which a CLI or Python render of gbdraw 0.14.0-0.14.5 (request schemas 5-9) stored a
+# comparison table it was given (`--comparisons_table`, a `LinearComparison`): this prefix and its number. Those
+# writers stored such a BLAST table as a protein table; the Web named its LOSATP tables otherwise (OV-3573).
+LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX = "comparison-explicit-"
 
 __all__ = [
+    "LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX",
     "LEGACY_SCALAR_AXIS_LABELS",
     "LEGACY_SCALAR_AXIS_LABEL_SECTIONS",
     "SCALAR_AXIS_LABEL_PATHS",

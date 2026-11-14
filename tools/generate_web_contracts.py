@@ -145,6 +145,9 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEFAULT_PNG_DPI", "gbdraw.render.export_limits", "DEFAULT_PNG_DPI"),
     # What an absent axis label style reads as: every writer before the setting drew numbered ticks.
     ("LEGACY_SCALAR_AXIS_LABELS", "gbdraw.session_legacy_values", "LEGACY_SCALAR_AXIS_LABELS"),
+    # The resource IDs of a given comparison table in a 0.14.x CLI or Python Session: Load reads only
+    # these as BLAST tables (OV-3573).
+    ("LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX", "gbdraw.session_legacy_values", "LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX"),
     # The params keys each track renderer takes without reading them; the Source recipe leaves them out.
     ("CIRCULAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.circular", "CIRCULAR_SLOT_UNREAD_PARAM_KEYS"),
     # The label fit row statuses Apply can choose, the preferred first: the dialog selects by this order.

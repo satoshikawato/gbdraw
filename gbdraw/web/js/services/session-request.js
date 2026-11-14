@@ -181,6 +181,7 @@ import {
   CONFIG_UNSET_NUMBER_SPELLINGS,
   EXPANDED_RECORD_KEY_SEPARATOR,
   INPUT_FILE_MEDIA_TYPE,
+  LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX,
   STORED_REGION_FIELDS,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
   WRITTEN_RESOURCE_MEDIA_TYPES
@@ -7988,6 +7989,16 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
 const BLAST_TABLE_HEADER = COMPARISON_COLUMNS.join('\t');
 /** The request schemas whose writers stored a BLAST table as a protein table (released 0.14.0 to 0.14.5). */
 const STORED_BLAST_TABLE_SCHEMAS = Object.freeze([5, 6, 7, 8, 9]);
+/**
+ * Whether a resource ID is one a 0.14.x CLI or Python render gave a comparison table it was given
+ * (`--comparisons_table`, a `LinearComparison`): the prefix and a number. The Web stored its LOSATP tables under other IDs, and so did
+ * the CLI's protein tables, so a Web LOSATP table is never read as a BLAST table by its columns alone.
+ * @param {unknown} resourceId
+ * @returns {resourceId is string}
+ */
+const isGivenComparisonResourceId = (resourceId) => typeof resourceId === 'string'
+  && resourceId.startsWith(LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX)
+  && /^[1-9]\d*$/.test(resourceId.slice(LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX.length));
 
 /**
  * The BLAST rows of a stored canonical TSV whose header is the BLAST columns alone, or null for any other resource
@@ -8012,7 +8023,9 @@ const storedBlastTableRows = (resource) => {
 /**
  * OV-3573: a request of schema 5 to 9 stored a BLAST table that a CLI or Python render drew from a comparisons
  * table as a `precomputedProteinComparison`, the kind of a protein table, in a canonical TSV of the BLAST columns
- * alone (`COMPARISON_COLUMNS`). Load reads each such comparison as the BLAST comparison it is, before any reader
+ * alone (`COMPARISON_COLUMNS`), under the resource ID those writers gave a table they were given
+ * (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX` and a number). Both must hold: the ID tells who wrote the table, the
+ * columns that it holds no protein. Load reads each such comparison as the BLAST comparison it is, before any reader
  * sees the file: `nucleotideBlast`, its resource the same rows as a BLAST table (`nucleotide-blast`, without the
  * header line), as the current writers store one. Python's decoder reads these tables by the same columns. A
  * protein table and a request of any other schema are left as stored; nothing changes when no table is rewritten.
@@ -8024,7 +8037,7 @@ export const readStoredBlastTables = (requests, resources) => {
   /** @type {Map<string, string>} */
   const rowsById = new Map();
   const blastRowsOf = (/** @type {unknown} */ resourceId) => {
-    if (typeof resourceId !== 'string' || !isPlainObject(resources)) return null;
+    if (!isGivenComparisonResourceId(resourceId) || !isPlainObject(resources)) return null;
     if (!rowsById.has(resourceId)) {
       const rows = storedBlastTableRows(ownEntry(resources, resourceId));
       if (rows === null) return null;
