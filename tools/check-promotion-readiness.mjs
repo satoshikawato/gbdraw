@@ -705,11 +705,16 @@ export const verifyWorkflowEvidence = async ({
   };
 };
 
-// SELECTIVE_CI.md "Dev state on pull requests": dev is red or green by the newest `Tests` push
-// run on dev with a result. A run's result is that of its newest attempt that finished with
-// one: a running attempt and an attempt that ended cancelled, skipped, neutral, stale, or
-// action_required pass to the attempt before it, and a run without such an attempt is skipped.
-const DEV_STATE_IDENTITY = Object.freeze({ workflowPath: '.github/workflows/test.yml', event: 'push', branch: 'dev' });
+// SELECTIVE_CI.md "Dev state on pull requests": dev is red when the newest push run on dev with a
+// result failed in any of these workflows. A run's result is that of its newest attempt that
+// finished with one: a running attempt and an attempt that ended cancelled, skipped, neutral,
+// stale, or action_required pass to the attempt before it, and a run without such an attempt is
+// skipped. `name` is the workflow's `name:`, shown in messages.
+export const DEV_STATE_WORKFLOWS = Object.freeze([
+  Object.freeze({ name: 'Tests', workflowPath: '.github/workflows/test.yml' }),
+  Object.freeze({ name: 'Gallery publication', workflowPath: '.github/workflows/gallery-publication.yml' })
+]);
+const DEV_STATE_PUSH = Object.freeze({ event: 'push', branch: 'dev' });
 const DEV_RUN_STATES = Object.freeze({
   success: 'green',
   failure: 'red',
@@ -723,7 +728,9 @@ const DEV_RUN_STATES = Object.freeze({
 });
 
 /**
- * @typedef {object} DevTestsState
+ * @typedef {object} DevWorkflowState The state one workflow gives dev.
+ * @property {string} workflow The workflow's name, such as `Tests`.
+ * @property {string} workflowPath
  * @property {'green' | 'red'} state
  * @property {string} conclusion The conclusion that decides the state, such as `success` or `failure`.
  * @property {number} runId
@@ -733,28 +740,25 @@ const DEV_RUN_STATES = Object.freeze({
  * @property {string} headSha The dev commit the run tested.
  */
 
-/** @returns {Promise<DevTestsState>} */
-export const readDevTestsState = async ({ repository, token, fetchImpl = globalThis.fetch }) => {
+/**
+ * @typedef {object} DevState
+ * @property {'green' | 'red'} state Red when any workflow is red.
+ * @property {readonly DevWorkflowState[]} workflows One entry per `DEV_STATE_WORKFLOWS` entry, in its order.
+ */
+
+/** @returns {Promise<DevWorkflowState>} */
+const readDevWorkflowState = async ({ repository, token, fetchImpl, workflow }) => {
   const [owner, repo] = repositoryParts(repository);
-  const expected = { repository, ...DEV_STATE_IDENTITY };
-  if (typeof token !== 'string' || !token.trim()) {
-    fail('MISSING_TOKEN', 'A GitHub token with Actions read access is required.', {
-      expected,
-      observed: { token: 'missing' }
-    });
-  }
-  if (typeof fetchImpl !== 'function') {
-    fail('MISSING_FETCH', 'A fetch implementation is required.', { expected });
-  }
+  const expected = { repository, workflowPath: workflow.workflowPath, ...DEV_STATE_PUSH };
   const repositoryApiPath = `/repos/${owner}/${repo}`;
-  // Each listed run and each read attempt must be a Tests push run on dev with a known conclusion.
+  // Each listed run and each read attempt must be a push run of this workflow on dev with a known conclusion.
   const devRun = (run, attempt = null) => {
     validateRun(run, expected);
-    if (run.path !== DEV_STATE_IDENTITY.workflowPath || run.event !== DEV_STATE_IDENTITY.event
-        || run.head_branch !== DEV_STATE_IDENTITY.branch || run.repository.full_name !== repository
+    if (run.path !== expected.workflowPath || run.event !== expected.event
+        || run.head_branch !== expected.branch || run.repository.full_name !== repository
         || (attempt !== null && (run.id !== attempt.runId || run.run_attempt !== attempt.number
           || run.status !== 'completed'))) {
-      fail('RUN_IDENTITY_MISMATCH', 'A run is not the expected Tests push run on dev.', {
+      fail('RUN_IDENTITY_MISMATCH', `A run is not the expected ${workflow.name} push run on dev.`, {
         expected: { ...expected, ...(attempt ?? {}) },
         observed: runIdentity(run)
       });
@@ -767,11 +771,11 @@ export const readDevTestsState = async ({ repository, token, fetchImpl = globalT
     }
     return run;
   };
-  const workflowFile = encodeURIComponent(DEV_STATE_IDENTITY.workflowPath.split('/').at(-1));
+  const workflowFile = encodeURIComponent(expected.workflowPath.split('/').at(-1));
   const runsUrl = new URL(`${API_ORIGIN}${repositoryApiPath}/actions/workflows/${workflowFile}/runs`);
   [
-    ['branch', DEV_STATE_IDENTITY.branch],
-    ['event', DEV_STATE_IDENTITY.event],
+    ['branch', expected.branch],
+    ['event', expected.event],
     ['exclude_pull_requests', 'true'],
     ['per_page', String(PER_PAGE)]
   ].forEach(([name, value]) => runsUrl.searchParams.set(name, value));
@@ -804,6 +808,8 @@ export const readDevTestsState = async ({ repository, token, fetchImpl = globalT
     }
     if (decided === null) continue;
     return Object.freeze({
+      workflow: workflow.name,
+      workflowPath: workflow.workflowPath,
       state: DEV_RUN_STATES[decided.conclusion],
       conclusion: decided.conclusion,
       runId: run.id,
@@ -813,9 +819,31 @@ export const readDevTestsState = async ({ repository, token, fetchImpl = globalT
       headSha: run.head_sha.toLowerCase()
     });
   }
-  fail('NO_DEV_STATE', 'No recent Tests push run on dev has finished with a result.', {
+  fail('NO_DEV_STATE', `No recent ${workflow.name} push run on dev has finished with a result.`, {
     expected,
     observed: { runs: runs.length }
+  });
+};
+
+/** @returns {Promise<DevState>} */
+export const readDevState = async ({ repository, token, fetchImpl = globalThis.fetch }) => {
+  repositoryParts(repository);
+  if (typeof token !== 'string' || !token.trim()) {
+    fail('MISSING_TOKEN', 'A GitHub token with Actions read access is required.', {
+      expected: { repository, workflows: DEV_STATE_WORKFLOWS },
+      observed: { token: 'missing' }
+    });
+  }
+  if (typeof fetchImpl !== 'function') {
+    fail('MISSING_FETCH', 'A fetch implementation is required.', { expected: { repository } });
+  }
+  const workflows = [];
+  for (const workflow of DEV_STATE_WORKFLOWS) {
+    workflows.push(await readDevWorkflowState({ repository, token, fetchImpl, workflow }));
+  }
+  return Object.freeze({
+    state: workflows.some(({ state }) => state === 'red') ? 'red' : 'green',
+    workflows: Object.freeze(workflows)
   });
 };
 

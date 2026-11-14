@@ -6,6 +6,8 @@ import {
   validateGateResults
 } from '../../tools/ci-impact-policy.mjs';
 import { runCiImpactCli } from '../../tools/ci-impact.mjs';
+import { readFileSync } from 'node:fs';
+import { DEV_STATE_WORKFLOWS } from '../../tools/check-promotion-readiness.mjs';
 
 const SHA = Object.freeze({
   base: 'a'.repeat(40),
@@ -328,15 +330,17 @@ const textWriter = () => {
   };
 };
 
-// The Actions API as `PR / gate` reads it: `Tests` push runs on dev, and earlier attempts of a
-// run being rerun.
+// The Actions API as `PR / gate` reads it: `Tests` and `Gallery publication` push runs on dev,
+// and earlier attempts of a run being rerun.
 const REPOSITORY = 'satoshikawato/gbdraw';
-const devRun = (id, conclusion, minute, { status = 'completed', attempt = 1 } = {}) => ({
+const TESTS_PATH = '.github/workflows/test.yml';
+const GALLERY_PATH = '.github/workflows/gallery-publication.yml';
+const devRun = (id, conclusion, minute, { status = 'completed', attempt = 1, path = TESTS_PATH } = {}) => ({
   id,
   run_number: id,
   run_attempt: attempt,
-  workflow_id: 501,
-  path: '.github/workflows/test.yml',
+  workflow_id: path === TESTS_PATH ? 501 : 502,
+  path,
   event: 'push',
   head_branch: 'dev',
   head_sha: String(id % 10).repeat(40),
@@ -354,8 +358,11 @@ const reply = (status, body) => ({
   headers: { get: () => null },
   json: async () => body
 });
+const galleryRun = (id, conclusion, minute, options = {}) => devRun(id, conclusion, minute, { ...options, path: GALLERY_PATH });
+const GREEN_GALLERY = Object.freeze([galleryRun(801, 'success', 5)]);
 // `attempts` maps `<run id>/<attempt>` to that attempt's run object; a missing key is a 404.
-const devRunsFetch = (runs, { status = 200, attempts = {} } = {}) => {
+// `runs` are the listed `Tests` runs and `galleryRuns` the listed `Gallery publication` runs.
+const devRunsFetch = (runs, { status = 200, attempts = {}, galleryRuns = GREEN_GALLERY } = {}) => {
   const calls = [];
   const fetchImpl = async (source, options) => {
     calls.push(source);
@@ -366,21 +373,23 @@ const devRunsFetch = (runs, { status = 200, attempts = {} } = {}) => {
       const key = `${attempt[1]}/${attempt[2]}`;
       return Object.hasOwn(attempts, key) ? reply(200, attempts[key]) : reply(404, { message: 'Not Found' });
     }
-    assert.equal(url.pathname, `/repos/${REPOSITORY}/actions/workflows/test.yml/runs`);
+    const listed = { [`/repos/${REPOSITORY}/actions/workflows/test.yml/runs`]: runs,
+      [`/repos/${REPOSITORY}/actions/workflows/gallery-publication.yml/runs`]: galleryRuns }[url.pathname];
+    assert.ok(listed, url.pathname);
     assert.equal(url.searchParams.get('branch'), 'dev');
     assert.equal(url.searchParams.get('event'), 'push');
     // Runs still running are listed too: a rerun keeps its previous result.
     assert.equal(url.searchParams.has('status'), false);
     return status === 200
-      ? reply(200, { total_count: runs.length, workflow_runs: runs })
+      ? reply(200, { total_count: listed.length, workflow_runs: listed })
       : reply(status, { message: 'Server Error gate-token' });
   };
   return { fetchImpl, calls };
 };
-const runPrGate = async ({ runs, labels = [], status, attempts, impactPlan = plan() }) => {
+const runPrGate = async ({ runs, galleryRuns, labels = [], status, attempts, impactPlan = plan() }) => {
   const stdout = textWriter();
   const stderr = textWriter();
-  const stub = devRunsFetch(runs, { status, attempts });
+  const stub = devRunsFetch(runs, { status, attempts, galleryRuns });
   let summary = '';
   const exitCode = await runCiImpactCli({
     argv: ['gate'],
@@ -464,7 +473,7 @@ test('PR gate fails while dev is red unless the pull request carries the fix lab
     assert.match(red.stderr, new RegExp('2'.repeat(40)));
     assert.match(red.stderr, /label dev-red-fix/);
     assert.match(red.stderr, /rerun the PR \/ gate job after dev turns green/);
-    assert.match(red.summary, new RegExp(`Dev state: \`red\` \\(\`${conclusion}\`\\)`));
+    assert.match(red.summary, new RegExp(`Dev state: \`red\`\\n- \`Tests\`: \`red\` \\(\`${conclusion}\`\\)`));
     assert.doesNotMatch(red.summary, /Gate result: pass/);
 
     const fix = await runPrGate({ runs, labels: ['dev-red-fix'] });
@@ -482,7 +491,7 @@ test('PR gate skips dev runs whose conclusion says nothing', async () => {
     assert.match(red.stderr, /\[DEV_RED\][\s\S]*runs\/902/, conclusion);
     const green = await runPrGate({ runs: [devRun(903, conclusion, 30), ...older] });
     assert.equal(green.exitCode, 0, `${conclusion}: ${green.stderr}`);
-    assert.match(green.summary, /Dev state: `green` \(`success`\) — \[run 901\]/);
+    assert.match(green.summary, /`Tests`: `green` \(`success`\) — \[run 901\]/);
   }
   const none = await runPrGate({ runs: [devRun(903, 'cancelled', 30)] });
   assert.equal(none.exitCode, 1);
@@ -527,7 +536,7 @@ test('PR gate counts a run being rerun by its previous attempt', async () => {
   const held = await runPrGate({ runs: [rerun, ...green], attempts: { '902/1': failedAttempt } });
   assert.equal(held.exitCode, 1);
   assert.match(held.stderr, /\[DEV_RED\][\s\S]*runs\/902[\s\S]*attempt 1, and its rerun has not finished/);
-  assert.match(held.summary, /Dev state: `red` \(`failure`\) — \[run 902\]\([^)]*\) attempt 1 \(a rerun is in progress\)/);
+  assert.match(held.summary, /`Tests`: `red` \(`failure`\) — \[run 902\]\([^)]*\) attempt 1 \(a rerun is in progress\)/);
   assert.ok(held.calls.some((call) => call.endsWith('/actions/runs/902/attempts/1')));
   const fix = await runPrGate({ runs: [rerun, ...green], labels: ['dev-red-fix'], attempts: { '902/1': failedAttempt } });
   assert.equal(fix.exitCode, 0, fix.stderr);
@@ -541,7 +550,7 @@ test('PR gate counts a run being rerun by its previous attempt', async () => {
   // A first attempt that is still running has no result yet, and its attempt is not read.
   const first = await runPrGate({ runs: [devRun(903, null, 30, { status: 'queued' }), ...green] });
   assert.equal(first.exitCode, 0, first.stderr);
-  assert.equal(first.calls.length, 1);
+  assert.equal(first.calls.length, 2, 'one run list per workflow');
 
   // An unreadable or mismatched previous attempt fails closed.
   const missing = await runPrGate({ runs: [rerun, ...green] });
@@ -580,7 +589,7 @@ test('PR gate passes over cancelled attempts to the newest attempt with a result
     attempts: { '902/2': attemptOf(902, 2, 'skipped'), '902/1': attemptOf(902, 1, 'cancelled') }
   });
   assert.equal(allCancelled.exitCode, 0, allCancelled.stderr);
-  assert.match(allCancelled.summary, /Dev state: `green` \(`success`\) — \[run 901\]/);
+  assert.match(allCancelled.summary, /`Tests`: `green` \(`success`\) — \[run 901\]/);
 
   // An earlier attempt that cannot be read fails closed.
   const unreadable = await runPrGate({
@@ -588,6 +597,67 @@ test('PR gate passes over cancelled attempts to the newest attempt with a result
     attempts: { '902/2': attemptOf(902, 2, 'cancelled') }
   });
   assert.match(unreadable.stderr, /\[DEV_STATE_UNAVAILABLE\][\s\S]*API_REQUEST_FAILED/);
+});
+
+test('PR gate counts a failed Gallery publication push run on dev as red', async () => {
+  const tests = [devRun(901, 'success', 10)];
+  for (const conclusion of ['failure', 'timed_out', 'startup_failure']) {
+    const galleryRuns = [galleryRun(802, conclusion, 20), galleryRun(801, 'success', 5)];
+    const red = await runPrGate({ runs: tests, galleryRuns });
+    assert.equal(red.exitCode, 1, conclusion);
+    assert.equal(red.stdout, '');
+    assert.match(red.stderr, new RegExp(`\\[DEV_RED\\]: dev is red: Gallery publication run https://github\\.com/${REPOSITORY}/actions/runs/802 on ${'2'.repeat(40)} ended ${conclusion} in attempt 1\\.`));
+    assert.doesNotMatch(red.stderr, /Tests run/);
+    assert.match(red.summary, new RegExp(`Dev state: \`red\`[\\s\\S]*\`Tests\`: \`green\` \\(\`success\`\\) — \\[run 901\\][\\s\\S]*\`Gallery publication\`: \`red\` \\(\`${conclusion}\`\\) — \\[run 802\\]`));
+
+    const fix = await runPrGate({ runs: tests, galleryRuns, labels: ['dev-red-fix'] });
+    assert.equal(fix.exitCode, 0, fix.stderr);
+    assert.match(fix.summary, /Dev state: `red`[\s\S]*Label `dev-red-fix`: yes[\s\S]*Gate result: pass/);
+  }
+
+  // Both red: the message names each workflow's run.
+  const both = await runPrGate({ runs: [devRun(902, 'failure', 20)], galleryRuns: [galleryRun(803, 'timed_out', 30)] });
+  assert.match(both.stderr, /\[DEV_RED\]: dev is red: Tests run \S*runs\/902 [^;]*ended failure in attempt 1; Gallery publication run \S*runs\/803 [^;]*ended timed_out in attempt 1\./);
+});
+
+test('PR gate reads Gallery publication by the same counting rule as Tests', async () => {
+  const tests = [devRun(901, 'success', 10)];
+  // Both green: dev is green, and the gate lists each workflow's push runs on dev by file name.
+  const green = await runPrGate({ runs: tests });
+  assert.equal(green.exitCode, 0, green.stderr);
+  assert.match(green.summary, /Dev state: `green`\n- `Tests`: `green` \(`success`\) — \[run 901\][^\n]*\n- `Gallery publication`: `green` \(`success`\) — \[run 801\]/);
+  assert.ok(green.calls.some((call) => new URL(call).pathname.endsWith('/actions/workflows/gallery-publication.yml/runs')));
+
+  // A cancelled, skipped, neutral, stale, or action_required Gallery run says nothing.
+  for (const conclusion of ['cancelled', 'skipped', 'neutral', 'stale', 'action_required']) {
+    const passed = await runPrGate({ runs: tests, galleryRuns: [galleryRun(803, conclusion, 30), galleryRun(801, 'success', 5)] });
+    assert.equal(passed.exitCode, 0, `${conclusion}: ${passed.stderr}`);
+    const held = await runPrGate({ runs: tests, galleryRuns: [galleryRun(803, conclusion, 30), galleryRun(802, 'failure', 20)] });
+    assert.match(held.stderr, /\[DEV_RED\]: dev is red: Gallery publication run \S*runs\/802/, conclusion);
+  }
+
+  // A failed Gallery run stays red while it reruns.
+  const rerun = galleryRun(802, null, 20, { status: 'in_progress', attempt: 2 });
+  const failedAttempt = { ...galleryRun(802, 'failure', 20), status: 'completed' };
+  const held = await runPrGate({ runs: tests, galleryRuns: [rerun, galleryRun(801, 'success', 5)], attempts: { '802/1': failedAttempt } });
+  assert.match(held.stderr, /\[DEV_RED\]: dev is red: Gallery publication run \S*runs\/802 [^.]*attempt 1, and its rerun has not finished/);
+
+  // No Gallery run with a result, or a run of another workflow in its list, fails closed.
+  const none = await runPrGate({ runs: tests, galleryRuns: [galleryRun(803, 'cancelled', 30)] });
+  assert.match(none.stderr, /\[DEV_STATE_UNAVAILABLE\][\s\S]*NO_DEV_STATE/);
+  assert.match(none.summary, /No recent Gallery publication push run on dev has finished with a result/);
+  const wrong = await runPrGate({ runs: tests, galleryRuns: [devRun(803, 'success', 30)] });
+  assert.match(wrong.stderr, /\[DEV_STATE_UNAVAILABLE\][\s\S]*RUN_IDENTITY_MISMATCH/);
+});
+
+test('dev state names each workflow by the name its file declares', () => {
+  assert.deepEqual(DEV_STATE_WORKFLOWS.map(({ workflowPath }) => workflowPath), [TESTS_PATH, GALLERY_PATH]);
+  for (const { name, workflowPath } of DEV_STATE_WORKFLOWS) {
+    const source = readFileSync(new URL(`../../${workflowPath}`, import.meta.url), 'utf8');
+    assert.equal(source.match(/^name: (.+)$/m)?.[1], name, workflowPath);
+    // Both run on every push to dev, so each has a newest dev push run to read.
+    assert.match(source, /^on:\n {2}push:\n {4}branches: \["dev"(, "[^"]+")*\]/m, workflowPath);
+  }
 });
 
 test('dev, release, and Gallery gates make no dev-state request', async () => {

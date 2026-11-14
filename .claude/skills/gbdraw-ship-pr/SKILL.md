@@ -70,13 +70,14 @@ this skill, they win.
 ## Merge
 
 - Before arming auto-merge, read dev's state (`AGENTS.md`, "When dev is
-  red"). This prints the newest dev `Tests` push run with a result, or a
-  rerun run (attempt above 1) without one:
-  `gh run list -w Tests -b dev -e push -L 100 --json status,conclusion,attempt,url -q '[.[] | select((.status == "completed" and (.conclusion == "success" or .conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure")) or .attempt > 1)][0]'`.
+  red"). This prints, for `Tests` and for `Gallery publication`, the newest
+  dev push run with a result, or a rerun run (attempt above 1) without one:
+  `for w in test.yml gallery-publication.yml; do echo "$w: $(gh run list -w "$w" -b dev -e push -L 100 --json status,conclusion,attempt,url -q '[.[] | select((.status == "completed" and (.conclusion == "success" or .conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure")) or .attempt > 1)][0]')"; done`.
   For a rerun run, read its earlier attempts newest first
   (`gh run view <id> --attempt <n> --json conclusion`), passing over those
   that ended cancelled or skipped, until one has a result; if none has, go on
-  to the next run. The trusted `PR / gate` check is the authority
+  to that workflow's next run. dev is red when either workflow's run failed.
+  The trusted `PR / gate` check is the authority
   (`docs/internal/SELECTIVE_CI.md`, "Dev state on pull requests"). While dev
   is red, arm auto-merge only on the fix.
 - When the PR does not expand authority (see `AGENTS.md`), arm auto-merge:
