@@ -265,14 +265,20 @@ export const createArtifactSlotStore = () => {
 };
 
 /**
- * The values of a kept artifact that the request of its drawing reads (`buildLayout` in session-request.js: the
- * Similarity alignment plan and record translations, OV-3532), in the refs the shown state holds them in; the empty
- * slot's for a drawing without a slot.
+ * The values of a kept artifact that the request of its drawing reads, in the refs the shown state holds them in:
+ * the Similarity alignment plan and record translations (`buildLayout`, OV-3532), the labels, Results, feature
+ * catalog and selected Result (`requestLabelProjection`) and the generated Legend inventory
+ * (`requestLegendEditLeaves`, all in session-request.js); the empty slot's for a drawing without a slot.
  * @param {Readonly<ArtifactSlot> | undefined} slot
  */
 export const keptRequestArtifact = (slot) => ({
   similarityAlignmentPlan: { value: slot ? slot.values.similarityAlignmentPlan : ARTIFACT_SLOT_EMPTY.similarityAlignmentPlan() },
-  linearRecordTranslations: { value: slot ? slot.values.linearRecordTranslations : ARTIFACT_SLOT_EMPTY.linearRecordTranslations() }
+  linearRecordTranslations: { value: slot ? slot.values.linearRecordTranslations : ARTIFACT_SLOT_EMPTY.linearRecordTranslations() },
+  results: { value: slot ? slot.values.results : ARTIFACT_SLOT_EMPTY.results() },
+  selectedResultIndex: { value: slot ? slot.values.selectedResultIndex : ARTIFACT_SLOT_EMPTY.selectedResultIndex() },
+  featureCatalog: { value: slot ? slot.values.featureCatalog : ARTIFACT_SLOT_EMPTY.featureCatalog() },
+  editableLabels: { value: slot ? slot.values.editableLabels : ARTIFACT_SLOT_EMPTY.editableLabels() },
+  originalLegendOrder: { value: slot ? [...slot.legend.originalOrder] : [] }
 });
 
 /**

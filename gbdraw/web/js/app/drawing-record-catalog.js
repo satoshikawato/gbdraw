@@ -3,7 +3,7 @@
 // (a Circular drawing's record set, or a Linear drawing's drawn cards), why a
 // catalog is not ready, and the catalog Generate and Add to annotation set read
 // once every Linear card's records are read (`prepareLinearRecordCatalog`).
-// The composition root passes the state, its reader of one input's records,
+// The composition root passes its reader of one input's records
 // and the Linear record selector's members as ports. The rebind of the shown
 // drawing's annotations to the catalog (`rebindAnnotationRecords`, R10) is a
 // factory of its own, which the root creates right after the catalog.
@@ -28,7 +28,6 @@ import { reconcileAnnotationRecordBindings } from './annotations/record-selector
 
 /**
  * @typedef {object} DrawingRecordCatalogPorts
- * @property {WebState} state
  * @property {(inputType: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null) => Promise<SequenceRecord[]>} readInputRecords
  *   The records of one input, read from the file store.
  * @property {(drawing: DrawingState, seq: LinearSeq) => LinearCardCatalogState} linearRecordCatalogStateFor
@@ -44,7 +43,7 @@ import { reconcileAnnotationRecordBindings } from './annotations/record-selector
  * @param {DrawingRecordCatalogPorts} ports
  */
 export const createDrawingRecordCatalog = ({
-  state, readInputRecords, linearRecordCatalogStateFor, linearRecordErrorModelFor, refreshLinearRecords
+  readInputRecords, linearRecordCatalogStateFor, linearRecordErrorModelFor, refreshLinearRecords
 }) => {
   /** @param {DrawingState} drawing */
   const getCircularRecordDiscoveryState = (drawing) => circularDiscoveryForInput(drawing);
@@ -132,8 +131,12 @@ export const createDrawingRecordCatalog = ({
     // A stored '' (no error) has no `code`: the read is undefined, as for null.
     && drawing.drawnLinearSeqs.value.map(seq => linearRecordErrorModelFor(drawing, seq)).find(error => /** @type {UserFacingError} */ (error)?.code))
     || catalogIssueError(catalog);
-  async function prepareLinearRecordCatalog({ privateCandidate = false } = {}) {
-    const drawing = state.activeDrawing();
+  /**
+   * The record catalog of `drawing`, shown or not (R15: it takes the drawing it reads).
+   * @param {DrawingState} drawing
+   * @param {{ privateCandidate?: boolean }} [options]
+   */
+  async function prepareLinearRecordCatalog(drawing, { privateCandidate = false } = {}) {
     if (drawing.mode !== 'linear') return { catalog: null, error: '' };
     // Every card with its files reads its records: the request names a card's record by its file's records (none for
     // the record of a file of one record, as the CLI writes it, `cliRecordSelector`), and an automatic card draws them.

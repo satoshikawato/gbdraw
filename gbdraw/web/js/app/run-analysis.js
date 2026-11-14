@@ -1786,7 +1786,7 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   shown drawing's committed request, by binding key (`resultRecordBindings`); none by default.
  * @property {((discovered: CircularRecordsDiscovered) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of a Circular drawing's input settled (success or error).
- * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
+ * @property {((drawing: DrawingState) => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {((drawing: DrawingState) => void) | null} [placeCircularRecordChoices] Names a Circular drawing's record
  *   choices by identity once its cards are read (record-settings.js), before its Record Order is merged.
  * @property {(drawing: DrawingState, card: LinearSeq) => CardRecordFacts} linearCardRecord What a Linear card's
@@ -3022,7 +3022,7 @@ export const createRunAnalysis = ({
       processingStatus.value = t('Reading input records...');
       let prepared;
       try {
-        prepared = await prepareLinearRecordCatalog();
+        prepared = await prepareLinearRecordCatalog(drawing);
       } catch (error) {
         prepared = {
           catalog: null,

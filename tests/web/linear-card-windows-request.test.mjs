@@ -67,11 +67,11 @@ const recordsOf = (seq) => discoverSequenceRecords({
 const preparedCatalog = async (drawing) => {
   const read = new Map(await Promise.all(drawing.linearSeqs.map(async (seq) => [seq.uid, await recordsOf(seq)])));
   const { prepareLinearRecordCatalog } = createDrawingRecordCatalog({
-    state: { activeDrawing: () => drawing }, readInputRecords: async () => { throw new Error('not read privately'); },
+    readInputRecords: async () => { throw new Error('not read privately'); },
     linearRecordCatalogStateFor: (_drawing, seq) => ({ status: 'ready', records: read.get(seq.uid), error: '' }),
     linearRecordErrorModelFor: () => '', refreshLinearRecords: async () => ({})
   });
-  const { catalog, error } = await prepareLinearRecordCatalog();
+  const { catalog, error } = await prepareLinearRecordCatalog(drawing);
   assert.equal(error, '');
   return catalog;
 };

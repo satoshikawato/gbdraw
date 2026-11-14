@@ -363,7 +363,7 @@ const cardDrawing = (id, cards) => {
   return drawing;
 };
 const { circularAnnotationSourceKey } = createDrawingRecordCatalog({
-  state, readInputRecords: async () => [], linearRecordCatalogStateFor: () => ({ status: 'idle', records: [], error: '' }),
+  readInputRecords: async () => [], linearRecordCatalogStateFor: () => ({ status: 'idle', records: [], error: '' }),
   linearRecordErrorModelFor: () => '', refreshLinearRecords: async () => ({ status: 'ok' })
 });
 
