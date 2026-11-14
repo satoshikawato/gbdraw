@@ -782,8 +782,10 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the stored catalog left its sequences (D5, catalog schema 6): with schema 5, each CDS row's
     # amino_acid_sequence, sequenceSourceIndex and translationFromAminoAcidSequence in place of its /translation
     # qualifier, and the item's sequenceSources put back, the reply has the earlier digest.
-    "similarity_groups": "fe8d72d1d2af12ce91f30fd1adcc555e723af2432944f5c04fba8fb9fa124f7e",
-    "collinear": "77882178861fac3e1b9b650149cc9a3092d203f03240e47f700520a766d359a3",
+    # Updated again when a block at a record's first base started at that base (OV-3527): each record's CDS at
+    # 1..120 is drawn one base wider to the left; nothing else in the reply moves.
+    "similarity_groups": "65da567581763e2811b667d5733a4649c9a29dc222606cc9b9e921b1d346f5ac",
+    "collinear": "83d6ddd4141aadede4b0a66a4526f0461e9ba296228c786cfe50468a6f240f58",
 }
 
 

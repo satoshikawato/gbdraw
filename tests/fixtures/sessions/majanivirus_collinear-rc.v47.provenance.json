@@ -63,12 +63,12 @@
   "requestSchema": 9,
   "replay": {
     "svg": "majanivirus_collinear-rc.v47.replay.svg",
-    "code": "fix/ov165-labels-drawn-box (OV-165 PR-2, labels, ticks, definition and canvas; dev 71610129f before the Legend change)",
+    "code": "fix/feature-block-first-base (OV-3527, blocks and connector lines from a part's own bounds; on #2027 610fa9cc5)",
     "command": "python -c 'from gbdraw.cli import main; main()' linear --session majanivirus_collinear-rc.v47.gbdraw-session.json.gz -o majanivirus_collinear-rc.v47.replay -f svg",
-    "sha256": "bb088056fc3084507ffaca967b3c820392028246fa7787e3cefa84ca505541f7",
+    "sha256": "4df920facb00143f3686b0ccca1039036c152f7e440aad12e0815bd2fe36ec7e",
     "mainReplaySha256": "b306e5b637a4e920ccd2eab4665c8879220130b10a0d114f3a62ea15f9e886c9",
     "mainReplayEqualsBaseReplay": false,
-    "differenceFromMainReplay": "the composition metadata gains the Linear scale bounds (lengthBar), which paint nothing, then the Legend laid out at the drawn text width (Owner V-D03, 2026-10-24): the Legend and the canvas 11.58 px narrower, then the labels, definition lines and canvas of OV-165 (the Linear label, definition and length-bar rows move)"
+    "differenceFromMainReplay": "the composition metadata gains the Linear scale bounds (lengthBar), which paint nothing, then the Legend laid out at the drawn text width (Owner V-D03, 2026-10-24): the Legend and the canvas 11.58 px narrower, then the labels, definition lines and canvas of OV-165 (the Linear label, definition and length-bar rows move) Then the 85 connector lines between feature parts span the whole gap between them, one base longer at each end (0.007 px; OV-3527)."
   },
   "reversedRecordItemsInV": {
     "counts": {
