@@ -3067,6 +3067,10 @@ export const createRunAnalysis = ({
     let structuredLosatTelemetry = null;
     /** @type {{ cacheMap: Map<string, RawLosatCacheEntry>, cacheKey: string, candidateIndex: number }[]} */
     const legacyPromotionTransaction = [];
+    // Legacy candidates that verified for a search this Generate answers with another entry: they leave with its
+    // commit, unless a later search promotes them (OV-3561).
+    /** @type {number[]} */
+    const legacyRetiredCandidateIndexes = [];
     let legacyPromotionCommitted = false;
     /** @type {((candidateOwnerSet: Record<string, any>) => Record<string, any>) | null} */
     let commitProteinMigration = null;
@@ -4196,13 +4200,17 @@ export const createRunAnalysis = ({
         };
 
         /**
-         * @param {{ cacheKey: string, metadata: LosatCacheMetadata, queryEntry: LosatSeqEntry, subjectEntry: LosatSeqEntry }} candidate
+         * A search with a current entry (`answered`) promotes nothing; the Python owner reports, for any search, the
+         * candidates that verify for it without answering it, which retire (OV-3561).
+         * @param {{ cacheKey: string, metadata: LosatCacheMetadata, queryEntry: LosatSeqEntry, subjectEntry: LosatSeqEntry,
+         *   answered: boolean }} candidate
          */
         const tryPromoteLegacyProteinEntry = async ({
           cacheKey,
           metadata,
           queryEntry,
-          subjectEntry
+          subjectEntry,
+          answered
         }) => {
           if (
             metadata?.identityKind !== 'protein' ||
@@ -4230,7 +4238,8 @@ export const createRunAnalysis = ({
               expectedOptions: {
                 program: metadata.program,
                 outfmt: metadata.outfmt,
-                args: normalizeLosatArgs(metadata.args)
+                args: normalizeLosatArgs(metadata.args),
+                answeredKeys: answered ? [cacheKey] : []
               }
             }
           );
@@ -4238,6 +4247,7 @@ export const createRunAnalysis = ({
           if (result.status === 'error') {
             throw result.error || new Error('Legacy protein cache migration failed.');
           }
+          legacyRetiredCandidateIndexes.push(...result.duplicates);
           const candidateIndex = Number(result.candidateIndex);
           if (
             result.status !== 'promoted' ||
@@ -4257,14 +4267,9 @@ export const createRunAnalysis = ({
             return null;
           }
 
-          const promoted = {
-            ...result.entry,
-            text: result.text,
-            migratedFromSchema: LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA
-          };
-          delete promoted.key;
-          delete promoted.filename;
-          delete promoted.display;
+          // The cache map holds an entry without its key, file name and display flag.
+          const { key: _key, filename: _filename, display: _display, ...stored } = result.entry;
+          const promoted = { ...stored, text: result.text, migratedFromSchema: LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA };
           cacheMap.set(cacheKey, promoted);
           const verified = getCurrentRawLosatCacheEntry(
             cacheMap,
@@ -4565,13 +4570,14 @@ export const createRunAnalysis = ({
               cacheMetadata,
               workingProteinIdentityManifest
             );
-            if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
+            if (useProteinBlastp && !cacheMetadata.searchContext) {
               cached = await tryPromoteLegacyProteinEntry({
                 cacheKey,
                 metadata: cacheMetadata,
                 queryEntry,
-                subjectEntry
-              });
+                subjectEntry,
+                answered: Boolean(cached)
+              }) || cached;
               throwIfGenerationCanceled();
             }
             const hasCachedText = Boolean(cached);
@@ -4946,7 +4952,7 @@ export const createRunAnalysis = ({
             }
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
-          if (legacyPromotionTransaction.length > 0) {
+          if (legacyPromotionTransaction.length + legacyRetiredCandidateIndexes.length > 0) {
             // A promotion changes only the cache entries and their candidate records. The features and orthogroups
             // of this Generate come from its own catalog and results, which name proteins by current handles, and the
             // selected alignment feature was resolved before the run: the candidate keeps the catalog's own feature
@@ -4955,7 +4961,10 @@ export const createRunAnalysis = ({
               const written = writtenLegacyProteinArtifacts({
                 candidates: candidateOwnerSet.legacyProteinRawCandidates,
                 evidence: candidateOwnerSet.legacyProteinDerivedEvidence,
-                promoted: legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
+                promoted: [
+                  ...legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
+                  ...legacyRetiredCandidateIndexes
+                ],
                 hasCurrentDerived: false
               });
               legacyPromotionCommitted = true;

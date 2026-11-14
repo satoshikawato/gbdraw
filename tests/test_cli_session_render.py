@@ -1111,43 +1111,54 @@ def _resaved_legacy_artifacts(
     )
 
 
-def test_a_cli_resave_keeps_the_legacy_candidates_its_search_did_not_promote(
+def test_a_cli_resave_leaves_no_candidate_of_a_search_it_answers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """OV-1143: the 25 Similarity groups searches promote 25 candidates; 9 stay pending, as after a Web Generate.
-    The 9 are the 0.13.0 CLI's second copies of searches that a Web entry answers first (OV-3494)."""
+    """OV-1143: the 25 Similarity groups searches promote 25 candidates. OV-3561: the other 9, the 0.13.0 CLI's
+    second copies of searches that a Web entry answers first (OV-3494), leave too, as after a Web Generate; with no
+    candidate left the evidence goes."""
 
-    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, _legacy_protein_session(), "groups") == (
-        ["pending"] * 9, 8
-    )
+    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, _legacy_protein_session(), "groups") == ([], 0)
 
 
-def test_a_resaved_session_with_a_pending_copy_of_an_answered_search_renders_again(
+def test_a_pending_copy_of_a_search_with_a_current_entry_leaves_the_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """OV-3525: the re-save holds a current entry for each search of record 5 and, pending, the CLI's copy of it, as
-    a Web save does. A search with a current entry is not answered again, as in the Web, so it renders."""
+    """OV-3525: a Session that a 0.14 Web or CLI re-saved holds a current entry for each search of record 5 and,
+    pending, the other copy of it; a search with a current entry is not answered again, so it renders. OV-3561: the
+    copies leave, with the evidence they kept."""
+
+    from gbdraw.analysis.protein_colinearity import make_legacy_protein_raw_candidate
 
     source = tmp_path / "source.gbdraw"
     write_unchecked_session_file(source, _legacy_protein_session())
     resaved = tmp_path / "resaved.gbdraw"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "first" / "out"), "-f", "svg",
          "--session_output", str(resaved))
-    again = tmp_path / "again.gbdraw"
-    _cli(monkeypatch, "render", "--session", str(resaved), "-o", str(tmp_path / "second" / "out"), "-f", "svg",
-         "--session_output", str(again))
-    candidates = load_session_document(again).to_dict()["legacyArtifacts"]["proteinRawCandidates"]["entries"]
-    assert [candidate["state"] for candidate in candidates] == ["pending"] * 9
+    fixture = _legacy_protein_session()
+    copies = [
+        make_legacy_protein_raw_candidate(entry)
+        for entry in fixture["losatCache"]["entries"]
+        if _RECORD_5_DRAWN_FRAME_HASH in (entry["queryCanonicalHash"], entry["subjectCanonicalHash"])
+    ]
+    assert len(copies) == 9
+    released_save = read_session_payload(resaved)
+    released_save["legacyArtifacts"] = {
+        "proteinRawCandidates": {"schema": 1, "entries": copies},
+        "proteinDerivedEvidence": {"schema": 1, "entries": fixture["losatDerivedCache"]["entries"]},
+    }
+    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, released_save, "released-save") == ([], 0)
 
 
 def test_a_cli_resave_tries_only_the_candidates_of_the_searches_it_plans(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """OV-1143: Pairwise searches the 4 adjacent edges; no protein search tries none."""
+    """OV-1143: Pairwise searches the 4 adjacent edges; no protein search tries none. OV-3561: the edge to record 5
+    promotes the Web's entry and retires the CLI's copy of it, so 29 of 34 stay."""
 
     pairwise = _legacy_protein_session()
     pairwise["config"]["losat"]["blastp"]["mode"] = "pairwise"
-    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, pairwise, "pairwise") == (["pending"] * 30, 8)
+    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, pairwise, "pairwise") == (["pending"] * 29, 8)
     without = _legacy_protein_session()
     without["renderRequest"]["comparisons"] = []
     assert _resaved_legacy_artifacts(tmp_path, monkeypatch, without, "none") == (["pending"] * 34, 8)
@@ -1174,7 +1185,8 @@ def test_a_cli_resave_that_promotes_the_last_candidate_drops_the_legacy_evidence
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """OV-1132: with no candidate left pending the evidence goes, as after a Web Generate. OV-3494: the Web's
-    entries of the reversed record 5 promote, as in the Web; the CLI's copies of the same searches stay pending."""
+    entries of the reversed record 5 promote, as in the Web. OV-3561: the CLI's copies of the same searches leave
+    with them, and the migration report warns of no candidate."""
 
     from gbdraw.api.session_compat import adapt_session_request
     from gbdraw.session import session_drawing_artifacts, session_to_request
@@ -1182,19 +1194,9 @@ def test_a_cli_resave_that_promotes_the_last_candidate_drops_the_legacy_evidence
     document = load_session_document(_LEGACY_PROTEIN_SESSION)
     with materialize_session(document, output_directory=tmp_path) as materialized:
         adapted = adapt_session_request(session_to_request(materialized), session_drawing_artifacts(document))
-    pending = [candidate["originalEntry"] for candidate in adapted.migration_report.protein_raw_candidates]
-    assert len(pending) == 9
-    assert all(
-        _RECORD_5_DRAWN_FRAME_HASH in (entry["queryCanonicalHash"], entry["subjectCanonicalHash"])
-        and _RECORD_5_SEARCH_FRAME_HASH not in (entry["queryCanonicalHash"], entry["subjectCanonicalHash"])
-        for entry in pending
-    )
-    unmatched = {entry["key"] for entry in pending}
-    session = _legacy_protein_session()
-    session["losatCache"]["entries"] = [
-        entry for entry in session["losatCache"]["entries"] if entry["key"] not in unmatched
-    ]
-    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, session, "promoted") == ([], 0)
+    report = adapted.migration_report
+    assert (report.protein_raw_candidates, report.protein_derived_evidence) == ((), ())
+    assert not any("could not be promoted" in warning for warning in report.warnings)
     # Without the Web's copies, the CLI's entries of record 5 promote in the drawn frame.
     session = _legacy_protein_session()
     session["losatCache"]["entries"] = [

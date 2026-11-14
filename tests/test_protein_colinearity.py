@@ -2840,6 +2840,87 @@ def test_the_web_promotes_a_cli_entry_of_a_record_drawn_reversed() -> None:
     )
 
 
+
+def _two_copies_of_one_search() -> tuple[ProteinExtractionResult, list[dict[str, object]]]:
+    """The Web's extraction of a record drawn reversed and two schema-2 copies of its one search: the 0.11-0.13 Web's
+    (search frame) and the 0.13.0 CLI's (drawn frame), in the order a 0.13.0 Session lists them."""
+
+    _record_in_source, _drawn_record, web, cli = _drawn_reversed_extractions()
+    legacy_subject = protein_colinearity_module._with_stable_web_protein_ids(web.proteins_by_record[1], "r_subject")
+    copies = [
+        _legacy_reversed_entry(
+            protein_colinearity_module._with_stable_web_protein_ids(proteins, "r_query"), legacy_subject
+        )
+        for proteins in (web.proteins_by_record[0], cli.proteins_by_record[0])
+    ]
+    return web, copies
+
+
+@pytest.mark.linear
+def test_legacy_promotion_reports_the_other_copies_of_the_search_it_answers() -> None:
+    """OV-3561: the owner answers a search with its first verified candidate and reports the other candidates that
+    verify for the same search; for a search with a current entry (``answered_keys``) it promotes none and reports
+    every verified candidate. Both surfaces retire what it reports, so no copy stays pending forever."""
+
+    web, copies = _two_copies_of_one_search()
+    unrelated = {**copies[0], "args": ["--other"]}
+
+    def scan(answered_keys: Sequence[str] = ()) -> LegacyProteinRawCachePromotionScan:
+        return promote_legacy_protein_raw_cache_entries(
+            [*copies, unrelated],
+            query_proteins=web.proteins_by_record[0],
+            subject_proteins=web.proteins_by_record[1],
+            query_fasta=proteins_to_fasta(web.proteins_by_record[0]),
+            subject_fasta=proteins_to_fasta(web.proteins_by_record[1]),
+            identity_manifest=web.identity_manifest,
+            expected_args=_LEGACY_REVERSED_ARGS,
+            answered_keys=answered_keys,
+        )
+
+    first = scan()
+    assert first.promotion is not None and first.promotion.candidate_index == 0
+    assert first.duplicates == (1,)
+    assert [rejection.candidate_index for rejection in first.rejections] == [2]
+    answered = scan([str(first.promotion.entry["key"])])
+    assert (answered.promotion, answered.duplicates) == (None, (0, 1))
+
+
+@pytest.mark.linear
+def test_the_web_helper_reports_the_copies_of_a_search_to_retire() -> None:
+    """OV-3561: the Web helper carries the owner's report: the candidates to retire, by their envelope indexes, and,
+    for a search with a current entry (its key in ``answeredKeys``), no promotion."""
+
+    web, copies = _two_copies_of_one_search()
+    record, _drawn_record, _web, _cli = _drawn_reversed_extractions()
+    subject_record = _record("subject", features=[_cds(9, 18, qualifiers={"translation": ["MKV"], "locus_tag": ["s1"]})])
+    manifest = web.identity_manifest
+    assert manifest is not None
+    helpers = _load_web_helper_namespace()
+    serialize_protein = helpers["_serialize_cds_protein"]
+    maps = [
+        json.dumps({protein.protein_id: serialize_protein(protein, source) for protein in proteins})
+        for source, proteins in zip((record, subject_record), web.proteins_by_record, strict=True)
+    ]
+
+    def reply(answered_keys: list[str]) -> dict[str, object]:
+        return cast(dict[str, object], json.loads(
+            helpers["promote_legacy_losatp_cache_candidates"](
+                json.dumps([{"candidateIndex": 3 + index, "entry": copy} for index, copy in enumerate(copies)]),
+                proteins_to_fasta(web.proteins_by_record[0]),
+                proteins_to_fasta(web.proteins_by_record[1]),
+                maps[0],
+                maps[1],
+                json.dumps(manifest.to_dict()),
+                json.dumps({"args": _LEGACY_REVERSED_ARGS, "answeredKeys": answered_keys}),
+            )
+        ))
+
+    promoted = reply([])
+    assert (promoted["status"], promoted["candidateIndex"], promoted["duplicates"]) == ("promoted", 3, [4])
+    entry = cast(dict[str, object], promoted["entry"])
+    assert reply([str(entry["key"])]) == {"status": "no-match", "rejections": [], "duplicates": [3, 4]}
+
+
 @pytest.mark.linear
 def test_legacy_protein_cache_promotion_rejects_hash_args_and_ambiguous_empty_output() -> None:
     records = [

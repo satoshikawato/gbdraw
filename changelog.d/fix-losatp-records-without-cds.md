@@ -8,3 +8,8 @@
   now keeps a comparison, empty when the pair has no collinear block (such as
   a pair with a record that has no CDS protein), so the figure reports that
   the pair has no protein match to draw.
+- Fixed: When a Session saved by gbdraw 0.11 to 0.13 holds two stored copies
+  of one LOSATP search (one the web app wrote and one the command line wrote),
+  the web app and the command line now drop the copy they do not use once the
+  search is answered, with the older derived results kept for it, instead of
+  carrying it in every saved Session.

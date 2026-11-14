@@ -251,7 +251,7 @@ def test_the_web_legacy_promotion_skips_records_without_proteins() -> None:
     reply = json.loads(str(promote(
         "[]", "", "", "{}", "{}", json.dumps(extraction.identity_manifest), json.dumps({"args": []}),
     )))
-    assert reply == {"status": "no-match", "rejections": []}
+    assert reply == {"status": "no-match", "rejections": [], "duplicates": []}
 
 
 @pytest.mark.linear

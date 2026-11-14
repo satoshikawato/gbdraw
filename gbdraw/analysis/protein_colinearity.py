@@ -715,10 +715,16 @@ class LegacyProteinRawCacheRejection:
 
 @dataclass(frozen=True)
 class LegacyProteinRawCachePromotionScan:
-    """Promotion result plus pair-local rejection diagnostics."""
+    """Promotion result plus pair-local rejection diagnostics.
+
+    ``duplicates`` are the indexes of the other candidates that verify for the
+    same search: copies of a search that ``promotion`` or a current entry
+    answers. A caller retires them once no other search of its run takes them
+    (OV-3561)."""
 
     promotion: LegacyProteinRawCachePromotion | None
     rejections: tuple[LegacyProteinRawCacheRejection, ...] = ()
+    duplicates: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2517,13 +2523,18 @@ def _legacy_frame_matching(
     canonical_hash: object,
     *,
     side: str,
+    built: dict[tuple[str, int], tuple[str, dict[str, str], str]],
 ) -> tuple[str, dict[str, str]]:
     """The legacy FASTA and legacy-to-current ID map of the first of ``frames`` whose FASTA hash is
-    ``canonical_hash``."""
+    ``canonical_hash``. ``built`` keeps each frame's FASTA, map and hash by record token, so the candidates of one
+    scan build each once."""
 
-    for proteins in frames:
-        legacy_fasta, id_map = _legacy_fasta_and_id_map(proteins, record_token)
-        if _hash_text_sha256(legacy_fasta) == str(canonical_hash or ""):
+    for frame_index, proteins in enumerate(frames):
+        if (record_token, frame_index) not in built:
+            legacy_fasta, id_map = _legacy_fasta_and_id_map(proteins, record_token)
+            built[(record_token, frame_index)] = (legacy_fasta, id_map, _hash_text_sha256(legacy_fasta))
+        legacy_fasta, id_map, fasta_hash = built[(record_token, frame_index)]
+        if fasta_hash == str(canonical_hash or ""):
             return legacy_fasta, id_map
     raise ValidationError(f"Legacy {side} FASTA hash does not match.")
 
@@ -2741,6 +2752,7 @@ def promote_legacy_protein_raw_cache_entries(
     expected_args: Sequence[str],
     expected_program: str = "blastp",
     expected_outfmt: str = "6",
+    answered_keys: AbstractSet[str] = frozenset(),
 ) -> LegacyProteinRawCachePromotionScan:
     """Find and verify a legacy pair, then return a schema-4 copy.
 
@@ -2750,6 +2762,10 @@ def promote_legacy_protein_raw_cache_entries(
     may have hashed (:func:`_legacy_writer_frames`). No input object is
     mutated. A failed candidate contributes a pair-local rejection diagnostic
     and never enters the current cache.
+
+    The first verified candidate answers the search, unless its key is in
+    ``answered_keys`` (it has a current entry); every other verified candidate
+    is a duplicate (OV-3561).
     """
 
     manifest = validate_protein_identity_manifest(identity_manifest)
@@ -2773,6 +2789,15 @@ def promote_legacy_protein_raw_cache_entries(
     token_evidence: dict[str, set[str]] | None = None
     query_frames = _legacy_writer_frames(query_proteins)
     subject_frames = _legacy_writer_frames(subject_proteins)
+    built_frames: tuple[dict[tuple[str, int], tuple[str, dict[str, str], str]], ...] = ({}, {})
+    cache_key = build_protein_losat_cache_key(
+        pair_identity,
+        args=expected_arg_tuple,
+        program=expected_program,
+        outfmt=expected_outfmt,
+    )
+    promotion: LegacyProteinRawCachePromotion | None = None
+    duplicates: list[int] = []
 
     for candidate_index, candidate in enumerate(entries):
         entry = _legacy_original_entry(candidate)
@@ -2811,10 +2836,10 @@ def promote_legacy_protein_raw_cache_entries(
                 query_token = next(iter(query_candidates))
                 subject_token = next(iter(subject_candidates))
             legacy_query_fasta, query_id_map = _legacy_frame_matching(
-                query_frames, query_token, entry.get("queryCanonicalHash"), side="query"
+                query_frames, query_token, entry.get("queryCanonicalHash"), side="query", built=built_frames[0]
             )
             legacy_subject_fasta, subject_id_map = _legacy_frame_matching(
-                subject_frames, subject_token, entry.get("subjectCanonicalHash"), side="subject"
+                subject_frames, subject_token, entry.get("subjectCanonicalHash"), side="subject", built=built_frames[1]
             )
             rewritten_tsv = _rewrite_legacy_protein_tsv(
                 raw_text,
@@ -2828,13 +2853,10 @@ def promote_legacy_protein_raw_cache_entries(
                 subject_record_instance_key=subject_instance_key,
             ):
                 raise ValidationError("Rewritten TSV does not match the current bindings.")
+            if promotion is not None or cache_key in answered_keys:
+                duplicates.append(candidate_index)
+                continue
 
-            cache_key = build_protein_losat_cache_key(
-                pair_identity,
-                args=expected_arg_tuple,
-                program=expected_program,
-                outfmt=expected_outfmt,
-            )
             promoted: dict[str, object] = {
                 "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
                 "kind": "raw-losat",
@@ -2856,15 +2878,12 @@ def promote_legacy_protein_raw_cache_entries(
             }
             if not is_protein_losat_cache_entry(promoted):
                 raise ValidationError("Promoted schema-4 entry failed validation.")
-            return LegacyProteinRawCachePromotionScan(
-                promotion=LegacyProteinRawCachePromotion(
-                    candidate_index=candidate_index,
-                    entry=promoted,
-                    rewritten_tsv=rewritten_tsv,
-                    legacy_query_fasta=legacy_query_fasta,
-                    legacy_subject_fasta=legacy_subject_fasta,
-                ),
-                rejections=tuple(rejections),
+            promotion = LegacyProteinRawCachePromotion(
+                candidate_index=candidate_index,
+                entry=promoted,
+                rewritten_tsv=rewritten_tsv,
+                legacy_query_fasta=legacy_query_fasta,
+                legacy_subject_fasta=legacy_subject_fasta,
             )
         except (ParseError, ValidationError) as exc:
             rejections.append(
@@ -2875,8 +2894,9 @@ def promote_legacy_protein_raw_cache_entries(
             )
 
     return LegacyProteinRawCachePromotionScan(
-        promotion=None,
+        promotion=promotion,
         rejections=tuple(rejections),
+        duplicates=tuple(duplicates),
     )
 
 

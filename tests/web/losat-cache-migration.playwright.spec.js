@@ -34,7 +34,6 @@ const CURRENT_PROTEIN_RAW_SCHEMA = generatedConstant('PROTEIN_LOSAT_CACHE_SCHEMA
 const CURRENT_PROTEIN_DERIVED_SCHEMA = generatedConstant('LOSAT_DERIVED_CACHE_SCHEMA');
 const CURRENT_PROTEIN_IDENTITY_MANIFEST_SCHEMA = generatedConstant('PROTEIN_IDENTITY_MANIFEST_SCHEMA');
 
-let sourceSession;
 let savedSessionCount = 0;
 let savedSessionDir;
 
@@ -269,17 +268,11 @@ const assertCurrentProteinArtifacts = (session) => {
     entry?.program === 'blastp'
   ))).toBe(true);
   expect(derivedEntries).toEqual([]);
-  const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
-  expect(legacyCandidates)
-    .toHaveLength(expected.storedRawEntries - expected.totalPairs);
-  expect(legacyCandidates.every((candidate) => (
-    candidate.state === 'pending' &&
-    (sourceSession.losatCache?.entries || []).some(
-      (entry) => JSON.stringify(entry) === JSON.stringify(candidate.originalEntry)
-    )
-  ))).toBe(true);
-  expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || [])
-    .toEqual(sourceSession.losatDerivedCache?.entries || []);
+  // OV-3561: the stored entries the searches did not promote are second copies of searches they answer
+  // (storedRawEntries - totalPairs of them); they retire with the promotions, and the legacy evidence goes.
+  expect(expected.storedRawEntries).toBeGreaterThan(expected.totalPairs);
+  expect(session.legacyArtifacts?.proteinRawCandidates?.entries || []).toEqual([]);
+  expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || []).toEqual([]);
 
   const runtimeOwners = new Map();
   for (const [instanceKey, instance] of Object.entries(manifest.recordInstances || {})) {
@@ -650,7 +643,6 @@ test.beforeAll(async () => {
   expect(existsSync(fixturePath)).toBe(true);
   const fixtureBytes = expandedSessionBytes(fixturePath);
   const fixture = JSON.parse(fixtureBytes.toString('utf8'));
-  sourceSession = fixture;
   expect(createHash('sha256').update(fixtureBytes).digest('hex')).toBe(expected.sourceSha256);
   expect(fixture.version).toBe(expected.sessionVersion);
   expect(fixture.renderRequest?.schema).toBe(expected.renderRequestSchema);

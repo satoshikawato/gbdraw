@@ -778,7 +778,11 @@ def promote_legacy_losatp_cache_candidates(
     identity_manifest_json,
     expected_options_json,
 ):
-    """Verify and copy one legacy schema-2 protein entry into schema 4."""
+    """Verify and copy one legacy schema-2 protein entry into schema 4.
+
+    expected_options_json names the search (program, outfmt, args) and, as
+    answeredKeys, its key when it has a current entry; the reply's duplicates
+    are the candidates to retire (OV-3561)."""
     try:
         from gbdraw.analysis.protein_colinearity import (
             promote_legacy_protein_raw_cache_entries,
@@ -807,7 +811,9 @@ def promote_legacy_losatp_cache_candidates(
             expected_args=options.get("args") or [],
             expected_program=str(options.get("program") or "blastp"),
             expected_outfmt=str(options.get("outfmt") or "6"),
+            answered_keys=frozenset(str(key) for key in options.get("answeredKeys") or []),
         )
+        duplicates = [candidate_indexes[index] for index in scan.duplicates]
         rejections = [
             {
                 "candidateIndex": candidate_indexes[rejection.candidate_index],
@@ -816,7 +822,7 @@ def promote_legacy_losatp_cache_candidates(
             for rejection in scan.rejections
         ]
         if scan.promotion is None:
-            return json.dumps({"status": "no-match", "rejections": rejections})
+            return json.dumps({"status": "no-match", "rejections": rejections, "duplicates": duplicates})
         promotion = scan.promotion
         return json.dumps({
             "status": "promoted",
@@ -824,6 +830,7 @@ def promote_legacy_losatp_cache_candidates(
             "entry": promotion.entry,
             "text": promotion.rewritten_tsv,
             "rejections": rejections,
+            "duplicates": duplicates,
         })
     except Exception as error:
         return json.dumps({'status': 'error', 'error': serialize_web_error(error, operation='promoteLegacyLosatpCache', stage="helper")})

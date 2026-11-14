@@ -347,9 +347,10 @@ def written_legacy_protein_artifacts(
     """The legacy protein raw candidates and derived evidence a written Session keeps.
 
     ``candidates`` are in their states after this write's attempts and
-    ``promoted`` are the indexes it promoted: a promoted candidate leaves the
-    envelope (its entry is a current raw entry now); every other candidate
-    stays, ``pending`` or ``rejected``. The evidence goes when this write
+    ``promoted`` are the indexes it promoted or retired: such a candidate
+    leaves the envelope (its entry, or another copy of its search, is a
+    current raw entry now, OV-3561); every other candidate stays, ``pending``
+    or ``rejected``. The evidence goes when this write
     promoted a candidate and left none pending, or when the written Session
     holds or built current derived entries (OV-1129); else it stays. The Web
     twin is ``writtenLegacyProteinArtifacts`` (``services/losat-cache.js``);
@@ -408,12 +409,13 @@ def _promote_legacy_candidates(
     (``search_frame_extraction``), as the Web's does.
 
     Returns the promoted current raw entries, the indexes of the candidates
-    they came from and the legacy-to-current protein ID map. An unmatched
-    candidate stays as it is; a ``rejected`` one is not tried again. As in
+    that leave the envelope and the legacy-to-current protein ID map. As in
     the Web, only a search without a current entry (its key is not in
-    ``answered_keys``) is answered, by the first candidate that matches it;
-    a later candidate of the same search (the same record pair written again,
-    in another frame) stays pending.
+    ``answered_keys``) is answered, by the first candidate that matches it. A
+    candidate that matches only searches answered already (the same record
+    pair written again, in another frame) is a duplicate and leaves with the
+    promoted ones (OV-3561). An unmatched candidate stays as it is; a
+    ``rejected`` one is not tried again.
     """
 
     manifest = extraction.identity_manifest
@@ -423,6 +425,7 @@ def _promote_legacy_candidates(
     promoted_entries: list[Mapping[str, Any]] = []
     promoted_indexes: set[int] = set()
     promoted_keys: set[str] = set(answered_keys)
+    duplicate_indexes: set[int] = set()
     id_map: dict[str, str] = {}
 
     for candidate_index, candidate in enumerate(candidates):
@@ -454,10 +457,13 @@ def _promote_legacy_candidates(
                     expected_args=expected_args,
                     expected_program=str(original.get("program") or "blastp"),
                     expected_outfmt=str(original.get("outfmt") or "6"),
+                    answered_keys=promoted_keys,
                 )
             except ValidationError:
                 continue
-            if scan.promotion is not None and str(scan.promotion.entry["key"]) not in promoted_keys:
+            if scan.duplicates:
+                duplicate_indexes.add(candidate_index)
+            if scan.promotion is not None:
                 promotion = scan.promotion
                 break
 
@@ -476,7 +482,7 @@ def _promote_legacy_candidates(
             current_text=promotion.rewritten_tsv,
         )
 
-    return tuple(promoted_entries), frozenset(promoted_indexes), id_map
+    return tuple(promoted_entries), frozenset(promoted_indexes | duplicate_indexes), id_map
 
 
 def _rewrite_protein_reference_string(
