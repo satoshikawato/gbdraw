@@ -1574,6 +1574,63 @@ def build_session_document(
     )
 
 
+@dataclass(frozen=True)
+class DrawingRequestReplacement:
+    """One drawing with a new request: its spec, with its ID, name and Web state, and the Session with it there.
+
+    ``result_dropped`` says that the drawing's saved Result, which drew the
+    old request, was dropped; the next Generate draws the drawing again.
+    """
+
+    drawing: SessionDrawingSpec
+    document: SessionDocument
+    result_dropped: bool
+
+
+def replace_drawing_request(
+    document: SessionDocument,
+    selector: str,
+    request: DiagramRequest,
+    *,
+    keep_result: bool = False,
+) -> DrawingRequestReplacement:
+    """``document`` with the request of its drawing ``selector`` replaced and everything else kept.
+
+    The drawing keeps its ID, name and Web state (settings draft, Legend and
+    feature edits, ``ui``, editor state); the other drawings, the title and
+    the resources stay. Its saved Result drew the old request, so it is
+    dropped, unless ``keep_result`` (the request draws the same figure).
+    Equal file bytes keep their resource IDs.
+    """
+
+    if document.version < DRAWINGS_SESSION_MIN_VERSION:
+        raise SessionFormatError(
+            f"A Session {document.version} moves to drawings before a drawing's request is replaced."
+        )
+    from gbdraw.session_migration import project_session_adjunct_for_current_write
+
+    parts = document._drawing_parts(selector)
+    state, web_file_inventory = project_session_adjunct_for_current_write(
+        parts.artifacts.fields, document.resources, source_version=CURRENT_SESSION_VERSION
+    )
+    dropped = not keep_result and bool(parts.results)
+    if not keep_result:
+        _set_aside_results({}, parts.id, state)
+        # The catalog names the features of the dropped Result.
+        editor_state = state.get("editorState")
+        state["editorState"] = {**(editor_state if isinstance(editor_state, Mapping) else {}), "featureCatalog": None}
+    spec = SessionDrawingSpec(request=request, mode=parts.mode, id=parts.id, name=parts.name, state=state)
+    title = parts.artifacts.fields.get("title")
+    replaced = _build_session_document_from_drawings(
+        _drawing_builds(None, (spec,)),
+        base=document,
+        title=title if isinstance(title, str) else None,
+        web_file_inventory=web_file_inventory,
+        resources=document.resources,
+    )
+    return DrawingRequestReplacement(spec, replaced, dropped)
+
+
 def _write_session_document(
     path: str | Path,
     document: SessionDocument,
@@ -2623,8 +2680,10 @@ __all__ = [
     "SessionUpgrade",
     "SessionVersionError",
     "build_session_document",
+    "DrawingRequestReplacement",
     "load_session_document",
     "materialize_session",
+    "replace_drawing_request",
     "render_session",
     "render_session_drawings",
     "save_session_document",

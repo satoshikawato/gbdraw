@@ -145,6 +145,16 @@ class AlreadyPresentItem(TypedDict):
     targetRecordKey: str
 
 
+class LeftOutItem(TypedDict):
+    """A selected span the existing drawing cannot take while it takes the others, with the reason: the source record
+    key and the span in source coordinates."""
+
+    recordKey: str
+    start: int
+    end: int
+    reason: CopyRefusalReason
+
+
 class PasteNotCarriedItem(TypedDict):
     """A part a paste does not bring, or the pasted records lack, by kind, with its count."""
 
@@ -179,6 +189,7 @@ class PastedRecords(TypedDict):
     addedResources: list[AddedResource]
     pastedRecordKeys: list[str]
     alreadyPresent: list[AlreadyPresentItem]
+    leftOut: list[LeftOutItem]
     notCarried: list[PasteNotCarriedItem]
 
 
@@ -324,6 +335,10 @@ def _pasted_reply(
             }
             for item in pasted.already_present
         ],
+        "leftOut": [
+            {"recordKey": item.record_key, "start": item.start, "end": item.end, "reason": item.reason}
+            for item in pasted.left_out
+        ],
         "notCarried": [{"kind": item.kind, "count": item.count} for item in pasted.not_carried],
     }
 
@@ -430,6 +445,7 @@ __all__ = [
     "CopyChoice",
     "DerivedRegionDrawing",
     "ExistingDrawingCopy",
+    "LeftOutItem",
     "NewDrawingCopy",
     "PasteNotCarriedItem",
     "PasteTarget",

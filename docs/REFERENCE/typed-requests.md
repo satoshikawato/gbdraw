@@ -171,8 +171,9 @@ inside the regions:
   `CopyRefused` (reason `CIRCULAR_WHOLE_RECORDS`).
 - `settings="defaults"` draws the records with the mode's defaults instead:
   none of the drawing's settings, colors, rules, tables, annotations, Depth,
-  per-feature edits, or record orientation and display start come along, and
-  nothing is listed as returned to Auto or not carried.
+  per-feature edits, or record orientation and display start come along.
+  Nothing is listed as returned to Auto; the drawing's uploaded comparison
+  and ring tables are listed as not carried.
 - Each record keeps its orientation unless `reverse_complement` is given.
 - A region whose start is after its end is refused with a `ValidationError`
   whose diagnostic code is `REGION_INVALID`: reason `ORIGIN_CROSSING` on a
@@ -197,9 +198,18 @@ materialization context closes.
 `paste_region_drawing(materialized, regions, target=...)` returns a
 `PastedDrawing`: the drawing that `target` names by ID or name, with the
 records or regions of the source drawing (`drawing=`, as above) appended after
-its own records. Put `drawing` in place of the target when you build the
-session again. The target keeps its settings, colors and rules, tables, and
-comparisons, and neither drawing changes:
+its own records. The target is another drawing; naming the source drawing
+raises `CopyRefused` (reason `SAME_DRAWING`). The target keeps its settings,
+colors and rules, tables, and comparisons, and the source drawing does not
+change:
+
+- `drawing` is a `SessionDrawingSpec` with the target's ID, name, and Web
+  state (its settings draft, Legend and feature edits, `ui`, and editor
+  state), and `document` is the Session with that drawing in its place and
+  every other drawing, the title, and the resources as they were. When
+  records were pasted, the target's saved Result drew the old request, so
+  it is dropped (`result_dropped` is true) and the next render draws the
+  drawing again. Use `document` while `materialized` is active.
 
 - Each pasted record takes a record key of its own in the target
   (`pasted_record_keys`). A Linear target that places its records by row gives
@@ -208,26 +218,30 @@ comparisons, and neither drawing changes:
   row where it places its records by row. A Circular target that draws
   separate diagrams takes each pasted record as a diagram of its own. A
   Circular target takes whole records only, and only while it draws whole
-  records; otherwise the paste raises `CopyRefused` (reasons
-  `CIRCULAR_WHOLE_RECORDS`, `CIRCULAR_RANGE_TARGET`). A Linear target aligned
+  records: a range is left out and listed in `left_out` (`LeftOut`, reason
+  `CIRCULAR_WHOLE_RECORDS`) while the whole records are pasted, and the paste
+  raises `CopyRefused` when no whole record is selected (reason
+  `CIRCULAR_WHOLE_RECORDS`) or the target draws a range (reason
+  `CIRCULAR_RANGE_TARGET`). A Linear target aligned
   at a feature or by a Similarity alignment keeps its alignment, and the
   pasted records are drawn where they are, without a move of their own.
 - With `edits="edits"` (the default) each record comes as the source draws it,
   with its per-feature color, label, and visibility edits inside the regions
   moved to its new key. A per-feature color is a `hash` row of the color
   table; the target's color table gains one row for each such feature, after
-  its own rows, which do not change. The source's annotations, feature
-  placements, and Depth tracks of those records are not carried. With
-  `edits="records"` the records come as a new drawing of their files draws
-  them.
+  its own rows, which do not change. With `edits="records"` the records come
+  as a new drawing of their files draws them. Either way the source's
+  annotations, feature placements, and Depth tracks of those records and
+  regions, and its uploaded comparison and ring tables, are not carried.
 - A selected span that the target already draws, the same record of the same
   file (compared by file content and the record's place in the file, not by
   its name) and the same span, is listed in `already_present` with the
   target's record key. `duplicates="skip"` (the default) leaves it out;
   `duplicates="add"` adds it as a record of its own. Another span of the same
   record is not a duplicate.
-- `not_carried` lists what the paste left behind, and pasted records that the
-  target's comparison tables or pairs have no rows for.
+- `not_carried` lists what the paste left behind, by kind and count, whatever
+  `edits` is and whatever the target's mode is, and the pasted records that
+  the target's comparison tables or pairs have no rows for.
 
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.
