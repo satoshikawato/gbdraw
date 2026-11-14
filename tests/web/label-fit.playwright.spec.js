@@ -83,7 +83,7 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   await expect(separate).toContainText('separate overlapping features');
   await expect(separate).toContainText('Resolve Overlaps On');
   await expect(separate).toContainText(/\d+ × \d+ px/);
-  await expect(separate.locator('[data-label-fit-note]')).toHaveText('15 leader pairs still cross');
+  await expect(separate.locator('[data-label-fit-note]')).toHaveText('15 leader pairs still cross.');
   await shot(dialog.getByRole('dialog'), 'label-fit-dialog-crossing-row.png');
 
   const before = { undo: await undoCount(page), settings: await labelSettings(page) };

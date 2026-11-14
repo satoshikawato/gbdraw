@@ -40,6 +40,9 @@ from gbdraw.labels.fit import (
     LabelFitRow,
     LabelFitRowKind,
     LabelKind,
+    LimitReason,
+    PlainReason,
+    UnfitReason,
     format_label_fit_report,
 )
 from gbdraw.session import build_session_document
@@ -68,7 +71,7 @@ def _report(*, drawn: bool) -> LabelFitReport:
         rows=(
             LabelFitRow("outward_vertical", "found", {Y_OFFSET_PATH: 1.15}, (1708.0, 1130.0)),
             LabelFitRow("smaller_font", "found", {path: 12.0 for path in FONT_SIZE_PATHS}, (1615.0, 988.0)),
-            LabelFitRow("tighter_rows", "not_found", reason="Does not fit down to 0.1 px label spacing"),
+            LabelFitRow("tighter_rows", "not_found", reason=LimitReason("spacing_limit", 0.1)),
             LabelFitRow("combination", "not_computed"),
         ),
         drawn=drawn,
@@ -92,14 +95,62 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
         "kind": "outward_vertical", "title": "outward, vertical only", "status": "found",
         "values": {Y_OFFSET_PATH: 1.15}, "trackOptions": {},
         "settings": [{"name": "Outer Y Offset", "unit": "", "value": 1.15}],
-        "canvasSize": {"width": 1708.0, "height": 1130.0}, "reason": None, "note": None,
+        "canvasSize": {"width": 1708.0, "height": 1130.0}, "reason": None, "remaining": [],
     }
     # One control sets both font size classes: one setting, both config paths.
     assert font["values"] == {path: 12.0 for path in FONT_SIZE_PATHS}
     assert font["settings"] == [{"name": "Label Font Size", "unit": "pt", "value": 12.0}]
     assert tighter["status"] == "not_found" and tighter["values"] is None and tighter["settings"] == []
-    assert tighter["reason"] == "Does not fit down to 0.1 px label spacing"
+    assert tighter["reason"] == {"kind": "spacing_limit", "limit": 0.1}
     assert combination["status"] == "not_computed" and combination["canvasSize"] is None
+
+
+def test_row_reasons_and_notes_reach_the_web_as_data_not_english() -> None:
+    """OV-3109: why a row has no value and what a row that draws with the notice leaves are kinds, numbers and counts
+    by field name, which the Web words in the shown language; the payload carries no English sentence for them."""
+
+    from gbdraw.labels.fit import CombinationLimitReason
+
+    notice = LabelFitRow(
+        "outward_vertical", "found_with_notice", {Y_OFFSET_PATH: 1.3}, (1.0, 1.0),
+        remaining=LabelFit(1, 2, 3, region_overlaps=1, region_cuts=2),
+    )
+    definition = LabelFitRow(
+        "narrow_tracks", "found_with_notice", {DEFINITION_FONT_PATH: 12.0}, (1.0, 1.0),
+        remaining=LabelFit(0, 4, definition_track_overlaps=2),
+    )
+    rows = (
+        LabelFitRow("outward_vertical", "not_found", reason=LimitReason("y_offset_limit", 2.0)),
+        LabelFitRow("combination", "not_found", reason=CombinationLimitReason(13.0, 2.0)),
+        LabelFitRow("labels_out", "not_found", reason=UnfitReason(LabelFit(0, 1))),
+        LabelFitRow("radial", "not_found", reason=UnfitReason(None)),
+        LabelFitRow("outward_horizontal", "not_found", reason=PlainReason("outer_labels_only")),
+        notice,
+        definition,
+    )
+    report = LabelFitReport(records=(LabelFitRecord("rec-1", "circular_outer", 3, 14.0, LabelFit(1, 1)),), rows=rows,
+                            drawn=False)
+    payload_rows = label_fit_report_payload(report, "circular")["rows"]
+    assert [row["reason"] for row in payload_rows] == [
+        {"kind": "y_offset_limit", "limit": 2.0},
+        {"kind": "combination_limit", "fontSize": 13.0, "limit": 2.0},
+        {"kind": "labels_do_not_fit", "counts": [
+            {"field": "overlap_pairs", "count": 0}, {"field": "crossing_pairs", "count": 1},
+        ]},
+        {"kind": "labels_do_not_fit", "counts": []},
+        {"kind": "outer_labels_only"},
+        None,
+        None,
+    ]
+    # A label row names crossings, labels over the definition text and region label warnings (not its overlapping
+    # pairs); a definition row names only its definition lines over a track.
+    assert payload_rows[5]["remaining"] == [
+        {"field": "crossing_pairs", "count": 2}, {"field": "definition_overlaps", "count": 3},
+        {"field": "region_overlaps", "count": 1}, {"field": "region_cuts", "count": 2},
+    ]
+    assert payload_rows[6]["remaining"] == [{"field": "definition_track_overlaps", "count": 2}]
+    assert all("note" not in row for row in payload_rows)
+    assert not any(word in json.dumps(payload_rows) for word in ("Does not", "still", "Labels", "drawn with"))
 
 
 def test_labels_over_capacity_carry_their_ratio_the_remedies_and_their_own_reason() -> None:
@@ -149,8 +200,8 @@ def test_a_report_with_no_fitting_row_lists_the_ways_to_make_room() -> None:
     capacity stop names (the same owner, so a smaller font is left out at the 6 pt floor), and the CLI text lists them."""
 
     not_found = (
-        LabelFitRow("outward_both", "not_found", reason="Does not fit up to 2 Outer X and Y Offset"),
-        LabelFitRow("smaller_font", "not_found", reason="Does not fit down to 6 pt"),
+        LabelFitRow("outward_both", "not_found", reason=LimitReason("xy_offset_limit", 2.0)),
+        LabelFitRow("smaller_font", "not_found", reason=LimitReason("font_limit", 6.0)),
     )
 
     def report(font_size: float, rows: tuple[LabelFitRow, ...] = not_found, kind: LabelKind = "circular_outer") -> LabelFitReport:
@@ -447,8 +498,9 @@ def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_dra
     assert separate["values"] == {SEPARATE_FEATURES_PATH: True}
     assert separate["settings"] == [{"name": "Resolve Overlaps", "unit": "", "value": "On"}]
     assert separate["canvasSize"] is not None
-    assert separate["note"] == "15 leader pairs still cross"
-    assert {row["note"] for row in rows if row is not separate} == {None}
+    # What the row leaves is data the Web words in its language (OV-3109); the CLI words it in English.
+    assert separate["remaining"] == [{"field": "crossing_pairs", "count": 15}] and "note" not in separate
+    assert [row["remaining"] for row in rows if row is not separate] == [[]] * (len(rows) - 1)
     assert "  --resolve_overlaps   (separate overlapping features; 15 leader pairs still cross)\n" in str(raised.value)
 
     drawn = _web_render(_sars_request({**strands, SEPARATE_FEATURES_PATH: True}), tmp_path / "drawn")
@@ -510,7 +562,7 @@ def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_nar
     )
     assert font["trackOptions"] == {}
     assert narrow["settings"] == [{"name": "Center Reserved Radius", "unit": "px", "value": 247.31}]
-    assert narrow["note"] is None
+    assert narrow["remaining"] == []
 
     narrowed = _web_render(
         _mers_request(247.31, track_narrowing=False, definition_font=17.5), tmp_path / "narrowed"
@@ -552,7 +604,7 @@ def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_la
     # A newer render of the mode releases the figure: its rows answer "not computed".
     searches.retain("circular", [])
     stale = searches.row(token, "outward_vertical")
-    assert stale["status"] == "not_computed" and stale["reason"]
+    assert stale["status"] == "not_computed" and stale["reason"] == {"kind": "stale"}
     with pytest.raises(ValidationError):
         searches.row(token, "sideways")
 
@@ -864,7 +916,7 @@ def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
     assert row is not None and row.status == "not_found"
     unfit = _unfit_row_verification(error)
     assert unfit is not None and unfit.outcome == "stop"
-    assert unfit.reason == "The tracks do not fit with this setting"
+    assert unfit.reason == PlainReason("tracks_do_not_fit")
 
 
 def test_a_failed_render_keeps_the_shown_results_rows_computable() -> None:
@@ -929,7 +981,7 @@ def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
     (token,) = searches.retain("circular", [drawing])
     row = searches.row(str(token), "outward_vertical")
     assert row["status"] == "not_computed" and row["values"] is None
-    assert row["reason"] == "No value found within 0 seconds."
+    assert row["reason"] == {"kind": "search_bound", "limit": 0.0}
 
     # The rows a stopped Generate left are searched with the same bound.
     rows = _Rows()
