@@ -10,6 +10,7 @@ import {
 import { buildMatchPopupPayload, matchSpanFasta, matchSpanUnavailableReason } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 import { featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
+import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { numberText } from '../../gbdraw/web/js/utils/i18n.js';
 import {
   FEATURE_CATALOG_SCHEMA,
@@ -506,31 +507,23 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
   assert.deepEqual(plain.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`), ['1..4', '4..1']);
 });
 
-// A comparison band whose source's FASTA lacks the record it names (OV-2755): the exported viewer says no source
-// matched the record, the text the app shows for Python's reason; only a source that embeds no record says its FASTA
-// was not supplied.
-test('the viewer says a comparison FASTA was not supplied only for a source that embeds none (OV-2755)', () => {
-  const sources = [{
-    key: 'homology:comparison:0:cmp', origin: 'homology-comparison', sourceIndex: 0, recordId: 'cmp', aliases: ['cmp', 'CMP'],
-    sequence: 'TTGCAACC'
-  }];
-  const resolve = new Function('sequenceSources', `
-    ${embeddedFunction('consistentTextIdentity')}
-    ${embeddedFunction('nonnegativeIntegerIdentity')}
-    ${embeddedFunction('matchSourceAliases')}
-    ${embeddedFunction('resolveEmbeddedMatchSource')}
-    return resolveEmbeddedMatchSource;
-  `)(sources);
-  const band = (sourceIndex, subject) => ({
-    match_kind: 'homology', reference_side: 'query', source_index: sourceIndex, query_record_id: 'ref', subject_record_id: subject
-  });
-  const appText = (reason) => matchSpanUnavailableReason({ span: { recordId: 'absent' } }, {
-    status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '', sourceLength: 0
-  });
-  assert.equal(resolve(band(0, 'CMP'), 'subject').source, sources[0]);
-  assert.equal(resolve(band(0, 'absent'), 'subject').reason, 'No sequence source matched record “absent”.');
-  assert.equal(resolve(band(0, 'absent'), 'subject').reason, appText('RECORD_UNKNOWN'));
-  assert.equal(resolve(band(1, 'absent'), 'subject').reason, appText('NEVER_SUPPLIED'));
+// The exported viewer shows the reason Python embedded for a span it cannot read (OV-2755, OV-3542) in the words
+// the app shows for the same reason, so a band whose comparison FASTA lacks its record says no source matched it.
+test('the viewer words each embedded match span reason as the app does (OV-2755)', () => {
+  // The export fills the viewer's reason-text slot with this generated table (tests/web/embedded-match-spans.test.mjs).
+  const texts = MATCH_SPAN_REASON_TEXTS;
+  const read = new Function('matchSpanReads', 'sequenceSources', 'MATCH_SPAN_REASON_TEXTS', 'numberText', `
+    ${embeddedFunction('embeddedMatchSpanRead')}
+    return embeddedMatchSpanRead;
+  `);
+  for (const reason of Object.keys(texts)) {
+    const viewer = read({ m1: { subject: { reason, sourceLength: 12000 } } }, [], texts, numberText);
+    const shown = viewer({ id: 'm1', subject_record_id: 'absent' }, 'subject');
+    const app = matchSpanUnavailableReason({ span: { recordId: 'absent' } }, {
+      status: 'unavailable', reason, recordId: 'absent', orientation: '+', length: 0, sequence: '', sourceLength: 12000
+    });
+    assert.deepEqual(shown, { source: null, reason: app }, reason);
+  }
 });
 
 // A search index reads each similarity-group member once, not once per feature

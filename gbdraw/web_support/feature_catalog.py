@@ -11,7 +11,7 @@ import math
 import re
 from types import MappingProxyType
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING, Any, Iterable, TypedDict, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Iterable, Literal, TypedDict, TypeVar, cast, final, get_args
 
 from svgwrite import Drawing
 
@@ -238,6 +238,7 @@ def _without_stored_sequences(item: dict[str, object]) -> None:
     ``translationFromAminoAcidSequence`` mark stood for (Python reads every sequence again, D5)."""
 
     item.pop("sequenceSources", None)
+    item.pop("matchSpanReads", None)
     features = item.get("biologicalFeatures")
     for feature in features if isinstance(features, list) else ():
         if not isinstance(feature, dict):
@@ -2356,6 +2357,300 @@ def read_match_span(sequence: str, start: int, end: int) -> str | None:
     return _reverse_complement_sequence(bases) if start > end else bases
 
 
+SpanCoordinate = int | None
+"""A span coordinate as the drawing gives it: a whole number, or ``None`` when the drawing's value is not a whole
+number (the page reads the value as the match popup did before D5, and Python says so after the record)."""
+
+
+@final
+class RecordMatchSpan(TypedDict):
+    """A span of a drawn record, by the record key of its drawn unit, with the record ID or alias the match names
+    ('' when it names none), which the record must carry: displayed coordinates, 1-based and inclusive; a start after
+    the end is the reverse strand."""
+
+    kind: Literal["record"]
+    recordKey: str
+    recordId: str
+    start: SpanCoordinate
+    end: SpanCoordinate
+
+
+@final
+class ReferenceMatchSpan(TypedDict):
+    """A span of a drawn record named by its record ID or an alias (a Circular comparison band names its reference
+    by the ID its hit carries), searched among every drawn unit, or only the unit of ``recordKey`` (a band on a
+    cropped or reversed reference also carries its record index); coordinates as in ``RecordMatchSpan``."""
+
+    kind: Literal["reference"]
+    recordId: str
+    recordKey: str | None
+    start: SpanCoordinate
+    end: SpanCoordinate
+
+
+@final
+class ComparisonMatchSpan(TypedDict):
+    """A span of a comparison FASTA record, by the index of its comparison source (None: the match names no source,
+    and every source is searched) and its record ID or alias."""
+
+    kind: Literal["comparison"]
+    sourceIndex: int | None
+    recordId: str
+    start: SpanCoordinate
+    end: SpanCoordinate
+
+
+MatchSpanInput = RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan
+MatchSpanReason = Literal[
+    "NEVER_SUPPLIED", "SOURCE_UNAVAILABLE", "SOURCE_KEY_CONFLICT", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS",
+    "RECORD_ALIAS_AMBIGUOUS", "COORDINATE_NOT_WHOLE", "COORDINATE_BELOW_ONE", "OUT_OF_RANGE",
+]
+# Why a span cannot be read: the Web reads this list from here (tools/generate_web_contracts.py) and shows one text
+# per reason, the text the match popup showed for that case before D5.
+MATCH_SPAN_REASONS: tuple[MatchSpanReason, ...] = get_args(MatchSpanReason)
+# The sentence of each reason, in English: the match popup of the Web shows it translated (a catalog key) and an
+# exported Interactive SVG shows it as it is ({id}: the record the match names; {length}: the length of the record
+# the span reads). The Web reads the table from here (tools/generate_web_contracts.py); the export writes it into
+# the file's script (``STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT``).
+MATCH_SPAN_REASON_TEXTS: dict[MatchSpanReason, str] = {
+    "NEVER_SUPPLIED": "Comparison sequence was not supplied for this BLAST source.",
+    "SOURCE_UNAVAILABLE": "The sequence source for this match is unavailable.",
+    "SOURCE_KEY_CONFLICT": "The sequence source key conflicts with the match identity.",
+    "RECORD_UNKNOWN": "No sequence source matched record \u201c{id}\u201d.",
+    "RECORD_AMBIGUOUS": "Record ID \u201c{id}\u201d is ambiguous in the available sequence sources.",
+    "RECORD_ALIAS_AMBIGUOUS": "Record alias \u201c{id}\u201d is ambiguous in the available sequence sources.",
+    "COORDINATE_NOT_WHOLE": "Coordinates must be whole 1-based values.",
+    "COORDINATE_BELOW_ONE": "Coordinates must be greater than or equal to 1.",
+    "OUT_OF_RANGE": "Coordinates exceed the sequence length ({length} bp).",
+}
+
+
+
+def _aliases(source: Mapping[str, object]) -> set[str]:
+    """A source's record ID and aliases, each also by its first word (the match registry's rule before D5)."""
+
+    names = {str(source["recordId"]).strip(), *(str(alias).strip() for alias in cast("list[object]", source["aliases"]))}
+    return {name for value in names if value for name in (value, value.split()[0])}
+
+
+def registered_match_sources(sources: Sequence[Mapping[str, object]]) -> list[Mapping[str, object]]:
+    """The sources the match registry held before D5: none with an empty sequence, and of the sources that share a
+    key (two comparison records with one ID), the one when they agree, else none."""
+
+    by_key: dict[object, list[Mapping[str, object]]] = {}
+    for source in sources:
+        if source["sequence"]:
+            by_key.setdefault(source["key"], []).append(source)
+    return [
+        group[0] for group in by_key.values()
+        if all(
+            (other["recordId"], other["sequence"], _aliases(other)) == (group[0]["recordId"], group[0]["sequence"], _aliases(group[0]))
+            for other in group[1:]
+        )
+    ]
+
+
+def match_span_source(
+    records: CatalogSequenceRecords,
+    sources: Sequence[Mapping[str, object]],
+    span: MatchSpanInput,
+) -> tuple[Mapping[str, object] | None, MatchSpanReason | None]:
+    """The source a span reads among the ``registered_match_sources``, found in the match popup's order before D5: a drawn
+    unit by its record key, which must carry the record ID or alias the match names; a drawn record by its record ID,
+    else an alias (the record identity ``match_sequence_sources`` gives: ID, name, accessions), among every unit or
+    the one a reference span names, which it reads when the span names no ID; or a comparison record of a source (of
+    every source when the match names none) by its record ID, else an alias. Only a comparison span whose source has
+    no comparison FASTA (no source has one, when the match names none) says its FASTA was not supplied; one whose
+    FASTA lacks the record gives the record's reason, as a drawn record does (OV-2755). Ambiguity and absence are
+    reasons, never a guess."""
+
+    wanted = span["recordId"].strip()
+    drawn = [source for source in sources if "sourceIndex" not in source]
+    if span["kind"] == "record":
+        keyed = _unit_sources(records, drawn, span["recordKey"])
+        if not keyed:
+            return None, "SOURCE_UNAVAILABLE"
+        if wanted and wanted not in _aliases(keyed[0]):
+            return None, "SOURCE_KEY_CONFLICT"
+        return keyed[0], None
+    if span["kind"] == "reference":
+        candidates = drawn if span["recordKey"] is None else _unit_sources(records, drawn, span["recordKey"])
+        if span["recordKey"] is not None and not wanted and candidates:
+            return candidates[0], None
+    else:
+        index = span["sourceIndex"]
+        supplied = records.comparison_records if index is None else records.comparison_records[index:index + 1]
+        if not any(supplied):
+            return None, "NEVER_SUPPLIED"
+        candidates = [source for source in sources if "sourceIndex" in source and index in (None, source["sourceIndex"])]
+    return _by_record_id(candidates, wanted)
+
+
+def _unit_sources(
+    records: CatalogSequenceRecords, drawn: Sequence[Mapping[str, object]], record_key: str
+) -> list[Mapping[str, object]]:
+    """The source of the drawn unit of ``record_key`` (none when no unit has that key)."""
+
+    if record_key not in records.unit_keys:
+        return []
+    unit = records.unit_keys.index(record_key)
+    return [source for source in drawn if source.get("recordIndex") == unit]
+
+
+def _by_record_id(
+    candidates: Sequence[Mapping[str, object]], wanted: str
+) -> tuple[Mapping[str, object] | None, MatchSpanReason | None]:
+    """The one candidate whose record ID is ``wanted``, else the one with that alias."""
+
+    if not wanted:
+        return None, "RECORD_UNKNOWN"
+    reasons: tuple[MatchSpanReason, MatchSpanReason] = ("RECORD_AMBIGUOUS", "RECORD_ALIAS_AMBIGUOUS")
+    for found, ambiguous in zip((
+        [source for source in candidates if source["recordId"] == wanted],
+        [source for source in candidates if wanted in _aliases(source)],
+    ), reasons, strict=True):
+        if len(found) == 1:
+            return found[0], None
+        if found:
+            return None, ambiguous
+    return None, "RECORD_UNKNOWN"
+
+
+def span_reason(sequence: str, start: SpanCoordinate, end: SpanCoordinate) -> MatchSpanReason | None:
+    """Why the coordinates of a span cannot be read on ``sequence``, checked in the match popup's order before D5."""
+
+    if start is None or end is None:
+        return "COORDINATE_NOT_WHOLE"
+    if start < 1 or end < 1:
+        return "COORDINATE_BELOW_ONE"
+    if start > len(sequence) or end > len(sequence):
+        return "OUT_OF_RANGE"
+    return None
+
+
+@final
+class ReadableMatchSpan(TypedDict):
+    """A span an exported Interactive SVG reads: the place, among the item's ``sequenceSources``, of the record whose
+    bases it reads (on the coordinates and strand of its match)."""
+
+    source: int
+
+
+@final
+class UnreadableMatchSpan(TypedDict):
+    """A span an exported Interactive SVG cannot read: why, and the length of the record it names (0 when no record
+    is found), as the Worker's read answers (``MatchSpanSequence``)."""
+
+    reason: MatchSpanReason
+    sourceLength: int
+
+
+EmbeddedMatchSpan = ReadableMatchSpan | UnreadableMatchSpan
+
+
+@final
+class EmbeddedMatchSpans(TypedDict):
+    """The two spans of one match in an exported Interactive SVG (``matchSpanReads``, by match ID)."""
+
+    query: EmbeddedMatchSpan
+    subject: EmbeddedMatchSpan
+
+
+def _span_coordinate_of(value: object) -> SpanCoordinate:
+    """A match's coordinate as the export reads it: a whole number, or ``None`` (missing or not whole)."""
+
+    try:
+        number = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    return int(number) if math.isfinite(number) and number.is_integer() else None
+
+
+def _embedded_match_span(
+    match: Mapping[str, object], role: Literal["query", "subject"], unit_keys: Sequence[str]
+) -> MatchSpanInput | MatchSpanReason:
+    """The span of a match's ``role`` that the export reads, named as the Web's match popup names it
+    (``matchSpanRead``): a comparison record of a ring's source for the side that is not the reference, a drawn unit
+    by its record index for a Linear match, else a drawn record by ID or alias (in the unit of a record index, if
+    any). A reason when no record can be named."""
+
+    start, end = (_span_coordinate_of(match.get(f"{role[0]}{name}")) for name in ("start", "end"))
+    record_id = _text(match.get(f"{role}_record_id"))
+    homology = _text(match.get("match_kind")) == "homology"
+    if homology and role != _text(match.get("reference_side")):
+        source_text = _text(match.get("source_index"))
+        source_index = parse_ascii_nonnegative_integer(source_text) if source_text else None
+        if source_text and source_index is None:
+            return "SOURCE_UNAVAILABLE"
+        return {"kind": "comparison", "sourceIndex": source_index, "recordId": record_id, "start": start, "end": end}
+    index_text = _text(match.get(f"{role}_record_index"))
+    record_index = parse_ascii_nonnegative_integer(index_text) if index_text else None
+    if index_text and record_index is None:
+        return "SOURCE_UNAVAILABLE"
+    record_key = unit_keys[record_index] if record_index is not None and record_index < len(unit_keys) else None
+    if not homology and record_index is not None:
+        if record_key is None:
+            return "SOURCE_UNAVAILABLE"
+        return {"kind": "record", "recordKey": record_key, "recordId": record_id, "start": start, "end": end}
+    if record_index is not None and record_key is None:
+        return "RECORD_UNKNOWN"
+    return {"kind": "reference", "recordId": record_id, "recordKey": record_key, "start": start, "end": end}
+
+
+def embedded_match_span_reads(
+    matches: Sequence[Mapping[str, object]],
+    records: CatalogSequenceRecords,
+    sources: Sequence[Mapping[str, object]],
+) -> tuple[list[dict[str, object]], dict[str, EmbeddedMatchSpans]]:
+    """What an exported Interactive SVG reads for the spans of ``matches`` (D5, OV-3542): each span's record found
+    by ``match_span_source`` among the ``registered_match_sources`` of ``sources`` and judged by ``span_reason``, as
+    the Worker reads a span for the Web's match popup. Returns the sources the file embeds as ``sequenceSources``:
+    those of the records the matches name, as the export wrote them before (``_deduplicated_sequence_sources``; the
+    features of those records read their bases from them, ``sequenceSourceIndex``), then any other record a readable
+    span reads; and each match's two spans by match ID. A similarity group ribbon names no span."""
+
+    registered = registered_match_sources(sources)
+    found: dict[str, tuple[Mapping[str, object] | None, MatchSpanReason | None]] = {}
+    spans: dict[str, dict[str, tuple[Mapping[str, object] | None, MatchSpanReason | None]]] = {}
+    for match in matches:
+        if _text(match.get("match_kind")) == "orthogroup":
+            continue
+        roles: dict[str, tuple[Mapping[str, object] | None, MatchSpanReason | None]] = {}
+        for role in ("query", "subject"):
+            span = _embedded_match_span(match, role, records.unit_keys)
+            if isinstance(span, str):
+                roles[role] = (None, span)
+                continue
+            # Many matches name one record: its search runs once.
+            name = json.dumps({key: value for key, value in span.items() if key not in ("start", "end")}, sort_keys=True)
+            if name not in found:
+                found[name] = match_span_source(records, registered, span)
+            source, reason = found[name]
+            sequence = "" if source is None else cast("str", source["sequence"])
+            roles[role] = (source, reason or span_reason(sequence, span["start"], span["end"]))
+        spans[_text(match.get("id"))] = roles
+    embedded = _deduplicated_sequence_sources(matches, sources)
+    places = {source["key"]: index for index, source in enumerate(embedded)}
+    read_keys = {
+        source["key"] for roles in spans.values() for source, reason in roles.values() if source is not None and not reason
+    }
+    for source in registered:
+        if source["key"] in read_keys and source["key"] not in places:
+            places[source["key"]] = len(embedded)
+            embedded.append(_compact_wire_mapping(dict(source)))
+
+    def embedded_span(source: Mapping[str, object] | None, reason: MatchSpanReason | None) -> EmbeddedMatchSpan:
+        if source is not None and reason is None:
+            return {"source": places[source["key"]]}
+        sequence = "" if source is None else cast("str", source["sequence"])
+        return {"reason": reason or "SOURCE_UNAVAILABLE", "sourceLength": len(sequence)}
+
+    return embedded, {
+        match_id: {"query": embedded_span(*roles["query"]), "subject": embedded_span(*roles["subject"])}
+        for match_id, roles in spans.items()
+    }
+
+
 # The export profile of the catalog (D5-02): an exported Interactive SVG embeds the catalog with its sequences, in
 # this schema and its compact encoding; the stored catalog (``FEATURE_CATALOG_SCHEMA``) holds no sequence.
 INTERACTIVE_EMBED_SCHEMA = SEQUENCE_FEATURE_CATALOG_SCHEMA
@@ -2427,11 +2722,14 @@ class EmbeddedSequenceSource(TypedDict):
 
 class EmbedCatalogPart(TypedDict):
     """A part of the export encoding of one catalog item (D5-02): the biological rows asked, with their sequences,
-    and the whole-record sources the part owns, each with its place among the item's ``sourceCount`` sources."""
+    and the whole-record sources the part owns, each with its place among the item's ``sourceCount`` sources; the
+    part that holds the comparison sources also holds what the item's match spans read (``matchSpanReads``, None in
+    the other parts and when no match names a span)."""
 
     biologicalFeatures: list[dict[str, object]]
     sequenceSources: list[EmbeddedSequenceSource]
     sourceCount: int
+    matchSpanReads: dict[str, EmbeddedMatchSpans] | None
 
 
 def embed_catalog_part(
@@ -2446,10 +2744,10 @@ def embed_catalog_part(
 
     Each row gets its feature's sequences from ``feature_sequence_payload`` (the one producer), found by its record
     key and source feature index in the drawn records; a nucleotide sequence that a whole-record source of the item's
-    matches reconstructs is written as ``sequenceSourceIndex``. The part returns the sources the item's matches read
-    that belong to the records ``source_record_keys`` name (each drawn unit of such a record; ``None``: every
-    record) and, with
-    ``comparison_sources``, those of the comparison FASTA records, each with its index among the item's sources. The
+    matches reconstructs is written as ``sequenceSourceIndex``. The part returns the sources the item's match spans
+    read (``embedded_match_span_reads``) that belong to the records ``source_record_keys`` name (each drawn unit of
+    such a record; ``None``: every record) and, with ``comparison_sources``, those of the comparison FASTA records and
+    what each match span reads (``matchSpanReads``), each source with its index among the item's sources. The
     CLI and Python export read the whole item as one part (``embed_catalog_item``); the Web export reads parts of a
     bounded number of bases, so no reply of a large item holds all of it.
     """
@@ -2484,7 +2782,7 @@ def embed_catalog_part(
 
     biological = [_row_with_sequences(row, sequences_of(row)) for row in rows]
     matches = cast("Sequence[Mapping[str, object]]", item.get("comparisonMatches") or ())
-    sequence_sources = _deduplicated_sequence_sources(matches, match_sequence_sources(records))
+    sequence_sources, reads = embedded_match_span_reads(matches, records, match_sequence_sources(records))
     _reference_reconstructible_nucleotide_sequences(biological, identity_keys, sequence_sources)
     owners = set(identity_keys if source_record_keys is None else source_record_keys)
 
@@ -2498,19 +2796,23 @@ def embed_catalog_part(
             {"index": index, "source": source} for index, source in enumerate(sequence_sources) if owned(source)
         ],
         "sourceCount": len(sequence_sources),
+        "matchSpanReads": reads if comparison_sources and reads else None,
     }
 
 
 def embed_catalog_item(item: Mapping[str, object], records: CatalogSequenceRecords) -> dict[str, object]:
     """The export encoder (D5-02): a stored catalog item with every sequence an exported Interactive SVG embeds, its
-    biological rows in the export encoding and the whole-record sources its matches read (``sequenceSources``), as
-    one part (``embed_catalog_part``). The CLI and Python export write this, in ``INTERACTIVE_EMBED_SCHEMA``."""
+    biological rows in the export encoding, the whole-record sources its matches read (``sequenceSources``) and what
+    each match span reads (``matchSpanReads``), as one part (``embed_catalog_part``). The CLI and Python export write
+    this, in ``INTERACTIVE_EMBED_SCHEMA``."""
 
     whole = embed_catalog_part(item, records, source_record_keys=None, comparison_sources=True)
     sources = [entry["source"] for entry in whole["sequenceSources"]]
     embedded: dict[str, object] = {**item, "biologicalFeatures": whole["biologicalFeatures"]}
     if sources:
         embedded["sequenceSources"] = sources
+    if whole["matchSpanReads"] is not None:
+        embedded["matchSpanReads"] = whole["matchSpanReads"]
     return embedded
 
 

@@ -81,8 +81,10 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("INTERACTIVE_EMBED_SCHEMA", "gbdraw.web_support.feature_catalog", "INTERACTIVE_EMBED_SCHEMA"),
     # What a catalog of schema 5 or older stored of the sequences: the promotion drops it, schema 6 refuses it.
     ("STORED_SEQUENCE_KEYS", "gbdraw.web_support.feature_catalog", "STORED_SEQUENCE_KEYS"),
-    # Why a match span's bases cannot be read (the `readMatchSequences` reply's reasons).
-    ("MATCH_SPAN_REASONS", "gbdraw.web_support.catalog_sequences", "MATCH_SPAN_REASONS"),
+    # Why a match span's bases cannot be read (the `readMatchSequences` reply's reasons), and the English sentence
+    # of each, which the match popup shows translated and an exported Interactive SVG shows as it is.
+    ("MATCH_SPAN_REASONS", "gbdraw.web_support.feature_catalog", "MATCH_SPAN_REASONS"),
+    ("MATCH_SPAN_REASON_TEXTS", "gbdraw.web_support.feature_catalog", "MATCH_SPAN_REASON_TEXTS"),
     ("FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION", "gbdraw.session_io", "FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION"),
     ("PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "PROTEIN_LOSAT_CACHE_SCHEMA"),
     ("LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA"),
@@ -1065,6 +1067,7 @@ def render_drawn_attributes_module() -> str:
     from gbdraw.render.interactive_svg import (
         MATCH_FRAGMENT_OWN_ATTRIBUTES,
         STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT,
+        STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT,
     )
 
     minimum, maximum = GRADIENT_SCALE_NAME_ATTRIBUTES
@@ -1076,7 +1079,8 @@ def render_drawn_attributes_module() -> str:
         "// (WRAP_ROW_ATTRIBUTE), gbdraw/legend/metrics.py (GRADIENT_SCALE_NAME_ATTRIBUTES) and\n"
         "// gbdraw/render/drawers/annotation_marks.py (the annotation attributes) and\n"
         "// gbdraw/render/drawers/circular/conservation.py (the similarity-ring attributes) and\n"
-        "// gbdraw/render/interactive_svg.py (the attributes of a match fragment); do not edit manually.\n"
+        "// gbdraw/render/interactive_svg.py (the attributes of a match fragment and the slots of the standalone\n"
+        "// script); do not edit manually.\n"
         "\n"
         "/** A drawn region annotation's group names its annotation and its set, in both modes. */\n"
         f"export const ANNOTATION_ID_ATTRIBUTE = {_scalar(ANNOTATION_ID_ATTRIBUTE)};\n"
@@ -1096,6 +1100,8 @@ def render_drawn_attributes_module() -> str:
         f"export const MATCH_FRAGMENT_OWN_ATTRIBUTES = {_frozen(list(MATCH_FRAGMENT_OWN_ATTRIBUTES))};\n"
         "/** Where the standalone interactive script's asset takes MATCH_FRAGMENT_OWN_ATTRIBUTES. */\n"
         f"export const STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT = {_scalar(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT)};\n"
+        "/** Where the standalone interactive script's asset takes MATCH_SPAN_REASON_TEXTS (schema.generated.js). */\n"
+        f"export const STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT = {_scalar(STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT)};\n"
     )
 
 

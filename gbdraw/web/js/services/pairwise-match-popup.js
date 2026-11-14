@@ -1,5 +1,5 @@
 // @ts-check
-import { ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
+import { MATCH_SPAN_REASON_TEXTS, ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
 import {
   formatFeatureLocation,
   getQualifierFirstValue,
@@ -28,7 +28,7 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
-/** @import { MatchSpanInput, MatchSpanReason, MatchSpanSequence, SpanCoordinate } from './diagram-worker-protocol.js' */
+/** @import { MatchSpanInput, MatchSpanSequence, SpanCoordinate } from './diagram-worker-protocol.js' */
 /** @import { SequenceReadState } from './catalog-sequences.js' */
 
 /**
@@ -2098,22 +2098,8 @@ export const matchSpanFasta = (entry, read) => {
 };
 
 /**
- * The reason a span Python could not read shows, for each of Python's reasons.
- * @type {Readonly<Record<MatchSpanReason, string>>}
- */
-const MATCH_SPAN_REASON_TEXTS = Object.freeze({
-  NEVER_SUPPLIED: msg('Comparison sequence was not supplied for this BLAST source.'),
-  SOURCE_UNAVAILABLE: msg('The sequence source for this match is unavailable.'),
-  SOURCE_KEY_CONFLICT: msg('The sequence source key conflicts with the match identity.'),
-  RECORD_UNKNOWN: msg('No sequence source matched record “{id}”.'),
-  RECORD_AMBIGUOUS: msg('Record ID “{id}” is ambiguous in the available sequence sources.'),
-  RECORD_ALIAS_AMBIGUOUS: msg('Record alias “{id}” is ambiguous in the available sequence sources.'),
-  COORDINATE_NOT_WHOLE: msg('Coordinates must be whole 1-based values.'),
-  COORDINATE_BELOW_ONE: msg('Coordinates must be greater than or equal to 1.'),
-  OUT_OF_RANGE: msg('Coordinates exceed the sequence length ({length} bp).')
-});
-
-/**
+ * The reason a span Python could not read shows: Python's sentence of its reason (`MATCH_SPAN_REASON_TEXTS`, a
+ * catalog key), which an exported Interactive SVG shows too.
  * @param {MatchSpanEntry} entry
  * @param {MatchSpanSequence} read A span Python could not read.
  */

@@ -305,6 +305,22 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   border-radius: 8px;
   overflow: hidden;
 }
+/* What a bordered block holds sits inside its border, as its title does: rows, the coordinates of a span, a note,
+   and the blocks of a match's spans (OV-3543). */
+.gfi-block > .gfi-row,
+.gfi-block > .gfi-disclosure > .gfi-row {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+.gfi-block > .gfi-mono {
+  padding: 7px 9px;
+  overflow-wrap: anywhere;
+}
+.gfi-block > .gfi-warning,
+.gfi-block > .gfi-empty,
+.gfi-block > .gfi-block {
+  margin: 0 9px 9px;
+}
 .gfi-block-title {
   display: flex;
   gap: 8px;
@@ -774,6 +790,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   // The attributes a fragment of one match holds on its own (Python's MATCH_FRAGMENT_OWN_ATTRIBUTES, written in by
   // the embedder); its other data- attributes are the match's and agree across its fragments.
   var MATCH_FRAGMENT_OWN_ATTRIBUTES = [/* gbdraw: MATCH_FRAGMENT_OWN_ATTRIBUTES */];
+  // The sentence of each reason a match span cannot be read (Python's MATCH_SPAN_REASON_TEXTS, written in by the
+  // embedder): {id} is the record the match names, {length} the length of the record the span reads.
+  var MATCH_SPAN_REASON_TEXTS = {/* gbdraw: MATCH_SPAN_REASON_TEXTS */};
   var MATCH_SELECTOR =
     'path[data-gbdraw-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var ANNOTATION_SELECTOR = '[data-gbdraw-interactive-annotation="true"][data-gbdraw-annotation-id]';
@@ -1673,7 +1692,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       orthogroups: orthogroups,
       matches: matches,
       annotations: Array.isArray(item && item.annotations) ? item.annotations : [],
-      sequence_sources: Array.isArray(item && item.sequenceSources) ? item.sequenceSources : []
+      sequence_sources: Array.isArray(item && item.sequenceSources) ? item.sequenceSources : [],
+      match_span_reads: item && item.matchSpanReads && typeof item.matchSpanReads === 'object'
+        ? item.matchSpanReads
+        : {}
     };
   }
 
@@ -1740,6 +1762,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var matches = Array.isArray(payload.matches) ? payload.matches : [];
   var annotations = Array.isArray(payload.annotations) ? payload.annotations : [];
   var sequenceSources = Array.isArray(payload.sequence_sources) ? payload.sequence_sources : [];
+  // What each match span reads, by match ID (Python's embedded_match_span_reads): a place in sequenceSources, or why
+  // the span cannot be read. The file holds no rule of its own for finding a span's record.
+  var matchSpanReads = payload.match_span_reads && typeof payload.match_span_reads === 'object'
+    ? payload.match_span_reads
+    : {};
   var popupMode = (
     payload.popup_mode === 'simple'
     || metadata && metadata.getAttribute('data-popup-mode') === 'simple'
@@ -5236,94 +5263,34 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return cleaned || fallback || 'sequence';
   }
 
-  function matchSourceAliases(source) {
-    var recordId = consistentTextIdentity(source, ['recordId', 'record_id']);
-    if (!recordId.valid) return [];
-    return [recordId.value].concat(Array.isArray(source && source.aliases) ? source.aliases : []).map(function (value) {
-      return String(value || '').trim();
-    }).filter(Boolean);
-  }
-
-  function resolveEmbeddedMatchSource(match, role) {
-    var kind = String(match && match.match_kind || 'pairwise');
+  // What the export wrote for one span of a match: a source of sequenceSources, or why it cannot be read (a match the
+  // export wrote nothing for has no source). A feature endpoint this file's catalog does not resolve reads nothing.
+  function embeddedMatchSpanRead(match, role) {
     if (
       match
       && match._gbdraw_catalog_endpoint_contract === true
-      && kind !== 'homology'
+      && String(match.match_kind || 'pairwise') !== 'homology'
       && match['_gbdraw_' + role + '_record_span'] !== true
       && !catalogMatchEndpointResolved(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
     }
-    var recordIdIdentity = consistentTextIdentity(
-      match,
-      [role + '_record_id', role + 'RecordId']
-    );
-    var recordId = recordIdIdentity.value;
-    var recordIndexIdentity = nonnegativeIntegerIdentity(
-      match,
-      [role + '_record_index', role + 'RecordIndex']
-    );
-    var recordIndex = recordIndexIdentity.value;
-    var referenceSide = String(match && match.reference_side || '').trim();
-    var sourceIndexIdentity = nonnegativeIntegerIdentity(
-      match,
-      ['source_index', 'sourceIndex']
-    );
-    var sourceIndex = sourceIndexIdentity.value;
-    var expectedOrigin = kind === 'homology'
-      ? (role === referenceSide ? 'circular-reference' : 'homology-comparison')
-      : 'linear-record';
-    if (
-      !recordIndexIdentity.valid
-      || !sourceIndexIdentity.valid
-      || !recordIdIdentity.valid
-      || (expectedOrigin === 'linear-record' && !Number.isInteger(recordIndex))
-      || (expectedOrigin === 'homology-comparison' && !Number.isInteger(sourceIndex))
-    ) {
-      return { source: null, reason: 'Match sequence source identity is invalid.' };
-    }
-    var candidates = sequenceSources.filter(function (source) {
-      if (String(source && source.origin || '') !== expectedOrigin) return false;
-      var candidateRecordId = consistentTextIdentity(source, ['recordId', 'record_id']);
-      if (!candidateRecordId.valid) return false;
-      if (expectedOrigin === 'linear-record' || (expectedOrigin === 'circular-reference' && recordIndex !== null)) {
-        var candidateRecord = nonnegativeIntegerIdentity(
-          source,
-          ['recordIndex', 'record_index']
-        );
-        if (!candidateRecord.valid || candidateRecord.value !== recordIndex) return false;
-      }
-      if (expectedOrigin === 'homology-comparison') {
-        var candidateSource = nonnegativeIntegerIdentity(
-          source,
-          ['sourceIndex', 'source_index']
-        );
-        if (!candidateSource.valid || candidateSource.value !== sourceIndex) return false;
-      }
-      return true;
-    });
-    if (candidates.length === 1 && !recordId) return { source: candidates[0], reason: '' };
-    if (!recordId) {
-      return { source: null, reason: 'Record ID is required when embedded sequence sources are ambiguous.' };
-    }
-    var recordMatches = candidates.filter(function (source) {
-      return matchSourceAliases(source).indexOf(recordId) >= 0;
-    });
-    if (recordMatches.length === 1) return { source: recordMatches[0], reason: '' };
-    if (recordMatches.length > 1) {
-      return { source: null, reason: 'Record ID or alias is ambiguous in the embedded sequence sources.' };
-    }
-    // Only a source whose FASTA the export holds no record of was never supplied (OV-2755).
-    if (expectedOrigin === 'homology-comparison') {
-      return {
-        source: null,
-        reason: candidates.length
-          ? 'No sequence source matched record “' + recordId + '”.'
-          : 'Comparison sequence was not supplied for this BLAST source.'
-      };
-    }
-    return { source: null, reason: 'Sequence was not embedded by the interactive export policy.' };
+    var matchId = String(match && match.id || '');
+    var spans = Object.prototype.hasOwnProperty.call(matchSpanReads, matchId) ? matchSpanReads[matchId] : null;
+    var read = spans && Object.prototype.hasOwnProperty.call(spans, role) ? spans[role] : null;
+    var source = read && Number.isInteger(read.source) ? sequenceSources[read.source] : null;
+    if (source && typeof source.sequence === 'string') return { source: source, reason: '' };
+    var reason = read && Object.prototype.hasOwnProperty.call(MATCH_SPAN_REASON_TEXTS, read.reason)
+      ? read.reason
+      : 'SOURCE_UNAVAILABLE';
+    var sourceLength = read && Number.isInteger(read.sourceLength) ? read.sourceLength : 0;
+    var recordId = String(match && match[role + '_record_id'] || '').trim();
+    return {
+      source: null,
+      reason: MATCH_SPAN_REASON_TEXTS[reason].replace(/\\{(id|length)\\}/g, function (_whole, name) {
+        return name === 'id' ? recordId : numberText(sourceLength);
+      })
+    };
   }
 
   function wrapMatchFasta(sequence) {
@@ -5347,11 +5314,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var unavailable = function (reason) {
       return { role: role, displayRole: displayRole, recordId: recordId, start: start, end: end, orientation: orientation, available: false, reason: reason, fasta: '', filename: '' };
     };
-    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) return unavailable('Coordinates must be whole 1-based values.');
-    var resolved = resolveEmbeddedMatchSource(match, role);
+    // Python judged the span when it wrote the file: its record and its coordinates.
+    var resolved = embeddedMatchSpanRead(match, role);
     if (!resolved.source) return unavailable(resolved.reason);
     var sourceSequence = String(resolved.source.sequence || '').replace(/\\s+/g, '').toUpperCase();
-    if (start > sourceSequence.length || end > sourceSequence.length) return unavailable('Coordinates exceed the embedded sequence length.');
     var low = Math.min(start, end);
     var high = Math.max(start, end);
     var sequence = sourceSequence.slice(low - 1, high);

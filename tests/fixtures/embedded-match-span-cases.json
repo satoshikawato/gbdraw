@@ -1,0 +1,694 @@
+{
+ "description": "Exported Interactive SVG match spans (OV-3542): Python's export writes, for each case's drawn and comparison records and matches, the sources and span reads in `embedded`; the file's viewer, reading `embedded`, shows `shown` (the bases of a span, or the sentence of why it cannot be read). Python owns the lookup; the viewer has none.",
+ "cases": [
+  {
+   "name": "a Linear match reads each span from the drawn record its record index names",
+   "mode": "linear",
+   "records": [
+    {
+     "id": "q",
+     "name": "Q",
+     "sequence": "AACCGGTT"
+    },
+    {
+     "id": "s",
+     "name": "S",
+     "sequence": "GGGACCCT"
+    }
+   ],
+   "comparisonRecords": [],
+   "matches": [
+    {
+     "id": "p1",
+     "match_kind": "pairwise",
+     "query_record_index": "0",
+     "subject_record_index": "1",
+     "query_record_id": "q",
+     "subject_record_id": "s",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "6",
+     "send": "3"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "linear:record:0",
+      "recordId": "q",
+      "aliases": [
+       "Q",
+       "q"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "linear-record",
+      "recordIndex": 0
+     },
+     {
+      "key": "linear:record:1",
+      "recordId": "s",
+      "aliases": [
+       "S",
+       "s"
+      ],
+      "sequence": "GGGACCCT",
+      "origin": "linear-record",
+      "recordIndex": 1
+     }
+    ],
+    "matchSpanReads": {
+     "p1": {
+      "query": {
+       "source": 0
+      },
+      "subject": {
+       "source": 1
+      }
+     }
+    }
+   },
+   "shown": {
+    "p1": {
+     "query": {
+      "sequence": "AACC"
+     },
+     "subject": {
+      "sequence": "GGTC"
+     }
+    }
+   }
+  },
+  {
+   "name": "a ring band reads the reference and the comparison record of its source",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "ref",
+     "name": "REF",
+     "sequence": "AACCGGTT"
+    }
+   ],
+   "comparisonRecords": [
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ]
+   ],
+   "matches": [
+    {
+     "id": "h1",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "2",
+     "qend": "5",
+     "sstart": "6",
+     "send": "3",
+     "query_record_id": "ref",
+     "subject_record_id": "cmp",
+     "source_index": "0"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "circular:record:0",
+      "recordId": "ref",
+      "aliases": [
+       "REF",
+       "ref"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "circular-reference",
+      "recordIndex": 0
+     },
+     {
+      "key": "homology:comparison:0:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "h1": {
+      "query": {
+       "source": 0
+      },
+      "subject": {
+       "source": 1
+      }
+     }
+    }
+   },
+   "shown": {
+    "h1": {
+     "query": {
+      "sequence": "ACCG"
+     },
+     "subject": {
+      "sequence": "TTGC"
+     }
+    }
+   }
+  },
+  {
+   "name": "a band that names no source reads the comparison record from any source (OV-3542)",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "ref",
+     "name": "REF",
+     "sequence": "AACCGGTT"
+    }
+   ],
+   "comparisonRecords": [
+    [],
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ]
+   ],
+   "matches": [
+    {
+     "id": "h2",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "2",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "ref",
+     "subject_record_id": "cmp"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "circular:record:0",
+      "recordId": "ref",
+      "aliases": [
+       "REF",
+       "ref"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "circular-reference",
+      "recordIndex": 0
+     },
+     {
+      "key": "homology:comparison:1:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 1
+     }
+    ],
+    "matchSpanReads": {
+     "h2": {
+      "query": {
+       "source": 0
+      },
+      "subject": {
+       "source": 1
+      }
+     }
+    }
+   },
+   "shown": {
+    "h2": {
+     "query": {
+      "sequence": "AA"
+     },
+     "subject": {
+      "sequence": "TTGC"
+     }
+    }
+   }
+  },
+  {
+   "name": "a span that names no record reads none, also when one record could be read (OV-3542)",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "ref",
+     "name": "REF",
+     "sequence": "AACCGGTT"
+    }
+   ],
+   "comparisonRecords": [
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ]
+   ],
+   "matches": [
+    {
+     "id": "h3",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "2",
+     "sstart": "1",
+     "send": "4",
+     "source_index": "0"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "homology:comparison:0:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "h3": {
+      "query": {
+       "reason": "RECORD_UNKNOWN",
+       "sourceLength": 0
+      },
+      "subject": {
+       "reason": "RECORD_UNKNOWN",
+       "sourceLength": 0
+      }
+     }
+    }
+   },
+   "shown": {
+    "h3": {
+     "query": {
+      "reason": "No sequence source matched record “”."
+     },
+     "subject": {
+      "reason": "No sequence source matched record “”."
+     }
+    }
+   }
+  },
+  {
+   "name": "a source without a comparison FASTA was never supplied; a record the FASTA lacks is unknown",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "ref",
+     "name": "REF",
+     "sequence": "AACCGGTT"
+    }
+   ],
+   "comparisonRecords": [
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ],
+    []
+   ],
+   "matches": [
+    {
+     "id": "h4",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "ref",
+     "subject_record_id": "x",
+     "source_index": "1"
+    },
+    {
+     "id": "h5",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "ref",
+     "subject_record_id": "absent",
+     "source_index": "0"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "circular:record:0",
+      "recordId": "ref",
+      "aliases": [
+       "REF",
+       "ref"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "circular-reference",
+      "recordIndex": 0
+     },
+     {
+      "key": "homology:comparison:0:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "h4": {
+      "query": {
+       "source": 0
+      },
+      "subject": {
+       "reason": "NEVER_SUPPLIED",
+       "sourceLength": 0
+      }
+     },
+     "h5": {
+      "query": {
+       "source": 0
+      },
+      "subject": {
+       "reason": "RECORD_UNKNOWN",
+       "sourceLength": 0
+      }
+     }
+    }
+   },
+   "shown": {
+    "h4": {
+     "query": {
+      "sequence": "AACC"
+     },
+     "subject": {
+      "reason": "Comparison sequence was not supplied for this BLAST source."
+     }
+    },
+    "h5": {
+     "query": {
+      "sequence": "AACC"
+     },
+     "subject": {
+      "reason": "No sequence source matched record “absent”."
+     }
+    }
+   }
+  },
+  {
+   "name": "coordinates past the record's end or below 1 cannot be read",
+   "mode": "linear",
+   "records": [
+    {
+     "id": "q",
+     "name": "Q",
+     "sequence": "AACCGGTT"
+    },
+    {
+     "id": "s",
+     "name": "S",
+     "sequence": "GGGACCCT"
+    }
+   ],
+   "comparisonRecords": [],
+   "matches": [
+    {
+     "id": "p2",
+     "match_kind": "pairwise",
+     "query_record_index": "0",
+     "subject_record_index": "1",
+     "query_record_id": "q",
+     "subject_record_id": "s",
+     "qstart": "5",
+     "qend": "12",
+     "sstart": "0",
+     "send": "3"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "linear:record:0",
+      "recordId": "q",
+      "aliases": [
+       "Q",
+       "q"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "linear-record",
+      "recordIndex": 0
+     },
+     {
+      "key": "linear:record:1",
+      "recordId": "s",
+      "aliases": [
+       "S",
+       "s"
+      ],
+      "sequence": "GGGACCCT",
+      "origin": "linear-record",
+      "recordIndex": 1
+     }
+    ],
+    "matchSpanReads": {
+     "p2": {
+      "query": {
+       "reason": "OUT_OF_RANGE",
+       "sourceLength": 8
+      },
+      "subject": {
+       "reason": "COORDINATE_BELOW_ONE",
+       "sourceLength": 8
+      }
+     }
+    }
+   },
+   "shown": {
+    "p2": {
+     "query": {
+      "reason": "Coordinates exceed the sequence length (8 bp)."
+     },
+     "subject": {
+      "reason": "Coordinates must be greater than or equal to 1."
+     }
+    }
+   }
+  },
+  {
+   "name": "a record index whose record does not carry the named ID, and one that names no drawn record",
+   "mode": "linear",
+   "records": [
+    {
+     "id": "q",
+     "name": "Q",
+     "sequence": "AACCGGTT"
+    },
+    {
+     "id": "s",
+     "name": "S",
+     "sequence": "GGGACCCT"
+    }
+   ],
+   "comparisonRecords": [],
+   "matches": [
+    {
+     "id": "p3",
+     "match_kind": "pairwise",
+     "query_record_index": "0",
+     "subject_record_index": "7",
+     "query_record_id": "Other",
+     "subject_record_id": "s",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "linear:record:0",
+      "recordId": "q",
+      "aliases": [
+       "Q",
+       "q"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "linear-record",
+      "recordIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "p3": {
+      "query": {
+       "reason": "SOURCE_KEY_CONFLICT",
+       "sourceLength": 0
+      },
+      "subject": {
+       "reason": "SOURCE_UNAVAILABLE",
+       "sourceLength": 0
+      }
+     }
+    }
+   },
+   "shown": {
+    "p3": {
+     "query": {
+      "reason": "The sequence source key conflicts with the match identity."
+     },
+     "subject": {
+      "reason": "The sequence source for this match is unavailable."
+     }
+    }
+   }
+  },
+  {
+   "name": "a reference named by an alias two drawn records share is ambiguous",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "one",
+     "name": "shared",
+     "sequence": "AACCGGTT"
+    },
+    {
+     "id": "two",
+     "name": "shared",
+     "sequence": "GGGACCCT"
+    }
+   ],
+   "comparisonRecords": [
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ]
+   ],
+   "matches": [
+    {
+     "id": "h6",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "shared",
+     "subject_record_id": "cmp",
+     "source_index": "0"
+    },
+    {
+     "id": "h7",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "2",
+     "qend": "3",
+     "sstart": "8",
+     "send": "7",
+     "query_record_id": "two",
+     "subject_record_id": "cmp",
+     "source_index": "0"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "circular:record:0",
+      "recordId": "one",
+      "aliases": [
+       "one",
+       "shared"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "circular-reference",
+      "recordIndex": 0
+     },
+     {
+      "key": "circular:record:1",
+      "recordId": "two",
+      "aliases": [
+       "shared",
+       "two"
+      ],
+      "sequence": "GGGACCCT",
+      "origin": "circular-reference",
+      "recordIndex": 1
+     },
+     {
+      "key": "homology:comparison:0:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "h6": {
+      "query": {
+       "reason": "RECORD_ALIAS_AMBIGUOUS",
+       "sourceLength": 0
+      },
+      "subject": {
+       "source": 2
+      }
+     },
+     "h7": {
+      "query": {
+       "source": 1
+      },
+      "subject": {
+       "source": 2
+      }
+     }
+    }
+   },
+   "shown": {
+    "h6": {
+     "query": {
+      "reason": "Record alias “shared” is ambiguous in the available sequence sources."
+     },
+     "subject": {
+      "sequence": "TTGC"
+     }
+    },
+    "h7": {
+     "query": {
+      "sequence": "GG"
+     },
+     "subject": {
+      "sequence": "GG"
+     }
+    }
+   }
+  }
+ ]
+}

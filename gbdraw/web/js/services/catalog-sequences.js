@@ -90,7 +90,8 @@ export const readEmbedSequencesReply = (result, rows) => {
   if (!read || !isIndexBelow(count, Number.MAX_SAFE_INTEGER) || read.rowCount !== rows.length
     || typeof read.biologicalFeatures !== 'string' || (read.biologicalFeatures === '') !== (rows.length === 0)
     || !Array.isArray(read.sequenceSources) || !read.sequenceSources.every((entry) => isRecord(entry)
-      && isIndexBelow(entry.index, count) && typeof entry.source === 'string' && entry.source !== '')) {
+      && isIndexBelow(entry.index, count) && typeof entry.source === 'string' && entry.source !== '')
+    || !(read.matchSpanReads === null || (typeof read.matchSpanReads === 'string' && read.matchSpanReads !== ''))) {
     throw diagnosticError('RESULT_INVALID', {}, failure('readEmbedSequences'));
   }
   return /** @type {EmbedPartText} */ (read);
@@ -98,9 +99,10 @@ export const readEmbedSequencesReply = (result, rows) => {
 
 /**
  * The JSON text an exported Interactive SVG embeds for a catalog item's sequences, as Python's export encoder writes
- * them (`embed_catalog_part`): the item's biological rows with their sequences, and the whole-record sources its
- * matches read (null when they read none). The export writes it into the file as it is.
- * @typedef {{ biologicalFeatures: string, sequenceSources: string | null }} EmbeddedSequencesJson
+ * them (`embed_catalog_part`): the item's biological rows with their sequences, the whole-record sources its match
+ * spans read (null when they read none), and what each match span reads (null when no match names a span). The
+ * export writes it into the file as it is.
+ * @typedef {{ biologicalFeatures: string, sequenceSources: string | null, matchSpanReads: string | null }} EmbeddedSequencesJson
  */
 
 /**
@@ -357,6 +359,8 @@ const encodeEmbed = async (readEmbedSequences, request, item, featureReadBases, 
   const rows = [];
   /** @type {(string | undefined)[] | null} */
   let sources = null;
+  /** @type {string | null} */
+  let matchSpanReads = null;
   for (const part of embedReadParts(item, featureReadBases)) {
     const files = /** @type {[EmbedItemFile]} */ ([{
       role: 'embedItem', blob: new Blob([JSON.stringify(part.item)], { type: 'application/json' })
@@ -367,13 +371,19 @@ const encodeEmbed = async (readEmbedSequences, request, item, featureReadBases, 
     sources ??= new Array(reply.sourceCount).fill(undefined);
     if (sources.length !== reply.sourceCount) throw invalid();
     if (reply.rowCount) rows.push(reply.biologicalFeatures);
+    // Only the part that holds the comparison sources (the last) holds what the match spans read.
+    if (reply.matchSpanReads !== null && (!part.part.comparisonSources || matchSpanReads !== null)) throw invalid();
+    matchSpanReads ??= reply.matchSpanReads;
     for (const { index, source } of reply.sequenceSources) {
       if (sources[index] !== undefined) throw invalid();
       sources[index] = source;
     }
   }
   if (!sources || sources.some((source) => source === undefined)) throw invalid();
-  return { biologicalFeatures: `[${rows.join(',')}]`, sequenceSources: sources.length ? `[${sources.join(',')}]` : null };
+  return {
+    biologicalFeatures: `[${rows.join(',')}]`, sequenceSources: sources.length ? `[${sources.join(',')}]` : null,
+    matchSpanReads
+  };
 };
 
 /**

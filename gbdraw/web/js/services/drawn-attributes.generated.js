@@ -3,7 +3,8 @@
 // (WRAP_ROW_ATTRIBUTE), gbdraw/legend/metrics.py (GRADIENT_SCALE_NAME_ATTRIBUTES) and
 // gbdraw/render/drawers/annotation_marks.py (the annotation attributes) and
 // gbdraw/render/drawers/circular/conservation.py (the similarity-ring attributes) and
-// gbdraw/render/interactive_svg.py (the attributes of a match fragment); do not edit manually.
+// gbdraw/render/interactive_svg.py (the attributes of a match fragment and the slots of the standalone
+// script); do not edit manually.
 
 /** A drawn region annotation's group names its annotation and its set, in both modes. */
 export const ANNOTATION_ID_ATTRIBUTE = 'data-gbdraw-annotation-id';
@@ -23,3 +24,5 @@ export const RING_LEGEND_NAME_ATTRIBUTE = 'data-ring-legend-name';
 export const MATCH_FRAGMENT_OWN_ATTRIBUTES = Object.freeze(['data-gbdraw-match-fragment', 'data-display-start', 'data-display-end']);
 /** Where the standalone interactive script's asset takes MATCH_FRAGMENT_OWN_ATTRIBUTES. */
 export const STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT = '[/* gbdraw: MATCH_FRAGMENT_OWN_ATTRIBUTES */]';
+/** Where the standalone interactive script's asset takes MATCH_SPAN_REASON_TEXTS (schema.generated.js). */
+export const STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT = '{/* gbdraw: MATCH_SPAN_REASON_TEXTS */}';

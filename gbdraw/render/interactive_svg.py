@@ -451,6 +451,9 @@ def _match_id(attributes: Mapping[str, object]) -> str:
 # from the generated module when the Web does (tools/generate_web_contracts.py).
 MATCH_FRAGMENT_OWN_ATTRIBUTES: tuple[str, ...] = ("data-gbdraw-match-fragment", *HIT_DISPLAY_SPAN_ATTRIBUTES)
 STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT = "[/* gbdraw: MATCH_FRAGMENT_OWN_ATTRIBUTES */]"
+# Where the standalone interactive script's asset takes the sentence of each reason a match span cannot be read
+# (``MATCH_SPAN_REASON_TEXTS`` of ``feature_catalog``), written in as the fragment attributes are.
+STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT = "{/* gbdraw: MATCH_SPAN_REASON_TEXTS */}"
 
 
 def _validate_match_fragments(attributes: Sequence[Mapping[str, object]]) -> None:
@@ -1334,13 +1337,17 @@ def _load_standalone_assets() -> tuple[str, str]:
         )
     except Exception as exc:
         raise GbdrawError("Missing standalone interactive SVG runtime/style package asset.") from exc
+    from gbdraw.web_support.feature_catalog import MATCH_SPAN_REASON_TEXTS
+
     script = _extract_template_literal(source, "STANDALONE_INTERACTIVE_SCRIPT")
-    if script.count(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT) != 1:
-        raise GbdrawError("Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT")
-    return (
-        _extract_template_literal(source, "STANDALONE_INTERACTIVE_STYLE"),
-        script.replace(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, json.dumps(list(MATCH_FRAGMENT_OWN_ATTRIBUTES), separators=(",", ":"))),
-    )
+    for slot, value in (
+        (STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, list(MATCH_FRAGMENT_OWN_ATTRIBUTES)),
+        (STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, MATCH_SPAN_REASON_TEXTS),
+    ):
+        if script.count(slot) != 1:
+            raise GbdrawError("Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT")
+        script = script.replace(slot, json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+    return _extract_template_literal(source, "STANDALONE_INTERACTIVE_STYLE"), script
 
 
 def _remove_existing_assets(root: ET.Element) -> None:
