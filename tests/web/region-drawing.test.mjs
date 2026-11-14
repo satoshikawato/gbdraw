@@ -210,7 +210,7 @@ const assertRoundTrip = async (installed, { leftToLoad = [] } = {}) => {
   assert.equal(comparison.equivalent, true);
 };
 
-createAppSetup();
+const app = createAppSetup();
 const history = window.__GBDRAW_HISTORY__;
 const listView = () => ({
   tabs: state.drawingTabs.value.map(({ id, name }) => ({ id, name })),
@@ -748,3 +748,84 @@ test('(e) a hand-set size whose Auto differs at the region\'s length returns to 
   assert.deepEqual(kept.derived.returnedToAuto, []);
   assert.equal(kept.made.adv.scale_interval, 500, 'Adapt sizes off keeps the hand-set interval');
 });
+
+/**
+ * The records a Circular drawing draws once it is shown and its records are read (as Generate reads them): the record
+ * ID each request record selects, in drawing order.
+ * @param {object} drawing A drawing added to the project.
+ */
+const drawnCircularRecordIds = async (drawing) => {
+  app.selectDrawing(drawing.id);
+  await app.readShownRecords('circular');
+  const { envelope } = await projectOf(drawing);
+  return envelope.renderRequest.records.map((record) => record.selector?.value ?? record.selector?.index ?? null);
+};
+const threeRecords = ['recA', 'recB', 'recD'].map((name, index) => genbankRecord(name, 900 + index * 100, [[101, 400, `${name}1`]]));
+
+// OV-3530: Python names the records of a Circular canvas by their place in the file; the drawing draws those, not every
+// record of the file once per record.
+test('OV-3530: a new Circular drawing of two whole records of a file of three draws those two', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  const { made, derived } = await deriveAndInstall(source, [
+    { recordKey: 'record-1:1', start: 1, end: 900 }, { recordKey: 'record-1:3', start: 1, end: 1100 }
+  ], true, 'circular-30');
+  assert.equal(derived.mode, 'circular');
+  state.addDrawing(made, 'OV-3530'); history.addMember(made.id);
+  assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  app.selectDrawing(source.id);
+});
+
+// OV-3531: a CLI Session whose Circular canvas draws some records of one file (`--records_table`) names them by record
+// ID over one shared resource; Load draws those records.
+test('OV-3531: a stored Circular canvas of two records of a file of three draws those two at Load', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  const { envelope } = await projectOf(source);
+  const resourceId = Object.keys(envelope.resources).find((id) => envelope.resources[id].kind === 'genbank');
+  const renderRequest = structuredClone(envelope.renderRequest);
+  renderRequest.records = ['recA.1', 'recD.1'].map((recordId, index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index + 1}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordId', value: recordId }, source: { kind: 'genbank', resourceId }
+  }));
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  assert.deepEqual(prepared.repairs, []);
+  const made = createDrawingState('circular-31', prepared.mode);
+  installPreparedDrawing(made, prepared);
+  state.addDrawing(made, 'OV-3531'); history.addMember(made.id);
+  assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  app.selectDrawing(source.id);
+});
+
+const { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, keptRequestArtifact } = await import(
+  '../../gbdraw/web/js/services/artifact-slot.js');
+// D-24 (R15): Copy to another drawing projects the drawing it pastes into while another drawing is shown. The
+// projection reads that drawing's Result-bound values from the slot that keeps them, so it is the projection the drawing
+// has while shown, whatever the shown drawing holds.
+for (const mode of ['linear', 'circular']) {
+  test(`a ${mode} drawing's draft request while not shown is its draft request while shown`, async () => {
+    const drawing = mode === 'circular' ? circularSource([recordA]) : (() => {
+      const linear = withNewDrawingDefaults(state, createDrawingState('kept-linear', 'linear'));
+      linear.inputType.value = 'gb';
+      linear.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'seq-1', gb: state.inputFiles.registerFile(genbankFile('l.gb', [recordA])) }));
+      return linear;
+    })();
+    drawing.deletedLegendEntries.value = [{ caption: 'tRNA', originalCaption: 'tRNA' }];
+    state.results.value = [{ name: 'shown', content: '<svg xmlns="http://www.w3.org/2000/svg"/>' }];
+    state.selectedResultIndex.value = 0;
+    state.originalLegendOrder.value = ['CDS', 'tRNA'];
+    const shown = (await projectOf(drawing)).envelope;
+    // Another drawing is shown: every slot value of the state is that drawing's (here an empty one's), as a switch
+    // installs them; the drawing's own are kept in its slot.
+    const kept = createArtifactSlot({
+      drawing: { id: drawing.id, mode },
+      values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
+      legend: { originalOrder: [...state.originalLegendOrder.value], originalColors: {} }
+    });
+    ARTIFACT_SLOT_KEYS.forEach((key) => { state[key].value = ARTIFACT_SLOT_EMPTY[key](mode, state[key].value); });
+    state.originalLegendOrder.value = [];
+    const notShown = (await projectDraftRequest({ ...state, ...keptRequestArtifact(kept) }, drawing, await factsOf(drawing))).envelope;
+    const withOtherValues = (await projectOf(drawing)).envelope;
+    assert.notDeepEqual(withOtherValues.renderRequest, shown.renderRequest, 'the request reads the Result-bound values');
+    assert.deepEqual(notShown.renderRequest, shown.renderRequest);
+    assert.deepEqual(notShown.resources, shown.resources);
+  });
+}

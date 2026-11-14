@@ -243,7 +243,7 @@ const positionsOf = (entries) => {
  * @param {IdentityRequestRecord} record
  * @param {readonly RecordSourceEntry[]} entries
  */
-const selectedPosition = (record, entries) => {
+export const selectedPosition = (record, entries) => {
   const selector = record.selector;
   if (selector?.kind === 'recordIndex' && Number.isInteger(selector.index)) {
     return Number(selector.index) < entries.length ? Number(selector.index) : null;

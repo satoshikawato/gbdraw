@@ -9,3 +9,7 @@
   the drawing's settings and edits or starts from the mode's defaults;
   several whole Circular records make one Multi-Record Canvas. See
   [Web app](./docs/REFERENCE/web-app.md).
+- Fixed: the Web app drew every record of a file when a Session written by
+  `gbdraw circular --records_table --multi_record_canvas` drew only some
+  records of that file on one canvas; it now draws the records the Session
+  names.

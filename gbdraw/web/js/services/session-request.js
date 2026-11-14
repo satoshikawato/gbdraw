@@ -2,9 +2,10 @@
 import { storedRegionWindows, writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
   INPUT_TYPES, inputSourceFiles, inputSourceSlotFiles, inputTypeOfSourceKind, inputTypeSpec,
-  recordSourceOf, recordSourceSlotIds
+  recordSourceOf, recordSourceSlotIds, storedRecordSourceResourceIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
+/** @import { IdentityRequestRecord } from './record-draw-selection.js' */
 /** @import { LosatRequestRing } from './circular-conservation-keys.js' */
 import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
@@ -101,7 +102,8 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordSelectorNumber, sameSelectedRecord
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordIdentity, recordKeyExpansion, recordSelectorNumber,
+  sameSelectedRecord, selectedPosition
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
@@ -173,7 +175,7 @@ import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
 import { featureDensityTrackIds, projectFeatureDensityTracks, requestFeatureDensityTracks } from './feature-density-tracks.js';
-import { NO_STORED_READINGS, storedRecordIdOf } from './stored-leaf-readings.js';
+import { NO_STORED_READINGS, storedFileRecordsKey, storedRecordIdOf } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   COMPARISON_COLUMNS,
@@ -6847,6 +6849,34 @@ const projectQuantitativeTrackDraft = (overrides, depthColor) => ({
 });
 
 /**
+ * The records a Circular canvas or batch leaves off: a card draws its file, and when every request record of the card
+ * names one record of a file whose record list Load read (`storedFileRecordsKey`), the file's other records are off
+ * (OV-3530: Python's copy of some records of a file; OV-3531: a CLI records table). Without that list (a record that
+ * draws the file whole, a reader given no readings) the card draws its file.
+ * @param {ReadonlyMap<unknown, string>} cardOfRecord The card uid each request record reads.
+ * @param {string} grouping The request's grouping.
+ * @param {StoredLeafReadings} readings
+ * @returns {{ recordsOff?: string[] }}
+ */
+const unnamedFileRecordsOff = (cardOfRecord, grouping, readings) => {
+  if (grouping === 'single') return {};
+  /** @type {Map<string, IdentityRequestRecord[]>} */
+  const recordsOfCard = new Map();
+  cardOfRecord.forEach((uid, record) => recordsOfCard.set(uid, [...(recordsOfCard.get(uid) ?? []),
+    /** @type {IdentityRequestRecord & { source?: unknown }} */ (record)]));
+  const off = [...recordsOfCard].flatMap(([uid, cardRecords]) => {
+    const source = /** @type {{ source?: Readonly<Record<string, unknown>> | null }} */ (cardRecords[0]).source;
+    const fileRecords = readings.get(storedFileRecordsKey(storedRecordSourceResourceIds(source)));
+    if (!Array.isArray(fileRecords)) return [];
+    const entries = fileRecords.map((recordId) => ({ recordId }));
+    const named = new Set(cardRecords.map((record) => selectedPosition(record, entries)));
+    return named.has(null) ? [] : entries.flatMap((_entry, sourceIndex) => (named.has(sourceIndex) ? []
+      : [recordIdentity({ uid, sourceIndex, recordCount: entries.length })]));
+  });
+  return off.length ? { recordsOff: off } : {};
+};
+
+/**
  * A reader of unvalidated Session data (R14): the input is not typed.
  * @param {Record<string, any>} input
  */
@@ -6867,7 +6897,9 @@ export const projectCanonicalSessionRequest = ({
   adoptCanonicalPayloads = false,
   markCardFileRows = false,
   bindingInputSlot,
-  // Python's readings of the stored leaves the form cannot hold as stored (Load asks for them).
+  // Python's readings of the stored leaves the form cannot hold as stored (Load asks for them), and the record lists of
+  // the files a Circular canvas draws some records of (`readStoredCanvasFileRecords`). Without them a Circular card
+  // draws its file whole: only Load and a copy (`prepareStoredDrawing`) install the draft, and both read them.
   leafReadings = NO_STORED_READINGS
 }) => {
   // Every request reaches the projection at the current schema: a stored one
@@ -7896,6 +7928,7 @@ export const projectCanonicalSessionRequest = ({
         reverseComplementOverride: null,
         anchorIntent: null
       }] : []),
+      ...unnamedFileRecordsOff(circularCardOfRecord, grouping, leafReadings),
       featurePlacementOverrides: featureDraftMap(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode
       )),

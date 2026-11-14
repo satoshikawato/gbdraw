@@ -56,7 +56,7 @@ import {
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
 import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
-import { readStoredRecordIdPlaces } from './record-discovery.js';
+import { readStoredCanvasFileRecords, readStoredRecordIdPlaces } from './record-discovery.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -1471,18 +1471,21 @@ const readStoredLeaves = async (data) => {
 
 /**
  * Adds to `readings` the place in its file of each stored record ID that a record text reads as a `#N` (OV-3311),
- * read through `table`, the resources Load adopted, so a card's own read of the file is this one; `repairs` lists
- * each such ID Load could not place, which keeps its text.
+ * and the record IDs of each file a Circular canvas draws some records of (OV-3530, OV-3531), read through `table`,
+ * the resources Load adopted, so a card's own read of the file is this one; `repairs` lists each such ID Load could
+ * not place, which keeps its text.
  * @param {SessionInput | Session51} data The Session Load reads, or the document of a stored drawing.
  * @param {ReturnType<typeof adoptCurrentSessionResources>} table
  * @param {Map<string, unknown>} readings `readStoredLeaves`'s.
  * @param {LoadRepair[]} repairs
  */
 const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
-  const { places, unresolved } = await readStoredRecordIdPlaces(
-    storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
-    (resourceId) => createSessionResourceFileView(table, resourceId));
+  const requests = storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest }));
+  /** @param {string} resourceId */
+  const fileOf = (resourceId) => createSessionResourceFileView(table, resourceId);
+  const { places, unresolved } = await readStoredRecordIdPlaces(requests, fileOf);
   places.forEach((place, key) => readings.set(key, place));
+  (await readStoredCanvasFileRecords(requests, fileOf)).forEach((recordIds, key) => readings.set(key, recordIds));
   repairs.push(...unresolved.map(({ path, recordId }) => loadRepair({ code: 'record-id-unresolved', path, effect: 'changed', stored: recordId })));
 };
 
