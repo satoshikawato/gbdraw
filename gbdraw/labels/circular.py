@@ -1658,7 +1658,7 @@ def _leader_shift_positions(
 
     A label on one side of the vertical axis stays on that side.
     """
-    lower_bound, upper_bound = bounds
+    inner_lower, inner_upper = _inner_order_bounds(bounds)
     current_half = _current_half_from_x(start_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
     step_deg = settings.step_deg
     step_positions: list[list[_LeaderPosition]] = []
@@ -1667,7 +1667,7 @@ def _leader_shift_positions(
         positions: list[_LeaderPosition] = []
         for direction in (1.0, -1.0):
             candidate_angle = current_angle + (direction * angle_offset)
-            if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
+            if candidate_angle <= inner_lower or candidate_angle >= inner_upper:
                 continue
 
             candidate_x, candidate_y = _point_on_circle(radius, candidate_angle)
@@ -3476,14 +3476,21 @@ def _legacy_improved_label_placement_fc(
     return labels
 
 
-class _ArcGeometry(NamedTuple):
-    """The ellipse that the labels of one arc sit on, and the genome length that places their features."""
+@dataclass(frozen=True, slots=True)
+class _LabelEllipse:
+    """The ellipse a set of labels sits on: its center and radii, and the record length that maps a feature to an angle."""
 
+    total_length: int
     center_x: float
     center_y: float
     x_radius: float
     y_radius: float
-    total_length: int
+
+    def start_at(self, angle_unwrapped: float, middle: float) -> tuple[float, float]:
+        """The start point of a label at `angle_unwrapped` on the ellipse."""
+        return calculate_coordinates(
+            self.center_x, self.center_y, self.x_radius, self.y_radius, angle_unwrapped, middle, self.total_length
+        )
 
 
 class _ArcLabelField:
@@ -3507,11 +3514,12 @@ class _ArcLabelField:
         "_pairs_at_positions",
     )
 
-    def __init__(self, labels: list[CircularLabel], geometry: _ArcGeometry, pair_gaps: _PairGaps) -> None:
+    def __init__(self, labels: list[CircularLabel], ellipse: _LabelEllipse, pair_gaps: _PairGaps) -> None:
         self.labels = labels
-        self.total_length = geometry.total_length
+        self.total_length = ellipse.total_length
         # Kept as plain attributes: `position_at` runs once per search candidate.
-        self._center_x, self._center_y, self._x_radius, self._y_radius, _ = geometry
+        self._center_x, self._center_y = ellipse.center_x, ellipse.center_y
+        self._x_radius, self._y_radius = ellipse.x_radius, ellipse.y_radius
         self._pair_gaps = pair_gaps
         self.max_pair_margin = pair_gaps.largest
         # Inner dense sets take a coarser search grid (the labels' sides do not change while they move).
@@ -4272,9 +4280,10 @@ def improved_label_placement_fc(
         legacy_spacing_px=1.5,
     )
     labels = _order_labels_for_arc(labels, total_length, resolved_spacing_px)
+    ellipse = _LabelEllipse(total_length, center_x, center_y, x_radius, y_radius)
     field = _ArcLabelField(
         labels,
-        _ArcGeometry(center_x, center_y, x_radius, y_radius, total_length),
+        ellipse,
         _PairGaps(labels, base_margin_px=max(float(y_margin), resolved_spacing_px)),
     )
     for label in labels:
@@ -4299,21 +4308,10 @@ def improved_label_placement_fc(
     _resolve_arc_overlaps(field, max_angle_shift_deg, max_iterations)
 
     field.enforce_order()
-    labels = _refine_labels_to_preferred_hemisphere(
-        labels,
-        total_length,
-        center_x,
-        center_y,
-        x_radius,
-        y_radius,
-    )
+    labels = _refine_labels_to_preferred_hemisphere(labels, ellipse)
     labels = _polish_total_leader_distance(
         labels,
-        total_length,
-        center_x,
-        center_y,
-        x_radius,
-        y_radius,
+        ellipse,
         min_order_gap=LABEL_MIN_ORDER_GAP_DEG,
         angle_step_deg=LABEL_ANGLE_STEP_DEG,
         max_passes=8,
@@ -4334,6 +4332,16 @@ def _cyclic_order_bounds(angles: Sequence[float], idx: int, min_gap: float) -> t
     lower = float(angles[idx - 1]) + min_gap if idx > 0 else float(angles[last]) - 360.0 + min_gap
     upper = float(angles[idx + 1]) - min_gap if idx < last else float(angles[0]) + 360.0 - min_gap
     return lower, upper
+
+
+def _inner_order_bounds(bounds: tuple[float, float]) -> tuple[float, float]:
+    """The order bounds of `_cyclic_order_bounds` pulled in by 1e-9 degrees at each end: a candidate angle
+    keeps the feature order when it is above the first and below the second.
+
+    Computed once per label, so the candidate loops compare against plain floats (no call per candidate).
+    """
+    lower_bound, upper_bound = bounds
+    return lower_bound + 1e-9, upper_bound - 1e-9
 
 
 def _keep_cyclic_order(angles: list[float], min_gap: float) -> bool:
@@ -4867,26 +4875,10 @@ class _HemisphereBlockShift(NamedTuple):
 
 
 @dataclass(frozen=True, slots=True)
-class _LabelEllipse:
-    """The ellipse a set of labels sits on: its center and radii, and the record length that maps a feature to an angle."""
-
-    total_length: int
-    center_x: float
-    center_y: float
-    x_radius: float
-    y_radius: float
-
-    def start_at(self, angle_unwrapped: float, middle: float) -> tuple[float, float]:
-        """The start point of a label at `angle_unwrapped` on the ellipse."""
-        return calculate_coordinates(
-            self.center_x, self.center_y, self.x_radius, self.y_radius, angle_unwrapped, middle, self.total_length
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class _HemisphereSettings(_LabelEllipse):
+class _HemisphereSettings:
     """The ellipse the labels sit on and the search settings of the hemisphere refinement."""
 
+    ellipse: _LabelEllipse
     axis_neutral_deg: float
     axis_eps_px: float
     angle_step_deg: float
@@ -4921,10 +4913,11 @@ class _HemisphereRefine:
     __slots__ = ("settings", "labels", "plain_total", "angles", "peers")
 
     def __init__(self, settings: _HemisphereSettings, labels: list[CircularLabel]) -> None:
+        total_length = settings.ellipse.total_length
         self.settings = settings
         self.labels = labels
-        self.plain_total = _count_label_overlaps(labels, settings.total_length, use_min_gap=False)
-        self.angles = _derive_monotonic_unwrapped_angles(labels, settings.total_length)
+        self.plain_total = _count_label_overlaps(labels, total_length, use_min_gap=False)
+        self.angles = _derive_monotonic_unwrapped_angles(labels, total_length)
         # Peer pruning (output-preserving): the plain predicate is false for labels whose reach boxes are disjoint.
         self.peers = _LabelPeers.of(labels, _reach_pad(1.0))
 
@@ -4958,7 +4951,7 @@ class _HemisphereRefine:
         peers = self.peers
         return _count_local_label_overlaps(
             self.labels,
-            self.settings.total_length,
+            self.settings.ellipse.total_length,
             label_idx,
             candidate_label,
             use_min_gap=False,
@@ -4969,7 +4962,7 @@ class _HemisphereRefine:
         """Label `label_idx` when it sits on the half away from its feature, outside the neutral band
         and with room between its neighbours; else None."""
         settings = self.settings
-        total_length = settings.total_length
+        total_length = settings.ellipse.total_length
         label = self.labels[label_idx]
         preferred_half = _preferred_half_for_label(label, total_length, axis_neutral_deg=settings.axis_neutral_deg)
         if preferred_half == 0:
@@ -5006,6 +4999,7 @@ class _HemisphereRefine:
         after the first step that has a place with no more neighbour overlaps than now.
         """
         settings = self.settings
+        ellipse = settings.ellipse
         label_idx, label = focus.label_idx, focus.label
         lower_bound, upper_bound = focus.lower_bound, focus.upper_bound
         target_angle_mod, preferred_half, axis_eps_px = focus.target_angle_mod, focus.preferred_half, settings.axis_eps_px
@@ -5027,7 +5021,7 @@ class _HemisphereRefine:
                     candidate_angle_unwrapped -= 360.0
                 if not (lower_bound < candidate_angle_unwrapped < upper_bound):
                     continue
-                candidate_x, candidate_y = settings.start_at(candidate_angle_unwrapped, label["middle"])
+                candidate_x, candidate_y = ellipse.start_at(candidate_angle_unwrapped, label["middle"])
                 if _current_half_from_x(candidate_x, axis_eps_px=axis_eps_px) != preferred_half:
                     continue
                 candidate_label = label.copy()
@@ -5037,7 +5031,7 @@ class _HemisphereRefine:
                 if plain_total > self.plain_total:
                     continue
                 neighbor_overlaps = _neighbor_min_gap_overlap_count(
-                    self.labels, label_idx, candidate_label, settings.total_length
+                    self.labels, label_idx, candidate_label, ellipse.total_length
                 )
                 score = (plain_total, neighbor_overlaps, abs(offset))
                 if best_score is None or score < best_score:
@@ -5090,6 +5084,7 @@ class _HemisphereRefine:
         when the turn breaks feature order, leaves the focus label off its preferred half or raises the
         plain overlap total."""
         settings = self.settings
+        ellipse = settings.ellipse
         candidate_angles = self.angles.copy()
         for move_idx in range(block_start, block_end + 1):
             candidate_angles[move_idx] += delta
@@ -5101,7 +5096,7 @@ class _HemisphereRefine:
         candidate_labels = [item.copy() for item in self.labels]
         for move_idx in range(block_start, block_end + 1):
             moved_label = candidate_labels[move_idx]
-            moved_label["start_x"], moved_label["start_y"] = settings.start_at(
+            moved_label["start_x"], moved_label["start_y"] = ellipse.start_at(
                 candidate_angles[move_idx], moved_label["middle"]
             )
             if "angle_unwrapped" in moved_label:
@@ -5109,22 +5104,18 @@ class _HemisphereRefine:
         focus_x = float(candidate_labels[focus.label_idx]["start_x"])
         if _current_half_from_x(focus_x, axis_eps_px=settings.axis_eps_px) != focus.preferred_half:
             return None
-        plain_total = _count_label_overlaps(candidate_labels, settings.total_length, use_min_gap=False)
+        plain_total = _count_label_overlaps(candidate_labels, ellipse.total_length, use_min_gap=False)
         if plain_total > self.plain_total:
             return None
         neighbor_overlaps = _neighbor_min_gap_overlap_count(
-            candidate_labels, focus.label_idx, candidate_labels[focus.label_idx], settings.total_length
+            candidate_labels, focus.label_idx, candidate_labels[focus.label_idx], ellipse.total_length
         )
         return _HemisphereBlockShift(candidate_labels, candidate_angles, plain_total, neighbor_overlaps)
 
 
 def _refine_labels_to_preferred_hemisphere(
     labels: list[CircularLabel],
-    total_length: int,
-    center_x: float,
-    center_y: float,
-    x_radius: float,
-    y_radius: float,
+    ellipse: _LabelEllipse,
     *,
     axis_neutral_deg: float = HEMISPHERE_AXIS_NEUTRAL_DEG,
     axis_eps_px: float = HEMISPHERE_AXIS_EPS_PX,
@@ -5142,11 +5133,7 @@ def _refine_labels_to_preferred_hemisphere(
         return labels
 
     settings = _HemisphereSettings(
-        total_length,
-        center_x,
-        center_y,
-        x_radius,
-        y_radius,
+        ellipse,
         axis_neutral_deg,
         axis_eps_px,
         angle_step_deg,
@@ -5168,9 +5155,10 @@ _LeaderPolishMove: TypeAlias = tuple[float, _LeaderPolishScore]
 
 
 @dataclass(frozen=True, slots=True)
-class _LeaderPolishSettings(_LabelEllipse):
+class _LeaderPolishSettings:
     """The ellipse the labels sit on and the step settings of the leader polish."""
 
+    ellipse: _LabelEllipse
     min_order_gap: float
     angle_step_deg: float
 
@@ -5207,16 +5195,6 @@ def _angles_toward_target(current_angle: float, target_angle: float, angle_step_
     return candidate_angles
 
 
-def _total_target_delta(labels: list[CircularLabel], total_length: int) -> float:
-    """The sum of the labels' distances from their target angles, from their `angle_unwrapped` (the target when unset)."""
-    delta_sum = 0.0
-    for label in labels:
-        target = _label_target_angle_unwrapped(label, total_length)
-        current = float(label.get("angle_unwrapped", target))
-        delta_sum += abs(current - target)
-    return delta_sum
-
-
 class _LeaderPolish:
     """One run of the leader polish over `labels`, which it changes in place.
 
@@ -5230,7 +5208,7 @@ class _LeaderPolish:
     __slots__ = ("settings", "labels", "peers", "angles", "relax_min_gap", "max_min_gap", "score")
 
     def __init__(self, settings: _LeaderPolishSettings, labels: list[CircularLabel]) -> None:
-        total_length = settings.total_length
+        total_length = settings.ellipse.total_length
         self.settings = settings
         self.labels = labels
         # Peer pruning (output-preserving): both overlap predicates are false for labels whose reach boxes are disjoint.
@@ -5249,14 +5227,14 @@ class _LeaderPolish:
             min_gap_overlaps,
             mismatch_count,
             leader_sum,
-            _total_target_delta(labels, total_length),
+            _angle_deviation_score(labels, total_length)[0],
         )
 
     def polish(self, max_passes: int) -> None:
         """Up to `max_passes` passes over the labels, longest leader first, each moving a label to its best
         accepted place toward its target; stop after a pass that moves nothing."""
         labels = self.labels
-        total_length = self.settings.total_length
+        total_length = self.settings.ellipse.total_length
         for _ in range(max_passes):
             pass_changed = False
             label_order = sorted(
@@ -5280,16 +5258,18 @@ class _LeaderPolish:
         """Label `label_idx` with its candidate places, when it is away from its target and has a place
         toward it between its neighbours; else None."""
         settings = self.settings
-        total_length = settings.total_length
+        ellipse = settings.ellipse
+        total_length = ellipse.total_length
         labels = self.labels
         label = labels[label_idx]
         current_angle = self.angles[label_idx]
         target_angle = _label_target_angle_unwrapped(label, total_length)
         if math.isclose(current_angle, target_angle, abs_tol=1e-9):
             return None
-        lower_bound, upper_bound = _cyclic_order_bounds(self.angles, label_idx, settings.min_order_gap)
-        if lower_bound >= upper_bound:
+        bounds = _cyclic_order_bounds(self.angles, label_idx, settings.min_order_gap)
+        if bounds[0] >= bounds[1]:
             return None
+        inner_lower, inner_upper = _inner_order_bounds(bounds)
         candidate_angles = _angles_toward_target(current_angle, target_angle, settings.angle_step_deg)
         peers = self.peers
         current_peers = peers.near(peers.kept_box(label_idx), skip=label_idx)
@@ -5304,9 +5284,9 @@ class _LeaderPolish:
         # The mismatch count always counts the current labels, so a move changes it by this label's own flag only.
         others_mismatch = self.score[2] - (_label_hemisphere_mismatch_weight(label, total_length) is not None)
         positions = [
-            (candidate_angle, *settings.start_at(candidate_angle, label["middle"]))
+            (candidate_angle, *ellipse.start_at(candidate_angle, label["middle"]))
             for candidate_angle in candidate_angles
-            if not (candidate_angle <= lower_bound + 1e-9 or candidate_angle >= upper_bound - 1e-9)
+            if not (candidate_angle <= inner_lower or candidate_angle >= inner_upper)
         ]
         if not positions:
             return None
@@ -5332,7 +5312,7 @@ class _LeaderPolish:
         dense set) the shortest leaders and target distances with a few more min-gap overlaps
         (`_relaxed_move`); None when no place is better."""
         labels = self.labels
-        total_length = self.settings.total_length
+        total_length = self.settings.ellipse.total_length
         label_idx, label, target_angle = focus.label_idx, focus.label, focus.target_angle
         peers = focus.peers
         current_plain_for_label, current_min_gap_for_label = focus.plain, focus.min_gap
@@ -5431,18 +5411,14 @@ class _LeaderPolish:
         self.angles[label_idx] = angle_unwrapped
         label = self.labels[label_idx]
         label["angle_unwrapped"] = angle_unwrapped
-        label["start_x"], label["start_y"] = self.settings.start_at(angle_unwrapped, label["middle"])
+        label["start_x"], label["start_y"] = self.settings.ellipse.start_at(angle_unwrapped, label["middle"])
         self.peers.move(label_idx, label)
         self.score = score
 
 
 def _polish_total_leader_distance(
     labels: list[CircularLabel],
-    total_length: int,
-    center_x: float,
-    center_y: float,
-    x_radius: float,
-    y_radius: float,
+    ellipse: _LabelEllipse,
     *,
     min_order_gap: float = LABEL_MIN_ORDER_GAP_DEG,
     angle_step_deg: float = LABEL_ANGLE_STEP_DEG,
@@ -5456,9 +5432,7 @@ def _polish_total_leader_distance(
     """
     if not labels:
         return labels
-    settings = _LeaderPolishSettings(
-        total_length, center_x, center_y, x_radius, y_radius, min_order_gap, angle_step_deg
-    )
+    settings = _LeaderPolishSettings(ellipse, min_order_gap, angle_step_deg)
     _LeaderPolish(settings, labels).polish(max_passes)
     return labels
 
@@ -5539,10 +5513,8 @@ def rearrange_labels_fc(
     candidates.
     """
     arc = label_arc(feature_radius, genome_len, cfg, strands, is_outer, arena_outer_radius, track_preset)
-    x_radius = arc.x_radius
-    y_radius = arc.y_radius
-    center_y = 0
-    center_x = arc.center_x
+    ellipse = _LabelEllipse(total_length, arc.center_x, 0, arc.x_radius, arc.y_radius)
+    center_x, center_y, x_radius, y_radius = ellipse.center_x, ellipse.center_y, ellipse.x_radius, ellipse.y_radius
     start_angle = 0
     end_angle = 360
 
@@ -5583,14 +5555,7 @@ def rearrange_labels_fc(
             y_margin=legacy_row_gap_px,
         )
         candidate_legacy = sort_labels(candidate_legacy)
-        return _refine_labels_to_preferred_hemisphere(
-            candidate_legacy,
-            total_length,
-            center_x,
-            center_y,
-            x_radius,
-            y_radius,
-        )
+        return _refine_labels_to_preferred_hemisphere(candidate_legacy, ellipse)
 
     candidate_legacy = None
     legacy_score = None
@@ -5651,14 +5616,7 @@ def rearrange_labels_fc(
         end_angle,
         spacing_px=label_spacing_px,
     )
-    candidate_current = _refine_labels_to_preferred_hemisphere(
-        candidate_current,
-        total_length,
-        center_x,
-        center_y,
-        x_radius,
-        y_radius,
-    )
+    candidate_current = _refine_labels_to_preferred_hemisphere(candidate_current, ellipse)
     best_labels = candidate_current
     best_score = _placement_score(candidate_current, total_length)
 
