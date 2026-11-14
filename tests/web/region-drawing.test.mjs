@@ -34,9 +34,10 @@ const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annot
 const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');
 const { bindCircularSourceFile, createCircularSource, createLinearSeq, replaceCircularSources } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  installShownDrawing, installPreparedDrawing, makeRegionDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
+  installShownDrawing, installPastedRecords, installPreparedDrawing, makeRegionDrawing, preparePastedRecords,
+  prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
 } = await import('../../gbdraw/web/js/services/config.js');
-const { compareCanonicalRenderRequests } = await import('../../gbdraw/web/js/services/session-request.js');
+const { compareCanonicalRenderRequests, writtenTextResource } = await import('../../gbdraw/web/js/services/session-request.js');
 const { annotationSourceKey, buildAnnotationRecordCatalog } = await import(
   '../../gbdraw/web/js/app/annotations/record-catalog.js'
 );
@@ -829,3 +830,126 @@ for (const mode of ['linear', 'circular']) {
     assert.deepEqual(notShown.resources, shown.resources);
   });
 }
+
+// A paste into an existing drawing (PD-OI-090 〔作成〕(4)): Python pastes the source's regions into the target's draft
+// request; the Web installs only what the paste adds, and the target's draft request is then the one Python returned.
+const STAGE_PASTE = `
+import base64, json, os, tempfile
+def stage(staged):
+    directory = tempfile.mkdtemp()
+    out = {}
+    for index, (resource_id, item) in enumerate(staged.items()):
+        path = os.path.join(directory, f'r{index}_{item["name"]}')
+        with open(path, 'wb') as handle:
+            handle.write(base64.b64decode(item['base64']))
+        out[resource_id] = path
+    return out
+paths = stage(payload['staged'])
+target_paths = stage(payload['targetStaged'])
+directory = tempfile.mkdtemp()
+`;
+/** The Worker helper `deriveRegionDrawing` pasting into `targetSent`'s drawing, run by the real Python owner. */
+const pasteInPython = async ({ sent, targetSent, regions, edits = 'edits', duplicates = 'skip' }) => JSON.parse(await evaluatePython(`${STAGE_PASTE}
+from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+copy = dict(payload['copy'], target={'renderRequest': payload['targetRequest'], 'resourcePaths': target_paths})
+result = derive_web_region_drawing_json(
+    json.dumps(payload['canonicalRequest']), json.dumps(paths), directory,
+    json.dumps(payload['regions']), json.dumps(True), json.dumps(copy))
+`, {
+  canonicalRequest: sent.envelope.renderRequest, targetRequest: targetSent.envelope.renderRequest, regions,
+  copy: { into: 'existing', edits, duplicates },
+  staged: await stagedFiles(sent.envelope.renderRequest, sent.envelope.resources),
+  targetStaged: await stagedFiles(targetSent.envelope.renderRequest, targetSent.envelope.resources)
+}));
+/** The resources of a paste's request: each one the bytes of the sent resource it reads, or the table Python wrote. */
+const pastedResources = ({ pasted, sent, targetSent }) => ({
+  ...Object.fromEntries(Object.entries(pasted.targetResourceSources).map(([id, from]) => [id, targetSent.envelope.resources[from]])),
+  ...Object.fromEntries(Object.entries(pasted.resourceSources).map(([id, from]) => [id, sent.envelope.resources[from]])),
+  ...Object.fromEntries(pasted.addedResources.map(({ resourceId, name, text }) => [resourceId, writtenTextResource(resourceId, name, text)]))
+});
+/** Pastes `regions` of `source` into `target`, installs the paste, and returns the reply and the requests. */
+const pasteAndInstall = async (source, target, regions, choices = {}) => {
+  const sent = await projectOf(source);
+  const targetSent = await projectOf(target);
+  const pasted = await pasteInPython({ sent, targetSent, regions, ...choices });
+  assert.equal(pasted.status, 'pasted', JSON.stringify(pasted));
+  installPastedRecords(target, await preparePastedRecords({ pasted, sent, targetSent }));
+  return { pasted, sent, targetSent };
+};
+/** The target's draft request after the paste is the request Python returned, but at the paths of `open`. */
+const assertPastedRequest = async (target, paste, open = []) => {
+  const { envelope } = await projectOf(target);
+  const comparison = await compareCanonicalRenderRequests({
+    expectedRequest: paste.pasted.renderRequest, expectedResources: pastedResources(paste),
+    actualRequest: envelope.renderRequest, actualResources: envelope.resources
+  });
+  assert.deepEqual(comparison.differences.map(({ path }) => path), open, 'the target writes the pasted request');
+};
+
+test('a paste into a Linear drawing appends the pasted region with its edits; the target keeps its own', async () => {
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-40');
+  target.manualSpecificRules.splice(0, Infinity, { feat: 'CDS', qual: 'locus_tag', val: 'A1', color: '#00ff00', cap: 'Mine' });
+  for (const key of Object.keys(target.featureOverrides)) delete target.featureOverrides[key];
+  const ownRow = { ...target.linearSeqs[0] };
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1', start: 301, end: 800 }]);
+  assert.deepEqual(paste.pasted.pastedRecordKeys, [target.linearSeqs[1].uid]);
+  assert.deepEqual({ ...target.linearSeqs[0] }, ownRow, 'the target\'s own row');
+  assert.deepEqual(Object.values(target.featureOverrides).map((row) => [row.recordKey, row.labelText]), [[target.linearSeqs[1].uid, 'kept']]);
+  assert.deepEqual(target.manualSpecificRules.map(({ val, cap }) => [val, cap]), [['A1', 'Mine']], 'the target\'s color rules');
+  await assertPastedRequest(target, paste);
+});
+
+test('a paste of records only brings no edit of the source', async () => {
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-41');
+  for (const key of Object.keys(target.featureOverrides)) delete target.featureOverrides[key];
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1', start: 301, end: 800 }], { edits: 'records' });
+  assert.deepEqual(target.featureOverrides, {});
+  await assertPastedRequest(target, paste);
+});
+
+test('a paste of whole records into a Circular drawing draws them after its own on a Multi-Record Canvas', async () => {
+  const { made: target } = await deriveAndInstall(circularSource([genbankRecord('recC', 1500, [[101, 400, 'C1']])]),
+    [{ recordKey: 'record-1', start: 1, end: 1500 }], true, 'circular-42');
+  state.addDrawing(target, 'paste target'); history.addMember(target.id);
+  await drawnCircularRecordIds(target);
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  app.selectDrawing(source.id);
+  const ownCard = { ...target.circularSources[0] };
+  const paste = await pasteAndInstall(source, target, [
+    { recordKey: 'record-1:1', start: 1, end: 900 }, { recordKey: 'record-1:3', start: 1, end: 1100 }
+  ]);
+  assert.deepEqual({ ...target.circularSources[0] }, ownCard, 'the target\'s own card');
+  assert.equal(new Set(target.circularSources.map(({ uid }) => uid)).size, 3, 'each pasted card has a uid of its own');
+  assert.equal(target.form.multi_record_canvas, true);
+  // The target's own card reads a file of one record, which its request names without a selector.
+  assert.deepEqual(await drawnCircularRecordIds(target), [null, 'recA.1', 'recD.1']);
+  // OV-3533 (open): the read of the cards places each File card's records on a row of its own, so the request names
+  // places where Python's names none.
+  await assertPastedRequest(target, paste, ['$.layout.multiRecordPositions']);
+  app.selectDrawing(source.id);
+});
+
+test('a paste with the records\' edits brings the colors of the pasted features into the target\'s color rules', async () => {
+  const source = await circularSourceWithLook();
+  const ids = await featureIdsInPython((await projectOf(source)).envelope);
+  const only = JSON.parse(await evaluatePython(`
+import json
+from gbdraw.features.ids import exact_value_pattern, feature_instance
+result = json.dumps(exact_value_pattern(feature_instance(payload['id'], 'record-1')))
+`, { id: ids['400'] }));
+  source.manualSpecificRules.splice(0, Infinity, { feat: 'CDS', qual: 'hash', val: only, color: '#ff0000', cap: 'Only this' });
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-43');
+  const own = { feat: 'CDS', qual: 'locus_tag', val: 'A1', color: '#00ff00', cap: 'Mine' };
+  target.manualSpecificRules.splice(0, Infinity, own);
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1', start: 301, end: 800 }]);
+  assert.equal(paste.pasted.addedResources.length, 1, 'Python wrote the merged color table');
+  assert.deepEqual(target.manualSpecificRules.map(({ color, cap }) => [color, cap]), [['#00ff00', 'Mine'], ['#ff0000', 'Only this']]);
+  assert.deepEqual({ ...target.manualSpecificRules[0] }, own, 'the target\'s rule as it was (not read from the table)');
+  await assertPastedRequest(target, paste);
+  const recordsOnly = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-44');
+  recordsOnly.made.manualSpecificRules.splice(0, Infinity, own);
+  await pasteAndInstall(source, recordsOnly.made, [{ recordKey: 'record-1', start: 301, end: 800 }], { edits: 'records' });
+  assert.deepEqual(recordsOnly.made.manualSpecificRules.map(({ cap }) => cap), ['Mine']);
+});

@@ -17,7 +17,7 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
-import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
+import { INPUTS_SLICE, bindDrawingCanonicalComparisons, createCircularSource, createLinearSeq, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, parseColorTable, userTableRows } from './file-imports.js';
@@ -81,7 +81,7 @@ import {
   normalizeFeatureVisibilityRule,
   splitLegacyVisibilityRules
 } from './feature-visibility.js';
-import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
+import { canonicalFeatureOverrides, featureDraftMap, featureIdentityKeyOf } from './feature-placement.js';
 import { ANNOTATION_TARGET_MIGRATION_NOTICE, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { buildSessionFeatureRecoveryPlan } from './session-feature-recovery.js';
 import {
@@ -113,7 +113,8 @@ import {
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
   linearCardWindowPlanRecords,
-  requestRunsProteinSearch
+  requestRunsProteinSearch,
+  writtenTextResource
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -379,7 +380,9 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { CanonicalRenderEnvelope, RequestRecordDisplayRow, ResourceTexts } from './session-request.js' */
-/** @import { DerivedRegionDrawing } from '../contracts/locate.generated.js' */
+/** @import { AddedResource, DerivedRegionDrawing, PastedRecords } from '../contracts/locate.generated.js' */
+/** @import { SpecificColorRule } from './specific-color-rules.js' */
+/** @import { RecordDisplayDraft } from './record-display-model.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
@@ -7427,35 +7430,85 @@ export const projectDraftRequest = async (sourceState, drawing, {
  * @property {DerivedRegionDrawing} derived
  * @property {ProjectedDraftRequest} sent
  */
+const derivedReplyInvalid = () => diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
 /**
- * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a
- * stored drawing: each resource ID it names holds the bytes of the sent
- * request's resource it reads (`resourceSources`), and binds that resource's
- * Web file. A read that repairs anything refuses (`RESULT_INVALID`): the
- * region drawing has no Load dialog to list a loss in.
- * @param {RegionDerivation} derivation
+ * A request Python derived from drawings' draft requests: each resource ID it names reads a resource of one of the
+ * sent requests (`ResourceSources`: the resource ID it reads there), or holds a table Python wrote (`added`).
+ * @typedef {object} DerivedRequestReply
+ * @property {'circular' | 'linear'} mode
+ * @property {Record<string, unknown>} renderRequest
+ * @property {readonly (readonly [Readonly<Record<string, string>>, ProjectedDraftRequest])[]} sources
+ * @property {readonly AddedResource[]} added
+ */
+/**
+ * Reads a request Python derived (a new drawing, a paste) as Load reads a stored drawing: each resource ID holds the
+ * bytes of the sent resource it reads and binds that resource's Web file, or holds the table Python wrote. A read that
+ * repairs anything refuses (`RESULT_INVALID`): Python derived a request the Load readers read whole, so a repair means
+ * the two disagree, and the drawing would lose a setting with no Load dialog to list it in.
+ * @param {DerivedRequestReply} reply
  * @returns {Promise<PreparedStoredDrawing>}
  */
-export const prepareRegionDrawing = async ({ derived, sent }) => {
+const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) => {
   /** @type {Record<string, unknown>} */
   const resources = {};
   /** @type {Map<string, InputFileRef>} */
   const sourceFiles = new Map();
-  for (const [resourceId, sourceId] of Object.entries(derived.resourceSources)) {
-    if (!Object.hasOwn(sent.envelope.resources, sourceId)) {
-      throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
+  for (const [table, sent] of sources) {
+    for (const [resourceId, sourceId] of Object.entries(table)) {
+      if (!Object.hasOwn(sent.envelope.resources, sourceId)) throw derivedReplyInvalid();
+      resources[resourceId] = sent.envelope.resources[sourceId];
+      const ref = sent.filesByResource.get(sourceId);
+      if (ref) sourceFiles.set(resourceId, ref);
     }
-    resources[resourceId] = sent.envelope.resources[sourceId];
-    const ref = sent.filesByResource.get(sourceId);
-    if (ref) sourceFiles.set(resourceId, ref);
   }
-  const prepared = await prepareStoredDrawing({ mode: derived.mode, renderRequest: derived.renderRequest, resources, sourceFiles });
-  // Python derived a request the Load readers can read whole; a repair means
-  // the two disagree, and the drawing would lose a setting with no Load dialog.
-  if (prepared.repairs.length > 0) {
-    throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
-  }
+  for (const { resourceId, name, text } of added) resources[resourceId] = writtenTextResource(resourceId, name, text);
+  const prepared = await prepareStoredDrawing({ mode, renderRequest, resources, sourceFiles });
+  if (prepared.repairs.length > 0) throw derivedReplyInvalid();
   return prepared;
+};
+/**
+ * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a stored drawing (`prepareDerivedRequest`):
+ * each resource ID it names reads the sent request's resource of `resourceSources`.
+ * @param {RegionDerivation} derivation
+ * @returns {Promise<PreparedStoredDrawing>}
+ */
+export const prepareRegionDrawing = ({ derived, sent }) => prepareDerivedRequest({
+  mode: derived.mode, renderRequest: derived.renderRequest, sources: [[derived.resourceSources, sent]], added: []
+});
+/**
+ * A paste into an existing drawing (`deriveRegionDrawing` with `copy.into` `existing`) and the draft requests it was
+ * pasted from: the source drawing's (`sent`) and the target drawing's (`targetSent`).
+ * @typedef {object} PasteDerivation
+ * @property {PastedRecords} pasted
+ * @property {ProjectedDraftRequest} sent
+ * @property {ProjectedDraftRequest} targetSent
+ */
+/**
+ * The target drawing's new request read whole (`prepared`), and what of it the paste adds: the records of
+ * `pastedRecordKeys`, which read the File cards the reader makes last (`pastedCards`, Circular).
+ * @typedef {object} PreparedPaste
+ * @property {PreparedStoredDrawing} prepared
+ * @property {ReadonlySet<string>} pastedRecordKeys
+ * @property {number} pastedCards
+ */
+/**
+ * Reads a paste as Load reads the target drawing's new request (`prepareDerivedRequest`): its resources read the
+ * target's request (`targetResourceSources`), the source's (`resourceSources`), or the tables Python wrote.
+ * @param {PasteDerivation} paste
+ * @returns {Promise<PreparedPaste>}
+ */
+export const preparePastedRecords = async ({ pasted, sent, targetSent }) => {
+  const prepared = await prepareDerivedRequest({
+    mode: pasted.mode, renderRequest: pasted.renderRequest, added: pasted.addedResources,
+    sources: [[pasted.targetResourceSources, targetSent], [pasted.resourceSources, sent]]
+  });
+  const pastedRecordKeys = new Set(pasted.pastedRecordKeys);
+  // The reader makes one File card per file of the records, in the order the records first read it; the pasted
+  // records follow the target's and read files of their own.
+  const { records } = /** @type {CanonicalRenderRequest} */ (/** @type {unknown} */ (pasted.renderRequest));
+  const pastedCards = new Set(records.filter((record) => pastedRecordKeys.has(record.recordKey))
+    .map((record) => JSON.stringify(record.source))).size;
+  return { prepared, pastedRecordKeys, pastedCards };
 };
 /**
  * Installs a prepared drawing into its drawing state as Load installs a
@@ -7495,6 +7548,116 @@ export const makeRegionDrawing = async (derivation, { runSavedComparison }) => {
     installPreparedDrawing(drawing, prepared);
     return drawing;
   };
+};
+/**
+ * A key of `uids`' records (a card uid, or its `<uid>:<k>` record identity) under the card's new uid; null for a key
+ * of another card.
+ * @param {string} key
+ * @param {ReadonlyMap<string, string>} uids The new uid of each pasted card, by its uid in the read request.
+ * @returns {string | null}
+ */
+const pastedKeyOf = (key, uids) => {
+  for (const [from, to] of uids) {
+    if (key === from) return to;
+    if (key.startsWith(`${from}:`)) return `${to}${key.slice(from.length)}`;
+  }
+  return null;
+};
+/**
+ * The color rules after a paste: the read table, where each rule the target has is the target's own row (its
+ * identity), and each other rule is one the paste adds (the colors of the pasted features, which Python puts in the
+ * table where they apply). Unchanged when the paste adds none.
+ * @param {readonly Readonly<SpecificColorRule>[]} own The target's rules.
+ * @param {readonly Readonly<SpecificColorRule>[]} read The rules of the target's new request.
+ * @returns {readonly Readonly<SpecificColorRule>[]}
+ */
+const pastedColorRules = (own, read) => {
+  const shown = (/** @type {Readonly<SpecificColorRule>} */ { feat, qual, val, color, cap }) => JSON.stringify([feat, qual, val, color, cap]);
+  const left = own.map((rule) => ({ rule, key: shown(rule) }));
+  const rules = read.map((rule) => {
+    const index = left.findIndex(({ key }) => key === shown(rule));
+    return index < 0 ? rule : left.splice(index, 1)[0].rule;
+  });
+  return rules.length === own.length ? own : rules;
+};
+/**
+ * The pasted cards of a read request (`read`) under uids of their own in `target`: the Linear rows of the pasted
+ * records (a row's uid is its record key; one the target has takes a new one), or the Circular File cards the reader
+ * made last, each under a new uid. `own` names the target's card of each other card the reader made (Circular: the
+ * first card of the target that reads the same files).
+ * @param {DrawingState} read
+ * @param {DrawingState} target
+ * @param {PreparedPaste} paste
+ */
+const pastedCardsOf = (read, target, { pastedRecordKeys, pastedCards }) => {
+  if (target.mode === 'circular') {
+    const ownCount = read.circularSources.length - pastedCards;
+    const cards = read.circularSources.slice(ownCount);
+    const uids = new Map(cards.map(({ uid }) => [uid, createCircularSource().uid]));
+    /** @param {CircularSource} card */
+    const filesOf = ({ gb, gff, fasta }) => JSON.stringify([gb, gff, fasta].map((ref) => ref?.fileId ?? null));
+    const unmatched = [...target.circularSources];
+    const own = new Map(read.circularSources.slice(0, ownCount).flatMap((card) => {
+      const index = unmatched.findIndex((candidate) => filesOf(candidate) === filesOf(card));
+      return index < 0 ? [] : [[card.uid, unmatched.splice(index, 1)[0].uid]];
+    }));
+    return { uids, own, linearSeqs: [], circularSources: cards.map((card) => ({ ...card, uid: String(uids.get(card.uid)) })) };
+  }
+  const taken = new Set(target.linearSeqs.map(({ uid }) => uid));
+  const rows = read.linearSeqs.filter(({ uid }) => pastedRecordKeys.has(uid));
+  const uids = new Map(rows.map(({ uid }) => [uid, taken.has(uid) ? createLinearSeq().uid : uid]));
+  return { uids, own: new Map(), linearSeqs: rows.map((row) => ({ ...row, uid: String(uids.get(row.uid)) })), circularSources: [] };
+};
+/**
+ * Installs a paste into its existing drawing (PD-OI-090 〔作成〕(4)): the records it adds, after the drawing's own,
+ * through each slice's install, as Load installs them (`installPreparedDrawing` of the drawing's new request, read
+ * apart): their cards, the records of those cards left out, their rows and display, their per-feature edits, and the
+ * colors of the pasted features. The drawing keeps everything else: its settings, palette, rules, tables, paint and
+ * annotations. A Circular drawing of several records becomes a Multi-Record Canvas placed as the request places its
+ * records, and reads its records again.
+ * @param {DrawingState} target
+ * @param {PreparedPaste} paste
+ */
+export const installPastedRecords = (target, paste) => {
+  const read = createDrawingState(target.id, paste.prepared.mode);
+  installPreparedDrawing(read, paste.prepared);
+  const { uids, own, linearSeqs, circularSources } = pastedCardsOf(read, target, paste);
+  const cards = new Map([...own, ...uids]);
+  /** @param {readonly string[]} keys */
+  const pastedKeys = (keys) => keys.flatMap((key) => pastedKeyOf(key, uids) ?? []);
+  const inputs = INPUTS_SLICE.capture(target.slices.inputs);
+  const readInputs = INPUTS_SLICE.capture(read.slices.inputs);
+  INPUTS_SLICE.install(target.slices.inputs, target.mode === 'circular'
+    ? { circularSources: [...inputs.circularSources, ...circularSources],
+        circularRecordList: readInputs.circularRecordList, circularRecordDiscovery: readInputs.circularRecordDiscovery }
+    : { linearSeqs: [...inputs.linearSeqs, ...linearSeqs] });
+  SETTINGS_SLICE.install(target.slices.settings, {
+    recordsOff: [...target.recordsOff, ...pastedKeys(read.recordsOff)],
+    linearRecordRows: [...target.linearRecordRows, ...read.linearRecordRows.flatMap((/** @type {LinearRecordRow} */ row) => {
+      const uid = pastedKeyOf(row.uid, uids);
+      return uid === null ? [] : [{ ...row, uid }];
+    })],
+    recordDisplayDrafts: [...target.recordDisplayDrafts, ...read.recordDisplayDrafts.flatMap((/** @type {RecordDisplayDraft} */ draft) => {
+      const sourceUid = pastedKeyOf(draft.sourceUid, uids);
+      return sourceUid === null ? [] : [{ ...draft, sourceUid }];
+    })],
+    form: { ...target.form, multi_record_canvas: read.form.multi_record_canvas },
+    // The places of a Multi-Record Canvas are the request's, which names the target's records and the pasted ones.
+    adv: { ...target.adv, multi_record_positions: read.adv.multi_record_positions.flatMap((/** @type {{ selector: string, row: number }} */ entry) => {
+      const selector = pastedKeyOf(entry.selector, cards);
+      return selector === null ? [] : [{ ...entry, selector }];
+    }) }
+  });
+  FEATURE_EDITS_SLICE.install(target.slices.featureEdits, { featureOverrides: {
+    ...FEATURE_EDITS_SLICE.capture(target.slices.featureEdits).featureOverrides,
+    ...Object.fromEntries(Object.values(read.featureOverrides).flatMap((row) => {
+      const recordKey = pastedKeyOf(row.recordKey, uids);
+      return recordKey === null ? [] : [[featureIdentityKeyOf({ ...row, recordKey }), { ...row, recordKey }]];
+    }))
+  } });
+  COLOR_RULES_SLICE.install(target.slices.colorRules, {
+    manualSpecificRules: pastedColorRules(target.manualSpecificRules, read.manualSpecificRules)
+  });
 };
 /**
  * Records the Use custom stack switch beside a committed Session Load installs

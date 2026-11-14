@@ -1380,6 +1380,20 @@ const createResourceBuilder = ({ encode = true } = {}) => {
 };
 
 /**
+ * A table Python wrote as text for a request (a paste's color table), as the descriptor the Web writes for a text
+ * table (`addText`): its kind is its resource ID, as the Web names a table it writes.
+ * @param {string} resourceId
+ * @param {string} name
+ * @param {string} text
+ * @returns {RawSessionResourceDescriptor}
+ */
+export const writtenTextResource = (resourceId, name, text) => {
+  const builder = createResourceBuilder();
+  builder.addText(resourceId, resourceId, name, text);
+  return builder.resources[resourceId];
+};
+
+/**
  * @param {string} resourceId
  * @returns {CanonicalFileRef}
  */
