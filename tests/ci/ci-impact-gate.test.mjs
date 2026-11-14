@@ -617,7 +617,22 @@ test('PR gate counts a failed Gallery publication push run on dev as red', async
 
   // Both red: the message names each workflow's run.
   const both = await runPrGate({ runs: [devRun(902, 'failure', 20)], galleryRuns: [galleryRun(803, 'timed_out', 30)] });
+  assert.equal(both.exitCode, 1);
   assert.match(both.stderr, /\[DEV_RED\]: dev is red: Tests run \S*runs\/902 [^;]*ended failure in attempt 1; Gallery publication run \S*runs\/803 [^;]*ended timed_out in attempt 1\./);
+  assert.match(both.summary, /Dev state: `red`\n- `Tests`: `red` \(`failure`\) — \[run 902\][^\n]*\n- `Gallery publication`: `red` \(`timed_out`\) — \[run 803\]/);
+  const bothFix = await runPrGate({ runs: [devRun(902, 'failure', 20)], galleryRuns: [galleryRun(803, 'timed_out', 30)], labels: ['dev-red-fix'] });
+  assert.equal(bothFix.exitCode, 0, bothFix.stderr);
+
+  // Each workflow counts by its own newest run: a newer green run of the other workflow does not
+  // make dev green.
+  const testsRed = await runPrGate({ runs: [devRun(902, 'failure', 20)], galleryRuns: [galleryRun(803, 'success', 30)] });
+  assert.equal(testsRed.exitCode, 1);
+  assert.match(testsRed.stderr, /\[DEV_RED\]: dev is red: Tests run \S*runs\/902 [^;]*ended failure in attempt 1\./);
+  assert.match(testsRed.summary, /`Gallery publication`: `green` \(`success`\) — \[run 803\]/);
+  const galleryRed = await runPrGate({ runs: [devRun(903, 'success', 30)], galleryRuns: [galleryRun(802, 'failure', 20)] });
+  assert.equal(galleryRed.exitCode, 1);
+  assert.match(galleryRed.stderr, /\[DEV_RED\]: dev is red: Gallery publication run \S*runs\/802 [^;]*ended failure in attempt 1\./);
+  assert.match(galleryRed.summary, /`Tests`: `green` \(`success`\) — \[run 903\]/);
 });
 
 test('PR gate reads Gallery publication by the same counting rule as Tests', async () => {
@@ -655,8 +670,9 @@ test('dev state names each workflow by the name its file declares', () => {
   for (const { name, workflowPath } of DEV_STATE_WORKFLOWS) {
     const source = readFileSync(new URL(`../../${workflowPath}`, import.meta.url), 'utf8');
     assert.equal(source.match(/^name: (.+)$/m)?.[1], name, workflowPath);
-    // Both run on every push to dev, so each has a newest dev push run to read.
-    assert.match(source, /^on:\n {2}push:\n {4}branches: \["dev"(, "[^"]+")*\]/m, workflowPath);
+    // Both run on every push to dev, so each has a newest dev push run to read: `branches` is the
+    // only key under `push:` (no `paths` or other filter).
+    assert.match(source, /^on:\n {2}push:\n {4}branches: \["dev"(, "[^"]+")*\]\n(?! {4})/m, workflowPath);
   }
 });
 
