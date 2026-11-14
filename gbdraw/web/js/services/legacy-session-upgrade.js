@@ -115,20 +115,38 @@ export const upgradeLegacySession = async (document, { storedRequestSchema = nul
  */
 
 const SAVED_PROTEIN_RESULTS = /** @type {const} */ ({ stage: 'helper', operation: 'storeSavedProteinResults' });
+/** Codes of a failed exchange with the Worker, which stop the Load. */
+const PROTOCOL_FAILURES = new Set(['RESULT_INVALID', 'HELPER_PROTOCOL']);
+
+/**
+ * Python refused the file (its reader is stricter than the Web's): an error
+ * of this operation that is neither a protocol failure nor a Cancel.
+ * @param {unknown} error
+ */
+const refusedByPython = (error) => isRecord(error) && error.operation === SAVED_PROTEIN_RESULTS.operation
+  && !PROTOCOL_FAILURES.has(String(error.code)) && error.canceled !== true;
 
 /**
  * The requests of a Session 46-50 that take the results of its saved LOSAT
- * rows, from Python, once (OV-3545); Load replaces them in their drawings. A
- * Worker failure throws its own diagnostic; a reply of another shape, or one
- * that adds a resource the file holds, throws RESULT_INVALID of this
- * operation; without the port, HELPER_PROTOCOL.
+ * rows, from Python, once (OV-3545); Load replaces them in their drawings.
+ * null when Python refuses the file: Load then reads it as before, with its
+ * search. Another Worker failure throws its own diagnostic; a reply of
+ * another shape, or one that adds a resource the file holds, throws
+ * RESULT_INVALID of this operation; without the port, HELPER_PROTOCOL.
  * @param {SessionEnvelope} document The file's document as the file holds it.
  * @param {{ upgrade?: LegacySessionUpgrader | null }} [options]
- * @returns {Promise<SavedProteinResultRequests>}
+ * @returns {Promise<SavedProteinResultRequests | null>}
  */
 export const readSavedProteinResults = async (document, { upgrade = legacySessionUpgrader } = {}) => {
   if (!upgrade) throw diagnosticError('HELPER_PROTOCOL', {}, SAVED_PROTEIN_RESULTS);
-  const response = await upgrade(SAVED_PROTEIN_RESULTS.operation, { document });
+  /** @type {unknown} */
+  let response;
+  try {
+    response = await upgrade(SAVED_PROTEIN_RESULTS.operation, { document });
+  } catch (error) {
+    if (refusedByPython(error)) return null;
+    throw error;
+  }
   const reply = isRecord(response) ? response.result : null;
   const held = isRecord(document.resources) ? document.resources : {};
   if (!isRecord(reply) || !isRecord(reply.requests) || !isRecord(reply.resources)

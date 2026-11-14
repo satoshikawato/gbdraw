@@ -35,8 +35,9 @@ const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixture
 // The composition root's port of Load's Python steps, with the operation of each call.
 const workerCalls = [];
 setLegacySessionUpgrader(pythonLegacySessionUpgrader([], workerCalls));
-const load = async (session) => importSession(await sessionLoadEvent(session), {
-  confirmLoadRepairs: async () => true,
+// `dialogs` collects each Load repair dialog the Load shows.
+const load = async (session, dialogs = []) => importSession(await sessionLoadEvent(session), {
+  confirmLoadRepairs: async (dialog) => { dialogs.push(dialog); return true; },
   transformLegacyResultSvg: Object.assign(() => false, { appliesToContent: () => false })
 });
 const comparisonKinds = (request) => request.comparisons.map(({ kind, mode }) => [kind, mode ?? null]);
@@ -65,6 +66,59 @@ test('a Session 46-50 without a LOSATP search, or whose search has no saved rows
     const loaded = await load(fixture(name));
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
     assert.deepEqual(workerCalls, [], name);
+  }
+  // Sessions with saved LOSAT rows but no LOSATP search: committed protein results (mode none), a collinear
+  // result, a nucleotide BLAST table, and a Circular drawing.
+  for (const name of [
+    'BGC0000708-BGC0000713.v47', 'majanivirus_collinear-rc.v47', 'two-mode-linear-shown.v48', 'web-losat-ring-copies.v50'
+  ]) {
+    const session = fixture(name);
+    assert.ok(session.losatCache.entries.length > 0, name);
+    workerCalls.length = 0;
+    await load(session);
+    assert.deepEqual(workerCalls, [], name);
+  }
+});
+
+test('a saved-rows step Python refuses keeps the search and lists a Load row; a protocol failure stops the Load', async () => {
+  // load_session_document is stricter than the Web reader: without the protein identity manifest Python refuses
+  // the file, which the Web loads as before, with its search.
+  const session = fixture('BGC0000711-BGC0000713-losatp-cli.v47');
+  delete session.proteinIdentityManifest;
+  workerCalls.length = 0;
+  const dialogs = [];
+  const loaded = await load(session, dialogs);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(workerCalls, ['storeSavedProteinResults']);
+  assert.deepEqual(comparisonKinds(sessionConfig.getCommittedCanonicalSession().renderRequest), [['generatedProteinComparison', 'orthogroup']]);
+  assert.deepEqual(dialogs.flatMap(({ items }) => items), [
+    'Saved diagram: the LOSAT results saved for its protein comparison (losatCache) could not be read. Click Generate to run the comparison again before you edit the diagram.'
+  ]);
+  setLegacySessionUpgrader(async () => { throw { code: 'HELPER_PROTOCOL', stage: 'helper', operation: 'storeSavedProteinResults' }; });
+  try {
+    const failed = await load(fixture('BGC0000711-BGC0000713-losatp-cli.v47'));
+    assert.equal(failed.status, 'error');
+    assert.equal(failed.error.code, 'HELPER_PROTOCOL');
+  } finally {
+    setLegacySessionUpgrader(pythonLegacySessionUpgrader([], workerCalls));
+  }
+});
+
+test('the Load dialog lists what Load could not restore of the stored request the step replaced', async () => {
+  // Python's reply for the file as written; the file Load reads holds an alignment the Web reader cannot read.
+  const session = fixture('BGC0000711-BGC0000713-losatp-cli.v47');
+  const reply = await pythonLegacySessionUpgrader()('storeSavedProteinResults', { document: session });
+  session.renderRequest.layout.similarityAlignment = 'unreadable';
+  setLegacySessionUpgrader(async () => reply);
+  try {
+    const dialogs = [];
+    const loaded = await load(session, dialogs);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(comparisonKinds(sessionConfig.getCommittedCanonicalSession().renderRequest)[0], ['precomputedProteinComparison', null]);
+    const items = dialogs.flatMap((dialog) => dialog.items);
+    assert.deepEqual(items, ['Settings: 1 entry of renderRequest.layout could not be read and was dropped.']);
+  } finally {
+    setLegacySessionUpgrader(pythonLegacySessionUpgrader([], workerCalls));
   }
 });
 

@@ -317,7 +317,7 @@ import {
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 import {
-  drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey, sessionSourceFactsOf, sliceDiffersFromDefault,
+  drawingViewOf, requestMode, sessionDocumentOfViews, sessionLegendEditsByRowKey, sessionSourceFactsOf, sliceDiffersFromDefault,
   upgradeRowKeyedModeScopedSession
 } from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
@@ -7531,8 +7531,9 @@ const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) =
  * its mode), and the tables join the file's resources. The rows Load's
  * request reader lists for a replaced request are read from the request the
  * file stored, at its paths, as a Session 27-44's readers read the file before
- * Python's move. Any other document is returned as given, with no row; a
- * failure throws, and the Load changes nothing.
+ * Python's move. A file Python refuses is returned as given, with its search
+ * and one row; any other document as given, with no row. A protocol failure
+ * throws, and the Load changes nothing.
  * @param {SessionEnvelope} document The file's document as the file holds it.
  * @returns {Promise<{ document: SessionEnvelope, repairs: readonly LoadRepair[] }>}
  */
@@ -7552,14 +7553,20 @@ const withSavedProteinResults = async (document) => {
   const { losatCache } = /** @type {{ losatCache?: unknown }} */ (document);
   const rows = /** @type {UnvalidatedFields<'entries'>} */ (losatCache)?.entries;
   if (searches.length === 0 || !Array.isArray(rows) || rows.length === 0) return unchanged;
-  const { requests, resources } = await readSavedProteinResults(document);
+  const saved = await readSavedProteinResults(document);
+  // Python refused the file: it loads as before, with its search and a row.
+  if (saved === null) {
+    return { document, repairs: [loadRepair({ code: 'saved-comparison-results-unread', path: 'losatCache', effect: 'kept' })] };
+  }
+  const { requests, resources } = saved;
   // The projected set comes first (`storedResultSets`), so replacing it keeps the other mode's set.
   let next = document;
   /** @type {string[]} */
   const replacedAt = [];
   for (const { at, set } of searches) {
-    const drawingId = String(/** @type {UnvalidatedFields<'mode'>} */ (set.renderRequest)?.mode);
-    if (!Object.hasOwn(requests, drawingId)) continue;
+    // A Session 46-50 names a drawing by its mode.
+    const drawingId = requestMode(/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (set)));
+    if (drawingId === null || !Object.hasOwn(requests, drawingId)) continue;
     next = withStoredResultSet(next, at, { ...set, renderRequest: requests[drawingId] });
     replacedAt.push(`${at}renderRequest`);
   }
