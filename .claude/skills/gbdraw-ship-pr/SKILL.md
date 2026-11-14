@@ -50,6 +50,12 @@ this skill, they win.
 - In a bundled PR, list the bug IDs and the former PRs it contains.
 - Run `node tools/check-pr-language.mjs --title "<title>" --body-file <file>`
   once, then `gh pr create --base dev`.
+- A Product Contract change is named after its pull request
+  ([Recording a revision](../../../docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md#recording-a-revision)).
+  Create the PR as a draft, write `Revision #<number>` into its entries and
+  `PD-OI-<number>` into a record it adds, run
+  `node --test tests/ci/contract-revisions.test.mjs`, and push at once, so the
+  push replaces the PR's first run within minutes; mark the PR ready afterwards.
 - Where the machine defines a CI admission command, run every command that
   starts a pull request `Tests` run (a push to a branch with an open PR,
   `gh pr create`, `gh pr update-branch`, `gh run rerun`) through it, as one

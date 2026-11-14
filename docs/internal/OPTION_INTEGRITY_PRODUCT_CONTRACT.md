@@ -5,7 +5,10 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `151`
+- Revisions: Revisions 1 to 151 are recorded in this section and keep their
+  numbers. Each later revision is named after the pull request that makes it,
+  as `Revision #<number>`, and is recorded in the section it changes
+  ([Recording a revision](#recording-a-revision)).
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -5809,6 +5812,38 @@ revision `1`, remains governed by its existing selected option
 where applicable and does not replace or duplicate it. No active `BD-###`
 decision governs the concerns recorded here at this revision.
 
+### Revision #1990
+
+Revisions are named after their pull requests and recorded in the sections
+they change, and a new record is numbered after the pull request that adds it,
+as [Recording a revision](#recording-a-revision) says. The `Revisions` field
+above replaces the `Contract revision` field, which held the number of the
+latest revision and changed with every revision; the new field does not
+change. Revisions 1 to 151 keep their numbers and entries, records `PD-OI-001`
+to `PD-OI-128` keep their numbers, and the approved decision ID lists above
+end at `PD-OI-128`.
+
+- On `2026-11-11` the Product Decision Owner `satoshikawato` answered
+  「すべて推奨通り」 to the final report of the campaign `ci-review-20261110`
+  (`DECISIONS.md` `OD-05`). The report's question Q1 recommended
+  「A（推奨）：通し番号をやめる」, described as
+  「改訂の名前を PR 番号にして（例「Revision #1867」）、記録は変えたレコードの節に書きます。これまでの 1〜142 はそのまま残します。」
+  and 「別々のレコードを変える PR どうしは衝突しなくなります。」 The numbers 1
+  to 142 were the revisions of that day; Revisions 143 to 151 merged before
+  this change and keep their numbers too.
+- On `2026-11-13` the Product Decision Owner `satoshikawato` answered
+  「推奨通り」 to the question of the campaign
+  `contract-revision-by-pr-20261111` on the numbers of new records
+  (`DECISIONS.md` `D-08`; session board message
+  `96009437-2b86-42c3-bf54-67e919dba24d`). Its recommended option was
+  「A（推奨）：新しいレコードの番号を PR 番号にする（例 `PD-OI-1970`）。001〜128 はそのまま。」
+- No record, receipt, or outcome is amended or retired.
+- This change is a static Product Contract co-change: the test that keeps
+  Authority metadata free of new numbered entries and approved decision IDs
+  and new records free of sequential numbers, the norms index, the Product
+  Decision Pack template, and the pull request skill change with it, and the
+  Review is `REQUIRED`.
+
 ## Interpretation and lifecycle
 
 Active records use only these statuses:
@@ -5836,6 +5871,53 @@ together satisfies that requirement. That route changes only this procedure.
 It does not change any recorded outcome, preservation condition, or
 compatibility commitment. Git history retains the former text; the active
 contract does not accumulate superseded records.
+
+### Recording a revision
+
+A revision is the change that one pull request makes to this contract.
+Revisions 1 to 151 are recorded in [Authority metadata](#authority-metadata)
+and keep their numbers. Text that names one of them, such as "the Revision
+144 entry above", stays as written.
+
+Each later revision is named `Revision #<number>` after its pull request. Its
+entry is a heading with that name and the text below it, at the end of the
+section the revision changes:
+
+- A change to a record: a `#### Revision #<number>` heading at the end of the
+  record, after any receipt the change adds.
+- A new record: the record is numbered after its pull request, as
+  `PD-OI-<number>`, goes at the end of the records, and ends with the same
+  heading. It is not added to the approved decision ID lists in Authority
+  metadata; its entry records its approval. Records `PD-OI-001` to
+  `PD-OI-128` keep their numbers.
+- A change to several records: an entry at the end of each, saying what
+  changes in that record. One of them quotes the approval, and the others
+  point to it.
+- A change outside the records: the entry goes at the end of the record the
+  change concerns, such as the record that an acceptance row names. A change
+  that concerns no single record ends the `##` section it changes, or the
+  first of those sections, with a `### Revision #<number>` heading.
+
+An entry says what changes; quotes the Product Decision Owner's question and
+reply as written, with their date and source; gives the SHA-256 of each new
+receipt; names what is superseded or retired and says that no other record is
+amended or retired; and names the route, such as a static Product Contract
+co-change. A record's `Decision source` field points to its entry ("its
+Revision #<number> entry below").
+
+The numbers exist once the pull request is open, so open the pull request
+first, as a draft while it is not ready, and then write them. A revision number
+goes only into entries and the fields that point to them, never into a
+receipt: an approved receipt is serialized byte for byte as the Product
+Decision Owner approved it. A receipt approved before the pull request that
+adds a record is open names that record by its concern key, such as
+`web.feature-sequence.on-demand`.
+
+No line of this contract holds the latest revision, and no two pull requests
+can give a new record the same number, so pull requests that change different
+sections change different lines. Two pull requests that each add a record
+meet only at the end of the records; the one that merges second keeps both.
+The Git history of this file lists every revision in order.
 
 ## Cross-surface clauses
 
