@@ -839,7 +839,7 @@ def test_upload_action_chooses_the_file_through_the_named_button() -> None:
             return FakeLocator(selector)
 
         def evaluate(self, script: str) -> None:
-            events.append("wait for transitions")
+            events.append("wait for scroll anchor" if script == capture_tool.RECORD_SCROLL_ANCHOR_SCRIPT else "wait for transitions")
 
     selector = "role=button[name='Choose Priority File (TSV)']"
     capture_tool.apply_capture_action(
@@ -852,6 +852,7 @@ def test_upload_action_chooses_the_file_through_the_named_button() -> None:
         ("click", selector),
         "file_chooser_opened",
         ("set_files", str(expected)),
+        "wait for scroll anchor",
         "wait for transitions",
     ]
 
@@ -1084,7 +1085,10 @@ def test_each_capture_action_lets_its_transitions_end_before_the_next() -> None:
     capture_tool.apply_capture_action(FakePage(), {"type": "evaluate", "script": "app.zoom = 1.15"})
 
     assert events[0] == "app.zoom = 1.15"
-    assert len(events) == 2 and "CSSTransition" in events[1] and ".finished" in events[1]
+    # A Record choice opens the single-record panel, and the app then puts the Settings pane back
+    # where it was: the next action scrolls only after that (OV-3547).
+    assert events[1] == capture_tool.RECORD_SCROLL_ANCHOR_SCRIPT
+    assert len(events) == 3 and "CSSTransition" in events[2] and ".finished" in events[2]
 
 
 class _PreparePage:

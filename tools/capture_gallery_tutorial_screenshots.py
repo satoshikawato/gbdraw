@@ -101,7 +101,7 @@ CROP_EDGE_MARGIN = 4.0
 CROP_EDGE_TOLERANCE = 0.1
 CROP_EDGE_ROUNDS = 8
 # The frame a capture draws around its highlightSelector never covers text or a control a reader
-# sees, the highlighted element's own text included (OV-3492): an outline HIGHLIGHT_FRAME_WIDTH px wide,
+# sees, the highlighted element's own text and the value its field shows included (OV-3492): an outline HIGHLIGHT_FRAME_WIDTH px wide,
 # drawn HIGHLIGHT_FRAME_OFFSET px outside the element, with a glow HIGHLIGHT_FRAME_GLOW px wide
 # (HTML elements only), moves in (down to just inside the element's edge) where text outside sits
 # closer, and stays HIGHLIGHT_FRAME_CLEARANCE px clear of it; text inside the element does not move
@@ -802,11 +802,20 @@ def inspect_shown_records(page) -> None:
         page.wait_for_function(SHOWN_RECORDS_READ_SCRIPT, timeout=DEFAULT_GENERATE_TIMEOUT_MS)
     except Exception as error:
         raise RuntimeError(f"Could not read the records of the capture session: {error}") from error
-    # A read that opens the single-record panel puts the Settings pane back where it was scrolled
-    # two frames later (circular-record-controls.js, after nextTick and afterPaint). Let those
-    # frames pass, so the restore never undoes a scroll the capture's actions make (HmmtDNA basic
-    # 3-1: the Layout card ended up below the page).
-    page.evaluate("() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    wait_for_record_scroll_anchor(page)
+
+
+# A record read or a Record choice that opens the Circular single-record panel puts the Settings
+# pane back where it was scrolled once the panel has painted. The capture awaits the app's own
+# restore, so it never undoes a scroll the capture makes next (OV-3547, HmmtDNA basic 3-1: the
+# Layout card ended up below the page). A page without the app has none.
+RECORD_SCROLL_ANCHOR_SCRIPT = (
+    "async () => { const app = window.__GBDRAW_APP__; if (app) await app.waitForCircularRecordScrollAnchor(); }"
+)
+
+
+def wait_for_record_scroll_anchor(page) -> None:
+    page.evaluate(RECORD_SCROLL_ANCHOR_SCRIPT)
 
 
 def assert_capture_records_read(page) -> None:
@@ -873,8 +882,10 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         chooser.value.set_files(str(path))
     else:
         raise RuntimeError(f"Unsupported capture action: {action_type}")
-    # The next action measures what this one moved: a zoom or pan moves the preview in a
-    # 0.2 s transition, and a box read before it ends is the old one (OV-2280).
+    # The next action measures what this one moved: the Settings pane the app puts back after a
+    # Record choice, a zoom or pan that moves the preview in a 0.2 s transition, where a box read
+    # before it ends is the old one (OV-2280).
+    wait_for_record_scroll_anchor(page)
     wait_for_css_transitions(page)
 
 
@@ -1435,12 +1446,29 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
     }
     return { owner: control, rect: own };
   };
+  // The controls that show their value as text: a field's value, a list's chosen option.
+  const VALUE_TEXT = 'input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="image"]), '
+    + 'select, textarea';
   for (const control of document.querySelectorAll(CONTROLS)) {
     // A drawn group that opens settings (role="button") is figure: its labels count as text.
-    if (control instanceof SVGElement || !shown(control) || control === exclude) continue;
+    if (control instanceof SVGElement || !shown(control)) continue;
     const name = normalize(control.getAttribute('aria-label') || control.textContent || control.value);
+    const label = `${control.tagName.toLowerCase()}: ${name}`;
     const { owner, rect } = shapeOf(control);
-    add(owner, rect, `${control.tagName.toLowerCase()}: ${name}`);
+    if (control !== exclude && owner !== exclude) {
+      add(owner, rect, label);
+      continue;
+    }
+    // The excluded element's own shape (the control, or the pill that draws it) is what the frame
+    // goes around; the value text it shows is text like any other: its content box (the border
+    // box less border and padding) stays inside the frame.
+    if (!control.matches(VALUE_TEXT)) continue;
+    const style = getComputedStyle(control);
+    const [padTop, padRight, padBottom, padLeft] = SIDES.map((side) => (parseFloat(style[`border${side}Width`]) || 0)
+      + (parseFloat(style[`padding${side}`]) || 0));
+    const own = control.getBoundingClientRect();
+    add(control, new DOMRect(own.left + padLeft, own.top + padTop, own.width - padLeft - padRight,
+      own.height - padTop - padBottom), label);
   }
   // The part of each box a reader sees, as rectangles that keep its shape: a label half under
   // a popup is an L, and one bounding box around it would cross edges the label does not reach.
@@ -1527,7 +1555,8 @@ VISIBLE_TEXT_BOXES_SCRIPT = """
 def visible_text_boxes(page, region: dict[str, float], exclude: ElementHandle | None = None) -> list[TextBox]:
     """The lines of text and the controls a reader sees in ``region`` (VISIBLE_TEXT_BOXES_SCRIPT),
     less the shape of the control ``exclude`` (an element handle: a highlighted field, whose own box
-    and the pill that draws it are what its frame goes around) when one is given. Text inside it counts."""
+    and the pill that draws it are what its frame goes around) when one is given. Text inside it counts,
+    and so does the value a field, list or text area shows: its content box stands for it."""
 
     return page.evaluate(VISIBLE_TEXT_BOXES_SCRIPT, {"region": region, "exclude": exclude})
 
@@ -1748,7 +1777,8 @@ def highlight_frame_cuts(
 def highlight_frame_style(element: dict[str, float], boxes: list[TextBox], *, glow: bool = True) -> FrameStyle | None:
     """The frame nearest its full size (an outline HIGHLIGHT_FRAME_OFFSET px out, a glow
     HIGHLIGHT_FRAME_GLOW px wide) that stays HIGHLIGHT_FRAME_CLEARANCE px clear of every box of
-    text, the element's own included (``boxes`` holds no box of the element's own control shape), or
+    text, the element's own included (``boxes`` holds no box of the element's own control shape, only the
+    content box of the value it shows), or
     as clear as the element's own edge allows, or None when no outline position within its reach
     meets none (OV-3492).
 
@@ -1937,7 +1967,7 @@ def draw_highlight_frames(page, selector: str) -> None:
 
 def assert_highlight_frames_cover_no_text(page, selector: str) -> None:
     """Refuse a capture whose drawn highlight frame paints a pixel of text or a control a reader
-    sees, the element's own text included (OV-3492): the pixels the frame paints are those that
+    sees, the element's own text and the value its field shows included (OV-3492): the pixels the frame paints are those that
     differ between the frame drawn clear and drawn in its colour. Run it on the page as it is captured, after the CSS transitions."""
 
     for handle in page.query_selector_all(selector):

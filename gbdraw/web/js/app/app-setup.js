@@ -3175,7 +3175,7 @@ export const createAppSetup = () => {
 
   const {
     circularRecordSelectionEnabled, setCircularRecordPresentationSelector, showCircularCanvasSetting,
-    showCircularTicksSlot
+    showCircularTicksSlot, waitForCircularRecordScrollAnchor
   } = createCircularRecordDisplay({
     state, semanticMutationAvailable, circularRecordDiscoveryState, circularSingleRecordPresentationEnabled,
     sessionOperationAvailability, shownDrawingOfMode, rebindAnnotationRecords,
@@ -3959,6 +3959,7 @@ export const createAppSetup = () => {
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
     showCircularTicksSlot,
+    waitForCircularRecordScrollAnchor,
     DEFAULT_LINEAR_OUTPUT_PREFIX,
     setCircularRecordPresentationSelector,
     chooseCircularRecordLayout, circularRecordLayout, ONE_CIRCLE_LIMITS,

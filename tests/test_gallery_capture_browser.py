@@ -619,15 +619,17 @@ def test_a_highlight_frame_never_moves_in_over_the_elements_own_caption() -> Non
 
 
 def test_the_frame_guard_sees_a_frame_on_an_element_that_eases_its_style() -> None:
-    """Review M1: a field that eases every property (`transition: all`, here with a delay) still
-    shows the guard the frame it paints: a frame forced over the label above it fails the guard."""
+    """Review M1: a field that eases every property (`transition: all`, here after a long delay)
+    still shows the guard the frame it paints, because the guard draws it clear and in colour with
+    transitions off: a frame forced over the label above it fails the guard. A guard that let the
+    field ease would take both shots inside the delay, see no difference and pass it."""
 
     playwright_api = pytest.importorskip("playwright.sync_api")
     html = (
         "<html><body style='margin:0;font:16px sans-serif'>"
         "<label style='position:absolute;left:20px;top:20px;line-height:20px'>Head Length Ratio</label>"
         "<input aria-label='ratio' value='0.64' style='position:absolute;left:20px;top:42px;width:120px;"
-        "height:24px;transition:all 300ms 300ms'>"
+        "height:24px'>"
         "</body></html>"
     )
     with playwright_api.sync_playwright() as playwright:
@@ -640,6 +642,8 @@ def test_the_frame_guard_sees_a_frame_on_an_element_that_eases_its_style() -> No
                 capture_tool.highlight_frame_css(3.0, 4.0),
             )
             capture_tool.wait_for_css_transitions(page)
+            # The field eases its style from now on, after a delay far longer than two screenshots.
+            page.evaluate("() => { document.querySelector('input').style.transition = 'all 10s 10s'; }")
             with pytest.raises(RuntimeError, match="covers text: 'Head Length Ratio'"):
                 capture_tool.assert_highlight_frames_cover_no_text(page, "input")
             # The guard leaves the frame drawn and starts no transition.
@@ -654,9 +658,12 @@ def test_the_frame_guard_sees_a_frame_on_an_element_that_eases_its_style() -> No
 
 
 def test_a_capture_scroll_after_the_record_read_is_not_undone() -> None:
-    """HmmtDNA basic 3-1: a record read that opens the single-record panel puts the Settings pane
-    back where it was two frames after the records are read (the app's scroll restore). The read
-    waits for that, so a scroll the capture's actions make right after it stays."""
+    """HmmtDNA basic 3-1 (OV-3547): a record read that opens the single-record panel puts the
+    Settings pane back where it was once the panel has painted, and the app keeps that restore as
+    a promise (`waitForCircularRecordScrollAnchor`). The read awaits it, so a scroll the capture
+    makes right after it stays. Here the restore waits for the test to release it (or for 2 s, so
+    a tool that awaits it goes on): a tool that does not await it scrolls first, and the release
+    then undoes the scroll on every run."""
 
     playwright_api = pytest.importorskip("playwright.sync_api")
     html = (
@@ -665,16 +672,19 @@ def test_a_capture_scroll_after_the_record_read_is_not_undone() -> None:
         "<div style='height:1000px'></div><div id='preset'>Track Preset</div><div style='height:1000px'></div>"
         "</div><script>"
         "const discovery = { hasInput: true, status: 'pending' };"
+        "let anchor = Promise.resolve();"
+        "const released = new Promise((resolve) => { window.__releaseRestore = resolve; });"
         "window.__GBDRAW_APP__ = { mode: 'circular', circularRecordDiscoveryState: discovery,"
         "  async inspectCircularSourceRecords() {"
         "    const pane = document.querySelector('.settings-scroll'); const saved = pane.scrollTop;"
         "    setTimeout(() => { discovery.status = 'ready';"
-        "      queueMicrotask(() => requestAnimationFrame(() => requestAnimationFrame(() => { pane.scrollTop = saved; })));"
+        "      anchor = Promise.race([released, new Promise((resolve) => setTimeout(resolve, 2000))])"
+        "        .then(() => { pane.scrollTop = saved; });"
         "    }, 30);"
-        "  } };"
+        "  },"
+        "  waitForCircularRecordScrollAnchor: () => anchor };"
         "</script></body></html>"
     )
-    frames = "() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))))"
     with playwright_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
@@ -682,12 +692,81 @@ def test_a_capture_scroll_after_the_record_read_is_not_undone() -> None:
             page.set_content(html)
             capture_tool.inspect_shown_records(page)
             page.evaluate("() => document.getElementById('preset').scrollIntoView({ block: 'center' })")
-            page.evaluate(frames)
+            page.evaluate("async () => { window.__releaseRestore(); await window.__GBDRAW_APP__.waitForCircularRecordScrollAnchor(); }")
             scroll_top = page.evaluate("() => document.querySelector('.settings-scroll').scrollTop")
         finally:
             browser.close()
 
     assert scroll_top > 800
+
+
+def test_a_highlighted_pill_keeps_its_frame_inside_off_a_label_above() -> None:
+    """Review D4: a highlighted pill that draws a single field is the shape its frame goes around,
+    so the field inside it (whose shape the pill draws) is not text that keeps the frame out: with
+    a label 1 px above the pill, the frame moves in, inside the pill and clear of the field's value."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:14px sans-serif'>"
+        "<span id='above' style='position:absolute;left:20px;top:0;line-height:20px'>Records</span>"
+        "<div class='pill' style='position:absolute;left:20px;top:40px;padding:4px;border:1px solid #cbd5e1;"
+        "background:#f8fafc'><input aria-label='width' value='12' style='display:block;width:120px;height:24px;"
+        "margin:0;padding:1px 4px;border:1px solid #94a3b8;font-size:14px'></div>"
+        "</body></html>"
+    )
+    place = """() => { const range = document.createRange();
+      range.selectNodeContents(document.getElementById('above').firstChild);
+      document.querySelector('.pill').style.top = `${range.getBoundingClientRect().bottom + 1}px`; }"""
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 200})
+            page.set_content(html)
+            page.evaluate(place)
+            capture_tool.draw_highlight_frames(page, "div.pill")
+            capture_tool.wait_for_css_transitions(page)
+            capture_tool.assert_highlight_frames_cover_no_text(page, "div.pill")
+            offset = page.evaluate("() => parseFloat(getComputedStyle(document.querySelector('.pill')).outlineOffset)")
+        finally:
+            browser.close()
+
+    assert offset < 0
+
+
+def test_a_highlight_frame_keeps_off_the_value_its_field_shows() -> None:
+    """Review D5: the value a highlighted field shows is its own text: its content box stays inside
+    the frame and the guard checks it. With a label 1 px above a field whose value sits 2 px inside
+    its edge, no outline position is clear, so the capture fails naming the field; a frame forced
+    inside the field fails the guard."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:14px sans-serif'>"
+        "<span id='above' style='position:absolute;left:20px;top:0;line-height:20px'>Records</span>"
+        "<input aria-label='ratio' value='0.64' style='position:absolute;left:20px;top:40px;width:120px;"
+        "height:20px;box-sizing:border-box;margin:0;padding:1px 4px;border:1px solid #94a3b8;"
+        "font-size:14px;line-height:16px'>"
+        "</body></html>"
+    )
+    place = """() => { const range = document.createRange();
+      range.selectNodeContents(document.getElementById('above').firstChild);
+      document.querySelector('input').style.top = `${range.getBoundingClientRect().bottom + 1}px`; }"""
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 200})
+            page.set_content(html)
+            page.evaluate(place)
+            with pytest.raises(RuntimeError, match="'input: ratio'"):
+                capture_tool.draw_highlight_frames(page, "input")
+            page.evaluate(
+                "(css) => { document.querySelector('input').style.cssText += `; ${css}`; }",
+                capture_tool.highlight_frame_css(-3.0, 0.0),
+            )
+            with pytest.raises(RuntimeError, match="covers text: 'input: ratio'"):
+                capture_tool.assert_highlight_frames_cover_no_text(page, "input")
+        finally:
+            browser.close()
 
 
 def test_text_under_an_opaque_drawer_is_not_seen_past_its_edge() -> None:
