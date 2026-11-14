@@ -1030,9 +1030,9 @@ Generate commits its typed orthogroup or Collinear result with the request, so
 Align, record rotation, and Save and Load use the same links without running
 LOSATP again. A Web Session 31 to 44 could store its LOSATP comparison as the
 search itself, with the raw rows it found in `losatCache`. Web Load gives such
-a request the results of those rows, as a Generate commits them, so Reset
-record positions, Align, and label edits before the first Generate redraw the
-figure without a LOSAT run. When the saved rows do not answer every search,
+a request the results of those rows, as a Generate commits them, so a redraw
+before the first Generate (a label edit, Reset record positions, Align) needs
+no LOSAT run. When the saved rows do not answer every search,
 the request keeps the search, and Generate runs it in the browser.
 
 Released request schemas 1, 2, 5, 6, and 7 remain readable. Their

@@ -1891,6 +1891,11 @@ def drawings_document_from_legacy(
     Linear comparison drafts, the sources of a Session 31-39 read again, and
     the request adaptation with its comparison and protein frames), then the
     move of :func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`.
+    One step is Web Load's alone: a Linear request whose LOSATP comparison is
+    a search takes the results of the LOSAT rows the Session saved
+    (:func:`_with_saved_protein_results`, OV-3540), so the browser, which has
+    no LOSAT, redraws it before the first Generate; ``upgrade_session_document``
+    keeps the search.
     Unlike the CLI re-save, no stored Result is
     dropped: the Results of a Session 40-44 stay in the document with their
     catalog, and those a Session 51 cannot hold (27-30 have no request,
