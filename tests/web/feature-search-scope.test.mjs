@@ -10,7 +10,7 @@ import {
 import { buildMatchPopupPayload, matchSpanFasta, matchSpanUnavailableReason } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 import { featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
-import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
 import { numberText } from '../../gbdraw/web/js/utils/i18n.js';
 import {
   FEATURE_CATALOG_SCHEMA,

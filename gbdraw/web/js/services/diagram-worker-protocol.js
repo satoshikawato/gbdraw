@@ -414,8 +414,9 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * The `readEmbedSequences` reply (`EmbedPartText`): the part's rows in the order sent, with their sequences, the
  * whole-record sources the part owns, each with its place among the item's `sourceCount` sources, and, in the part
  * that holds the comparison sources, what the item's match spans read (`matchSpanReads`, Python's
- * `embedded_match_span_reads`), all as the text the file embeds (`embed_json_text`), so neither the Worker nor the
- * page parses them.
+ * `embedded_match_span_reads`, read once per item) and the sources only a span reads, after the others (so its
+ * `sourceCount` may be larger than the other parts'), all as the text the file embeds (`embed_json_text`), so neither
+ * the Worker nor the page parses them.
  * @typedef {object} EmbedPartText
  * @property {string} biologicalFeatures The rows' text joined by commas ('' for none).
  * @property {number} rowCount

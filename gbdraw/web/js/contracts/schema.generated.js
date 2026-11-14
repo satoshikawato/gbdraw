@@ -85,20 +85,6 @@ export const STORED_SEQUENCE_KEYS = Object.freeze(['aminoAcidSequence', 'amino_a
 /** @type {readonly ['NEVER_SUPPLIED', 'SOURCE_UNAVAILABLE', 'SOURCE_KEY_CONFLICT', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS', 'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'OUT_OF_RANGE']} */
 export const MATCH_SPAN_REASONS = Object.freeze(['NEVER_SUPPLIED', 'SOURCE_UNAVAILABLE', 'SOURCE_KEY_CONFLICT', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS', 'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'OUT_OF_RANGE']);
 
-// gbdraw/web_support/feature_catalog.py: MATCH_SPAN_REASON_TEXTS
-/** @type {Readonly<Record<'NEVER_SUPPLIED' | 'SOURCE_UNAVAILABLE' | 'SOURCE_KEY_CONFLICT' | 'RECORD_UNKNOWN' | 'RECORD_AMBIGUOUS' | 'RECORD_ALIAS_AMBIGUOUS' | 'COORDINATE_NOT_WHOLE' | 'COORDINATE_BELOW_ONE' | 'OUT_OF_RANGE', string>>} */
-export const MATCH_SPAN_REASON_TEXTS = Object.freeze({
-  NEVER_SUPPLIED: 'Comparison sequence was not supplied for this BLAST source.',
-  SOURCE_UNAVAILABLE: 'The sequence source for this match is unavailable.',
-  SOURCE_KEY_CONFLICT: 'The sequence source key conflicts with the match identity.',
-  RECORD_UNKNOWN: 'No sequence source matched record “{id}”.',
-  RECORD_AMBIGUOUS: 'Record ID “{id}” is ambiguous in the available sequence sources.',
-  RECORD_ALIAS_AMBIGUOUS: 'Record alias “{id}” is ambiguous in the available sequence sources.',
-  COORDINATE_NOT_WHOLE: 'Coordinates must be whole 1-based values.',
-  COORDINATE_BELOW_ONE: 'Coordinates must be greater than or equal to 1.',
-  OUT_OF_RANGE: 'Coordinates exceed the sequence length ({length} bp).'
-});
-
 // gbdraw/session_io.py: FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION
 /** @type {Readonly<Record<number, number>>} */
 export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({

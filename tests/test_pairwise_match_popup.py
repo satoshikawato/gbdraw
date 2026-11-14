@@ -112,6 +112,10 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "contracts" / "schema.generated.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (tmp_path / "drawn-attributes.generated.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "drawn-attributes.generated.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     source_path = WEB_ROOT / "js" / "services" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_source = source_path.read_text(encoding="utf-8")
@@ -119,6 +123,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     # matches nothing would leave an import of a module the copy lacks.
     for specifier, copy in (
         ("'../contracts/schema.generated.js'", "'./schema.generated.mjs'"),
+        ("'./drawn-attributes.generated.js'", "'./drawn-attributes.generated.mjs'"),
         ("'./record-source-coordinates.js'", "'./record-source-coordinates.mjs'"),
         ("'./feature-utils.js'", "'./feature-utils.mjs'"),
         ("'./feature-sequence-fasta.js'", "'./feature-sequence-fasta.mjs'"),

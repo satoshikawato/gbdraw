@@ -292,6 +292,23 @@ test('the parts written as they arrive are the item Python encodes whole, byte f
   }));
 });
 
+test('the part that holds the comparison sources appends the sources only a match span reads', async () => {
+  const committed = committedOf();
+  const readOnly = { key: 'circular:record:9', recordIndex: 9 };
+  const door = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => {
+      const reply = await embedPartReply(payload);
+      return { result: payload.part.comparisonSources
+        ? { ...reply, sourceCount: EMBED_SOURCES.length + 1,
+          sequenceSources: [...reply.sequenceSources, { index: EMBED_SOURCES.length, source: JSON.stringify(readOnly) }] }
+        : reply };
+    } }
+  });
+  const sequences = await door.readEmbedJson(exportItem);
+  assert.deepEqual(JSON.parse(sequences.sequenceSources), [...EMBED_SOURCES, readOnly]);
+});
+
 test('an export read the shown Result outlived gives null; a source missing or given twice is an invalid reply', async () => {
   let committed = committedOf();
   const outlived = createCatalogSequences({
@@ -304,6 +321,9 @@ test('an export read the shown Result outlived gives null; a source missing or g
     async (payload) => ({ ...(await embedPartReply(payload)), sequenceSources: [{ index: 0, source: '{"key":"x"}' }] }),
     async (payload) => ({ ...(await embedPartReply(payload)), sequenceSources: [{ index: 0, source: { key: 'x' } }] }),
     async (payload) => ({ ...(await embedPartReply(payload)), rowCount: 0 }),
+    // Only the part that holds the comparison sources may count more sources (those only a span reads), never fewer.
+    async (payload) => ({ ...(await embedPartReply(payload)), sourceCount: EMBED_SOURCES.length + (payload.part.comparisonSources ? 0 : 1) }),
+    async (payload) => ({ ...(await embedPartReply(payload)), sourceCount: EMBED_SOURCES.length - (payload.part.comparisonSources ? 1 : 0) }),
     async (payload) => ({ ...(await embedPartReply(payload)), biologicalFeatures: [] }),
     // What the match spans read comes as text, and only with the comparison sources (the last part).
     async (payload) => ({ ...(await embedPartReply(payload)), matchSpanReads: payload.part.comparisonSources ? EMBED_READS : null }),

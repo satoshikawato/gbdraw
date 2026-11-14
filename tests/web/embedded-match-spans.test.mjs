@@ -44,7 +44,7 @@ print(json.dumps(out))
 /** The viewer script as an export writes it: Python's values in its slots. */
 const SCRIPT = [
   [slots.STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, slots.MATCH_FRAGMENT_OWN_ATTRIBUTES],
-  [slots.STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, schema.MATCH_SPAN_REASON_TEXTS]
+  [slots.STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, slots.MATCH_SPAN_REASON_TEXTS]
 ].reduce((text, [slot, value]) => (slot ? text.split(String(slot)).join(JSON.stringify(value)) : text),
   STANDALONE_INTERACTIVE_SCRIPT);
 

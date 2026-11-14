@@ -2051,10 +2051,12 @@ def test_schema6_validator_rejects_sequence_keys_marks_and_sources() -> None:
         broken["items"][0]["biologicalFeatures"][0][key] = value
         with pytest.raises(GbdrawError, match="stores no sequences"):
             select_feature_catalog_item(broken, result_index=0, result_name="r.svg")
-    with_sources = json.loads(json.dumps(catalog))
-    with_sources["items"][0]["sequenceSources"] = []
-    with pytest.raises(GbdrawError, match="stores no sequences"):
-        select_feature_catalog_item(with_sources, result_index=0, result_name="r.svg")
+    # Nor the item keys of an export: its whole-record sources and what its match spans read.
+    for key, value in (("sequenceSources", []), ("matchSpanReads", {})):
+        with_export_key = json.loads(json.dumps(catalog))
+        with_export_key["items"][0][key] = value
+        with pytest.raises(GbdrawError, match="stores no sequences"):
+            select_feature_catalog_item(with_export_key, result_index=0, result_name="r.svg")
 
 
 def test_schema5_invalid_reference_is_still_refused() -> None:

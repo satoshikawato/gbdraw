@@ -236,7 +236,8 @@ def test_the_worker_reply_of_an_embed_part_is_the_text_the_file_embeds(tmp_path:
 
 def test_the_export_writes_what_each_match_span_reads_with_the_comparison_sources() -> None:
     """The export finds each span's record as the Worker's read does (OV-3542): a band that names no source reads its
-    record from any source, and a span that names no record reads none, even when only one record could be read.
+    record from any source, and a span that names no record reads none, even when only one record could be read: the
+    reference says it names none, as the Web's match popup does, and the comparison side that the record is unknown.
     Only the part that holds the comparison sources (the last) carries the reads; the whole item carries the same."""
 
     records = CatalogSequenceRecords(
@@ -259,7 +260,7 @@ def test_the_export_writes_what_each_match_span_reads_with_the_comparison_source
     assert last["matchSpanReads"] == whole["matchSpanReads"] == {
         "any-source": {"query": {"source": 0}, "subject": {"source": 1}},
         "no-record": {
-            "query": {"reason": "RECORD_UNKNOWN", "sourceLength": 0},
+            "query": {"reason": "RECORD_UNNAMED", "sourceLength": 0},
             "subject": {"reason": "RECORD_UNKNOWN", "sourceLength": 0},
         },
     }

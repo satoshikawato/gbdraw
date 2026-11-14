@@ -306,7 +306,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   overflow: hidden;
 }
 /* What a bordered block holds sits inside its border, as its title does: rows, the coordinates of a span, a note,
-   and the blocks of a match's spans (OV-3543). */
+   and the blocks of a match's spans (OV-3543). A sequence block's "No sequence available." fills its block as before. */
 .gfi-block > .gfi-row,
 .gfi-block > .gfi-disclosure > .gfi-row {
   padding-left: 9px;
@@ -317,7 +317,6 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   overflow-wrap: anywhere;
 }
 .gfi-block > .gfi-warning,
-.gfi-block > .gfi-empty,
 .gfi-block > .gfi-block {
   margin: 0 9px 9px;
 }

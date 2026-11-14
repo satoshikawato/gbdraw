@@ -4,12 +4,13 @@
 /** @import { AliasSource } from './feature-identity.js' */
 import { normalizeStringArray } from './feature-utils.js';
 import { ownEntry } from '../utils/own-entry.js';
-import { INTERACTIVE_EMBED_SCHEMA, MATCH_SPAN_REASON_TEXTS } from '../contracts/schema.generated.js';
+import { INTERACTIVE_EMBED_SCHEMA } from '../contracts/schema.generated.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
 import { ANNOTATION_SELECTOR } from './drawn-groups.js';
 import {
-  MATCH_FRAGMENT_OWN_ATTRIBUTES, STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT
+  MATCH_FRAGMENT_OWN_ATTRIBUTES, MATCH_SPAN_REASON_TEXTS, STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT,
+  STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT
 } from './drawn-attributes.generated.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

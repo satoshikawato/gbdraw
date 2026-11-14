@@ -369,6 +369,10 @@ const encodeEmbed = async (readEmbedSequences, request, item, featureReadBases, 
       (await readEmbedSequences({ ...request, files, part: part.part }))?.result, part.item.biologicalFeatures);
     if (!stillShown()) throw OUTLIVED;
     sources ??= new Array(reply.sourceCount).fill(undefined);
+    // The part that holds the comparison sources (the last) appends the sources only a match span reads.
+    if (part.part.comparisonSources && reply.sourceCount > sources.length) {
+      sources.push(...new Array(reply.sourceCount - sources.length).fill(undefined));
+    }
     if (sources.length !== reply.sourceCount) throw invalid();
     if (reply.rowCount) rows.push(reply.biologicalFeatures);
     // Only the part that holds the comparison sources (the last) holds what the match spans read.

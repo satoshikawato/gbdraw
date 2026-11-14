@@ -24,7 +24,7 @@ import { errorTextKeys } from '../../tests/web/helpers/error-text-keys.mjs';
 import { COLLINEARITY_BLOCK_KINDS } from './collinearity-words.generated.mjs';
 import { LABEL_FIT_WORDS } from './label-fit-words.generated.mjs';
 import { GENOME_SCALE_WARNING_TEXT } from '../../gbdraw/web/js/contracts/card-windows.generated.js';
-import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
 
 export const REPOSITORY_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export const WEB_ROOT = join(REPOSITORY_ROOT, 'gbdraw', 'web');

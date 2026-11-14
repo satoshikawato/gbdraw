@@ -301,7 +301,7 @@
   overflow: hidden;
 }
 /* What a bordered block holds sits inside its border, as its title does: rows, the coordinates of a span, a note,
-   and the blocks of a match's spans (OV-3543). */
+   and the blocks of a match's spans (OV-3543). A sequence block's "No sequence available." fills its block as before. */
 .gfi-block &gt; .gfi-row,
 .gfi-block &gt; .gfi-disclosure &gt; .gfi-row {
   padding-left: 9px;
@@ -312,7 +312,6 @@
   overflow-wrap: anywhere;
 }
 .gfi-block &gt; .gfi-warning,
-.gfi-block &gt; .gfi-empty,
 .gfi-block &gt; .gfi-block {
   margin: 0 9px 9px;
 }
@@ -785,7 +784,7 @@
   var MATCH_FRAGMENT_OWN_ATTRIBUTES = ["data-gbdraw-match-fragment","data-display-start","data-display-end"];
   // The sentence of each reason a match span cannot be read (Python's MATCH_SPAN_REASON_TEXTS, written in by the
   // embedder): {id} is the record the match names, {length} the length of the record the span reads.
-  var MATCH_SPAN_REASON_TEXTS = {"NEVER_SUPPLIED":"Comparison sequence was not supplied for this BLAST source.","SOURCE_UNAVAILABLE":"The sequence source for this match is unavailable.","SOURCE_KEY_CONFLICT":"The sequence source key conflicts with the match identity.","RECORD_UNKNOWN":"No sequence source matched record “{id}”.","RECORD_AMBIGUOUS":"Record ID “{id}” is ambiguous in the available sequence sources.","RECORD_ALIAS_AMBIGUOUS":"Record alias “{id}” is ambiguous in the available sequence sources.","COORDINATE_NOT_WHOLE":"Coordinates must be whole 1-based values.","COORDINATE_BELOW_ONE":"Coordinates must be greater than or equal to 1.","OUT_OF_RANGE":"Coordinates exceed the sequence length ({length} bp)."};
+  var MATCH_SPAN_REASON_TEXTS = {"NEVER_SUPPLIED":"Comparison sequence was not supplied for this BLAST source.","SOURCE_UNAVAILABLE":"The sequence source for this match is unavailable.","SOURCE_KEY_CONFLICT":"The sequence source key conflicts with the match identity.","RECORD_UNKNOWN":"No sequence source matched record “{id}”.","RECORD_AMBIGUOUS":"Record ID “{id}” is ambiguous in the available sequence sources.","RECORD_ALIAS_AMBIGUOUS":"Record alias “{id}” is ambiguous in the available sequence sources.","COORDINATE_NOT_WHOLE":"Coordinates must be whole 1-based values.","COORDINATE_BELOW_ONE":"Coordinates must be greater than or equal to 1.","OUT_OF_RANGE":"Coordinates exceed the sequence length ({length} bp).","IDENTITY_INVALID":"The sequence identifier metadata for this match is invalid.","RECORD_UNNAMED":"The match does not identify a sequence record."};
   var MATCH_SELECTOR =
     'path[data-gbdraw-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var ANNOTATION_SELECTOR = '[data-gbdraw-interactive-annotation="true"][data-gbdraw-annotation-id]';

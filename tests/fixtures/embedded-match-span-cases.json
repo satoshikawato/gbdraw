@@ -286,7 +286,7 @@
     "matchSpanReads": {
      "h3": {
       "query": {
-       "reason": "RECORD_UNKNOWN",
+       "reason": "RECORD_UNNAMED",
        "sourceLength": 0
       },
       "subject": {
@@ -299,7 +299,7 @@
    "shown": {
     "h3": {
      "query": {
-      "reason": "No sequence source matched record “”."
+      "reason": "The match does not identify a sequence record."
      },
      "subject": {
       "reason": "No sequence source matched record “”."
@@ -561,6 +561,421 @@
      },
      "subject": {
       "reason": "The sequence source for this match is unavailable."
+     }
+    }
+   }
+  },
+  {
+   "name": "a band on a cropped or reversed reference reads the drawn unit its record index names, by ID or with none",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "ref",
+     "name": "REF",
+     "sequence": "AACCGGTT"
+    },
+    {
+     "id": "ref2",
+     "name": "REF2",
+     "sequence": "GGGACCCT"
+    }
+   ],
+   "comparisonRecords": [
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ]
+   ],
+   "matches": [
+    {
+     "id": "h8",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "ref2",
+     "subject_record_id": "cmp",
+     "source_index": "0",
+     "query_record_index": "1"
+    },
+    {
+     "id": "h9",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "2",
+     "qend": "3",
+     "sstart": "1",
+     "send": "4",
+     "subject_record_id": "cmp",
+     "source_index": "0",
+     "query_record_index": "0"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "circular:record:1",
+      "recordId": "ref2",
+      "aliases": [
+       "REF2",
+       "ref2"
+      ],
+      "sequence": "GGGACCCT",
+      "origin": "circular-reference",
+      "recordIndex": 1
+     },
+     {
+      "key": "homology:comparison:0:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 0
+     },
+     {
+      "key": "circular:record:0",
+      "recordId": "ref",
+      "aliases": [
+       "REF",
+       "ref"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "circular-reference",
+      "recordIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "h8": {
+      "query": {
+       "source": 0
+      },
+      "subject": {
+       "source": 1
+      }
+     },
+     "h9": {
+      "query": {
+       "source": 2
+      },
+      "subject": {
+       "source": 1
+      }
+     }
+    }
+   },
+   "shown": {
+    "h8": {
+     "query": {
+      "sequence": "GGGA"
+     },
+     "subject": {
+      "sequence": "TTGC"
+     }
+    },
+    "h9": {
+     "query": {
+      "sequence": "AC"
+     },
+     "subject": {
+      "sequence": "TTGC"
+     }
+    }
+   }
+  },
+  {
+   "name": "a reference record index past the drawn units names no record: unknown when the band names an ID",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "ref",
+     "name": "REF",
+     "sequence": "AACCGGTT"
+    }
+   ],
+   "comparisonRecords": [
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ]
+   ],
+   "matches": [
+    {
+     "id": "h10",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "ref",
+     "subject_record_id": "cmp",
+     "source_index": "0",
+     "query_record_index": "5"
+    },
+    {
+     "id": "h11",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "subject_record_id": "cmp",
+     "source_index": "0",
+     "query_record_index": "5"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "circular:record:0",
+      "recordId": "ref",
+      "aliases": [
+       "REF",
+       "ref"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "circular-reference",
+      "recordIndex": 0
+     },
+     {
+      "key": "homology:comparison:0:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "h10": {
+      "query": {
+       "reason": "RECORD_UNKNOWN",
+       "sourceLength": 0
+      },
+      "subject": {
+       "source": 1
+      }
+     },
+     "h11": {
+      "query": {
+       "reason": "RECORD_UNNAMED",
+       "sourceLength": 0
+      },
+      "subject": {
+       "source": 1
+      }
+     }
+    }
+   },
+   "shown": {
+    "h10": {
+     "query": {
+      "reason": "No sequence source matched record “ref”."
+     },
+     "subject": {
+      "sequence": "TTGC"
+     }
+    },
+    "h11": {
+     "query": {
+      "reason": "The match does not identify a sequence record."
+     },
+     "subject": {
+      "sequence": "TTGC"
+     }
+    }
+   }
+  },
+  {
+   "name": "an index that is not a whole number makes the identity of its span, or of a band's both spans, invalid",
+   "mode": "circular",
+   "records": [
+    {
+     "id": "ref",
+     "name": "REF",
+     "sequence": "AACCGGTT"
+    }
+   ],
+   "comparisonRecords": [
+    [
+     {
+      "id": "cmp",
+      "name": "CMP",
+      "sequence": "TTGCAACC"
+     }
+    ]
+   ],
+   "matches": [
+    {
+     "id": "h12",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "ref",
+     "subject_record_id": "cmp",
+     "source_index": "0.5"
+    },
+    {
+     "id": "h13",
+     "match_kind": "homology",
+     "reference_side": "query",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "1",
+     "send": "4",
+     "query_record_id": "ref",
+     "subject_record_id": "cmp",
+     "source_index": "0",
+     "subject_record_index": "x"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "circular:record:0",
+      "recordId": "ref",
+      "aliases": [
+       "REF",
+       "ref"
+      ],
+      "sequence": "AACCGGTT",
+      "origin": "circular-reference",
+      "recordIndex": 0
+     },
+     {
+      "key": "homology:comparison:0:cmp",
+      "recordId": "cmp",
+      "aliases": [
+       "cmp",
+       "CMP"
+      ],
+      "sequence": "TTGCAACC",
+      "origin": "homology-comparison",
+      "sourceIndex": 0
+     }
+    ],
+    "matchSpanReads": {
+     "h12": {
+      "query": {
+       "reason": "IDENTITY_INVALID",
+       "sourceLength": 0
+      },
+      "subject": {
+       "reason": "IDENTITY_INVALID",
+       "sourceLength": 0
+      }
+     },
+     "h13": {
+      "query": {
+       "source": 0
+      },
+      "subject": {
+       "reason": "IDENTITY_INVALID",
+       "sourceLength": 0
+      }
+     }
+    }
+   },
+   "shown": {
+    "h12": {
+     "query": {
+      "reason": "The sequence identifier metadata for this match is invalid."
+     },
+     "subject": {
+      "reason": "The sequence identifier metadata for this match is invalid."
+     }
+    },
+    "h13": {
+     "query": {
+      "sequence": "AACC"
+     },
+     "subject": {
+      "reason": "The sequence identifier metadata for this match is invalid."
+     }
+    }
+   }
+  },
+  {
+   "name": "a Linear record index that is not a whole number makes its span's identity invalid",
+   "mode": "linear",
+   "records": [
+    {
+     "id": "q",
+     "name": "Q",
+     "sequence": "AACCGGTT"
+    },
+    {
+     "id": "s",
+     "name": "S",
+     "sequence": "GGGACCCT"
+    }
+   ],
+   "comparisonRecords": [],
+   "matches": [
+    {
+     "id": "p4",
+     "match_kind": "pairwise",
+     "query_record_index": "0.5",
+     "subject_record_index": "1",
+     "query_record_id": "q",
+     "subject_record_id": "s",
+     "qstart": "1",
+     "qend": "4",
+     "sstart": "6",
+     "send": "3"
+    }
+   ],
+   "embedded": {
+    "sequenceSources": [
+     {
+      "key": "linear:record:1",
+      "recordId": "s",
+      "aliases": [
+       "S",
+       "s"
+      ],
+      "sequence": "GGGACCCT",
+      "origin": "linear-record",
+      "recordIndex": 1
+     }
+    ],
+    "matchSpanReads": {
+     "p4": {
+      "query": {
+       "reason": "IDENTITY_INVALID",
+       "sourceLength": 0
+      },
+      "subject": {
+       "source": 0
+      }
+     }
+    }
+   },
+   "shown": {
+    "p4": {
+     "query": {
+      "reason": "The sequence identifier metadata for this match is invalid."
+     },
+     "subject": {
+      "sequence": "GGTC"
      }
     }
    }

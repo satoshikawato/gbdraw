@@ -1,5 +1,6 @@
 // @ts-check
-import { MATCH_SPAN_REASON_TEXTS, ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
+import { ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
+import { MATCH_SPAN_REASON_TEXTS } from './drawn-attributes.generated.js';
 import {
   formatFeatureLocation,
   getQualifierFirstValue,
@@ -2020,7 +2021,7 @@ const safeFilePart = (value, fallback = 'sequence') => {
  * @returns {{ read: MatchSpanInput | null, reason: string }}
  */
 const matchSpanRead = (span, matchKind, records, start, end) => {
-  if (!span.identityValid) return { read: null, reason: t('The sequence identifier metadata for this match is invalid.') };
+  if (!span.identityValid) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.IDENTITY_INVALID, {}) };
   // A Result without its request (a Result-only Session 27-39): the reason the read would give (SEQUENCE_REQUIRES_GENERATE).
   if (!records) return { read: null, reason: t('This Result was saved by an older gbdraw, so its sequences are read after the next Generate.') };
   const { recordId } = span;
@@ -2036,7 +2037,7 @@ const matchSpanRead = (span, matchKind, records, start, end) => {
       ? { read: { kind: 'record', recordKey, recordId, start, end }, reason: '' }
       : { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.SOURCE_UNAVAILABLE, {}) };
   }
-  if (!recordId && !recordKey) return { read: null, reason: t('The match does not identify a sequence record.') };
+  if (!recordId && !recordKey) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.RECORD_UNNAMED, {}) };
   // A record index that names no drawn unit: no record is searched, so the named one is not found.
   if (span.recordIndex !== null && !recordKey) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.RECORD_UNKNOWN, { id: recordId }) };
   return { read: { kind: 'reference', recordId, recordKey, start, end }, reason: '' };

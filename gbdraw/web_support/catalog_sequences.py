@@ -310,7 +310,8 @@ class EmbedPartText(TypedDict):
     """The reply of one export part (``read_embed_sequences_json``): its rows and sources as the text the file
     embeds (``embed_json_text``), so neither the Worker nor the page parses them; ``biologicalFeatures`` is the rows'
     text joined by commas, ``rowCount`` their number; ``matchSpanReads`` is the text of what the item's match spans
-    read, in the part that holds the comparison sources (None in the others and when no match names a span)."""
+    read, in the part that holds the comparison sources (None in the others and when no match names a span), whose
+    ``sourceCount`` also counts the sources only a span reads."""
 
     biologicalFeatures: str
     rowCount: int

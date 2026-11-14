@@ -4,7 +4,7 @@
 // gbdraw/render/drawers/annotation_marks.py (the annotation attributes) and
 // gbdraw/render/drawers/circular/conservation.py (the similarity-ring attributes) and
 // gbdraw/render/interactive_svg.py (the attributes of a match fragment and the slots of the standalone
-// script); do not edit manually.
+// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS); do not edit manually.
 
 /** A drawn region annotation's group names its annotation and its set, in both modes. */
 export const ANNOTATION_ID_ATTRIBUTE = 'data-gbdraw-annotation-id';
@@ -24,5 +24,24 @@ export const RING_LEGEND_NAME_ATTRIBUTE = 'data-ring-legend-name';
 export const MATCH_FRAGMENT_OWN_ATTRIBUTES = Object.freeze(['data-gbdraw-match-fragment', 'data-display-start', 'data-display-end']);
 /** Where the standalone interactive script's asset takes MATCH_FRAGMENT_OWN_ATTRIBUTES. */
 export const STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT = '[/* gbdraw: MATCH_FRAGMENT_OWN_ATTRIBUTES */]';
-/** Where the standalone interactive script's asset takes MATCH_SPAN_REASON_TEXTS (schema.generated.js). */
+/** Where the standalone interactive script's asset takes MATCH_SPAN_REASON_TEXTS. */
 export const STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT = '{/* gbdraw: MATCH_SPAN_REASON_TEXTS */}';
+/**
+ * The English sentence of each reason a match span cannot be read: the match popup shows it translated (a
+ * catalog key) and an exported Interactive SVG shows it as it is. Not a persisted contract: a wording fix
+ * changes no saved file.
+ */
+/** @type {Readonly<Record<'NEVER_SUPPLIED' | 'SOURCE_UNAVAILABLE' | 'SOURCE_KEY_CONFLICT' | 'RECORD_UNKNOWN' | 'RECORD_AMBIGUOUS' | 'RECORD_ALIAS_AMBIGUOUS' | 'COORDINATE_NOT_WHOLE' | 'COORDINATE_BELOW_ONE' | 'OUT_OF_RANGE' | 'IDENTITY_INVALID' | 'RECORD_UNNAMED', string>>} */
+export const MATCH_SPAN_REASON_TEXTS = Object.freeze({
+  NEVER_SUPPLIED: 'Comparison sequence was not supplied for this BLAST source.',
+  SOURCE_UNAVAILABLE: 'The sequence source for this match is unavailable.',
+  SOURCE_KEY_CONFLICT: 'The sequence source key conflicts with the match identity.',
+  RECORD_UNKNOWN: 'No sequence source matched record “{id}”.',
+  RECORD_AMBIGUOUS: 'Record ID “{id}” is ambiguous in the available sequence sources.',
+  RECORD_ALIAS_AMBIGUOUS: 'Record alias “{id}” is ambiguous in the available sequence sources.',
+  COORDINATE_NOT_WHOLE: 'Coordinates must be whole 1-based values.',
+  COORDINATE_BELOW_ONE: 'Coordinates must be greater than or equal to 1.',
+  OUT_OF_RANGE: 'Coordinates exceed the sequence length ({length} bp).',
+  IDENTITY_INVALID: 'The sequence identifier metadata for this match is invalid.',
+  RECORD_UNNAMED: 'The match does not identify a sequence record.'
+});
