@@ -102,7 +102,8 @@ const fileBackedReaders = new WeakMap();
  * the size of the stored bytes, a stream of them, their content token
  * (`contentTokenOfBytes` in file-content-cache.js) when it is known without a
  * read, else null, and a Blob of them when they rest in a file the page does
- * not hold (an input's copy, PD-OI-121, or the File a Generate described),
+ * not hold (an input's copy, PD-OI-121, the File a Generate described, or
+ * the entry of the Session file a Load read when no copy could be written),
  * else null: Generate stages that Blob, and the page keeps no read of them
  * (OV-2753, OV-2754). A gzip input is stored as it is (receipt
  * session.file-container), so a File chosen as gzip stores its gzip bytes,

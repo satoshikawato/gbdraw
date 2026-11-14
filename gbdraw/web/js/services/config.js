@@ -131,6 +131,7 @@ import { savedDrawingsOf } from './session-drawings.js';
 import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend } from './artifact-slot.js';
 import {
   base64ToBytes,
+  contentFactsOfStream,
   fileDescriptorOf,
   getSessionResourceSource,
   copyInputStream,
@@ -7441,7 +7442,8 @@ const loadedInputCopies = new FinalizationRegistry((release) => release());
  * and none becomes a base64 text (receipt session.file-container). Before it
  * writes, it compares the declared input total with the free browser storage
  * and refuses when it is short. When the browser lets no copy be written, an
- * input is read from the Session file itself, after one checked read here.
+ * input rests in the Session file itself: one checked read here hashes it, and
+ * Generate stages a Blob streamed from its entry, which may be deflated.
  * A damaged entry refuses the Load. The returned release gives the copies back
  * (a Load that does not end ok).
  * @param {File} file
@@ -7477,10 +7479,11 @@ const copyContainerInputs = async (file, { resources: entries, inputBytes }, par
         parsed.resources[resourceId] = fileBackedDescriptor(fields, readBytes,
           { size: fields.size, open: async () => (await copy.blob()).stream(), token: async () => facts.token, blob: () => copy.blob() });
       } else {
-        await openEntry().pipeTo(new WritableStream());
+        const facts = await contentFactsOfStream(openEntry());
         parsed.resources[resourceId] = fileBackedDescriptor(fields,
           async () => new Uint8Array(await new Response(openEntry()).arrayBuffer()),
-          { size: fields.size, open: async () => openEntry(), token: null, blob: null });
+          { size: fields.size, open: async () => openEntry(), token: async () => facts.token,
+            blob: () => new Response(openEntry()).blob() });
       }
     }
   } catch (error) {
