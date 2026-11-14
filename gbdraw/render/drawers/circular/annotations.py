@@ -1000,7 +1000,7 @@ def circular_annotation_label_extent(
         font_family=font_family,
         rings=(),
     )
-    centre = position_angle(place_bp, max(1, record_length))
+    centre = 360.0 * place_bp / max(1, record_length) - 90.0
     # Each corner's turn from the place, in degrees clockwise.
     turns = [
         (math.degrees(math.atan2(y, x)) - centre + 180.0) % 360.0 - 180.0 for part in label.parts for x, y in part
@@ -1090,7 +1090,7 @@ def _label_at(
     (``text_runs_glyph_outlines``).
     """
 
-    angle = position_angle(position_bp, max(1, record_length))
+    angle = 360.0 * position_bp / max(1, record_length) - 90.0
     clear = partial(_cleared_radius, mark_edge=mark_edge, outward=outward, gap=gap, rings=rings)
     label = partial(
         CircularAnnotationLabel, annotation_id=annotation_id, font_size=font_size, color=color, label_offset=gap
