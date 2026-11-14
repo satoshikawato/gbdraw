@@ -305,7 +305,7 @@ const regionsOf = (rows) => {
 /**
  * What the creation screen shows: the refusal, or the derived drawing (what
  * returned to Auto, what is not carried) with the Create that adds it.
- * @typedef {RefusedRegionDrawing | RefusedCopy | ((DerivedRegionDrawing | PastedRecords) & { create: () => Promise<unknown> })} RegionDrawingOffer
+ * @typedef {RefusedRegionDrawing | RefusedCopy | ((DerivedRegionDrawing | PastedRecords) & { create: () => Promise<DrawingListOutcome> })} RegionDrawingOffer
  */
 
 const REPLY_INVALID = () => diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
@@ -402,7 +402,7 @@ export const createRegionDrawing = (ports) => {
   // The dialog (the one owner of its open, close, reset and input edits; the template assigns none of its state).
   /** @type {RegionDialogView} */
   const dialog = reactive({ show: false, rows: [], ...startingChoices() });
-  /** @type {(() => Promise<unknown>) | null} */
+  /** @type {(() => Promise<DrawingListOutcome>) | null} */
   let create = null;
   let request = 0;
 
@@ -517,12 +517,11 @@ export const createRegionDrawing = (ports) => {
   const confirm = async () => {
     if (dialog.status !== 'derived' || !create) return null;
     const run = create;
-    const { target } = dialog;
     create = null;
     dialog.status = 'creating';
     try {
       const outcome = await run();
-      lastTarget.remember(target);
+      lastTarget.remember(outcome);
       close();
       return outcome;
     } catch (error) {

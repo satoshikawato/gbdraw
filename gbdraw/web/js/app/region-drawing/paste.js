@@ -6,6 +6,7 @@ import { alreadyPresentLine, leftOutLine, pasteNotCarriedLine } from './copy-tex
 
 /** @import { DrawingTab, DrawingState } from '../../state.js' */
 /** @import { DrawingId } from '../../services/drawing-view.js' */
+/** @import { DrawingListOutcome } from '../drawing-list.js' */
 /** @import { PasteDerivation, ProjectedDraftRequest } from '../../services/config.js' */
 /** @import { PastedRecords } from '../../contracts/locate.generated.js' */
 /** @import { PageExistingDrawingCopy, RegionDrawingHelperPayload } from '../../services/diagram-worker-protocol.js' */
@@ -17,8 +18,8 @@ import { alreadyPresentLine, leftOutLine, pasteNotCarriedLine } from './copy-tex
  * @property {(drawingId: DrawingId) => DrawingState} drawingOf A drawing of the Session, by its ID.
  * @property {(drawingId: DrawingId) => Promise<ProjectedDraftRequest>} projectDrawing A drawing's draft request, shown
  *   or not, its records read first.
- * @property {(drawingId: DrawingId, paste: PasteDerivation) => Promise<unknown>} pasteInto The paste, as one History
- *   step of that drawing, which is shown.
+ * @property {(drawingId: DrawingId, paste: PasteDerivation) => Promise<DrawingListOutcome>} pasteInto The paste, as
+ *   one History step of that drawing, which is shown; `busy` when the app refuses to show it.
  */
 
 /** The target of a copy: a new drawing, or an existing drawing by its ID. @typedef {'new' | DrawingId} CopyTarget */
@@ -68,9 +69,9 @@ export const pasteLinesOf = ({ alreadyPresent, leftOut, notCarried }, captionOf,
 });
 
 /**
- * The last target of the open Session (not saved in it): a new drawing at first; after a copy, the target chosen.
- * A remembered drawing that is no longer the same drawing (removed, or replaced by a Load or New Session) gives a new
- * drawing.
+ * The last target of the open Session (not saved in it): a new drawing at first; after a copy, the drawing it went
+ * into, the one a copy into a new drawing made included (D-29); a copy refused as busy changes nothing. A remembered
+ * drawing that is no longer the same drawing (removed, or replaced by a Load or New Session) gives a new drawing.
  * @param {PasteTargetPorts['drawingOf']} drawingOf
  */
 export const createLastTarget = (drawingOf) => {
@@ -82,9 +83,9 @@ export const createLastTarget = (drawingOf) => {
       const kept = last;
       return kept && targets.some(({ id }) => id === kept.id) && drawingOf(kept.id) === kept.drawing ? kept.id : 'new';
     },
-    /** @param {CopyTarget} target */
-    remember: (target) => {
-      last = target === 'new' ? null : { id: target, drawing: drawingOf(target) };
+    /** @param {DrawingListOutcome} outcome A copy's. */
+    remember: (outcome) => {
+      if (outcome.status === 'ok') last = { id: outcome.drawingId, drawing: drawingOf(outcome.drawingId) };
     }
   };
 };

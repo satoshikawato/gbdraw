@@ -9,6 +9,7 @@ import { msg } from '../../utils/i18n.js';
 /** @import { DrawingId } from '../../services/drawing-view.js' */
 /** @import { PasteDerivation, PreparedPaste, ProjectedDraftRequest } from '../../services/config.js' */
 /** @import { PasteTargetPorts } from './paste.js' */
+/** @import { DrawingListOutcome } from '../drawing-list.js' */
 
 /**
  * @typedef {object} PasteIntoOwners
@@ -26,7 +27,7 @@ import { msg } from '../../utils/i18n.js';
 /**
  * The dialog's port to the existing drawings. A paste is read first, then installed, with its drawing shown, as one
  * step of that drawing's History; its figure is drawn by the next Generate (the drawing keeps its Result until then).
- * A switch the app refuses (a Generate runs) pastes nothing and gives its answer.
+ * A switch the app refuses (a Generate runs) pastes nothing and answers `busy` with its reason.
  * @param {PasteIntoOwners} owners
  * @returns {PasteTargetPorts}
  */
@@ -40,7 +41,10 @@ export const createPasteTargets = ({ tabs, drawingOf, readRecords, project, show
   pasteInto: async (drawingId, paste) => {
     const prepared = await prepare(paste);
     const shown = show(drawingId);
-    if (shown && typeof shown === 'object' && 'status' in shown && shown.status !== 'ok') return shown;
-    return runUndoable(msg('Copy to another drawing'), () => install(drawingOf(drawingId), prepared));
+    if (shown && typeof shown === 'object' && 'status' in shown && shown.status !== 'ok') {
+      return /** @type {DrawingListOutcome} */ ({ status: 'busy', reason: 'reason' in shown ? shown.reason : null });
+    }
+    await runUndoable(msg('Copy to another drawing'), () => install(drawingOf(drawingId), prepared));
+    return /** @type {DrawingListOutcome} */ ({ status: 'ok', drawingId });
   }
 });

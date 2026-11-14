@@ -36,10 +36,10 @@ const pasteTargetPorts = (drawings = new Map([['circular', { id: 'circular' }], 
     filesByResource: new Map() };
   return {
     pasted, drawings, targetSent,
-    tabs: () => [...drawings.keys()].map((id) => ({ id, name: id === 'circular' ? 'Circular' : 'Linear 2' })),
+    tabs: () => [...drawings.keys()].map((id) => ({ id, name: id === 'circular' ? 'Circular' : `Linear ${id.split('-')[1]}` })),
     drawingOf: (id) => drawings.get(id),
     projectDrawing: async () => targetSent,
-    pasteInto: async (drawingId, paste) => { pasted.push({ drawingId, paste }); return { status: 'ok' }; }
+    pasteInto: async (drawingId, paste) => { pasted.push({ drawingId, paste }); return { status: 'ok', drawingId }; }
   };
 };
 const { projectShownRequest, readRecordSources, resultFeatures, pasteTargets: sharedPasteTargets } = recordPorts(RECORDS);
@@ -58,7 +58,7 @@ const pastedReply = {
   notCarried: [{ kind: 'ANNOTATIONS', count: 2 }]
 };
 const harness = ({ reply = null, refusal = 'START_AFTER_END', pasteTargets = pasteTargetPorts() } = {}) => {
-  const calls = { derive: [], created: [] };
+  const calls = { derive: [], created: [], busy: false };
   /** @type {Array<() => void>} */
   const pending = [];
   const owner = createRegionDrawing({
@@ -74,9 +74,12 @@ const harness = ({ reply = null, refusal = 'START_AFTER_END', pasteTargets = pas
       if (payload.copy.into === 'existing') return { result: pastedReply };
       return { result: derivedReply(payload.adaptSizes) };
     },
+    // Adds the drawing it makes to the Session, as the drawing list does.
     newDrawingFromRegion: async (sourceId, derivation) => {
+      if (calls.busy) return { status: 'busy', reason: 'a Generate runs' };
       calls.created.push({ sourceId, derivation });
-      return { drawingId: 'linear' };
+      pasteTargets.drawings.set('linear-3', { id: 'linear-3' });
+      return { status: 'ok', drawingId: 'linear-3' };
     },
     readRecordSources,
     resultFeatures,
@@ -105,7 +108,7 @@ test('a feature can be chosen only in a record whose Result drew features; each 
     ['', 'Generate the drawing to choose a feature.']);
   const ownerOfEmpty = createRegionDrawing({
     shownDrawingId: () => 'circular', deriveRegion: async () => ({ result: derivedReply(false) }),
-    newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
+    newDrawingFromRegion: async () => ({ status: 'ok', drawingId: 'linear' }),
     ...recordPorts([{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: [] }])
   });
   await ownerOfEmpty.open();
@@ -184,7 +187,7 @@ test('Create runs one list step and closes; Cancel records nothing', async () =>
   await owner.open();
   owner.dialog.rows[0].checked = true;
   await owner.refresh();
-  assert.deepEqual(await owner.confirm(), { drawingId: 'linear' });
+  assert.deepEqual(await owner.confirm(), { status: 'ok', drawingId: 'linear-3' });
   assert.equal(calls.created.length, 1);
   assert.equal(calls.created[0].sourceId, 'circular');
   assert.equal(owner.dialog.show, false);
@@ -203,7 +206,7 @@ test('a close while the records are read keeps the dialog closed', async () => {
     shownDrawingId: () => 'circular',
     projectShownRequest,
     deriveRegion: async () => ({ result: null }),
-    newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
+    newDrawingFromRegion: async () => ({ status: 'ok', drawingId: 'linear' }),
     readRecordSources: () => new Promise((resolve) => { release = () => resolve(readRecordSources()); }),
     pasteTargets: sharedPasteTargets,
     resultFeatures
@@ -298,7 +301,7 @@ test('the rows come from the request projected after the records are read', asyn
     )) }, resources: {} }, filesByResource: new Map() }),
     deriveRegion: async () => ({ result: null }),
     pasteTargets: sharedPasteTargets,
-    newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
+    newDrawingFromRegion: async () => ({ status: 'ok', drawingId: 'linear' }),
     readRecordSources: async () => {
       list.splice(0);
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -323,7 +326,7 @@ test('a second Create while one runs adds one drawing', async () => {
   assert.equal(owner.dialog.status, 'creating', 'Create is disabled while the drawing is added');
   assert.equal(owner.dialog.returnedToAuto.length, 2, 'the derived view stays shown');
   const second = owner.confirm();
-  assert.deepEqual(await Promise.all([first, second]), [{ drawingId: 'linear' }, null]);
+  assert.deepEqual(await Promise.all([first, second]), [{ status: 'ok', drawingId: 'linear-3' }, null]);
   assert.equal(calls.created.length, 1);
   assert.equal(owner.dialog.show, false);
 });
@@ -491,7 +494,7 @@ test('a refused copy is worded from its reason', async () => {
   const refusing = createRegionDrawing({
     shownDrawingId: () => 'circular', projectShownRequest, readRecordSources, resultFeatures, pasteTargets: sharedPasteTargets,
     deriveRegion: async () => ({ result: { status: 'refused', reason: 'CIRCULAR_WHOLE_RECORDS' } }),
-    newDrawingFromRegion: async () => ({ drawingId: 'linear' }), committedRecordKeyOf: () => null
+    newDrawingFromRegion: async () => ({ status: 'ok', drawingId: 'linear' }), committedRecordKeyOf: () => null
   });
   await refusing.open();
   await refusing.setChoice({ newMode: 'circular' });
@@ -543,9 +546,31 @@ test('the last target is remembered while the same drawings are open; a drawing 
   second.pasteTargets.drawings.delete('linear-2');
   await second.owner.open();
   assert.deepEqual([second.owner.dialog.targets, second.owner.dialog.target], [[], 'new'], 'a removed drawing');
-  // A copy to a new drawing leaves a new drawing chosen.
-  await second.owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'whole' } });
-  await second.owner.confirm();
-  await second.owner.open();
-  assert.equal(second.owner.dialog.target, 'new');
+});
+
+test('after a copy into a new drawing the dialog opens on the drawing that copy made (D-29), with the same fallbacks', async () => {
+  const { owner, pasteTargets } = harness();
+  await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'whole' } });
+  assert.equal(owner.dialog.target, 'new');
+  await owner.confirm();
+  await owner.open();
+  assert.deepEqual(owner.dialog.targets.map(({ id }) => id), ['linear-2', 'linear-3']);
+  assert.equal(owner.dialog.target, 'linear-3', 'the drawing the copy made');
+  owner.close();
+  // A copy the drawing list refused (busy) made nothing: the last target stays.
+  const busy = harness();
+  await busy.owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'whole' } });
+  await busy.owner.setChoice({ target: 'linear-2' });
+  await busy.owner.confirm();
+  busy.calls.busy = true;
+  await busy.owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'whole' } });
+  await busy.owner.setChoice({ target: 'new' });
+  await busy.owner.confirm();
+  await busy.owner.open();
+  assert.equal(busy.owner.dialog.target, 'linear-2', 'a refused copy changes no target');
+  busy.owner.close();
+  // Removed, or replaced by a Load: a new drawing.
+  pasteTargets.drawings.delete('linear-3');
+  await owner.open();
+  assert.equal(owner.dialog.target, 'new');
 });
