@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -33,6 +34,7 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.linear_multi_record import (
+    DEFAULT_RECORD_GAP_PX,
     ROW_GAPS_MAX_SHARE,
     LinearLayoutPlan,
     LinearRecordMeasurement,
@@ -350,27 +352,65 @@ def test_layout_refuses_a_row_whose_window_marks_take_its_width() -> None:
     assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": "ROW_WIDTH"})
 
 
-@pytest.mark.parametrize("count", (2, 74, 97, 400))
-def test_the_gaps_of_a_row_take_at_most_their_share_of_its_width(count: int) -> None:
-    """OV-3456: 97 records in one 2000 px row drew nothing, because 96 gaps of 24 px took the whole width, and
-    74 records drew at a tiny scale. A row's gaps take at most ``ROW_GAPS_MAX_SHARE`` of its width, so any number
-    of records draws and they keep most of the row; a row whose gaps fit keeps the record gap."""
+def _row_gaps_drawn(count: int, length: int, width: float, record_gap_px: float | None) -> list[float]:
+    """The gaps between the records of one row of ``count`` records, as the solver places them."""
 
-    width = 2000.0
-    measurements = [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), 1000 + index) for index in range(count)]
     horizontal = solve_linear_horizontal_layout(
-        measurements, (0,) * count, available_width=width, record_gap_px=24, align_center=False
+        [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), length) for index in range(count)],
+        (0,) * count,
+        available_width=width,
+        record_gap_px=record_gap_px,
+        align_center=False,
     )
     places = [horizontal.placement_for_index(index) for index in range(count)]
-    gaps = [right.x - (left.x + left.sequence_width) for left, right in zip(places, places[1:])]
-    gap = min(24.0, ROW_GAPS_MAX_SHARE * width / (count - 1))
+    return [right.x - (left.x + left.sequence_width) for left, right in zip(places, places[1:])]
+
+
+@pytest.mark.parametrize(
+    ("width", "count", "gap"),
+    (
+        (2000.0, 2, 24.0),
+        (2000.0, 21, 24.0),
+        (2000.0, 22, 23.80952380952381),
+        (2000.0, 74, 6.8493150684931505),
+        (2000.0, 97, 5.208333333333333),
+        (2000.0, 400, 1.2531328320802004),
+        (1000.0, 11, 24.0),
+        (1000.0, 15, 17.857142857142858),
+    ),
+)
+def test_the_default_record_gap_narrows_to_a_quarter_of_the_row(width: float, count: int, gap: float) -> None:
+    """OV-3456: 97 records in one 2000 px row drew nothing, because 96 gaps of 24 px took the whole width, and
+    74 records drew at a tiny scale. The default (Auto) gap is 24 px, narrowed so that a row's gaps take at most a
+    quarter of its width (OV-3572: the values are literal, so a change of the share or of the default shows)."""
+
+    gaps = _row_gaps_drawn(count, 1000, width, None)
     assert gaps == pytest.approx([gap] * (count - 1))
-    assert sum(place.sequence_width for place in places) == pytest.approx(width - gap * (count - 1))
-    assert sum(gaps) <= ROW_GAPS_MAX_SHARE * width + 1e-9
+    assert ROW_GAPS_MAX_SHARE == 0.25 and DEFAULT_RECORD_GAP_PX == 24.0
 
 
-def test_a_row_of_many_records_draws_and_its_gaps_follow_the_shared_rule() -> None:
-    """The 97-record row of OV-3456 draws through the assembler, every record at one scale."""
+@pytest.mark.parametrize(("width", "count", "gap"), ((2000.0, 7, 100.0), (1000.0, 15, 24.0), (2000.0, 22, 24.0)))
+def test_a_record_gap_the_user_set_is_drawn_as_set(width: float, count: int, gap: float) -> None:
+    """OV-3572: a gap the user set is never narrowed; 7 records of 100 kbp with a 100 px gap at width 2000 drew
+    83.3 px gaps after OV-3456."""
+
+    assert _row_gaps_drawn(count, 100_000, width, gap) == pytest.approx([gap] * (count - 1))
+
+
+def test_a_row_that_cannot_hold_the_record_gap_the_user_set_is_refused() -> None:
+    """OV-3572: a set gap is kept, so a row it does not fit is refused with the cause the Web words, as for window
+    marks; the default gap draws the same row."""
+
+    measurements = [LinearRecordMeasurement(index, RecordKey(f"key-{index}"), 1000) for index in range(97)]
+    with pytest.raises(ValidationError, match="record_gap_px=24") as refused:
+        solve_linear_horizontal_layout(measurements, (0,) * 97, available_width=2000, record_gap_px=24)
+    payload = serialize_web_error(refused.value, operation="generate", stage="render")
+    assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": "ROW_WIDTH"})
+
+
+def test_a_row_of_many_records_draws_with_the_default_gap_at_one_scale() -> None:
+    """The 97-record row of OV-3456 draws through the assembler with the default gap: every record 1500/97 px wide
+    (one scale) and 500/96 px apart."""
 
     count = 97
     records = _records(*(1000 for _index in range(count)))
@@ -382,11 +422,43 @@ def test_a_row_of_many_records_draws_and_its_gaps_follow_the_shared_rule() -> No
             ),
             legend="none",
         ),
-        layout=LinearMultiRecordOptions(
-            record_gap_px=24, multi_record_positions=tuple(f"#{index}@1" for index in range(1, count + 1))
-        ),
+        layout=LinearMultiRecordOptions(multi_record_positions=tuple(f"#{index}@1" for index in range(1, count + 1))),
     ).tostring()
     assert svg.count("data-record-row=") == count
+    root = ET.fromstring(svg)
+    xs = [_translate(_record_group(root, f"record_{index}", index - 1))[0] for index in range(1, count + 1)]
+    assert [right - left for left, right in zip(xs, xs[1:])] == pytest.approx([1500 / 97 + 500 / 96] * (count - 1))
+
+
+def _seven_record_genbank(path: Path) -> Path:
+    SeqIO.write(_records(*(100_000 for _index in range(7))), path, "genbank")
+    return path
+
+
+@pytest.mark.parametrize(("gap_args", "gap"), (((), 24.0), (("--linear_record_gap", "100"), 100.0)))
+def test_the_cli_draws_the_record_gap_the_user_set(tmp_path: Path, gap_args: tuple[str, ...], gap: float) -> None:
+    """OV-3572 through the command: 7 records of 100 kbp in one row draw ``--linear_record_gap 100`` as 100 px,
+    and the default as 24 px."""
+
+    from gbdraw.linear import linear_main
+
+    gbk = _seven_record_genbank(tmp_path / "seven.gb")
+    positions = [token for index in range(1, 8) for token in ("--multi_record_position", f"#{index}@1")]
+    linear_main(["--gbk", str(gbk), *positions, *gap_args, "-o", str(tmp_path / "out"), "-f", "svg"])
+    root = ET.parse(tmp_path / "out.svg").getroot()
+    xs = [_translate(_record_group(root, f"record_{index}", index - 1))[0] for index in range(1, 8)]
+    width = (2000 - 6 * gap) / 7
+    assert [right - left for left, right in zip(xs, xs[1:])] == pytest.approx([width + gap] * 6)
+
+
+def test_the_python_api_leaves_the_record_gap_at_auto_unless_set() -> None:
+    """OV-3572: the default of every Python layout type is Auto (None); a number is the user's gap."""
+
+    from gbdraw import interface
+
+    assert LinearMultiRecordOptions().record_gap_px is None
+    assert interface.LinearLayout().record_gap is None
+    assert interface.LinearLayout(record_gap=100).record_gap == 100.0
 
 
 @pytest.mark.parametrize("available_width", (1000.0, 997.3))

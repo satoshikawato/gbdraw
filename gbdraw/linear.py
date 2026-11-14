@@ -333,8 +333,11 @@ def _add_linear_input_args(parser: argparse.ArgumentParser) -> None:
         "--linear_record_gap",
         metavar="PX",
         type=argparse_float,
-        default=24.0,
-        help="Gap in pixels between records in the same Linear row (default: 24).",
+        default=None,
+        help=(
+            "Gap in pixels between records in the same Linear row. A gap you set is kept, and a row it does not "
+            "fit is refused (default: 24, narrowed in a row whose gaps would take more than a quarter of its width)."
+        ),
     )
 
 
@@ -1063,7 +1066,7 @@ def _validate_linear_inputs(parser: argparse.ArgumentParser, args: argparse.Name
         )
     if args.comparisons_table and args.blast:
         parser.error("--comparisons_table cannot be combined with -b/--blast")
-    if args.linear_record_gap < 0:
+    if args.linear_record_gap is not None and args.linear_record_gap < 0:
         parser.error("--linear_record_gap must be a finite non-negative number")
     if args.comparison_height is not None and args.comparison_height <= 0:
         parser.error("--comparison_height must be a positive finite number")
@@ -1688,7 +1691,7 @@ def _linear_records(args: argparse.Namespace, losat_search: LosatSearchOptions |
     )
     linear_layout = (
         LinearMultiRecordOptions(
-            record_gap_px=float(args.linear_record_gap),
+            record_gap_px=args.linear_record_gap,
             multi_record_positions=(
                 tuple(linear_positions) if linear_positions else None
             ),

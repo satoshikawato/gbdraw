@@ -4074,9 +4074,10 @@
                                             </div>
                                         </div>
                                     </template>
-                                    <label class="linear-primary-label block">{{ t('Record gap (px)') }}
-                                        <input type="number" min="0" step="1" v-model.number="linearRecordGap" :aria-label="t('Linear record gap')" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                    </label>
+                                    <div>
+                                        <span class="linear-primary-label block">{{ t('Record gap (px)') }} <help-tip id="help-linear-record-gap" :text="t('Gap between the records of one row. Blank (Auto): 24 px, narrowed in a row whose gaps would take more than a quarter of its width. A gap you type is kept; a row that cannot hold it is not drawn.')"></help-tip></span>
+                                        <input type="number" min="0" step="1" v-model.number="linearRecordGap" :aria-label="t('Linear record gap')" aria-describedby="help-linear-record-gap" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
+                                    </div>
                                 </div>
                                 <div class="min-w-0 space-y-1.5 border-t border-slate-200 pt-2" data-feature-anchor>
                                     <span class="linear-primary-label mb-1"><label for="linear-anchor-feature-selector">{{ t('Align at feature') }}</label> <help-tip id="help-linear-anchor-feature" :text="t('Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as gene=COX1 or locus_tag=<tag>. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.')"></help-tip></span>

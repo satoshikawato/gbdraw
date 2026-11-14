@@ -1033,7 +1033,7 @@ export const buildConfigData = (drawing) => ({
   featurePlacementOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
-    recordGap: Number(draftLinearRecordGap(drawing.linearRecordGap.value)) || 0,
+    recordGap: draftLinearRecordGap(drawing.linearRecordGap.value),
     // The rows as Load reads them (one reader; a row state holds is valid).
     rows: readLinearRecordRows(drawing.linearRecordRows).value
   },

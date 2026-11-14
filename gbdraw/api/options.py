@@ -735,29 +735,35 @@ class LinearRecordTranslation:
             object.__setattr__(self, field_name, normalized)
 
 
+def _record_gap_px(value: object) -> float:
+    """A record gap the user set, in px: a finite non-negative number."""
+
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValidationError("record_gap_px must be a finite non-negative number or None.")
+    try:
+        gap = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValidationError("record_gap_px must be a finite non-negative number or None.") from exc
+    if not math.isfinite(gap) or gap < 0:
+        raise ValidationError("record_gap_px must be a finite non-negative number or None.")
+    return gap
+
+
 @dataclass(frozen=True)
 class LinearMultiRecordOptions:
-    """Layout values used only by Linear multi-record rows."""
+    """Layout values used only by Linear multi-record rows.
 
-    record_gap_px: float = 24.0
+    ``record_gap_px`` is the gap the user set between the records of a row, drawn as set; ``None`` (Auto) draws the
+    default gap, narrowed in a row of many records (``solve_linear_horizontal_layout``).
+    """
+
+    record_gap_px: float | None = None
     multi_record_positions: Sequence[str] | None = None
     record_translations: Sequence[LinearRecordTranslation] = ()
 
     def __post_init__(self) -> None:
-        if isinstance(self.record_gap_px, bool) or not isinstance(
-            self.record_gap_px,
-            Real,
-        ):
-            raise ValidationError("record_gap_px must be a finite non-negative number.")
-        try:
-            value = float(self.record_gap_px)
-        except (OverflowError, TypeError, ValueError) as exc:
-            raise ValidationError(
-                "record_gap_px must be a finite non-negative number."
-            ) from exc
-        if not math.isfinite(value) or value < 0:
-            raise ValidationError("record_gap_px must be a finite non-negative number.")
-        object.__setattr__(self, "record_gap_px", value)
+        if self.record_gap_px is not None:
+            object.__setattr__(self, "record_gap_px", _record_gap_px(self.record_gap_px))
         if self.multi_record_positions is not None:
             if isinstance(self.multi_record_positions, (str, bytes)) or not isinstance(
                 self.multi_record_positions,

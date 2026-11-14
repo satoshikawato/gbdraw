@@ -156,7 +156,7 @@ import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './d
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { drawsOneCircle, oneCircleAdvOfLayout, oneCircleLeftOfRequest, oneCircleRequestLayout } from './one-circle-layout.js';
 import {
-  DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readCircularRecordRanges, readScalarAxisLabels
+  draftLinearRecordGap, readCircularRecordRanges, readLinearRecordGap, readScalarAxisLabels
 } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -4424,7 +4424,7 @@ const buildLayout = (state, drawing, records = [], drawnIdentities = []) => {
         !records.some((record) => record.presentation.gridRow != null) &&
         plan === null && translations.length === 0) return {};
     return {
-      recordGapPx: Math.max(0, Number(draftLinearRecordGap(drawing.linearRecordGap?.value)) || 0),
+      recordGapPx: draftLinearRecordGap(drawing.linearRecordGap?.value),
       multiRecordPositions: null,
       recordTranslations: translations,
       similarityAlignment: plan
@@ -4534,7 +4534,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []),
     losatProgram: config.losatProgram || 'blastn',
     linearRecordLayoutEnabled: Boolean(layout.enabled),
-    linearRecordGap: layout.recordGap ?? DEFAULT_LINEAR_RECORD_GAP_PX
+    linearRecordGap: readLinearRecordGap(layout.recordGap).value
   };
   /** @param {Record<string, any>} values */
   const refsOf = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, publicationRef(value)]));
@@ -6732,8 +6732,8 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'linear') {
     const layout = renderRequest.layout || {};
     if (Object.keys(layout).length > 0) {
-      if (!Number.isFinite(layout.recordGapPx) || layout.recordGapPx < 0) {
-        throw new Error('renderRequest.layout.recordGapPx must be a finite non-negative number.');
+      if (layout.recordGapPx !== null && (!Number.isFinite(layout.recordGapPx) || layout.recordGapPx < 0)) {
+        throw new Error('renderRequest.layout.recordGapPx must be null or a finite non-negative number.');
       }
       if (layout.multiRecordPositions !== null && (
         !Array.isArray(layout.multiRecordPositions) ||
@@ -7662,7 +7662,7 @@ export const projectCanonicalSessionRequest = ({
     ? {
         enabled: presentationOwnsLinearRows ||
           (renderRequest.layout?.multiRecordPositions || []).length > 0,
-        recordGap: renderRequest.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX,
+        recordGap: renderRequest.layout?.recordGapPx ?? null,
         rows: linearLayoutRows,
         recordTranslations,
         similarityAlignment
@@ -8055,9 +8055,8 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
-      const recordGapPx = Number(storedLayout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX);
       promoted.layout = {
-        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : DEFAULT_LINEAR_RECORD_GAP_PX,
+        recordGapPx: readLinearRecordGap(storedLayout?.recordGapPx).value,
         multiRecordPositions: null,
         recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),
@@ -8852,7 +8851,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
     }
     targets[0].display = { ...targets[0].display, startCoordinate };
   }
-  request.layout = { recordGapPx: DEFAULT_LINEAR_RECORD_GAP_PX, multiRecordPositions: null, ...request.layout,
+  request.layout = { recordGapPx: null, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };
   carryKeptTrackParts(committedRequest, request, []);

@@ -6,7 +6,6 @@ import { msg, numberText, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
 import { BUILTIN_COLOR_TABLES } from './builtin-color-tables.generated.js';
-import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
 import {
   featureDrawnContext,
   listFeatureRows,
@@ -967,7 +966,8 @@ const settingsDefaults = (drawingMode) => () => ({
   circularConservation: createDefaultCircularConservation(),
   linearComparisonPlan: createDefaultLinearComparisonPlan(),
   linearRecordLayoutEnabled: /** @type {boolean} */ (WEB_UX_PROFILE.linear.arrangeInRowsByDefault),
-  linearRecordGap: DEFAULT_LINEAR_RECORD_GAP_PX,
+  // null: Auto (`draftLinearRecordGap`); the number input holds '' when cleared.
+  linearRecordGap: /** @type {number | '' | null} */ (null),
   linearRecordRows: [],
   recordDisplayDrafts: [],
   recordsOff: [],

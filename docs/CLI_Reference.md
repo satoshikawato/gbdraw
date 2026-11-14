@@ -77,7 +77,7 @@ Options (examples):
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
   --records_table      TSV manifest for row-based input records
   --multi_record_position  Linear record placement as SELECTOR@ROW (repeatable)
-  --linear_record_gap  Fixed pixel gap between records in one Linear row
+  --linear_record_gap  Pixel gap between records in one Linear row (default: 24, narrowed in a long row)
   --comparisons_table  Linear BLAST manifest with explicit query/subject endpoints
   --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
   --conservation_table TSV manifest for circular BLAST similarity rings
@@ -959,7 +959,7 @@ One table row represents one displayed record, except that rows sharing a `recor
 
 A `:rc` suffix and `reverse_complement` draw the same window. `region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both crop 1000..9000 of the record as stored in the file, then reverse-complement the crop. `--region` and `--reverse_complement` follow the same order.
 
-For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` controls only the fixed gap between them. Multi-record rows cannot be combined with `--normalize_length`.
+For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` sets the gap between them, and the figure keeps it; a row that cannot hold the gaps is refused. Without it the gap is 24 px, narrowed in a row whose gaps would take more than a quarter of its width, so a row of many records (the contigs of a draft assembly) still draws. Multi-record rows cannot be combined with `--normalize_length`.
 
 Minimal GenBank records table:
 
@@ -1402,8 +1402,10 @@ options:
                         Place a record in a Linear row; repeat once for every
                         loaded record.
   --linear_record_gap PX
-                        Gap in pixels between records in the same Linear row
-                        (default: 24).
+                        Gap in pixels between records in the same Linear row.
+                        A gap you set is kept, and a row it does not fit is
+                        refused (default: 24, narrowed in a row whose gaps
+                        would take more than a quarter of its width).
   --comparisons_table TSV
                         TSV manifest with blast, query, and subject columns.
   -b, --blast [BLAST ...]

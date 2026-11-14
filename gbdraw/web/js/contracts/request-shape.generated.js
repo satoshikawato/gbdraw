@@ -291,7 +291,10 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
     CanonicalLinearLayout: Object.freeze({
       kind: "object",
       fields: Object.freeze({
-        recordGapPx: Object.freeze({kind: "number"}),
+        recordGapPx: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+        }),
         multiRecordPositions: Object.freeze({
           kind: "union",
           options: Object.freeze([
@@ -312,7 +315,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       open: false,
       defaults: Object.freeze({
         multiRecordPositions: null,
-        recordGapPx: 24.0,
+        recordGapPx: null,
         recordTranslations: Object.freeze([]),
         similarityAlignment: null
       })
