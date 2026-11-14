@@ -126,7 +126,7 @@ const buildHarness = ({
   // The label table owner, wired as app/feature-editor.js wires it.
   const labelTableActions = createLabelTableActions({
     state: appState, ref, computed, isRuleInputCurrent, snapshotRuleInputs, evaluateLabelRules, showNotice,
-    labelTargetsOf: labelActions.labelTargetsOf, labelSourceText: labelActions.labelSourceText,
+    labelTargetsOf: labelActions.labelTargetsOf,
     applyLabelTable: labelActions.applyLabelTable, rememberLabelImportNotice: labelActions.rememberLabelImportNotice
   });
   const actions = { ...labelActions, ...labelTableActions };
@@ -711,6 +711,12 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
     comparisonMatches: []
   });
   state.featureCatalog = ref({ schema: 5, items: [item(0, 'fa'), item(1, 'fb')] });
+  // The label owner lists the labels of every Result of the batch: the
+  // displayed Result's first, then each other Result's (R13).
+  assert.deepEqual(
+    actions.labelTargetsOf(state.activeDrawing(), displayed).map(({ featureId, feature, sourceText }) => [featureId, feature?.svg_id, sourceText]),
+    [['fa', 'fa', 'alpha'], ['fb', 'fb', 'beta']]
+  );
   const tsv = '*\tCDS\tlabel\t^beta$\tIMPORTED_B\n*\t*\tlabel\t^alpha$\tBULK_A\n';
   await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
   assert.deepEqual(evaluated, [['alpha', 'beta']], 'one evaluation covers the labels of both Results');
@@ -755,7 +761,7 @@ test('a Label TSV load with a location row is declined for a label whose drawn v
 });
 
 // Export Label TSV names its file after the displayed Result.
-test('Export Label TSV writes <result>.label_table.tsv with the bulk label edits', () => {
+test('Export Label TSV writes <result>.label_table.tsv with the bulk label edits', async () => {
   const { state, actions } = buildHarness();
   state.results.value = [{ name: 'my genome/a.svg', content: '<svg></svg>' }];
   state.labelTextBulkOverrides.alpha = 'A';
@@ -774,6 +780,7 @@ test('Export Label TSV writes <result>.label_table.tsv with the bulk label edits
   }
   assert.equal(saved.name, 'my_genome_a.svg.label_table.tsv');
   assert.equal(saved.blob.type, 'text/tab-separated-values');
+  assert.equal(await saved.blob.text(), '*\t*\tlabel\t^alpha$\tA\n');
 });
 
 // OV-131: a Label TSV that applies to no label changes nothing. The import
