@@ -1007,6 +1007,65 @@ for (const invalidRecordIndex of [
   assert.equal(circularPlan.recoveredFeatureState, undefined);
 }
 
+// D5-35: a Linear Session 27-39 whose saved rows match every drawn element (click-ready) stored them with the
+// input and the record within it: from the second input on, the pair reads as a record-index conflict, so no
+// identity reader finds such a row (a Similarity group member then shows its saved strand). Such rows are not
+// click-ready: Load reads the sources again, and the features read again name their drawn record. No released fixture
+// stores such rows; this is the smallest Session that does (two inputs of one record each, rows with sequences).
+{
+  const svg = `<svg>
+    <path id="a_record_1" data-gbdraw-feature-id="a_record_1" data-gbdraw-stable-feature-id="a" data-gbdraw-record-index="0" data-gbdraw-record-id="RA" />
+    <path id="b_record_2" data-gbdraw-feature-id="b_record_2" data-gbdraw-stable-feature-id="b" data-gbdraw-record-index="1" data-gbdraw-record-id="RB" />
+  </svg>`;
+  const saved = [
+    { id: 'f0', svg_id: 'a_record_1', stable_svg_id: 'a', fileIdx: 0, record_idx: 0, record_id: 'RA', type: 'CDS',
+      nucleotide_sequence: 'ATGTAA' },
+    { id: 'f1', svg_id: 'b_record_2', stable_svg_id: 'b', fileIdx: 1, record_idx: 0, record_id: 'RB', type: 'CDS',
+      nucleotide_sequence: 'ATGTGA' }
+  ];
+  const extracted = {
+    '/seq_0.gb': { features: [{ id: 'f0', svg_id: 'a', stable_svg_id: 'a', rendered_feature_svg_id: 'a', record_idx: 0,
+      record_id: 'RA', type: 'CDS' }], record_ids: ['RA'] },
+    '/seq_1.gb': { features: [{ id: 'f0', svg_id: 'b', stable_svg_id: 'b', rendered_feature_svg_id: 'b', record_idx: 0,
+      record_id: 'RB', type: 'CDS' }], record_ids: ['RB'] }
+  };
+  const reads = [];
+  const snapshot = (rows) => ({
+    mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb: { name: 'a.gb' } }, { gb: { name: 'b.gb' } }],
+    selectedResultIndex: 0, results: committedResults(svg),
+    featureState: { extractedFeatures: rows, biologicalFeatures: rows }, editorState: {}
+  });
+  const readFeatureExtractionDataImpl = async ({ path }) => { reads.push(path); return extracted[path]; };
+  assert.equal(featureIdentity(saved[1]).recordIndex.valid, false);
+  const plan = await buildSessionFeatureRecoveryPlan({ snapshot: snapshot(saved), featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl });
+  assert.equal(plan.status, 'recovered', plan.reason);
+  assert.deepEqual(reads, ['/seq_0.gb', '/seq_1.gb']);
+  for (const recovered of [plan.recoveredFeatureState.extractedFeatures, plan.recoveredFeatureState.biologicalFeatures]) {
+    assert.deepEqual(recovered.map((feature) => [feature.fileIdx, feature.record_idx]), [[0, 0], [1, 1]]);
+    assert.deepEqual(recovered.map((feature) => featureIdentity(feature).recordIndex.valid), [true, true]);
+  }
+  // Rows that name their drawn record are read as saved: Load reads no source.
+  reads.length = 0;
+  const consistent = saved.map((row, index) => ({ ...row, record_idx: index }));
+  const ready = await buildSessionFeatureRecoveryPlan({ snapshot: snapshot(consistent), featureVisibilityTsv: '',
+    readFeatureExtractionDataImpl });
+  assert.equal(ready.status, 'aligned', ready.reason);
+  assert.deepEqual(reads, []);
+  // When the sources cannot be read again, or the features read again do not match every drawn element, Load keeps
+  // the saved rows as it did before this check (a 'ready' plan with the extraction warning), not a failed recovery.
+  for (const failingRead of [
+    async () => { throw new Error('source unreadable'); },
+    async ({ path }) => ({ ...extracted[path], features: [] })
+  ]) {
+    const kept = await buildSessionFeatureRecoveryPlan({ snapshot: snapshot(saved), featureVisibilityTsv: '',
+      readFeatureExtractionDataImpl: failingRead });
+    assert.equal(kept.status, 'ready', kept.reason);
+    assert.equal(kept.recoveredFeatureState, undefined);
+    assert.ok(kept.warning);
+  }
+}
+
 // OV-751: two features of one record that share a hash (a 0.13.0
 // Linear Session such as hash-color-rule-linear-rc.v30, whose SVG draws both
 // under one ID) both agree with that element. They differ by no record, so

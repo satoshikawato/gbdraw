@@ -6,6 +6,7 @@
  */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { DrawnFeatureIdsOf } from './legend-layout/composition-actions.js' */
 import { msg, numberText, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
@@ -1197,6 +1198,8 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  *   the Web state members the alignment actions read and write
  * @property {(groupId: string) => OrthogroupGroup | null} getOrthogroupById
  * @property {(group: OrthogroupGroup | string | null) => OrthogroupMember[]} getEnrichedOrthogroupMembers
+ * @property {DrawnFeatureIdsOf} drawnFeatureIdsOf the drawn element IDs of an anchor's feature (the orthogroup owner's
+ *   catalog row lookup), which bind a Result an older gbdraw drew to the plan's records
  * @property {{ readonly value: SelectedGroupDetail | null }} selectedOrthogroupDetail
  *   the orthogroup owner's detail of the drawer's selected group (OV-920)
  * @property {() => Record<string, any> | null} getCommittedRequest
@@ -1253,6 +1256,7 @@ export const createSimilarityAlignmentActions = ({
   state,
   getOrthogroupById,
   getEnrichedOrthogroupMembers,
+  drawnFeatureIdsOf,
   selectedOrthogroupDetail,
   getCommittedRequest,
   getCommittedSession,
@@ -1276,6 +1280,7 @@ export const createSimilarityAlignmentActions = ({
     !state
     || typeof getOrthogroupById !== 'function'
     || typeof getEnrichedOrthogroupMembers !== 'function'
+    || typeof drawnFeatureIdsOf !== 'function'
     || !selectedOrthogroupDetail
     || typeof getCommittedRequest !== 'function'
     || typeof getCommittedSession !== 'function'
@@ -1388,7 +1393,7 @@ export const createSimilarityAlignmentActions = ({
   const materializedTranslations = (recordKeys, plan = null) => {
     const base = replacementTranslations(state, recordKeys);
     const svg = currentSvg();
-    return svg ? materializeRecordTranslations(svg, base, recordKeys, plan) : base;
+    return svg ? materializeRecordTranslations(svg, base, recordKeys, plan, drawnFeatureIdsOf) : base;
   };
 
   // `drafted`: the translations a draft's baseline materialized, kept as they are. `fromResult`: read the translations

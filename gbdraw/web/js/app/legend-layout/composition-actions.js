@@ -104,11 +104,20 @@ import { LEGEND_GROUP_SELECTOR, LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../servi
  * @property {Element | null} title
  */
 /**
+ * The anchor of an alignment-record decision; only the fields read here.
+ * @typedef {{ recordKey?: unknown, stableFeatureSvgId?: unknown, biologicalFeatureId?: unknown }} LegacyRecordAnchor
+ */
+/**
  * One alignment-record decision of the active plan; only the fields read here.
  * @typedef {object} LegacyRecordDecision
  * @property {unknown} [recordKey]
  * @property {unknown} [status]
- * @property {{ stableFeatureSvgId?: unknown, biologicalFeatureId?: unknown } | null} [anchor]
+ * @property {LegacyRecordAnchor | null} [anchor]
+ */
+/**
+ * The IDs of the drawn elements of an anchor's feature (`data-gbdraw-feature-id`), which the features Load read
+ * again from the sources give; empty when none is known.
+ * @typedef {(anchor: LegacyRecordAnchor) => readonly string[]} DrawnFeatureIdsOf
  */
 
 export const COMPOSITION_SCHEMA_VERSION = 1;
@@ -1720,14 +1729,33 @@ const stableFeatureIds = (target) => new Set(
 
 /**
  * @param {Element} target
- * @param {LegacyRecordDecision[]} decisions
+ * @returns {Set<string>}
  */
-const legacyRecordKey = (target, decisions) => {
+const drawnFeatureIds = (target) => new Set(
+  Array.from(target.querySelectorAll?.('[data-gbdraw-feature-id]') || [])
+    .map((feature) => String(feature.getAttribute?.('data-gbdraw-feature-id') || '').trim())
+    .filter(Boolean)
+);
+
+/**
+ * The record a record group draws: the decision whose anchor it draws, by the drawn IDs of the anchor's feature when
+ * the resolver knows them, else by the anchor's stable ID. A drawn ID names one drawn record (`..._record_N`); a
+ * stable ID does not: a record drawn reverse complemented, cropped or rotated by an older gbdraw draws its features
+ * under their hash in the drawn record, and a record drawn twice draws the same stable IDs twice (OV-3538).
+ * @param {Element} target
+ * @param {LegacyRecordDecision[]} decisions
+ * @param {DrawnFeatureIdsOf} drawnFeatureIdsOf
+ */
+const legacyRecordKey = (target, decisions, drawnFeatureIdsOf) => {
   const available = stableFeatureIds(target);
-  if (available.size === 0) return '';
+  const drawn = drawnFeatureIds(target);
+  if (available.size === 0 && drawn.size === 0) return '';
   const matches = decisions.filter((decision) => {
     const anchor = decision?.anchor;
-    return anchor && [anchor.stableFeatureSvgId, anchor.biologicalFeatureId]
+    if (!anchor) return false;
+    const drawnIds = drawnFeatureIdsOf(anchor);
+    if (drawnIds.length > 0) return drawnIds.some((value) => drawn.has(value));
+    return [anchor.stableFeatureSvgId, anchor.biologicalFeatureId]
       .map((value) => String(value || '').trim())
       .filter(Boolean)
       .some((value) => available.has(value));
@@ -1759,20 +1787,23 @@ const legacyRenderedTranslation = (target, fallbackValue) => {
 
 // This is the only bridge from SVG composition placement to the record-keyed
 // translation owner. Current SVGs bind directly by recordKey. Released
-// pre-recordKey SVGs bind once through the active plan's stable feature IDs;
-// DOM order, row number, rendered record ID, and array position never become
+// pre-recordKey SVGs bind once through the active plan's anchors: their stable
+// feature IDs, or the drawn IDs of their features (`drawnFeatureIdsOf`); DOM
+// order, row number, rendered record ID, and array position never become
 // persisted identity.
 /**
  * @param {Element} svg
- * @param {({ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined)[]} [baseTranslations]
- * @param {unknown[]} [recordKeys]
- * @param {{ records?: unknown } | null} [activePlan] The active plan; only its `records` are read.
+ * @param {({ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined)[]} baseTranslations
+ * @param {unknown[]} recordKeys
+ * @param {{ records?: unknown } | null} activePlan The active plan; only its `records` are read.
+ * @param {DrawnFeatureIdsOf} drawnFeatureIdsOf The resolver port of an anchor's drawn feature IDs.
  */
 export const materializeRecordTranslations = (
   svg,
-  baseTranslations = [],
-  recordKeys = [],
-  activePlan = null
+  baseTranslations,
+  recordKeys,
+  activePlan,
+  drawnFeatureIdsOf
 ) => {
   const binding = bindCompositionMetadata(svg);
   const deltas = userDeltas(binding).primary;
@@ -1791,7 +1822,7 @@ export const materializeRecordTranslations = (
     const explicitRecordKey = String(
       target.getAttribute?.('data-record-key') || ''
     ).trim();
-    const recordKey = explicitRecordKey || legacyRecordKey(target, decisions);
+    const recordKey = explicitRecordKey || legacyRecordKey(target, decisions, drawnFeatureIdsOf);
     if (!recordKey) return;
     if (byRecord.has(recordKey)) {
       fail(`Composition metadata binds duplicate record key ${JSON.stringify(recordKey)}.`);

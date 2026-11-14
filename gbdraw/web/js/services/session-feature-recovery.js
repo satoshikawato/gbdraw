@@ -1032,6 +1032,19 @@ const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResult
 const isClickReadyValidation = (validation) =>
   validation?.state === 'ready' || validation?.state === 'not-needed';
 
+/**
+ * Whether a Linear Session saved a feature row whose record indexes disagree: it saved the input (`fileIdx`) and the
+ * record within it (`record_idx`), which from the second input on name no one record, so no identity reader finds the
+ * row. Such rows are not click-ready: Load reads the sources again, and the features read again name their drawn
+ * record (`withDrawnRecordIndexes`, D5-35). A Circular extraction names no drawn inputs, so reading it again would
+ * not resolve such a row.
+ * @param {FeatureRecoverySnapshot | null | undefined} snapshot
+ */
+const savedLinearRecordIndexConflict = (snapshot) => snapshot?.mode === 'linear'
+  && [snapshot.featureState?.extractedFeatures, snapshot.featureState?.biologicalFeatures].some((features) => (
+    Array.isArray(features) && features.some((feature) => !nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS).valid)
+  ));
+
 // The plan reads the feature rows a Session 27-39 stored (its Results have no
 // catalog). Such a row stored its sequences and no catalog identity: the rows
 // are usable, and Load reads no feature again, when a row stored a sequence, as
@@ -1144,6 +1157,15 @@ export const buildSessionFeatureRecoveryPlan = async ({
     extractedFeatures: snapshot?.featureState?.extractedFeatures
   });
   const biologicalCatalogReady = hasUsableBiologicalFeatureCatalog(snapshot?.featureState);
+  const savedRowsConflict = savedLinearRecordIndexConflict(snapshot);
+  /** @param {{ state?: string } | null | undefined} checked */
+  const savedRowsClickReady = (checked) => !savedRowsConflict && isClickReadyValidation(checked);
+  // Rows that only their record-index conflict sent to the sources stay as saved when that read fails, as Load kept
+  // them before (the 'ready' return below): reading the sources again never makes such a Load worse.
+  /** @template {object} F @param {F} failed */
+  const failedRecovery = (failed) => (savedRowsConflict && biologicalCatalogReady && isClickReadyValidation(validation)
+    ? { status: 'ready', reason: validation.state, validation, warning: EXTRACTION_FAILED_WARNING, errors: [] }
+    : failed);
 
   if (validation.state === 'not-needed') {
     return {
@@ -1154,7 +1176,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
     };
   }
 
-  if (isClickReadyValidation(validation) && validation.renderedCount > 0) {
+  if (savedRowsClickReady(validation) && validation.renderedCount > 0) {
     const existingAlignment = alignFeatureStateToRenderedSvg({
       snapshot,
       featureState: snapshot?.featureState || {},
@@ -1182,7 +1204,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
     }
   }
 
-  if (biologicalCatalogReady && isClickReadyValidation(validation)) {
+  if (biologicalCatalogReady && savedRowsClickReady(validation)) {
     return {
       status: 'ready',
       reason: validation.state,
@@ -1197,7 +1219,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
       featureState: snapshot?.featureState || {},
       selectedResultIndex: validation.selectedResultIndex
     });
-    if (biologicalCatalogReady && isClickReadyValidation(existingAlignment.alignedValidation)) {
+    if (biologicalCatalogReady && savedRowsClickReady(existingAlignment.alignedValidation)) {
       const migrated = migrateFeatureOverrideState({
         featureState: existingAlignment.alignedFeatureState,
         editorState: snapshot?.editorState,
@@ -1264,7 +1286,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
     const recoveredValidation = recoveredAlignment.alignedValidation;
 
     if (!isClickReadyValidation(recoveredValidation)) {
-      return {
+      return failedRecovery({
         status: 'failed',
         reason: 'validation-not-ready-after-recovery',
         validation,
@@ -1272,7 +1294,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
         alignment: recoveredAlignment.alignment,
         warning: EXTRACTION_FAILED_WARNING,
         errors: payload.errors || []
-      };
+      });
     }
 
     const migration = buildFeatureOverrideMigration({
@@ -1312,12 +1334,12 @@ export const buildSessionFeatureRecoveryPlan = async ({
       errors: payload.errors || []
     };
   } catch (error) {
-    return {
+    return failedRecovery({
       status: 'failed',
       reason: 'extraction-failed',
       validation,
       warning: EXTRACTION_FAILED_WARNING,
       errors: [error]
-    };
+    });
   }
 };
