@@ -490,9 +490,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
   "regionDrawing": {
     "copyRefusalReasons": [
       "CIRCULAR_WHOLE_RECORDS",
-      "CIRCULAR_RANGE_TARGET",
-      "TARGET_ALIGNED",
-      "SEPARATE_DIAGRAMS"
+      "CIRCULAR_RANGE_TARGET"
     ],
     "notCarriedKinds": [
       "OTHER_MODE_SETTINGS",

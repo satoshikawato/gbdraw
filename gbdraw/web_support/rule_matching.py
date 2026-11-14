@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from collections import defaultdict
 from typing import Callable, Literal, Sequence, TypedDict, cast, is_typeddict
 
@@ -12,7 +11,7 @@ from pandas import DataFrame
 
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape, violations
 from gbdraw.features.colors import build_specific_color_rules
-from gbdraw.features.ids import feature_instance
+from gbdraw.features.ids import exact_value_pattern, feature_instance
 from gbdraw.features.selector_values import ColorRuleList, iter_specific_color_rules
 from gbdraw.features.visibility import (
     _first_matching_visibility_rule,
@@ -317,7 +316,6 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
     return json.dumps(RuleEvaluationResult(matches=matches, winners=winners, priorities=priorities))
 
 
-_EXACT_SPECIAL = re.compile(r"[.*+?^${}()|[\]\\]")
 # The qualifiers an exact condition reads besides a label text (Owner R-07).
 _CONDITION_QUALIFIERS = ("product", "gene")
 _REQUEST_DESCRIPTION = describe_rule_helpers()
@@ -329,13 +327,6 @@ HashTarget = tuple[str, str]
 NextTableRow = int | ColorRuleRow | RetargetedColorRule
 # A next table, and the index in it of the rule that colors each feature (-1 for none).
 ColoredTable = tuple[list[NextTableRow], list[int]]
-
-
-def exact_value_pattern(value: str) -> str:
-    """The pattern that matches `value` exactly, escaped as the Web writes one
-    (services/feature-selector.js `exactRegexValue`), so a rule either wrote
-    reads as the same condition."""
-    return "^" + _EXACT_SPECIAL.sub(lambda match: "\\" + match.group(0), value) + "$"
 
 
 def _qualifier_rank(qualifier: str) -> int:

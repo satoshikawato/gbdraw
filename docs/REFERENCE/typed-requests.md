@@ -205,15 +205,21 @@ comparisons, and neither drawing changes:
   (`pasted_record_keys`). A Linear target that places its records by row gives
   each pasted record a new row; a Circular target takes whole records only and
   becomes, or stays, a Multi-Record Canvas, with the pasted records on one new
-  row where it places its records by row. A Circular target that draws one
-  range, and a Linear target aligned at a feature or by a Similarity
-  alignment, refuse a paste with `CopyRefused` (reasons
-  `CIRCULAR_WHOLE_RECORDS`, `CIRCULAR_RANGE_TARGET`, `TARGET_ALIGNED`).
+  row where it places its records by row. A Circular target that draws
+  separate diagrams takes each pasted record as a diagram of its own. A
+  Circular target takes whole records only, and only while it draws whole
+  records; otherwise the paste raises `CopyRefused` (reasons
+  `CIRCULAR_WHOLE_RECORDS`, `CIRCULAR_RANGE_TARGET`). A Linear target aligned
+  at a feature or by a Similarity alignment keeps its alignment, and the
+  pasted records are drawn where they are, without a move of their own.
 - With `edits="edits"` (the default) each record comes as the source draws it,
-  with its per-feature label and visibility edits inside the regions moved to
-  its new key. The source's annotations, feature placements, and Depth tracks
-  of those records are not carried. With `edits="records"` the records come as
-  a new drawing of their files draws them.
+  with its per-feature color, label, and visibility edits inside the regions
+  moved to its new key. A per-feature color is a `hash` row of the color
+  table; the target's color table gains one row for each such feature, after
+  its own rows, which do not change. The source's annotations, feature
+  placements, and Depth tracks of those records are not carried. With
+  `edits="records"` the records come as a new drawing of their files draws
+  them.
 - A selected span that the target already draws, the same record of the same
   file (compared by file content and the record's place in the file, not by
   its name) and the same span, is listed in `already_present` with the

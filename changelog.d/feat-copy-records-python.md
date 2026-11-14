@@ -1,8 +1,8 @@
 - Added: `paste_region_drawing()` in `gbdraw.api` appends records or regions
   of one drawing of a materialized Session to another drawing of it. The
-  drawing keeps its own settings; the records' per-feature label and
-  visibility edits come along under their new record keys
-  (`edits="records"` brings the records only). A span the drawing already
+  drawing keeps its own settings, colors, and alignment; the records'
+  per-feature color, label, and visibility edits come along under their new
+  record keys (`edits="records"` brings the records only). A span the drawing already
   draws (the same record of the same file, and the same span) is listed in
   `already_present` and left out unless `duplicates="add"`. See
   [Typed requests](./docs/REFERENCE/typed-requests.md).

@@ -365,6 +365,17 @@ def feature_instance(biological_feature_id: str, record_key: str) -> str:
     return f"{biological_feature_id}{FEATURE_INSTANCE_SEPARATOR}{record_key}"
 
 
+_EXACT_SPECIAL = re.compile(r"[.*+?^${}()|[\]\\]")
+
+
+def exact_value_pattern(value: str) -> str:
+    """The pattern that matches `value` exactly, escaped as the Web writes one
+    (services/feature-selector.js `exactRegexValue`), so a rule either wrote
+    reads as the same condition: the spelling of a `hash` row that names a
+    feature instance."""
+    return "^" + _EXACT_SPECIAL.sub(lambda match: "\\" + match.group(0), value) + "$"
+
+
 _FEATURE_INSTANCES_ATTR = "_gbdraw_feature_instances"
 
 
@@ -496,6 +507,7 @@ __all__ = [
     "compute_feature_hash_from_location_parts",
     "compute_feature_object_hash",
     "compute_source_feature_hash",
+    "exact_value_pattern",
     "feature_instance",
     "feature_instances",
     "source_feature_location_parts",

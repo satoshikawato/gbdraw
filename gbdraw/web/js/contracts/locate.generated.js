@@ -339,9 +339,16 @@
  * @property {Record<string, unknown>} renderRequest
  * @property {Record<string, string>} resourceSources
  * @property {Record<string, string>} targetResourceSources
+ * @property {AddedResource[]} addedResources
  * @property {string[]} pastedRecordKeys
  * @property {AlreadyPresentItem[]} alreadyPresent
  * @property {PasteNotCarriedItem[]} notCarried
+ */
+/**
+ * @typedef {object} AddedResource
+ * @property {string} resourceId
+ * @property {string} name
+ * @property {string} text
  */
 /**
  * @typedef {object} AlreadyPresentItem
@@ -359,7 +366,7 @@
 /**
  * @typedef {object} RefusedCopy
  * @property {'refused'} status
- * @property {'CIRCULAR_WHOLE_RECORDS' | 'CIRCULAR_RANGE_TARGET' | 'TARGET_ALIGNED' | 'SEPARATE_DIAGRAMS'} reason
+ * @property {'CIRCULAR_WHOLE_RECORDS' | 'CIRCULAR_RANGE_TARGET'} reason
  */
 /**
  * @typedef {object} NewDrawingCopy
@@ -999,9 +1006,20 @@ export const LOCATE_DESCRIPTION = Object.freeze({
         renderRequest: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
         resourceSources: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})}),
         targetResourceSources: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})}),
+        addedResources: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "AddedResource"})}),
         pastedRecordKeys: Object.freeze({kind: "array", items: Object.freeze({kind: "string"})}),
         alreadyPresent: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "AlreadyPresentItem"})}),
         notCarried: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "PasteNotCarriedItem"})})
+      }),
+      optional: Object.freeze([]),
+      open: false
+    }),
+    AddedResource: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        resourceId: Object.freeze({kind: "string"}),
+        name: Object.freeze({kind: "string"}),
+        text: Object.freeze({kind: "string"})
       }),
       optional: Object.freeze([]),
       open: false
@@ -1034,10 +1052,7 @@ export const LOCATE_DESCRIPTION = Object.freeze({
       kind: "object",
       fields: Object.freeze({
         status: Object.freeze({kind: "literal", values: Object.freeze(["refused"])}),
-        reason: Object.freeze({
-          kind: "literal",
-          values: Object.freeze(["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET", "TARGET_ALIGNED", "SEPARATE_DIAGRAMS"])
-        })
+        reason: Object.freeze({kind: "literal", values: Object.freeze(["CIRCULAR_WHOLE_RECORDS", "CIRCULAR_RANGE_TARGET"])})
       }),
       optional: Object.freeze([]),
       open: false

@@ -1339,24 +1339,156 @@ def test_a_paste_lists_the_rows_the_targets_comparisons_lack() -> None:
     assert paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], searched).not_carried == ()
 
 
-def test_an_aligned_linear_drawing_or_separate_diagrams_refuse_a_paste() -> None:
-    from gbdraw.api import CircularBatchOutputPolicy, CircularBatchRequest, LinearRecordTranslation
+def test_a_paste_into_an_aligned_linear_drawing_keeps_its_alignment_and_moves_no_pasted_record() -> None:
+    from gbdraw.api import LinearRecordTranslation
     from gbdraw.api.region_drawing import paste_region_request
+    from gbdraw.layout.similarity_alignment import (
+        AlignmentAnchorIdentity,
+        AlignmentDecisionStatus,
+        AlignmentRecordDecision,
+        AlignmentResolutionRationale,
+        SimilarityAlignmentPlan,
+    )
 
-    target = LinearDiagramRequest(
+    # Placed by hand (Align at feature): the translations name the target's own records only.
+    shifted = LinearDiagramRequest(
         records=[RecordInput(GenBankInputSource(MITO), record_key="mito")],
         layout=LinearMultiRecordOptions(record_translations=(LinearRecordTranslation("mito", 120.0, 0.0),)),
     )
-    with pytest.raises(CopyRefused) as refused:
-        paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], target)
-    assert refused.value.reason == "TARGET_ALIGNED"
-    separate = CircularBatchRequest(
+    pasted = paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], shifted)
+    assert pasted.request.layout.record_translations == (
+        LinearRecordTranslation("mito", 120.0, 0.0), LinearRecordTranslation("pair:1", 0.0, 0.0)
+    )
+    assert [record.record_key for record in pasted.request.records] == ["mito", "pair:1"]
+    # A Similarity alignment plan names every record it draws: the pasted ones as records it leaves where they are.
+    feature = resolve_request_records(shifted).provenance[0].source_feature_catalog[3].biological_feature_id
+    anchor = AlignmentAnchorIdentity(record_key="mito", biological_feature_id=feature)
+    plan = SimilarityAlignmentPlan(group_id="g1", reference=anchor, records=(AlignmentRecordDecision(
+        "mito", AlignmentDecisionStatus.REFERENCE, AlignmentResolutionRationale.REFERENCE, anchor
+    ),))
+    aligned = replace(shifted, similarity_alignment=plan)
+    request = paste_region_request(
+        _vnig_like_canvas(), [RegionSelection("pair:1", 1, 400), RegionSelection("pair:2", 1, 400)], aligned
+    ).request
+    assert request.similarity_alignment.reference == anchor
+    assert [(item.record_key, item.status, item.rationale) for item in request.similarity_alignment.records] == [
+        ("mito", AlignmentDecisionStatus.REFERENCE, AlignmentResolutionRationale.REFERENCE),
+        ("pair:1", AlignmentDecisionStatus.SKIPPED, AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE),
+        ("pair:2", AlignmentDecisionStatus.SKIPPED, AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE),
+    ]
+    assert [item.x for item in request.layout.record_translations] == [120.0, 0.0, 0.0]
+
+
+def test_separate_circular_diagrams_take_whole_records_as_diagrams_of_their_own() -> None:
+    from gbdraw.api import CircularBatchOutputPolicy, CircularBatchRequest, RenderOutputRequest
+    from gbdraw.api.region_drawing import paste_region_request
+
+    named = CircularBatchRequest(
         records=[RecordInput(GenBankInputSource(MITO), record_key="mito")],
         output_policy=CircularBatchOutputPolicy(output_prefix="out"),
     )
+    pasted = paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 4000)], named)
+    assert isinstance(pasted.request, CircularBatchRequest) and pasted.request.output_policy == named.output_policy
+    assert [record.record_key for record in pasted.request.records] == ["mito", "pair:1"]
+    assert all(record.presentation.grid_row is None for record in pasted.request.records)
+    # Diagrams named one by one (as the Web states them): each pasted diagram takes its record ID, made unique.
+    each = CircularBatchRequest(
+        records=[RecordInput(GenBankInputSource(TWO_RECORDS), selector=RecordSelector("TESTA", "TESTA", None),
+                             record_key="a")],
+        outputs=[RenderOutputRequest(output_prefix="TESTA")],
+    )
+    both = paste_region_request(
+        _vnig_like_canvas(), [RegionSelection("pair:1", 1, 4000), RegionSelection("pair:2", 1, 4000)], each,
+        duplicates="add",
+    ).request
+    assert [output.output_prefix for output in both.outputs] == ["TESTA", "TESTA_2", "TESTB"]
+    assert [str(record.id) for record in resolve_request_records(both).records] == ["TESTA", "TESTA", "TESTB"]
     with pytest.raises(CopyRefused) as refused:
-        paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 4000)], separate)
-    assert refused.value.reason == "SEPARATE_DIAGRAMS"
+        paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], named)
+    assert refused.value.reason == "CIRCULAR_WHOLE_RECORDS"
+    cropped = replace(named, records=[
+        RecordInput(GenBankInputSource(MITO), record_key="mito", windows=(RecordWindow(1, 500),))
+    ])
+    with pytest.raises(CopyRefused) as refused:
+        paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 4000)], cropped)
+    assert refused.value.reason == "CIRCULAR_RANGE_TARGET"
+
+
+def _catalog_entry(request: DiagramRequest, record_key: str, locus_tag: str) -> Any:
+    identity = _catalog_id(request, record_key, locus_tag)
+    item = next(item for item in resolve_request_records(request).provenance if item.record_identity_key == record_key)
+    return next(entry for entry in item.source_feature_catalog if entry.biological_feature_id == identity)
+
+
+def _colored_canvas(rules_file: Path | None = None) -> CircularDiagramRequest:
+    """The canvas with a color of its own on three features of TESTB and a rule for every CDS: two features inside
+    1..1000 (one by its instance, one by an older row naming its stable hash), one outside. With ``rules_file``
+    the rules are a file, as the Web sends its rule list."""
+    from pandas import DataFrame
+
+    from gbdraw.api import ColorOptions
+    from gbdraw.features.ids import exact_value_pattern, feature_instance
+
+    plain = _vnig_like_canvas()
+    first, second, outside = (_catalog_entry(plain, "pair:2", tag) for tag in ("TESTB_0001", "TESTB_0002", "TESTB_0005"))
+    rows = [
+        ("CDS", "product", ".*", "#999999", "every CDS"),
+        ("CDS", "hash", exact_value_pattern(feature_instance(first.biological_feature_id, "pair:2")), "#ff0000", "mine"),
+        ("CDS", "hash", str(second.stable_feature_id), "#00ff00", "older"),
+        ("CDS", "hash", exact_value_pattern(feature_instance(outside.biological_feature_id, "pair:2")), "#0000ff", ""),
+    ]
+    if rules_file is not None:
+        rules_file.write_text("".join("\t".join(row) + "\n" for row in rows), encoding="utf-8")
+        return _vnig_like_canvas(colors=ColorOptions(color_table_file=str(rules_file)))
+    table = DataFrame(rows, columns=["feature_type", "qualifier_key", "value", "color", "caption"])
+    return _vnig_like_canvas(colors=ColorOptions(color_table=table))
+
+
+def test_a_paste_brings_the_colors_of_the_features_inside_its_regions() -> None:
+    from pandas import DataFrame
+
+    from gbdraw.api import ColorOptions
+    from gbdraw.api.region_drawing import paste_region_request
+    from gbdraw.features.colors import build_specific_color_rules
+    from gbdraw.features.ids import feature_instances
+    from gbdraw.features.selector_values import find_specific_color_rule
+
+    own = DataFrame([("CDS", "gene", "ND1", "#123456", "own")],
+                    columns=["feature_type", "qualifier_key", "value", "color", "caption"])
+    target = _linear_target(colors=ColorOptions(color_table=own, default_colors_palette="forest"))
+    pasted = paste_region_request(_colored_canvas(), [RegionSelection("pair:2", 1, 1000)], target)
+    request = pasted.request
+    assert pasted.pasted_record_keys == ("pair:2-2",)
+    colors = request.options.colors
+    # The target keeps its palette and its rows, first; the two colored features inside follow, named in the
+    # pasted record; the rule for every CDS and the feature outside stay behind.
+    assert colors.default_colors_palette == "forest" and colors.color_table_file is None
+    table = colors.color_table
+    assert table.iloc[:1].values.tolist() == own.values.tolist()
+    assert table.iloc[1:][["color", "caption"]].values.tolist() == [["#ff0000", "mine"], ["#00ff00", "older"]]
+    assert all(value.endswith("@pair:2-2$") for value in table.iloc[1:]["value"])
+    # The renderer colors the pasted features, and only them, with those rows.
+    rules = build_specific_color_rules(table.iloc[1:])
+    resolved = resolve_request_records(request).records
+    drawn = {
+        (record.id, feature.qualifiers.get("locus_tag", [""])[0]): find_specific_color_rule(
+            feature, rules, record_id=record.id, instance=feature_instances(record)(feature)
+        )
+        for record in resolved
+        for feature in record.features
+        if feature.type == "CDS"
+    }
+    assert {key: value for key, value in drawn.items() if value is not None} == {
+        ("TESTB", "TESTB_0001"): ("#ff0000", "mine"), ("TESTB", "TESTB_0002"): ("#00ff00", "older")
+    }
+    # Without a color table of its own the target takes one; the records only, or no colored feature inside,
+    # leave its colors as they are.
+    plain = paste_region_request(_colored_canvas(), [RegionSelection("pair:2", 1, 1000)], _linear_target())
+    assert plain.request.options.colors.color_table.iloc[:, 3].tolist() == ["#ff0000", "#00ff00"]
+    only = paste_region_request(_colored_canvas(), [RegionSelection("pair:2", 1, 1000)], target, edits="records")
+    assert only.request.options.colors == target.options.colors
+    elsewhere = paste_region_request(_colored_canvas(), [RegionSelection("pair:2", 3000, 3500)], target)
+    assert elsewhere.request.options.colors == target.options.colors
 
 
 def test_a_paste_through_the_drawings_api_keeps_the_targets_id(tmp_path: Path) -> None:
@@ -1460,6 +1592,53 @@ def test_the_web_helper_pastes_with_the_resources_of_both_drawings(tmp_path: Pat
     }
     decoded = decode_canonical_request(request, resource_paths=paths, output_directory=tmp_path / "out")
     assert [str(record.id) for record in resolve_request_records(decoded).records] == ["NC_012920.1", "TESTA", "TESTB"]
+
+
+def test_the_web_helper_returns_the_color_table_with_the_pasted_colors(tmp_path: Path) -> None:
+    from gbdraw.features.ids import exact_value_pattern, feature_instance
+    from gbdraw.session_request_codec import decode_canonical_request
+    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+
+    source_payload, source_paths = _staged(_colored_canvas(tmp_path / "rules.tsv"), tmp_path / "source")
+    target_payload, target_paths = _staged(
+        LinearDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="mito")]), tmp_path / "target"
+    )
+    copy = {
+        "into": "existing",
+        "target": {"renderRequest": target_payload, "resourcePaths": target_paths},
+        "edits": "edits",
+        "duplicates": "skip",
+    }
+    reply = json.loads(derive_web_region_drawing_json(
+        json.dumps(source_payload), json.dumps(source_paths), str(tmp_path / "out"),
+        json.dumps([{"recordKey": "pair:2", "start": 1, "end": 1000}]), json.dumps(True), json.dumps(copy),
+    ))
+    [added] = reply["addedResources"]
+    assert reply["renderRequest"]["diagramOptions"]["colors"]["colorTable"]["resourceId"] == added["resourceId"]
+    assert added["resourceId"] not in {**reply["resourceSources"], **reply["targetResourceSources"]}
+    first = _catalog_entry(_vnig_like_canvas(), "pair:2", "TESTB_0001")
+    lines = added["text"].splitlines()
+    assert lines[0] == "feature_type\tqualifier_key\tvalue\tcolor\tcaption"
+    assert lines[1] == "\t".join(
+        ["CDS", "hash", exact_value_pattern(feature_instance(first.biological_feature_id, "pair:2")), "#ff0000", "mine"]
+    )
+    staged = tmp_path / added["name"]
+    staged.write_text(added["text"], encoding="utf-8")
+    paths = {
+        **{rid: target_paths[tid] for rid, tid in reply["targetResourceSources"].items()},
+        **{rid: source_paths[sid] for rid, sid in reply["resourceSources"].items()},
+        added["resourceId"]: str(staged),
+    }
+    decoded = decode_canonical_request(reply["renderRequest"], resource_paths=paths, output_directory=tmp_path / "out")
+    assert decoded.options.colors.color_table["color"].tolist() == ["#ff0000", "#00ff00"]
+    # Records only: the target's colors stay, and nothing is added.
+    copy["edits"] = "records"
+    records_only = json.loads(derive_web_region_drawing_json(
+        json.dumps(source_payload), json.dumps(source_paths), str(tmp_path / "out"),
+        json.dumps([{"recordKey": "pair:2", "start": 1, "end": 1000}]), json.dumps(True), json.dumps(copy),
+    ))
+    assert records_only["addedResources"] == []
+    assert records_only["renderRequest"]["diagramOptions"].get("colors") == target_payload["diagramOptions"].get("colors")
 
 
 @pytest.mark.parametrize(
