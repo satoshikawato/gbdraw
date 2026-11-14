@@ -22,6 +22,7 @@ const { createSimilarityAlignmentActions } = await import(
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 const { writeCanonicalRecordReverseComplement } = await import('../../gbdraw/web/js/services/record-display-model.js');
+const { CompositionMetadataError } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 
 const anchor = (recordKey, biologicalFeatureId, sourceFeatureIndex) => ({
   recordKey, biologicalFeatureId, sourceFeatureIndex,
@@ -807,6 +808,30 @@ test('stale active target enters the same repair draft and needs an explicit new
     'target-b');
 });
 
+// OV-3440: a Result an older gbdraw drew has no record keys to read a stale plan's placements by. The repair of the
+// check before Generate then places the records where the committed request has them, as the next Generate draws
+// them, instead of stopping Generate.
+test('the stale-target repair starts from the committed placements when the shown Result cannot be read', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const committedTranslations = structuredClone(fixture.state.linearRecordTranslations.value);
+  fixture.showResultSvg(new Proxy({}, { get: () => {
+    throw new CompositionMetadataError('Composition metadata cannot bind alignment record "b".');
+  } }));
+  fixture.currentGroup.members.splice(1, 1, targetB);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-target' });
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  assert.equal(fixture.actions.repair.value.kind, 'targets');
+  const { payload: repair } = fixture.helperCalls.at(-1);
+  assert.deepEqual(repair.projection.canonicalRequest.layout.recordTranslations, committedTranslations);
+  assert.equal(repair.projection.canonicalRequest.layout.similarityAlignment, null);
+  assert.equal(fixture.actions.selectCandidate('b', anchor('b', 'target-b', 2)).status, 'selected');
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records[1].anchor.biologicalFeatureId, 'target-b');
+});
+
 test('drawer requires a unique exact reference before starting the Worker', async () => {
   const fixture = create();
   assert.match(fixture.actions.drawerDisabledReason('og-1'), /Select an exact reference/);
@@ -833,6 +858,25 @@ test('the selected group drawer reads its members from the selected detail (OV-9
   assert.equal(fixture.actions.setDrawerReference('og-1', drawer.options[1].key), true);
   assert.equal(fixture.actions.drawer.value.disabledReason, '');
   assert.deepEqual(fixture.actions.drawerReferenceOptions('og-missing'), []);
+});
+
+// OV-3442: a Session an older gbdraw wrote saved a member's strand in the drawn direction (a record drawn
+// reverse-complemented). Two members with one name in one record show their location, read from the source facts their
+// name reads: the catalog row after a Generate, the member's catalog feature (`sequenceFeature`) before one.
+test('the drawer names an inparalog by the location and strand of its source feature', () => {
+  const inparalogs = [member('b', 'para-1', 5, '-'), member('b', 'para-2', 6, '-')]
+    .map((item) => ({ ...item, gene: 'gene-para' }));
+  const fixture = create({ members: [reference, ...inparalogs] });
+  // The group's members as such a Session saved them; the catalog keeps the source facts.
+  fixture.currentGroup.members = fixture.currentGroup.members.map((item) => (
+    item.strand === '-' ? { ...item, strand: '+', start: item.start + 1, sequenceFeature: item } : item
+  ));
+  const labels = () => fixture.actions.drawer.value.options.map(({ label }) => label).slice(1);
+  const expected = ['Record 2 · gene-para · 61..80 (-)', 'Record 2 · gene-para · 71..90 (-)'];
+  assert.deepEqual(labels(), expected);
+  // A loaded Session before its first Generate has no catalog rows yet.
+  fixture.state.featureCatalog.value = null;
+  assert.deepEqual(labels(), expected);
 });
 
 // OV-381: a committed plan (from the popup or a loaded Session) shows its exact
