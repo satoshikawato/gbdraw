@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
+
 import pytest
+from PIL import Image
 
 import tools.capture_gallery_tutorial_screenshots as capture_tool
 
@@ -152,14 +155,18 @@ def test_crop_edges_measure_the_text_a_reader_sees_and_the_pointer_leaves_no_hov
 def test_a_highlight_frame_covers_no_text_around_its_element() -> None:
     """The frame around a capture's highlightSelector stays clear of a label 2 px above the
     highlighted field (BGC 11-1: it covered the descenders of Head Length Ratio), and keeps its
-    full size around a field with nothing near it."""
+    full size around a field with nothing near it, also around a field in a painted pill: the
+    field's own control, its value and the pill that draws it are not foreign text (the measure
+    leaves out the highlighted element, `exclude`; L2)."""
 
     playwright_api = pytest.importorskip("playwright.sync_api")
     html = (
         "<html><body style='margin:0;font:16px sans-serif'>"
         "<label style='position:absolute;left:20px;top:20px;line-height:20px'>Head Length Ratio</label>"
         "<input aria-label='near' style='position:absolute;left:20px;top:42px;width:120px;height:24px'>"
-        "<input aria-label='alone' style='position:absolute;left:300px;top:200px;width:120px;height:24px'>"
+        "<input aria-label='alone' value='0.4' style='position:absolute;left:300px;top:200px;width:120px;height:24px'>"
+        "<span style='position:absolute;left:300px;top:300px;padding:3px;border:1px solid #cbd5e1;"
+        "border-radius:999px;background:#f8fafc'><input aria-label='wrapped' value='0.6' style='width:80px;height:20px'></span>"
         "</body></html>"
     )
     frame = """(label) => [...document.querySelectorAll('input')].map((input) => {
@@ -167,7 +174,7 @@ def test_a_highlight_frame_covers_no_text_around_its_element() -> None:
       const rect = input.getBoundingClientRect();
       const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
       return {label: input.getAttribute('aria-label'), top: rect.top - reach, reach,
-              glow: style.boxShadow};
+              offset: parseFloat(style.outlineOffset), glow: style.boxShadow};
     })"""
     with playwright_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch()
@@ -175,6 +182,7 @@ def test_a_highlight_frame_covers_no_text_around_its_element() -> None:
             page = browser.new_page(viewport={"width": 600, "height": 400})
             page.set_content(html)
             capture_tool.draw_highlight_frames(page, "input")
+            capture_tool.assert_highlight_frames_cover_no_text(page, "input")
             frames = {item["label"]: item for item in page.evaluate(frame, None)}
             label_bottom = page.evaluate(
                 """() => { const range = document.createRange();
@@ -186,7 +194,9 @@ def test_a_highlight_frame_covers_no_text_around_its_element() -> None:
 
     assert frames["near"]["top"] >= label_bottom + capture_tool.HIGHLIGHT_FRAME_CLEARANCE - 0.01
     assert frames["alone"]["reach"] == capture_tool.HIGHLIGHT_FRAME_OFFSET + capture_tool.HIGHLIGHT_FRAME_WIDTH
-    assert " 4px" in frames["alone"]["glow"]
+    for label in ("alone", "wrapped"):
+        assert frames[label]["offset"] == capture_tool.HIGHLIGHT_FRAME_OFFSET, label
+        assert frames[label]["glow"].endswith(" 0px 0px 0px 4px"), label
 
 
 def _boxes_of(page, region):
@@ -374,19 +384,56 @@ def test_an_opaque_layer_without_pointer_events_covers_the_text_under_it() -> No
     assert hittable == "BODY"
 
 
-def test_a_highlight_frame_around_a_figure_path_covers_no_neighbours_label() -> None:
-    """A neighbour's label crossing the bounding box of a highlighted figure path: the frame
-    lies on the path's own edge, inside the box, with no glow (L2)."""
+_FIGURE_WITH_LABELS = (
+    "<html><body style='margin:0;font:14px sans-serif;background:#fff'>"
+    "<svg width='400' height='240' style='position:absolute;left:0;top:0'>"
+    "<path id='arc' d='M 40 40 Q 200 160 360 40' fill='none' stroke='#2563eb' stroke-width='12'/>"
+    "<text id='inside' x='180' y='70' font-size='14'>dnaB</text>"
+    "<text id='across' x='260' y='100' font-size='14'>dnaC</text>"
+    "<path id='alone' d='M 40 200 L 120 200' stroke='#2563eb' stroke-width='12'/>"
+    "</svg></body></html>"
+)
+# Moves the label `across` so that its text box ends `by` px below the box the arc's outline is
+# drawn around (Chromium draws an SVG element's outline around its stroke box, not its
+# getBoundingClientRect).
+_PLACE_ACROSS = """([by, edge]) => {
+  const label = document.getElementById('across');
+  const range = document.createRange();
+  range.selectNodeContents(label.firstChild);
+  const box = range.getBoundingClientRect();
+  label.setAttribute('y', String(parseFloat(label.getAttribute('y')) + edge + by - box.bottom));
+}"""
+
+
+def _arc_outline_box(page) -> dict[str, float]:
+    handle = page.query_selector("#arc")
+    element = handle.evaluate(capture_tool.HIGHLIGHT_ELEMENT_BOX_SCRIPT)
+    return capture_tool.highlight_outline_box(page, handle, element, True)
+
+
+def _screenshot(page) -> Image.Image:
+    with Image.open(io.BytesIO(page.screenshot(type="png"))) as shot:
+        return shot.convert("RGB")
+
+
+def _changed_pixels_in(before: Image.Image, after: Image.Image, boxes) -> int:
+    """The pixels in ``boxes`` (CSS px, device scale 1) that differ between two screenshots."""
+
+    count = 0
+    for box in boxes:
+        for x in range(int(box["x"]), int(box["x"] + box["width"] + 0.999)):
+            for y in range(int(box["y"]), int(box["y"] + box["height"] + 0.999)):
+                count += before.getpixel((x, y)) != after.getpixel((x, y))
+    return count
+
+
+def test_a_highlight_frame_keeps_off_a_label_inside_or_across_its_figure_path() -> None:
+    """OV-3492: a label wholly inside a highlighted figure path's box (ATskew 10-1's l-rRNA) leaves
+    the frame its full size; a label 1.5 px across the edge of the box the outline is drawn around
+    is passed by the outline at its usual place, and no pixel of the drawn frame lies in either
+    label's box. An SVG element draws no glow."""
 
     playwright_api = pytest.importorskip("playwright.sync_api")
-    html = (
-        "<html><body style='margin:0;font:14px sans-serif'>"
-        "<svg width='400' height='200' style='position:absolute;left:0;top:0'>"
-        "<path id='arc' d='M 40 40 Q 200 160 360 40' fill='none' stroke='#2563eb' stroke-width='12'/>"
-        "<text id='neighbour' x='180' y='70' font-size='14'>dnaB</text>"
-        "<path id='alone' d='M 40 170 L 120 170' stroke='#2563eb' stroke-width='12'/>"
-        "</svg></body></html>"
-    )
     frames = """() => Object.fromEntries(['arc', 'alone'].map((id) => {
       const style = getComputedStyle(document.getElementById(id));
       return [id, { offset: parseFloat(style.outlineOffset), glow: style.boxShadow }];
@@ -394,13 +441,138 @@ def test_a_highlight_frame_around_a_figure_path_covers_no_neighbours_label() -> 
     with playwright_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": 400, "height": 200})
-            page.set_content(html)
+            page = browser.new_page(viewport={"width": 400, "height": 240})
+            page.set_content(_FIGURE_WITH_LABELS)
+            outline_box = _arc_outline_box(page)
+            page.evaluate(_PLACE_ACROSS, [1.5, outline_box["y"] + outline_box["height"]])
+            boxes = _boxes_of(page, {"x": 0.0, "y": 0.0, "width": 400.0, "height": 240.0})
+            unframed = _screenshot(page)
             capture_tool.draw_highlight_frames(page, "#arc, #alone")
             drawn = page.evaluate(frames)
+            capture_tool.assert_highlight_frames_cover_no_text(page, "#arc, #alone")
+            framed = _screenshot(page)
         finally:
             browser.close()
 
-    assert drawn["arc"]["offset"] == -capture_tool.HIGHLIGHT_FRAME_WIDTH
-    assert drawn["arc"]["glow"].endswith(" 0px 0px 0px 0px")
+    painted = _changed_pixels_in(unframed, framed, boxes)
+    # The outline is drawn: 3 to 6 px outside the left side of the arc's outline box.
+    beside_arc = _changed_pixels_in(unframed, framed, [{
+        "x": outline_box["x"] - 6.0, "y": outline_box["y"], "width": 3.0, "height": outline_box["height"],
+    }])
+    assert sorted(box["text"] for box in boxes) == ["dnaB", "dnaC"]
+    assert drawn["arc"] == {"offset": capture_tool.HIGHLIGHT_FRAME_OFFSET, "glow": "rgba(245, 158, 11, 0.18) 0px 0px 0px 0px"}
     assert drawn["alone"]["offset"] == capture_tool.HIGHLIGHT_FRAME_OFFSET
+    assert beside_arc > 0
+    assert painted == 0
+
+
+def test_no_highlight_frame_is_drawn_across_a_label_it_cannot_pass() -> None:
+    """OV-3492: a label 8 px across the edge of a highlighted figure path's outline box lies under
+    every outline position within the frame's reach: the capture fails and names the label. A frame
+    drawn across a label by other means fails the guard that runs on the captured page."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 240})
+            page.set_content(_FIGURE_WITH_LABELS)
+            outline_box = _arc_outline_box(page)
+            edge = outline_box["y"] + outline_box["height"]
+            page.evaluate(_PLACE_ACROSS, [8.0, edge])
+            with pytest.raises(RuntimeError, match="'dnaC'"):
+                capture_tool.draw_highlight_frames(page, "#arc")
+            page.evaluate(_PLACE_ACROSS, [1.5, edge])
+            page.evaluate(
+                "(css) => { document.getElementById('arc').style.cssText += `; ${css}`; }",
+                capture_tool.highlight_frame_css(-3.0, 0.0),
+            )
+            with pytest.raises(RuntimeError, match="covers text: 'dnaC'"):
+                capture_tool.assert_highlight_frames_cover_no_text(page, "#arc")
+        finally:
+            browser.close()
+
+
+def test_text_under_a_translucent_or_border_only_layer_is_seen() -> None:
+    """L1: a layer without pointer events hides text only where its paint is opaque. Text under a
+    selection marquee (a dashed border and a 12 % tint), under an opaque layer drawn at opacity
+    0.5, or inside a border-only frame is seen whole; text under an opaque layer is not."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    layer = "position:absolute;pointer-events:none;z-index:5;"
+    html = (
+        "<html><body style='margin:0;font:16px sans-serif'>"
+        "<span style='position:absolute;left:20px;top:20px'>under the marquee</span>"
+        f"<div class='feature-selection-marquee' style='{layer}left:10px;top:10px;width:300px;height:40px;"
+        "border:1px dashed #2563eb;background:rgba(37,99,235,0.12)'></div>"
+        "<span style='position:absolute;left:20px;top:120px'>under a faded layer</span>"
+        f"<div style='{layer}left:10px;top:110px;width:300px;height:40px;background:#fff;opacity:0.5'></div>"
+        "<span style='position:absolute;left:20px;top:220px'>inside a border</span>"
+        f"<div style='{layer}left:10px;top:210px;width:300px;height:40px;border:2px solid #0f172a'></div>"
+        "<span style='position:absolute;left:400px;top:20px'>under a sheet</span>"
+        f"<div style='{layer}left:390px;top:10px;width:180px;height:40px;background:#fff'></div>"
+        "</body></html>"
+    )
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 600, "height": 300})
+            page.set_content(html)
+            boxes = _boxes_of(page, {"x": 0.0, "y": 0.0, "width": 600.0, "height": 300.0})
+            whole = page.evaluate(
+                """() => Object.fromEntries([...document.querySelectorAll('span')].map((span) => {
+                  const range = document.createRange();
+                  range.selectNodeContents(span);
+                  const rect = range.getBoundingClientRect();
+                  return [span.textContent, rect.width * rect.height];
+                }))"""
+            )
+        finally:
+            browser.close()
+
+    seen: dict[str, float] = {}
+    for box in boxes:
+        seen[box["text"]] = max(seen.get(box["text"], 0.0), box["width"] * box["height"])
+    assert "under a sheet" not in seen
+    for text in ("under the marquee", "under a faded layer", "inside a border"):
+        assert seen.get(text, 0.0) >= whole[text] - 0.5, text
+
+
+def test_svg_text_in_a_tspan_or_on_a_text_path_is_seen() -> None:
+    """Figure text drawn in a `<tspan>` (a definition line) or on a `<textPath>` (a tick label) is
+    measured where it is drawn, like any other label, also when the figure sets no pointer events."""
+
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    html = (
+        "<html><body style='margin:0;font:14px sans-serif'>"
+        "<svg width='400' height='300' style='position:absolute;left:0;top:0'>"
+        "<defs><path id='ring' d='M 60 200 A 140 140 0 0 1 340 200'/></defs>"
+        "<g style='pointer-events:none'>"
+        "<text x='120' y='40' font-size='16'><tspan x='120' dy='0'>Homo</tspan>"
+        "<tspan x='120' dy='20' font-style='italic'>sapiens</tspan></text>"
+        "<text font-size='14'><textPath href='#ring' startOffset='40%'>16 kbp</textPath></text>"
+        "</g></svg></body></html>"
+    )
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 400, "height": 300})
+            page.set_content(html)
+            boxes = _boxes_of(page, {"x": 0.0, "y": 0.0, "width": 400.0, "height": 300.0})
+            whole = page.evaluate(
+                """() => Object.fromEntries([...document.querySelectorAll('tspan, textPath')].map((node) => {
+                  const range = document.createRange();
+                  range.selectNodeContents(node);
+                  return [node.textContent, [...range.getClientRects()].reduce(
+                    (area, rect) => area + rect.width * rect.height, 0)];
+                }))"""
+            )
+        finally:
+            browser.close()
+
+    seen: dict[str, float] = {}
+    for box in boxes:
+        seen[box["text"]] = seen.get(box["text"], 0.0) + box["width"] * box["height"]
+    assert sorted(seen) == ["16 kbp", "Homo", "sapiens"]
+    for text, area in whole.items():
+        assert seen[text] >= area - 0.5, text
