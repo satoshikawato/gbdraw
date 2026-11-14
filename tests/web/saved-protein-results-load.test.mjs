@@ -141,3 +141,29 @@ test('a reply of another shape, one that adds a resource the file holds, or one 
       setLegacySessionUpgrader(pythonLegacySessionUpgrader([], workerCalls));
     }
   });
+
+// OV-3541: a committed request whose LOSATP search no saved rows answered (a Session saved before any run) cannot be
+// redrawn in the browser, which has no LOSAT. Every committed redraw (the label rerender, Reset record positions,
+// Align at feature, a record rotation) renders the request `projectCommittedEditorIntent` projects, which refuses it
+// with a notice to Generate once; a Session whose rows answered its search redraws.
+test('a committed redraw of a search no saved rows answered asks for one Generate (OV-3541)', async () => {
+  const { projectCommittedEditorIntent } = await import('../../gbdraw/web/js/services/session-request.js');
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const redraw = () => projectCommittedEditorIntent({
+    committed: sessionConfig.getCommittedCanonicalSession(), state, drawing: state.activeDrawing()
+  });
+  const unanswered = await load(fixture('python-api-linear-pairs.v50'));
+  assert.equal(unanswered.status, 'ok', JSON.stringify(unanswered.error));
+  assert.deepEqual(comparisonKinds(sessionConfig.getCommittedCanonicalSession().renderRequest),
+    [['generatedProteinComparison', 'pairwise']]);
+  let refusal = null;
+  try { redraw(); } catch (error) { refusal = error; }
+  assert.equal(refusal?.code, 'COMPARISON_REQUIRES_GENERATE');
+  const notice = normalizeUserFacingError(refusal);
+  assert.deepEqual(notice.actions, ['generate']);
+  assert.match(notice.summary, /no saved comparison results/);
+  assert.doesNotMatch(notice.summary, /LOSAT|BLAST\+/);
+  const answered = await load(fixture('BGC0000711-BGC0000713-losatp-cli.v47'));
+  assert.equal(answered.status, 'ok', JSON.stringify(answered.error));
+  assert.deepEqual(comparisonKinds(redraw().renderRequest).at(-1), ['generatedProteinComparison', 'none']);
+});
