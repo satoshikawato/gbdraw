@@ -264,7 +264,7 @@
       "id": "vector:tests/fixtures/location-parts-vectors.json",
       "concern": "A location part's start and end, as written into the interactive SVG and read back",
       "pythonOwner": [
-        "gbdraw/render/interactive_svg.py:_normalize_location_parts"
+        "gbdraw/render/interactive_svg.py:_location_part_number"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/feature-utils.js:locationPartNumber"

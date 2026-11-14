@@ -275,7 +275,7 @@ def _match_source(
     sources: Sequence[Mapping[str, object]],
     span: MatchSpanInput,
 ) -> tuple[Mapping[str, object] | None, MatchSpanReason | None]:
-    """The source a span reads among the ``_registered`` sources, found as the match popup found it before D5: a drawn
+    """The source a span reads among the ``_registered`` sources, found in the match popup's order before D5: a drawn
     unit by its record key, which must carry the record ID or alias the match names; a drawn record by its record ID,
     else an alias (the record identity ``match_sequence_sources`` gives: ID, name, accessions), among every unit or
     the one a reference span names, which it reads when the span names no ID; or a comparison record of a source (of

@@ -508,7 +508,7 @@ def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
     assert found("") == (None, "RECORD_UNKNOWN")
 
 
-def test_a_comparison_span_found_as_the_match_popup_found_it_before_d5() -> None:
+def test_a_comparison_span_found_by_id_then_alias_with_its_own_reason() -> None:
     """A comparison record is found by ID, else alias, in its source or, when the match names no source, in every
     source; two records with one ID (one registry key) count once when they agree and not at all otherwise, and a
     record without bases is none. Only a source without a comparison FASTA (or no source at all, when the match names
