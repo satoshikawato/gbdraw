@@ -257,7 +257,7 @@ FUNCTION_STATEMENTS: dict[str, int] = {
     "gbdraw/labels/circular.py::_legacy_improved_label_placement_fc": 113,
     "gbdraw/labels/circular.py::place_labels_on_arc_fc": 68,
     "gbdraw/labels/circular.py::prepare_label_list": 201,
-    "gbdraw/labels/circular.py::rearrange_labels_fc": 63,
+    "gbdraw/labels/circular.py::rearrange_labels_fc": 61,
     "gbdraw/labels/filtering.py::_label_text": 65,
     "gbdraw/labels/linear.py::place_linear_label_row": 62,
     "gbdraw/layout/linear_multi_record.py::solve_linear_horizontal_layout": 63,

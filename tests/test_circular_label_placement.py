@@ -478,7 +478,7 @@ def _placement_runs(seed: int, make: Callable[[int], tuple[list[dict], int, floa
         spacing_px=rng.choice([None, 1.0]),
     )
     refined = module._refine_labels_to_preferred_hemisphere(
-        copy.deepcopy(labels), total_length, 0.0, 0.0, x_radius, y_radius
+        copy.deepcopy(labels), module._LabelEllipse(total_length, 0.0, 0.0, x_radius, y_radius)
     )
     return placed, improved, refined
 
@@ -710,7 +710,9 @@ def test_circular_label_peer_pruning_keeps_every_count(
         polish_input = copy.deepcopy(labels)
         for label in polish_input:
             label["angle_unwrapped"] = math.degrees(math.atan2(label["start_y"], label["start_x"]))
-        polished = module._polish_total_leader_distance(polish_input, total_length, 0.0, 0.0, radius, radius)
+        polished = module._polish_total_leader_distance(
+            polish_input, module._LabelEllipse(total_length, 0.0, 0.0, radius, radius)
+        )
         return repr((resolved, improved, polished))
 
     pruned = place()
@@ -745,7 +747,7 @@ def test_circular_hemisphere_refinement_peer_grid_keeps_every_peer(
 
     def refine() -> str:
         refined = module._refine_labels_to_preferred_hemisphere(
-            copy.deepcopy(placed), total_length, 0.0, 0.0, radius, radius
+            copy.deepcopy(placed), module._LabelEllipse(total_length, 0.0, 0.0, radius, radius)
         )
         return repr(refined)
 
