@@ -18,6 +18,7 @@ const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw';
 const HEPA = 'gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw';
 const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw';
 const HMMT_AT_SKEW = 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw';
+const VNIG = 'gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw';
 const LEGEND_FONT = 'input[aria-label="Legend font size"]';
 const PLOT_TITLE = 'input[aria-label="Plot Title"]';
 const LEGEND_FONT_OVERRIDE = 'objects.legends.font_size.short';
@@ -922,6 +923,28 @@ test('tobacco: a live change is one History step, then Reset Settings applies th
       await expect(clocksIn(note)).toHaveAttribute('aria-label', 'Applies on Generate');
       for (const id of ['legend', 'plot-title']) await expect.poll(() => positionNotes(id)).toBe(1);
     });
+  } finally {
+    await page.context().close();
+  }
+});
+
+// OV-3490: on a loaded grid Result (the Vibrio nigripulchritudo Gallery
+// Session, six records) the grid fields apply live, so their block shows no
+// clock; the One circle fields wait for Generate until a Result draws one
+// circle (the Session CLI one circle case checks that side).
+test('Vnig: the grid fields of a grid Result show no clock, and One circle fields wait for Generate (OV-3490)', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, VNIG);
+  try {
+    await settleLive(page);
+    const grid = page.locator('[data-capture="multi-record-canvas-controls"]');
+    const oneCircle = page.locator('[data-capture="one-circle-controls"]');
+    await expect(grid).toHaveCount(1);
+    await expect(clocksIn(grid)).toHaveCount(0);
+    await clickControl(page, 'input[type="checkbox"][data-circular-one-circle-setting]');
+    await expect(oneCircle).toHaveCount(1);
+    await expect(clocksIn(oneCircle)).toHaveCount(1);
+    await expect(clocksIn(oneCircle)).toHaveAttribute('aria-label', 'Applies on Generate');
   } finally {
     await page.context().close();
   }

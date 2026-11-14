@@ -5518,9 +5518,9 @@
                                     </div>
                                 </div>
 
-                                <div v-if="circularRecordLayout === 'one_circle'" data-capture="one-circle-controls" data-setting="multi-record-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
+                                <div v-if="circularRecordLayout === 'one_circle'" data-capture="one-circle-controls" data-setting="one-circle-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
                                     <div>
-                                        <span class="input-label text-[10px] mb-1">{{ t('Gap between records (degrees)') }} <setting-note id="one-circle-gap-timing" setting="multi-record-layout"></setting-note></span>
+                                        <span class="input-label text-[10px] mb-1">{{ t('Gap between records (degrees)') }} <setting-note id="one-circle-gap-timing" setting="one-circle-layout"></setting-note></span>
                                         <input type="number" :min="ONE_CIRCLE_LIMITS.gapDegrees.minimum" :max="ONE_CIRCLE_LIMITS.gapDegrees.maximum" step="0.1" v-model.number="adv.one_circle_gap_degrees" class="form-input py-1 text-xs" :aria-label="t('Gap between records (degrees)')" aria-describedby="one-circle-gap-timing" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
