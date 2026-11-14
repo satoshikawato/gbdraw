@@ -1466,7 +1466,7 @@
       "id": "vector:tests/fixtures/ring_drawn_position_vectors.json",
       "concern": "The drawn order of the Circular comparison rings that the Ring colors scheme colours follow (PD-OI-110)",
       "pythonOwner": [
-        "gbdraw/analysis/conservation.py:_drawn_ring_colors"
+        "gbdraw/analysis/conservation.py:resolve_drawn_conservation_rings"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/conservation-series.js:ringDrawnPositions"
