@@ -2026,7 +2026,7 @@ const matchSpanRead = (span, matchKind, records, start, end) => {
   const { recordId } = span;
   if (matchKind === 'homology' && span.role !== span.referenceSide) {
     if (!records.comparisonSupplied(span.sourceIndex)) {
-      return { read: null, reason: t('Comparison sequence was not supplied for this BLAST source.') };
+      return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.NEVER_SUPPLIED, {}) };
     }
     return { read: { kind: 'comparison', sourceIndex: span.sourceIndex, recordId, start, end }, reason: '' };
   }

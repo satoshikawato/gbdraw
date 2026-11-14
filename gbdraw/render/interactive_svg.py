@@ -861,8 +861,9 @@ def _get_search_labels(
     return out
 
 
-# The location-part readers are the twins of ``locationPartNumber`` and
-# ``locationPartText`` in services/standalone-interactivity.js; both read
+# The location-part reader is the twin of ``locationPartNumber`` in
+# services/feature-utils.js and of ``locationPartBound`` in the viewer script
+# (services/standalone-interactivity-assets.js); all read
 # tests/fixtures/location-parts-vectors.json.
 def _location_part_number(value: object) -> int | None:
     """A part's start or end: a number or ASCII number text, truncated toward zero.
@@ -903,8 +904,7 @@ def _feature_coordinates(feature: Mapping[str, object]) -> dict[str, int | None]
     """A feature's own start and end, read like a part's.
 
     The viewer builds the one part of a feature without parts from them
-    (OV-1011). The twin of ``featureCoordinates`` in
-    services/standalone-interactivity.js.
+    (OV-1011).
     """
 
     return {

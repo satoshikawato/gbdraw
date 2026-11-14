@@ -1145,7 +1145,6 @@ test('browser export embeds the exact selected current-schema item and expands r
       popupMode: 'rich',
       catalogItem: catalog.items[0],
       embeddedSequences: { biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null },
-      requireFeatureCatalog: true,
       labelTextFeatureOverrides: {
         'rendered-visible': 'Edited visible label'
       },
@@ -1563,8 +1562,7 @@ test('standalone rejects conflicting compact provenance markers', async ({
       enrichSvgWithStandaloneInteractivity(svg, {
         popupMode: 'rich',
         catalogItem: catalog.items[0],
-        embeddedSequences: { biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null },
-        requireFeatureCatalog: true
+        embeddedSequences: { biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null }
       });
       return {
         name,

@@ -1724,18 +1724,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         .pipeThrough(new DecompressionStream('gzip'));
       metadataText = await new Response(decompressed).text();
     }
-    payload = JSON.parse(metadataText);
-    // Feature catalog schema 5 adds drawn selector values, which the popup does not read.
-    if (payload && (payload.schema === 4 || payload.schema === 5) && Array.isArray(payload.items)) {
-      payload = decodeCatalogPayload(payload);
-    }
+    var catalog = JSON.parse(metadataText);
+    // The file's feature catalog (schema 5 adds drawn selector values, which the popup does not read); the viewer
+    // reads no other metadata, as every writer writes the catalog with this script.
+    payload = catalog && (catalog.schema === 4 || catalog.schema === 5) && Array.isArray(catalog.items)
+      ? decodeCatalogPayload(catalog)
+      : {};
   } catch (error) {
     payload = {};
   }
 
   var features = Array.isArray(payload.features) ? payload.features : [];
-  var hasBiologicalFeatureCatalog = Array.isArray(payload.biological_features);
-  var biologicalFeatures = hasBiologicalFeatureCatalog ? payload.biological_features : features;
+  var biologicalFeatures = Array.isArray(payload.biological_features) ? payload.biological_features : [];
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
   var matches = Array.isArray(payload.matches) ? payload.matches : [];
   var annotations = Array.isArray(payload.annotations) ? payload.annotations : [];
@@ -4975,10 +4975,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
   }
 
-  function renderSequenceBlock(title, sequence, fasta, sequenceKind, feature) {
+  function renderSequenceBlock(title, sequence, sequenceKind, feature) {
     var text = String(sequenceKind ? featureFasta(feature, sequenceKind) : '');
     if (!text) {
-      var fallbackText = String(fasta || sequence || '');
+      var fallbackText = String(sequence || '');
       text = containsInternalProteinDisplayId(fallbackText) ? '' : fallbackText;
     }
     if (!text) {
@@ -5000,8 +5000,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       return '<div class="gfi-warning">' + escapeHtml(warning) + '</div>';
     }).join('');
     return warningHtml +
-      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence, feature.nucleotide_fasta || feature.nucleotideFasta, 'nt', feature) +
-      renderSequenceBlock('Amino acid', featureAminoAcidSequence(feature), feature.amino_acid_fasta || feature.aminoAcidFasta, 'aa', feature);
+      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence, 'nt', feature) +
+      renderSequenceBlock('Amino acid', featureAminoAcidSequence(feature), 'aa', feature);
   }
 
   function renderSimplePopup(feature) {
@@ -5314,8 +5314,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (recordMatches.length > 1) {
       return { source: null, reason: 'Record ID or alias is ambiguous in the embedded sequence sources.' };
     }
-    if (kind === 'homology' && expectedOrigin === 'homology-comparison') {
-      return { source: null, reason: 'Comparison sequence was not supplied for this BLAST source.' };
+    // Only a source whose FASTA the export holds no record of was never supplied (OV-2755).
+    if (expectedOrigin === 'homology-comparison') {
+      return {
+        source: null,
+        reason: candidates.length
+          ? 'No sequence source matched record “' + recordId + '”.'
+          : 'Comparison sequence was not supplied for this BLAST source.'
+      };
     }
     return { source: null, reason: 'Sequence was not embedded by the interactive export policy.' };
   }

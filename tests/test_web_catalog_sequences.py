@@ -511,8 +511,9 @@ def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
 def test_a_comparison_span_found_as_the_match_popup_found_it_before_d5() -> None:
     """A comparison record is found by ID, else alias, in its source or, when the match names no source, in every
     source; two records with one ID (one registry key) count once when they agree and not at all otherwise, and a
-    record without bases is none. Every span that finds no one record says its FASTA was not supplied, as the popup
-    said for each: unknown, ambiguous ID or alias, no ID, another source (base c75daa1de, r4fix/probe-base.out)."""
+    record without bases is none. Only a source without a comparison FASTA (or no source at all, when the match names
+    none) says its FASTA was not supplied; a source whose FASTA lacks the record gives the record's own reason, as a
+    drawn record does: unknown, ambiguous ID or alias (OV-2755)."""
 
     from gbdraw.web_support.catalog_sequences import _match_source, _registered
 
@@ -530,6 +531,7 @@ def test_a_comparison_span_found_as_the_match_popup_found_it_before_d5() -> None
                 record("q", "shared", "GTGT"), record("e", "e", ""),
             ),
             (record("only2", "o", "CCGG"),),
+            (),
         ),
     )
     sources = _registered(match_sequence_sources(records))
@@ -541,12 +543,21 @@ def test_a_comparison_span_found_as_the_match_popup_found_it_before_d5() -> None
         return reason if source is None else source["sequence"]
 
     assert [found(name) for name in ("contig_1", "c1", "twin", "z")] == ["CCCC", "CCCC", "AAAA", "AAAA"]
-    for name in ("dup", "x", "y", "shared", "absent", "", "e", "only2"):
-        assert found(name) == "NEVER_SUPPLIED", name
+    for name in ("dup", "x", "y", "absent", "", "e", "only2"):
+        assert found(name) == "RECORD_UNKNOWN", name
+    assert found("shared") == "RECORD_ALIAS_AMBIGUOUS"
     assert [found("only2", None), found("c1", None), found("absent", None), found("dup", None)] == [
-        "CCGG", "CCCC", "NEVER_SUPPLIED", "NEVER_SUPPLIED",
+        "CCGG", "CCCC", "RECORD_UNKNOWN", "RECORD_UNKNOWN",
     ]
-    assert found("c1", 5) == "NEVER_SUPPLIED"
+    # A source without a FASTA, and a source the request does not have, were never supplied.
+    assert [found("c1", 2), found("absent", 2), found("c1", 5)] == ["NEVER_SUPPLIED"] * 3
+    without_fasta = CatalogSequenceRecords(
+        mode="circular", records=records.records, unit_keys=records.unit_keys, comparison_records=((), ()),
+    )
+    for source_index in (None, 0, 1):
+        assert _match_source(without_fasta, _registered(match_sequence_sources(without_fasta)), {
+            "kind": "comparison", "sourceIndex": source_index, "recordId": "c1", "start": 1, "end": 2,
+        }) == (None, "NEVER_SUPPLIED"), source_index
 
 
 def test_a_drawn_unit_by_key_carries_the_record_the_match_names(tmp_path: Path) -> None:

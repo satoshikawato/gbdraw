@@ -2,10 +2,8 @@
 /** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
 /** @import { EmbeddedSequencesJson } from './catalog-sequences.js' */
 /** @import { AliasSource } from './feature-identity.js' */
-/** @import { OrthogroupFeatureIndex, OrthogroupMetadataEntry } from './orthogroup-feature-metadata.js' */
-import { locationPartNumber, normalizeStringArray } from './feature-utils.js';
+import { normalizeStringArray } from './feature-utils.js';
 import { ownEntry } from '../utils/own-entry.js';
-import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import { INTERACTIVE_EMBED_SCHEMA } from '../contracts/schema.generated.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
@@ -34,8 +32,6 @@ const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
 const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow';
 const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
-const FEATURE_RECORD_SUFFIX_RE = /_record_\d+$/;
-const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
 
 /**
  * A label the Features list edits; its fields are only read through `String()`.
@@ -54,19 +50,15 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  * @typedef {object} StandaloneInteractivityOptions
  * @property {string} [popupMode] `simple` or `rich`; anything else is `rich`.
  * @property {FeatureCatalogItem | null} [catalogItem] The shown Result's stored catalog item, which the file
- *   embeds with `embeddedSequences`; without both the export writes nothing when `requireFeatureCatalog` is set.
+ *   embeds with `embeddedSequences`; without both the export writes nothing.
  * @property {EmbeddedSequencesJson | null} [embeddedSequences] The item's sequences in the export encoding, as
  *   Python's encoder writes them (`embed_catalog_part`, which the CLI export writes too), read through the Worker
  *   (`CatalogSequences['readEmbedJson']`, D5): the biological rows with their sequences (inline, or as
  *   `sequenceSourceIndex` and the `translationFromAminoAcidSequence` mark) and the whole-record sources the item's
  *   matches read. The page derives none of these and writes them into the file as they are.
- * @property {boolean} [requireFeatureCatalog]
- * @property {AliasSource[]} [features] Source Feature rows of the legacy, catalog-free path.
  * @property {StandaloneEditableLabel[]} [editableLabels]
  * @property {Record<string, unknown>} [labelTextFeatureOverrides] Label text by rendered Feature ID.
  * @property {Record<string, unknown>} [labelTextBulkOverrides] Label text by source text.
- * @property {OrthogroupFeatureIndex} [featureOrthogroupIndex]
- * @property {AliasSource[]} [orthogroups]
  * @property {Record<string, unknown>} [orthogroupNameOverrides]
  * @property {Record<string, unknown>} [orthogroupDescriptionOverrides]
  */
@@ -77,85 +69,15 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  * @property {'simple' | 'rich'} popupMode
  * @property {FeatureCatalogItem | null} catalogItem
  * @property {EmbeddedSequencesJson | null} embeddedSequences
- * @property {boolean} requireFeatureCatalog
- * @property {AliasSource[]} features
  * @property {StandaloneEditableLabel[]} editableLabels
  * @property {Record<string, unknown>} labelTextFeatureOverrides
  * @property {Record<string, unknown>} labelTextBulkOverrides
- * @property {OrthogroupFeatureIndex} featureOrthogroupIndex
- * @property {AliasSource[]} orthogroups
  * @property {Record<string, unknown>} orthogroupNameOverrides
  * @property {Record<string, unknown>} orthogroupDescriptionOverrides
  */
 
-/**
- * A payload object written into the exported SVG's metadata, or read back from it.
- * @typedef {AliasSource} StandalonePayload
- */
-
 /** @typedef {{ valid: boolean, value: string }} StandaloneTextAlias */
-/** @typedef {{ valid: boolean, value: number | null }} StandaloneIntegerAlias */
-/** @typedef {{ valid: boolean, value: [string, string] | null }} StandaloneCanonicalIdentity */
-
-/**
- * The orthogroup fields one Feature takes from its member (the index entry, or the direct metadata).
- * @typedef {Pick<OrthogroupMetadataEntry, 'orthogroupId' | 'orthogroupMemberCount' | 'orthogroupRecordCoverage' | 'proteinId' | 'sourceProteinId' | 'orthogroupRepresentative' | 'orthogroupMember'>} StandaloneOrthogroupEntry
- */
-
-/** @typedef {NonNullable<ReturnType<typeof normalizeStandaloneOrthogroupMember>>} StandaloneOrthogroupMember */
-
-/** @typedef {Element & { style?: CSSStyleDeclaration }} StandaloneStyledElement An SVG or HTML element, which may carry an inline style. */
-
-/**
- * One drawn Feature of the SVG: its elements, grouped by rendered ID.
- * @typedef {object} StandaloneRenderedEntry
- * @property {string} id
- * @property {string} stableId
- * @property {number | null} recordIndex
- * @property {string} recordId
- * @property {StandaloneStyledElement[]} elements
- */
-
-/**
- * How a Feature is looked up among the source rows. Every field is read through
- * an alias check or `String()`.
- * @typedef {object} StandaloneFeatureQuery
- * @property {unknown} [stableSvgId]
- * @property {unknown} [renderedSvgId]
- * @property {unknown} [recordIndex]
- * @property {unknown} [featureIndex]
- * @property {unknown} [recordKey]
- * @property {unknown} [biologicalFeatureId]
- */
-
-/** @typedef {(query?: StandaloneFeatureQuery) => AliasSource | null} StandaloneFeatureResolver */
-
 /** @typedef {{ x: number, y: number, width: number, height: number }} StandaloneViewBox */
-
-/**
- * Drop the empty values of a payload: `null`, `undefined`, `''`, `false`, and
- * the arrays and objects that end up empty. An object comes back as an object
- * or `undefined`; the callers that pass one say so with a cast.
- * @param {unknown} value
- * @returns {unknown}
- */
-const compactWireValue = (value) => {
-  if (Array.isArray(value)) {
-    const items = value.map(compactWireValue).filter((item) => item !== undefined);
-    return items.length ? items : undefined;
-  }
-  if (value && typeof value === 'object') {
-    /** @type {StandalonePayload} */
-    const compact = {};
-    Object.entries(value).forEach(([key, entry]) => {
-      const normalized = compactWireValue(entry);
-      if (normalized !== undefined) compact[key] = normalized;
-    });
-    return Object.keys(compact).length ? compact : undefined;
-  }
-  if (value === null || value === undefined || value === '' || value === false) return undefined;
-  return value;
-};
 
 /** @param {unknown} value */
 const normalizeFeatureElementId = (value) =>
@@ -169,82 +91,6 @@ const getElementFeatureId = (element) =>
     element?.getAttribute?.('id') ||
     ''
   );
-
-
-
-/**
- * @param {unknown} qualifiers
- * @returns {Record<string, string[]>}
- */
-const normalizeQualifierMap = (qualifiers) => {
-  /** @type {Record<string, string[]>} */
-  const normalized = {};
-  if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) {
-    return normalized;
-  }
-  Object.entries(qualifiers).forEach(([key, value]) => {
-    const normalizedKey = String(key || '').trim();
-    const values = normalizeStringArray(value);
-    if (!normalizedKey || values.length === 0) return;
-    normalized[normalizedKey] = values;
-  });
-  return normalized;
-};
-
-// A part's start or end is read by `locationPartNumber` (feature-utils.js), the
-// display and strand by `locationPartText`, the twin of `_location_part_text` in
-// gbdraw/render/interactive_svg.py; both read tests/fixtures/location-parts-vectors.json.
-// The ASCII whitespace that Python's `str.strip(string.whitespace)` removes.
-const ASCII_WHITESPACE_AT_ENDS = /^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g;
-
-/**
- * A part's display or strand: text without surrounding ASCII whitespace. A
- * list gives its first such non-empty text and a safe integer its digits;
- * anything else (a boolean, a fraction, an object) is empty.
- * @param {unknown} value
- * @returns {string}
- */
-const locationPartText = (value) => {
-  if (Array.isArray(value)) {
-    for (const item of /** @type {unknown[]} */ (value)) {
-      const text = locationPartText(item);
-      if (text) return text;
-    }
-    return '';
-  }
-  if (typeof value === 'string') return value.replace(ASCII_WHITESPACE_AT_ENDS, '');
-  return typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : '';
-};
-
-/**
- * A feature's own start and end, read like a part's: the viewer builds the one
- * part of a feature without parts from them (OV-1011). The twin of
- * `_feature_coordinates` in gbdraw/render/interactive_svg.py.
- * @param {AliasSource} feature
- * @returns {{ start: number | null, end: number | null }}
- */
-export const featureCoordinates = (feature) => ({
-  start: locationPartNumber(feature.start),
-  end: locationPartNumber(feature.end)
-});
-
-/** @param {unknown} parts */
-export const normalizeLocationParts = (parts) => {
-  if (!Array.isArray(parts)) return [];
-  /** @type {{ start: number | null, end: number | null, strand: string, display: string }[]} */
-  const normalized = [];
-  for (const item of /** @type {unknown[]} */ (parts)) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const part = /** @type {Record<string, unknown>} */ (item);
-    const start = locationPartNumber(part.start);
-    const end = locationPartNumber(part.end);
-    const display = locationPartText(part.display) ||
-      `${start === null ? '' : start + 1}..${end === null ? '' : end}`;
-    if (display === '..') continue;
-    normalized.push({ start, end, strand: locationPartText(part.strand), display });
-  }
-  return normalized;
-};
 
 /**
  * @param {AliasSource | null | undefined} feature
@@ -302,147 +148,6 @@ const standaloneConsistentTextAlias = (payload, keys) => {
 };
 
 /**
- * @param {readonly unknown[]} candidates
- * @returns {StandaloneIntegerAlias}
- */
-const standaloneIntegerAlias = (candidates) => {
-  const indexes = new Set();
-  for (const candidate of candidates) {
-    // A blank or whitespace-only index is not supplied (OV-274).
-    if (candidate === null || candidate === undefined || (typeof candidate === 'string' && candidate.trim() === '')) continue;
-    const text = String(candidate).trim();
-    if (typeof candidate === 'boolean' || !/^\d+$/.test(text)) {
-      return { valid: false, value: null };
-    }
-    const recordIndex = Number(text);
-    if (!Number.isSafeInteger(recordIndex)) {
-      return { valid: false, value: null };
-    }
-    indexes.add(recordIndex);
-  }
-  return {
-    valid: indexes.size <= 1,
-    value: indexes.size === 1 ? indexes.values().next().value : null
-  };
-};
-
-/** @param {AliasSource | null | undefined} feature */
-const standaloneFeatureRecordIndexStatus = (feature) => (
-  standaloneIntegerAlias([
-    feature?.fileIdx,
-    feature?.file_idx,
-    feature?.recordIndex,
-    feature?.record_index,
-    feature?.record_idx
-  ])
-);
-
-/** @param {AliasSource | null | undefined} feature */
-const standaloneFeatureRecordIndex = (feature) => {
-  const status = standaloneFeatureRecordIndexStatus(feature);
-  return status.valid ? status.value : null;
-};
-
-/** @param {AliasSource | null | undefined} payload */
-const standaloneSourceIdentityStatus = (payload) => {
-  const stable = standaloneConsistentTextAlias(payload, [
-    'stable_svg_id', 'stableSvgId', 'stableFeatureSvgId',
-    'stable_feature_svg_id', 'stable_feature_id', 'stableFeatureId'
-  ]);
-  const legacy = standaloneConsistentTextAlias(payload, ['featureSvgId', 'feature_svg_id']);
-  return {
-    valid: stable.valid && legacy.valid && (
-      !stable.value || !legacy.value || stable.value === legacy.value
-    ),
-    value: stable.value || legacy.value
-  };
-};
-
-/** @param {AliasSource | null | undefined} payload */
-const standaloneRenderedIdentityStatus = (payload) => standaloneConsistentTextAlias(
-  payload,
-  [
-    'rendered_svg_id', 'renderedSvgId', 'renderedFeatureSvgId',
-    'rendered_feature_svg_id'
-  ]
-);
-
-/** @param {AliasSource | null | undefined} feature */
-const standaloneFeatureIdentityStatus = (feature) => {
-  const source = standaloneSourceIdentityStatus(feature);
-  const rendered = standaloneRenderedIdentityStatus(feature);
-  const svg = standaloneConsistentTextAlias(feature, ['svg_id', 'svgId']);
-  if (!source.valid || !rendered.valid || !svg.valid) {
-    return { valid: false, source, rendered };
-  }
-  if (svg.value && rendered.value && svg.value !== rendered.value) {
-    return { valid: false, source, rendered };
-  }
-  const renderedExplicit = Boolean(rendered.value);
-  if (svg.value && !rendered.value) rendered.value = svg.value;
-  if (svg.value && !source.value) {
-    source.value = svg.value.replace(FEATURE_RECORD_SUFFIX_RE, '');
-  }
-  return { valid: true, source, rendered, renderedExplicit };
-};
-
-/** @param {AliasSource | null | undefined} feature */
-const standaloneFeatureStableSvgId = (feature) => {
-  const status = standaloneFeatureIdentityStatus(feature);
-  return status.valid ? status.source.value : '';
-};
-
-/** @param {AliasSource | null | undefined} member */
-const standaloneMemberRecordIndexStatus = (member) => (
-  standaloneIntegerAlias([
-    member?.recordIndex,
-    member?.record_index,
-    member?.record_idx,
-    member?.fileIdx,
-    member?.file_idx
-  ])
-);
-
-/** @param {AliasSource | null | undefined} member */
-const standaloneMemberStableSvgId = (member) => {
-  const stable = standaloneConsistentTextAlias(member, [
-    'stableFeatureSvgId', 'stable_feature_svg_id',
-    'stableFeatureId', 'stable_feature_id'
-  ]);
-  const legacy = standaloneConsistentTextAlias(
-    member,
-    ['featureSvgId', 'feature_svg_id']
-  );
-  if (
-    !stable.valid
-    || !legacy.valid
-    || (stable.value && legacy.value && stable.value !== legacy.value)
-  ) return '';
-  return stable.value || legacy.value;
-};
-
-/** @param {AliasSource | null | undefined} payload */
-const standaloneFeatureIndexStatus = (payload) => standaloneIntegerAlias([
-  payload?.featureIndex,
-  payload?.feature_index,
-  payload?.sourceFeatureIndex,
-  payload?.source_feature_index
-]);
-
-/** @param {AliasSource | null | undefined} payload */
-const standaloneCanonicalIdentityStatus = (payload) => {
-  const record = standaloneConsistentTextAlias(payload, ['recordKey', 'record_key']);
-  const feature = standaloneConsistentTextAlias(
-    payload,
-    ['biologicalFeatureId', 'biological_feature_id']
-  );
-  return {
-    valid: record.valid && feature.valid && Boolean(record.value) === Boolean(feature.value),
-    value: record.value && feature.value ? [record.value, feature.value] : null
-  };
-};
-
-/**
  * @param {StandaloneInteractivityOptions} [options]
  * @returns {StandaloneContext}
  */
@@ -451,8 +156,6 @@ const normalizeStandaloneContext = (options = {}) => ({
   catalogItem: options.catalogItem && typeof options.catalogItem === 'object' ? options.catalogItem : null,
   embeddedSequences: options.embeddedSequences && typeof options.embeddedSequences === 'object'
     ? options.embeddedSequences : null,
-  requireFeatureCatalog: options.requireFeatureCatalog === true,
-  features: Array.isArray(options.features) ? options.features : [],
   editableLabels: Array.isArray(options.editableLabels) ? options.editableLabels : [],
   labelTextFeatureOverrides:
     options.labelTextFeatureOverrides && typeof options.labelTextFeatureOverrides === 'object'
@@ -462,10 +165,6 @@ const normalizeStandaloneContext = (options = {}) => ({
     options.labelTextBulkOverrides && typeof options.labelTextBulkOverrides === 'object'
       ? options.labelTextBulkOverrides
       : {},
-  featureOrthogroupIndex: options.featureOrthogroupIndex instanceof Map
-    ? options.featureOrthogroupIndex
-    : new Map(),
-  orthogroups: Array.isArray(options.orthogroups) ? options.orthogroups : [],
   orthogroupNameOverrides:
     options.orthogroupNameOverrides && typeof options.orthogroupNameOverrides === 'object'
       ? options.orthogroupNameOverrides
@@ -493,11 +192,11 @@ const standaloneCatalogFeatureKey = (recordKey, biologicalFeatureId) => (
 
 /**
  * @param {AliasSource | null | undefined} feature
- * @param {StandaloneContext | undefined} context
+ * @param {StandaloneContext} context
  * @returns {StandaloneEditableLabel | null}
  */
 const getEditableLabelEntryForStandaloneFeature = (feature, context) => {
-  const entries = Array.isArray(context?.editableLabels) ? context.editableLabels : [];
+  const entries = Array.isArray(context.editableLabels) ? context.editableLabels : [];
   const candidates = [
     normalizeFeatureIdKey(feature?.svg_id),
     normalizeFeatureIdKey(feature?.id)
@@ -508,11 +207,11 @@ const getEditableLabelEntryForStandaloneFeature = (feature, context) => {
 
 /**
  * @param {AliasSource | null | undefined} feature
- * @param {StandaloneContext | undefined} context
+ * @param {StandaloneContext} context
  * @returns {string}
  */
 const getLabelTextFeatureOverride = (feature, context) => {
-  const overrides = context?.labelTextFeatureOverrides || {};
+  const overrides = context.labelTextFeatureOverrides;
   const candidates = [
     String(feature?.svg_id || '').trim(),
     String(feature?.id || '').trim()
@@ -529,7 +228,7 @@ const getLabelTextFeatureOverride = (feature, context) => {
 /**
  * @param {AliasSource | null | undefined} feature
  * @param {string} fallbackLabel
- * @param {StandaloneContext | undefined} context
+ * @param {StandaloneContext} context
  * @returns {string}
  */
 const getStandaloneDisplayLabel = (feature, fallbackLabel, context) => {
@@ -548,312 +247,11 @@ const getStandaloneDisplayLabel = (feature, fallbackLabel, context) => {
     feature?.locus_tag
   ].map((value) => String(value || '').trim()).filter(Boolean);
   for (const sourceText of sourceCandidates) {
-    const bulkText = String(ownEntry(context?.labelTextBulkOverrides, sourceText) ?? '').trim();
+    const bulkText = String(ownEntry(context.labelTextBulkOverrides, sourceText) ?? '').trim();
     if (bulkText) return bulkText;
   }
 
   return fallbackLabel;
-};
-
-/**
- * @param {AliasSource | null | undefined} feature
- * @param {string} fallbackLabel
- * @param {string} displayLabel
- * @returns {string[]}
- */
-const getStandaloneSearchLabels = (feature, fallbackLabel, displayLabel) => {
-  const labels = [
-    displayLabel,
-    fallbackLabel,
-    feature?.label,
-    feature?.gene,
-    feature?.locus_tag,
-    feature?.product,
-    firstQualifierValue(feature, 'gene'),
-    firstQualifierValue(feature, 'locus_tag'),
-    firstQualifierValue(feature, 'product'),
-    feature?.svg_id
-  ];
-  const seen = new Set();
-  return labels
-    .map((value) => String(value || '').trim())
-    .filter((value) => {
-      const key = value.toLowerCase();
-      if (!value || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-};
-
-/**
- * @param {unknown} recordIndex
- * @param {unknown} svgId
- */
-const buildStandaloneOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
-
-/**
- * @param {AliasSource | null | undefined} feature
- * @param {AliasSource | null | undefined} member
- * @returns {boolean}
- */
-const standaloneDirectOrthogroupMetadataMatches = (feature, member) => {
-  if (!member || typeof member !== 'object' || Array.isArray(member)) return false;
-  const featureRecord = standaloneFeatureRecordIndexStatus(feature);
-  const memberRecord = standaloneMemberRecordIndexStatus(member);
-  const featureIndex = standaloneFeatureIndexStatus(feature);
-  const memberIndex = standaloneFeatureIndexStatus(member);
-  const featureCanonical = standaloneCanonicalIdentityStatus(feature);
-  const memberCanonical = standaloneCanonicalIdentityStatus(member);
-  const featureIdentity = standaloneFeatureIdentityStatus(feature);
-  const memberIdentity = standaloneFeatureIdentityStatus(member);
-  if (
-    !featureRecord.valid
-    || !memberRecord.valid
-    || featureRecord.value === null
-    || featureRecord.value !== memberRecord.value
-    || !featureIndex.valid
-    || !memberIndex.valid
-    || !featureCanonical.valid
-    || !memberCanonical.valid
-    || !featureIdentity.valid
-    || !memberIdentity.valid
-  ) return false;
-  if (
-    (featureIndex.value !== null || memberIndex.value !== null)
-    && (
-      featureIndex.value === null
-      || memberIndex.value === null
-      || featureIndex.value !== memberIndex.value
-    )
-  ) return false;
-  if (
-    featureCanonical.value
-    || memberCanonical.value
-  ) {
-    if (
-      !featureCanonical.value
-      || !memberCanonical.value
-      || featureCanonical.value[0] !== memberCanonical.value[0]
-      || featureCanonical.value[1] !== memberCanonical.value[1]
-    ) return false;
-  }
-  const featureStable = standaloneFeatureStableSvgId(feature);
-  const memberStable = standaloneMemberStableSvgId(member);
-  if (!featureStable || !memberStable || featureStable !== memberStable) return false;
-  const featureRendered = featureIdentity.rendered;
-  const memberRendered = memberIdentity.rendered;
-  return (
-    (!featureRendered.value && !memberRendered.value)
-    || (
-      Boolean(featureRendered.value)
-      && Boolean(memberRendered.value)
-      && featureRendered.value === memberRendered.value
-    )
-  );
-};
-
-/**
- * @param {AliasSource | null | undefined} feature
- * @param {StandaloneContext | undefined} context
- * @returns {StandaloneOrthogroupEntry | null}
- */
-const getStandaloneFeatureOrthogroupEntry = (feature, context) => {
-  const directIdentity = standaloneConsistentTextAlias(
-    feature,
-    ['orthogroupId', 'orthogroup_id']
-  );
-  if (!directIdentity.valid) return null;
-  const directOrthogroupId = directIdentity.value;
-  if (directOrthogroupId) {
-    const matchingGroups = (Array.isArray(context?.orthogroups) ? context.orthogroups : [])
-      .filter((group) => {
-        const identity = standaloneConsistentTextAlias(
-          group,
-          ['id', 'orthogroupId', 'orthogroup_id']
-        );
-        return identity.valid && identity.value === directOrthogroupId;
-      });
-    if (matchingGroups.length !== 1) return null;
-    const members = Array.isArray(matchingGroups[0]?.members) ? matchingGroups[0].members : [];
-    const matchingMembers = members.filter((member) => (
-      standaloneDirectOrthogroupMetadataMatches(feature, member)
-    ));
-    if (matchingMembers.length !== 1) return null;
-    const member = matchingMembers[0];
-    return {
-      orthogroupId: directOrthogroupId,
-      orthogroupMemberCount: Number(feature?.orthogroupMemberCount || feature?.orthogroup_member_count || 0),
-      orthogroupRecordCoverage: Number(feature?.orthogroupRecordCoverage || feature?.orthogroup_record_coverage || 0),
-      proteinId: String(feature?.proteinId || feature?.protein_id || '').trim(),
-      sourceProteinId: String(feature?.sourceProteinId || feature?.source_protein_id || '').trim(),
-      orthogroupRepresentative: Boolean(feature?.orthogroupRepresentative || feature?.orthogroup_representative),
-      orthogroupMember: member
-    };
-  }
-
-  /** @type {OrthogroupFeatureIndex} */
-  const index = context?.featureOrthogroupIndex instanceof Map ? context.featureOrthogroupIndex : new Map();
-  const record = standaloneFeatureRecordIndexStatus(feature);
-  const identities = standaloneFeatureIdentityStatus(feature);
-  const featureIndex = standaloneFeatureIndexStatus(feature);
-  const canonical = standaloneCanonicalIdentityStatus(feature);
-  if (
-    !record.valid
-    || !identities.valid
-    || !featureIndex.valid
-    || !canonical.valid
-    || (
-      (identities.source.value || identities.rendered.value || featureIndex.value !== null)
-      && record.value === null
-    )
-    || (
-      !identities.source.value
-      && !identities.rendered.value
-      && featureIndex.value === null
-      && !canonical.value
-    )
-    || index.size === 0
-  ) return null;
-
-  const matches = new Set();
-  if (identities.source.value) {
-    const candidates = new Set([
-      index.get(buildStandaloneOrthogroupIndexKey(record.value, identities.source.value)),
-      index.get(`record-id:${record.value}:${identities.source.value}`)
-    ].filter(Boolean));
-    if (candidates.size !== 1) return null;
-    matches.add(candidates.values().next().value);
-  }
-  if (
-    identities.rendered.value
-    && (
-      identities.renderedExplicit
-      // A null record index with a rendered ID returned null above.
-      || index.recordsWithRenderedIds?.has(/** @type {number} */ (record.value))
-    )
-  ) {
-    const entry = index.get(
-      `record-rendered-id:${record.value}:${identities.rendered.value}`
-    );
-    if (!entry) return null;
-    matches.add(entry);
-  }
-  if (featureIndex.value !== null) {
-    const entry = index.get(
-      `record-feature-index:${record.value}:${featureIndex.value}`
-    );
-    if (!entry) return null;
-    matches.add(entry);
-  }
-  if (canonical.value) {
-    const entry = index.get(`canonical:${canonical.value[0]}\u0000${canonical.value[1]}`);
-    if (!entry) return null;
-    matches.add(entry);
-  }
-  return matches.size === 1 ? matches.values().next().value : null;
-};
-
-/**
- * @param {AliasSource | null | undefined} member
- * @param {unknown} [renderedFeatureSvgId]
- */
-const normalizeStandaloneOrthogroupMember = (member, renderedFeatureSvgId = '') => {
-  if (!member || typeof member !== 'object' || Array.isArray(member)) return null;
-  const record = standaloneMemberRecordIndexStatus(member);
-  const recordIndex = record.valid ? record.value : null;
-  const stableIdentity = standaloneConsistentTextAlias(member, [
-    'stableFeatureSvgId', 'stable_feature_svg_id',
-    'stableFeatureId', 'stable_feature_id'
-  ]);
-  const legacyIdentity = standaloneConsistentTextAlias(
-    member,
-    ['featureSvgId', 'feature_svg_id']
-  );
-  const renderedIdentity = standaloneConsistentTextAlias(member, [
-    'renderedFeatureSvgId', 'rendered_feature_svg_id',
-    'renderedSvgId', 'rendered_svg_id'
-  ]);
-  const stableFeatureSvgId = standaloneMemberStableSvgId(member);
-  const featureIndex = standaloneFeatureIndexStatus(member);
-  const canonical = standaloneCanonicalIdentityStatus(member);
-  if (
-    !record.valid
-    || !stableIdentity.valid
-    || !legacyIdentity.valid
-    || (
-      stableIdentity.value
-      && legacyIdentity.value
-      && stableIdentity.value !== legacyIdentity.value
-    )
-    || !renderedIdentity.valid
-    || !featureIndex.valid
-    || !canonical.valid
-    || (
-      (stableFeatureSvgId || featureIndex.value !== null)
-      && recordIndex === null
-    )
-    || (!stableFeatureSvgId && featureIndex.value === null && !canonical.value)
-  ) return null;
-  return {
-    orthogroup_id: String(member.orthogroupId || member.orthogroup_id || ''),
-    protein_id: String(member.proteinId || member.protein_id || ''),
-    source_protein_id: String(member.sourceProteinId || member.source_protein_id || ''),
-    record_index: recordIndex,
-    record_id: String(member.recordId || member.record_id || ''),
-    feature_index: featureIndex.valid ? featureIndex.value : null,
-    record_key: canonical.value?.[0] || '',
-    recordKey: canonical.value?.[0] || '',
-    biological_feature_id: canonical.value?.[1] || '',
-    biologicalFeatureId: canonical.value?.[1] || '',
-    label: String(member.label || ''),
-    feature_svg_id: stableFeatureSvgId,
-    stable_feature_svg_id: stableFeatureSvgId,
-    rendered_feature_svg_id: String(renderedFeatureSvgId || ''),
-    ...featureCoordinates(member),
-    strand: String(member.strand || ''),
-    representative: Boolean(member.representative),
-    gene: String(member.gene || ''),
-    locus_tag: String(member.locusTag || member.locus_tag || ''),
-    gene_id: String(member.geneId || member.gene_id || ''),
-    old_locus_tag: String(member.oldLocusTag || member.old_locus_tag || ''),
-    product: String(member.product || ''),
-    note: String(member.note || '')
-  };
-};
-
-/** @param {AliasSource | null | undefined} candidate */
-const normalizeStandaloneOrthogroupCandidate = (candidate) => {
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
-  return {
-    text: String(candidate.text || ''),
-    source: String(candidate.source || ''),
-    member_count: Number.isFinite(Number(candidate.memberCount ?? candidate.member_count)) ? Number(candidate.memberCount ?? candidate.member_count) : 0,
-    record_coverage_count: Number.isFinite(Number(candidate.recordCoverageCount ?? candidate.record_coverage_count)) ? Number(candidate.recordCoverageCount ?? candidate.record_coverage_count) : 0,
-    representative_count: Number.isFinite(Number(candidate.representativeCount ?? candidate.representative_count)) ? Number(candidate.representativeCount ?? candidate.representative_count) : 0,
-    score: Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : 0
-  };
-};
-
-/**
- * @param {AliasSource | null | undefined} group
- * @param {StandaloneContext | undefined} context
- * @returns {string}
- */
-const getStandaloneOrthogroupDisplayName = (group, context) => {
-  const id = String(group?.id || '').trim();
-  const override = id ? String(ownEntry(context?.orthogroupNameOverrides, id) || '').trim() : '';
-  return override || String(group?.display_name || group?.displayName || group?.name || id).trim();
-};
-
-/**
- * @param {AliasSource | null | undefined} group
- * @param {StandaloneContext | undefined} context
- * @returns {string}
- */
-const getStandaloneOrthogroupDescription = (group, context) => {
-  const id = String(group?.id || '').trim();
-  const override = id ? String(ownEntry(context?.orthogroupDescriptionOverrides, id) || '').trim() : '';
-  return override || String(group?.description || '').trim();
 };
 
 /**
@@ -910,10 +308,10 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
       if (!id || groupIds.has(id)) return null;
       groupIds.add(id);
       const displayName = id
-        ? String(ownEntry(context?.orthogroupNameOverrides, id) || '').trim()
+        ? String(ownEntry(context.orthogroupNameOverrides, id) || '').trim()
         : '';
       const description = id
-        ? String(ownEntry(context?.orthogroupDescriptionOverrides, id) || '').trim()
+        ? String(ownEntry(context.orthogroupDescriptionOverrides, id) || '').trim()
         : '';
       return {
         ...group,
@@ -925,581 +323,10 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
   return item;
 };
 
-/**
- * @param {AliasSource[] | null | undefined} features
- * @returns {StandaloneFeatureResolver}
- */
-const createStandaloneBiologicalFeatureResolver = (features) => {
-  /** @type {Map<string, AliasSource>} */
-  const byRecordAndId = new Map();
-  /** @type {Set<string>} */
-  const ambiguousRecordIds = new Set();
-  /**
-   * @param {Map<string, AliasSource>} map
-   * @param {Set<string>} ambiguous
-   * @param {string} key
-   * @param {AliasSource} feature
-   */
-  const addUnique = (map, ambiguous, key, feature) => {
-    if (!key || ambiguous.has(key)) return;
-    const existing = map.get(key);
-    if (existing && existing !== feature) {
-      map.delete(key);
-      ambiguous.add(key);
-      return;
-    }
-    map.set(key, feature);
-  };
-
-  (Array.isArray(features) ? features : []).forEach((feature) => {
-    const record = standaloneFeatureRecordIndexStatus(feature);
-    const identities = standaloneFeatureIdentityStatus(feature);
-    const featureIndex = standaloneFeatureIndexStatus(feature);
-    const canonical = standaloneCanonicalIdentityStatus(feature);
-    if (
-      !record.valid
-      || !identities.valid
-      || !featureIndex.valid
-      || !canonical.valid
-      || (
-        (identities.source.value || identities.rendered.value || featureIndex.value !== null)
-        && record.value === null
-      )
-      || (
-        !identities.source.value
-        && featureIndex.value === null
-        && !canonical.value
-      )
-    ) return;
-    if (record.value !== null) {
-      if (identities.source.value) {
-        addUnique(
-          byRecordAndId,
-          ambiguousRecordIds,
-          `record-id:${record.value}:${identities.source.value}`,
-          feature
-        );
-      }
-      if (identities.rendered.value) {
-        addUnique(
-          byRecordAndId,
-          ambiguousRecordIds,
-          `record-rendered-id:${record.value}:${identities.rendered.value}`,
-          feature
-        );
-      }
-      if (featureIndex.value !== null) {
-        addUnique(
-          byRecordAndId,
-          ambiguousRecordIds,
-          `record-feature-index:${record.value}:${featureIndex.value}`,
-          feature
-        );
-      }
-    }
-    if (canonical.value) {
-      addUnique(
-        byRecordAndId,
-        ambiguousRecordIds,
-        `canonical:${canonical.value[0]}\u0000${canonical.value[1]}`,
-        feature
-      );
-    }
-  });
-
-  return ({
-    stableSvgId = '',
-    renderedSvgId = '',
-    recordIndex = null,
-    featureIndex = null,
-    recordKey = '',
-    biologicalFeatureId = ''
-  } = {}) => {
-    const record = standaloneIntegerAlias([recordIndex]);
-    const sourceIndex = standaloneIntegerAlias([featureIndex]);
-    const stableId = String(stableSvgId || '').trim();
-    const renderedId = String(renderedSvgId || '').trim();
-    const canonical = [
-      String(recordKey || '').trim(),
-      String(biologicalFeatureId || '').trim()
-    ];
-    if (
-      !record.valid
-      || !sourceIndex.valid
-      || (Boolean(canonical[0]) !== Boolean(canonical[1]))
-      || ((stableId || renderedId || sourceIndex.value !== null) && record.value === null)
-      || (!stableId && !renderedId && sourceIndex.value === null && !canonical[0])
-    ) return null;
-    /** @type {Set<AliasSource>} */
-    const matches = new Set();
-    if (stableId) {
-      const feature = byRecordAndId.get(
-        `record-id:${record.value}:${stableId}`
-      );
-      if (!feature) return null;
-      matches.add(feature);
-    }
-    if (renderedId) {
-      const feature = byRecordAndId.get(
-        `record-rendered-id:${record.value}:${renderedId}`
-      );
-      if (!feature) return null;
-      matches.add(feature);
-    }
-    if (sourceIndex.value !== null) {
-      const feature = byRecordAndId.get(
-        `record-feature-index:${record.value}:${sourceIndex.value}`
-      );
-      if (!feature) return null;
-      matches.add(feature);
-    }
-    if (canonical[0]) {
-      const feature = byRecordAndId.get(
-        `canonical:${canonical[0]}\u0000${canonical[1]}`
-      );
-      if (!feature) return null;
-      matches.add(feature);
-    }
-    return matches.size === 1 ? matches.values().next().value : null;
-  };
-};
-
-/**
- * @param {AliasSource[]} features
- * @param {StandaloneContext} context
- */
-const buildStandaloneOrthogroupPayloads = (features, context) => {
-  const resolveRenderedFeature = createStandaloneBiologicalFeatureResolver(features);
-  /** @param {AliasSource | null | undefined} member */
-  const resolveMemberRenderedFeatureId = (member) => {
-    const record = standaloneMemberRecordIndexStatus(member);
-    const featureIndex = standaloneFeatureIndexStatus(member);
-    const canonical = standaloneCanonicalIdentityStatus(member);
-    const stable = standaloneConsistentTextAlias(member, [
-      'stableFeatureSvgId', 'stable_feature_svg_id',
-      'stableFeatureId', 'stable_feature_id'
-    ]);
-    const legacy = standaloneConsistentTextAlias(member, ['featureSvgId', 'feature_svg_id']);
-    const rendered = standaloneConsistentTextAlias(member, [
-      'renderedFeatureSvgId', 'rendered_feature_svg_id',
-      'renderedSvgId', 'rendered_svg_id'
-    ]);
-    if (
-      !record.valid
-      || !featureIndex.valid
-      || !canonical.valid
-      || !stable.valid
-      || !legacy.valid
-      || (stable.value && legacy.value && stable.value !== legacy.value)
-      || !rendered.valid
-    ) return '';
-    const renderedFeature = resolveRenderedFeature({
-      stableSvgId: stable.value || legacy.value,
-      renderedSvgId: rendered.value,
-      recordIndex: record.value,
-      featureIndex: featureIndex.value,
-      recordKey: canonical.value?.[0] || '',
-      biologicalFeatureId: canonical.value?.[1] || ''
-    });
-    return String(renderedFeature?.svg_id || '').trim();
-  };
-
-  const groups = Array.isArray(context?.orthogroups) ? context.orthogroups : [];
-  /** @type {Map<string, number>} */
-  const groupIdCounts = new Map();
-  groups.forEach((group) => {
-    const identity = standaloneConsistentTextAlias(
-      group,
-      ['id', 'orthogroupId', 'orthogroup_id']
-    );
-    if (identity.valid && identity.value) {
-      groupIdCounts.set(identity.value, (groupIdCounts.get(identity.value) || 0) + 1);
-    }
-  });
-  return groups
-    .map((group) => {
-      const groupIdentity = standaloneConsistentTextAlias(
-        group,
-        ['id', 'orthogroupId', 'orthogroup_id']
-      );
-      if (
-        !groupIdentity.valid
-        || !groupIdentity.value
-        || groupIdCounts.get(groupIdentity.value) !== 1
-      ) return null;
-      const members = Array.isArray(group?.members)
-        // `filter(Boolean)` drops the members that did not normalize.
-        ? /** @type {StandaloneOrthogroupMember[]} */ (group.members
-          .map((member) => normalizeStandaloneOrthogroupMember(
-            member,
-            resolveMemberRenderedFeatureId(member)
-          ))
-          .filter(Boolean))
-        : [];
-      const memberCount = Number(group?.member_count || group?.memberCount || members.length || 0);
-      const recordCoverageFallback = new Set(
-        members
-          .map((member) => Number(member.record_index))
-          .filter((recordIndex) => Number.isInteger(recordIndex))
-      ).size;
-      const recordCoverageCount = Number(group?.record_coverage_count || group?.recordCoverageCount || recordCoverageFallback || 0);
-      return {
-        id: groupIdentity.value,
-        name: String(group?.name || ''),
-        display_name: getStandaloneOrthogroupDisplayName(group, context),
-        description: getStandaloneOrthogroupDescription(group, context),
-        name_confidence: String(group?.nameConfidence || group?.name_confidence || ''),
-        name_candidates: Array.isArray(group?.nameCandidates || group?.name_candidates)
-          // `Array.isArray` above holds for whichever alias is set.
-          ? /** @type {(AliasSource | null | undefined)[]} */ (group.nameCandidates || group.name_candidates).map(normalizeStandaloneOrthogroupCandidate).filter(Boolean)
-          : [],
-        member_count: Number.isFinite(memberCount) ? memberCount : members.length,
-        record_coverage_count: Number.isFinite(recordCoverageCount) ? recordCoverageCount : 0,
-        members
-      };
-    })
-    .filter(Boolean);
-};
-
-/**
- * @param {Element | null | undefined} svg
- * @returns {Map<string, StandaloneRenderedEntry>}
- */
-const collectRenderedFeatureEntries = (svg) => {
-  const entries = new Map();
-  const ambiguousIds = new Set();
-  if (!svg) return entries;
-  svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
-    const id = getElementFeatureId(element);
-    if (!id || ambiguousIds.has(id)) return;
-    const recordIndexText = element.getAttribute('data-gbdraw-record-index');
-    const record = standaloneIntegerAlias([recordIndexText]);
-    const stableId = String(
-      element.getAttribute('data-gbdraw-stable-feature-id') || id
-    ).trim();
-    if (!record.valid) {
-      entries.delete(id);
-      ambiguousIds.add(id);
-      return;
-    }
-    if (!entries.has(id)) {
-      entries.set(id, {
-        id,
-        stableId,
-        recordIndex: record.value,
-        recordId: String(element.getAttribute('data-gbdraw-record-id') || '').trim(),
-        elements: []
-      });
-    } else {
-      const existing = entries.get(id);
-      if (
-        existing.stableId !== stableId
-        || existing.recordIndex !== record.value
-      ) {
-        entries.delete(id);
-        ambiguousIds.add(id);
-        return;
-      }
-    }
-    entries.get(id).elements.push(element);
-  });
-  return entries;
-};
-
-/** @param {unknown} value */
-const normalizeColorKey = (value) => String(value || '').trim().toLowerCase();
-
-/** @param {StandaloneStyledElement | null | undefined} element */
-const getRenderedElementFill = (element) => {
-  const fill = String(element?.getAttribute?.('fill') || element?.style?.fill || '').trim();
-  if (fill && fill.toLowerCase() !== 'none') return fill;
-  return '';
-};
-
-/** @param {StandaloneRenderedEntry | null | undefined} entry */
-const getRenderedFeatureFill = (entry) => {
-  const elements = Array.isArray(entry?.elements) ? entry.elements : [];
-  for (const element of elements) {
-    const fill = getRenderedElementFill(element);
-    if (fill) return fill;
-  }
-  return '';
-};
-
-// The captions of the exported SVG's Legend by swatch fill: the colors the
-// exported Result shows, never a Legend row's recorded color (OV-282).
-/**
- * @param {Element | null | undefined} svg
- * @returns {Map<string, string>}
- */
-const collectLegendCaptionsByColor = (svg) => {
-  const captionsByColor = new Map();
-  /**
-   * @param {unknown} color
-   * @param {unknown} caption
-   */
-  const addCaption = (color, caption) => {
-    const key = normalizeColorKey(color);
-    const text = String(caption || '').trim();
-    if (key && text && !captionsByColor.has(key)) {
-      captionsByColor.set(key, text);
-    }
-  };
-
-  if (!svg) return captionsByColor;
-  const legendRoots = Array.from(svg.querySelectorAll('#legend, g[id*="legend"], [data-gbdraw-sticky-legend]'));
-  legendRoots.forEach((root) => {
-    root.querySelectorAll('rect, path, polygon').forEach((shape) => {
-      const color = getRenderedElementFill(shape);
-      if (!color) return;
-      const group = shape.closest?.('g') || root;
-      const groupText = group?.querySelector?.('text') || null;
-      const siblingText = shape.nextElementSibling?.matches?.('text') ? shape.nextElementSibling : null;
-      const textElement = groupText || siblingText;
-      const caption = String(textElement?.textContent || '').trim();
-      addCaption(color, caption);
-    });
-  });
-  return captionsByColor;
-};
-
-/**
- * @param {string} svgId
- * @param {StandaloneRenderedEntry} entry
- * @param {Map<string, string>} captionsByColor
- */
-const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) => {
-  const fillColor = getRenderedFeatureFill(entry);
-  const caption = captionsByColor.get(normalizeColorKey(fillColor)) || 'Feature';
-  const label = caption === 'Feature' ? String(svgId) : caption;
-  const searchLabels = Array.from(new Set([label, caption, svgId].map((value) => String(value || '').trim()).filter(Boolean)));
-  return {
-    svg_id: String(svgId || ''),
-    stable_svg_id: String(entry?.stableId || svgId || ''),
-    label,
-    display_label: label,
-    search_labels: searchLabels,
-    record_id: String(entry?.recordId || ''),
-    record_idx: Number.isInteger(entry?.recordIndex) ? entry.recordIndex : null,
-    type: caption,
-    start: null,
-    end: null,
-    strand: '',
-    locus_tag: '',
-    gene_id: '',
-    old_locus_tag: '',
-    fill_color: fillColor,
-    orthogroup_id: '',
-    orthogroup_member_count: 0,
-    orthogroup_record_coverage: 0,
-    protein_id: '',
-    source_protein_id: '',
-    orthogroup_representative: false,
-    qualifiers: {},
-    location_parts: [],
-    orthogroup_member: null
-  };
-};
-
 /** @param {unknown} popupMode */
 const normalizeStandalonePopupMode = (popupMode) => (
   popupMode === 'simple' ? 'simple' : 'rich'
 );
-
-/**
- * @param {AliasSource | null | undefined} feature
- * @param {StandaloneContext} context
- */
-const normalizeStandaloneBiologicalFeature = (feature, context) => {
-  if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return null;
-  const record = standaloneFeatureRecordIndexStatus(feature);
-  const featureIndex = standaloneFeatureIndexStatus(feature);
-  const canonical = standaloneCanonicalIdentityStatus(feature);
-  const identity = standaloneFeatureIdentityStatus(feature);
-  if (
-    !record.valid
-    || !featureIndex.valid
-    || !canonical.valid
-    || !identity.valid
-    || ((identity.source.value || featureIndex.value !== null) && record.value === null)
-  ) return null;
-  const stableSvgId = standaloneFeatureStableSvgId(feature);
-  if (!stableSvgId) return null;
-  const fallbackLabel = getStandaloneFeatureLabel(feature);
-  const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
-  const qualifiers = normalizeQualifierMap(feature.qualifiers);
-  const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature, context);
-  return /** @type {StandalonePayload | undefined} */ (compactWireValue({
-    svg_id: stableSvgId,
-    stable_svg_id: stableSvgId,
-    stable_feature_id: stableSvgId,
-    record_idx: record.value,
-    record_id: String(feature.record_id || feature.recordId || ''),
-    feature_index: featureIndex.value,
-    record_key: canonical.value?.[0] || '',
-    biological_feature_id: canonical.value?.[1] || '',
-    label: fallbackLabel,
-    display_label: displayLabel,
-    search_labels: getStandaloneSearchLabels(feature, fallbackLabel, displayLabel),
-    type: String(feature.type || ''),
-    ...featureCoordinates(feature),
-    strand: String(feature.strand || ''),
-    locus_tag: String(feature.locus_tag || feature.locusTag || ''),
-    gene_id: String(feature.gene_id || feature.geneId || ''),
-    old_locus_tag: String(feature.old_locus_tag || feature.oldLocusTag || ''),
-    gene: String(feature.gene || firstQualifierValue(feature, 'gene') || ''),
-    product: String(feature.product || firstQualifierValue(feature, 'product') || ''),
-    note: String(feature.note || firstQualifierValue(feature, 'note') || ''),
-    orthogroup_id: String(orthogroupEntry?.orthogroupId || ''),
-    orthogroup_member_count: Number.isFinite(Number(orthogroupEntry?.orthogroupMemberCount))
-      ? Number(orthogroupEntry?.orthogroupMemberCount)
-      : 0,
-    orthogroup_record_coverage: Number.isFinite(Number(orthogroupEntry?.orthogroupRecordCoverage))
-      ? Number(orthogroupEntry?.orthogroupRecordCoverage)
-      : 0,
-    protein_id: String(orthogroupEntry?.proteinId || feature.proteinId || feature.protein_id || ''),
-    source_protein_id: String(
-      orthogroupEntry?.sourceProteinId ||
-      feature.sourceProteinId ||
-      feature.source_protein_id ||
-      firstQualifierValue(feature, 'protein_id') ||
-      ''
-    ),
-    orthogroup_representative: Boolean(orthogroupEntry?.orthogroupRepresentative),
-    qualifiers,
-    location_parts: normalizeLocationParts(feature.location_parts),
-    orthogroup_member: normalizeStandaloneOrthogroupMember(
-      orthogroupEntry?.orthogroupMember
-    )
-  }));
-};
-
-/**
- * @param {StandaloneContext} context
- * @param {AliasSource[]} renderedFeatures
- */
-const buildStandaloneBiologicalFeaturePayloads = (context, renderedFeatures) => {
-  /** @type {{ feature: AliasSource, payload: StandalonePayload, recordIndex: number, key: string }[]} */
-  const candidates = [];
-  /** @type {Map<string, number>} */
-  const keyCounts = new Map();
-  const resolveRenderedFeature = createStandaloneBiologicalFeatureResolver(renderedFeatures);
-  (Array.isArray(context?.features) ? context.features : []).forEach((feature) => {
-    const payload = normalizeStandaloneBiologicalFeature(feature, context);
-    if (!payload) return;
-    const recordIndex = Number(payload.record_idx);
-    const canonicalKey = payload.record_key && payload.biological_feature_id
-      ? standaloneCatalogFeatureKey(payload.record_key, payload.biological_feature_id)
-      : '';
-    const key = canonicalKey || (
-      Number.isInteger(recordIndex)
-        ? buildStandaloneOrthogroupIndexKey(recordIndex, payload.stable_svg_id)
-        : `?:${payload.stable_svg_id}`
-    );
-    keyCounts.set(key, (keyCounts.get(key) || 0) + 1);
-    candidates.push({ feature, payload, recordIndex, key });
-  });
-  /** @type {StandalonePayload[]} */
-  const payloads = [];
-  candidates.forEach(({ feature, payload, recordIndex, key }) => {
-    if (keyCounts.get(key) !== 1) return;
-    const renderedFeature = resolveRenderedFeature({
-      stableSvgId: payload.stable_svg_id,
-      renderedSvgId: String(feature?.svg_id || '').trim(),
-      recordIndex: Number.isInteger(recordIndex) ? recordIndex : null
-    });
-    if (renderedFeature?.svg_id) {
-      payload.rendered_svg_id = renderedFeature.svg_id;
-    }
-    payloads.push(payload);
-  });
-  return payloads;
-};
-
-/**
- * @param {Element | null | undefined} svg
- * @param {StandaloneInteractivityOptions} [options]
- */
-const buildStandaloneFeaturePayloads = (svg, options = {}) => {
-  const renderedEntries = collectRenderedFeatureEntries(svg);
-  if (renderedEntries.size === 0) return [];
-
-  const context = normalizeStandaloneContext(options);
-  const normalizedPopupMode = normalizeStandalonePopupMode(context.popupMode);
-  const resolveSourceFeature = createStandaloneBiologicalFeatureResolver(context.features);
-  /** @type {StandalonePayload[]} */
-  const payloads = [];
-  const captionsByColor = collectLegendCaptionsByColor(svg);
-  renderedEntries.forEach((entry, svgId) => {
-    const feature = resolveSourceFeature({
-      stableSvgId: entry.stableId,
-      renderedSvgId: svgId,
-      recordIndex: entry.recordIndex
-    });
-    if (!feature) {
-      // The fallback payload always has a `svg_id`, so it is never compacted away.
-      payloads.push(/** @type {StandalonePayload} */ (compactWireValue(buildFallbackStandaloneFeaturePayload(svgId, entry, captionsByColor))));
-      return;
-    }
-    const fallbackLabel = getStandaloneFeatureLabel(feature);
-    const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
-    const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature, context);
-    const orthogroupMember = normalizeStandaloneOrthogroupMember(
-      orthogroupEntry?.orthogroupMember,
-      svgId
-    );
-    const qualifiers = normalizeQualifierMap(feature?.qualifiers);
-    const stableSvgId = String(entry.stableId || standaloneFeatureStableSvgId(feature) || svgId).trim();
-    const recordIndex = Number.isInteger(entry.recordIndex)
-      ? entry.recordIndex
-      : standaloneFeatureRecordIndex(feature);
-    const payload = {
-      svg_id: svgId,
-      stable_svg_id: stableSvgId,
-      label: fallbackLabel,
-      display_label: displayLabel,
-      search_labels: Array.from(new Set([
-        ...getStandaloneSearchLabels(feature, fallbackLabel, displayLabel),
-        stableSvgId,
-        svgId
-      ].filter(Boolean))),
-      record_id: String(entry.recordId || feature?.record_id || feature?.recordId || ''),
-      record_idx: Number.isInteger(recordIndex) ? recordIndex : null,
-      type: String(feature?.type || ''),
-      ...featureCoordinates(feature),
-      strand: String(feature?.strand || ''),
-      locus_tag: String(feature?.locus_tag || feature?.locusTag || ''),
-      gene_id: String(feature?.gene_id || feature?.geneId || ''),
-      old_locus_tag: String(feature?.old_locus_tag || feature?.oldLocusTag || ''),
-      orthogroup_id: String(orthogroupEntry?.orthogroupId || ''),
-      orthogroup_member_count: Number.isFinite(Number(orthogroupEntry?.orthogroupMemberCount))
-        ? Number(orthogroupEntry?.orthogroupMemberCount)
-        : 0,
-      orthogroup_record_coverage: Number.isFinite(Number(orthogroupEntry?.orthogroupRecordCoverage))
-        ? Number(orthogroupEntry?.orthogroupRecordCoverage)
-        : 0,
-      protein_id: String(orthogroupEntry?.proteinId || feature?.proteinId || feature?.protein_id || ''),
-      source_protein_id: String(
-        orthogroupEntry?.sourceProteinId ||
-        feature?.sourceProteinId ||
-        feature?.source_protein_id ||
-        firstQualifierValue(feature, 'protein_id') ||
-        ''
-      ),
-      orthogroup_representative: Boolean(orthogroupEntry?.orthogroupRepresentative)
-    };
-    if (normalizedPopupMode === 'rich') {
-      Object.assign(payload, {
-        qualifiers,
-        location_parts: normalizeLocationParts(feature?.location_parts),
-        orthogroup_member: orthogroupMember
-      });
-    }
-    // `svg_id` is never empty here, so the payload is never compacted away.
-    payloads.push(/** @type {StandalonePayload} */ (compactWireValue(payload)));
-  });
-  return payloads;
-};
 
 /**
  * @param {Element | null | undefined} element
@@ -1507,166 +334,6 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
  */
 const standaloneAttr = (element, name) =>
   String(element?.getAttribute?.(name) || '').trim();
-
-/** @param {...unknown} values */
-const firstStandaloneText = (...values) => {
-  for (const value of values) {
-    const text = String(value === null || value === undefined ? '' : value).trim();
-    if (text) return text;
-  }
-  return '';
-};
-
-/** @param {unknown} value */
-const splitStandaloneMetadataValues = (value) => firstStandaloneText(value)
-  .split(';')
-  .map((entry) => firstStandaloneText(entry))
-  .filter(Boolean);
-
-/**
- * @param {unknown} value
- * @returns {string[]}
- */
-const uniqueStandaloneMetadataValues = (value) => {
-  const seen = new Set();
-  /** @type {string[]} */
-  const values = [];
-  splitStandaloneMetadataValues(value).forEach((entry) => {
-    if (seen.has(entry)) return;
-    seen.add(entry);
-    values.push(entry);
-  });
-  return values;
-};
-
-/** @param {Element} element */
-const standaloneMatchKind = (element) => {
-  const explicit = standaloneAttr(element, 'data-match-kind').toLowerCase();
-  if (['homology', 'pairwise', 'orthogroup', 'collinear'].includes(explicit)) return explicit;
-  if (standaloneAttr(element, 'data-collinearity-block-id')) return 'collinear';
-  if (standaloneAttr(element, 'data-orthogroup-id')) return 'orthogroup';
-  return 'pairwise';
-};
-
-/** @param {Element | null | undefined} svg */
-const buildStandaloneMatchPayloads = (svg) => {
-  if (!svg) return [];
-  const elements = Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR));
-  const payloads = elements.map((element, index) => {
-    let id = standaloneAttr(element, 'data-gbdraw-match-id');
-    if (!id) {
-      id = `pairwise_match_${index + 1}`;
-      element.setAttribute('data-gbdraw-match-id', id);
-    }
-    const matchKind = standaloneMatchKind(element);
-    // Source coordinates for the embedded popup and FASTA header (PD-OI-076).
-    /**
-     * @param {string} role
-     * @param {string} start
-     * @param {string} end
-     */
-    const source = (role, start, end) => (matchKind === 'homology' ? null : recordSourceInterval(
-      readRecordSourceSpan(element, standaloneAttr(element, `data-${role}-record-index`)),
-      standaloneAttr(element, start),
-      standaloneAttr(element, end)
-    ));
-    const querySource = source('query', 'data-qstart', 'data-qend');
-    const subjectSource = source('subject', 'data-sstart', 'data-send');
-    /** @param {ReturnType<typeof recordSourceInterval>} interval */
-    const tableInterval = (interval) => (interval?.table ? `${interval.table.start}..${interval.table.end}` : '');
-    return /** @type {StandalonePayload | undefined} */ (compactWireValue({
-      id,
-      match_kind: matchKind,
-      orthogroup_ids: uniqueStandaloneMetadataValues(standaloneAttr(element, 'data-orthogroup-id')),
-      collinearity_block_id: standaloneAttr(element, 'data-collinearity-block-id'),
-      fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
-      query_record_id: firstStandaloneText(
-        standaloneAttr(element, 'data-query-record-id'),
-        standaloneAttr(element, 'data-query')
-      ),
-      subject_record_id: firstStandaloneText(
-        standaloneAttr(element, 'data-subject-record-id'),
-        standaloneAttr(element, 'data-subject')
-      ),
-      query_record_index: standaloneAttr(element, 'data-query-record-index'),
-      subject_record_index: standaloneAttr(element, 'data-subject-record-index'),
-      source_index: standaloneAttr(element, 'data-source-index'),
-      track_index: standaloneAttr(element, 'data-track-index'),
-      track_label: standaloneAttr(element, 'data-track-label'),
-      reference_side: standaloneAttr(element, 'data-reference-side'),
-      reference_record_id: standaloneAttr(element, 'data-reference-record-id'),
-      qstart: standaloneAttr(element, 'data-qstart'),
-      qend: standaloneAttr(element, 'data-qend'),
-      sstart: standaloneAttr(element, 'data-sstart'),
-      send: standaloneAttr(element, 'data-send'),
-      qsource_start: querySource ? String(querySource.start) : '',
-      qsource_end: querySource ? String(querySource.end) : '',
-      ssource_start: subjectSource ? String(subjectSource.start) : '',
-      ssource_end: subjectSource ? String(subjectSource.end) : '',
-      qtable_interval: tableInterval(querySource),
-      stable_interval: tableInterval(subjectSource),
-      orientation: firstStandaloneText(
-        standaloneAttr(element, 'data-collinearity-orientation'),
-        standaloneAttr(element, 'data-orientation')
-      ),
-      identity: standaloneAttr(element, 'data-identity'),
-      alignment_length: standaloneAttr(element, 'data-alignment-length'),
-      evalue: standaloneAttr(element, 'data-evalue'),
-      bitscore: standaloneAttr(element, 'data-bitscore'),
-      mismatches: standaloneAttr(element, 'data-mismatches'),
-      gap_opens: standaloneAttr(element, 'data-gap-opens'),
-      block_kind: standaloneAttr(element, 'data-collinearity-block-kind'),
-      collinear_group_scope: standaloneAttr(element, 'data-collinear-group-scope'),
-      group_kind: standaloneAttr(element, 'data-group-kind'),
-      block_color_mode: standaloneAttr(element, 'data-collinearity-color-mode'),
-      block_score: standaloneAttr(element, 'data-collinearity-block-score'),
-      anchor_index: standaloneAttr(element, 'data-collinearity-anchor-index'),
-      anchor_count: standaloneAttr(element, 'data-collinearity-anchor-count'),
-      query_feature_svg_id: standaloneAttr(element, 'data-query-feature-svg-id'),
-      subject_feature_svg_id: standaloneAttr(element, 'data-subject-feature-svg-id'),
-      query_stable_feature_svg_id: standaloneAttr(
-        element,
-        'data-query-stable-feature-svg-id'
-      ),
-      subject_stable_feature_svg_id: standaloneAttr(
-        element,
-        'data-subject-stable-feature-svg-id'
-      ),
-      query_feature_index: standaloneAttr(element, 'data-query-feature-index'),
-      subject_feature_index: standaloneAttr(element, 'data-subject-feature-index'),
-      query_protein_id: standaloneAttr(element, 'data-query-protein-id'),
-      subject_protein_id: standaloneAttr(element, 'data-subject-protein-id'),
-      query_locus_id: standaloneAttr(element, 'data-query-locus-id'),
-      subject_locus_id: standaloneAttr(element, 'data-subject-locus-id'),
-      query_display_name: standaloneAttr(element, 'data-query-display-name'),
-      subject_display_name: standaloneAttr(element, 'data-subject-display-name')
-    }));
-  });
-  /** @type {Map<unknown, { payload: StandalonePayload, element: Element }[]>} */
-  const groups = new Map();
-  payloads.forEach((payload, index) => {
-    if (!payload) return;
-    if (!groups.has(payload.id)) groups.set(payload.id, []);
-    // Set just above.
-    /** @type {{ payload: StandalonePayload, element: Element }[]} */ (groups.get(payload.id)).push({ payload, element: elements[index] });
-  });
-  return Array.from(groups.values()).filter((group) => {
-    if (group.length === 1 && !group[0].element.hasAttribute('data-gbdraw-match-fragment')) return true;
-    const ids = new Set();
-    const fragments = new Set();
-    const expected = JSON.stringify(group[0].payload);
-    return group.every(({ payload, element }) => {
-      const id = standaloneAttr(element, 'id');
-      const fragment = standaloneAttr(element, 'data-gbdraw-match-fragment');
-      if (!id || ids.has(id) || !/^(0|[1-9][0-9]*)$/.test(fragment) || fragments.has(fragment)
-        || ['qstart', 'qend', 'sstart', 'send', 'match_kind'].some((key) => !payload[key])
-        || JSON.stringify(payload) !== expected) return false;
-      ids.add(id);
-      fragments.add(fragment);
-      return true;
-    }) && group.every((_entry, index) => fragments.has(String(index)));
-  }).map((group) => group[0].payload);
-};
 
 /**
  * @param {SVGDefsElement} defs
@@ -1885,14 +552,12 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   if (!svg) return false;
 
   const context = normalizeStandaloneContext(options);
-  // The file embeds the stored item with the drawing's edits and the sequences Python encoded (D5).
-  const embeddedSequences = context.embeddedSequences;
-  const sourceCatalogItem = embeddedSequences ? context.catalogItem : null;
-  if (context.requireFeatureCatalog && !sourceCatalogItem) return false;
-  const catalogItem = sourceCatalogItem
-    ? catalogItemWithStandaloneOverrides(sourceCatalogItem, context)
-    : null;
-  if (sourceCatalogItem && !catalogItem) return false;
+  // The file embeds the stored item with the drawing's edits and the sequences Python encoded (D5); without both it
+  // writes nothing.
+  const { embeddedSequences } = context;
+  if (!context.catalogItem || !embeddedSequences) return false;
+  const catalogItem = catalogItemWithStandaloneOverrides(context.catalogItem, context);
+  if (!catalogItem) return false;
   const originalGeometry = resolveStandaloneOriginalGeometry(svg);
   const normalizedPopupMode = normalizeStandalonePopupMode(context.popupMode);
   removeExistingStandaloneInteractivityAssets(svg);
@@ -1908,39 +573,21 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     element.removeAttribute('data-gbdraw-interactive-annotation');
     removeClassToken(element, 'gbdraw-interactive-annotation');
   });
-  const features = catalogItem
-    ? catalogItem.features
-    : buildStandaloneFeaturePayloads(svg, {
-      ...context,
-      popupMode: normalizedPopupMode
-    });
-  const biologicalFeatures = catalogItem
-    ? catalogItem.biologicalFeatures
-    : buildStandaloneBiologicalFeaturePayloads(context, features);
-  const orthogroups = catalogItem
-    ? catalogItem.orthogroups
-    : buildStandaloneOrthogroupPayloads(features, context);
-  const matches = catalogItem
-    ? catalogItem.comparisonMatches
-    : buildStandaloneMatchPayloads(svg);
-
-  const featureIds = new Set(features.map((feature) => (
-    catalogItem ? feature.svgId : feature.svg_id
-  )));
+  const featureIds = new Set(catalogItem.features.map((feature) => feature.svgId));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
     const id = getElementFeatureId(element);
     if (!featureIds.has(id)) return;
     element.setAttribute('data-gbdraw-interactive-feature', 'true');
     addClassToken(element, 'gbdraw-interactive-feature');
   });
-  const matchIds = new Set(matches.map((match) => match.id));
+  const matchIds = new Set(catalogItem.comparisonMatches.map((match) => match.id));
   svg.querySelectorAll(STANDALONE_MATCH_SELECTOR).forEach((element) => {
     if (!matchIds.has(standaloneAttr(element, 'data-gbdraw-match-id'))) return;
     element.setAttribute('data-gbdraw-interactive-match', 'true');
     addClassToken(element, 'gbdraw-interactive-pairwise-match');
   });
   const annotationDomIds = new Set(
-    (Array.isArray(catalogItem?.annotations) ? catalogItem.annotations : [])
+    (Array.isArray(catalogItem.annotations) ? catalogItem.annotations : [])
       .map((annotation) => String(annotation?.dom_id || annotation?.domId || '').trim())
       .filter(Boolean)
   );
@@ -1953,24 +600,11 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   const metadata = document.createElementNS(SVG_NS, 'metadata');
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
   metadata.setAttribute('data-popup-mode', normalizedPopupMode);
-  if (catalogItem) {
-    // The export profile (D5-02): the embedded catalog's schema, which the CLI writes too, not the stored one.
-    metadata.setAttribute('data-schema', String(INTERACTIVE_EMBED_SCHEMA));
-    metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
-    metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
-    metadata.textContent = `{"schema":${INTERACTIVE_EMBED_SCHEMA},"items":[${
-      embeddedCatalogItemJson(catalogItem, /** @type {EmbeddedSequencesJson} */ (embeddedSequences))}]}`;
-  } else {
-    metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
-    metadata.textContent = JSON.stringify(compactWireValue({
-      schema: INTERACTIVE_SCHEMA,
-      popup_mode: normalizedPopupMode,
-      features,
-      biological_features: biologicalFeatures,
-      orthogroups,
-      matches
-    }));
-  }
+  // The export profile (D5-02): the embedded catalog's schema, which the CLI writes too, not the stored one.
+  metadata.setAttribute('data-schema', String(INTERACTIVE_EMBED_SCHEMA));
+  metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
+  metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
+  metadata.textContent = `{"schema":${INTERACTIVE_EMBED_SCHEMA},"items":[${embeddedCatalogItemJson(catalogItem, embeddedSequences)}]}`;
 
   const style = document.createElementNS(SVG_NS, 'style');
   style.setAttribute('id', INTERACTIVE_STYLE_ID);

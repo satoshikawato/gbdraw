@@ -279,9 +279,10 @@ def _match_source(
     unit by its record key, which must carry the record ID or alias the match names; a drawn record by its record ID,
     else an alias (the record identity ``match_sequence_sources`` gives: ID, name, accessions), among every unit or
     the one a reference span names, which it reads when the span names no ID; or a comparison record of a source (of
-    every source when the match names none) by its record ID, else an alias. A comparison span that finds no one
-    record says its FASTA was not supplied, as the popup said for every such span. Ambiguity and absence are reasons,
-    never a guess."""
+    every source when the match names none) by its record ID, else an alias. Only a comparison span whose source has
+    no comparison FASTA (no source has one, when the match names none) says its FASTA was not supplied; one whose
+    FASTA lacks the record gives the record's reason, as a drawn record does (OV-2755). Ambiguity and absence are
+    reasons, never a guess."""
 
     wanted = span["recordId"].strip()
     drawn = [source for source in sources if "sourceIndex" not in source]
@@ -298,11 +299,11 @@ def _match_source(
             return candidates[0], None
     else:
         index = span["sourceIndex"]
+        supplied = records.comparison_records if index is None else records.comparison_records[index:index + 1]
+        if not any(supplied):
+            return None, "NEVER_SUPPLIED"
         candidates = [source for source in sources if "sourceIndex" in source and index in (None, source["sourceIndex"])]
-    found, reason = _by_record_id(candidates, wanted)
-    if found is None and span["kind"] == "comparison":
-        return None, "NEVER_SUPPLIED"
-    return found, reason
+    return _by_record_id(candidates, wanted)
 
 
 def _unit_sources(
