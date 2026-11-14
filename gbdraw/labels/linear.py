@@ -774,9 +774,8 @@ def _drawn_part_x(part: FeatureLocationPart, context: _LinearLabelContext) -> tu
 def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) -> _LabelSegment | None:
     """The drawn block a feature's label is centred on: the part ``display_label_segment`` chooses when
     the feature has drawn parts (None when none of them is shown), else the longest block of its
-    location, the first of equal ones. Its extents are the drawn block's, so a feature at the record's
-    first base, whose block starts at 1 (``get_exon_coordinate``), is labeled at that block's middle
-    (OV-3452)."""
+    location, the first of equal ones. Its extents are the drawn block's (``_drawn_part_x``), the one owner
+    of a label's extents, its fit and the spans other labels avoid."""
 
     wrap_row: int | None = None
     if feature_object.display_parts is not None:

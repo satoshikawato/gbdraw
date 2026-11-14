@@ -1,4 +1,4 @@
-"""A Linear feature label is centred on the block its feature draws (OV-3452)."""
+"""A Linear feature label is centred on the block its feature draws."""
 from __future__ import annotations
 
 import pytest
@@ -21,7 +21,7 @@ _LENGTH = 10000
 def _record() -> SeqRecord:
     record = SeqRecord(Seq("AAAACCGTGG" * (_LENGTH // 10)), id="rec", annotations={"molecule_type": "DNA"})
     record.features = [
-        # At the record's first base: Biopython's start is 0, the drawn block starts at 1.
+        # At the record's first base: Biopython's start is 0, and the block is drawn from 0.
         SeqFeature(SimpleLocation(0, 1000, strand=1), type="CDS", qualifiers={"product": ["first base"]}),
         # A join whose first part starts at the first base, as long as its second part.
         SeqFeature(
@@ -99,13 +99,19 @@ def test_linear_label_is_centred_on_its_longest_drawn_block(view: str, monkeypat
 
 
 @pytest.mark.linear
-def test_linear_label_of_a_feature_at_the_first_base_is_centred_on_its_drawn_block(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("view", ["whole", "cropped", "wrapped"])
+def test_linear_labels_at_the_first_base_sit_at_its_feature_middle_in_every_view(
+    view: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Base 1 to 1000 is drawn from position 1 to 1000; its label sits at 500.5, not at Biopython's 500."""
+    """Base 1 to 1000 is drawn from position 0 to 1000, so its label sits at 500. The join of two parts of
+    1,000 bases is labeled on its first part, at 500 in the first row, whether the record is drawn whole,
+    cropped or wrapped."""
 
-    (label, _feature, genome_length, alignment_width), = [
-        entry for entry in _labels("whole", monkeypatch) if entry[0]["label_text"] == "first base"
-    ]
-    assert genome_length == _LENGTH
-    assert label["feature_anchor_x"] == pytest.approx(alignment_width * 500.5 / _LENGTH)
+    labels = {label["label_text"]: (label, genome_length, alignment_width)
+              for label, _feature, genome_length, alignment_width in _labels(view, monkeypatch)}
+    for text in ("first base", "joined"):
+        label, genome_length, alignment_width = labels[text]
+        assert label["feature_anchor_x"] == pytest.approx(
+            normalize_position_to_linear_track(500, genome_length, alignment_width)
+        ), text
+        assert label.get("wrap_row", 0) == 0, text
