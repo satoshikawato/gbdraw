@@ -2724,6 +2724,26 @@ def stored_protein_result_request(
     )
 
 
+def saved_protein_result_request(
+    request: DiagramRequest,
+    artifacts: CurrentRequestArtifacts,
+) -> DiagramRequest:
+    """``request`` as a Session stores it after a run (:func:`stored_protein_result_request`), its protein
+    pipeline answered by the raw LOSAT rows in ``artifacts`` that a Session saved.
+
+    A request without a protein pipeline is returned as given. A search the rows
+    do not answer runs where a LOSAT runtime exists; without one (the browser) the
+    build raises its ``LOSAT_RUNTIME`` error.
+    """
+
+    if not isinstance(request, LinearDiagramRequest) or losatp_analysis_mode(
+        request.options.losat_search
+    ) not in {"pairwise", "orthogroup", "collinear"}:
+        return request
+    built = build_request_plan_diagram(plan_linear_request(request), artifacts=artifacts)
+    return stored_protein_result_request(built.request, built.linear_metadata)
+
+
 def _stored_linear_comparisons(
     options: LinearDiagramOptions,
     metadata: LinearDiagramMetadata,

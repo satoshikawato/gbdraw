@@ -1028,7 +1028,12 @@ ends bind to current members of their own source records. Missing or unbound
 links leave the usual Review rules in place instead of a guess. A Web LOSATP
 Generate commits its typed orthogroup or Collinear result with the request, so
 Align, record rotation, and Save and Load use the same links without running
-LOSATP again.
+LOSATP again. A Web Session 31 to 44 could store its LOSATP comparison as the
+search itself, with the raw rows it found in `losatCache`. Web Load gives such
+a request the results of those rows, as a Generate commits them, so Reset
+record positions, Align, and label edits before the first Generate redraw the
+figure without a LOSAT run. When the saved rows do not answer every search,
+the request keeps the search, and Generate runs it in the browser.
 
 Released request schemas 1, 2, 5, 6, and 7 remain readable. Their
 `alignOrthogroupFeature` protein-setting string is read only when loading old

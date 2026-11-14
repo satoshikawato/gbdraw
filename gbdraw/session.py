@@ -83,6 +83,7 @@ if TYPE_CHECKING:
     from gbdraw.api.migration_report import SessionMigrationReport
     from gbdraw.api.request_render import (
         CircularBatchRenderResult,
+        CurrentRequestArtifacts,
         RequestRenderResult,
     )
     from gbdraw.api.requests import DiagramRequest
@@ -2120,6 +2121,28 @@ def _with_cli_record_presentations(
     return {**request, "records": records} if records else request
 
 
+def _with_saved_protein_results(
+    request: DiagramRequest,
+    artifacts: CurrentRequestArtifacts,
+) -> DiagramRequest:
+    """For Web Load: ``request`` with the protein results of its saved LOSAT rows
+    (:func:`gbdraw.api.request_render.saved_protein_result_request`), as a Web
+    Generate commits them, so the browser redraws it without a search (OV-3540).
+
+    A search its rows do not answer needs a LOSAT runtime, which the browser's
+    Python lacks: the request keeps its search, which Generate runs in the browser.
+    """
+
+    from gbdraw.api.request_render import saved_protein_result_request
+
+    try:
+        return saved_protein_result_request(request, artifacts)
+    except ValidationError as exc:
+        if (exc.diagnostic or {}).get("code") != "LOSAT_RUNTIME":
+            raise
+        return request
+
+
 def _upgrade_to_current(
     loaded: SessionDocument,
     temporary_directory: str | Path | None,
@@ -2132,7 +2155,9 @@ def _upgrade_to_current(
     unchanged. A Session 49 changes only by the anchor-mode replacement that
     every older version gets. With ``stored_results`` (Web Load's reading),
     Results without a feature catalog go there instead of being dropped
-    (OV-1659). ``stored_request_schema`` is the schema of the request the
+    (OV-1659), and a Linear request's LOSATP search takes the results of the
+    rows the Session saved (:func:`_with_saved_protein_results`, OV-3540).
+    ``stored_request_schema`` is the schema of the request the
     file stored (None: the request's own)."""
 
     if loaded.version >= DRAWINGS_SESSION_MIN_VERSION:
@@ -2236,13 +2261,16 @@ def _upgrade_to_current(
             state["results"] = []
             state.pop("runMetadata", None)
         replace_current_derived_feature_state(state, catalog)
+        written = project_legacy_similarity_alignment_for_current_write(
+            adapted.request,
+            legacy_source=request,
+        )
+        if stored_results is not None:
+            written = _with_saved_protein_results(written, adapted.artifacts)
         upgraded = _mode_scoped_document(
             _DrawingBuild(
                 mode=drawing.mode,
-                request=project_legacy_similarity_alignment_for_current_write(
-                    adapted.request,
-                    legacy_source=request,
-                ),
+                request=written,
                 state=state,
             ),
             web_file_inventory=web_file_inventory,
