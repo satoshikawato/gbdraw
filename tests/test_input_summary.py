@@ -24,7 +24,9 @@ from gbdraw.api import (
     RenderOutputRequest,
     render_request,
 )
-from gbdraw.api.input_summary import input_summary_lines, input_warnings
+from gbdraw.api.input_summary import InputSummary, input_summary_lines, input_warnings
+from gbdraw.io.comparisons import ComparisonRowTally
+from gbdraw.linear_comparison import ComparisonTableTally
 from gbdraw.io.genome import parse_gff_fasta, read_flat_file_records
 from gbdraw.session import SessionDocument, build_session_document
 from tests.utils.session_files import embedded_session
@@ -334,15 +336,8 @@ def test_python_api_logs_a_region_set_the_track_stack_leaves_out(
     ]
 
 
-def test_one_file_given_twice_warns_once_in_the_python_api_and_the_web(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """``draw_linear`` logs, and the Web reply carries, one warning of one input, as ``gbdraw linear`` logs it."""
-    from gbdraw import read_genbank
-
-    records = read_genbank(str(ZERO_FEATURES))
-    with caplog.at_level("WARNING", logger="gbdraw.api.input_summary"):
-        gbdraw.draw_linear(records + records)
+def test_one_file_given_twice_warns_once_in_the_web_reply(tmp_path: Path) -> None:
+    """The Web reply carries one warning of one input, as ``gbdraw linear`` logs it."""
     document = _embedded(build_session_document(LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(ZERO_FEATURES)),) * 2,
         output=RenderOutputRequest(output_prefix="twice", formats=("svg",)),
@@ -351,12 +346,33 @@ def test_one_file_given_twice_warns_once_in_the_python_api_and_the_web(
         document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
     )
 
-    assert [record.getMessage() for record in caplog.records if record.levelname == "WARNING"] == [
-        ZERO_FEATURES_WARNING.removeprefix("WARNING: ").replace("(zero_features_record.gb)", "(in-memory record)")
-    ]
     assert reply["metadata"]["inputSummaries"][0]["warnings"] == [
         {"code": "no_drawable_features", "message": ZERO_FEATURES_WARNING.removeprefix("WARNING: ")}
     ]
+
+
+def test_records_without_a_file_each_warn_in_the_python_api(caplog: pytest.LogCaptureFixture) -> None:
+    """A record held in memory has no file to name it: each one drawn is its own input and warns."""
+    from gbdraw import read_genbank
+
+    records = read_genbank(str(ZERO_FEATURES))
+    with caplog.at_level("WARNING", logger="gbdraw.api.input_summary"):
+        gbdraw.draw_linear(records + records)
+
+    warning = ZERO_FEATURES_WARNING.removeprefix("WARNING: ").replace("(zero_features_record.gb)", "(in-memory record)")
+    assert [record.getMessage() for record in caplog.records if record.levelname == "WARNING"] == [warning, warning]
+
+
+def test_two_comparison_tables_of_one_name_and_record_pair_each_warn() -> None:
+    """Two empty tables of one base name (two folders) for one record pair are two inputs."""
+    empty = ComparisonTableTally("hits.tsv", 0, 1, ComparisonRowTally(rows_read=0, rows_kept=0, thresholds=()))
+
+    warnings = input_warnings(InputSummary(records=(), comparisons=(empty, empty)))
+
+    assert [item.message for item in warnings] == [
+        "Comparison table hits.tsv (record #1 and record #2) has no rows, so no match is drawn."
+    ] * 2
+
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_web_reply_names_a_region_set_the_track_stack_leaves_out(tmp_path: Path, mode: str) -> None:
