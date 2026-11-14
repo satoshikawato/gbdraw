@@ -10,10 +10,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import test from 'node:test';
 
 import * as schema from '../../gbdraw/web/js/contracts/schema.generated.js';
 import * as slots from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
+import { buildMatchPopupPayload } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 
 const CASES = JSON.parse(readFileSync(new URL('../fixtures/embedded-match-span-cases.json', import.meta.url), 'utf8')).cases;
@@ -120,6 +122,66 @@ test('the viewer shows what Python embedded, with no lookup of its own', () => {
     return Object.entries(testCase.shown).flatMap(([id, roles]) => Object.entries(roles)
       .filter(([role, expected]) => JSON.stringify(shown[id]?.[role]) !== JSON.stringify(expected))
       .map(([role, expected]) => `${testCase.name}: ${id} ${role} shows ${JSON.stringify(shown[id]?.[role])}, not ${JSON.stringify(expected)}`));
+  });
+  assert.deepEqual(failures, []);
+});
+
+/**
+ * The span each match names, as Python's export reads it before it looks up a source: the read (record, coordinates)
+ * or the code of the reason it cannot read one.
+ */
+const pythonSpanReads = () => JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
+import json, sys
+from gbdraw.web_support.feature_catalog import _embedded_match_span, _span_input
+
+out = []
+for case in json.load(sys.stdin):
+    keys = [f"key-{index}" for index in range(len(case["records"]))]
+    reads = {}
+    for match in case["matches"]:
+        for role in ("query", "subject"):
+            span = _embedded_match_span(match, role, keys)
+            reads[f"{match['id']}/{role}"] = span if isinstance(span, str) else _span_input(*span)
+    out.append(reads)
+print(json.dumps(out))
+`], { encoding: 'utf8', input: JSON.stringify(CASES) }));
+
+/** The SVG attribute of each fixture match field, as the drawing writes it. */
+const MATCH_ATTRIBUTES = {
+  id: 'data-gbdraw-match-id', match_kind: 'data-match-kind', query_record_id: 'data-query-record-id',
+  subject_record_id: 'data-subject-record-id', query_record_index: 'data-query-record-index',
+  subject_record_index: 'data-subject-record-index', qstart: 'data-qstart', qend: 'data-qend', sstart: 'data-sstart',
+  send: 'data-send', source_index: 'data-source-index', reference_side: 'data-reference-side'
+};
+
+// The Web app's match popup reads a span itself (`matchSpanRead`), so its notices show as the popup opens, without a
+// Worker call; Python's export repeats that read (`_embedded_match_span`). Until the app reads Python's, this case
+// keeps the two the same: for every span of the fixture, the app reads the same record and coordinates as Python, or
+// shows the sentence the exported viewer shows.
+test('the Web app\'s match popup reads each span as Python\'s export does', () => {
+  const python = pythonSpanReads();
+  const failures = CASES.flatMap((/** @type {any} */ testCase, /** @type {number} */ index) => {
+    const unitKeys = testCase.records.map((/** @type {unknown} */ _row, /** @type {number} */ unit) => `key-${unit}`);
+    const comparisonSupplied = (/** @type {number | null} */ source) => (source === null
+      ? testCase.comparisonRecords.some((/** @type {unknown[]} */ rows) => rows.length > 0)
+      : (testCase.comparisonRecords[source] || []).length > 0);
+    return testCase.matches.flatMap((/** @type {Record<string, string>} */ match) => {
+      const attributes = Object.fromEntries(Object.entries(match).map(([key, value]) => [MATCH_ATTRIBUTES[key], String(value)]));
+      const element = { style: { fill: '' }, ownerSVGElement: { querySelectorAll: () => [] },
+        getAttribute: (/** @type {string} */ name) => attributes[name] ?? null };
+      const payload = buildMatchPopupPayload(element, { matchSequenceRecords: { unitKeys, comparisonSupplied } });
+      return payload.sequenceBundle.entries.flatMap((/** @type {any} */ entry) => {
+        const label = `${testCase.name}: ${match.id} ${entry.span.role}`;
+        if (entry.read) {
+          const pythonRead = python[index][`${match.id}/${entry.span.role}`];
+          return isDeepStrictEqual(pythonRead, entry.read) ? []
+            : [`${label}: the app reads ${JSON.stringify(entry.read)}, Python ${JSON.stringify(pythonRead)}`];
+        }
+        const shown = testCase.shown[match.id]?.[entry.span.role];
+        return shown?.reason === entry.unavailableReason ? []
+          : [`${label}: the app shows "${entry.unavailableReason}", the export ${JSON.stringify(shown)}`];
+      });
+    });
   });
   assert.deepEqual(failures, []);
 });
