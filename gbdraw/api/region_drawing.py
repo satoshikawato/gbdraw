@@ -1608,12 +1608,16 @@ def _placed(
     unit_count: int,
 ) -> tuple[tuple[RecordInput, ...], LinearMultiRecordOptions | CircularMultiRecordOptions | None]:
     """The target's records with ``added`` after them, and its layout: where the target places its records by row,
-    a Linear record takes a new row of its own and the Circular records one new row together; otherwise they follow
-    in order. A Circular target becomes, or stays, a Multi-Record Canvas."""
+    a Linear record takes a new row of its own and the Circular records one new row together; otherwise Linear
+    records follow in order. A Circular target becomes, or stays, a Multi-Record Canvas; one that names no places
+    draws each record on a row of its own (``resolve_record_row_positions``), and the pasted records take one new
+    row after them, so they are added below its records."""
     linear = isinstance(target, LinearDiagramRequest)
     layout = target.layout if linear or target.layout is not None else CircularMultiRecordOptions()
     rows = [record.presentation.grid_row for record in target.records]
     positions = layout.multi_record_positions if layout is not None else None
+    if not linear and not positions and all(row is None for row in rows):
+        positions = tuple(f"#{unit}@{unit}" for unit in range(1, unit_count + 1))
     new_rows = [index + 1 if linear else 1 for index in range(len(added))]
     if any(row is not None for row in rows):
         top = max(row for row in rows if row is not None)

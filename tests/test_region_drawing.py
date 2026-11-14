@@ -960,9 +960,21 @@ def test_the_web_helper_draws_two_records_in_one_linear_drawing(tmp_path: Path) 
     assert (reply["status"], reply["mode"]) == ("derived", "linear")
     records = reply["renderRequest"]["records"]
     assert [record["recordKey"] for record in records] == ["pair:1", "pair:2"]
-    # Each input keeps a resource of its own (the codec's rule); each reads the source's file.
+    # The records of one file name one resource, the source's, as the Web writes the records of one File (OV-3533).
     source_id = payload["records"][0]["source"]["resourceId"]
-    assert {reply["resourceSources"][record["source"]["resourceId"]] for record in records} == {source_id}
+    assert [record["source"]["resourceId"] for record in records] == [source_id, source_id]
+    assert reply["resourceSources"] == {source_id: source_id}
+
+
+def test_the_web_helper_copies_the_records_of_one_file_onto_one_circular_card(tmp_path: Path) -> None:
+    # OV-3533: a Circular copy of whole records of one file names that file once, so the Web reads one File card (its
+    # records drawn as the source drew them), not a card per record.
+    whole = [{"recordKey": "pair:1", "start": 1, "end": 4000}, {"recordKey": "pair:2", "start": 1, "end": 4000}]
+    payload, _paths, reply = _web_copy(_vnig_like_canvas(), whole, tmp_path, NEW_DRAWING)
+    assert (reply["status"], reply["mode"]) == ("derived", "circular")
+    source_id = payload["records"][0]["source"]["resourceId"]
+    assert {record["source"]["resourceId"] for record in reply["renderRequest"]["records"]} == {source_id}
+    assert reply["resourceSources"] == {source_id: source_id}
 
 
 def test_the_web_helper_names_only_the_resources_the_derived_request_reads(tmp_path: Path) -> None:
@@ -1291,6 +1303,10 @@ def test_a_paste_into_a_circular_drawing_takes_whole_records_on_a_new_row() -> N
     source = _vnig_like_canvas()
     pasted = paste_region_request(source, [RegionSelection("pair:1", 1, 4000)], target)
     assert (pasted.request.grouping, len(pasted.request.records)) == ("grid", 2)
+    # A drawing that names no places draws each record on a row of its own; the pasted records take one new row
+    # after them, so they are added below its records, not beside them.
+    both = paste_region_request(source, [RegionSelection("pair:1", 1, 4000), RegionSelection("pair:2", 1, 4000)], target)
+    assert both.request.layout.multi_record_positions == ("#1@1", "#2@2", "#3@2")
     with pytest.raises(CopyRefused) as refused:
         paste_region_request(source, [RegionSelection("pair:1", 1, 400)], target)
     assert refused.value.reason == "CIRCULAR_WHOLE_RECORDS"
@@ -1710,6 +1726,35 @@ def test_the_web_helper_pastes_with_the_resources_of_both_drawings(tmp_path: Pat
     }
     decoded = decode_canonical_request(request, resource_paths=paths, output_directory=tmp_path / "out")
     assert [str(record.id) for record in resolve_request_records(decoded).records] == ["NC_012920.1", "TESTA", "TESTB"]
+
+
+def test_the_web_helper_pastes_the_records_of_one_file_as_one_resource_of_their_own(tmp_path: Path) -> None:
+    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+
+    # OV-3533: the pasted records of one file name one resource; a pasted record never takes a resource the target's
+    # own records name, even when both drawings read the same staged file.
+    source_payload, source_paths = _web_source(_vnig_like_canvas())
+    for target_request, regions, expected in (
+        (LinearDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="mito")]),
+         [{"recordKey": "pair:1", "start": 1, "end": 4000}, {"recordKey": "pair:2", "start": 1, "end": 400}],
+         ["pair:1", "pair:2"]),
+        (LinearDiagramRequest(records=[
+            RecordInput(GenBankInputSource(TWO_RECORDS), selector=RecordSelector("TESTA", "TESTA", None), record_key="a"),
+        ]), [{"recordKey": "pair:2", "start": 1, "end": 400}], ["pair:2"]),
+    ):
+        target_payload, target_paths = _web_source(target_request)
+        copy = {"into": "existing", "target": {"renderRequest": target_payload, "resourcePaths": target_paths},
+                "edits": "edits", "duplicates": "skip"}
+        reply = json.loads(derive_web_region_drawing_json(
+            json.dumps(source_payload), json.dumps(source_paths), str(tmp_path / "out"), json.dumps(regions),
+            json.dumps(True), json.dumps(copy),
+        ))
+        assert reply["pastedRecordKeys"] == expected
+        records = {record["recordKey"]: record["source"]["resourceId"] for record in reply["renderRequest"]["records"]}
+        pasted = {records[key] for key in expected}
+        own = {records[record["recordKey"]] for record in target_payload["records"]}
+        assert len(pasted) == 1 and not pasted & own
+        assert set(reply["resourceSources"]) | set(reply["targetResourceSources"]) == set(records.values())
 
 
 def test_the_web_helper_returns_the_color_table_with_the_pasted_colors(tmp_path: Path) -> None:

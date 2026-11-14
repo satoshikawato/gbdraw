@@ -786,6 +786,35 @@ test('OV-3530: a new Circular drawing of two whole records of a file of three dr
   app.selectDrawing(source.id);
 });
 
+/** The row of each drawn record of a Circular canvas drawing, in drawing order, as its draft request places them. */
+const drawnCircularRows = async (drawing) => {
+  const { envelope } = await projectOf(drawing);
+  const positions = at(envelope.renderRequest, '$.layout.multiRecordPositions').value ?? [];
+  return envelope.renderRequest.records.map((_record, index) => {
+    const token = positions.find((position) => position.startsWith(`#${index + 1}@`));
+    return token === undefined ? null : Number(token.split('@')[1]);
+  });
+};
+
+// OV-3533: the whole records of one file copied to a Circular drawing read that one file as one File card, as the
+// source drew them, so each record keeps the row the source drew it on (records #1 and #2 share the first row of a
+// three-record canvas, #3 is on the second).
+for (const [picked, sourceRows] of [[[1, 2], [1, 1]], [[1, 3], [1, 2]]]) {
+  test(`OV-3533: a Circular copy of records #${picked.join(' and #')} of one file draws one card, each record on its source row`, async () => {
+    const source = circularSource(threeRecords, { multi_record_canvas: true });
+    await app.readShownRecords('circular');
+    const all = await drawnCircularRows(source);
+    assert.deepEqual(picked.map((number) => all[number - 1]), sourceRows, 'the source\'s rows');
+    const { made } = await deriveAndInstall(source, picked.map((number) => (
+      { recordKey: `record-1:${number}`, start: 1, end: 800 + number * 100 })), true, `circular-3${picked.join('')}`);
+    state.addDrawing(made, `OV-3533 ${picked}`); history.addMember(made.id);
+    await drawnCircularRecordIds(made);
+    assert.equal(made.circularSources.length, 1, 'one File card');
+    assert.deepEqual(await drawnCircularRows(made), sourceRows);
+    app.selectDrawing(source.id);
+  });
+}
+
 // OV-3531: a CLI Session whose Circular canvas draws some records of one file (`--records_table`) names them by record
 // ID over one shared resource; Load draws those records.
 test('OV-3531: a stored Circular canvas of two records of a file of three draws those two at Load', async () => {
@@ -931,13 +960,15 @@ test('a paste of whole records into a Circular drawing draws them after its own 
     { recordKey: 'record-1:1', start: 1, end: 900 }, { recordKey: 'record-1:3', start: 1, end: 1100 }
   ]);
   assert.deepEqual({ ...target.circularSources[0] }, ownCard, 'the target\'s own card');
-  assert.equal(new Set(target.circularSources.map(({ uid }) => uid)).size, 3, 'each pasted card has a uid of its own');
+  // The pasted records of one file are one File card (OV-3533), under a uid of its own.
+  assert.equal(new Set(target.circularSources.map(({ uid }) => uid)).size, 2, 'the target\'s card and the pasted card');
   assert.equal(target.form.multi_record_canvas, true);
   // The target's own card reads a file of one record, which its request names without a selector.
   assert.deepEqual(await drawnCircularRecordIds(target), [null, 'recA.1', 'recD.1']);
-  // OV-3533 (open): the read of the cards places each File card's records on a row of its own, so the request names
-  // places where Python's names none.
-  await assertPastedRequest(target, paste, ['$.layout.multiRecordPositions']);
+  // OV-3534 (open): Python places the pasted records on one new row (#2@2, #3@2), but the paste install drops their
+  // places (the reader names them by request record key, the install maps card keys), so the read places them on the
+  // Web's default grid, the first beside the target's own record (#2@1).
+  await assertPastedRequest(target, paste, ['$.layout.multiRecordPositions[1]']);
   app.selectDrawing(source.id);
 });
 

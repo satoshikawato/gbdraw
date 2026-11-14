@@ -15,7 +15,7 @@ whose files it reads, and types the reply. It renders nothing.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Literal, TypedDict
 
 from gbdraw.api.region_drawing import (
@@ -83,9 +83,9 @@ class DerivedRegionDrawing(TypedDict):
     """The derived drawing: its mode, its canonical request (as a Session stores a committed one), and the lists.
 
     ``resourceSources`` names, for each resource the request names, the
-    source drawing's resource whose file it reads. Each input keeps a
-    resource of its own, so two records of one file name two resources of
-    the same bytes.
+    source drawing's resource whose file it reads. The records of one file
+    name one resource, as the Web writes the records of one File, so a
+    Circular canvas reads them as one File card (OV-3533).
     """
 
     status: Literal["derived"]
@@ -311,7 +311,7 @@ def _pasted_reply(
         pasted = paste_region_request(
             source, selections, target, edits=choice["edits"], duplicates=choice["duplicates"]
         )
-    payload, named, added = _encoded(pasted.request, target_paths)
+    payload, named, added = _encoded(pasted.request, target_paths, pasted.pasted_record_keys)
     target_sources, source_sources = _resource_sources(named, target_paths, resource_paths)
     return {
         "status": "pasted",
@@ -337,16 +337,19 @@ def _pasted_reply(
 
 
 def _encoded(
-    request: DiagramRequest, held: Mapping[str, str]
+    request: DiagramRequest, held: Mapping[str, str], records: Collection[str] | None = None
 ) -> tuple[dict[str, object], dict[str, str], list[AddedResource]]:
     """``request`` encoded with the staged files ``held`` under their own IDs, the file of each resource it names,
     and the resources it names that no file holds (a table built for it): the encoder takes a held resource with
-    equal bytes, and adds one for a second input of a file."""
+    equal bytes, and adds one for a second input of a file. The ``records`` (by record key; every record when
+    ``None``) that read one file then name the first of their resources of it (:func:`_one_resource_per_file`)."""
 
     table = SessionResourceTable()
     for resource_id, path in held.items():
         table.request().add_path(resource_id, kind="web-file", value=path)
     encoded = encode_canonical_request(request, table=table)
+    paths = {resource.resource_id: str(resource.source_path) for resource in encoded.resources if resource.source_path}
+    _one_resource_per_file(encoded.payload, {**paths, **held}, records)
     by_id = {resource.resource_id: resource for resource in encoded.resources}
     named: dict[str, str] = {}
     built: list[AddedResource] = []
@@ -359,6 +362,25 @@ def _encoded(
         else:
             named[resource_id] = "" if resource is None else str(resource.source_path)
     return encoded.payload, named, built
+
+
+def _one_resource_per_file(
+    payload: dict[str, object], paths: Mapping[str, str], records: Collection[str] | None
+) -> None:
+    """Make the ``records`` of ``payload`` (by record key; every record when ``None``) that read one file (``paths``:
+    each resource's file) name one resource of it, the first record's, as the Web writes the records of one File
+    (``inputRecordSource`` in ``services/session-request.js``): a Circular canvas reads them as one File card and
+    draws them as the source drew them (OV-3533). The encoder gives each input a resource of its own."""
+
+    first: dict[tuple[str, str], str] = {}
+    listed = payload.get("records")
+    for record in listed if isinstance(listed, list) else ():
+        source = record.get("source") if isinstance(record, dict) else None
+        if not isinstance(source, dict) or (records is not None and record.get("recordKey") not in records):
+            continue
+        for field, resource_id in source.items():
+            if isinstance(resource_id, str) and canonical_resource_ids({field: resource_id}) and resource_id in paths:
+                source[field] = first.setdefault((field, paths[resource_id]), resource_id)
 
 
 def _resource_sources(named: Mapping[str, str], *drawings: Mapping[str, str]) -> tuple[dict[str, str], ...]:
