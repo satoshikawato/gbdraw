@@ -56,7 +56,6 @@ from gbdraw.comparisons.losat_jobs import (
     split_losat_batch_result,
 )
 from gbdraw.comparisons.losat_runtime import (
-    LosatCacheWrite,
     LosatRawCache,
     LosatRuntimeCallback,
     LosatRuntimeRecord,
@@ -2906,9 +2905,7 @@ class LosatpCacheState:
 
     entries: tuple[tuple[str, Mapping[str, object]], ...]
     display: tuple[tuple[str, str], ...]
-    legacy_entries: tuple[Mapping[str, object], ...]
     identity_manifest: ProteinIdentityManifest | None
-    proteins_by_instance: tuple[tuple[str, tuple[CdsProtein, ...]], ...]
     threads_per_job: str | int
     runtime_compatibility: str
     database_sizes: GenomeDatabaseSizes | None = None
@@ -2942,12 +2939,7 @@ class LosatpCacheManager(LosatRawCache):
             if identity_manifest is not None
             else None
         )
-        self._legacy_entries: list[dict[str, object]] = []
-        self._proteins_by_instance: dict[str, tuple[CdsProtein, ...]] = {}
         for entry in entries or ():
-            if is_legacy_protein_losat_cache_entry(entry):
-                self._legacy_entries.append(copy.deepcopy(dict(entry)))
-                continue
             if not is_protein_losat_cache_entry(entry):
                 continue
             key = str(entry.get("key") or "").strip()
@@ -2990,9 +2982,7 @@ class LosatpCacheManager(LosatRawCache):
         return LosatpCacheState(
             entries=entries,
             display=display,
-            legacy_entries=tuple(self._legacy_entries),
             identity_manifest=self.identity_manifest,
-            proteins_by_instance=tuple(self._proteins_by_instance.items()),
             threads_per_job=self.threads_per_job,
             runtime_compatibility=self.runtime_compatibility,
             database_sizes=self.database_sizes,
@@ -3009,23 +2999,7 @@ class LosatpCacheManager(LosatRawCache):
         )
         cache.identity_manifest = state.identity_manifest
         cache._restore_raw_state(state.entries, state.display)
-        cache._legacy_entries = [copy.deepcopy(dict(entry)) for entry in state.legacy_entries]
-        cache._proteins_by_instance = dict(state.proteins_by_instance)
         return cache
-
-    def _apply_write(self, write: LosatCacheWrite) -> None:
-        if write.kind == "retire-legacy":
-            self._retire_legacy(write.index)
-        else:
-            super()._apply_write(write)
-
-    def _retire_legacy(self, index: int) -> None:
-        del self._legacy_entries[index]
-        self._writes.append(LosatCacheWrite("retire-legacy", index=index))
-
-    @property
-    def has_legacy_candidates(self) -> bool:
-        return bool(self._legacy_entries)
 
     def set_identity_manifest(
         self,
@@ -3036,65 +3010,6 @@ class LosatpCacheManager(LosatRawCache):
         self._retain_entries(
             lambda entry: validate_protein_raw_entry_references(entry, authority)
         )
-
-    def set_protein_extraction(self, extraction: ProteinExtractionResult, records: Sequence[SeqRecord]) -> None:
-        """Attach the current extraction of ``records`` needed to verify legacy cache candidates."""
-
-        if extraction.identity_manifest is None:
-            raise ValidationError(
-                "Stable protein extraction must include an identity manifest."
-            )
-        if len(extraction.record_instance_keys) != len(extraction.proteins_by_record):
-            raise ValidationError(
-                "Stable protein extraction record bindings are incomplete."
-            )
-
-        self.set_identity_manifest(extraction.identity_manifest)
-        proteins_by_instance: dict[str, tuple[CdsProtein, ...]] = {}
-        # Legacy promotion reads each record in its search frame.
-        for instance_key, proteins in zip(
-            extraction.record_instance_keys,
-            search_frame_extraction(records, extraction).proteins_by_record,
-            strict=True,
-        ):
-            normalized_key = str(instance_key).strip()
-            if not normalized_key or normalized_key in proteins_by_instance:
-                raise ValidationError(
-                    "Stable protein extraction record-instance keys must be non-empty and unique."
-                )
-            protein_tuple = tuple(proteins)
-            fasta_text = proteins_to_fasta(protein_tuple)
-            # set_identity_manifest above stored the (non-None) extraction manifest. A record without proteins
-            # has an empty FASTA, which names no binding.
-            if protein_tuple and (
-                _fasta_record_instance_key(
-                    fasta_text, cast(ProteinIdentityManifest, self.identity_manifest)
-                )
-                != normalized_key
-            ):
-                raise ValidationError(
-                    "Stable protein extraction does not match its record-instance binding."
-                )
-            proteins_by_instance[normalized_key] = protein_tuple
-        self._proteins_by_instance = proteins_by_instance
-
-    def legacy_candidate_envelope(self) -> dict[str, object]:
-        return {
-            "schema": LEGACY_PROTEIN_RAW_CANDIDATE_SCHEMA,
-            "entries": [make_legacy_protein_raw_candidate(entry) for entry in self._legacy_entries],
-        }
-
-    def add_promoted_entry(self, entry: Mapping[str, object]) -> None:
-        if not is_protein_losat_cache_entry(entry):
-            raise ValidationError(
-                "Only current schema-4 protein entries can be promoted into the cache."
-            )
-        if self.identity_manifest is None or not validate_protein_raw_entry_references(
-            entry,
-            self.identity_manifest,
-        ):
-            raise ValidationError("Promoted protein entry does not match the current manifest.")
-        self._add_search_entry(str(entry["key"]), dict(entry))
 
     def _pair_identity(
         self,
@@ -3162,7 +3077,7 @@ class LosatpCacheManager(LosatRawCache):
         display: bool = False,
         filename: str = "",
     ) -> str | None:
-        """Raw TSV of one record pair from a current or promoted entry, if any."""
+        """Raw TSV of one record pair from a current entry, if any."""
 
         pair_identity = self._pair_identity(query_record_instance_key, subject_record_instance_key)
         cache_key = build_protein_losat_cache_key(
@@ -3179,42 +3094,11 @@ class LosatpCacheManager(LosatRawCache):
             outfmt="6",
             args=args,
         )
-        if cached is not None:
-            if display:
-                self._mark_display(cache_key, filename)
-            return str(cached.get("text") or "")
-        # Legacy entries predate source batches; they answer only a search
-        # whose sides are the two records themselves (as in the Web).
-        if search_context is not None or not self._legacy_entries:
+        if cached is None:
             return None
-        query_proteins = self._proteins_by_instance.get(
-            pair_identity.query_record_instance_key
-        )
-        subject_proteins = self._proteins_by_instance.get(
-            pair_identity.subject_record_instance_key
-        )
-        if query_proteins is None or subject_proteins is None:
-            return None
-        scan = promote_legacy_protein_raw_cache_entries(
-            self._legacy_entries,
-            query_proteins=query_proteins,
-            subject_proteins=subject_proteins,
-            query_fasta=proteins_to_fasta(query_proteins),
-            subject_fasta=proteins_to_fasta(subject_proteins),
-            # _pair_identity above raised when the manifest is None.
-            identity_manifest=cast(ProteinIdentityManifest, self.identity_manifest),
-            expected_args=args,
-            expected_program="blastp",
-            expected_outfmt="6",
-        )
-        if scan.promotion is None:
-            return None
-        promotion = scan.promotion
-        self.add_promoted_entry(promotion.entry)
-        self._retire_legacy(promotion.candidate_index)
         if display:
             self._mark_display(cache_key, filename)
-        return promotion.rewritten_tsv
+        return str(cached.get("text") or "")
 
     def store_search(
         self,

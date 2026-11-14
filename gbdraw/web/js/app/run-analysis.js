@@ -713,6 +713,34 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
 const isHexDigest = (key) => typeof key === 'string' && /^[0-9a-f]{64}$/.test(key);
 
 /**
+ * A legacy candidate that the `promoteLegacyLosatpCache` helper could not promote for a search
+ * (`LegacyProteinRawCacheRejection`), by its index in the candidate envelope.
+ * @typedef {{ candidateIndex: number, reason: string }} LegacyLosatpPromotionRejection
+ */
+
+/**
+ * The search the `promoteLegacyLosatpCache` helper verifies legacy candidates for (its `expectedOptions`): program,
+ * output format and arguments, and the search's key when a current entry answers it (`answeredKeys`), so that no
+ * candidate is promoted to it.
+ * @typedef {object} LegacyLosatpPromotionOptions
+ * @property {string} program
+ * @property {string} [outfmt]
+ * @property {string[]} args
+ * @property {string[]} answeredKeys
+ */
+
+/**
+ * The reply of the `promoteLegacyLosatpCache` helper (`promote_legacy_losatp_cache_candidates` in
+ * app/python-helpers.js, its one producer). Every reply names the candidates that verify for the search without
+ * answering it (`duplicates`, which retire, OV-3561) and the candidates it rejected; a promotion also carries the
+ * promoted candidate, its current schema-4 entry and its rewritten TSV. The helper's error reply never reaches the
+ * page: the Worker turns it into a rejected request (`callJsonHelper`).
+ * @typedef {{ status: 'no-match', rejections: LegacyLosatpPromotionRejection[], duplicates: number[] }
+ *   | { status: 'promoted', candidateIndex: number, entry: RawLosatCacheEntry & { key: string }, text: string,
+ *     rejections: LegacyLosatpPromotionRejection[], duplicates: number[] }} LegacyLosatpPromotionReply
+ */
+
+/**
  * The keys of the `buildProteinLosatCacheKeys` reply: one raw key per pair, and the key of the derived payload
  * they convert to when the request asked for it (`''` otherwise).
  * @typedef {{ keys: string[], derivedKey: string }} ProteinLosatCacheKeys
@@ -4226,6 +4254,13 @@ export const createRunAnalysis = ({
             }));
           if (pending.length === 0) return null;
 
+          /** @type {LegacyLosatpPromotionOptions} */
+          const expectedOptions = {
+            program: metadata.program,
+            outfmt: metadata.outfmt,
+            args: normalizeLosatArgs(metadata.args),
+            answeredKeys: answered ? [cacheKey] : []
+          };
           const response = await runDiagramHelperOperation(
             DIAGRAM_HELPER_OPERATIONS.PROMOTE_LEGACY_LOSATP_CACHE,
             {
@@ -4235,29 +4270,14 @@ export const createRunAnalysis = ({
               queryProteinMap: cloneJsonData(queryEntry?.proteinMap || {}),
               subjectProteinMap: cloneJsonData(subjectEntry?.proteinMap || {}),
               identityManifest: cloneJsonData(workingProteinIdentityManifest),
-              expectedOptions: {
-                program: metadata.program,
-                outfmt: metadata.outfmt,
-                args: normalizeLosatArgs(metadata.args),
-                answeredKeys: answered ? [cacheKey] : []
-              }
+              expectedOptions
             }
           );
-          const result = response.result;
-          if (result.status === 'error') {
-            throw result.error || new Error('Legacy protein cache migration failed.');
-          }
+          const result = /** @type {LegacyLosatpPromotionReply} */ (response.result);
           legacyRetiredCandidateIndexes.push(...result.duplicates);
-          const candidateIndex = Number(result.candidateIndex);
-          if (
-            result.status !== 'promoted' ||
-            !Number.isInteger(candidateIndex) ||
-            candidateIndex < 0 ||
-            typeof result.text !== 'string' ||
-            !result.entry ||
-            typeof result.entry !== 'object'
-          ) return null;
-          if (String(result.entry.key || '') !== cacheKey) {
+          if (result.status !== 'promoted') return null;
+          const { candidateIndex } = result;
+          if (result.entry.key !== cacheKey) {
             workingLegacyProteinRawCandidates = transitionLegacyProteinCandidate(
               envelope,
               candidateIndex,

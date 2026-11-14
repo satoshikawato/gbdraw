@@ -16,10 +16,12 @@ from tests.prototypes.protein_local_reductions import without_protein_map
 # store. The identity manifest became a read-only proof that only the live
 # validator and extraction construct. CdsProtein gained the arc of a CDS
 # across the record origin (OV-2258), which the frozen algorithm never reads.
+# The legacy raw-cache promotion scan gained the duplicate candidates it
+# retires (OV-3561); the frozen collinear algorithm never reads that scan.
 # None of them is part of the frozen collinear algorithm; keep frozen copies.
 FROZEN_COPY_CLASSES = frozenset({
     'ProteinBlastpRuntime', 'LosatpCacheManager', 'ProteinIdentityManifest',
-    'CdsProtein',
+    'CdsProtein', 'LegacyProteinRawCachePromotionScan',
 })
 
 

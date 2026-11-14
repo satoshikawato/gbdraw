@@ -2599,9 +2599,7 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
 
 
 @pytest.mark.linear
-def test_pairwise_blastp_reuses_only_verified_legacy_web_losat_cache(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_verified_legacy_web_losat_cache_entry_promotes_to_current_handles() -> None:
     records = [
         _record("record_a", features=[_cds(0, 9)]),
         _record("record_b", features=[_cds(9, 18)]),
@@ -2655,30 +2653,9 @@ def test_pairwise_blastp_reuses_only_verified_legacy_web_losat_cache(
     )
     assert promotion.promotion is not None
     assert legacy_query[0].protein_id not in promotion.promotion.rewritten_tsv
-    cache = LosatpCacheManager([legacy_entry], threads_per_job=32)
-    cache.set_protein_extraction(extraction, records)
-
-    def fail_run(*_args, **_kwargs):
-        raise AssertionError("LOSATP should not run on a legacy cache hit")
-
-    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fail_run)
-
-    result = build_pairwise_protein_blastp_comparisons(
-        records,
-        losatp_cache=cache,
-        protein_extraction=extraction,
-        cache_filenames=("record_a.record_b.losatp.tsv",),
-    )
-
-    assert result.comparisons[0].iloc[0]["query_protein_id"] == query_id
-    assert result.comparisons[0].iloc[0]["subject_protein_id"] == subject_id
-    entries = cache.session_entries()
-    assert entries[0]["key"] != legacy_key
-    assert entries[0]["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA
-    assert entries[0]["display"] is True
-    assert entries[0]["args"] == ["--max-hsps-per-subject", "1"]
-    assert entries[0]["outfmt"] == "6"
-    assert cache.has_legacy_candidates is False
+    assert f"{query_id}\t{subject_id}\t" in promotion.promotion.rewritten_tsv
+    assert promotion.promotion.entry["key"] != legacy_key
+    assert promotion.promotion.entry["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA
 
 
 def _drawn_reversed_extractions() -> tuple[SeqRecord, SeqRecord, ProteinExtractionResult, ProteinExtractionResult]:
@@ -2987,9 +2964,9 @@ def test_legacy_protein_cache_promotion_rejects_hash_args_and_ambiguous_empty_ou
     assert "args" in scan.rejections[0].reason
     assert "hash" in scan.rejections[1].reason
     assert "Empty" in scan.rejections[2].reason
+    # The raw cache holds current entries only; legacy candidates are the Session migration's (session_compat).
     cache = LosatpCacheManager(candidates, identity_manifest=extraction.identity_manifest)
     assert cache.session_entries() == ()
-    assert len(cache.legacy_candidate_envelope()["entries"]) == 3
 
     empty_with_evidence = promote_legacy_protein_raw_cache_entries(
         [
