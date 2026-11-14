@@ -26,10 +26,14 @@ ARC_UNEQUAL_SHIFT_DEG = 60.0
 
 
 def circle_point(radius: float, angle_deg: float) -> tuple[float, float]:
-    """The point at ``angle_deg`` on the circle of ``radius`` around the origin."""
+    """The point at ``angle_deg`` on the circle of ``radius`` around the origin.
+
+    Label placement calls this millions of times per figure, so ``radius`` is used as given: every caller passes a
+    Python float or int (a NumPy position goes through :func:`position_angle` first, which converts it).
+    """
 
     angle = math.radians(angle_deg)
-    return float(radius) * math.cos(angle), float(radius) * math.sin(angle)
+    return radius * math.cos(angle), radius * math.sin(angle)
 
 
 def arc_pieces(span_deg: float) -> tuple[float, ...]:
