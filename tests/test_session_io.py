@@ -1921,12 +1921,12 @@ def test_genuine_version_39_shape_retains_disabled_layout_upload_draft() -> None
 
 
 @pytest.mark.parametrize(
-    ("query_index", "subject_index", "subject_uid"),
-    [(5, 6, "s"), (-1, 0, "r1")],
-    ids=["pair-after-the-rows", "negative-query-index"],
+    ("query_index", "subject_index", "query_uid", "subject_uid"),
+    [(5, 6, "q", "s"), (-1, 0, "q", "r1"), (1, 2, "r2", "s")],
+    ids=["pair-after-the-rows", "negative-query-index", "pair-from-the-last-row"],
 )
 def test_pre40_selected_comparison_outside_the_rows_takes_no_losat_filename(
-    query_index: int, subject_index: int, subject_uid: str
+    query_index: int, subject_index: int, query_uid: str, subject_uid: str
 ) -> None:
     from gbdraw.session import upgrade_session_document
 
@@ -1952,8 +1952,8 @@ def test_pre40_selected_comparison_outside_the_rows_takes_no_losat_filename(
 
     edges = upgraded["modes"]["linear"]["config"]["linearComparisonPlan"]["edges"]
     assert edges[0] == {
-        "id": f"linear-comparison-migrated-selected-1-q-{subject_uid}",
-        "queryUid": "q",
+        "id": f"linear-comparison-migrated-selected-1-{query_uid}-{subject_uid}",
+        "queryUid": query_uid,
         "subjectUid": subject_uid,
         "included": True,
         "fileActive": False,

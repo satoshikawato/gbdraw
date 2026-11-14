@@ -5620,7 +5620,7 @@ def migrate_legacy_linear_comparison_draft_for_current_writer(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Project a supported pre-v40 comparison draft into final v40 ownership.
 
-    The Session 27-44 draft held its comparisons in ``linearSeqs[].blast`` and
+    The draft of a Session 27-39 held its comparisons in ``linearSeqs[].blast`` and
     ``losat_filename``, ``blastSource`` (or ``adv.blastSource``),
     ``linearRecordLayout.comparisons`` and ``linearComparisons``; the result
     holds them as ``config.linearComparisonPlan`` and the files its edges bind
