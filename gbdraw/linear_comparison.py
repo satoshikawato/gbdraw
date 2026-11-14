@@ -12,7 +12,7 @@ from pandas import DataFrame
 
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ComparisonIdentityError, ValidationError
-from gbdraw.io.comparisons import ComparisonFilter, filter_comparison_dataframe
+from gbdraw.io.comparisons import ComparisonFilter, comparison_table_text, filter_comparison_dataframe
 from gbdraw.io.comparisons import ComparisonRowTally
 from gbdraw.layout.record_coordinates import (
     DisplayFragment,
@@ -102,7 +102,8 @@ class LinearComparison:
 
     ``protein_matches`` marks the rows of a LOSATP protein comparison: the
     protein analysis that made them sets it, and the input summary words the
-    comparison by it. A Session does not store it.
+    comparison by it. A Session stores it as the comparison's kind: a protein
+    table as ``precomputedProteinComparison``, a BLAST table as ``nucleotideBlast``.
 
     ``drawn_feature_ids`` marks a table of a Session up to 40 without
     ``*_view_feature_svg_id`` columns: main's writers before ``3bca0e8d9``
@@ -512,8 +513,9 @@ def reverse_endpoint_table_text(
                 f"Comparison rows lie outside 1..{int(length)} of their reverse-complemented record.",
                 diagnostic={"code": "COMPARISON_INPUT", "reason": "SEARCH_FRAME"},
             )
-    converted = reverse_unbound_endpoint_rows(LinearComparison(0, 1, frame), query, subject).matches
-    return converted.to_csv(sep="\t", header=False, index=False, lineterminator="\n")
+    converted = comparison_table_text(reverse_unbound_endpoint_rows(LinearComparison(0, 1, frame), query, subject).matches)
+    assert converted is not None  # the 12 columns read_comparison_table returns
+    return converted
 
 
 # The one code of a ``ComparisonRecordIdWarning``; a Session stores it in ``runMetadata.comparisonWarnings``.

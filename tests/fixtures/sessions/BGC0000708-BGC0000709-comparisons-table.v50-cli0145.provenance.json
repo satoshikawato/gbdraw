@@ -1,0 +1,17 @@
+{
+  "purpose": "Positive fixture of a Session that the v0.14.5 CLI wrote for a --comparisons_table BLAST table: request schema 9 stores the table's rows as precomputedProteinComparison (canonical TSV with the 12 BLAST columns only), the kind a LOSATP protein pair is also stored as. A reader keeps it a nucleotide table: its replay says \"Comparison of record #1 BGC0000708 and record #2 BGC0000709: kept 1 of 1 row.\", and a re-save stores it as nucleotideBlast (OV-3512).",
+  "sourceCommit": "033a3aa89",
+  "history": "release tag v0.14.5 (first-parent main 033a3aa89); every release from v0.14.0 wrote this form (gbdraw/api/record_planning.py builds the comparisons-table LinearComparison without its file's text, and _encode_comparisons stores such a comparison as precomputedProteinComparison)",
+  "route": "in a directory holding copies of tests/test_inputs/BGC0000708.gbk and BGC0000709.gbk, pair.tsv (one row: BGC0000708 BGC0000709 90 100 0 0 1 100 1 100 1e-20 200) and comparisons.tsv (header blast query subject; row pair.tsv #1 #2): gbdraw linear --gbk BGC0000708.gbk BGC0000709.gbk --comparisons_table comparisons.tsv -o v0145-table -f svg --session_output v0145-table.gbdraw-session.json, with gbdraw from that tag (git archive v0.14.5 gbdraw); the written file was compressed with gzip -n -9",
+  "inputs": {
+    "tests/test_inputs/BGC0000708.gbk": "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0",
+    "tests/test_inputs/BGC0000709.gbk": "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255",
+    "pair.tsv": "987fc37165c8e3f8c8967bac913cd5f9fc5e0a6e9ea154584bbb18a386e7b6b2",
+    "comparisons.tsv": "6c369cc8b2656ba4c5bb78d83dc64867612a3d0beace3d556002dd1ef3f99e5b"
+  },
+  "values": "renderRequest.comparisons[0]: kind precomputedProteinComparison, resourceId comparison-explicit-1, queryRecordIndex 0, subjectRecordIndex 1; the v0.14.5 render logged \"Comparison table pair.tsv (record #1 BGC0000708 and record #2 BGC0000709): kept 1 of 1 row.\"",
+  "decompressedSha256": "3a8b8f8d7c1d503b05fefb97820b51bf7b073c1d2bea2c013f918c062ca830ec",
+  "compression": "gzip -n -9",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

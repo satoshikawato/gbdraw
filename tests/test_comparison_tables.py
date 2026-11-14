@@ -283,8 +283,7 @@ def test_web_generate_reports_a_malformed_blast_table_line_as_a_comparison_diagn
         resource_paths[resource.resource_id] = str(target)
     # The browser uploads a BLAST table as a nucleotideBlast resource.
     comparison = encoded.payload["comparisons"][0]
-    comparison["kind"] = "nucleotideBlast"
-    comparison.pop("encoding")
+    assert comparison["kind"] == "nucleotideBlast"  # a BLAST table is stored as one (OV-3512)
     case = next(
         case for case in _VECTORS["cases"] if case["name"] == "non-integer coordinate after comments"
     )
@@ -334,8 +333,7 @@ def test_an_uploaded_gzip_blast_table_decodes_as_the_plain_one(tmp_path: Path) -
             resource_paths[resource.resource_id] = str(target)
         payload = json.loads(json.dumps(encoded.payload))
         comparison = payload["comparisons"][0]
-        comparison["kind"] = "nucleotideBlast"
-        comparison.pop("encoding")
+        assert comparison["kind"] == "nucleotideBlast"  # a BLAST table is stored as one (OV-3512)
         Path(resource_paths[comparison["resourceId"]]).write_bytes(content)
         decoded.append(decode_canonical_request(
             payload, resource_paths=resource_paths, output_directory=str(tmp_path / f"{name}-out")
@@ -548,8 +546,7 @@ def test_web_request_and_cli_reject_the_same_swapped_table(tmp_path: Path, gbdra
         target.write_bytes(resource.content)
         resource_paths[resource.resource_id] = target
     comparison = encoded.payload["comparisons"][0]
-    comparison["kind"] = "nucleotideBlast"
-    comparison.pop("encoding")
+    assert comparison["kind"] == "nucleotideBlast"  # a BLAST table is stored as one (OV-3512)
     resource_paths[comparison["resourceId"]] = swapped
     decoded = decode_canonical_request(
         encoded.payload, resource_paths=resource_paths, output_directory=tmp_path / "out"

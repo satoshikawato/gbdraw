@@ -229,6 +229,13 @@ comparison genome in the listed order, or an empty list for a ring without
 one. A schema 1–9 request wrote one reference or `null` per ring; it reads as a
 ring of that one file or a ring without a comparison genome.
 
+Request schema 10 stores a BLAST table given in `--comparisons_table`, or as a
+Python `LinearComparison`, as a nucleotide comparison table (`nucleotideBlast`)
+under its file name; `precomputedProteinComparison` holds only LOSATP protein
+tables. A schema 2–9 request that stored such a table as
+`precomputedProteinComparison` (gbdraw 0.14.0 to 0.14.5) still reads it as a
+nucleotide table, and saving the Session again stores it in the new form.
+
 A schema-10 Circular request may also draw its records one after another
 on one circle: `layout.recordLayout` is `"one_circle"` and
 `oneCircleGapDegrees`, `oneCircleMinLength` and `oneCircleRecordBand` hold

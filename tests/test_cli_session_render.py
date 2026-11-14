@@ -729,11 +729,12 @@ def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
     assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "none")]
 
 
-def test_a_cli_session_replays_a_comparison_table_as_a_table_not_a_protein_comparison(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_a_cli_session_stores_a_comparison_table_as_a_nucleotide_table_and_replays_it_as_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A `--comparisons_table` BLAST table is stored without its raw text; its
-    replay still reports it as a table, never as a protein comparison."""
+    """OV-3512: a `--comparisons_table` BLAST table is stored as a nucleotide
+    table under its file name, never as a protein comparison, and its replay
+    words it as the fresh render does."""
 
     from gbdraw.api.input_summary import input_summary_lines
     from tests.test_render_stage_protein_analysis import _request
@@ -744,15 +745,86 @@ def test_a_cli_session_replays_a_comparison_table_as_a_table_not_a_protein_compa
     table = tmp_path / "comparisons.tsv"
     table.write_text("blast\tquery\tsubject\npair.tsv\t#1\t#2\n", encoding="utf-8")
     sidecar = tmp_path / "table.gbdraw"
+    caplog.set_level("INFO")
     _cli(monkeypatch, "linear", "--gbk", *(str(record.source.path) for record in request.records[:2]),
          "--comparisons_table", str(table), "-o", str(tmp_path / "table"), "-f", "svg",
          "--session_output", str(sidecar))
+    (fresh,) = [record.getMessage() for record in caplog.records if "record #2" in record.getMessage()]
+    assert fresh.startswith("Comparison table pair.tsv ("), fresh
 
+    session = drawing_view(read_session_payload(sidecar), mode="linear")
+    (stored,) = [item for item in session["renderRequest"]["comparisons"] if "resourceId" in item]
+    assert stored["kind"] == "nucleotideBlast"
     with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "api") as materialized:
         lines = input_summary_lines(render_session(materialized).input_summary)
-    (comparison,) = [line for line in lines if "record #2" in line]
-    assert not comparison.startswith("Protein comparison"), comparison
-    assert comparison.endswith("kept 1 of 1 row."), comparison
+    assert [line for line in lines if "record #2" in line] == [fresh]
+    _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replay"), "-f", "svg")
+    assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "table.svg").read_bytes()
+
+
+def test_a_cli_session_replay_words_a_protein_pair_without_a_match_as_its_fresh_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """OV-3512: the Session stores each LOSATP pair's table as a protein
+    comparison, and its replay says so: a pair without a match has no protein
+    match to draw, as the fresh `gbdraw linear` render says."""
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.api.input_summary import input_warnings
+    from tests.test_render_stage_protein_analysis import _no_hit_losatp, _no_search, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_hit_losatp)
+    request, _identities = _request("similarity_groups", tmp_path)
+    sidecar = tmp_path / "nohit.gbdraw"
+    caplog.set_level("INFO")
+    _cli(monkeypatch, "linear", "--gbk", *(str(record.source.path) for record in request.records),
+         "--losat", "losatp", "--losatp_mode", "similarity_groups",
+         "-o", str(tmp_path / "nohit"), "-f", "svg", "--session_output", str(sidecar))
+    fresh = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert fresh and all(message.endswith("has no protein match to draw.") for message in fresh), fresh
+    session = drawing_view(read_session_payload(sidecar), mode="linear")
+    assert "precomputedProteinComparison" in {kind for kind, _mode in _protein_comparison_kinds(session)}
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "replay") as materialized:
+        replayed = render_session(materialized)
+    assert [warning.message for warning in input_warnings(replayed.input_summary)] == fresh
+
+
+_RELEASED_COMPARISONS_TABLE_SESSION = (
+    Path(__file__).parent / "fixtures" / "sessions" / "BGC0000708-BGC0000709-comparisons-table.v50-cli0145.gbdraw-session.json.gz"
+)
+
+
+def test_a_released_cli_comparisons_table_session_still_reads_its_table_as_a_nucleotide_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Request schema 9 and older stored a `--comparisons_table` BLAST table
+    (gbdraw 0.14.0-0.14.5) and a LOSATP pair alike as `precomputedProteinComparison`;
+    only a protein table has the protein columns. The released table replays as
+    a table, and a re-save stores it as a nucleotide table with the same rows."""
+
+    import gzip
+
+    from gbdraw.api.input_summary import input_summary_lines
+
+    sidecar = tmp_path / "released.gbdraw-session.json"
+    sidecar.write_bytes(gzip.decompress(_RELEASED_COMPARISONS_TABLE_SESSION.read_bytes()))
+    released = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert (released["version"], released["renderRequest"]["schema"]) == (50, 9)
+    assert [item["kind"] for item in released["renderRequest"]["comparisons"]][0] == "precomputedProteinComparison"
+
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "replay") as materialized:
+        lines = input_summary_lines(render_session(materialized).input_summary)
+    assert [line for line in lines if "record #2" in line] == [
+        "Comparison of record #1 BGC0000708 and record #2 BGC0000709: kept 1 of 1 row."
+    ]
+    resaved = tmp_path / "resaved.gbdraw"
+    _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "resaved"), "-f", "svg",
+         "--session_output", str(resaved))
+    session = drawing_view(read_session_payload(resaved), mode="linear")
+    (stored,) = [item for item in session["renderRequest"]["comparisons"] if "resourceId" in item]
+    assert stored["kind"] == "nucleotideBlast"
 
 
 def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(

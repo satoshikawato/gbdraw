@@ -298,7 +298,8 @@ def test_comparisons_table_mixes_losat_and_table_edges(tmp_path: Path) -> None:
         if "queryRecordIndex" in item
     }
     assert ("nucleotideBlast", 0, 1) in endpoints
-    assert ("precomputedProteinComparison", 1, 2) in endpoints
+    # The table row is stored as a nucleotide table, as the LOSAT edge is (OV-3512).
+    assert ("nucleotideBlast", 1, 2) in endpoints
 
 
 # Diagnostics (design 3.7).
