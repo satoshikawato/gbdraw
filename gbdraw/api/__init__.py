@@ -188,7 +188,17 @@ from gbdraw.session import (
     with_request_output,
 )
 from gbdraw.auto_sizes import SettingAdaptation, SettingReset
-from .region_drawing import FeatureRegionSelection, RegionDrawing, RegionSelection, derive_region_drawing
+from .region_drawing import (
+    AlreadyPresent,
+    CopyRefused,
+    FeatureRegionSelection,
+    PastedDrawing,
+    PasteNotCarried,
+    RegionDrawing,
+    RegionSelection,
+    derive_region_drawing,
+    paste_region_drawing,
+)
 from .tracks import (
     CircularTrackRendererName,
     CircularTrackSide,
@@ -407,6 +417,11 @@ __all__ = [
     "SettingAdaptation",
     "SettingReset",
     "derive_region_drawing",
+    "AlreadyPresent",
+    "CopyRefused",
+    "PasteNotCarried",
+    "PastedDrawing",
+    "paste_region_drawing",
     # tracks (foundation)
     "CircularTrackRendererName",
     "CircularTrackSide",

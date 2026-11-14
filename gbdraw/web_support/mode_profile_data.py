@@ -9,7 +9,7 @@ from dataclasses import fields
 from typing import get_args
 
 from gbdraw.analysis.feature_density import FEATURE_DENSITY_METRICS, FEATURE_DENSITY_STYLES, FeatureDensityTrack
-from gbdraw.api.region_drawing import NotCarriedKind, StartAfterEndReason
+from gbdraw.api.region_drawing import CopyRefusalReason, NotCarriedKind, PasteNotCarriedKind, StartAfterEndReason
 from gbdraw.auto_sizes import (
     ADAPTABLE_SETTINGS,
     linear_label_size_records,
@@ -112,10 +112,13 @@ def mode_profiles_payload() -> dict[str, object]:
         "figureLength": figure_length_unit_table(),
         # The vocabularies of a region drawing's reply (gbdraw/api/region_drawing.py):
         # the kinds of a part the new drawing does not carry and the reasons a
-        # region is refused.
+        # region is refused; for Copy to another drawing, the kinds of a part a
+        # paste does not bring and the reasons a copy is refused.
         "regionDrawing": {
             "notCarriedKinds": list(get_args(NotCarriedKind)),
             "refusalReasons": list(get_args(StartAfterEndReason)),
+            "pasteNotCarriedKinds": list(get_args(PasteNotCarriedKind)),
+            "copyRefusalReasons": list(get_args(CopyRefusalReason)),
         },
         # The values of labels.<mode>.line and .protection.
         "labelStyleChoices": {"line": list(LABEL_LINES), "protection": list(LABEL_PROTECTIONS)},

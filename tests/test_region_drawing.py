@@ -39,7 +39,7 @@ from gbdraw.api import (
     render_request,
 )
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.api.region_drawing import derive_region_request
+from gbdraw.api.region_drawing import CopyRefused, derive_region_request
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import DiagramRequest
 from gbdraw.auto_sizes import (
@@ -52,6 +52,7 @@ from gbdraw.auto_sizes import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.record_select import RecordSelector
+from gbdraw.io.regions import RecordWindow
 from tests.utils.session_drawing_view import drawing_view
 from tests.utils.svg_compare import assert_nested_approx
 from tests.utils.two_mode_session import two_mode_session
@@ -423,16 +424,17 @@ def test_invalid_regions_are_refused(materialize, selections, options, message) 
         derive_region_drawing(materialize(_mito_circular()), selections, **options)
 
 
-def test_a_circular_region_drawing_takes_one_record(materialize) -> None:
+def test_a_circular_region_drawing_takes_whole_records_or_one_range(materialize) -> None:
     source = LinearDiagramRequest(
         records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)]
     )
-    with pytest.raises(ValidationError, match="exactly one record"):
+    with pytest.raises(CopyRefused, match="several whole records, or one record or range alone") as refused:
         derive_region_drawing(
             materialize(source),
             [RegionSelection("pair:1", 1, 10), RegionSelection("pair:2", 1, 10)],
             mode="circular",
         )
+    assert refused.value.reason == "CIRCULAR_WHOLE_RECORDS"
 
 
 def _circular_records(tmp_path: Path, big: int, small: int) -> list[RecordInput]:
@@ -1060,3 +1062,441 @@ def test_the_web_helper_takes_a_feature_region(tmp_path: Path) -> None:
     across_reply = _web_region(source, [{"recordKey": "o", "featureId": across}], tmp_path)[2]
     assert across_reply["status"] == "derived"
     assert [(w["start"], w["end"]) for w in across_reply["renderRequest"]["records"][0]["windows"]] == [(901, 50)]
+
+
+# Copy to another drawing (#1384): a new drawing with the mode's defaults, the mode rule, and a paste into an
+# existing drawing.
+
+def _vnig_like_canvas(path: Path = TWO_RECORDS, **options: Any) -> CircularDiagramRequest:
+    """A Circular Multi-Record Canvas of the two circular records of one file, placed on two rows, as the Gallery's
+    Vnig_TUMSAT-TG-2018 Session states its canvas."""
+    from gbdraw.api import CircularMultiRecordOptions
+
+    return CircularDiagramRequest(
+        records=[RecordInput(GenBankInputSource(path), record_key="pair", cardinality=RecordCardinality.ALL)],
+        options=CircularDiagramOptions(**options),
+        layout=CircularMultiRecordOptions(multi_record_size_mode="equal", multi_record_positions=("#1@1", "#2@2")),
+    )
+
+
+def _catalog_id(request: DiagramRequest, record_key: str, locus_tag: str) -> str:
+    collection = resolve_request_records(request)
+    item = next(item for item in collection.provenance if item.record_identity_key == record_key)
+    record = collection.records[item.resolved_index]
+    [feature] = [
+        feature for feature in record.features if feature.qualifiers.get("locus_tag") == [locus_tag]
+    ]
+    start = int(feature.location.start)
+    return next(
+        entry.biological_feature_id for entry in item.source_feature_catalog if entry.location_parts[0][0] == start
+    )
+
+
+def test_mode_defaults_drop_every_carried_setting_and_edit() -> None:
+    from gbdraw.api import RecordDisplayOptions
+
+    plain = _mito_circular()
+    feature = resolve_request_records(plain).provenance[0].source_feature_catalog[3].biological_feature_id
+    source = _mito_circular(
+        config_overrides={"labels.font_size.short": 16, "labels.font_size.long": 16},
+        feature_overrides=(FeatureOverride("mito", feature, label_text="edited"),),
+        annotations=AnnotationOptions(
+            sets=(AnnotationSet(id="marks", annotations=(RegionAnnotation("a", CoordinateSpan(None, 1, 500)),)),)
+        ),
+        record={
+            "presentation": RecordPresentation(label="Mito", reverse_complement=True),
+            "display": RecordDisplayOptions(start_coordinate=100),
+        },
+    )
+    whole = derive_region_request(source, [RegionSelection("mito", 1, 16569)], settings="defaults")
+    assert whole.mode == "circular"
+    assert whole.request == CircularDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="mito")])
+    assert (whole.adaptation.reset, whole.adaptation.kept, whole.not_carried) == ((), {}, ())
+
+    cropped = derive_region_request(source, [RegionSelection("mito", 100, 900)], settings="defaults")
+    assert cropped.request == LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(MITO), record_key="mito", windows=(RecordWindow(100, 900),))]
+    )
+    assert cropped.not_carried == ()
+    # Keep (the default) still carries them.
+    kept = derive_region_request(source, [RegionSelection("mito", 100, 900)])
+    assert [row.label_text for row in kept.request.options.feature_overrides] == ["edited"]
+
+
+@pytest.mark.parametrize(
+    ("selections", "expected"),
+    [
+        ([("pair:1", 1, 4000), ("pair:2", 1, 4000)], ("circular", "grid")),
+        ([("pair:1", 1, 4000)], ("circular", "single")),
+        ([("pair:1", 1, 4000), ("pair:2", 1, 400)], ("linear", None)),
+        ([("pair:2", 1, 400)], ("linear", None)),
+    ],
+)
+def test_the_mode_of_a_new_drawing_follows_whole_records(materialize, selections, expected) -> None:
+    region = derive_region_drawing(
+        materialize(_vnig_like_canvas()), [RegionSelection(*selection) for selection in selections]
+    )
+    request = region.drawing.request
+    assert (region.drawing.mode, getattr(request, "grouping", None)) == expected
+    # A Linear source of whole records stays Linear.
+    linear = LinearDiagramRequest(records=_vnig_like_canvas().records)
+    assert derive_region_request(linear, [RegionSelection("pair:1", 1, 4000)]).mode == "linear"
+
+
+def test_a_circular_drawing_of_whole_records_is_a_canvas_as_the_web_stores_it(materialize) -> None:
+    from gbdraw.api import CircularMultiRecordOptions
+    from gbdraw.session_request_codec import encode_canonical_request
+
+    region = derive_region_drawing(
+        materialize(_vnig_like_canvas()), [RegionSelection("pair:2", 1, 4000), RegionSelection("pair:1", 1, 4000)]
+    )
+    request = region.drawing.request
+    assert isinstance(request, CircularDiagramRequest)
+    assert [record.record_key for record in request.records] == ["pair:1", "pair:2"]
+    # The canvas keeps the source's layout; its records take their places in order.
+    assert request.layout == CircularMultiRecordOptions(multi_record_size_mode="equal")
+    payload = encode_canonical_request(request).payload
+    assert (payload["mode"], payload["grouping"]) == ("circular", "grid")
+    assert payload["layout"]["multiRecordPositions"] is None
+    assert resolve_request_records(request).records[1].id == "TESTB"
+    defaults = derive_region_drawing(
+        materialize(_vnig_like_canvas()),
+        [RegionSelection("pair:1", 1, 4000), RegionSelection("pair:2", 1, 4000)],
+        settings="defaults",
+    )
+    assert defaults.drawing.request.layout == CircularMultiRecordOptions()
+
+
+def test_a_range_is_refused_into_a_circular_drawing_with_other_records(materialize) -> None:
+    with pytest.raises(CopyRefused) as refused:
+        derive_region_drawing(
+            materialize(_vnig_like_canvas()),
+            [RegionSelection("pair:1", 1, 4000), RegionSelection("pair:2", 1, 400)],
+            mode="circular",
+        )
+    assert refused.value.reason == "CIRCULAR_WHOLE_RECORDS"
+    # One range alone is a Circular drawing of that range (today's rule).
+    alone = derive_region_drawing(materialize(_vnig_like_canvas()), [RegionSelection("pair:2", 1, 400)], mode="circular")
+    assert alone.drawing.request.records[0].windows[0].start == 1
+
+
+def _linear_target(**options: Any) -> LinearDiagramRequest:
+    return LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(MITO), record_key="pair:2")],
+        options=LinearDiagramOptions(**options),
+    )
+
+
+def test_a_paste_appends_after_the_targets_records_with_their_edits_rebound(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import paste_region_request
+
+    plain = _vnig_like_canvas()
+    inside = _catalog_id(plain, "pair:2", "TESTB_0001")
+    source = _vnig_like_canvas(
+        feature_overrides=(FeatureOverride("pair:2", inside, label_text="copied", feature_visibility="off"),),
+        annotations=AnnotationOptions(
+            sets=(AnnotationSet(id="marks", annotations=(RegionAnnotation("a", CoordinateSpan(RecordSelector("#2", None, 1), 1, 500)),)),)
+        ),
+        config_overrides={"labels.font_size.short": 20, "labels.font_size.long": 20},
+    )
+    mito_feature = resolve_request_records(_linear_target()).provenance[0].source_feature_catalog[3].biological_feature_id
+    target = _linear_target(
+        config_overrides={"objects.legends.font_size.short": 9, "objects.legends.font_size.long": 9},
+        feature_overrides=(FeatureOverride("pair:2", mito_feature, label_text="target's own"),),
+    )
+    pasted = paste_region_request(source, [RegionSelection("pair:2", 1, 4000)], target)
+    request = pasted.request
+    assert pasted.mode == "linear" and isinstance(request, LinearDiagramRequest)
+    # The target's own record keeps its key; the pasted record takes a key of its own.
+    assert [record.record_key for record in request.records] == ["pair:2", "pair:2-2"]
+    assert pasted.pasted_record_keys == ("pair:2-2",)
+    # The target keeps its settings; the pasted record's edit is rebound to its new key.
+    assert request.options.config_overrides == target.options.config_overrides
+    assert [(row.record_key, row.label_text) for row in request.options.feature_overrides] == [
+        ("pair:2", "target's own"), ("pair:2-2", "copied")
+    ]
+    assert [(item.kind, item.count) for item in pasted.not_carried] == [("ANNOTATIONS", 1)]
+    assert pasted.already_present == ()
+    # Neither request changed (frozen values), and the result resolves.
+    assert target == _linear_target(
+        config_overrides={"objects.legends.font_size.short": 9, "objects.legends.font_size.long": 9},
+        feature_overrides=(FeatureOverride("pair:2", mito_feature, label_text="target's own"),),
+    )
+    assert [str(record.id) for record in resolve_request_records(request).records] == ["NC_012920.1", "TESTB"]
+
+
+def test_a_records_only_paste_brings_nothing_else() -> None:
+    from gbdraw.api.region_drawing import paste_region_request
+
+    inside = _catalog_id(_vnig_like_canvas(), "pair:2", "TESTB_0001")
+    source = LinearDiagramRequest(
+        records=[RecordInput(
+            GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL,
+            presentation=RecordPresentation(reverse_complement=True),
+        )],
+        options=LinearDiagramOptions(feature_overrides=(FeatureOverride("pair:2", inside, label_text="copied"),)),
+    )
+    pasted = paste_region_request(source, [RegionSelection("pair:2", 1, 400)], _linear_target(), edits="records")
+    added = pasted.request.records[1]
+    assert added.presentation == RecordPresentation() and added.windows[0].reverse_complement is False
+    assert pasted.request.options.feature_overrides == ()
+    assert pasted.not_carried == ()
+    with_edits = paste_region_request(source, [RegionSelection("pair:2", 1, 400)], _linear_target())
+    assert with_edits.request.records[1].windows[0].reverse_complement is True
+    assert [row.label_text for row in with_edits.request.options.feature_overrides] == ["copied"]
+
+
+def test_a_record_already_drawn_is_reported_and_skipped_or_added(tmp_path: Path) -> None:
+    import shutil
+
+    from gbdraw.api.region_drawing import paste_region_request
+
+    # The target reads its own copy of the file (each drawing of a Session stages its own): the record is the same
+    # by file content and place, not by its key there ("other") or its caption.
+    copy = tmp_path / "copy.gb"
+    shutil.copyfile(TWO_RECORDS, copy)
+    target = LinearDiagramRequest(records=[
+        RecordInput(GenBankInputSource(copy), selector=RecordSelector("TESTA", "TESTA", None), record_key="other",
+                    presentation=RecordPresentation(label="Renamed")),
+        RecordInput(GenBankInputSource(copy), selector=RecordSelector("TESTB", "TESTB", None), record_key="b-range",
+                    windows=(RecordWindow(100, 300),)),
+    ])
+    source = _vnig_like_canvas()
+    selections = [RegionSelection("pair:1", 1, 4000), RegionSelection("pair:2", 100, 300), RegionSelection("pair:2", 1000, 1200)]
+    skipped = paste_region_request(source, selections, target)
+    assert [(item.record_key, item.start, item.end, item.whole, item.target_record_key) for item in skipped.already_present] == [
+        ("pair:1", 1, 4000, True, "other"), ("pair:2", 100, 300, False, "b-range")
+    ]
+    # Skip: only the span the target does not draw (a different span of the same record) is pasted.
+    assert [record.record_key for record in skipped.request.records] == ["other", "b-range", "pair:2"]
+    assert [(window.start, window.end) for window in skipped.request.records[2].windows] == [(1000, 1200)]
+    added = paste_region_request(source, selections, target, duplicates="add")
+    assert added.already_present == skipped.already_present
+    assert [record.record_key for record in added.request.records] == ["other", "b-range", "pair:1", "pair:2"]
+    assert len(added.request.records[3].windows) == 2
+    # Everything already there and skipped: the target is unchanged.
+    nothing = paste_region_request(source, [RegionSelection("pair:1", 1, 4000)], target)
+    assert (nothing.request, nothing.pasted_record_keys) == (target, ())
+
+
+def test_a_paste_into_a_circular_drawing_takes_whole_records_on_a_new_row() -> None:
+    from gbdraw.api.region_drawing import paste_region_request
+
+    target = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="mito")])
+    source = _vnig_like_canvas()
+    pasted = paste_region_request(source, [RegionSelection("pair:1", 1, 4000)], target)
+    assert (pasted.request.grouping, len(pasted.request.records)) == ("grid", 2)
+    with pytest.raises(CopyRefused) as refused:
+        paste_region_request(source, [RegionSelection("pair:1", 1, 400)], target)
+    assert refused.value.reason == "CIRCULAR_WHOLE_RECORDS"
+    ranged = CircularDiagramRequest(records=[
+        RecordInput(GenBankInputSource(MITO), record_key="mito", windows=(RecordWindow(1, 500),))
+    ])
+    with pytest.raises(CopyRefused) as refused:
+        paste_region_request(source, [RegionSelection("pair:1", 1, 4000)], ranged)
+    assert refused.value.reason == "CIRCULAR_RANGE_TARGET"
+    # A canvas that places its records by row takes the pasted records on one new row.
+    canvas = replace(_vnig_like_canvas(), records=[
+        RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)
+    ])
+    onto = paste_region_request(
+        CircularDiagramRequest(records=[RecordInput(GenBankInputSource(MITO), record_key="mito")]),
+        [RegionSelection("mito", 1, 16569)],
+        canvas,
+    )
+    assert onto.request.layout.multi_record_positions == ("#1@1", "#2@2", "#3@3")
+    assert len(resolve_request_records(onto.request).records) == 3
+
+
+def test_a_paste_into_a_linear_drawing_placed_by_rows_takes_a_new_row() -> None:
+    from gbdraw.api.region_drawing import paste_region_request
+
+    target = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(MITO), record_key="mito", presentation=RecordPresentation(grid_row=2))],
+        layout=LinearMultiRecordOptions(),
+    )
+    pasted = paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], target)
+    assert [record.presentation.grid_row for record in pasted.request.records] == [2, 3]
+
+
+def test_a_paste_lists_the_rows_the_targets_comparisons_lack() -> None:
+    from gbdraw.api import LosatSearchOptions
+    from gbdraw.api.region_drawing import paste_region_request
+
+    examples = REPO / "examples"
+    target = LinearDiagramRequest(
+        records=[
+            RecordInput(GenBankInputSource(examples / "MjeNMV.gb"), record_key="a"),
+            RecordInput(GenBankInputSource(examples / "MelaMJNV.gb"), record_key="b"),
+        ],
+        options=LinearDiagramOptions(blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")]),
+    )
+    pasted = paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], target)
+    assert pasted.request.options.blast_files == target.options.blast_files
+    assert [(item.kind, item.count) for item in pasted.not_carried] == [("NO_COMPARISON_ROWS", 1)]
+    # A search without pairs compares adjacent rows, the pasted one too.
+    searched = replace(target, options=LinearDiagramOptions(losat_search=LosatSearchOptions(program="tlosatx")))
+    assert paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], searched).not_carried == ()
+
+
+def test_an_aligned_linear_drawing_or_separate_diagrams_refuse_a_paste() -> None:
+    from gbdraw.api import CircularBatchOutputPolicy, CircularBatchRequest, LinearRecordTranslation
+    from gbdraw.api.region_drawing import paste_region_request
+
+    target = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(MITO), record_key="mito")],
+        layout=LinearMultiRecordOptions(record_translations=(LinearRecordTranslation("mito", 120.0, 0.0),)),
+    )
+    with pytest.raises(CopyRefused) as refused:
+        paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], target)
+    assert refused.value.reason == "TARGET_ALIGNED"
+    separate = CircularBatchRequest(
+        records=[RecordInput(GenBankInputSource(MITO), record_key="mito")],
+        output_policy=CircularBatchOutputPolicy(output_prefix="out"),
+    )
+    with pytest.raises(CopyRefused) as refused:
+        paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 4000)], separate)
+    assert refused.value.reason == "SEPARATE_DIAGRAMS"
+
+
+def test_a_paste_through_the_drawings_api_keeps_the_targets_id(tmp_path: Path) -> None:
+    from gbdraw.api import SessionDrawingSpec, paste_region_drawing
+
+    document = build_session_document(drawings=[
+        SessionDrawingSpec(request=_vnig_like_canvas()),
+        SessionDrawingSpec(request=_linear_target()),
+    ])
+    with materialize_session(document, output_directory=tmp_path / "out") as materialized:
+        pasted = paste_region_drawing(materialized, [RegionSelection("pair:1", 1, 4000)], drawing="circular", target="linear")
+        assert (pasted.drawing.id, pasted.drawing.mode) == ("linear", "linear")
+        assert [record.record_key for record in pasted.drawing.request.records] == ["pair:2", "pair:1"]
+        rebuilt = build_session_document(drawings=[SessionDrawingSpec(request=_vnig_like_canvas()), pasted.drawing])
+    assert [drawing.id for drawing in rebuilt.drawings] == ["circular", "linear"]
+
+
+def _web_copy(
+    source: DiagramRequest, regions: list[dict[str, Any]], tmp_path: Path, copy: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, str], dict[str, Any]]:
+    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+
+    payload, paths = _web_source(source)
+    arguments = [json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(True)]
+    if copy is not None:
+        arguments.append(json.dumps(copy))
+    return payload, paths, json.loads(derive_web_region_drawing_json(*arguments))
+
+
+def _staged(request: DiagramRequest, folder: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    """A draft projection whose resources are staged in ``folder`` (each drawing's files in their own folder)."""
+    import shutil
+
+    payload, paths = _web_source(request)
+    folder.mkdir()
+    staged = {}
+    for resource_id, path in paths.items():
+        staged[resource_id] = str(folder / Path(path).name)
+        shutil.copyfile(path, staged[resource_id])
+    return payload, staged
+
+
+def test_the_web_helper_without_a_copy_keeps_new_drawing_from_a_region(tmp_path: Path) -> None:
+    # The page's call before Copy to another drawing: two whole records of a canvas still make a Linear drawing.
+    whole = [{"recordKey": "pair:1", "start": 1, "end": 4000}, {"recordKey": "pair:2", "start": 1, "end": 4000}]
+    legacy = _web_copy(_vnig_like_canvas(), whole, tmp_path, None)[2]
+    assert (legacy["status"], legacy["mode"]) == ("derived", "linear")
+    copied = _web_copy(_vnig_like_canvas(), whole, tmp_path, {"into": "new", "settings": "keep", "mode": None})[2]
+    assert (copied["status"], copied["mode"], copied["renderRequest"]["grouping"]) == ("derived", "circular", "grid")
+    assert copied["renderRequest"]["layout"]["multiRecordSizeMode"] == "equal"
+    defaults = _web_copy(_vnig_like_canvas(), whole, tmp_path, {"into": "new", "settings": "defaults", "mode": "linear"})[2]
+    assert (defaults["mode"], defaults["returnedToAuto"], defaults["notCarried"]) == ("linear", [], [])
+    refused = _web_copy(
+        _vnig_like_canvas(), [whole[0], {"recordKey": "pair:2", "start": 1, "end": 400}], tmp_path,
+        {"into": "new", "settings": "keep", "mode": "circular"},
+    )[2]
+    assert refused == {"status": "refused", "reason": "CIRCULAR_WHOLE_RECORDS"}
+
+
+def test_the_web_helper_pastes_with_the_resources_of_both_drawings(tmp_path: Path) -> None:
+    from gbdraw.session_request_codec import decode_canonical_request
+    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+
+    # Both drawings name a resource of the same ID for different files, and the target reads its own copy of the
+    # source's file: each resource reads the file of the drawing the reply names it in.
+    source_payload, source_paths = _staged(_vnig_like_canvas(), tmp_path / "source")
+    target_request = LinearDiagramRequest(records=[
+        RecordInput(GenBankInputSource(MITO), record_key="mito"),
+        RecordInput(GenBankInputSource(TWO_RECORDS), selector=RecordSelector("TESTA", "TESTA", None), record_key="a"),
+    ])
+    target_payload, target_paths = _staged(target_request, tmp_path / "target")
+    assert set(source_paths) & set(target_paths)
+    copy = {
+        "into": "existing",
+        "target": {"renderRequest": target_payload, "resourcePaths": target_paths},
+        "edits": "edits",
+        "duplicates": "skip",
+    }
+    regions = [{"recordKey": "pair:1", "start": 1, "end": 4000}, {"recordKey": "pair:2", "start": 1, "end": 400}]
+    reply = json.loads(derive_web_region_drawing_json(
+        json.dumps(source_payload), json.dumps(source_paths), str(tmp_path / "out"), json.dumps(regions),
+        json.dumps(True), json.dumps(copy),
+    ))
+    assert (reply["status"], reply["mode"], reply["pastedRecordKeys"]) == ("pasted", "linear", ["pair:2"])
+    assert reply["alreadyPresent"] == [
+        {"recordKey": "pair:1", "start": 1, "end": 4000, "whole": True, "targetRecordKey": "a"}
+    ]
+    request = reply["renderRequest"]
+    named = {record["source"]["resourceId"] for record in request["records"]}
+    assert set(reply["resourceSources"]) | set(reply["targetResourceSources"]) == named
+    assert not set(reply["resourceSources"]) & set(reply["targetResourceSources"])
+    # The target's records keep their resources; the pasted record reads the source drawing's file.
+    assert [record["source"]["resourceId"] for record in request["records"][:2]] == [
+        record["source"]["resourceId"] for record in target_payload["records"]
+    ]
+    pasted_id = request["records"][2]["source"]["resourceId"]
+    assert reply["resourceSources"][pasted_id] == source_payload["records"][0]["source"]["resourceId"]
+    paths = {
+        **{rid: target_paths[tid] for rid, tid in reply["targetResourceSources"].items()},
+        **{rid: source_paths[sid] for rid, sid in reply["resourceSources"].items()},
+    }
+    decoded = decode_canonical_request(request, resource_paths=paths, output_directory=tmp_path / "out")
+    assert [str(record.id) for record in resolve_request_records(decoded).records] == ["NC_012920.1", "TESTA", "TESTB"]
+
+
+@pytest.mark.parametrize(
+    "copy",
+    [
+        {"into": "new", "settings": "keep"},
+        {"into": "new", "settings": "mine", "mode": None},
+        {"into": "existing", "edits": "edits", "duplicates": "skip"},
+        {"into": "elsewhere"},
+    ],
+)
+def test_the_web_helper_refuses_an_unknown_copy(tmp_path: Path, copy: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="A copy goes into a new drawing") as refused:
+        _web_copy(_mito_circular(), [{"recordKey": "mito", "start": 1, "end": 100}], tmp_path, copy)
+    assert refused.value.diagnostic["code"] == "HELPER_PROTOCOL"
+
+
+def test_a_paste_gives_the_pasted_records_no_depth_or_genetic_code_of_the_target(tmp_path: Path) -> None:
+    from gbdraw.api import LosatSearchOptions
+    from gbdraw.api.region_drawing import paste_region_request
+
+    depth = tmp_path / "depth.tsv"
+    depth.write_text("".join(f"NC_012920.1\t{position}\t3\n" for position in range(1, 101)), encoding="utf-8")
+    target = LinearDiagramRequest(
+        records=[
+            RecordInput(GenBankInputSource(MITO), record_key="mito"),
+            RecordInput(GenBankInputSource(MITO), record_key="mito-b"),
+        ],
+        options=LinearDiagramOptions(
+            depth_track_files=[[str(depth)], [None]],
+            losat_search=LosatSearchOptions(program="tlosatx", record_gencodes=(2, 2)),
+        ),
+    )
+    pasted = paste_region_request(_vnig_like_canvas(), [RegionSelection("pair:1", 1, 400)], target)
+    # The compatibility input in its canonical form, with no Depth for the pasted record.
+    [track] = pasted.request.options.depth_tracks
+    assert track.source == (str(depth), None, None)
+    assert pasted.request.options.depth_track_files is None
+    assert tuple(pasted.request.options.losat_search.record_gencodes) == (2, 2, None)
+    assert len(resolve_request_records(pasted.request).records) == 3
