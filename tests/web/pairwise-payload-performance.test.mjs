@@ -14,6 +14,8 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-pairwise-payload-'));
 
 const modulePaths = [
   'gbdraw/web/js/services/pairwise-match-popup.js',
+  // The popup reads the text of each match span reason from the generated table.
+  'gbdraw/web/js/services/drawn-attributes.generated.js',
   'gbdraw/web/js/services/feature-utils.js',
   'gbdraw/web/js/services/feature-sequence-fasta.js',
   // The popup names the reads of member and span sequences (D5); Python reads them when a sequence action is pressed.

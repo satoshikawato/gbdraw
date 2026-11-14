@@ -81,7 +81,7 @@ export const INTERACTIVE_EMBED_SCHEMA = 5;
 /** @type {readonly string[]} */
 export const STORED_SEQUENCE_KEYS = Object.freeze(['aminoAcidSequence', 'amino_acid_sequence', 'nucleotideSequence', 'nucleotide_sequence', 'sequenceSourceIndex', 'sequenceWarnings', 'sequence_warnings', 'translationFromAminoAcidSequence']);
 
-// gbdraw/web_support/catalog_sequences.py: MATCH_SPAN_REASONS
+// gbdraw/web_support/feature_catalog.py: MATCH_SPAN_REASONS
 /** @type {readonly ['NEVER_SUPPLIED', 'SOURCE_UNAVAILABLE', 'SOURCE_KEY_CONFLICT', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS', 'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'OUT_OF_RANGE']} */
 export const MATCH_SPAN_REASONS = Object.freeze(['NEVER_SUPPLIED', 'SOURCE_UNAVAILABLE', 'SOURCE_KEY_CONFLICT', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS', 'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'OUT_OF_RANGE']);
 

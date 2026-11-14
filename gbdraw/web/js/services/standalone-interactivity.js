@@ -8,7 +8,10 @@ import { INTERACTIVE_EMBED_SCHEMA } from '../contracts/schema.generated.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
 import { ANNOTATION_SELECTOR } from './drawn-groups.js';
-import { MATCH_FRAGMENT_OWN_ATTRIBUTES, STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT } from './drawn-attributes.generated.js';
+import {
+  MATCH_FRAGMENT_OWN_ATTRIBUTES, MATCH_SPAN_REASON_TEXTS, STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT,
+  STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT
+} from './drawn-attributes.generated.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
@@ -527,18 +530,24 @@ const applyStandaloneViewportRoot = (svg) => {
 
 /**
  * The JSON text of the item an exported Interactive SVG embeds: `JSON.stringify` of the stored item with the
- * drawing's edits, whose biological rows and whole-record sources are the export encoding Python wrote, taken as text
- * (the item Python's `embed_catalog_item` writes: the rows in their place, the sources after every stored key).
+ * drawing's edits, whose biological rows, whole-record sources and match span reads are the export encoding Python
+ * wrote, taken as text (the item Python's `embed_catalog_item` writes: the rows in their place, the sources and then
+ * the reads after every stored key).
  * @param {FeatureCatalogItem} item
  * @param {EmbeddedSequencesJson} sequences
  * @returns {string}
  */
 export const embeddedCatalogItemJson = (item, sequences) => {
+  const { sequenceSources, matchSpanReads } = sequences;
   /** @type {Record<string, unknown>} */
-  const fields = { ...item, biologicalFeatures: null, ...(sequences.sequenceSources === null ? {} : { sequenceSources: null }) };
+  const fields = {
+    ...item, biologicalFeatures: null,
+    ...(sequenceSources === null ? {} : { sequenceSources: null }), ...(matchSpanReads === null ? {} : { matchSpanReads: null })
+  };
   const text = (/** @type {string} */ key, /** @type {unknown} */ value) => (key === 'biologicalFeatures'
     ? sequences.biologicalFeatures
-    : key === 'sequenceSources' && sequences.sequenceSources !== null ? sequences.sequenceSources : JSON.stringify(value));
+    : key === 'sequenceSources' && sequenceSources !== null ? sequenceSources
+      : key === 'matchSpanReads' && matchSpanReads !== null ? matchSpanReads : JSON.stringify(value));
   return `{${Object.entries(fields).filter(([, value]) => value !== undefined && typeof value !== 'function')
     .map(([key, value]) => `${JSON.stringify(key)}:${text(key, value)}`).join(',')}}`;
 };
@@ -614,10 +623,16 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   const script = document.createElementNS(SVG_NS, 'script');
   script.setAttribute('id', INTERACTIVE_SCRIPT_ID);
   script.setAttribute('type', 'application/ecmascript');
-  // The script checks the fragments of a match with Python's list of the attributes a fragment holds on its own.
-  const scriptParts = STANDALONE_INTERACTIVE_SCRIPT.split(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT);
-  if (scriptParts.length !== 2) throw new Error('Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT');
-  script.textContent = scriptParts.join(JSON.stringify(MATCH_FRAGMENT_OWN_ATTRIBUTES));
+  // The script checks the fragments of a match with Python's list of the attributes a fragment holds on its own, and
+  // shows Python's sentence for each reason a match span cannot be read; Python writes both in the same way.
+  script.textContent = [
+    [STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, JSON.stringify(MATCH_FRAGMENT_OWN_ATTRIBUTES)],
+    [STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT, JSON.stringify(MATCH_SPAN_REASON_TEXTS)]
+  ].reduce((text, [slot, json]) => {
+    const parts = text.split(slot);
+    if (parts.length !== 2) throw new Error('Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT');
+    return parts.join(json);
+  }, STANDALONE_INTERACTIVE_SCRIPT);
 
   ensureStandaloneFeatureGlowFilter(svg);
   svg.appendChild(metadata);

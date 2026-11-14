@@ -1,5 +1,6 @@
 // @ts-check
 import { ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
+import { MATCH_SPAN_REASON_TEXTS } from './drawn-attributes.generated.js';
 import {
   formatFeatureLocation,
   getQualifierFirstValue,
@@ -28,7 +29,7 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
-/** @import { MatchSpanInput, MatchSpanReason, MatchSpanSequence, SpanCoordinate } from './diagram-worker-protocol.js' */
+/** @import { MatchSpanInput, MatchSpanSequence, SpanCoordinate } from './diagram-worker-protocol.js' */
 /** @import { SequenceReadState } from './catalog-sequences.js' */
 
 /**
@@ -2020,7 +2021,7 @@ const safeFilePart = (value, fallback = 'sequence') => {
  * @returns {{ read: MatchSpanInput | null, reason: string }}
  */
 const matchSpanRead = (span, matchKind, records, start, end) => {
-  if (!span.identityValid) return { read: null, reason: t('The sequence identifier metadata for this match is invalid.') };
+  if (!span.identityValid) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.IDENTITY_INVALID, {}) };
   // A Result without its request (a Result-only Session 27-39): the reason the read would give (SEQUENCE_REQUIRES_GENERATE).
   if (!records) return { read: null, reason: t('This Result was saved by an older gbdraw, so its sequences are read after the next Generate.') };
   const { recordId } = span;
@@ -2036,7 +2037,7 @@ const matchSpanRead = (span, matchKind, records, start, end) => {
       ? { read: { kind: 'record', recordKey, recordId, start, end }, reason: '' }
       : { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.SOURCE_UNAVAILABLE, {}) };
   }
-  if (!recordId && !recordKey) return { read: null, reason: t('The match does not identify a sequence record.') };
+  if (!recordId && !recordKey) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.RECORD_UNNAMED, {}) };
   // A record index that names no drawn unit: no record is searched, so the named one is not found.
   if (span.recordIndex !== null && !recordKey) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.RECORD_UNKNOWN, { id: recordId }) };
   return { read: { kind: 'reference', recordId, recordKey, start, end }, reason: '' };
@@ -2098,22 +2099,8 @@ export const matchSpanFasta = (entry, read) => {
 };
 
 /**
- * The reason a span Python could not read shows, for each of Python's reasons.
- * @type {Readonly<Record<MatchSpanReason, string>>}
- */
-const MATCH_SPAN_REASON_TEXTS = Object.freeze({
-  NEVER_SUPPLIED: msg('Comparison sequence was not supplied for this BLAST source.'),
-  SOURCE_UNAVAILABLE: msg('The sequence source for this match is unavailable.'),
-  SOURCE_KEY_CONFLICT: msg('The sequence source key conflicts with the match identity.'),
-  RECORD_UNKNOWN: msg('No sequence source matched record “{id}”.'),
-  RECORD_AMBIGUOUS: msg('Record ID “{id}” is ambiguous in the available sequence sources.'),
-  RECORD_ALIAS_AMBIGUOUS: msg('Record alias “{id}” is ambiguous in the available sequence sources.'),
-  COORDINATE_NOT_WHOLE: msg('Coordinates must be whole 1-based values.'),
-  COORDINATE_BELOW_ONE: msg('Coordinates must be greater than or equal to 1.'),
-  OUT_OF_RANGE: msg('Coordinates exceed the sequence length ({length} bp).')
-});
-
-/**
+ * The reason a span Python could not read shows: Python's sentence of its reason (`MATCH_SPAN_REASON_TEXTS`, a
+ * catalog key), which an exported Interactive SVG shows too.
  * @param {MatchSpanEntry} entry
  * @param {MatchSpanSequence} read A span Python could not read.
  */

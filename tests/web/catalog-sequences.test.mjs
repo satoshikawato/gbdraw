@@ -30,6 +30,8 @@ const featureReply = ({ recordKey, biologicalFeatureId }) => ({
 // one whole-record source (its index the record's place) and a comparison source comes last.
 const EMBED_SOURCES = [{ key: 'linear:record:0', recordIndex: 0 }, { key: 'linear:record:1', recordIndex: 1 },
   { key: 'homology:comparison:0:C', sourceIndex: 0 }];
+// What the item's match spans read, which the part holding the comparison sources carries.
+const EMBED_READS = { m1: { query: { source: 0 }, subject: { reason: 'NEVER_SUPPLIED', sourceLength: 0 } } };
 // What the encoder makes of a part, and the reply that carries it as the text the file embeds.
 // An export read sends the part's item as the JSON file `embedItem`.
 const embedItemOf = async (payload) => payload.item ?? JSON.parse(await payload.files[0].blob.text());
@@ -38,12 +40,14 @@ const embedPartObjectsOf = ({ item, part }) => ({
   biologicalFeatures: item.biologicalFeatures.map((row) => ({ ...row, nucleotide_sequence: `N${row.biologicalFeatureId}` })),
   sequenceSources: EMBED_SOURCES.map((source, index) => ({ index, source })).filter(({ source }) => (
     source.recordIndex === undefined ? part.comparisonSources : part.sourcesOf.includes(item.recordKeys[source.recordIndex]))),
-  sourceCount: EMBED_SOURCES.length
+  sourceCount: EMBED_SOURCES.length,
+  matchSpanReads: part.comparisonSources ? EMBED_READS : null
 });
 const embedPartReply = async (payload) => {
-  const { biologicalFeatures, sequenceSources, sourceCount } = await embedPartObjects(payload);
+  const { biologicalFeatures, sequenceSources, sourceCount, matchSpanReads } = await embedPartObjects(payload);
   return { biologicalFeatures: biologicalFeatures.map((row) => JSON.stringify(row)).join(','), rowCount: biologicalFeatures.length,
-    sequenceSources: sequenceSources.map(({ index, source }) => ({ index, source: JSON.stringify(source) })), sourceCount };
+    sequenceSources: sequenceSources.map(({ index, source }) => ({ index, source: JSON.stringify(source) })), sourceCount,
+    matchSpanReads: matchSpanReads === null ? null : JSON.stringify(matchSpanReads) };
 };
 
 const doorWith = (initialCommitted) => {
@@ -283,8 +287,26 @@ test('the parts written as they arrive are the item Python encodes whole, byte f
   assert.equal(sent.length, 2);
   const whole = embedPartObjectsOf({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
   assert.equal(embeddedCatalogItemJson(exportItem, sequences), JSON.stringify({
-    ...exportItem, biologicalFeatures: whole.biologicalFeatures, sequenceSources: whole.sequenceSources.map(({ source }) => source)
+    ...exportItem, biologicalFeatures: whole.biologicalFeatures, sequenceSources: whole.sequenceSources.map(({ source }) => source),
+    matchSpanReads: whole.matchSpanReads
   }));
+});
+
+test('the part that holds the comparison sources appends the sources only a match span reads', async () => {
+  const committed = committedOf();
+  const readOnly = { key: 'circular:record:9', recordIndex: 9 };
+  const door = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => {
+      const reply = await embedPartReply(payload);
+      return { result: payload.part.comparisonSources
+        ? { ...reply, sourceCount: EMBED_SOURCES.length + 1,
+          sequenceSources: [...reply.sequenceSources, { index: EMBED_SOURCES.length, source: JSON.stringify(readOnly) }] }
+        : reply };
+    } }
+  });
+  const sequences = await door.readEmbedJson(exportItem);
+  assert.deepEqual(JSON.parse(sequences.sequenceSources), [...EMBED_SOURCES, readOnly]);
 });
 
 test('an export read the shown Result outlived gives null; a source missing or given twice is an invalid reply', async () => {
@@ -299,7 +321,13 @@ test('an export read the shown Result outlived gives null; a source missing or g
     async (payload) => ({ ...(await embedPartReply(payload)), sequenceSources: [{ index: 0, source: '{"key":"x"}' }] }),
     async (payload) => ({ ...(await embedPartReply(payload)), sequenceSources: [{ index: 0, source: { key: 'x' } }] }),
     async (payload) => ({ ...(await embedPartReply(payload)), rowCount: 0 }),
-    async (payload) => ({ ...(await embedPartReply(payload)), biologicalFeatures: [] })
+    // Only the part that holds the comparison sources may count more sources (those only a span reads), never fewer.
+    async (payload) => ({ ...(await embedPartReply(payload)), sourceCount: EMBED_SOURCES.length + (payload.part.comparisonSources ? 0 : 1) }),
+    async (payload) => ({ ...(await embedPartReply(payload)), sourceCount: EMBED_SOURCES.length - (payload.part.comparisonSources ? 1 : 0) }),
+    async (payload) => ({ ...(await embedPartReply(payload)), biologicalFeatures: [] }),
+    // What the match spans read comes as text, and only with the comparison sources (the last part).
+    async (payload) => ({ ...(await embedPartReply(payload)), matchSpanReads: payload.part.comparisonSources ? EMBED_READS : null }),
+    async (payload) => ({ ...(await embedPartReply(payload)), matchSpanReads: JSON.stringify(EMBED_READS) })
   ]) {
     const fixed = committedOf();
     const door = createCatalogSequences({

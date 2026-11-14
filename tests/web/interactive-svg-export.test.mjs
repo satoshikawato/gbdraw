@@ -71,12 +71,14 @@ const storedItem = {
   comparisonMatches: [{ id: 'match-a', match_kind: 'pairwise', query_record_index: 0, query_record_id: 'acc-a' }]
 };
 // What Python's `embed_catalog_item` returns for it: the rows' sequences in the compact export encoding and the
-// whole-record sources the matches read; the page gets the rows and the sources as text (`embeddedSequences`).
+// whole-record sources the matches read, and what each match span reads; the page gets them as text
+// (`embeddedSequences`).
 const embedItem = {
   ...storedItem,
   biologicalFeatures: [{ recordKey: 'record-a', biologicalFeatureId: 'feature-a', stableFeatureId: 'feature-a', type: 'CDS',
     qualifiers: { gene: ['g'] }, sequenceSourceIndex: 0, amino_acid_sequence: 'MK', translationFromAminoAcidSequence: true }],
-  sequenceSources: [{ key: 'linear:record:0', origin: 'linear-record', recordIndex: 0, recordId: 'acc-a', sequence: 'ATGAAA' }]
+  sequenceSources: [{ key: 'linear:record:0', origin: 'linear-record', recordIndex: 0, recordId: 'acc-a', sequence: 'ATGAAA' }],
+  matchSpanReads: { 'match-a': { query: { source: 0 }, subject: { reason: 'RECORD_UNKNOWN', sourceLength: 0 } } }
 };
 
 const exportState = (items) => ({
@@ -113,7 +115,8 @@ test('the capture holds the stored catalog item of the shown Result, found by it
 });
 
 const embeddedSequences = {
-  biologicalFeatures: JSON.stringify(embedItem.biologicalFeatures), sequenceSources: JSON.stringify(embedItem.sequenceSources)
+  biologicalFeatures: JSON.stringify(embedItem.biologicalFeatures), sequenceSources: JSON.stringify(embedItem.sequenceSources),
+  matchSpanReads: JSON.stringify(embedItem.matchSpanReads)
 };
 
 test('the file embeds the item Python encoded, under the export schema, byte for byte', () => {
@@ -132,9 +135,9 @@ test('the file embeds the item Python encoded, under the export schema, byte for
   }
 });
 
-test('an item whose matches read no source embeds no sequenceSources key, as Python writes it', () => {
+test('an item whose matches read no source embeds no sequenceSources or matchSpanReads key, as Python writes it', () => {
   const rows = embedItem.biologicalFeatures.map(({ sequenceSourceIndex, ...row }) => ({ ...row, nucleotide_sequence: 'ATG' }));
-  const sequences = { biologicalFeatures: JSON.stringify(rows), sequenceSources: null };
+  const sequences = { biologicalFeatures: JSON.stringify(rows), sequenceSources: null, matchSpanReads: null };
   assert.equal(embeddedCatalogItemJson(storedItem, sequences), JSON.stringify({ ...storedItem, biologicalFeatures: rows }));
 });
 

@@ -24,6 +24,7 @@ import { errorTextKeys } from '../../tests/web/helpers/error-text-keys.mjs';
 import { COLLINEARITY_BLOCK_KINDS } from './collinearity-words.generated.mjs';
 import { LABEL_FIT_WORDS } from './label-fit-words.generated.mjs';
 import { GENOME_SCALE_WARNING_TEXT } from '../../gbdraw/web/js/contracts/card-windows.generated.js';
+import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
 
 export const REPOSITORY_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export const WEB_ROOT = join(REPOSITORY_ROOT, 'gbdraw', 'web');
@@ -490,6 +491,7 @@ export const sourceKeys = async () => {
   }
   for (const word of LABEL_FIT_WORDS) add(word, word, null, { ...derivedSite('js/app/label-fit-dialog.js', word), role: 'label' }, null);
   add(GENOME_SCALE_WARNING_TEXT, GENOME_SCALE_WARNING_TEXT, null, { ...derivedSite('js/services/linear-units.js', GENOME_SCALE_WARNING_TEXT), role: 'notice' }, null);
+  for (const text of Object.values(MATCH_SPAN_REASON_TEXTS)) add(text, text, null, { ...derivedSite('js/services/pairwise-match-popup.js', text), role: 'notice' }, null);
   for (const { context, english } of settingsShortKeys()) {
     add(context + CONTEXT_SEPARATOR + english, english, context, { ...derivedSite('js/services/settings-sections.js', english), role: 'label' }, null);
   }
