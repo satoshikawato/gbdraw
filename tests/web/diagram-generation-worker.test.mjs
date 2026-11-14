@@ -396,13 +396,27 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   assert.equal(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION), false);
   // New drawing from a region: Python derives the drawing from the source
   // drawing's draft projection, whose resources the page stages.
-  const { stagedHelperReferences } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
+  const { pasteTargetPaths, stagedHelperReferences } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
   const region = DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING;
   assert.equal(region, 'deriveRegionDrawing');
   assert.ok(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(region));
   for (const key of ['canonicalRequest', 'regions', 'adaptSizes']) assert.ok(helperPayloadKeys(region)?.includes(key), key);
   const canonicalRequest = { records: [] };
-  assert.equal(stagedHelperReferences(region, { canonicalRequest }), canonicalRequest);
+  const newDrawing = { into: 'new', settings: 'keep', mode: null };
+  assert.deepEqual(stagedHelperReferences(region, { canonicalRequest, copy: newDrawing }), [canonicalRequest]);
+  // A paste stages the target drawing's resources in the same table, under staging IDs of their own (one staging);
+  // the Worker gives Python the target's request with the staged path of each resource by its own ID.
+  const targetRequest = { records: [{ source: { resourceId: 'record-1-genbank' } }] };
+  const paste = { into: 'existing', edits: 'edits', duplicates: 'skip',
+    target: { renderRequest: targetRequest, resourceIds: { 'record-1-genbank': 'paste-target-1' } } };
+  assert.deepEqual(stagedHelperReferences(region, { canonicalRequest, copy: paste }), [canonicalRequest, { resourceId: 'paste-target-1' }]);
+  const staged = { 'record-1-genbank': '/w/request/a.gb', 'paste-target-1': '/w/request/b.gb' };
+  assert.deepEqual(pasteTargetPaths(paste, staged), {
+    copy: { into: 'existing', edits: 'edits', duplicates: 'skip',
+      target: { renderRequest: targetRequest, resourcePaths: { 'record-1-genbank': '/w/request/b.gb' } } },
+    sourcePaths: { 'record-1-genbank': '/w/request/a.gb' }
+  });
+  assert.deepEqual(pasteTargetPaths(newDrawing, staged), { copy: newDrawing, sourcePaths: staged });
 }
 
 // D7: a Cancel drains the queue. The interrupt and then Python's cancel flag
