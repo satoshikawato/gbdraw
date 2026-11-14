@@ -1920,6 +1920,49 @@ def test_genuine_version_39_shape_retains_disabled_layout_upload_draft() -> None
     ]
 
 
+@pytest.mark.parametrize(
+    ("query_index", "subject_index", "query_uid", "subject_uid"),
+    [(5, 6, "q", "s"), (-1, 0, "q", "r1"), (1, 2, "r2", "s")],
+    ids=["pair-after-the-rows", "negative-query-index", "pair-from-the-last-row"],
+)
+def test_pre40_selected_comparison_outside_the_rows_takes_no_losat_filename(
+    query_index: int, subject_index: int, query_uid: str, subject_uid: str
+) -> None:
+    from gbdraw.session import upgrade_session_document
+
+    source = json.loads(
+        (Path(__file__).parent / "fixtures" / "sessions" / "lambda_basic_linear.v40-schema5.json").read_text()
+    )
+    source["version"] = 39
+    source["config"].pop("linearComparisonPlan")
+    source["files"] = {
+        "linearSeqs": [
+            {"uid": "r1", "losat_filename": "r1-r2.losat"},
+            {"uid": "r2", "losat_filename": "last-row.losat"},
+        ]
+    }
+    source["config"]["linearRecordLayout"] = {
+        "enabled": True,
+        "comparisons": [
+            {"queryUid": "q", "subjectUid": "s", "queryIndex": query_index, "subjectIndex": subject_index}
+        ],
+    }
+
+    upgraded = drawing_view(upgrade_session_document(source).document.to_dict(), mode="linear")
+
+    edges = upgraded["modes"]["linear"]["config"]["linearComparisonPlan"]["edges"]
+    assert edges[0] == {
+        "id": f"linear-comparison-migrated-selected-1-{query_uid}-{subject_uid}",
+        "queryUid": query_uid,
+        "subjectUid": subject_uid,
+        "included": True,
+        "fileActive": False,
+        "losatFilenameActive": False,
+        "source": "losat",
+        "losatFilename": "",
+    }
+
+
 def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
     source = build_mode_scoped_session_json(
         SessionBuildContext(

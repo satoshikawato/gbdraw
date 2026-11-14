@@ -5219,326 +5219,397 @@ def _legacy_cli_protein_mode(config: Mapping[str, Any]) -> str:
     return (values[-1] if values else "none").strip().lower()
 
 
-def _migrate_legacy_linear_comparison_draft(
-    config: Mapping[str, Any],
-    files: Mapping[str, Any],
-    *,
-    force_web_draft: bool,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    migrated_config = _json_clone(dict(config))
-    migrated_files = _json_clone(dict(files))
-    linear_sequences_value = migrated_files.get("linearSeqs")
-    linear_sequences = (
-        linear_sequences_value if isinstance(linear_sequences_value, list) else []
-    )
-    legacy_rows: list[dict[str, Any]] = []
-    sanitized_sequences: list[Any] = []
-    for sequence in linear_sequences:
+class _LegacyRecordRow(NamedTuple):
+    """What one ``linearSeqs`` row of a legacy draft held for its comparisons.
+
+    ``blast`` is the upload compared with the next row, ``losat_filename`` the
+    LOSAT result file name of that pair; a row that is not an object holds
+    neither and has no uid.
+    """
+
+    uid: str
+    blast: object
+    losat_filename: str
+
+
+class _LegacyComparisonSetting(NamedTuple):
+    """The draft-wide comparison source of a legacy draft and the plan mode it implies."""
+
+    default_source: str
+    mode: Literal["none", "adjacent"]
+
+
+@dataclass(frozen=True)
+class _LegacyComparisonFile:
+    """A ``linearComparisons`` entry of a legacy draft that binds a file, at its list position."""
+
+    index: int
+    comparison: dict[str, object]
+    id: str
+    query_uid: str
+    subject_uid: str
+    file: object
+
+
+@dataclass(frozen=True)
+class _MigratedEdgePayload:
+    """The source and the result inputs of one migrated comparison edge."""
+
+    source: str
+    included: bool
+    file: object
+    file_active: bool
+    losat_filename: str
+    losat_filename_active: bool
+
+
+class _MigratedComparisonEdge(TypedDict):
+    id: str
+    queryUid: str
+    subjectUid: str
+    included: bool
+    fileActive: bool
+    losatFilenameActive: bool
+    source: str
+    losatFilename: str
+
+
+class _MigratedComparisonPlan(TypedDict):
+    mode: Literal["none", "adjacent", "selected"]
+    defaultSource: str
+    edges: list[_MigratedComparisonEdge]
+
+
+class _ComparisonFileBinding(TypedDict):
+    """One ``files.linearComparisons`` entry of the current writer: the file of plan edge ``id``."""
+
+    id: str
+    file: object
+
+
+def _take_legacy_record_rows(files: dict[str, object]) -> list[_LegacyRecordRow]:
+    """Remove ``blast`` and ``losat_filename`` from each ``linearSeqs`` row of ``files`` and return what they held."""
+
+    sequences_value = files.get("linearSeqs")
+    rows: list[_LegacyRecordRow] = []
+    sanitized_sequences: list[object] = []
+    for sequence in sequences_value if isinstance(sequences_value, list) else []:
         if not isinstance(sequence, Mapping):
             sanitized_sequences.append(sequence)
-            legacy_rows.append({"uid": "", "blast": None, "losatFilename": ""})
+            rows.append(_LegacyRecordRow(uid="", blast=None, losat_filename=""))
             continue
         row = dict(sequence)
-        legacy_rows.append(
-            {
-                "uid": str(row.get("uid") or ""),
-                "blast": row.pop("blast", None),
-                "losatFilename": str(row.pop("losat_filename", "") or ""),
-            }
+        rows.append(
+            _LegacyRecordRow(
+                uid=str(row.get("uid") or ""),
+                blast=row.pop("blast", None),
+                losat_filename=str(row.pop("losat_filename", "") or ""),
+            )
         )
         sanitized_sequences.append(row)
-    migrated_files["linearSeqs"] = sanitized_sequences
+    files["linearSeqs"] = sanitized_sequences
+    return rows
 
-    comparisons_value = migrated_files.get("linearComparisons")
-    file_comparisons = (
-        [dict(item) for item in comparisons_value if isinstance(item, Mapping)]
-        if isinstance(comparisons_value, list)
-        else []
-    )
-    adv_value = migrated_config.get("adv")
+
+def _take_legacy_comparison_setting(config: dict[str, object]) -> _LegacyComparisonSetting:
+    """Remove ``blastSource`` and ``adv.blastSource`` from ``config`` and return the setting they held."""
+
+    adv_value = config.get("adv")
     adv = dict(adv_value) if isinstance(adv_value, Mapping) else {}
-    raw_source = migrated_config.get("blastSource", adv.get("blastSource"))
-    global_source = _legacy_comparison_source(raw_source)
-    legacy_none = str(raw_source or "").strip().lower() == "none"
-    migrated_config.pop("blastSource", None)
-    adv.pop("blastSource", None)
-    migrated_config["adv"] = adv
-
-    layout_value = migrated_config.get("linearRecordLayout")
-    layout = dict(layout_value) if isinstance(layout_value, Mapping) else None
-    explicit_value = layout.get("comparisons") if layout is not None else None
-    explicit = (
-        [dict(item) for item in explicit_value if isinstance(item, Mapping)]
-        if isinstance(explicit_value, list)
-        else None
+    raw_source = config.get("blastSource", adv.get("blastSource"))
+    setting = _LegacyComparisonSetting(
+        default_source=_legacy_comparison_source(raw_source),
+        mode="none" if str(raw_source or "").strip().lower() == "none" else "adjacent",
     )
-    if layout is not None:
-        layout.pop("comparisons", None)
-        migrated_config["linearRecordLayout"] = layout
+    config.pop("blastSource", None)
+    adv.pop("blastSource", None)
+    config["adv"] = adv
+    return setting
 
-    existing_plan = migrated_config.get("linearComparisonPlan")
-    if isinstance(existing_plan, Mapping):
-        plan = _json_clone(dict(existing_plan))
-        edges_value = plan.get("edges")
-        edges = edges_value if isinstance(edges_value, list) else []
-        file_by_id: dict[str, Any] = {
-            str(item.get("id") or ""): item.get("file")
-            for item in file_comparisons
-            if str(item.get("id") or "") and item.get("file")
-        }
-        bindings = []
-        sanitized_edges = []
-        for edge in edges:
-            if not isinstance(edge, Mapping):
-                continue
-            metadata = dict(edge)
-            file_entry = metadata.pop("file", None) or file_by_id.get(
-                str(metadata.get("id") or "")
-            )
-            sanitized_edges.append(metadata)
-            if file_entry:
-                bindings.append(
-                    {"id": str(metadata.get("id") or ""), "file": file_entry}
-                )
-        plan["edges"] = sanitized_edges
-        migrated_config["linearComparisonPlan"] = plan
-        migrated_files["linearComparisons"] = bindings
-        return migrated_config, migrated_files
 
-    if not force_web_draft:
-        # A CLI-only draft gains no synthetic Web comparison (No comparison).
-        # Its own protein comparison is stated as the adjacent LOSATP plan: a
-        # legacy CLI writer selected LOSATP exactly when the last
-        # --protein_blastp_mode was not ``none``, and compared adjacent records.
-        migrated_config.pop("linearRecordLayout", None)
-        migrated_config.pop("linearComparisonPlan", None)
-        if _legacy_cli_protein_mode(migrated_config) != "none":
-            migrated_config["linearComparisonPlan"] = {
-                "mode": "adjacent",
-                "defaultSource": "losat",
-                "edges": [],
-            }
-        migrated_files["linearComparisons"] = []
-        return migrated_config, migrated_files
+def _take_layout_comparisons(config: dict[str, object]) -> list[dict[str, object]] | None:
+    """Remove ``linearRecordLayout.comparisons`` from ``config``.
 
-    uid_index = {
-        str(row.get("uid") or ""): index
-        for index, row in enumerate(legacy_rows)
-        if str(row.get("uid") or "")
+    Return its object items when the layout is enabled and the value is a
+    list (the selected comparisons, authoritative even when empty); else None.
+    """
+
+    layout_value = config.get("linearRecordLayout")
+    if not isinstance(layout_value, Mapping):
+        return None
+    layout = dict(layout_value)
+    explicit_value = layout.pop("comparisons", None)
+    config["linearRecordLayout"] = layout
+    if not layout.get("enabled") or not isinstance(explicit_value, list):
+        return None
+    return [dict(item) for item in explicit_value if isinstance(item, Mapping)]
+
+
+def _carry_existing_comparison_plan(
+    existing_plan: Mapping[str, object],
+    file_comparisons: list[dict[str, object]],
+) -> tuple[dict[str, object], list[_ComparisonFileBinding]]:
+    """An existing plan with each edge's ``file`` (or the file bound to its id) moved to a binding."""
+
+    plan = _json_clone(dict(existing_plan))
+    edges_value = plan.get("edges")
+    file_by_id: dict[str, object] = {
+        str(item.get("id") or ""): item.get("file")
+        for item in file_comparisons
+        if str(item.get("id") or "") and item.get("file")
     }
-    legacy_binding_entries: list[dict[str, Any]] = [
-        {
-            "index": index,
-            "comparison": comparison,
-            "id": str(comparison.get("id") or ""),
-            "queryUid": str(comparison.get("queryUid") or ""),
-            "subjectUid": str(comparison.get("subjectUid") or ""),
-            "file": comparison.get("file"),
-        }
-        for index, comparison in enumerate(file_comparisons)
-    ]
-    file_by_id = {}
-    file_by_pair: dict[tuple[str, str], Mapping[str, Any]] = {}
-    for entry in legacy_binding_entries:
-        file_entry = entry["file"]
-        if not file_entry:
+    bindings: list[_ComparisonFileBinding] = []
+    sanitized_edges = []
+    for edge in edges_value if isinstance(edges_value, list) else []:
+        if not isinstance(edge, Mapping):
             continue
-        comparison_id = str(entry["id"])
-        query_uid = str(entry["queryUid"])
-        subject_uid = str(entry["subjectUid"])
-        if comparison_id:
-            file_by_id.setdefault(comparison_id, entry)
-        if query_uid and subject_uid:
-            file_by_pair.setdefault((query_uid, subject_uid), entry)
+        metadata = dict(edge)
+        file_entry = metadata.pop("file", None) or file_by_id.get(str(metadata.get("id") or ""))
+        sanitized_edges.append(metadata)
+        if file_entry:
+            bindings.append({"id": str(metadata.get("id") or ""), "file": file_entry})
+    plan["edges"] = sanitized_edges
+    return plan, bindings
 
-    consumed_binding_indexes: set[int] = set()
 
-    def consume_binding(entry: Mapping[str, Any] | None) -> Any:
-        if not entry or not entry.get("file"):
-            return None
-        consumed_binding_indexes.add(int(entry["index"]))
-        return entry["file"]
+def _cli_only_comparison_plan(config: Mapping[str, object]) -> _MigratedComparisonPlan | None:
+    """The plan of a CLI-only draft: none (No comparison), or the adjacent LOSATP plan.
 
-    def positional_file(index: int) -> Any:
-        if not 0 <= index < len(legacy_rows) - 1:
-            return None
-        row = legacy_rows[index]
-        next_row = legacy_rows[index + 1]
-        endpoint_binding = file_by_pair.get(
-            (str(row.get("uid") or ""), str(next_row.get("uid") or ""))
-        )
-        if row.get("blast"):
-            # Canonical projection mirrored adjacent uploads into both legacy shapes.
-            consume_binding(endpoint_binding)
-            return row["blast"]
-        return consume_binding(endpoint_binding)
+    A CLI-only draft gains no synthetic Web comparison. A legacy CLI writer
+    selected LOSATP exactly when the last ``--protein_blastp_mode`` was not
+    ``none``, and compared adjacent records.
+    """
 
-    used_ids: set[str] = set()
-    edges_with_files: list[dict[str, Any]] = []
+    if _legacy_cli_protein_mode(config) == "none":
+        return None
+    return {"mode": "adjacent", "defaultSource": "losat", "edges": []}
 
-    def add_edge(
-        *,
-        edge_id: Any,
-        query_uid: str,
-        subject_uid: str,
-        source: str,
-        included: bool,
-        file_entry: Any,
-        file_active: bool,
-        losat_filename: str,
-        losat_filename_active: bool,
-        prefix: str,
-        index: int,
+
+class _LegacyComparisonPlanBuilder:
+    """The comparison plan of a legacy Web draft and the files its edges bind.
+
+    The selected comparisons of an enabled layout come first, then each
+    adjacent pair whose rows held a file or a LOSAT file name, then each bound
+    file no edge took (kept, not included). Each edge takes a draft-unique id.
+    """
+
+    def __init__(
+        self,
+        rows: list[_LegacyRecordRow],
+        file_comparisons: list[dict[str, object]],
+        setting: _LegacyComparisonSetting,
     ) -> None:
+        self.rows = rows
+        self.setting = setting
+        self.uid_index = {row.uid: index for index, row in enumerate(rows) if row.uid}
+        self.comparison_files = [
+            _LegacyComparisonFile(
+                index=index,
+                comparison=comparison,
+                id=str(comparison.get("id") or ""),
+                query_uid=str(comparison.get("queryUid") or ""),
+                subject_uid=str(comparison.get("subjectUid") or ""),
+                file=comparison.get("file"),
+            )
+            for index, comparison in enumerate(file_comparisons)
+            if comparison.get("file")
+        ]
+        self.file_by_id: dict[str, _LegacyComparisonFile] = {}
+        self.file_by_pair: dict[tuple[str, str], _LegacyComparisonFile] = {}
+        for comparison_file in self.comparison_files:
+            if comparison_file.id:
+                self.file_by_id.setdefault(comparison_file.id, comparison_file)
+            if comparison_file.query_uid and comparison_file.subject_uid:
+                pair = (comparison_file.query_uid, comparison_file.subject_uid)
+                self.file_by_pair.setdefault(pair, comparison_file)
+        self.consumed_indexes: set[int] = set()
+        self.used_ids: set[str] = set()
+        self.edges: list[_MigratedComparisonEdge] = []
+        self.bindings: list[_ComparisonFileBinding] = []
+
+    def build(
+        self, explicit: list[dict[str, object]] | None
+    ) -> tuple[_MigratedComparisonPlan, list[_ComparisonFileBinding]]:
+        mode: Literal["none", "adjacent", "selected"] = self.setting.mode
+        used_payload_gaps: set[int] = set()
+        if explicit is not None:
+            mode = "selected" if explicit else "none"
+            used_payload_gaps = self._add_selected_edges(explicit)
+        self._add_adjacent_edges(mode, used_payload_gaps)
+        self._add_retained_edges()
+        plan: _MigratedComparisonPlan = {
+            "mode": mode,
+            "defaultSource": self.setting.default_source,
+            "edges": self.edges,
+        }
+        return plan, self.bindings
+
+    def _consume(self, comparison_file: _LegacyComparisonFile | None) -> object:
+        if comparison_file is None:
+            return None
+        self.consumed_indexes.add(comparison_file.index)
+        return comparison_file.file
+
+    def _positional_file(self, index: int) -> object:
+        """The file of the adjacent pair at gap ``index`` (a row with a next row); it consumes the binding of that pair."""
+
+        row = self.rows[index]
+        endpoint_binding = self.file_by_pair.get((row.uid, self.rows[index + 1].uid))
+        if row.blast:
+            # Canonical projection mirrored adjacent uploads into both legacy shapes.
+            self._consume(endpoint_binding)
+            return row.blast
+        return self._consume(endpoint_binding)
+
+    def _selected_endpoint(
+        self, comparison: Mapping[str, object], uid_key: str, index_key: str
+    ) -> tuple[str, int | None]:
+        """A selected comparison's endpoint uid and row index: by uid, else by its stored index."""
+
+        uid = str(comparison.get(uid_key) or "")
+        index = self.uid_index.get(uid)
+        index_value = comparison.get(index_key)
+        if index is None and isinstance(index_value, int):
+            index = index_value
+            if 0 <= index < len(self.rows):
+                uid = self.rows[index].uid
+        return uid, index
+
+    def _add_selected_edges(self, explicit: list[dict[str, object]]) -> set[int]:
+        """Add the selected comparisons; return the adjacent gaps whose payload they took."""
+
+        used_payload_gaps: set[int] = set()
+        for index, comparison in enumerate(explicit):
+            query_uid, query_index = self._selected_endpoint(comparison, "queryUid", "queryIndex")
+            subject_uid, subject_index = self._selected_endpoint(
+                comparison, "subjectUid", "subjectIndex"
+            )
+            # An adjacent pair is a gap between two rows: its file and LOSAT file name are those of the row.
+            adjacent_gap = (
+                query_index
+                if query_index is not None
+                and subject_index == query_index + 1
+                and 0 <= query_index < len(self.rows) - 1
+                else None
+            )
+            file_entry = (
+                self._consume(self.file_by_id.get(str(comparison.get("id") or "")))
+                or self._consume(self.file_by_pair.get((query_uid, subject_uid)))
+                or (self._positional_file(adjacent_gap) if adjacent_gap is not None else None)
+            )
+            losat_filename = (
+                self.rows[adjacent_gap].losat_filename if adjacent_gap is not None else ""
+            )
+            if adjacent_gap is not None and (file_entry or losat_filename):
+                used_payload_gaps.add(adjacent_gap)
+            self._add_edge(
+                comparison.get("id"),
+                (query_uid, subject_uid),
+                ("selected", index),
+                _MigratedEdgePayload(
+                    source=_legacy_comparison_source(
+                        comparison.get("source"), self.setting.default_source
+                    ),
+                    included=True,
+                    file=file_entry,
+                    file_active=bool(file_entry),
+                    losat_filename=losat_filename,
+                    losat_filename_active=bool(losat_filename),
+                ),
+            )
+        return used_payload_gaps
+
+    def _add_adjacent_edges(self, mode: str, used_payload_gaps: set[int]) -> None:
+        """Add each adjacent pair whose rows held a file or a LOSAT file name and no selected edge took."""
+
+        source = self.setting.default_source
+        for index, row in enumerate(self.rows[:-1]):
+            file_entry = self._positional_file(index)
+            if (not file_entry and not row.losat_filename) or index in used_payload_gaps:
+                continue
+            payload_active = mode == "adjacent"
+            file_active = payload_active and source == "upload" and bool(file_entry)
+            filename_active = payload_active and source == "losat" and bool(row.losat_filename)
+            self._add_edge(
+                None,
+                (row.uid, self.rows[index + 1].uid),
+                ("adjacent", index),
+                _MigratedEdgePayload(
+                    source=source,
+                    included=file_active or filename_active,
+                    file=file_entry,
+                    file_active=file_active,
+                    losat_filename=row.losat_filename,
+                    losat_filename_active=filename_active,
+                ),
+            )
+
+    def _uid_at(self, index_value: object) -> str:
+        if isinstance(index_value, int) and 0 <= index_value < len(self.rows):
+            return self.rows[index_value].uid
+        return ""
+
+    def _add_retained_edges(self) -> None:
+        """Keep each bound file no edge took as an edge that is not included."""
+
+        for comparison_file in self.comparison_files:
+            if comparison_file.index in self.consumed_indexes:
+                continue
+            comparison = comparison_file.comparison
+            self._add_edge(
+                comparison_file.id,
+                (
+                    comparison_file.query_uid or self._uid_at(comparison.get("queryIndex")),
+                    comparison_file.subject_uid or self._uid_at(comparison.get("subjectIndex")),
+                ),
+                ("retained", comparison_file.index),
+                _MigratedEdgePayload(
+                    source=_legacy_comparison_source(
+                        comparison.get("source"), self.setting.default_source
+                    ),
+                    included=False,
+                    file=comparison_file.file,
+                    file_active=False,
+                    losat_filename="",
+                    losat_filename_active=False,
+                ),
+            )
+
+    def _add_edge(
+        self,
+        edge_id: object,
+        pair: tuple[str, str],
+        fallback: tuple[str, int],
+        payload: _MigratedEdgePayload,
+    ) -> None:
+        """Add an edge between ``pair`` under ``edge_id``, or the stable id of ``fallback``, made unique."""
+
+        query_uid, subject_uid = pair
         if not query_uid or not subject_uid:
             return
         base_id = str(edge_id or "").strip() or _stable_migrated_comparison_id(
-            prefix, index, query_uid, subject_uid
+            *fallback, query_uid, subject_uid
         )
         unique_id = base_id
         suffix = 2
-        while unique_id in used_ids:
+        while unique_id in self.used_ids:
             unique_id = f"{base_id}-{suffix}"
             suffix += 1
-        used_ids.add(unique_id)
-        edges_with_files.append(
+        self.used_ids.add(unique_id)
+        self.edges.append(
             {
                 "id": unique_id,
                 "queryUid": query_uid,
                 "subjectUid": subject_uid,
-                "included": bool(included),
-                "fileActive": bool(file_active),
-                "losatFilenameActive": bool(losat_filename_active),
-                "source": source,
-                "losatFilename": str(losat_filename or ""),
-                "file": file_entry,
+                "included": bool(payload.included),
+                "fileActive": bool(payload.file_active),
+                "losatFilenameActive": bool(payload.losat_filename_active),
+                "source": payload.source,
+                "losatFilename": payload.losat_filename,
             }
         )
-
-    authoritative_explicit = bool(layout and layout.get("enabled")) and explicit is not None
-    mode = "none" if legacy_none else "adjacent"
-    used_payload_gaps: set[int] = set()
-    if authoritative_explicit:
-        assert explicit is not None
-        mode = "selected" if explicit else "none"
-        for index, comparison in enumerate(explicit):
-            query_index_value = comparison.get("queryIndex")
-            subject_index_value = comparison.get("subjectIndex")
-            query_uid = str(comparison.get("queryUid") or "")
-            subject_uid = str(comparison.get("subjectUid") or "")
-            query_index = uid_index.get(query_uid)
-            subject_index = uid_index.get(subject_uid)
-            if query_index is None and isinstance(query_index_value, int):
-                query_index = query_index_value
-                if 0 <= query_index < len(legacy_rows):
-                    query_uid = str(legacy_rows[query_index].get("uid") or "")
-            if subject_index is None and isinstance(subject_index_value, int):
-                subject_index = subject_index_value
-                if 0 <= subject_index < len(legacy_rows):
-                    subject_uid = str(legacy_rows[subject_index].get("uid") or "")
-            adjacent_gap = (
-                query_index
-                if query_index is not None and subject_index == query_index + 1
-                else None
-            )
-            file_entry = (
-                consume_binding(file_by_id.get(str(comparison.get("id") or "")))
-                or consume_binding(file_by_pair.get((query_uid, subject_uid)))
-                or (positional_file(adjacent_gap) if adjacent_gap is not None else None)
-            )
-            losat_filename = (
-                str(legacy_rows[adjacent_gap].get("losatFilename") or "")
-                if adjacent_gap is not None
-                else ""
-            )
-            if adjacent_gap is not None and (file_entry or losat_filename):
-                used_payload_gaps.add(adjacent_gap)
-            add_edge(
-                edge_id=comparison.get("id"),
-                query_uid=query_uid,
-                subject_uid=subject_uid,
-                source=_legacy_comparison_source(
-                    comparison.get("source"), global_source
-                ),
-                included=True,
-                file_entry=file_entry,
-                file_active=bool(file_entry),
-                losat_filename=losat_filename,
-                losat_filename_active=bool(losat_filename),
-                prefix="selected",
-                index=index,
-            )
-
-    for index, row in enumerate(legacy_rows[:-1]):
-        file_entry = positional_file(index)
-        losat_filename = str(row.get("losatFilename") or "")
-        if (not file_entry and not losat_filename) or index in used_payload_gaps:
-            continue
-        payload_active = mode == "adjacent"
-        file_active = payload_active and global_source == "upload" and bool(file_entry)
-        filename_active = (
-            payload_active and global_source == "losat" and bool(losat_filename)
-        )
-        add_edge(
-            edge_id=None,
-            query_uid=str(row.get("uid") or ""),
-            subject_uid=str(legacy_rows[index + 1].get("uid") or ""),
-            source=global_source,
-            included=file_active or filename_active,
-            file_entry=file_entry,
-            file_active=file_active,
-            losat_filename=losat_filename,
-            losat_filename_active=filename_active,
-            prefix="adjacent",
-            index=index,
-        )
-
-    for entry in legacy_binding_entries:
-        entry_index = int(entry["index"])
-        file_entry = entry.get("file")
-        if not file_entry or entry_index in consumed_binding_indexes:
-            continue
-        comparison = entry["comparison"]
-        query_uid = str(entry["queryUid"])
-        subject_uid = str(entry["subjectUid"])
-        query_index_value = comparison.get("queryIndex")
-        subject_index_value = comparison.get("subjectIndex")
-        if not query_uid and isinstance(query_index_value, int):
-            if 0 <= query_index_value < len(legacy_rows):
-                query_uid = str(legacy_rows[query_index_value].get("uid") or "")
-        if not subject_uid and isinstance(subject_index_value, int):
-            if 0 <= subject_index_value < len(legacy_rows):
-                subject_uid = str(legacy_rows[subject_index_value].get("uid") or "")
-        add_edge(
-            edge_id=entry["id"],
-            query_uid=query_uid,
-            subject_uid=subject_uid,
-            source=_legacy_comparison_source(
-                comparison.get("source"), global_source
-            ),
-            included=False,
-            file_entry=file_entry,
-            file_active=False,
-            losat_filename="",
-            losat_filename_active=False,
-            prefix="retained",
-            index=entry_index,
-        )
-
-    migrated_config["linearComparisonPlan"] = {
-        "mode": mode,
-        "defaultSource": global_source,
-        "edges": [
-            {key: value for key, value in edge.items() if key != "file"}
-            for edge in edges_with_files
-        ],
-    }
-    migrated_files["linearComparisons"] = [
-        {"id": edge["id"], "file": edge["file"]}
-        for edge in edges_with_files
-        if edge.get("file")
-    ]
-    return migrated_config, migrated_files
+        if payload.file:
+            self.bindings.append({"id": unique_id, "file": payload.file})
 
 
 def migrate_legacy_linear_comparison_draft_for_current_writer(
@@ -5547,13 +5618,43 @@ def migrate_legacy_linear_comparison_draft_for_current_writer(
     *,
     force_web_draft: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Project a supported pre-v40 comparison draft into final v40 ownership."""
+    """Project a supported pre-v40 comparison draft into final v40 ownership.
 
-    return _migrate_legacy_linear_comparison_draft(
-        config,
-        files,
-        force_web_draft=force_web_draft,
+    The draft of a Session 27-39 held its comparisons in ``linearSeqs[].blast`` and
+    ``losat_filename``, ``blastSource`` (or ``adv.blastSource``),
+    ``linearRecordLayout.comparisons`` and ``linearComparisons``; the result
+    holds them as ``config.linearComparisonPlan`` and the files its edges bind
+    as ``files.linearComparisons``. An existing plan is carried with its edge
+    files moved to bindings. A CLI-only draft (not ``force_web_draft``) gains
+    no Web comparison.
+    """
+
+    migrated_config = _json_clone(dict(config))
+    migrated_files = _json_clone(dict(files))
+    rows = _take_legacy_record_rows(migrated_files)
+    comparisons_value = migrated_files.get("linearComparisons")
+    file_comparisons = (
+        [dict(item) for item in comparisons_value if isinstance(item, Mapping)]
+        if isinstance(comparisons_value, list)
+        else []
     )
+    setting = _take_legacy_comparison_setting(migrated_config)
+    explicit = _take_layout_comparisons(migrated_config)
+    existing_plan = migrated_config.get("linearComparisonPlan")
+    plan: Mapping[str, object] | None
+    bindings: list[_ComparisonFileBinding]
+    if isinstance(existing_plan, Mapping):
+        plan, bindings = _carry_existing_comparison_plan(existing_plan, file_comparisons)
+    elif not force_web_draft:
+        migrated_config.pop("linearRecordLayout", None)
+        migrated_config.pop("linearComparisonPlan", None)
+        plan, bindings = _cli_only_comparison_plan(migrated_config), []
+    else:
+        plan, bindings = _LegacyComparisonPlanBuilder(rows, file_comparisons, setting).build(explicit)
+    if plan is not None:
+        migrated_config["linearComparisonPlan"] = plan
+    migrated_files["linearComparisons"] = bindings
+    return migrated_config, migrated_files
 
 
 class _SessionResourceDescriptorRequired(TypedDict):
@@ -6249,7 +6350,7 @@ def build_session_json(
             or isinstance(config.get("linearComparisonPlan"), Mapping)
             or not isinstance(config.get("cliOptions"), Mapping)
         )
-        config, files_for_web = _migrate_legacy_linear_comparison_draft(
+        config, files_for_web = migrate_legacy_linear_comparison_draft_for_current_writer(
             config,
             files_for_web,
             force_web_draft=force_web_comparison_draft,
