@@ -1118,8 +1118,8 @@ export const NOTICE_LINE_LIMIT = 4;
 // The lines of a preview notice (OV-3495, OV-3562): the input summary's warnings, the skipped annotation rows, the
 // comparison rows placed by position. It shows the first lines through its default slot (`{ line }`) and "and
 // {count} more", which opens the rest in a box of its own height. The notice is an atomic live region: lines added
-// inside it read the whole notice again, so the rest, which enters the accessibility tree when it opens, is a region
-// of its own with aria-live off.
+// inside it read the whole notice again, so the box of the rest, which enters the accessibility tree when it opens,
+// is a region of its own with aria-live off. The summary stays in the notice's live region.
 export const NoticeLines = {
   props: { lines: { type: Array, required: true } },
   /** @param {{ lines: readonly unknown[] }} props */
@@ -1128,9 +1128,9 @@ export const NoticeLines = {
     return { list, moreLine };
   },
   template: `<template v-for="(line, index) in list.shown" :key="index"><slot :line="line"></slot></template>
-<details v-if="list.rest.length" data-notice-lines-rest aria-live="off">
+<details v-if="list.rest.length" data-notice-lines-rest>
   <summary class="cursor-pointer font-medium">{{ moreLine(list.rest.length) }}</summary>
-  <div class="max-h-40 overflow-y-auto"><template v-for="(line, index) in list.rest" :key="index"><slot :line="line"></slot></template></div>
+  <div class="max-h-40 overflow-y-auto" data-notice-lines-box aria-live="off"><template v-for="(line, index) in list.rest" :key="index"><slot :line="line"></slot></template></div>
 </details>`
 };
 

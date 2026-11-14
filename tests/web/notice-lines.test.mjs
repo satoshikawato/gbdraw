@@ -73,10 +73,15 @@ test('a notice that fits the line limit shows every line and no disclosure', () 
 
 // #2002 review: each notice is an atomic polite live region. Opening the disclosure adds the rest to the
 // accessibility tree inside it, which would read the whole notice again; the rest is a region of its own with
-// aria-live off, so opening it announces nothing.
+// aria-live off, so opening it announces nothing. The summary stays in the notice's live region.
 test('the rest of a notice is outside its live announcements', () => {
   const shown = render(['A', 'B', 'C', 'D', 'E']);
-  assert.equal(shown.details.attributes['aria-live'], 'off');
+  const box = [...all(shown.details)].find((node) => node.attributes['data-notice-lines-box'] !== undefined);
+  assert.equal(box.attributes['aria-live'], 'off');
+  assert.equal(shown.details.attributes['aria-live'], undefined);
+  const summary = [...all(shown.details)].find((node) => node.tag === 'summary');
+  assert.equal(summary.attributes['aria-live'], undefined);
+  assert.ok(![...all(summary)].some((node) => node.attributes['aria-live'] === 'off'));
   shown.unmount();
 });
 
