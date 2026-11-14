@@ -1616,7 +1616,12 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   );
   // Node comes from the base branch tip: github.sha is the PR merge commit and base.sha can predate .node-version.
   // The third reads this run's workflow file for the job-time report (tests/ci/ci-impact-job-times.test.mjs).
-  assert.equal([...gate.matchAll(/uses: actions\/checkout@/g)].length, 3);
+  // The fourth, after the trusted step, is the current dev for the fresh guards (tests/ci/ci-impact-fresh-guards.test.mjs).
+  assert.equal([...gate.matchAll(/uses: actions\/checkout@/g)].length, 4);
+  assert.match(
+    gate,
+    /Validate required PR evidence[\s\S]*Checkout the current dev\n[\s\S]*?ref: refs\/heads\/\$\{\{ github\.base_ref \}\}\n {10}path: \.ci-fresh-merge\n[\s\S]*?persist-credentials: false\n/
+  );
   assert.match(
     gate,
     /ref: refs\/heads\/\$\{\{ github\.base_ref \}\}\n {10}path: \.ci-node-version\n {10}sparse-checkout: \.node-version\n {10}sparse-checkout-cone-mode: false\n {10}persist-credentials: false\n[\s\S]*node-version-file: \.ci-node-version\/\.node-version\n[\s\S]*Validate required PR evidence/
