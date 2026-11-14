@@ -14,6 +14,7 @@ from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_meets_ink
 from ....render.drawers.circular.annotations import LeaderSegment
 from ....render.drawers.label_backing import BACKING_PADDING_EM, SectorBacking, sector_backing
+from ....svg.circular_arcs import position_angle_rad, position_turn_rad
 from ....svg.ids import track_slot_svg_id
 from ....svg.circular_ticks import (
     CircularTickLabelGeometry,
@@ -286,8 +287,8 @@ class TickGroup:
         for ring in rings:
             outside = not radii or ring.band.inner_px >= max(radii)
             edge = (max(radii) + half if radii else 0.0) if outside else min(radii) - half
-            low = 2.0 * math.pi * ring.start_turn - 0.5 * math.pi
-            high = low + 2.0 * math.pi * ((ring.end_turn - ring.start_turn) % 1.0)
+            low = position_angle_rad(ring.start_turn, 1.0)
+            high = low + position_turn_rad((ring.end_turn - ring.start_turn) % 1.0, 1.0)
             backings.append(
                 sector_backing(ring.band.inner_px, ring.band.outer_px, low, high, float(self.font_size), edge=edge)
             )

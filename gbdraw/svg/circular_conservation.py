@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from .circular_arcs import circle_arc_to, circle_point, position_angle
+from .circular_arcs import circle_arc_to, circle_point, position_angle, span_angle
 from .path_data import path_point
 
 
 def _annular_sector(start: float, span: float, total_length: int, inner_radius_px: float, outer_radius_px: float) -> str:
     start_angle = position_angle(start, total_length)
-    span_deg = 360.0 * span / float(total_length)
+    span_deg = span_angle(span, float(total_length))
     end_angle = start_angle + span_deg
     return (
         f"M {path_point(*circle_point(inner_radius_px, start_angle))} "

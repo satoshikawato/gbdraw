@@ -17,6 +17,7 @@ from typing import Literal, TypeAlias
 from ..core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
 from ..layout.spatial import Aabb
 from ..layout.text_geometry import Point
+from ..svg.circular_arcs import position_turn_angle
 from .circular_types import CircularLabel
 from .fit import polyline_crossing_count
 
@@ -46,7 +47,7 @@ def horizontal_label_alignment(
 ) -> tuple[TextAnchor, TextBaseline]:
     """The ``text-anchor`` and ``dominant-baseline`` a horizontal external label is drawn with."""
 
-    angle = (360.0 * (middle / total_length)) % 360
+    angle = position_turn_angle(middle, total_length) % 360
     anchor: TextAnchor
     if start_x > 0:
         anchor = "end" if is_inner else "start"

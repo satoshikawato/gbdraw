@@ -13,6 +13,7 @@ from ..layout.text_geometry import (
     oriented_text_box,
     segment_intersects_polygon,
 )
+from ..svg.circular_arcs import position_turn_angle
 from .circular_leaders import leader_crossing_count, leader_segments
 from .fit import overlapping_pairs
 from .circular_types import CircularLabel, CircularLabelLayoutResult
@@ -231,7 +232,7 @@ def _make_placed_label(
         {
             "placement": "radial",
             "preferred_middle": _preferred_middle(source),
-            "preferred_angle_deg": (360.0 * (_preferred_middle(source) / float(total_length))) % 360.0,
+            "preferred_angle_deg": position_turn_angle(_preferred_middle(source), total_length) % 360.0,
             "placed_angle_deg": placed_angle_deg,
             "middle": (placed_angle_deg / 360.0) * float(total_length),
             "start_x": text_x,

@@ -18,6 +18,7 @@ from typing import TypeAlias
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from ..svg.circular_arcs import position_angles_rad
 from .circular import RadialBand
 from .spatial import Aabb
 
@@ -123,7 +124,7 @@ class CircularInkPolygon:
         return cls(((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y)))
 
     def spans(self, turns: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        angles = 2.0 * math.pi * turns - 0.5 * math.pi
+        angles = position_angles_rad(turns)
         dx, dy = np.cos(angles), np.sin(angles)
         points = np.asarray(self.points, dtype=float)
         centroid = points.mean(axis=0)
@@ -226,7 +227,7 @@ def _ray_turns(box: Aabb, inks: Sequence[CircularInk]) -> NDArray[np.float64]:
 def _ray_box(box: Aabb, turns: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Where each ray from the centre enters and leaves ``box`` (``inf``/``-inf`` when it misses)."""
 
-    angles = 2.0 * math.pi * turns - 0.5 * math.pi
+    angles = position_angles_rad(turns)
     entries: list[NDArray[np.float64]] = []
     exits: list[NDArray[np.float64]] = []
     for direction, low, high in ((np.cos(angles), box.min_x, box.max_x), (np.sin(angles), box.min_y, box.max_y)):

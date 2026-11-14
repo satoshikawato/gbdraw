@@ -49,7 +49,8 @@ from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import Point, annular_sector_parts
 from gbdraw.render.label_binding import bind_label_part
 from gbdraw.svg.elements import Group, Line, Path, Rect, Text, Use
-from gbdraw.svg.path_data import path_number
+from gbdraw.svg.circular_arcs import circle_point_rad
+from gbdraw.svg.path_data import path_number, path_point
 
 BACKING_PADDING_EM = 0.18
 BACKING_FILL = "#ffffff"
@@ -203,7 +204,7 @@ class SectorBacking(NamedTuple):
         large = 1 if self.high - self.low > math.pi else 0
 
         def at(radius: float, turn: float) -> str:
-            return f"{path_number(radius * math.cos(turn))},{path_number(radius * math.sin(turn))}"
+            return path_point(*circle_point_rad(radius, turn))
 
         outer, inner = path_number(self.outer), path_number(self.inner)
         d = (

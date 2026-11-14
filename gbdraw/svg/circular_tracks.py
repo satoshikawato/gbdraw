@@ -13,7 +13,7 @@ from gbdraw.analysis.skew import deviation_scale
 
 from gbdraw.layout.record_coordinates import CirclePlace, RecordDisplayTransform
 from ..layout.scalar_axis import held_to_end, project_scalar_line
-from .circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
+from .circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle, span_angle
 from .path_data import path_point
 from .track_paths import TRACK_PATH_TOLERANCE_PX, track_line_to, track_polyline
 
@@ -92,7 +92,7 @@ def circle_unit_arc(record_transform: RecordDisplayTransform) -> tuple[float, fl
     place = record_transform.circle
     if place is None:
         return None
-    return position_angle(place.offset, place.length), 360.0 * record_transform.drawn_length / place.length
+    return position_angle(place.offset, place.length), span_angle(record_transform.drawn_length, place.length)
 
 
 def circle_unit_turns(record_transform: RecordDisplayTransform) -> tuple[float, float]:

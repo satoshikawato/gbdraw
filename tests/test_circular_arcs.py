@@ -8,13 +8,26 @@ those spans; these tests parse what each writer emits and bound the radial devia
 from __future__ import annotations
 
 import math
+import random
 import re
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from gbdraw.render.drawers.circular.annotations import CircularLabelArc, _arc_path, _band_path
-from gbdraw.svg.circular_arcs import arc_pieces, circle_arc
+from gbdraw.svg.circular_arcs import (
+    arc_pieces,
+    circle_arc,
+    circle_point,
+    circle_point_rad,
+    position_angle,
+    position_angle_rad,
+    position_angles_rad,
+    position_turn_angle,
+    position_turn_rad,
+    span_angle,
+)
 from gbdraw.svg.circular_conservation import generate_annular_hsp_path_desc, generate_full_annulus_path_desc
 from gbdraw.svg.circular_features import (
     generate_circular_arrow_path_with_radii,
@@ -194,6 +207,58 @@ def test_arc_numbers_use_the_path_number_form() -> None:
     d = circle_arc(387.257, 269.97, -359.97)
     numbers = re.findall(r"-?\d+(?:\.\d+)?", d)
     assert all(len(number.partition(".")[2]) <= PATH_DECIMALS for number in numbers)
+
+
+def _positions() -> list[tuple[float, float]]:
+    """Positions and lengths whose quotient rounds: ints, halves and floats, up to 2^40 bp."""
+
+    rng = random.Random(1115)
+    cases = []
+    for _ in range(4000):
+        length = rng.choice([rng.randint(1, 10**4), rng.randint(1, 10**7), rng.randint(1, 2**40)])
+        cases.append(rng.choice([(rng.randint(0, length), length), (rng.randint(0, length) + 0.5, length), (rng.random() * length, length)]))
+    return cases
+
+
+def test_position_angles_come_from_the_turn_owners_bit_for_bit() -> None:
+    """The SVG-frame angles are the turn angles less a quarter turn, with the same bits as written out once."""
+
+    for position, length in _positions():
+        quotient = float(position) / float(length)
+        assert position_turn_angle(position, length) == 360.0 * quotient
+        assert position_angle(position, length) == 360.0 * quotient - 90.0
+        assert position_turn_rad(position, length) == 2.0 * math.pi * quotient
+        assert position_angle_rad(position, length) == 2.0 * math.pi * quotient - 0.5 * math.pi
+
+
+def test_the_radians_owner_is_not_derived_from_degrees() -> None:
+    """``math.radians`` of the degrees rounds differently, so the radians owners keep their own expression."""
+
+    differ = sum(
+        math.radians(position_angle(position, length)) != position_angle_rad(position, length)
+        for position, length in _positions()
+    )
+    assert differ > 0
+
+
+def test_the_vector_twin_rounds_each_turn_as_the_scalar_owner() -> None:
+    turns = np.random.default_rng(1115).random(20000) * 3.0 - 1.0
+    expected = np.array([position_angle_rad(turn, 1.0) for turn in turns.tolist()])
+    assert np.array_equal(position_angles_rad(turns).view(np.int64), expected.view(np.int64))
+
+
+def test_a_span_angle_multiplies_first() -> None:
+    for span, length in _positions():
+        assert span_angle(span, length) == 360.0 * span / length
+
+
+def test_circle_point_is_the_radians_point_at_the_radians_of_its_angle() -> None:
+    rng = random.Random(1116)
+    for _ in range(4000):
+        radius, degrees = rng.uniform(0.0, 5000.0), rng.uniform(-720.0, 720.0)
+        angle = math.radians(degrees)
+        assert circle_point(radius, degrees) == circle_point_rad(radius, angle)
+        assert circle_point_rad(radius, angle) == (radius * math.cos(angle), radius * math.sin(angle))
 
 
 def _circular_transform(length: int) -> RecordDisplayTransform:

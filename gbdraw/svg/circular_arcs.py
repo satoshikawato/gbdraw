@@ -12,11 +12,20 @@ degrees of 180 or near 360:
   (a full circle is 120 + 240 degrees).
 
 Angles are in degrees in the SVG frame: 0 at 3 o'clock, positive clockwise.
+
+It also owns where a sequence position lies on the circle: its turn angle from 12 o'clock
+(:func:`position_turn_angle`, :func:`position_turn_rad`), its angle in the SVG frame
+(:func:`position_angle`, :func:`position_angle_rad`), the angle a span takes (:func:`span_angle`), and the
+point at an angle (:func:`circle_point`, :func:`circle_point_rad`). Each is one expression, written once; the
+other forms are built from it, so they keep its bits.
 """
 
 from __future__ import annotations
 
 import math
+
+import numpy as np
+from numpy.typing import NDArray
 
 from .path_data import path_number, path_point
 
@@ -25,15 +34,20 @@ ARC_HALVES_MAX_DEG = 300.0
 ARC_UNEQUAL_SHIFT_DEG = 60.0
 
 
-def circle_point(radius: float, angle_deg: float) -> tuple[float, float]:
-    """The point at ``angle_deg`` on the circle of ``radius`` around the origin.
+def circle_point_rad(radius: float, angle_rad: float) -> tuple[float, float]:
+    """The point at ``angle_rad`` radians on the circle of ``radius`` around the origin.
 
     Label placement calls this millions of times per figure, so ``radius`` is used as given: every caller passes a
     Python float or int (a NumPy position goes through :func:`position_angle` first, which converts it).
     """
 
-    angle = math.radians(angle_deg)
-    return radius * math.cos(angle), radius * math.sin(angle)
+    return radius * math.cos(angle_rad), radius * math.sin(angle_rad)
+
+
+def circle_point(radius: float, angle_deg: float) -> tuple[float, float]:
+    """The point at ``angle_deg`` degrees on the circle of ``radius``: :func:`circle_point_rad` at its radians."""
+
+    return circle_point_rad(radius, math.radians(angle_deg))
 
 
 def arc_pieces(span_deg: float) -> tuple[float, ...]:
@@ -74,10 +88,53 @@ def circle_arc(radius: float, start_deg: float, span_deg: float) -> str:
     return f"M {path_point(*circle_point(radius, start_deg))} {circle_arc_to(radius, start_deg, span_deg)}"
 
 
-def position_angle(position: float, total_length: float) -> float:
-    """The angle of a sequence position on a Circular record (0 at 12 o'clock, clockwise)."""
+def position_turn_angle(position: float, total_length: float) -> float:
+    """The angle of a sequence position on a Circular record in degrees from 12 o'clock, clockwise (its turn).
 
-    return 360.0 * (float(position) / float(total_length)) - 90.0
+    The fraction comes first (``360 * (position / length)``): a turn fraction of 1.0 maps to the fraction itself.
+    """
+
+    return 360.0 * (float(position) / float(total_length))
+
+
+def position_angle(position: float, total_length: float) -> float:
+    """The angle of a sequence position on a Circular record in the SVG frame: its turn angle less 90 degrees."""
+
+    return position_turn_angle(position, total_length) - 90.0
+
+
+def position_turn_rad(position: float, total_length: float) -> float:
+    """:func:`position_turn_angle` in radians, from the fraction: ``2 pi * (position / length)``.
+
+    Not ``math.radians`` of the degrees, which rounds differently.
+    """
+
+    return 2.0 * math.pi * (float(position) / float(total_length))
+
+
+def position_angle_rad(position: float, total_length: float) -> float:
+    """The angle of a sequence position in the SVG frame in radians: its turn in radians less a quarter turn."""
+
+    return position_turn_rad(position, total_length) - 0.5 * math.pi
+
+
+def position_angles_rad(turns: NDArray[np.float64]) -> NDArray[np.float64]:
+    """:func:`position_angle_rad` of each turn fraction of ``turns`` (a length of 1.0), as one NumPy expression.
+
+    The vector twin of the scalar owners, written out because a call per element would be slow; it rounds each
+    element as they do (pinned by tests/test_circular_arcs.py).
+    """
+
+    return 2.0 * math.pi * turns - 0.5 * math.pi
+
+
+def span_angle(span: float, total_length: float) -> float:
+    """The angle in degrees that ``span`` positions take on a Circular record of ``total_length``.
+
+    The product comes first (``360 * span / length``), so it is not :func:`position_turn_angle` of the span.
+    """
+
+    return 360.0 * span / total_length
 
 
 __all__ = [
@@ -88,5 +145,11 @@ __all__ = [
     "circle_arc",
     "circle_arc_to",
     "circle_point",
+    "circle_point_rad",
     "position_angle",
+    "position_angle_rad",
+    "position_angles_rad",
+    "position_turn_angle",
+    "position_turn_rad",
+    "span_angle",
 ]

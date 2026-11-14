@@ -16,6 +16,7 @@ from gbdraw.auto_sizes import (
 )
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 from gbdraw.core.text import calculate_svg_bbox_dimensions
+from gbdraw.svg.circular_arcs import position_turn_rad
 from gbdraw.tracks.parsing import depth_slot_track_index
 
 from .circular import RadialBand
@@ -262,8 +263,8 @@ class CircularRangeLabel(NamedTuple):
         width = self.text_end_rad(font_family) - self.start_rad
         inset = SCALAR_AXIS_LABEL_GAP_PX / self.baseline_px
         for start_turn, end_turn in record_turns:
-            start = max(self.start_rad, start_turn * 2.0 * math.pi + inset)
-            end = end_turn * 2.0 * math.pi
+            start = max(self.start_rad, position_turn_rad(start_turn, 1.0) + inset)
+            end = position_turn_rad(end_turn, 1.0)
             if start + width <= end:
                 return self._replace(start_rad=start, path_end_rad=end)
         return None
