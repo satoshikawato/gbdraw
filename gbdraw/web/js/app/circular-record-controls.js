@@ -394,7 +394,7 @@ const anchorScrollOnRecordPresentation = ({
     if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return undefined;
     const run = anchor(current);
     // Vue reports a failed run, as it did when the watch itself was async; the wait still settles.
-    anchoring = Promise.all([anchoring, run.catch(() => undefined)]);
+    anchoring = Promise.all([anchoring, run.catch(() => undefined)]).then(() => undefined);
     return run;
   }, { flush: 'sync' });
   return () => anchoring;

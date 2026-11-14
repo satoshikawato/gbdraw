@@ -124,6 +124,8 @@ test('native upload automatically inspects one, two, duplicate and DDBJ records 
     expect((await snapshot(page)).rows).toEqual(expected);
     await expect(page.getByRole('button', { name: 'Inspect records' })).toHaveCount(0);
     await expect(page.getByRole('spinbutton', { name: /^Display start/ })).toHaveCount(expected.length);
+    // The Gallery capture tool awaits this wait after every record read (tools/capture_gallery_tutorial_screenshots.py).
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.waitForCircularRecordScrollAnchor())).toBeUndefined();
     await assertDiagramWorkerIdle(page);
   }
 });
