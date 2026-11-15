@@ -30,7 +30,8 @@
 //   the Urdu hint of a code field in Nastaliq (OV-2794, OV-3656, OV-3658); no
 //   visible text under 13 px at the start, with every section and the custom
 //   track stack open, in the History list, the Drawing menu, the feature popup
-//   and the rail (OV-3669);
+//   and the rail (OV-3669); each location of the Features list reads whole,
+//   strand sign included (OV-3672);
 // - at 1024x768, 1280x800 and 1440x900, in all 18 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
@@ -555,6 +556,12 @@ test('Urdu takes the Noto Nastaliq Urdu font, 2.5em lines, a 13 px floor and con
   await page.locator('.right-drawer').getByRole('button', { name: ur.Edit, exact: true }).first().click();
   await expect(page.locator('.feature-popup')).toBeVisible();
   expect(await textsUnder(page, 13)).toEqual([]);
+  // Each location of the Features list reads whole at 13 px, strand sign included (OV-3672: a 7rem cell cut
+  // "10059..10404 (+)" to "10059..10404 (…").
+  expect(await page.locator('.right-drawer [data-feature-list-row] .font-mono[title]').evaluateAll((cells) => {
+    const shown = cells.filter((cell) => cell.getClientRects().length > 0);
+    return { cells: shown.length > 0, cut: shown.filter((cell) => cell.scrollWidth > cell.clientWidth).map((cell) => cell.textContent.trim()) };
+  })).toEqual({ cells: true, cut: [] });
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: ur['Collapse settings to icons'], exact: true }).click();
   expect(await text('.settings-index nav > button[data-settings-entry="font"] > span')).toEqual(['13px', '32.5px', 'none', 'normal']);
