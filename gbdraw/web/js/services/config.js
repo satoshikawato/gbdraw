@@ -7591,7 +7591,7 @@ const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) =
 };
 
 /**
- * The file's document with each BLAST table that a request of schema 5 to 9
+ * The file's document with each BLAST table that a request of schema 2 or 5 to 9
  * stored as a protein table read as a BLAST table (`readStoredBlastTables`,
  * OV-3573): the one step before every reader of Load, the comparison
  * classifier's included. The same document when no set stores one.

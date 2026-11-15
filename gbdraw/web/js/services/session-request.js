@@ -182,6 +182,7 @@ import {
   EXPANDED_RECORD_KEY_SEPARATOR,
   INPUT_FILE_MEDIA_TYPE,
   LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX,
+  LEGACY_GIVEN_COMPARISON_SCHEMAS,
   LOSATP_NO_SEARCH_MODE,
   RECORD_GAP_AUTO_SCHEMA,
   STORED_REGION_FIELDS,
@@ -4385,7 +4386,7 @@ const buildComparisons = ({
         queryRecordIndex: edge.queryIndex,
         subjectRecordIndex: edge.subjectIndex,
         // The name of the file the user chose, which the CLI replay and the Web show (OV-3557).
-        sourceName: normalizeOriginalResourceName(file.name) || null
+        ...uploadedComparisonSourceName(file)
       });
       continue;
     }
@@ -5583,6 +5584,43 @@ const resourceAsLegacyFile = (resources, resourceId) => {
 const storedComparisonFileName = (comparison) => (
   typeof comparison.sourceName === 'string' ? { name: comparison.sourceName } : {}
 );
+
+/**
+ * The loaded tables a stored request names no file for, by their payload (`getResourcePayloadIdentity`, the Session
+ * resource every view of it stands for): `null` for a table gbdraw made (a LOSAT result, OV-3557), `undefined` for
+ * an entry an older writer stored without `sourceName`, whose name Python reads from the resource. Load makes every
+ * stored nucleotide table a file of the draft; the writer stores such a file as the request stored it, so a Generate
+ * or Save after Load names it as the CLI replay does. A file the user chooses later is another payload.
+ * @type {WeakMap<object, null | undefined>}
+ */
+const unnamedComparisonTables = new WeakMap();
+
+/**
+ * Load: remember a loaded table the stored request names no file for (`unnamedComparisonTables`).
+ * @template T
+ * @param {T} file The file Load bound for the comparison.
+ * @param {{ sourceName?: unknown }} comparison The stored comparison (unvalidated).
+ * @returns {T} `file`.
+ */
+const rememberUnnamedComparisonTable = (file, comparison) => {
+  if (typeof comparison.sourceName !== 'string' && file && typeof file === 'object') {
+    unnamedComparisonTables.set(getResourcePayloadIdentity(file), Object.hasOwn(comparison, 'sourceName') ? null : undefined);
+  }
+  return file;
+};
+
+/**
+ * The `sourceName` a nucleotide comparison of an uploaded file stores: the name of the file the user chose, or what
+ * the loaded request stored for a table it named no file for; none (the field left out) for an older writer's entry.
+ * @param {{ name?: unknown }} file
+ * @returns {{ sourceName?: string | null }}
+ */
+const uploadedComparisonSourceName = (file) => {
+  const identity = getResourcePayloadIdentity(file);
+  if (!unnamedComparisonTables.has(identity)) return { sourceName: normalizeOriginalResourceName(file.name) || null };
+  const stored = unnamedComparisonTables.get(identity);
+  return stored === undefined ? {} : { sourceName: stored };
+};
 
 /**
  * @typedef {(resourceId: unknown, metadata?: SessionResourceFileMetadata) => unknown} ResourceFileResolver
@@ -7089,9 +7127,10 @@ export const projectCanonicalSessionRequest = ({
           .get(Number(comparison.queryRecordIndex));
         const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
           .get(Number(comparison.subjectRecordIndex));
-        const file = resolveResourceFile
+        const file = rememberUnnamedComparisonTable(resolveResourceFile
           ? resolveResourceFile(comparison.resourceId, storedComparisonFileName(comparison))
-          : { ...resourceAsLegacyFile(resources, comparison.resourceId), ...storedComparisonFileName(comparison) };
+          : { ...resourceAsLegacyFile(resources, comparison.resourceId), ...storedComparisonFileName(comparison) },
+        comparison);
         // An unmapped source index is undefined; it never named a sequence here.
         if (queryIndex === undefined || subjectIndex === undefined) return;
         if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
@@ -8039,8 +8078,6 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
 
 /** The header of a canonical TSV that holds the BLAST columns alone (`COMPARISON_COLUMNS`). */
 const BLAST_TABLE_HEADER = COMPARISON_COLUMNS.join('\t');
-/** The request schemas whose writers stored a BLAST table as a protein table (released 0.14.0 to 0.14.5). */
-const STORED_BLAST_TABLE_SCHEMAS = Object.freeze([5, 6, 7, 8, 9]);
 /**
  * Whether a resource ID is one a 0.14.x CLI or Python render gave a comparison table it was given
  * (`--comparisons_table`, a `LinearComparison`): the prefix and a number. The Web stored its LOSATP tables under other IDs, and so did
@@ -8073,14 +8110,16 @@ const storedBlastTableRows = (resource) => {
 };
 
 /**
- * OV-3573: a request of schema 5 to 9 stored a BLAST table that a CLI or Python render drew from a comparisons
- * table as a `precomputedProteinComparison`, the kind of a protein table, in a canonical TSV of the BLAST columns
- * alone (`COMPARISON_COLUMNS`), under the resource ID those writers gave a table they were given
- * (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX` and a number). Both must hold: the ID tells who wrote the table, the
- * columns that it holds no protein. Load reads each such comparison as the BLAST comparison it is, before any reader
- * sees the file: `nucleotideBlast`, its resource the same rows as a BLAST table (`nucleotide-blast`, without the
- * header line), as the current writers store one. Python's decoder reads these tables by the same columns. A
- * protein table and a request of any other schema are left as stored; nothing changes when no table is rewritten.
+ * OV-3573: a request of schema 2 or 5 to 9 (`LEGACY_GIVEN_COMPARISON_SCHEMAS`) stored a BLAST table that a CLI or
+ * Python render drew from a comparisons table as a `precomputedProteinComparison`, the kind of a protein table,
+ * under the resource ID those writers gave a table they were given (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX` and a
+ * number). Such a table without a protein column holds no protein matches, Python's decoder reads it by the same
+ * rule (`_stored_protein_matches`): the ID tells who wrote the table, the columns that it holds no protein. Load
+ * reads each such comparison whose table is the BLAST columns alone (`COMPARISON_COLUMNS`) as the BLAST comparison
+ * it is, before any reader sees the file: `nucleotideBlast`, its resource the same rows as a BLAST table
+ * (`nucleotide-blast`, without the header line), as the current writers store one. A table bound to features (a
+ * Python `LinearComparison` with feature columns) has no BLAST form and stays as stored. A protein table and a
+ * request of any other schema are left as stored; nothing changes when no table is rewritten.
  * @param {readonly unknown[]} requests The stored requests (unvalidated).
  * @param {unknown} resources The Session's resources (unvalidated).
  * @returns {{ requests: unknown[], resources: unknown }} The same values when nothing changed.
@@ -8100,7 +8139,7 @@ export const readStoredBlastTables = (requests, resources) => {
   const read = requests.map((request) => {
     const stored = /** @type {UnvalidatedFields<'schema' | 'comparisons'>} */ (request);
     const storedComparisons = stored?.comparisons;
-    if (!STORED_BLAST_TABLE_SCHEMAS.includes(/** @type {number} */ (stored?.schema))
+    if (!LEGACY_GIVEN_COMPARISON_SCHEMAS.includes(/** @type {number} */ (stored?.schema))
       || !Array.isArray(storedComparisons)) return request;
     const comparisons = storedComparisons.map((/** @type {unknown} */ item) => {
       const comparison = /** @type {UnvalidatedFields<'kind' | 'encoding' | 'resourceId'>} */ (item);

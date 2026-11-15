@@ -513,9 +513,11 @@ export const classifyImportedComparisonIntent = ({
     );
   }
   if (pipeline && !generatedPipelineIsProjectable({ comparisons, pipeline })) {
-    return preserved(
-      msg('The saved protein comparison is executable, but current controls cannot represent it losslessly.')
-    );
+    // The message names what the comparisons hold: BLAST tables beside a pipeline that searches nothing (the CLI
+    // stores its LOSATP settings so with `-b` tables, OV-3589), else a protein comparison.
+    return preserved(!hasDirectProteinInput && pipeline.mode === LOSATP_NO_SEARCH_MODE
+      ? msg('The saved comparison tables can run, but the current controls cannot represent them losslessly.')
+      : msg('The saved protein comparison is executable, but current controls cannot represent it losslessly.'));
   }
 
   return editable(msg('The saved comparison is represented by the current controls.'));

@@ -37,9 +37,14 @@ LEGACY_SCALAR_AXIS_LABELS = "numbered"
 # comparison table it was given (`--comparisons_table`, a `LinearComparison`): this prefix and its number. Those
 # writers stored such a BLAST table as a protein table; the Web named its LOSATP tables otherwise (OV-3573).
 LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX = "comparison-explicit-"
+# The request schemas of those writers: 2 and 5-9 on main from 2026-07-18, 9 in the releases. Under these schemas a
+# table under that prefix and without the protein column `query_protein_id` holds no protein matches; every other
+# stored protein table holds them. Python's decoder and the Web Load read them by this rule (OV-3512, OV-3573).
+LEGACY_GIVEN_COMPARISON_SCHEMAS: tuple[int, ...] = (2, 5, 6, 7, 8, 9)
 
 __all__ = [
     "LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX",
+    "LEGACY_GIVEN_COMPARISON_SCHEMAS",
     "LEGACY_SCALAR_AXIS_LABELS",
     "LEGACY_SCALAR_AXIS_LABEL_SECTIONS",
     "SCALAR_AXIS_LABEL_PATHS",

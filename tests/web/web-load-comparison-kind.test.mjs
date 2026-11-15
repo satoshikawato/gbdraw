@@ -1,5 +1,5 @@
 // Web Load keeps the comparison kind a CLI Session stored.
-// OV-3573: a request of schema 5 to 9 stored a CLI comparisons-table BLAST table as a protein table
+// OV-3573: a request of schema 2 or 5 to 9 stored a CLI comparisons-table BLAST table as a protein table
 // (`precomputedProteinComparison` of the BLAST columns alone); Load reads it as the BLAST table it is.
 // OV-3566: a LOSATP Pairwise search that compared no pair (every record in one row) is stored as the Pairwise
 // pipeline without pairs; the controls hold it, and a redraw of it searches nothing.
@@ -85,6 +85,17 @@ test('a schema 5-9 protein table of the BLAST columns alone under a given table\
   assert.equal(resources[ids.blast].kind, 'canonical-tsv');
   assert.equal(stored.comparisons[0].kind, 'precomputedProteinComparison');
 
+  // Schema 2 (main from 2026-07-18) wrote the given table under the same ID, as Python's decoder reads it
+  // (`LEGACY_GIVEN_COMPARISON_SCHEMAS`); schema 1 had no record pairs.
+  const schema2 = readStoredBlastTables([{ schema: 2, mode: 'linear', comparisons: [comparison('blast')] }], resources);
+  assert.equal(schema2.requests[0].comparisons[0].kind, 'nucleotideBlast');
+  assert.equal(schema2.resources[ids.blast].kind, 'nucleotide-blast');
+  // A table bound to features has no BLAST form: it stays as stored.
+  const boundResources = { [given(1)]: table([...COMPARISON_COLUMNS, 'query_feature_index', 'subject_feature_index'].join('\t'),
+    BLAST_ROWS.replace('\n', '\t1\t2\n')) };
+  const bound = readStoredBlastTables([{ schema: 9, mode: 'linear', comparisons: [comparison('blast')] }], boundResources);
+  assert.equal(bound.resources, boundResources);
+
   const protein = { schema: 9, mode: 'linear', comparisons: [comparison('protein')] };
   const unchanged = readStoredBlastTables([current, protein], resources);
   assert.equal(unchanged.resources, resources);
@@ -144,4 +155,26 @@ test('a released Web LOSATP Session keeps its protein tables and its LOSATP pipe
   const read = readStoredBlastTables([stored], session.resources);
   assert.equal(read.requests[0], stored);
   assert.equal(read.resources, session.resources);
+});
+
+// OV-3589: a Session whose comparisons are BLAST tables (a CLI -b or comparisons-table render, which stores the
+// protein pipeline as a no-search marker) is preserved, and its message names the tables, not a protein comparison.
+test('a preserved BLAST table Session is named by its tables, a preserved protein comparison as one', () => {
+  const fixture = new URL('../fixtures/sessions/BGC0000708-BGC0000709-comparisons-table.v50-cli0145.gbdraw-session.json.gz',
+    import.meta.url);
+  const session = JSON.parse(gunzipSync(readFileSync(fixture)).toString('utf8'));
+  const read = readStoredBlastTables([session.renderRequest], session.resources);
+  const tables = classifyImportedComparisonIntent({ renderRequest: read.requests[0], resources: read.resources });
+  assert.equal(tables.disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY);
+  assert.equal(tables.message,
+    'The saved comparison tables can run, but the current controls cannot represent them losslessly.');
+  // A protein pipeline the controls cannot represent (its collinearity parameters are not lossless) keeps its message.
+  const protein = classifyImportedComparisonIntent({ renderRequest: {
+    ...pairwiseRequest({ positions: ['#1@1', '#2@2'] }),
+    comparisons: [{ ...pairwiseRequest().comparisons[0], settings: {
+      ...pipelineSettings,
+      collinearityParams: { kind: 'lossless', parameters: { minAnchors: 1, maxUnitGap: 0, maxDiagonalDrift: 0, maxConflicts: 1 } }
+    } }]
+  }, resources: {} });
+  assert.equal(protein.message, 'The saved protein comparison is executable, but current controls cannot represent it losslessly.');
 });

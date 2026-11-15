@@ -89,6 +89,8 @@ from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, rea
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
+    LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX,
+    LEGACY_GIVEN_COMPARISON_SCHEMAS,
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
     LEGACY_SCALAR_AXIS_LABEL_SECTIONS,
     LEGACY_SCALAR_AXIS_LABELS,
@@ -231,9 +233,11 @@ RECORD_GAP_AUTO_SCHEMA = 10
 # without them, and every earlier schema, draws a grid.
 RECORD_LAYOUT_SCHEMA = 10
 # Schema 10 stores a Linear comparison table that is not a LOSATP protein comparison as ``nucleotideBlast``, so every
-# ``precomputedProteinComparison`` holds protein matches; schemas 2-9 also stored a BLAST table given without its file's
-# text (a ``--comparisons_table`` row, a Python ``LinearComparison``) there (OV-3512).
+# ``precomputedProteinComparison`` holds protein matches unless it says ``proteinMatches: false``; schemas 2-9 also
+# stored a table given without its file's text (a ``--comparisons_table`` row, a Python ``LinearComparison``) there
+# (OV-3512), under a resource ID of its own (``LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX`` and its number).
 PROTEIN_ONLY_PRECOMPUTED_SCHEMA = 10
+_LEGACY_GIVEN_COMPARISON_ID = re.compile(re.escape(LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX) + r"[1-9]\d*")
 # Schema 10 stores the name of the file the user gave on a nucleotide comparison (``sourceName``; null for a table
 # gbdraw made), so the CLI replay and the Web name it alike (OV-3557).
 COMPARISON_SOURCE_NAME_SCHEMA = 10
@@ -4739,12 +4743,16 @@ def _stored_protein_matches(item: Mapping[str, Any], table: DataFrame, *, schema
     """Whether a stored ``precomputedProteinComparison`` holds protein matches.
 
     Schema 10 says so unless the entry has ``proteinMatches: false`` (a table bound to features that holds no
-    protein matches, OV-3574). Schemas 2-9 also stored a BLAST table under this kind; it has none of a protein
-    table's protein ID columns (OV-3512).
+    protein matches, OV-3574). Schemas 2-9 also stored a table a render was given under this kind: one holds no
+    protein matches when it is under the resource ID those writers gave it and has no protein column, the rule the
+    Web Load reads too (``LEGACY_GIVEN_COMPARISON_SCHEMAS``; OV-3512, OV-3573). A table under any other ID is a
+    protein table a writer made, whatever its columns.
     """
 
-    if schema < PROTEIN_ONLY_PRECOMPUTED_SCHEMA:
-        return "query_protein_id" in table.columns
+    if schema in LEGACY_GIVEN_COMPARISON_SCHEMAS:
+        return not (
+            _LEGACY_GIVEN_COMPARISON_ID.fullmatch(item["resourceId"]) and "query_protein_id" not in table.columns
+        )
     if item.get("proteinMatches", False) is not False:
         raise CanonicalRequestDecodingError(f"{path}.proteinMatches is false or absent.")
     return "proteinMatches" not in item

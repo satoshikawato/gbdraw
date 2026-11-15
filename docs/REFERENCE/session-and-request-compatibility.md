@@ -235,12 +235,14 @@ Python `LinearComparison`, as a nucleotide comparison table (`nucleotideBlast`);
 features that holds no protein matches with `proteinMatches: false`. A
 `nucleotideBlast` entry stores the name of the file the user gave
 (`sourceName`, null for a LOSAT result), so `gbdraw render --session`, the
-Python API and the web app name a comparison as the first drawing did. With
-`gbdraw render --session` and the Python API, a schema 2–9 request that stored
-such a BLAST table as `precomputedProteinComparison` (gbdraw 0.14.0 to 0.14.5)
-still reads it as a nucleotide table, and saving the Session again stores it in
-the new form. A comparison stored without `sourceName` is named from its
-stored file name.
+Python API and the web app name a comparison as the first drawing did, also
+after the web app loads the Session and saves it again. A request of schema
+2–9 that stored such a BLAST table as `precomputedProteinComparison` (gbdraw
+0.14.0 to 0.14.5) still reads it as a nucleotide table, in `gbdraw render
+--session`, the Python API and the web app alike, and saving the Session again
+stores it in the new form; its LOSATP protein tables still read as protein
+comparisons. A comparison stored without `sourceName` is named from its stored
+file name.
 
 A schema-10 Linear request's `layout.recordGapPx` may be `null`, the
 default (Auto) record gap: 24 px, narrowed in a row whose gaps would take more

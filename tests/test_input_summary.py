@@ -426,6 +426,14 @@ _NAMING_CASES = {
         ), None),
         None, [None],
     ),
+    # OV-3580: a Web LOSATN Generate stores its result as a table gbdraw made; the page stages it under its resource
+    # name, which never names the comparison.
+    "web-losat-generate": (
+        lambda folder: _with_source_name(_older_entry(
+            _blast_document(folder, _HITS), "comparison-resolved-1", "comparison-resolved-1-comparison-resolved-1.tsv",
+        ), None),
+        {"comparison-resolved-1": "comparison-resolved-1-comparison-resolved-1.tsv"}, [None],
+    ),
     # Sessions written before the stored name: the name is read from the resource's name.
     "older-web-upload": (
         lambda folder: _older_entry(_blast_document(folder, _HITS), "comparison-nucleotide-1", "comparison-nucleotide-1-hits.tsv"),

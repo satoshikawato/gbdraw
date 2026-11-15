@@ -833,6 +833,46 @@ def test_a_released_cli_comparisons_table_session_still_reads_its_table_as_a_nuc
     assert stored["kind"] == "nucleotideBlast"
 
 
+@pytest.mark.parametrize(("resource_id", "extra_columns", "protein"), [
+    # The table a 0.14.x CLI or Python render was given, under the ID it gave it: a BLAST table.
+    ("comparison-explicit-1", "", False),
+    # A table bound to features that holds no protein matches, under that ID (a Python LinearComparison).
+    ("comparison-explicit-1", "\tquery_feature_index\tsubject_feature_index", False),
+    # The same table under the ID of a protein table a writer made (Web LOSATP, CLI LOSATP): the Web Load reads it as
+    # a protein table, and so does the replay.
+    ("comparison-canonical-protein-1", "", True),
+    ("comparison-protein-1", "", True),
+    ("comparison-resolved-1", "", True),
+    # A protein table under the given table's ID.
+    ("comparison-explicit-1", "\tquery_protein_id\tsubject_protein_id", True),
+])
+def test_an_older_session_reads_a_stored_table_as_protein_by_its_resource_id_and_columns(
+    tmp_path: Path, resource_id: str, extra_columns: str, protein: bool
+) -> None:
+    """Request schemas 2-9 stored a table a render was given and a LOSATP pair alike as
+    `precomputedProteinComparison`. The replay reads one as a table without protein matches only under the
+    resource ID those writers gave a given table (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX`) and without the protein
+    columns, the rule the Web Load reads (`readStoredBlastTables`); every other ID is a protein table's."""
+
+    import gzip
+
+    from gbdraw.session import session_to_request
+
+    text = gzip.decompress(_RELEASED_COMPARISONS_TABLE_SESSION.read_bytes()).decode("utf-8")
+    released = json.loads(text.replace('"comparison-explicit-1', f'"{resource_id}'))
+    resource = released["resources"][resource_id]
+    header, rows = base64.b64decode(resource["data"]).decode("utf-8").split("\n", 1)
+    cells = "\t1\t2" if "feature" in extra_columns else "\tP1\tP2" if extra_columns else ""
+    table = f"{header}{extra_columns}\n" + "".join(f"{row}{cells}\n" for row in rows.splitlines())
+    resource.update(data=base64.b64encode(table.encode("utf-8")).decode("ascii"), size=len(table.encode("utf-8")))
+    resource.pop("checksum", None)
+    sidecar = tmp_path / "older.gbdraw-session.json"
+    sidecar.write_text(json.dumps(released), encoding="utf-8")
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "replay") as materialized:
+        (comparison,) = session_to_request(materialized).options.linear_comparisons
+    assert comparison.protein_matches is protein
+
+
 _FIXTURES = Path(__file__).parent / "fixtures"
 
 
