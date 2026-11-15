@@ -3384,6 +3384,37 @@ def test_legacy_gui_linear_region_names_its_card_file_after_a_file_drawn_whole(
     assert shown[shown.index("--region") + 1] == "HmmtDNA.gbk:#1:1001-3000"
 
 
+@pytest.mark.parametrize("region", sorted(_LEGACY_REGION_CARDS))
+def test_legacy_gui_linear_shown_command_crops_the_same_card_when_file_names_repeat(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, region: str
+) -> None:
+    """Two cards of one file name: the shown command names each card's file apart (``unique_filenames``), so it
+    crops the card the run crops (OV-3634 review r1)."""
+
+    session = _legacy_linear_cards_session(["HmmtDNA.gbk", "HmmtDNA.gbk"], _LEGACY_REGION_CARDS[region])
+    spec, _crops, _svg = _replay_legacy_linear(session, tmp_path / "run", caplog)
+
+    def cropped_files() -> list[str]:
+        return [message.split("(", 1)[1].split(")", 1)[0] for message in caplog.messages
+                if message.startswith("Record ") and "1,001..3,000 of" in message]
+
+    assert cropped_files() == ["files_linearSeqs_1_gb-HmmtDNA.gbk"]
+    shown = list(spec.cli_invocation_args)
+    at = shown.index("--gbk") + 1
+    assert shown[at:at + 2] == ["HmmtDNA.gbk", "HmmtDNA.2.gbk"]
+    assert shown[shown.index("--region") + 1] == "HmmtDNA.2.gbk:#1:1001-3000"
+    # The shown command, run in a folder that holds each file under the name it shows.
+    folder = tmp_path / "shown"
+    folder.mkdir()
+    for binding in spec.file_bindings:
+        (folder / shown[binding.argIndex]).write_bytes(Path(spec.args[binding.argIndex]).read_bytes())
+    monkeypatch.chdir(folder)
+    caplog.clear()
+    with caplog.at_level("INFO"):
+        linear_main([*shown, "-o", str(folder / "out"), "-f", "svg"])
+    assert cropped_files() == ["HmmtDNA.2.gbk"]
+
+
 def test_legacy_gui_linear_regions_of_one_record_files_draw_as_before(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

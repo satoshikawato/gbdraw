@@ -64,7 +64,7 @@ from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.cli_tables import COMPARISON_SEQUENCE_SEPARATOR
 from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
-from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
+from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename, unique_filenames
 from .io.regions import region_text
 from .render.formats import normalize_format_token
 from .session_container import (
@@ -7452,41 +7452,15 @@ def _append_linear_gui_args(
     if not isinstance(linear_seqs, list) or not linear_seqs:
         raise ValidationError("Linear GUI session has no embedded sequence files.")
     input_type = str(ui.get("lInputType") or "gb")
-    if input_type == "gb":
-        _append_flag(run_args, invocation_args, "--gbk")
-        for index, seq in enumerate(linear_seqs):
-            if isinstance(seq, Mapping) and seq.get("gb"):
-                _append_materialized_value(
-                    run_args,
-                    invocation_args,
-                    bindings,
-                    session=session,
-                    slot=f"files.linearSeqs[{index}].gb",
-                    temp_dir=temp_dir,
-                )
-    else:
-        _append_flag(run_args, invocation_args, "--gff")
-        for index, seq in enumerate(linear_seqs):
-            if isinstance(seq, Mapping) and seq.get("gff"):
-                _append_materialized_value(
-                    run_args,
-                    invocation_args,
-                    bindings,
-                    session=session,
-                    slot=f"files.linearSeqs[{index}].gff",
-                    temp_dir=temp_dir,
-                )
-        _append_flag(run_args, invocation_args, "--fasta")
-        for index, seq in enumerate(linear_seqs):
-            if isinstance(seq, Mapping) and seq.get("fasta"):
-                _append_materialized_value(
-                    run_args,
-                    invocation_args,
-                    bindings,
-                    session=session,
-                    slot=f"files.linearSeqs[{index}].fasta",
-                    temp_dir=temp_dir,
-                )
+    _append_linear_record_files(
+        run_args,
+        invocation_args,
+        bindings,
+        session=session,
+        linear_seqs=linear_seqs,
+        gff=input_type != "gb",
+        temp_dir=temp_dir,
+    )
     blast_slots = [
         index for index, seq in enumerate(linear_seqs)
         if isinstance(seq, Mapping) and seq.get("blast")
@@ -7568,6 +7542,51 @@ def _append_linear_definition_line_style_args(
             parts.append(f"color={fill}")
         if parts:
             _append_pair(run_args, invocation_args, "--definition_line_style", f"{line_kind}:{','.join(parts)}")
+
+
+def _append_linear_record_files(
+    run_args: list[str],
+    invocation_args: list[str],
+    bindings: list[SessionFileBinding],
+    *,
+    session: Mapping[str, Any],
+    linear_seqs: Sequence[Any],
+    gff: bool,
+    temp_dir: Path,
+) -> None:
+    """The record files of the Linear cards: ``--gbk``, or ``--gff`` and ``--fasta``, one per card in card order."""
+
+    first = len(bindings)
+    for option, role in ((("--gff", "gff"), ("--fasta", "fasta")) if gff else (("--gbk", "gb"),)):
+        _append_flag(run_args, invocation_args, option)
+        for index, seq in enumerate(linear_seqs):
+            if isinstance(seq, Mapping) and seq.get(role):
+                _append_materialized_value(
+                    run_args,
+                    invocation_args,
+                    bindings,
+                    session=session,
+                    slot=f"files.linearSeqs[{index}].{role}",
+                    temp_dir=temp_dir,
+                )
+    _name_record_files_apart(invocation_args, bindings, first)
+
+
+def _name_record_files_apart(
+    invocation_args: list[str], bindings: list[SessionFileBinding], first: int
+) -> None:
+    """Give the record files from ``bindings[first:]`` distinct names on the shown command line (``unique_filenames``).
+
+    A file region names its card's file (``<file>:#1:<span>``); two cards of one file name would both match it.
+    """
+
+    record_files = bindings[first:]
+    for at, (binding, name) in enumerate(
+        zip(record_files, unique_filenames([binding.name for binding in record_files])), start=first
+    ):
+        if name != binding.name:
+            invocation_args[binding.argIndex] = name
+            bindings[at] = SessionFileBinding(argIndex=binding.argIndex, slot=binding.slot, name=name)
 
 
 _LINEAR_CARD_SLOT_RE = re.compile(r"files\.linearSeqs\[(?P<index>\d+)\]\.(?P<role>gb|gff)")
