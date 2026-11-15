@@ -294,15 +294,13 @@ const DIAGRAM_PROGRESS_MESSAGES = Object.freeze({
   finalizing: msg('Finalizing diagram results...')
 });
 // The status line of a diagram Worker stage, shown in the processing overlay
-// while it runs. The first-use runtime preparation names its real step:
-// "step 2 of 5, loading the package installer" (the Worker marks the step
-// names with `msg`).
+// while it runs. The first-use runtime preparation names its real step: the
+// Worker sends the whole line of the step, marked with `msg`, with {step} and
+// {total} to fill ("…: step 2 of 5, loading the package installer...").
 /** @param {{ stage?: string, step?: number, total?: number, label?: string }} progress */
 const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
   const message = DIAGRAM_PROGRESS_MESSAGES[/** @type {keyof typeof DIAGRAM_PROGRESS_MESSAGES} */ (stage)] || '';
-  return stage === 'preparing-runtime' && step && total && label
-    ? t('Preparing diagram runtime (first use): step {step} of {total}, {label}...', { step, total, label: tm(label) })
-    : tm(message);
+  return stage === 'preparing-runtime' && step && total && label ? tm(label, { step, total }) : tm(message);
 };
 /**
  * The one owner of a diagram Worker progress report in the processing

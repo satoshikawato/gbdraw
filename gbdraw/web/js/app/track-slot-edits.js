@@ -91,13 +91,13 @@ export const featureSlotEdits = (changeTrackLayout, actions) => /** @type {Actio
 /** @param {number} index A row's index in its stack. */
 const trackRowName = (index) => t('Track row {row}', { row: index + 1 });
 /**
- * The rows a sentence acts on, by their numbers: one phrase, so that a language
- * gives it the article or case the sentence needs.
+ * The numbers of the rows a sentence acts on, as one list ("3 and 5"). Each
+ * sentence is one key that names the rows itself ("Turn off Track rows {rows}"),
+ * with a form per count, so that a language writes "Track row" in the case and
+ * number (the Arabic dual) that sentence needs.
  * @param {readonly number[]} numbers
  */
-export const trackRowsText = (numbers) => tn(numbers.length, 'Track row {rows}', 'Track rows {rows}', {
-  rows: listText(numbers.map(String))
-});
+export const trackRowNumbers = (numbers) => listText(numbers.map(String));
 /**
  * Whether a stack still holds what a question was asked about, the same rows
  * (or set ids) in the same order: an answer to a stack that changed meanwhile
@@ -198,7 +198,12 @@ export const askingTrackRowSwitch = ({ askChoice, runUndoable, busy, rows, mode 
     hiding: new Set([String(slot?.id)]),
     question: (numbers) => {
       const number = rows().indexOf(/** @type {Row} */ (slot)) + 1;
-      return { title: t('Turn off {row}?', { row: trackRowsText([number]) }), action: t('Turn off {rows}', { rows: trackRowsText([number, ...numbers]) }), keep: t('Cancel') };
+      const all = [number, ...numbers];
+      return {
+        title: t('Turn off Track row {row}?', { row: number }),
+        action: tn(all.length, 'Turn off Track row {rows}', 'Turn off Track rows {rows}', { rows: trackRowNumbers(all) }),
+        keep: t('Cancel')
+      };
     },
     label: msg('Turn off track rows'),
     unchanged: drawn,
@@ -228,8 +233,12 @@ export const askingTrackRowRemoval = ({ askChoice, runUndoable, busy, rows, mode
     mode,
     hiding: new Set([String(row.id)]),
     question: (numbers) => {
-      const texts = { row: trackRowsText([Number(index) + 1]), rows: trackRowsText(numbers) };
-      return { title: t('Remove {row} and turn off {rows}?', texts), action: t('Remove {row} and turn off {rows}', texts), keep: t('Cancel') };
+      const texts = { row: Number(index) + 1, rows: trackRowNumbers(numbers) };
+      return {
+        title: tn(numbers.length, 'Remove Track row {row} and turn off Track row {rows}?', 'Remove Track row {row} and turn off Track rows {rows}?', texts),
+        action: tn(numbers.length, 'Remove Track row {row} and turn off Track row {rows}', 'Remove Track row {row} and turn off Track rows {rows}', texts),
+        keep: t('Cancel')
+      };
     },
     label: msg('Remove track row'),
     unchanged: () => !busy(),
@@ -313,14 +322,38 @@ export const askingAnnotationTrackAdd = ({ askChoice, runUndoable, busy, rows, a
  */
 /**
  * The title and action of a removal's question.
- * @param {TrackSourceRemoval['kind']} kind @param {{ rows: string, series: number, id: string }} texts
+ * @param {TrackSourceRemoval['kind']} kind @param {number} count How many rows it turns off.
+ * @param {{ rows: string, series: number, id: string }} texts
  */
-const trackSourceRemovalTexts = (kind, texts) => {
-  if (kind === 'feature-density-track') return { title: t('Remove feature density track {id} and turn off {rows}?', texts), action: t('Remove feature density track {id} and turn off {rows}', texts) };
-  if (kind === 'depth-file') return { title: t('Remove the Depth file and turn off {rows}?', texts), action: t('Remove the Depth file and turn off {rows}', texts) };
-  if (kind === 'depth-series') return { title: t('Remove Depth series #{series} and turn off {rows}?', texts), action: t('Remove Depth series #{series} and turn off {rows}', texts) };
-  if (kind === 'linear-file') return { title: t('Remove the File and turn off {rows}?', texts), action: t('Remove the File and turn off {rows}', texts) };
-  return { title: t('Remove the comparison source and turn off {rows}?', texts), action: t('Remove the comparison source and turn off {rows}', texts) };
+const trackSourceRemovalTexts = (kind, count, texts) => {
+  if (kind === 'feature-density-track') {
+    return {
+      title: tn(count, 'Remove feature density track {id} and turn off Track row {rows}?', 'Remove feature density track {id} and turn off Track rows {rows}?', texts),
+      action: tn(count, 'Remove feature density track {id} and turn off Track row {rows}', 'Remove feature density track {id} and turn off Track rows {rows}', texts)
+    };
+  }
+  if (kind === 'depth-file') {
+    return {
+      title: tn(count, 'Remove the Depth file and turn off Track row {rows}?', 'Remove the Depth file and turn off Track rows {rows}?', texts),
+      action: tn(count, 'Remove the Depth file and turn off Track row {rows}', 'Remove the Depth file and turn off Track rows {rows}', texts)
+    };
+  }
+  if (kind === 'depth-series') {
+    return {
+      title: tn(count, 'Remove Depth series #{series} and turn off Track row {rows}?', 'Remove Depth series #{series} and turn off Track rows {rows}?', texts),
+      action: tn(count, 'Remove Depth series #{series} and turn off Track row {rows}', 'Remove Depth series #{series} and turn off Track rows {rows}', texts)
+    };
+  }
+  if (kind === 'linear-file') {
+    return {
+      title: tn(count, 'Remove the File and turn off Track row {rows}?', 'Remove the File and turn off Track rows {rows}?', texts),
+      action: tn(count, 'Remove the File and turn off Track row {rows}', 'Remove the File and turn off Track rows {rows}', texts)
+    };
+  }
+  return {
+    title: tn(count, 'Remove the comparison source and turn off Track row {rows}?', 'Remove the comparison source and turn off Track rows {rows}?', texts),
+    action: tn(count, 'Remove the comparison source and turn off Track row {rows}', 'Remove the comparison source and turn off Track rows {rows}', texts)
+  };
 };
 
 /**
@@ -348,7 +381,7 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
       const staying = stack.flatMap((row, index) => (alsoOff.has(String(row.id)) ? [trackRowItem(index, row.id)] : []));
       const emptySeries = loss.emptySeries(turnedOff);
       return {
-        ...trackSourceRemovalTexts(kind, { rows: trackRowsText(numbers), series: series + 1, id: track }),
+        ...trackSourceRemovalTexts(kind, numbers.length, { rows: trackRowNumbers(numbers), series: series + 1, id: track }),
         description: joinSentences(...[
           emptySeries.length === 0 ? '' : tn(emptySeries.length,
             'Depth series {series} stays empty, and Generate will ask for a file or its removal.',

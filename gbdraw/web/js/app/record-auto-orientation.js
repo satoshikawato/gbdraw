@@ -9,6 +9,7 @@
 /** @import { Wording } from '../utils/i18n.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, t, tm } from '../utils/i18n.js';
+import { itemListText } from '../utils/item-list.js';
 
 const ORIENTATION_FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'decideAutoOrientation' });
 
@@ -77,7 +78,7 @@ const writeStatusText = (written) => {
   switch (written.status) {
     case 'written':
       return t('Set Reverse complement from the comparisons: changed {records}. Generate to draw the new orientation.',
-        { records: written.recordIds.join(', ') });
+        { records: itemListText(written.recordIds) });
     case 'unchanged': return t('The comparisons give every record its current orientation.');
     case 'busy': return tm(written.reason);
     case 'notLinear': return t('The shown drawing changed while the records were being oriented. Orient the records again.');

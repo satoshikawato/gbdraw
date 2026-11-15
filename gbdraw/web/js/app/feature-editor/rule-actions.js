@@ -923,7 +923,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const risks = [
       pattern.length > 50 ? t('It is longer than 50 characters.') : '',
       /\(.+[\+\*]\)[\+\*]/.test(pattern) || /\(.*\)\+/.test(pattern)
-        ? t('It repeats a group, as in (a+)+, which can make the page stop responding.')
+        ? t('It repeats a group, as in {example}, which can make the page stop responding.', { example: '(a+)+' })
         : ''
     ].filter(Boolean);
     if (risks.length > 0) {

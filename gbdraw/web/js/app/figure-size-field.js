@@ -9,7 +9,7 @@ import {
   DEFAULT_FIGURE_LENGTH_UNIT, FIGURE_LENGTH_UNITS, FIGURE_SIZE_FIELDS, figureLengthAmountText, figureLengthInputValue,
   figureLengthUnitOf
 } from '../services/figure-size-form.js';
-import { listText, msg, t, tm } from '../utils/i18n.js';
+import { listText, t } from '../utils/i18n.js';
 import { computed, ref } from '../utils/reactivity.js';
 
 /**
@@ -32,7 +32,6 @@ import { computed, ref } from '../utils/reactivity.js';
 
 /** Which part of a side an edit comes from. @typedef {'amount' | 'unit'} FigureSizeFieldPart */
 
-const MOVED_ITEMS = msg('moves of the Legend, title, or scale');
 /** The causes Python fits a figure to (PD-OI-114 rev 2): when they leave it larger, the fit was refused. */
 const FITTED_CAUSES = /** @type {readonly FigureGrowthCause[]} */ (['legend-edits', 'canvas-padding']);
 
@@ -50,7 +49,7 @@ const largerSentence = ({ sides, causes }) => {
     return t('Larger than the requested {size}: the edit could not be fitted (see the note above the preview).', { size });
   }
   return causes.includes('moved-items')
-    ? t('Larger than the requested {size} after {causes}, which the fit does not include.', { size, causes: tm(MOVED_ITEMS) })
+    ? t('Larger than the requested {size} after moves of the Legend, title, or scale, which the fit does not include.', { size })
     : t('Larger than the requested {size}.', { size });
 };
 

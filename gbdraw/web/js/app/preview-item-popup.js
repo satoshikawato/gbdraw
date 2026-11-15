@@ -26,6 +26,7 @@ import {
 import { orientLinearCard } from '../services/linear-card-windows.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
 import { msg, numberText, t, tn, tm, tx } from '../utils/i18n.js';
+import { itemListText } from '../utils/item-list.js';
 
 /**
  * @typedef {{ label: string, value: string }} PreviewItemFact
@@ -203,7 +204,7 @@ const buildLegendEntryView = ({
 
 /** @param {readonly RequestRecordWindow[]} windows the request record's windows (request schema 10), none for the whole record */
 const regionText = (windows) => (windows.length
-  ? windows.map(({ start, end }) => `${numberText(start)}..${numberText(end)}`).join(', ')
+  ? itemListText(windows.map(({ start, end }) => `${numberText(start)}..${numberText(end)}`))
   : t('Whole record'));
 
 /** @param {AlignmentDecisionLike | null | undefined} decision */

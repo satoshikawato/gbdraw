@@ -9,6 +9,7 @@ import test from 'node:test';
 const { createFindInOtherFiles } = await import('../../gbdraw/web/js/app/find-in-other-files.js');
 const { referenceWindowOf, locateLosatJobs } = await import('../../gbdraw/web/js/services/find-in-other-files.js');
 const { proposalView, windowDrafts } = await import('../../gbdraw/web/js/app/find-in-other-files/proposal.js');
+const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
 
 const record = (recordKey, recordId, length, circular = false) => ({ recordKey, recordId, length, circular });
 const FILES = [
@@ -262,7 +263,7 @@ test('the search runs one job per File and proposes the windows Python planned, 
   const [a, b] = dialog.proposal;
   assert.deepEqual([a.name, a.summary, b.name, b.summary], ['a.gb', '1 window · 2 of 3 genes', 'b.gff', '2 windows · 3 of 3 genes']);
   assert.deepEqual(a.windows.map(({ number, recordId, span, genes, ends }) => [number, recordId, span, genes, ends]), [
-    ['①', 'A', '1,234–7,654 (−)', '2 · g1 to g3', ['contig start']]
+    ['①', 'A', '1,234–7,654 (−)', '2 · g1 to g3', 'contig start']
   ]);
   assert.deepEqual([a.found, a.absent, a.partial], ['2 found in full, 0 in part, 1 not at all.', 'g2', '']);
   assert.deepEqual(b.windows.map((window) => window.number), ['①', '②']);
@@ -477,4 +478,22 @@ test('typing in Start or End counts the genes once typing pauses', async () => {
   owner.close();
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.equal(calls.steps.filter((step) => step.step === 'reference').length, counted + 1);
+});
+
+// The ends a window reaches and the genes of a File are shown items: ", " between them in English, the Arabic comma
+// with each item isolated in Persian (utils/item-list.js).
+test('the contig ends and the gene lists of a File are joined as the UI language joins shown items', async () => {
+  const plan = { ...searchPlan(), files: [
+    filePlan('a', [planned('a', 'A', 1, 1, 9000, { genes: [1], ends: [true, true] })], [], coverage(['p1'], [], ['p2', 'p3']))
+  ] };
+  const view = () => proposalView({ plan, pairs: [], geneNames: NAMES }, { plan, counts: countsOf(plan) }, windowDrafts(plan), { a: 'a.gb' })[0];
+  assert.deepEqual([view().windows[0].ends, view().absent], ['contig start, contig end', 'g2, g3']);
+  try {
+    await setUiLocale('fa', async () => ({ default: { 'contig start': 'شروع کانتیگ', 'contig end': 'پایان کانتیگ' } }));
+    assert.deepEqual([view().windows[0].ends, view().absent], [
+      '\u2067\u2068شروع کانتیگ\u2069\u060C \u2068پایان کانتیگ\u2069\u2069', '\u2067\u2068g2\u2069\u060C \u2068g3\u2069\u2069'
+    ]);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });

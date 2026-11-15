@@ -4291,7 +4291,7 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Program') }}</span>
-                                        <p data-sequence-search-programs class="text-[10px] py-0.5">{{ sequenceSearch.programs.join(', ') }}</p>
+                                        <p data-sequence-search-programs class="text-[10px] py-0.5">{{ itemListText(sequenceSearch.programs) }}</p>
                                     </div>
                                     <div>
                                         <label for="sequence-search-task" class="input-label text-[10px]">{{ t('Task') }}</label>
@@ -7237,7 +7237,7 @@
                         <div v-if="selectedRecords.length" data-selected-records class="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
                             <span class="inline-flex min-w-0 max-w-full items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700 break-words" role="status">
                                 <i class="ph ph-copy-simple" aria-hidden="true"></i>
-                                {{ tn(selectedRecords.length, '{count} record: {names}', '{count} records: {names}', { names: selectedRecords.map((record) => record.recordId).join(', ') }) }}
+                                {{ tn(selectedRecords.length, '{count} record: {names}', '{count} records: {names}', { names: itemListText(selectedRecords.map((record) => record.recordId)) }) }}
                             </span>
                             <button type="button" class="btn btn-secondary btn-sm" data-history-ignore data-selected-records-copy
                                     :disabled="!drawingSwitchAvailable" @click="regionDrawings.openWithRecords(selectedRecords)">
@@ -8870,7 +8870,7 @@
                                         <code v-if="card.candidates[0].ids">{{ card.candidates[0].ids }}</code>
                                         <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ tm(card.candidates[0].displayedStrand) }})</span>
                                         <span class="alignment-review-evidence">
-                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.map((text) => tm(text)).join(', ') || t('no direct hit') }}</span>
+                                            <span class="alignment-review-chip is-evidence">{{ itemListText(card.candidates[0].evidence.map((text) => tm(text))) || t('no direct hit') }}</span>
                                             <span v-if="card.candidates[0].representative" class="alignment-review-chip is-evidence">{{ t('group representative') }}</span>
                                             <label class="alignment-review-skip">
                                                 <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
@@ -8910,7 +8910,7 @@
                                                         <b>{{ alignmentFeatureName(candidate.feature).name }}</b>
                                                         <span v-if="record.recommendedKey === candidate.key" class="alignment-review-chip is-recommended">{{ t('Recommended') }}</span>
                                                     </span>
-                                                    <span class="alignment-review-facts">{{ candidate.evidence.map((text) => tm(text)).join(', ') || t('no direct hit') }}{{ candidate.representative ? ' · ' + t('group representative') : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ tm(candidate.displayedStrand) }})</span>
+                                                    <span class="alignment-review-facts">{{ itemListText(candidate.evidence.map((text) => tm(text))) || t('no direct hit') }}{{ candidate.representative ? ' · ' + t('group representative') : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ tm(candidate.displayedStrand) }})</span>
                                                 </span>
                                             </label>
                                             <label class="alignment-review-candidate is-skip" :class="{ 'is-chosen': card.skipped, 'is-busy': similarityAlignmentBusy }">
@@ -9295,7 +9295,7 @@
                         </div>
 
                         <div v-if="orthogroupDormantNames.length" class="flex items-start justify-between gap-2 px-3 py-1.5 text-[11px] text-slate-600 border-b border-slate-100" role="status">
-                            <span class="min-w-0">{{ t('Names waiting for their original members · {names}', { names: orthogroupDormantNames.join(', ') }) }}</span>
+                            <span class="min-w-0">{{ t('Names waiting for their original members · {names}', { names: itemListText(orthogroupDormantNames) }) }}</span>
                             <button type="button" @click="clearOrthogroupDormantOverrides" class="btn btn-secondary px-2 py-1 text-[10px]" :disabled="!semanticMutationAvailable">{{ t('Clear') }}</button>
                         </div>
                         <!-- The list and the selected group's detail share the free height; each scrolls on its own. -->
@@ -10202,7 +10202,7 @@
                                         <td dir="auto" class="px-2 py-1 font-semibold">{{ window.recordId }}</td>
                                         <td class="px-2 py-1 tabular-nums whitespace-nowrap">{{ window.span }}</td>
                                         <td class="px-2 py-1">{{ window.genes }}<span v-if="window.reason" class="block text-[11px]">{{ window.reason }}</span></td>
-                                        <td class="px-2 py-1 whitespace-nowrap">{{ window.ends.join(', ') }}</td>
+                                        <td class="px-2 py-1 whitespace-nowrap">{{ window.ends }}</td>
                                         <td class="px-2 py-1 text-end"><button type="button" data-history-ignore data-find-files-edit class="text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button></td>
                                     </tr>
                                 </template>
@@ -10219,7 +10219,7 @@
                                         <span class="tabular-nums">{{ window.number }}</span><span dir="auto" class="min-w-0 truncate font-semibold">{{ window.recordId }}</span>
                                         <button type="button" data-history-ignore data-find-files-edit class="ms-auto text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button>
                                     </div>
-                                    <p class="tabular-nums">{{ window.span }}<span v-if="window.ends.length"> · {{ window.ends.join(', ') }}</span></p>
+                                    <p class="tabular-nums">{{ window.span }}<span v-if="window.ends"> · {{ window.ends }}</span></p>
                                     <p>{{ window.genes }}</p>
                                     <p v-if="window.reason" class="text-[11px]">{{ window.reason }}</p>
                                 </div>

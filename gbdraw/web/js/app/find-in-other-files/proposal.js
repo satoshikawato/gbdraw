@@ -3,6 +3,7 @@
 // are ticked at first and why the others are not, the genes found, the window numbers of the drawing, the alignments
 // removed); these functions only word them. A window is found by its identity in the plan: its File and its column.
 import { msg, t, tm, tn } from '../../utils/i18n.js';
+import { itemListText } from '../../utils/item-list.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { LOCATE_OPERATION, circledNumber, windowGeneSpan, windowSpanText } from '../../services/find-in-other-files.js';
 
@@ -33,7 +34,7 @@ import { LOCATE_OPERATION, circledNumber, windowGeneSpan, windowSpanText } from 
  * @property {string} recordId
  * @property {string} span With thousands separators, and "(−)" when reverse-complemented.
  * @property {string} genes Its number of genes with the first and last gene.
- * @property {string[]} ends "contig start" and "contig end" where it reaches the end of a linear record.
+ * @property {string} ends "contig start" and "contig end" where it reaches the end of a linear record, as one shown list.
  * @property {string} reason Why the search did not tick it, or ''.
  */
 
@@ -119,13 +120,13 @@ const windowView = (item, chosen, draft, number, names, maxWindows) => {
     span: windowSpanText(span),
     genes: genes.first === genes.last ? t('{count} · {first}', { count: genes.count, first: genes.first })
       : t('{count} · {first} to {last}', genes),
-    ends,
+    ends: itemListText(ends),
     reason: item.reason ? tm(NOT_SELECTED_TEXT[item.reason], { count: maxWindows }) : ''
   };
 };
 
 /** @param {readonly string[]} ids @param {Readonly<Record<string, string>>} names */
-const geneList = (ids, names) => ids.map((id) => names[id] ?? id).join(', ');
+const geneList = (ids, names) => itemListText(ids.map((id) => names[id] ?? id));
 
 /**
  * Why a File has no window: its search failed (with the reason), or no window was found (with how many alignments

@@ -99,7 +99,7 @@ test('the root size is read in px: a root in a requested unit reads its px viewB
   assert.equal(getSvgDimensions(null), null);
 });
 
-test('the field writes each side, keeps its unit as view state, and shows a value from elsewhere in its unit', () => {
+test('the field writes each side, keeps its unit as view state, and shows a value from elsewhere in its unit', async () => {
   const drawing = { id: 'circular', mode: 'circular', form: createDefaultForm() };
   const store = withDrawings(drawing);
   const watchers = [];
@@ -144,6 +144,18 @@ test('the field writes each side, keeps its unit as view state, and shows a valu
   // A move is never fitted: the sentence names it.
   shown = { ...shown, larger: { sides: [{ side: 'height', length: '120 mm' }], causes: ['moved-items'] } };
   assert.equal(field.figureSizeLarger.value, 'Larger than the requested 120 mm height after moves of the Legend, title, or scale, which the fit does not include.');
+  // The sentence that names the moves is one key, so a translation writes the moves in the case it needs.
+  const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+  try {
+    await setUiLocale('ar', async () => ({ default: {
+      'Larger than the requested {size} after moves of the Legend, title, or scale, which the fit does not include.': 'أكبر من {size} المطلوب بعد نقل مفتاح الشكل أو العنوان أو المقياس.',
+      '{length} height': 'ارتفاع {length}'
+    } }));
+    shown = { ...shown };
+    assert.equal(field.figureSizeLarger.value, 'أكبر من ارتفاع 120 mm المطلوب بعد نقل مفتاح الشكل أو العنوان أو المقياس.');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 // Review finding 1: the unit selects belong to the one field every drawing shares. A value that arrives from outside

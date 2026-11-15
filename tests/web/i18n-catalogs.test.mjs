@@ -751,6 +751,8 @@ test('OV-2790: a key with its code text as a value shows the English it showed b
       'Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.'],
     ['Define label priority order (e.g. {example}).', { example: 'CDS -> product,gene,locus_tag' }, 'Define label priority order (e.g. CDS -> product,gene,locus_tag).'],
     ['Copy every qualifier as {form} lines', { form: '/key="value"' }, 'Copy every qualifier as /key="value" lines'],
+    ['It repeats a group, as in {example}, which can make the page stop responding.', { example: '(a+)+' },
+      'It repeats a group, as in (a+)+, which can make the page stop responding.'],
     ['Label TSV value patterns use case-insensitive Python regex. Examples: {example} and {otherExample}.', { example: 'NADH|ATPase', otherExample: '(?P<name>NADH)' },
       'Label TSV value patterns use case-insensitive Python regex. Examples: NADH|ATPase and (?P<name>NADH).'],
     ['the Legend row edits cannot be written as a {option} table.', { option: '--legend_rows' }, 'the Legend row edits cannot be written as a --legend_rows table.'],

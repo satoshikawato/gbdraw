@@ -14,6 +14,7 @@ import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidan
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
+import { itemListText } from './utils/item-list.js';
 import { limitedList, moreLine } from './utils/limited-list.js';
 import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
@@ -988,7 +989,7 @@ export const FileUploader = {
       const items = selectedFiles.value;
       if (items.length === 0) return '';
       if (items.length === 1) return items[0]?.name || t('Selected file');
-      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || t('file')).join(', ');
+      const firstNames = itemListText(items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || t('file')));
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
       return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });

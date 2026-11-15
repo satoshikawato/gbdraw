@@ -7,6 +7,7 @@
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from '../../services/annotation-state.js';
 import { validateAnnotationCoordinates } from './validation.js';
 import { t } from '../../utils/i18n.js';
+import { itemListText } from '../../utils/item-list.js';
 import { featureSelector, hashSelector } from '../../utils/selector-syntax.js';
 import {
   annotationRecordSelectorValue,
@@ -211,7 +212,7 @@ export const parseAnnotationTableWithNotice = (text) => {
   });
   return {
     sets: normalizeAnnotationSets(Array.from(sets.values())),
-    notice: unknown.length ? () => t('Ignored annotation table columns: {columns}. These columns are not saved in Sessions or TSV re-export.', { columns: unknown.join(', ') }) : null
+    notice: unknown.length ? () => t('Ignored annotation table columns: {columns}. These columns are not saved in Sessions or TSV re-export.', { columns: itemListText(unknown) }) : null
   };
 };
 

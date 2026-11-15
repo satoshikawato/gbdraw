@@ -450,9 +450,15 @@ _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
 };
 
 // The first-use preparation steps, reported as they start: a real step
-// count, not a time estimate. The page translates the names where it shows them.
+// count, not a time estimate. Each is the whole status line of its step, so a
+// translation writes the sentence; the page translates it where it shows it
+// and fills in {step} and {total}.
 const RUNTIME_PREPARATION_STEPS = Object.freeze([
-  msg('loading Python'), msg('loading the package installer'), msg('checking packages'), msg('installing packages'), msg('starting gbdraw')
+  msg('Preparing diagram runtime (first use): step {step} of {total}, loading Python...'),
+  msg('Preparing diagram runtime (first use): step {step} of {total}, loading the package installer...'),
+  msg('Preparing diagram runtime (first use): step {step} of {total}, checking packages...'),
+  msg('Preparing diagram runtime (first use): step {step} of {total}, installing packages...'),
+  msg('Preparing diagram runtime (first use): step {step} of {total}, starting gbdraw...')
 ]);
 
 const initializeRuntime = async ({

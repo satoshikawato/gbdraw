@@ -39,7 +39,7 @@ import {
   sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
-import { askTrackHide, featureSlotEdits, trackLayoutWithVisibility, trackRowsText } from './track-slot-edits.js';
+import { askTrackHide, featureSlotEdits, trackLayoutWithVisibility, trackRowNumbers } from './track-slot-edits.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
@@ -149,7 +149,7 @@ const STACK_ENTRY_SLOT = 'slot';
  * @property {() => string} title the title of the dialog that asks before hiding
  * @property {(count: number) => string} description the dialog text: the custom stack rows the hide turns off
  * @property {() => string} hide the dialog's hide button
- * @property {(rows: string) => string} hideWith the dialog's hide button when it also turns off `rows`, the stack rows that reach the track
+ * @property {(rows: readonly number[]) => string} hideWith the dialog's hide button when it also turns off `rows`, the numbers of the stack rows that reach the track
  * @property {() => string} keep the dialog's cancel button
  * @property {() => string} hiddenBy the note on a stack row that the control hides
  */
@@ -161,7 +161,7 @@ const SUPPRESS_TEXT_BY_RENDERER = {
       'Your custom track stack has {count} GC content track. Hiding GC content turns that track off.',
       'Your custom track stack has {count} GC content tracks. Hiding GC content turns those tracks off.'),
     hide: () => t('Hide GC content'),
-    hideWith: (rows) => t('Hide GC content and turn off {rows}', { rows }),
+    hideWith: (rows) => tn(rows.length, 'Hide GC content and turn off Track row {rows}', 'Hide GC content and turn off Track rows {rows}', { rows: trackRowNumbers(rows) }),
     keep: () => t('Keep GC content'),
     hiddenBy: () => t('Hidden by Hide GC Content')
   },
@@ -171,7 +171,7 @@ const SUPPRESS_TEXT_BY_RENDERER = {
       'Your custom track stack has {count} GC skew track. Hiding GC skew turns that track off.',
       'Your custom track stack has {count} GC skew tracks. Hiding GC skew turns those tracks off.'),
     hide: () => t('Hide GC skew'),
-    hideWith: (rows) => t('Hide GC skew and turn off {rows}', { rows }),
+    hideWith: (rows) => tn(rows.length, 'Hide GC skew and turn off Track row {rows}', 'Hide GC skew and turn off Track rows {rows}', { rows: trackRowNumbers(rows) }),
     keep: () => t('Keep GC skew'),
     hiddenBy: () => t('Hidden by Hide GC Skew')
   }
@@ -1562,7 +1562,7 @@ export const createCircularTrackSlotEditor = ({
         title: texts.title(),
         // "Your custom track stack has..." is not the drawing's state when the stack is off.
         ...(stackInUse ? { description: texts.description(hidden.length) } : {}),
-        action: numbers.length ? texts.hideWith(trackRowsText(numbers)) : texts.hide(),
+        action: numbers.length ? texts.hideWith(numbers) : texts.hide(),
         keep: texts.keep()
       }),
       label: ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Hide track'),

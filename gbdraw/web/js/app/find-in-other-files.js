@@ -7,6 +7,7 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { t, tm, tn } from '../utils/i18n.js';
+import { itemListText } from '../utils/item-list.js';
 import { reactive } from '../utils/reactivity.js';
 import { resolveComparisonThresholds } from '../mode-profiles.js';
 import { formatRecordLength } from '../services/record-options.js';
@@ -524,7 +525,7 @@ export const createFindInOtherFiles = ({
       const cut = reply.plan.reference.cut_genes.map((cds) => reply.geneNames[cds.protein_id] ?? cds.protein_id);
       Object.assign(dialog, {
         screen: 'proposal', edit: null, reference: referenceLine(dialog, reply),
-        cutGenes: cut.length ? t('Cut by a window edge and not searched: {genes}.', { genes: cut.join(', ') }) : ''
+        cutGenes: cut.length ? t('Cut by a window edge and not searched: {genes}.', { genes: itemListText(cut) }) : ''
       });
       await proposal.derive();
     } catch (error) {

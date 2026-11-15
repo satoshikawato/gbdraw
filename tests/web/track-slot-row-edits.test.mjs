@@ -764,6 +764,30 @@ const REACH_ROWS = {
 const enabledOf = (editor) => Object.fromEntries(editor.slots().map((slot) => [slot.id, slot.enabled]));
 const REACH_SENTENCE = 'This row starts at or extends to a track that this change removes or turns off. It is turned off too, as it cannot be drawn without that track.';
 
+// Each question names the rows in its own sentence key with a form per count, so that a language writes "Track row" in
+// the case and number the sentence needs: Arabic writes the dual for two rows (no phrase is inserted into the sentence).
+test('a track row question is one sentence of the UI language, with the Arabic dual for two rows', async () => {
+  const { SOURCE_LOCALE, setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
+  try {
+    await setUiLocale('ar', async () => ({ default: {
+      'Turn off Track row {row}?': 'هل تريد إيقاف صف المسار {row}؟',
+      'Turn off Track row {rows}': 'إيقاف صف المسار {rows}',
+      'Turn off Track rows {rows}': { other: 'إيقاف صفوف المسار {rows}', two: 'إيقاف صفَّي المسار {rows}' },
+      'Hide GC content and turn off Track rows {rows}': { other: 'إخفاء محتوى GC وإيقاف صفوف المسار {rows}', two: 'إخفاء محتوى GC وإيقاف صفَّي المسار {rows}' }
+    } }));
+    const questions = [];
+    const editor = MODES.circular(REACH_ROWS.circular(), { showDepth: true, depthFiles: [depthFile] }, async (request) => { questions.push(request); return 'hide'; });
+    const row = editor.slots().find((slot) => slot.id === 'gc_content');
+    await editor.setEnabled(row, false, { target: { checked: false } });
+    const rowNumber = editor.slots().indexOf(row) + 1;
+    const rows = new Intl.ListFormat('ar', { type: 'conjunction' }).format([String(rowNumber), '4']);
+    assert.equal(questions[0].title, `هل تريد إيقاف صف المسار ${rowNumber}؟`);
+    assert.deepEqual(questions[0].actions.map((action) => action.label), [`إيقاف صفَّي المسار ${rows}`]);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
 for (const mode of ['circular', 'linear']) {
   test(`${mode}: turning off a GC or Depth row that another row reaches asks, names that row, and turns it off too`, async () => {
     for (const [rowId, reachId, number] of [['gc_content', 'tint', 4], ['depth', 'mark', 5]]) {
@@ -845,8 +869,7 @@ test('circular: Hide GC Content names the rows that reach the GC content track a
 test('circular: the Hide GC Content button with the rows it turns off is one translated sentence', async () => {
   const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
   await setUiLocale('ja', async () => ({ default: {
-    'Hide GC content and turn off {rows}': '{rows} をオフにして GC content を隠す',
-    'Track rows {rows}': 'トラック行 {rows}'
+    'Hide GC content and turn off Track rows {rows}': 'トラック行 {rows} をオフにして GC content を隠す'
   } }));
   try {
     const questions = [];
