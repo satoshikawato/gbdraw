@@ -7591,10 +7591,12 @@ const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) =
 };
 
 /**
- * The file's document with each BLAST table that a request of schema 2 or 5 to 9
- * stored as a protein table read as a BLAST table (`readStoredBlastTables`,
- * OV-3573): the one step before every reader of Load, the comparison
- * classifier's included. The same document when no set stores one.
+ * The file's document with each table that a request of schema 2 or 5 to 9
+ * stored as a protein table and that holds no protein matches read as Python
+ * reads it (`readStoredBlastTables`, OV-3573, OV-3574): the one step before
+ * every reader of Load, the comparison classifier's included. The same
+ * document when no set stores one. Python reads the file as it stores them
+ * (`withSavedProteinResults`).
  * @template {SessionInput} T
  * @param {T} document The file's document as the file holds it.
  * @returns {T}
@@ -7602,7 +7604,9 @@ const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) =
 const withStoredBlastTables = (document) => {
   const sets = storedResultSets(document);
   const read = readStoredBlastTables(sets.map(({ set }) => set.renderRequest), document.resources);
-  if (read.resources === document.resources) return document;
+  if (read.resources === document.resources && read.requests.every((request, index) => request === sets[index].set.renderRequest)) {
+    return document;
+  }
   return sets.reduce((next, { at, set }, index) => (read.requests[index] === set.renderRequest ? next
     // The top-level set is the document itself, whose resources changed.
     : withStoredResultSet(next, at, { ...(at === '' ? next : set), renderRequest: read.requests[index] })),
@@ -7663,6 +7667,17 @@ const withSavedProteinResults = async (document) => {
     document: { ...next, resources: { .../** @type {Record<string, unknown>} */ (next.resources), ...resources } },
     repairs: stored.filter(({ path }) => replacedAt.some((at) => path === at || path.startsWith(`${at}.`)))
   };
+};
+
+/**
+ * `withSavedProteinResults` of the file's document as the file holds it, which Python reads, and its result as Load's
+ * readers read it (`withStoredBlastTables`): request schemas 2 and 5-9 hold no `proteinMatches`.
+ * @param {SessionEnvelope} document
+ * @returns {Promise<{ document: SessionEnvelope, repairs: readonly LoadRepair[] }>}
+ */
+const readSavedProteinResultsOf = async (document) => {
+  const saved = await withSavedProteinResults(document);
+  return { document: withStoredBlastTables(saved.document), repairs: saved.repairs };
 };
 
 /**
@@ -7932,7 +7947,8 @@ const importSessionDocument = async (e, options = {}) => {
     // its saved rows, as a 27-44's does above (OV-3545). Each comes with the rows its readers listed before.
     const { document: storedDocument, repairs: storedRepairs } = legacyRead
       ? { document: readSessionInput(legacyRead.upgrade.document), repairs: legacyRead.repairs }
-      : await withSavedProteinResults(fileDocument);
+      // Python reads the requests as the file stores them; Load's readers, the tables as Python reads them.
+      : await readSavedProteinResultsOf(readSessionInput(parsed));
     recordSessionLifecycleEvent('current-session-preflight-start');
     // What Load cannot restore as stored, listed in the dialog before the
     // commit (BA-D25); frozen there, so no step after the commit adds one.

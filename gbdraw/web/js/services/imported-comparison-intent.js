@@ -334,14 +334,16 @@ const unitInputsOf = (records) => records.map((record, index) => ({
 /**
  * The LOSATP mode whose results a request stores beside a pipeline marker of mode `none`, as the CLI and the Web
  * write them after a render: Collinear for a `collinearityResult`, Similarity groups for an `orthogroupResult`,
- * Pairwise for protein tables alone, and '' for none. The one reader of that mode: the classifier, Load's draft of
+ * Pairwise for protein tables alone, and '' for none. A table that says it holds no protein matches
+ * (`proteinMatches: false`, OV-3574) is no protein result. The one reader of that mode: the classifier, Load's draft of
  * a CLI Session, which has no saved controls (`projectCanonicalSessionRequest` in services/session-request.js), and
  * Generate's reuse of resolved protein results (`canReuseResolvedProteinArtifacts` in app/run-analysis.js).
  * @param {readonly { kind?: unknown }[]} comparisons The request's comparisons.
  * @returns {'collinear' | 'orthogroup' | 'pairwise' | ''}
  */
 export const storedProteinResultMode = (comparisons) => {
-  const stores = (/** @type {string} */ kind) => comparisons.some((comparison) => comparison?.kind === kind);
+  const stores = (/** @type {string} */ kind) => comparisons.some((comparison) => comparison?.kind === kind
+    && /** @type {{ proteinMatches?: unknown }} */ (comparison).proteinMatches !== false);
   if (stores('collinearityResult')) return 'collinear';
   if (stores('orthogroupResult')) return 'orthogroup';
   return stores('precomputedProteinComparison') ? 'pairwise' : '';
@@ -513,9 +515,9 @@ export const classifyImportedComparisonIntent = ({
     );
   }
   if (pipeline && !generatedPipelineIsProjectable({ comparisons, pipeline })) {
-    // The message names what the comparisons hold: BLAST tables beside a pipeline that searches nothing (the CLI
-    // stores its LOSATP settings so with `-b` tables, OV-3589), else a protein comparison.
-    return preserved(!hasDirectProteinInput && pipeline.mode === LOSATP_NO_SEARCH_MODE
+    // The message names what the comparisons hold: tables without protein matches beside a pipeline that searches
+    // nothing (the CLI stores its LOSATP settings so with `-b` tables, OV-3589), else a protein comparison.
+    return preserved(!storedProteinResultMode(comparisons) && pipeline.mode === LOSATP_NO_SEARCH_MODE
       ? msg('The saved comparison tables can run, but the current controls cannot represent them losslessly.')
       : msg('The saved protein comparison is executable, but current controls cannot represent it losslessly.'));
   }

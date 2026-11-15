@@ -11,10 +11,13 @@
   keeps the name of the file the user chose, spaces and all. A Session saved
   after Load keeps these names, so its comparisons are named the same when it
   is drawn again in the Web app or with `gbdraw render --session`.
-- Fixed: a Python comparison table whose rows are bound to features but that
-  holds no protein matches is reported as a comparison table when its Session
-  is drawn again, as the first drawing reported it, not as a protein
-  comparison.
+- Fixed: a Python comparison table whose rows are bound to features, or whose
+  BLAST columns are in another order, is reported as a comparison table, not
+  as a protein comparison, when its Session is drawn again with
+  `gbdraw render --session`, the Python API, or the Web app, as the first
+  drawing reported it. This holds for Sessions of gbdraw 0.14.0 to 0.14.5 and
+  for Sessions saved from now on, and a Session saved again in the Web app
+  keeps it.
 - Fixed: a LOSATP Pairwise drawing whose records all share one row keeps LOSATP
   Pairwise in its Session, from `gbdraw linear` and from the Web app alike, so
   the Web app loads it with LOSATP Pairwise selected and a Generate after

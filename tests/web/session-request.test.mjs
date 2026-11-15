@@ -4009,6 +4009,29 @@ assert.equal(
   false,
   'projection provenance must not become part of the canonical comparison schema'
 );
+// OV-3574: a table that holds no protein matches keeps saying so through Load and a re-save.
+{
+  const unmatched = structuredClone(typedOptionCanonical);
+  const isTable = (comparison) => comparison.kind === 'precomputedProteinComparison';
+  unmatched.renderRequest.comparisons.find(isTable).proteinMatches = false;
+  const projection = projectCanonicalSessionRequest(unmatched);
+  assert.equal(projection.files.linearCanonicalComparisons.find(isTable).proteinMatches, false);
+  const unmatchedState = stateForCanonicalProjection(projection);
+  unmatchedState.losatProgram.value = 'blastn';
+  unmatchedState.linearComparisonPlan = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
+  assert.deepEqual(
+    buildCanonicalRenderRequestRaw({
+      state: unmatchedState, filesData: projection.files,
+      comparisonPlanSnapshot: comparisonSnapshotForState(unmatchedState, projection.files)
+    }).renderRequest.comparisons
+      .filter(isTable).map((comparison) => comparison.proteinMatches),
+    [false]
+  );
+  assert.equal(
+    typedOptionRoundTrip.renderRequest.comparisons.filter(isTable).some((comparison) => Object.hasOwn(comparison, 'proteinMatches')),
+    false
+  );
+}
 typedOptionState.linearComparisonPlan = {
   mode: 'none',
   defaultSource: 'losat',

@@ -15,7 +15,7 @@ import {
   readStoredBlastTables, requestRunsProteinSearch
 } from '../../gbdraw/web/js/services/session-request.js';
 import {
-  IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent
+  IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, storedProteinResultMode
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
 
 const base64 = (text) => Buffer.from(text, 'utf8').toString('base64');
@@ -90,16 +90,66 @@ test('a schema 5-9 protein table of the BLAST columns alone under a given table\
   const schema2 = readStoredBlastTables([{ schema: 2, mode: 'linear', comparisons: [comparison('blast')] }], resources);
   assert.equal(schema2.requests[0].comparisons[0].kind, 'nucleotideBlast');
   assert.equal(schema2.resources[ids.blast].kind, 'nucleotide-blast');
-  // A table bound to features has no BLAST form: it stays as stored.
+  // A table bound to features has no BLAST form: it says it holds no protein matches, and its resource stays.
   const boundResources = { [given(1)]: table([...COMPARISON_COLUMNS, 'query_feature_index', 'subject_feature_index'].join('\t'),
     BLAST_ROWS.replace('\n', '\t1\t2\n')) };
   const bound = readStoredBlastTables([{ schema: 9, mode: 'linear', comparisons: [comparison('blast')] }], boundResources);
   assert.equal(bound.resources, boundResources);
+  assert.deepEqual(bound.requests[0].comparisons, [{ ...comparison('blast'), proteinMatches: false }]);
 
   const protein = { schema: 9, mode: 'linear', comparisons: [comparison('protein')] };
   const unchanged = readStoredBlastTables([current, protein], resources);
   assert.equal(unchanged.resources, resources);
   assert.equal(unchanged.requests[1].comparisons[0].kind, 'precomputedProteinComparison');
+});
+
+// The vectors Python's decoder reads too (tests/test_cli_session_render.py): one rule on both surfaces.
+const GIVEN_TABLE_VECTORS = JSON.parse(readFileSync(new URL('../fixtures/given-comparison-table-vectors.json', import.meta.url),
+  'utf8')).cases;
+for (const vector of GIVEN_TABLE_VECTORS) {
+  test(`a stored table is read as Python reads it: ${vector.id}`, () => {
+    const stored = {
+      kind: 'precomputedProteinComparison', resourceId: vector.resourceId, encoding: 'canonicalTsv',
+      queryRecordIndex: 0, subjectRecordIndex: 1
+    };
+    const tsv = [vector.columns, ...vector.rows].map((cells) => `${cells.join('\t')}\n`).join('');
+    const resources = { [vector.resourceId]: { ...table('', ''), data: base64(tsv) } };
+    const request = { schema: vector.schema, mode: 'linear', comparisons: [stored] };
+    const read = readStoredBlastTables([request], resources);
+    const [comparison] = read.requests[0].comparisons;
+    if (vector.read === 'protein') {
+      assert.equal(read.requests[0], request);
+      assert.equal(read.resources, resources);
+    } else if (vector.read === 'table') {
+      assert.deepEqual(comparison, { ...stored, proteinMatches: false });
+      assert.equal(read.resources, resources);
+    } else {
+      assert.equal(vector.read, 'blast');
+      assert.deepEqual(comparison, { kind: 'nucleotideBlast', resourceId: vector.resourceId, queryRecordIndex: 0,
+        subjectRecordIndex: 1 });
+      assert.equal(read.resources[vector.resourceId].kind, 'nucleotide-blast');
+      assert.equal(text(read.resources[vector.resourceId].data), vector.blastRows);
+    }
+  });
+}
+
+// OV-3574: a table that holds no protein matches is no stored LOSATP result: beside the CLI's no-search pipeline
+// the comparison is preserved and named by its tables, not opened as a LOSATP Pairwise comparison.
+test('a table without protein matches is no stored protein result', () => {
+  const marker = { kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: pipelineSettings };
+  const bound = {
+    kind: 'precomputedProteinComparison', resourceId: given(1), encoding: 'canonicalTsv', queryRecordIndex: 0,
+    subjectRecordIndex: 1, proteinMatches: false
+  };
+  const { proteinMatches: _matches, ...protein } = bound;
+  assert.equal(storedProteinResultMode([bound, marker]), '');
+  assert.equal(storedProteinResultMode([protein, marker]), 'pairwise');
+  const renderRequest = { ...pairwiseRequest({ positions: ['#1@1', '#2@2'] }), comparisons: [bound, marker] };
+  const resources = { [given(1)]: table([...COMPARISON_COLUMNS, 'query_feature_index'].join('\t'), '') };
+  const intent = classifyImportedComparisonIntent({ renderRequest, resources });
+  assert.equal(intent.disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY);
+  assert.equal(intent.message,
+    'The saved comparison tables can run, but the current controls cannot represent them losslessly.');
 });
 
 const pipelineSettings = {
@@ -133,6 +183,11 @@ test('a Pairwise pipeline without pairs is the controls\' LOSATP Pairwise; over 
   assert.equal(requestRunsProteinSearch(pairwiseRequest({ positions: ['#1@1', '#2@2'] })), true);
   assert.equal(requestRunsProteinSearch(pairwiseRequest({ gridRows: [1, 2] })), true);
   assert.equal(requestRunsProteinSearch(pairwiseRequest()), true);
+  // A record entry of every record of its file (a Python API `RecordCardinality.ALL`): its rows are Python's, and
+  // the search runs as on dev.
+  const everyRecord = pairwiseRequest({ gridRows: [null] });
+  everyRecord.records[0].cardinality = 'all';
+  assert.equal(requestRunsProteinSearch(everyRecord), true);
   assert.equal(requestRunsProteinSearch(pairwiseRequest({
     positions: ['#1@1', '#2@1'], pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }]
   })), true);

@@ -833,44 +833,71 @@ def test_a_released_cli_comparisons_table_session_still_reads_its_table_as_a_nuc
     assert stored["kind"] == "nucleotideBlast"
 
 
-@pytest.mark.parametrize(("resource_id", "extra_columns", "protein"), [
-    # The table a 0.14.x CLI or Python render was given, under the ID it gave it: a BLAST table.
-    ("comparison-explicit-1", "", False),
-    # A table bound to features that holds no protein matches, under that ID (a Python LinearComparison).
-    ("comparison-explicit-1", "\tquery_feature_index\tsubject_feature_index", False),
-    # The same table under the ID of a protein table a writer made (Web LOSATP, CLI LOSATP): the Web Load reads it as
-    # a protein table, and so does the replay.
-    ("comparison-canonical-protein-1", "", True),
-    ("comparison-protein-1", "", True),
-    ("comparison-resolved-1", "", True),
-    # A protein table under the given table's ID.
-    ("comparison-explicit-1", "\tquery_protein_id\tsubject_protein_id", True),
-])
+# Stored tables and how both surfaces read them, shared with the Web Load (tests/web/web-load-comparison-kind.test.mjs).
+_GIVEN_TABLE_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "given-comparison-table-vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+def _vector_table_text(vector: dict[str, Any]) -> str:
+    return "".join("\t".join(cells) + "\n" for cells in [vector["columns"], *vector["rows"]])
+
+
+@pytest.mark.parametrize("vector", _GIVEN_TABLE_VECTORS, ids=lambda vector: vector["id"])
+def test_a_stored_table_is_read_as_the_web_load_reads_it(tmp_path: Path, vector: dict[str, Any]) -> None:
+    """Request schemas 2 and 5-9 stored a table a render was given and a LOSATP pair alike as
+    `precomputedProteinComparison`. The decoder reads one as a table without protein matches only under the resource
+    ID those writers gave a given table (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX`) and without the protein column;
+    its encoder writes such a table as a BLAST table when it has a BLAST form (`comparison_table_text`). The Web
+    Load reads each shared vector to the same result (`readStoredBlastTables`)."""
+
+    from io import StringIO
+
+    from gbdraw.io.comparisons import comparison_table_text, read_comparison_table
+    from gbdraw.session_request_codec import _read_canonical_table, _stored_protein_matches
+
+    path = tmp_path / "table.tsv"
+    path.write_text(_vector_table_text(vector), encoding="utf-8")
+    table = _read_canonical_table(path, context="vector")
+    item = {
+        "kind": "precomputedProteinComparison", "resourceId": vector["resourceId"], "encoding": "canonicalTsv",
+        "queryRecordIndex": 0, "subjectRecordIndex": 1,
+    }
+    protein = _stored_protein_matches(item, table, schema=vector["schema"], path="vector")
+    assert protein is (vector["read"] == "protein")
+    if protein:
+        return
+    text = comparison_table_text(table)
+    assert (text is not None) is (vector["read"] == "blast")
+    if text is not None:
+        assert read_comparison_table(StringIO(text)).equals(read_comparison_table(StringIO(vector["blastRows"])))
+
+
+@pytest.mark.parametrize(
+    "vector", [vector for vector in _GIVEN_TABLE_VECTORS if vector["schema"] == 9], ids=lambda vector: vector["id"]
+)
 def test_an_older_session_reads_a_stored_table_as_protein_by_its_resource_id_and_columns(
-    tmp_path: Path, resource_id: str, extra_columns: str, protein: bool
+    tmp_path: Path, vector: dict[str, Any]
 ) -> None:
-    """Request schemas 2-9 stored a table a render was given and a LOSATP pair alike as
-    `precomputedProteinComparison`. The replay reads one as a table without protein matches only under the
-    resource ID those writers gave a given table (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX`) and without the protein
-    columns, the rule the Web Load reads (`readStoredBlastTables`); every other ID is a protein table's."""
+    """The replay of the 0.14.5 Session (request schema 9) with its table replaced by each schema-9 vector reads it
+    as the vector says: a protein comparison, or a comparison without protein matches."""
 
     import gzip
 
     from gbdraw.session import session_to_request
 
+    resource_id = vector["resourceId"]
     text = gzip.decompress(_RELEASED_COMPARISONS_TABLE_SESSION.read_bytes()).decode("utf-8")
     released = json.loads(text.replace('"comparison-explicit-1', f'"{resource_id}'))
     resource = released["resources"][resource_id]
-    header, rows = base64.b64decode(resource["data"]).decode("utf-8").split("\n", 1)
-    cells = "\t1\t2" if "feature" in extra_columns else "\tP1\tP2" if extra_columns else ""
-    table = f"{header}{extra_columns}\n" + "".join(f"{row}{cells}\n" for row in rows.splitlines())
-    resource.update(data=base64.b64encode(table.encode("utf-8")).decode("ascii"), size=len(table.encode("utf-8")))
+    table = _vector_table_text(vector).encode("utf-8")
+    resource.update(data=base64.b64encode(table).decode("ascii"), size=len(table))
     resource.pop("checksum", None)
     sidecar = tmp_path / "older.gbdraw-session.json"
     sidecar.write_text(json.dumps(released), encoding="utf-8")
     with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "replay") as materialized:
         (comparison,) = session_to_request(materialized).options.linear_comparisons
-    assert comparison.protein_matches is protein
+    assert comparison.protein_matches is (vector["read"] == "protein")
 
 
 _FIXTURES = Path(__file__).parent / "fixtures"

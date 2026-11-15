@@ -89,6 +89,7 @@ from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, rea
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
+    LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN,
     LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX,
     LEGACY_GIVEN_COMPARISON_SCHEMAS,
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
@@ -4710,7 +4711,7 @@ def _read_blast_edge(resource_path: Path, label: str) -> tuple[str, bytes | None
     return text, stored, read_comparison_table(StringIO(text), label=label)
 
 
-def stored_comparison_name(item: Mapping[str, Any], resource_name: str) -> str | None:
+def stored_comparison_name(item: Mapping[str, object], resource_name: str) -> str | None:
     """The name a stored nucleotide comparison is shown by: the file the user gave, or None for a table gbdraw made.
 
     The one reader of a comparison's shown name, for the CLI replay and the Web Worker alike (OV-3557). A request
@@ -4722,9 +4723,9 @@ def stored_comparison_name(item: Mapping[str, Any], resource_name: str) -> str |
 
     if "sourceName" in item:
         stored = item["sourceName"]
-        if stored is not None and not (isinstance(stored, str) and stored):
-            raise CanonicalRequestDecodingError("A comparison's sourceName must be a file name or null.")
-        return stored
+        if stored is None or (isinstance(stored, str) and stored):
+            return stored
+        raise CanonicalRequestDecodingError("A comparison's sourceName must be a file name or null.")
     name = resource_name
     while True:
         stripped = name.removeprefix(f"{item['resourceId']}-")
@@ -4739,19 +4740,20 @@ def stored_comparison_name(item: Mapping[str, Any], resource_name: str) -> str |
     return name
 
 
-def _stored_protein_matches(item: Mapping[str, Any], table: DataFrame, *, schema: int, path: str) -> bool:
+def _stored_protein_matches(item: Mapping[str, object], table: DataFrame, *, schema: int, path: str) -> bool:
     """Whether a stored ``precomputedProteinComparison`` holds protein matches.
 
     Schema 10 says so unless the entry has ``proteinMatches: false`` (a table bound to features that holds no
     protein matches, OV-3574). Schemas 2-9 also stored a table a render was given under this kind: one holds no
-    protein matches when it is under the resource ID those writers gave it and has no protein column, the rule the
-    Web Load reads too (``LEGACY_GIVEN_COMPARISON_SCHEMAS``; OV-3512, OV-3573). A table under any other ID is a
-    protein table a writer made, whatever its columns.
+    protein matches when it is under the resource ID those writers gave it and has no protein column
+    (``LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN``), the rule the Web Load reads too (``readStoredBlastTables``;
+    OV-3512, OV-3573). A table under any other ID is a protein table a writer made, whatever its columns.
     """
 
     if schema in LEGACY_GIVEN_COMPARISON_SCHEMAS:
         return not (
-            _LEGACY_GIVEN_COMPARISON_ID.fullmatch(item["resourceId"]) and "query_protein_id" not in table.columns
+            _LEGACY_GIVEN_COMPARISON_ID.fullmatch(str(item["resourceId"]))
+            and LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN not in table.columns
         )
     if item.get("proteinMatches", False) is not False:
         raise CanonicalRequestDecodingError(f"{path}.proteinMatches is false or absent.")

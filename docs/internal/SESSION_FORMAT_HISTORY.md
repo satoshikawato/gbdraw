@@ -158,10 +158,16 @@ without protein matches when it is under that ID and has no protein column
 writer and the CLI stored their LOSATP tables under other IDs
 (`comparison-canonical-protein-<n>`, `comparison-resolved-<n>`,
 `comparison-protein-<n>`). The Web Load reads the same rule before any reader
-(`readStoredBlastTables`, OV-3573): such a table of the 12 BLAST columns alone
+(`readStoredBlastTables`, OV-3573, OV-3574) and writes what Python's encoder
+writes again: such a table of the 12 BLAST columns alone, in any order,
 becomes the `nucleotideBlast` entry and `nucleotide-blast` resource the current
-writers store; a table bound to features has no BLAST form and stays as
-stored (the Web holds no `proteinMatches` in a draft). Positive fixtures: the
+writers store (rows in `COMPARISON_COLUMNS` order); a table bound to features
+has no BLAST form and gets `proteinMatches: false`, which the Load projection
+and the Web writer keep. Python's own reads of the file (the saved LOSAT rows)
+get the requests as stored. The shared vectors
+`tests/fixtures/given-comparison-table-vectors.json` pin both surfaces; the
+schema-2 case there is synthetic, its evidence `_encode_comparisons` at
+`0266acb7b` on first-parent `main`. Positive fixtures: the
 Gallery Session of Session 47
 (`tests/fixtures/sessions/BGC0000708-BGC0000713.v47.gbdraw-session.json.gz`)
 and the Session 40 collinear Session

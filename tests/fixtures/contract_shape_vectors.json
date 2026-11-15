@@ -1712,6 +1712,101 @@
     "outerGapPx": -0.0
    },
    "violations": []
+  },
+  {
+   "id": "nucleotide-blast-comparison-with-the-users-file-name",
+   "type": "CanonicalNucleotideBlastComparison",
+   "value": {
+    "kind": "nucleotideBlast",
+    "resourceId": "comparison-nucleotide-1",
+    "queryRecordIndex": 0,
+    "subjectRecordIndex": 1,
+    "sourceName": "my hits.tsv"
+   },
+   "violations": []
+  },
+  {
+   "id": "nucleotide-blast-comparison-of-a-table-gbdraw-made",
+   "type": "CanonicalNucleotideBlastComparison",
+   "value": {
+    "kind": "nucleotideBlast",
+    "resourceId": "comparison-resolved-1",
+    "queryRecordIndex": 0,
+    "subjectRecordIndex": 1,
+    "sourceName": null
+   },
+   "violations": []
+  },
+  {
+   "id": "nucleotide-blast-comparison-written-before-the-file-name",
+   "type": "CanonicalNucleotideBlastComparison",
+   "value": {
+    "kind": "nucleotideBlast",
+    "resourceId": "comparison-nucleotide-1",
+    "queryRecordIndex": 0,
+    "subjectRecordIndex": 1
+   },
+   "violations": []
+  },
+  {
+   "id": "nucleotide-blast-comparison-with-a-number-for-a-file-name",
+   "type": "CanonicalNucleotideBlastComparison",
+   "value": {
+    "kind": "nucleotideBlast",
+    "resourceId": "comparison-nucleotide-1",
+    "queryRecordIndex": 0,
+    "subjectRecordIndex": 1,
+    "sourceName": 1
+   },
+   "violations": [
+    {
+     "path": "value.sourceName",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "protein-table-without-protein-matches",
+   "type": "CanonicalPrecomputedProteinComparison",
+   "value": {
+    "kind": "precomputedProteinComparison",
+    "resourceId": "comparison-explicit-1",
+    "encoding": "canonicalTsv",
+    "queryRecordIndex": 0,
+    "subjectRecordIndex": 1,
+    "proteinMatches": false
+   },
+   "violations": []
+  },
+  {
+   "id": "protein-table-of-protein-matches",
+   "type": "CanonicalPrecomputedProteinComparison",
+   "value": {
+    "kind": "precomputedProteinComparison",
+    "resourceId": "comparison-explicit-1",
+    "encoding": "canonicalTsv",
+    "queryRecordIndex": 0,
+    "subjectRecordIndex": 1
+   },
+   "violations": []
+  },
+  {
+   "id": "protein-table-that-says-it-holds-protein-matches",
+   "type": "CanonicalPrecomputedProteinComparison",
+   "value": {
+    "kind": "precomputedProteinComparison",
+    "resourceId": "comparison-explicit-1",
+    "encoding": "canonicalTsv",
+    "queryRecordIndex": 0,
+    "subjectRecordIndex": 1,
+    "proteinMatches": true
+   },
+   "violations": [
+    {
+     "path": "value.proteinMatches",
+     "reason": "not-in-set"
+    }
+   ]
   }
  ]
 }

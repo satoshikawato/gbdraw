@@ -7,6 +7,7 @@
  *   encoding?: string,
  *   queryRecordIndex?: number,
  *   subjectRecordIndex?: number,
+ *   proteinMatches?: boolean,
  *   valueKind?: string,
  *   canonicalInput?: boolean,
  *   file?: unknown
@@ -59,7 +60,9 @@ export const mapResourceBackedCanonicalComparison = (
     ...(kind === 'precomputedProteinComparison'
       ? {
           queryRecordIndex: Number(comparison.queryRecordIndex),
-          subjectRecordIndex: Number(comparison.subjectRecordIndex)
+          subjectRecordIndex: Number(comparison.subjectRecordIndex),
+          // A table that holds no protein matches says so (OV-3574).
+          ...(comparison.proteinMatches === false ? { proteinMatches: false } : {})
         }
       : {}),
     ...(kind === 'collinearityResult'
