@@ -135,6 +135,25 @@ No. Pair each GFF3 input with the matching FASTA sequence. [Sequence and
 annotation files](./REFERENCE/input-formats-and-tsv-schemas.md#sequence-and-annotation-files)
 explains ID matching, coordinates, phase, and translation.
 
+### Can I draw a sequence that has no annotation?
+
+Yes. Give a FASTA file alone: `--fasta` without `--gff` on the command line,
+`read_fasta()` in Python, or the **FASTA** input type in the Web app. Each entry
+is drawn as a record with its sequence and no features, and GC content, GC
+skew, depth, region annotations, and comparisons draw as usual. [Sequence and
+annotation files](./REFERENCE/input-formats-and-tsv-schemas.md#sequence-and-annotation-files)
+lists what a FASTA entry must contain.
+
+### How do I find where a sequence lies in my genome?
+
+In the Web app, after Generate, open **Sequence search**, paste or choose the
+query sequences, and select **Search**: LOSAT searches the drawn records and
+the hits appear as an annotation set. To take the query from the drawing itself, drag with **Select
+region** and choose **Use as search query** in the Region popup; the same popup
+can start a new drawing from the span. See [Sequence
+search](./REFERENCE/web-app.md#sequence-search) and the [main
+workflow](./REFERENCE/web-app.md#main-workflow).
+
 ### Can I use gzip-compressed files?
 
 Yes. A `.gbff.gz`, `.fna.gz`, `.gff.gz`, or gzip TSV file is read as the plain
