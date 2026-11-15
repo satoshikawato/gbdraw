@@ -367,6 +367,23 @@ def test_layout_refuses_a_row_by_what_takes_its_width(
     assert "fewer windows" in message and "move some records to another row" in message
 
 
+def test_an_auto_gap_row_that_its_marks_do_not_fill_gets_the_smaller_gap_advice() -> None:
+    """The Auto gap is no proof that the marks fill the row (OV-3572): three records whose one window mark takes 45 of
+    50 px are refused with the Auto gap (6.25 px each), yet a set gap of 0 draws them, so the advice is a smaller gap."""
+
+    measurements = (
+        LinearRecordMeasurement(0, RecordKey("a"), 10, right_inset=45),
+        LinearRecordMeasurement(1, RecordKey("b"), 10),
+        LinearRecordMeasurement(2, RecordKey("c"), 10),
+    )
+    with pytest.raises(ValidationError, match="record_count=3") as refused:
+        solve_linear_horizontal_layout(measurements, (0, 0, 0), available_width=50, record_gap_px=None)
+    payload = serialize_web_error(refused.value, operation="generate", stage="render")
+    assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": "ROW_WIDTH"})
+    assert "smaller record gap" in str(refused.value)
+    solve_linear_horizontal_layout(measurements, (0, 0, 0), available_width=50, record_gap_px=0)
+
+
 def _row_gaps_drawn(count: int, length: int, width: float, record_gap_px: float | None) -> list[float]:
     """The gaps between the records of one row of ``count`` records, as the solver places them."""
 

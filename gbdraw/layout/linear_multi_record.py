@@ -421,12 +421,12 @@ def solve_linear_horizontal_layout(
         # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
         gap_width = row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
         if width <= gap_width:
-            # What takes the row names the advice (OV-3572): the marks of a windowed row, which no gap, not even 0,
-            # shrinks, or else a set gap. Without a set gap the Auto gap keeps to its share of the row, so the marks are the cause.
+            # What takes the row names the advice (OV-3572): the marks of a windowed row when they alone fill it, as
+            # no gap, not even 0, helps then; otherwise the gap, set or Auto, which a smaller set gap shrinks.
             marks_width = compensated_sum(
                 left.right_inset + right.left_inset for left, right in zip(row_items, row_items[1:])
             )
-            marks_fill_row = gap is None or width <= marks_width
+            marks_fill_row = width <= marks_width
             raise ValidationError(
                 "Linear row cannot fit a positive bp scale: "
                 f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
