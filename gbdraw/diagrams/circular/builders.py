@@ -45,7 +45,8 @@ from ...render.group_content import (
     build_group_content,
     place_content,
 )
-from ...render_stages import render_stage
+from ...render_stages import _pre_keyed, render_stage
+from ...render.groups.circular.ticks import backed_tick_content, backed_tick_numbers, build_tick_slot_layout
 from ...svg.ids import stable_svg_id
 from ...render.groups.circular.definition import DefinitionNameLines, DefinitionRecordFacts
 from .positioning import (
@@ -474,10 +475,14 @@ def tick_group_content(
     record_transform: RecordDisplayTransform | None = None,
     feature_leaders: tuple[LeaderSegment, ...] = (),
 ) -> GroupContent:
-    """The tick group of a tick slot: its ticks and scale labels (a render stage: a Worker transaction reuses a second build)."""
-    return render_stage(
-        "ticks_content",
-        build_group_content,
+    """The tick group of a tick slot: its ticks and scale labels, the numbers ``feature_leaders`` run behind backed
+    (OV-3301). Three render stages, so a Worker transaction reuses a second build: ``ticks_layout`` builds the group
+    without the leaders, ``ticks_backed_numbers`` finds the numbers the leaders back (a render with the same leaders
+    tests none again, OV-3628), and ``ticks_content`` takes those numbers by value, so a leader that meets no number
+    (one that moves with the arrow shape) does not build the group again."""
+    layout = render_stage(
+        "ticks_layout",
+        build_tick_slot_layout,
         TickGroup,
         gb_record,
         canvas_config.geometry(),
@@ -489,8 +494,10 @@ def tick_group_content(
         track_preset=track_preset,
         slot_id=slot_id,
         record_transform=record_transform,
-        feature_leaders=feature_leaders,
     )
+    backed = render_stage("ticks_backed_numbers", backed_tick_numbers, layout, feature_leaders)
+    # Keyed by value, not by the build that found them: the same numbers from moved leaders reuse the content.
+    return render_stage("ticks_content", backed_tick_content, layout, _pre_keyed(backed))
 
 
 def add_tick_group_on_canvas(

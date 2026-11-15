@@ -2,7 +2,9 @@
 # coding: utf-8
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
+from typing import ParamSpec
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, Path, Text
@@ -14,6 +16,7 @@ from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_meets_ink
 from ....render.drawers.circular.annotations import LeaderSegment
 from ....render.drawers.label_backing import BACKING_PADDING_EM, SectorBacking, sector_backing
+from ....render.group_content import GroupContent
 from ....svg.circular_arcs import position_angle_rad, position_turn_rad
 from ....svg.ids import track_slot_svg_id
 from ....svg.circular_ticks import (
@@ -29,6 +32,9 @@ from ....svg.circular_tracks import within_record_arc
 
 from gbdraw.layout.record_coordinates import CirclePlace, RecordDisplayTransform
 from gbdraw.layout.record_transform import circular_display_length
+
+
+P = ParamSpec("P")
 
 
 def _closest_label_gap_px(
@@ -51,6 +57,63 @@ def _closest_label_gap_px(
     )
 
 
+@dataclass(frozen=True)
+class TickNumber:
+    """One scale number: its letters along its circle, and the backing it is drawn on when a feature label's leader
+    runs behind it or within the backing's padding of it (OV-3301)."""
+
+    letters: CircularInkRing
+    backing: SectorBacking
+
+
+@dataclass(frozen=True)
+class TickSlotLayout:
+    """A tick slot's ticks and numbers before any backing (render stage ``ticks_layout``): ``content`` holds the
+    ``mark_count`` tick marks, then the numbers; ``pad_px`` is how near a leader's stroke may come to a number's
+    letters before the number is backed."""
+
+    content: GroupContent
+    mark_count: int
+    numbers: tuple[TickNumber, ...]
+    pad_px: float
+
+
+def backed_tick_numbers(layout: TickSlotLayout, feature_leaders: Sequence[LeaderSegment]) -> tuple[int, ...]:
+    """The numbers (their places in ``layout.numbers``) a feature label's leader runs behind or within
+    ``layout.pad_px`` of (render stage ``ticks_backed_numbers``)."""
+
+    return tuple(
+        index
+        for index, number in enumerate(layout.numbers)
+        if any(
+            stroke_meets_ink(leader.start, leader.end, leader.half_width + layout.pad_px, number.letters)
+            for leader in feature_leaders
+        )
+    )
+
+
+def backed_tick_content(layout: TickSlotLayout, backed: tuple[int, ...]) -> GroupContent:
+    """The tick slot's content (render stage ``ticks_content``): the tick marks, the backings of the ``backed``
+    numbers, then the numbers, so a leader drawn before the slot passes behind a backed number."""
+
+    if not backed:
+        return layout.content
+    children = layout.content.children
+    backings = tuple(layout.numbers[index].backing.element() for index in backed)
+    return replace(
+        layout.content, children=(*children[: layout.mark_count], *backings, *children[layout.mark_count :])
+    )
+
+
+def build_tick_slot_layout(
+    group_class: Callable[P, "TickGroup"], /, *args: P.args, **kwargs: P.kwargs
+) -> TickSlotLayout:
+    """A render-stage function (``ticks_layout``): build a tick slot's group with ``group_class`` (``TickGroup``)
+    and keep its layout, as ``build_group_content`` keeps a group's content."""
+
+    return group_class(*args, **kwargs).layout()
+
+
 class TickGroup:
     """
     Represents a group for tick marks and labels on a circular genomic plot.
@@ -69,11 +132,8 @@ class TickGroup:
         track_preset: str | None = None,
         slot_id: str,
         record_transform: RecordDisplayTransform | None = None,
-        feature_leaders: Sequence[LeaderSegment] = (),
     ) -> None:
         self.record_transform = record_transform
-        # The record's feature label leaders, drawn before every slot: a number they run behind is backed (OV-3301).
-        self.feature_leaders = tuple(feature_leaders)
         self.gb_record: SeqRecord = gb_record
         self.geometry = geometry
         self.radius: float = float(radius) if radius is not None else geometry.radius
@@ -234,8 +294,8 @@ class TickGroup:
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
-        for backing in self._label_backings():
-            self.tick_group.add(backing.element())
+        # The numbers' backings go between the marks and the numbers (``backed_tick_content``).
+        self.mark_count: int = len(tick_paths_large)
         for tick_label_path_large in tick_label_paths_large:
             self.tick_group.add(tick_label_path_large)
         return self.tick_group
@@ -266,33 +326,34 @@ class TickGroup:
             rings.append(CircularInkRing(band, start % 1.0, end % 1.0))
         return rings
 
-    def _label_backings(self) -> list[SectorBacking]:
-        """The backings of the numbers a feature label's leader runs behind or within a backing's padding of
-        (OV-3301): as a region label's (``sector_backing``, CIR-RGN-FRONT), stopped before the tick marks and their
-        stroke on the side they lie."""
+    def _numbers(self) -> tuple[TickNumber, ...]:
+        """Each number's letters and its backing (OV-3301): as a region label's (``sector_backing``,
+        CIR-RGN-FRONT), stopped before the tick marks and their stroke on the side they lie."""
 
-        pad = BACKING_PADDING_EM * float(self.font_size)
-        rings = [
-            ring
-            for ring in self._label_rings()
-            if any(
-                stroke_meets_ink(leader.start, leader.end, leader.half_width + pad, ring) for leader in self.feature_leaders
-            )
-        ]
+        rings = self._label_rings()
         if not rings:
-            return []
+            return ()
         radii = [math.hypot(*point) for mark in self._tick_marks() for point in mark]
         half = 0.5 * float(self.tick_width)
-        backings: list[SectorBacking] = []
+        numbers: list[TickNumber] = []
         for ring in rings:
             outside = not radii or ring.band.inner_px >= max(radii)
             edge = (max(radii) + half if radii else 0.0) if outside else min(radii) - half
             low = position_angle_rad(ring.start_turn, 1.0)
             high = low + position_turn_rad((ring.end_turn - ring.start_turn) % 1.0, 1.0)
-            backings.append(
-                sector_backing(ring.band.inner_px, ring.band.outer_px, low, high, float(self.font_size), edge=edge)
-            )
-        return backings
+            backing = sector_backing(ring.band.inner_px, ring.band.outer_px, low, high, float(self.font_size), edge=edge)
+            numbers.append(TickNumber(ring, backing))
+        return tuple(numbers)
+
+    def layout(self) -> TickSlotLayout:
+        """The group's content, its numbers and their backings, before any number is backed."""
+
+        return TickSlotLayout(
+            GroupContent.of(self.tick_group),
+            self.mark_count,
+            self._numbers(),
+            BACKING_PADDING_EM * float(self.font_size),
+        )
 
     def ink(self) -> tuple[CircularInk, ...]:
         """What the group paints: each large tick mark (butt-capped, ``tick_width`` wide) and each label's letters
@@ -309,4 +370,11 @@ class TickGroup:
         return self.tick_group
 
 
-__all__ = ["TickGroup"]
+__all__ = [
+    "TickGroup",
+    "TickNumber",
+    "TickSlotLayout",
+    "backed_tick_content",
+    "backed_tick_numbers",
+    "build_tick_slot_layout",
+]

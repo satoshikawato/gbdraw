@@ -643,6 +643,38 @@ test('an Undo of Reset from the other drawing keeps a later step of the hidden d
   assert.equal(circular.form.prefix, 'later');
 });
 
+// OV-3606: a later step of the hidden drawing that set a value back to the
+// one before Reset is kept by the Undo of Reset and by its Redo; once that
+// step is undone in its drawing, the Undo of Reset restores the value again.
+test('a Redo of Reset from the other drawing keeps a later step that set the value before Reset again', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const circular = modeDrawing(state, 'circular');
+  show(app, 'linear');
+  circular.form.prefix = 'pre-reset';
+  circular.form.species = 'pre-reset species';
+  await history.captureBaseline();
+  await app.resetSettings();
+  const resetSpecies = circular.form.species;
+  show(app, 'circular');
+  await history.runUndoable('Circular prefix', () => { circular.form.prefix = 'pre-reset'; });
+  show(app, 'linear');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset settings');
+  await app.undoHistory();
+  assert.deepEqual([circular.form.prefix, circular.form.species], ['pre-reset', 'pre-reset species'],
+    'the Undo restores the species Reset changed and keeps the later prefix step');
+  await app.redoHistory();
+  assert.deepEqual([circular.form.prefix, circular.form.species], ['pre-reset', resetSpecies],
+    'the Redo resets the species again and keeps the later prefix step');
+  show(app, 'circular');
+  await app.undoHistory();
+  assert.equal(circular.form.prefix, '', 'the later Circular step is still its own step');
+  show(app, 'linear');
+  await app.undoHistory();
+  assert.deepEqual([circular.form.prefix, circular.form.species], ['pre-reset', 'pre-reset species'],
+    'with that step undone, the Undo of Reset restores both values');
+});
+
 // OV-1195: a hidden drawing's artifact slot values (here Linear's alignment
 // Reset receipt) are captured and restored on its own slot.
 test('an Undo of Reset from Circular gives Linear its alignment receipt back', async () => {

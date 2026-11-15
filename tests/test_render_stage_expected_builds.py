@@ -364,6 +364,13 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
         | (_CIRCULAR_LABELS if option_id in _CIRCULAR_LABEL_OPTIONS else frozenset())
         | (_RADIAL_LAYOUT_STAGES if option_id in _RADIAL_LAYOUT_OPTIONS else frozenset())
     )
+    # The tick content is the tick layout with the numbers the leaders back: a stage that rebuilds the ticks
+    # rebuilds the layout too, and only the layout reads the settings.
+    if "ticks_content" in allowed:
+        allowed |= {"ticks_layout"}
+    # The backed numbers read the tick layout and the leaders of the placed labels.
+    if allowed & ({"ticks_layout"} | _PLACED_LABELS):
+        allowed |= {"ticks_backed_numbers"}
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
     if allowed & _DEFINITION_COUNT_INPUTS:

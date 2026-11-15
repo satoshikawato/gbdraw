@@ -186,6 +186,36 @@ const changesAsLeft = (intent, changes, direction, editedPartOf = (_path, value)
   });
 };
 
+// OV-3606: the values of each project part that its last Undo or Redo kept
+// because a later step of its drawing had changed them, as that traversal read
+// them. A value that a later step set back to the one on the other side of
+// the part matches that side, so the comparison alone would restore it on the
+// next traversal; while it still holds what was kept, it stays kept.
+/** @type {WeakMap<object, Map<HistoryIntentChange, { has: boolean, value: unknown }>>} */
+const keptPartValues = new WeakMap();
+/**
+ * The changes of a project part (`part`, its `changes`) that an Undo or Redo
+ * restores in a drawing whose intent is `intent`: those `changesAsLeft` finds,
+ * less those the part's last traversal kept and `intent` still holds as kept.
+ * @param {{ changes?: readonly HistoryIntentChange[] }} part
+ * @param {HistoryIntent | null} intent
+ * @param {'undo' | 'redo'} direction
+ * @param {IntentEditedPart} [editedPartOf]
+ */
+const projectPartChanges = (part, intent, direction, editedPartOf) => {
+  const changes = part.changes || [];
+  const kept = keptPartValues.get(part);
+  const stillKept = (/** @type {HistoryIntentChange} */ change) => {
+    const was = kept?.get(change);
+    const now = intentValueAt(intent, change.path);
+    return was !== undefined && was.has === now.has && sameJsonValue(was.value, now.value);
+  };
+  const restored = changesAsLeft(intent, changes, direction, editedPartOf).filter((change) => !stillKept(change));
+  keptPartValues.set(part, new Map(changes.filter((change) => !restored.includes(change))
+    .map((change) => [change, intentValueAt(intent, change.path)])));
+  return restored;
+};
+
 /** @param {Record<string, unknown>} event */
 const emitHistoryDiagnostic = (event) => {
   const callback = globalThis.__GBDRAW_TEST_HOOKS__?.onHistoryDiagnostic;
@@ -2150,7 +2180,7 @@ export const createHistoryManager = ({
       await applyCheckpointEntry(direction === 'undo' ? entry.before : entry.after);
     } else {
       await refreshCurrentIntent();
-      const changes = changesAsLeft(currentIntent, entry.changes || [], direction, editedPartOf);
+      const changes = projectPartChanges(entry, currentIntent, direction, editedPartOf);
       if (changes.length > 0) await applyIntentEntry({ ...entry, type: 'intent', changes }, direction);
     }
     touch();

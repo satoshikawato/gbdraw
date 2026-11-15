@@ -216,3 +216,85 @@ def test_inner_leaders_through_the_default_scale_pass_behind_backed_numbers(tmp_
     assert measured["crossed"]
     assert measured["unbacked"] == []
     assert measured["on_numbers"] == []
+
+
+def _tick_group_renders(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The tick group of NC_002333.2 (``--labels both``) as the Circular assembler asked for it, its leaders, and a
+    render of it with other leaders in one prepared-input cache. Each render returns its stage metrics, its children
+    and how many leader-to-number tests it ran (``stroke_meets_ink`` in the tick module)."""
+
+    from gbdraw.api.prepared import PreparedBiologicalInputCache, register_prepared_value_identity
+    from gbdraw.diagrams.circular import builders
+    from gbdraw.render.drawers.circular.annotations import LeaderSegment
+    from gbdraw.render.groups.circular import ticks
+
+    calls: list[tuple[tuple, dict]] = []
+    drawn = builders.tick_group_content
+
+    def recording(*args, **kwargs):
+        calls.append((args, kwargs))
+        return drawn(*args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(builders, "tick_group_content", recording)
+        _draw(tmp_path, ZEBRAFISH, "--labels", "both")
+    [(args, kwargs)] = calls
+    leaders: tuple[LeaderSegment, ...] = kwargs.pop("feature_leaders")
+    assert leaders
+    tests = [0]
+    meets = ticks.stroke_meets_ink
+
+    def counted(*meet_args, **meet_kwargs):
+        tests[0] += 1
+        return meets(*meet_args, **meet_kwargs)
+
+    monkeypatch.setattr(ticks, "stroke_meets_ink", counted)
+    cache = PreparedBiologicalInputCache()
+
+    def render(feature_leaders: tuple[LeaderSegment, ...]) -> tuple[dict[str, int], str, int]:
+        diagnostics: dict[str, object] = {}
+        tests[0] = 0
+        with cache.transaction(resource_paths={}, diagnostics=diagnostics):
+            register_prepared_value_identity(args[0], ("test-record", "NC_002333.2"))
+            content = builders.tick_group_content(*args, **kwargs, feature_leaders=feature_leaders)
+        metrics = diagnostics["metrics"]
+        assert isinstance(metrics, dict)
+        return metrics, "".join(child.tostring() for child in content.children), tests[0]
+
+    return leaders, render
+
+
+@pytest.mark.circular
+def test_the_tick_group_is_built_again_only_when_its_backed_numbers_change(tmp_path, monkeypatch) -> None:
+    """The ticks read the leaders only for the numbers they back: a leader that meets no number (one that moves
+    with the arrow shape of another record on the circle, case C2 of the render-stage universe) reuses the tick
+    group of an earlier render, and a change of the backed numbers builds it again."""
+
+    from gbdraw.render.drawers.circular.annotations import LeaderSegment
+
+    leaders, render = _tick_group_renders(tmp_path, monkeypatch)
+    # A leader inside the numbers' circle, across from nothing they print.
+    clear = (*leaders, LeaderSegment((0.0, 0.0), (1.0, 0.0), 0.5))
+    _cold, backed, _tests = render(leaders)
+    warm, same, _tests = render(clear)
+    assert warm.get("renderStageBuild:ticks_content", 0) == 0
+    assert warm.get("renderStageHit:ticks_content", 0) >= 1
+    assert same == backed
+    changed, unbacked, _tests = render(())
+    assert changed.get("renderStageBuild:ticks_content", 0) >= 1
+    assert "fill-opacity" in backed and "fill-opacity" not in unbacked
+
+
+@pytest.mark.circular
+def test_a_render_with_the_same_leaders_tests_no_leader_against_the_numbers_again(tmp_path, monkeypatch) -> None:
+    """OV-3628: which numbers the leaders back is a cached step keyed by the leaders. A later render whose leaders
+    are the same (a Show Depth toggle on the Web that moves no label) reuses it; before, every render tested each
+    leader against each number again (1044 tests here, about 2 s of a live redraw in CPython)."""
+
+    leaders, render = _tick_group_renders(tmp_path, monkeypatch)
+    _cold, backed, cold_tests = render(leaders)
+    assert cold_tests > 0
+    warm, same, warm_tests = render(leaders)
+    assert warm_tests == 0
+    assert warm.get("renderStageBuild:ticks_content", 0) == 0
+    assert same == backed

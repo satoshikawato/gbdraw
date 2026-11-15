@@ -317,6 +317,7 @@ export const nextStep = (random, state, kind, { fixture, canUndo }) => {
 const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step) => {
   const { legendEntryKey } = await import('/gbdraw/web/js/services/drawing/paint.js');
   const { findWalkFeature } = await import('/tests/web/helpers/live-random-walk-page.mjs');
+  const { choosePaletteWithInstantPreview } = await import('/tests/web/helpers/palette-menu-page.mjs');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
   const notes = [];
@@ -520,8 +521,7 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
         break;
       }
       case 'palette':
-        app.setPaletteInstantPreview(true);
-        await answerDialogs(Promise.resolve(app.selectPalette(current.palette)));
+        await answerDialogs(choosePaletteWithInstantPreview(app, current.palette));
         break;
       case 'reset':
         await app.resetSettings();

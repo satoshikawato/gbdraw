@@ -10,7 +10,8 @@
 // promotion spec live-generate-random-walk.promotion.spec.js runs the
 // promotion level.
 const { expect, test } = require('@playwright/test');
-const { ALLOWLIST_WALK_KINDS, randomWalkTests, recordReplayTest, shrinkLimitsFromEnv } = require('./helpers/live-random-walk.mjs');
+const { join } = require('node:path');
+const { ALLOWLIST_WALK_KINDS, randomWalkTests, recordReplayTest, replayWalkTest, shrinkLimitsFromEnv } = require('./helpers/live-random-walk.mjs');
 const { FIXTURES, PR_SEED, REPLACED_MATRIX_CASES, WALK_KINDS, coverageOf, planWalk } = require('./helpers/live-random-walk-plan.mjs');
 const { WORK_ALLOWLIST } = require('./helpers/live-work-allowlist.mjs');
 
@@ -45,5 +46,13 @@ test('the walk draws each matrix case it replaced in that case\'s states', () =>
 
 const { title, body } = recordReplayTest({ seed: PR_SEED });
 test(title, body);
+
+// Fixed walks: the shrunk reproductions of failures the promotion walk found,
+// replayed on every pull request.
+// OV-3605 (promotion run 43665668390): two palette changes in Linear, an
+// Undo and Redo, a switch to Circular, and an Undo there, which must leave
+// Linear's palette.
+const UNDO_AFTER_LINEAR_PALETTE = replayWalkTest(join(__dirname, 'fixtures', 'random-walk', 'undo-after-linear-palette.walk.json'), { shrink: { replays: 0, walks: 0 } });
+test('random walk replay: an Undo in Circular after palette changes in Linear leaves Linear', UNDO_AFTER_LINEAR_PALETTE.body);
 
 for (const walk of randomWalkTests({ seed: PR_SEED, ...PLAN, shrink: shrinkLimitsFromEnv(SHRINK) })) test(walk.title, walk.body);

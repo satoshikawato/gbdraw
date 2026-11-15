@@ -28,6 +28,7 @@ const { expectLiveEqualsGenerate, semanticSnapshot, settleLive } = require(repo(
 const { colorLegendRow, generate, history, renameRow } = require(repo('tests/web/helpers/live-generate-parity-steps.cjs'));
 const { compareSvgFiles } = require(repo('tests/web/helpers/svg-semantic-compare.cjs'));
 const { circularFileInput } = require('../../tests/web/helpers/circular-inputs.cjs');
+const { drawingTab, shownDrawing, takeLinearOffer } = require('../../tests/web/helpers/drawing-bar.cjs');
 
 // Journey -> the capabilities (tools/ci-impact-policy.mjs classifyChanges) it
 // exercises. A changed capability that no journey lists is printed as uncovered.
@@ -283,22 +284,34 @@ const historyDepth = (page) => page.evaluate(() => ({
   redo: window.__GBDRAW_HISTORY__.getRedoCount()
 }));
 
+// The project's drawings by their IDs (a new Session has one Circular drawing,
+// and the Linear offer tab makes the Linear one, PD-OI-090), with the shown one.
 const readDrawings = (page, paths) => page.evaluate(async (fieldPaths) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  const { allocateDrawingId } = await import('/gbdraw/web/js/services/drawing-view.js');
   const unwrap = (value) => (value && typeof value === 'object' && value.__v_isRef ? value.value : value);
   const at = (drawing, path) => path.split('.').reduce((value, key) => unwrap(value)?.[key], drawing);
-  const pick = (mode) => {
-    // The mode's first drawing.
-    const drawing = state.drawingOf(allocateDrawingId(mode, []));
-    return Object.fromEntries(fieldPaths.map((path) => [path, JSON.parse(JSON.stringify(at(drawing, path) ?? null))]));
+  const fields = (drawing) => Object.fromEntries(fieldPaths.map((path) => [path, JSON.parse(JSON.stringify(at(drawing, path) ?? null))]));
+  return {
+    mode: state.mode.value,
+    shown: state.activeDrawingId.value,
+    drawings: Object.fromEntries(state.drawingList().map((drawing) => [drawing.id, { mode: drawing.mode, ...fields(drawing) }]))
   };
-  return { mode: state.mode.value, circular: pick('circular'), linear: pick('linear') };
 }, paths);
 
-const showMode = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'linear' ? 'Linear' : 'Circular', exact: true }).click();
-  await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, mode);
+// What a new drawing of `mode` starts with at `adv.<path>`: its row of the
+// generated new-drawing defaults (mode-slice-defaults.generated.js).
+const newDrawingDefault = (page, mode, path) => page.evaluate(async ({ mode, path }) => {
+  const { MODE_SLICE_DEFAULTS } = await import('/gbdraw/web/js/mode-slice-defaults.generated.js');
+  const [head, ...rest] = path.split('.');
+  const row = MODE_SLICE_DEFAULTS.defaults[mode].find((entry) => entry.domain === `config.${head}` && entry.path === rest.join('.'));
+  if (!row || !('value' in row)) throw new Error(`no ${mode} default for ${path}`);
+  return row.value;
+}, { mode, path });
+
+// Show a drawing by its tab, found by the drawing's ID.
+const showDrawingById = async (page, drawingId) => {
+  await drawingTab(page, drawingId).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(drawingId);
   await settleLive(page);
 };
 
@@ -384,6 +397,8 @@ journey('J2', 'Mode switch with per-mode settings', 15, async ({ page, steps }) 
   let initial;
   let circular;
   let linear;
+  let circularId;
+  let linearId;
   const shown = async () => ({
     drawings: await readDrawings(page, fields),
     result: await semanticSnapshot(page),
@@ -393,6 +408,9 @@ journey('J2', 'Mode switch with per-mode settings', 15, async ({ page, steps }) 
     await openApp(page);
     await uploadCircular(page, HMMT_GBK);
     initial = await readDrawings(page, fields);
+    circularId = initial.shown;
+    expect(Object.keys(initial.drawings), 'a new Session has one Circular drawing').toEqual([circularId]);
+    expect(initial.drawings[circularId].mode).toBe('circular');
     return initial;
   }, { limitMs: 240_000 });
   await steps.step('Circular: label font size 13, Generate', async () => {
@@ -407,7 +425,8 @@ journey('J2', 'Mode switch with per-mode settings', 15, async ({ page, steps }) 
     return circular.drawings;
   });
   await steps.step('switch to Linear: its own file, axis stroke width 2, Generate', async () => {
-    await showMode(page, 'linear');
+    linearId = await takeLinearOffer(page);
+    await settleLive(page);
     await page.evaluate(async (text) => {
       window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1000 }));
       await window.Vue.nextTick();
@@ -416,24 +435,29 @@ journey('J2', 'Mode switch with per-mode settings', 15, async ({ page, steps }) 
     await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_width = 2; });
     await generate(page);
     linear = await shown();
-    expect(linear.drawings.linear['adv.axis_stroke_width']).toBe(2);
-    expect(linear.drawings.linear['adv.label_font_size'], 'the Circular font size stays in Circular')
-      .toBe(initial.linear['adv.label_font_size']);
-    expect(linear.drawings.circular['adv.axis_stroke_width'], 'the Linear stroke width stays in Linear')
-      .toBe(initial.circular['adv.axis_stroke_width']);
+    expect(linear.drawings.drawings[linearId].mode).toBe('linear');
+    expect(linear.drawings.drawings[linearId]['adv.axis_stroke_width']).toBe(2);
+    expect(linear.drawings.drawings[linearId]['adv.label_font_size'], 'the Circular font size stays in Circular')
+      .toBe(await newDrawingDefault(page, 'linear', 'adv.label_font_size'));
+    expect(linear.drawings.drawings[circularId]['adv.axis_stroke_width'], 'the Linear stroke width stays in Linear')
+      .toBe(initial.drawings[circularId]['adv.axis_stroke_width']);
     return linear.drawings;
   }, { limitMs: 300_000 });
   await steps.step('back to Circular: settings, Result, and Legend edit unchanged', async () => {
-    await showMode(page, 'circular');
+    await showDrawingById(page, circularId);
     const back = await shown();
-    expect(back.drawings).toEqual({ ...circular.drawings, linear: linear.drawings.linear });
+    expect(back.drawings).toEqual({
+      mode: 'circular',
+      shown: circularId,
+      drawings: { [circularId]: circular.drawings.drawings[circularId], [linearId]: linear.drawings.drawings[linearId] }
+    });
     expect(back.result, 'the Circular Result').toEqual(circular.result);
     expect(back.legend, 'the Circular Legend rows').toEqual(circular.legend);
   });
   await steps.step('back to Linear: settings and Result unchanged', async () => {
-    await showMode(page, 'linear');
+    await showDrawingById(page, linearId);
     const back = await shown();
-    expect(back.drawings).toEqual({ ...linear.drawings, mode: 'linear' });
+    expect(back.drawings).toEqual(linear.drawings);
     expect(back.result, 'the Linear Result').toEqual(linear.result);
     expect(back.legend, 'the Linear Legend rows').toEqual(linear.legend);
   });
