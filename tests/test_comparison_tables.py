@@ -344,13 +344,104 @@ def test_an_uploaded_gzip_blast_table_decodes_as_the_plain_one(tmp_path: Path) -
     assert decoded[1].search_frame_text == decoded[0].search_frame_text == table.decode("utf-8")
 
 
-# A mapping of a table's columns onto COMPARISON_COLUMNS, as each language spells it. Python: read_csv names, or a
-# column assignment onto an already read frame. JavaScript: a callback or loop over the columns that looks up a
-# position (`columns.indexOf(column)`) or subscripts a value by a column or an index (`row[column]`,
-# `fields[index]`), or the columns subscripted by a position (`COMPARISON_COLUMNS[index]`, naming fields).
-_PYTHON_COLUMN_MAPPING = re.compile(
-    r"(?:names\s*=\s*|\.columns\s*=\s*|set_axis\()(?:list\(|tuple\()?\s*\bCOMPARISON_COLUMNS\b"
-)
+# A mapping of a table's columns onto COMPARISON_COLUMNS, as each language spells it. In both languages: a loop,
+# comprehension or callback over the columns that looks up each entry's position (`header.index(column)`,
+# `columns.indexOf(column)`) or a value by the entry or its index (`row[column]`, `fields[index]`), and the columns
+# subscripted by a position (`COMPARISON_COLUMNS[index]`, naming fields). Python also: read_csv names, a column
+# assignment onto an already read frame (`.columns =`, `set_axis(`), and a dict of the positions
+# (`dict(enumerate(COMPARISON_COLUMNS))`). An imported alias counts as the constant. Joining, membership, length and
+# a fixed entry or slice are not mappings. Nor are the forms that take values already in COMPARISON_COLUMNS order:
+# `zip(COMPARISON_COLUMNS, row)` over a normalized frame's rows and a frame built with `columns=COMPARISON_COLUMNS`
+# (eleven such consumers outside gbdraw/io/comparisons.py on dev); a reader names the fields of a table's own
+# order, which these spellings do not tell apart from a consumer.
+_PY_LOOKUP_METHODS = frozenset({"index", "get", "get_loc", "get_indexer"})
+
+
+def _python_column_mappings(tree: ast.Module) -> list[int]:
+    """Line numbers of each Python mapping onto COMPARISON_COLUMNS (or an imported alias of it)."""
+
+    names = {"COMPARISON_COLUMNS"} | {
+        alias.asname
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.name == "COMPARISON_COLUMNS" and alias.asname
+    }
+
+    def columns(node: ast.AST | None) -> bool:
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"list", "tuple"}:
+            return bool(node.args) and columns(node.args[0])
+        return (isinstance(node, ast.Name) and node.id in names) or (
+            isinstance(node, ast.Attribute) and node.attr == "COMPARISON_COLUMNS"
+        )
+
+    def iterated(node: ast.AST) -> bool:
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"enumerate", "reversed"}:
+            return bool(node.args) and columns(node.args[0])
+        return columns(node)
+
+    def looks_up(nodes: list[ast.AST], target: ast.AST) -> bool:
+        bound = {node.id for node in ast.walk(target) if isinstance(node, ast.Name)}
+        for node in (inner for outer in nodes for inner in ast.walk(outer)):
+            if isinstance(node, ast.Subscript) and any(
+                isinstance(name, ast.Name) and name.id in bound for name in ast.walk(node.slice)
+            ):
+                return True
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in _PY_LOOKUP_METHODS
+                and any(isinstance(arg, ast.Name) and arg.id in bound for arg in node.args)
+            ):
+                return True
+        return False
+
+    lines = []
+    for node in ast.walk(tree):
+        found = False
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            found = iterated(node.iter) and looks_up(list(node.body), node.target)
+        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            results = [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
+            found = any(iterated(gen.iter) and looks_up(results, gen.target) for gen in node.generators)
+        elif isinstance(node, ast.Subscript):
+            index = node.slice
+            fixed = isinstance(index, (ast.Constant, ast.Slice)) or (
+                isinstance(index, ast.UnaryOp) and isinstance(index.operand, ast.Constant)
+            )
+            found = columns(node.value) and not fixed
+        elif isinstance(node, ast.Call):
+            function = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", "")
+            found = (
+                (function == "dict" and bool(node.args) and iterated(node.args[0]) and not columns(node.args[0]))
+                or (function == "set_axis" and bool(node.args) and columns(node.args[0]))
+                or any(keyword.arg == "names" and columns(keyword.value) for keyword in node.keywords)
+            )
+        elif isinstance(node, ast.Assign):
+            found = columns(node.value) and any(
+                isinstance(target, ast.Attribute) and target.attr == "columns" for target in node.targets
+            )
+        if found:
+            lines.append(node.lineno)
+    return sorted(lines)
+
+
+def _python_top_level_name(tree: ast.Module, line: int) -> str:
+    """The top-level function (or `Class.method`) holding a line, or `<module>`."""
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.lineno <= line <= (node.end_lineno or node.lineno):
+                if isinstance(node, ast.ClassDef):
+                    for member in node.body:
+                        if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                            member.lineno <= line <= (member.end_lineno or member.lineno)
+                        ):
+                            return f"{node.name}.{member.name}"
+                return node.name
+    return "<module>"
+
+
 _JS_IMPORT_ALIAS = re.compile(r"\bCOMPARISON_COLUMNS\s+as\s+([\w$]+)")
 _JS_POSITION_LOOKUP = re.compile(r"\.\s*(?:indexOf|lastIndexOf|findIndex|findLastIndex)\s*\(")
 _JS_COMMENT = re.compile(r"/\*.*?\*/|(?:^|(?<=\s))//[^\n]*", re.DOTALL | re.MULTILINE)
@@ -409,25 +500,8 @@ def _column_mappings(path: str, text: str) -> list[str]:
     """`path:function` of each mapping onto COMPARISON_COLUMNS in one source file (`<module>` outside a function)."""
 
     if path.endswith(".py"):
-        functions = []
-
-        def visit(node: ast.AST, prefix: str) -> None:
-            for child in ast.iter_child_nodes(node):
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    name = f"{prefix}{child.name}"
-                    if not isinstance(child, ast.ClassDef):
-                        functions.append((child.lineno, child.end_lineno or child.lineno, name))
-                    visit(child, f"{name}.")
-                else:
-                    visit(child, prefix)
-
-        visit(ast.parse(text), "")
-        found = []
-        for match in _PYTHON_COLUMN_MAPPING.finditer(text):
-            line = text.count("\n", 0, match.start()) + 1
-            enclosing = [name for first, last, name in functions if first <= line <= last]
-            found.append(f"{path}:{enclosing[-1] if enclosing else '<module>'}")
-        return found
+        tree = ast.parse(text)
+        return [f"{path}:{_python_top_level_name(tree, line)}" for line in _python_column_mappings(tree)]
     declarations = [
         (match.start(), match.group(1) or match.group(2)) for match in _JS_TOP_LEVEL_DECLARATION.finditer(text)
     ]
@@ -480,8 +554,14 @@ def test_outfmt_table_columns_have_one_reader() -> None:
         "a mapping onto COMPARISON_COLUMNS outside gbdraw/io/comparisons.py (file:function): call the owner, "
         "or register the twin in tools/twins.json"
     )
-    # The file reader and the DataFrame normalizer, both in the one owner.
-    assert sum(count for site, count in readers.items() if site.startswith(f"{_OWNER_MODULE}:")) == 2
+    # The file reader, its outfmt 7 "# Fields:" header positions, and the DataFrame normalizer with its typed
+    # per-column read, all in the one owner.
+    assert {site: count for site, count in readers.items() if site.startswith(f"{_OWNER_MODULE}:")} == {
+        f"{_OWNER_MODULE}:read_comparison_table": 1,
+        f"{_OWNER_MODULE}:_field_positions": 1,
+        f"{_OWNER_MODULE}:normalize_comparison_dataframe": 1,
+        f"{_OWNER_MODULE}:_normalize": 1,
+    }
 
 
 _SYNTHETIC_JS = """\
@@ -532,6 +612,51 @@ def relabel(frame):
 
 
 ORDER = list(COMPARISON_COLUMNS)
+HEADER = "\\t".join(COMPARISON_COLUMNS)
+IDS = COMPARISON_COLUMNS[:2]
+FIRST = COMPARISON_COLUMNS[0]
+
+
+def not_mappings(column, frame):
+    empty = {name: [] for name in COMPARISON_COLUMNS}
+    known = column in COMPARISON_COLUMNS, COMPARISON_COLUMNS.index(column) + 1, len(COMPARISON_COLUMNS)
+    rows = [dict(zip(COMPARISON_COLUMNS, row)) for row in frame.itertuples(index=False)]
+    return empty, known, rows, pd.DataFrame(columns=COMPARISON_COLUMNS), pd.DataFrame(rows, columns=COMPARISON_COLUMNS)
+
+
+def positions_of(header):
+    return [header.index(column) for column in COMPARISON_COLUMNS]
+
+
+def by_name(row):
+    return tuple(row[column] for column in COMPARISON_COLUMNS)
+
+
+def numbered():
+    return dict(enumerate(COMPARISON_COLUMNS))
+
+
+def by_position(fields):
+    named = {}
+    for index in range(len(fields)):
+        named[COMPARISON_COLUMNS[index]] = fields[index]
+    return named
+
+
+def outer(rows):
+    def inner(row):
+        named = {}
+        for index, column in enumerate(COMPARISON_COLUMNS):
+            named[column] = row[index]
+        return named
+
+    return [inner(row) for row in rows]
+
+
+def aliased(row):
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS as COLUMNS
+
+    return {column: row.get(column) for column in COLUMNS}
 """
 
 
@@ -550,11 +675,18 @@ def test_column_mapping_detector_names_each_mapping_by_function() -> None:
         "gbdraw/web/js/x.js:aliased": 1,
         "gbdraw/y.py:Reader.read": 1,
         "gbdraw/y.py:relabel": 1,
+        "gbdraw/y.py:positions_of": 1,
+        "gbdraw/y.py:by_name": 1,
+        "gbdraw/y.py:numbered": 1,
+        "gbdraw/y.py:by_position": 1,
+        "gbdraw/y.py:outer": 1,
+        "gbdraw/y.py:aliased": 1,
     }
 
     registry = {"twins": [
         {"pythonOwner": ["gbdraw/y.py:Reader.read"], "jsOwner": ["gbdraw/web/js/x.js:registeredReorder"]},
-        {"pythonOwner": [], "jsOwner": ["gbdraw/web/js/x.js:namedFields"], "pending": True},
+        {"pythonOwner": ["gbdraw/y.py:numbered"], "jsOwner": ["gbdraw/web/js/x.js:namedFields"], "pending": True},
+        {"pythonOwner": ["gbdraw/y.py:outer"], "jsOwner": []},
     ]}
     assert _unregistered_column_mappings(
         {**readers, f"{_OWNER_MODULE}:read_comparison_table": 1}, registry
@@ -564,6 +696,11 @@ def test_column_mapping_detector_names_each_mapping_by_function() -> None:
         "gbdraw/web/js/x.js:looped": 1,
         "gbdraw/web/js/x.js:aliased": 1,
         "gbdraw/y.py:relabel": 1,
+        "gbdraw/y.py:positions_of": 1,
+        "gbdraw/y.py:by_name": 1,
+        "gbdraw/y.py:numbered": 1,
+        "gbdraw/y.py:by_position": 1,
+        "gbdraw/y.py:aliased": 1,
     }
 
 
