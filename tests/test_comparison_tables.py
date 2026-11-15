@@ -7,6 +7,7 @@ table IDs that contradict the endpoint records fail; unknown IDs warn.
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import math
@@ -343,25 +344,227 @@ def test_an_uploaded_gzip_blast_table_decodes_as_the_plain_one(tmp_path: Path) -
     assert decoded[1].search_frame_text == decoded[0].search_frame_text == table.decode("utf-8")
 
 
-# read_csv names, or a column assignment onto an already read frame.
-_COLUMN_MAPPING = re.compile(
-    r"(?:names\s*=\s*|\.columns\s*=\s*|set_axis\()(?:list\(|tuple\()?\s*COMPARISON_COLUMNS"
+# A mapping of a table's columns onto COMPARISON_COLUMNS, as each language spells it. Python: read_csv names, or a
+# column assignment onto an already read frame. JavaScript: a callback or loop over the columns that looks up a
+# position (`columns.indexOf(column)`) or subscripts a value by a column or an index (`row[column]`,
+# `fields[index]`), or the columns subscripted by a position (`COMPARISON_COLUMNS[index]`, naming fields).
+_PYTHON_COLUMN_MAPPING = re.compile(
+    r"(?:names\s*=\s*|\.columns\s*=\s*|set_axis\()(?:list\(|tuple\()?\s*\bCOMPARISON_COLUMNS\b"
 )
+_JS_IMPORT_ALIAS = re.compile(r"\bCOMPARISON_COLUMNS\s+as\s+([\w$]+)")
+_JS_POSITION_LOOKUP = re.compile(r"\.\s*(?:indexOf|lastIndexOf|findIndex|findLastIndex)\s*\(")
+_JS_COMMENT = re.compile(r"/\*.*?\*/|(?:^|(?<=\s))//[^\n]*", re.DOTALL | re.MULTILINE)
+_JS_TOP_LEVEL_DECLARATION = re.compile(
+    r"^(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function\s*\*?\s*([\w$]+)|(?:const|let|var|class)\s+([\w$]+))",
+    re.MULTILINE,
+)
+_JS_IDENTIFIER = re.compile(r"[A-Za-z_$][\w$]*")
+
+
+def _balanced(text: str, start: int, opening: str, closing: str) -> str:
+    """The text from `start` (an opening bracket) to its closing bracket, or to the end."""
+
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == opening:
+            depth += 1
+        elif text[index] == closing:
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return text[start:]
+
+
+def _looks_up_per_column(body: str, names: list[str]) -> bool:
+    if _JS_POSITION_LOOKUP.search(body):
+        return True
+    return any(re.search(rf"[\w$\])]\s*\[\s*{re.escape(name)}\s*\]", body) for name in names)
+
+
+def _js_column_mappings(text: str) -> list[int]:
+    """Offsets of each JavaScript mapping onto COMPARISON_COLUMNS (or an imported alias of it)."""
+
+    text = _JS_COMMENT.sub(lambda match: re.sub(r"[^\n]", " ", match.group(0)), text)
+    names = ["COMPARISON_COLUMNS", *_JS_IMPORT_ALIAS.findall(text)]
+    constant = "(?:" + "|".join(rf"(?<![\w$.]){re.escape(name)}\b" for name in names) + ")"
+    offsets = []
+    for match in re.finditer(rf"{constant}\s*\.\s*(?:map|flatMap|forEach|reduce|reduceRight)\s*\(", text):
+        callback = _balanced(text, match.end() - 1, "(", ")")
+        head = re.match(r"\(\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?(\([^)]*\)|[\w$]+)", callback)
+        parameters = _JS_IDENTIFIER.findall(head.group(1)) if head else []
+        if _looks_up_per_column(callback, parameters):
+            offsets.append(match.start())
+    loop = rf"for\s*\(\s*(?:const|let|var)\s+([^;]+?)\s+of\s+{constant}(?:\s*\.\s*entries\s*\(\s*\))?\s*\)"
+    for match in re.finditer(loop, text):
+        rest = text[match.end() :]
+        brace = re.match(r"\s*\{", rest)
+        body = _balanced(text, match.end() + brace.end() - 1, "{", "}") if brace else rest.split(";", 1)[0]
+        if _looks_up_per_column(body, _JS_IDENTIFIER.findall(match.group(1))):
+            offsets.append(match.start())
+    offsets.extend(match.start() for match in re.finditer(rf"{constant}\s*\[\s*(?!\d)[^\]\s]", text))
+    return sorted(offsets)
+
+
+def _column_mappings(path: str, text: str) -> list[str]:
+    """`path:function` of each mapping onto COMPARISON_COLUMNS in one source file (`<module>` outside a function)."""
+
+    if path.endswith(".py"):
+        functions = []
+
+        def visit(node: ast.AST, prefix: str) -> None:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    name = f"{prefix}{child.name}"
+                    if not isinstance(child, ast.ClassDef):
+                        functions.append((child.lineno, child.end_lineno or child.lineno, name))
+                    visit(child, f"{name}.")
+                else:
+                    visit(child, prefix)
+
+        visit(ast.parse(text), "")
+        found = []
+        for match in _PYTHON_COLUMN_MAPPING.finditer(text):
+            line = text.count("\n", 0, match.start()) + 1
+            enclosing = [name for first, last, name in functions if first <= line <= last]
+            found.append(f"{path}:{enclosing[-1] if enclosing else '<module>'}")
+        return found
+    declarations = [
+        (match.start(), match.group(1) or match.group(2)) for match in _JS_TOP_LEVEL_DECLARATION.finditer(text)
+    ]
+    found = []
+    for offset in _js_column_mappings(text):
+        enclosing = [name for start, name in declarations if start <= offset]
+        found.append(f"{path}:{enclosing[-1] if enclosing else '<module>'}")
+    return found
+
+
+def _package_column_mappings() -> dict[str, int]:
+    package_root = Path(gbdraw.__file__).parent
+    sources = [*package_root.rglob("*.py"), *(package_root / "web" / "js").rglob("*.js")]
+    readers: dict[str, int] = {}
+    for path in sorted(sources):
+        relative = path.relative_to(package_root.parent).as_posix()
+        for site in _column_mappings(relative, path.read_text(encoding="utf-8")):
+            readers[site] = readers.get(site, 0) + 1
+    return readers
+
+
+_OWNER_MODULE = "gbdraw/io/comparisons.py"
+
+
+def _unregistered_column_mappings(readers: dict[str, int], registry: dict) -> dict[str, int]:
+    """Mappings outside the owner module and outside every owner function of a twin row that is not pending."""
+
+    owners = {
+        owner
+        for row in registry["twins"]
+        if row.get("pending") is not True
+        for owner in (*row["pythonOwner"], *row["jsOwner"])
+    }
+    return {
+        site: count
+        for site, count in readers.items()
+        if not site.startswith(f"{_OWNER_MODULE}:") and site not in owners
+    }
 
 
 def test_outfmt_table_columns_have_one_reader() -> None:
-    """R9: only gbdraw.io.comparisons maps table columns onto COMPARISON_COLUMNS."""
+    """R9: gbdraw.io.comparisons maps table columns onto COMPARISON_COLUMNS; a second mapping is a registered twin.
 
-    package_root = Path(gbdraw.__file__).parent
-    sources = [*package_root.rglob("*.py"), *(package_root / "web" / "js").rglob("*.js")]
-    readers = {}
-    for path in sorted(sources):
-        count = len(_COLUMN_MAPPING.findall(path.read_text(encoding="utf-8")))
-        if count:
-            readers[path.relative_to(package_root).as_posix()] = count
+    A mapping elsewhere lies in a function that a row of tools/twins.json that is not pending names as an owner.
+    """
 
+    readers = _package_column_mappings()
+    registry = json.loads((Path(__file__).parents[1] / "tools" / "twins.json").read_text(encoding="utf-8"))
+    assert _unregistered_column_mappings(readers, registry) == {}, (
+        "a mapping onto COMPARISON_COLUMNS outside gbdraw/io/comparisons.py (file:function): call the owner, "
+        "or register the twin in tools/twins.json"
+    )
     # The file reader and the DataFrame normalizer, both in the one owner.
-    assert readers == {"io/comparisons.py": 2}
+    assert sum(count for site, count in readers.items() if site.startswith(f"{_OWNER_MODULE}:")) == 2
+
+
+_SYNTHETIC_JS = """\
+import { COMPARISON_COLUMNS, OTHER } from '../contracts/schema.generated.js';
+import { COMPARISON_COLUMNS as BLAST_COLUMNS } from '../contracts/schema.generated.js';
+
+/** Not a mapping: COMPARISON_COLUMNS.map((column) => columns.indexOf(column)) in a comment. */
+const HEADER = COMPARISON_COLUMNS.join('\\t');
+const labels = COMPARISON_COLUMNS.map((column) => column.toUpperCase());
+const known = (column) => COMPARISON_COLUMNS.includes(column) && COMPARISON_COLUMNS.length > 0;
+
+export const registeredReorder = (columns) => {
+  const positions = COMPARISON_COLUMNS.map((column) => columns.indexOf(column));
+  return positions;
+};
+
+function unregisteredRows(row) {
+  return COMPARISON_COLUMNS.map((column) => row[column]);
+}
+
+const namedFields = (fields) => Object.fromEntries(fields.map((value, index) => [COMPARISON_COLUMNS[index], value]));
+
+const looped = (fields) => {
+  const named = {};
+  for (const [index, column] of COMPARISON_COLUMNS.entries()) {
+    named[column] = fields[index];
+  }
+  return named;
+};
+
+const aliased = (columns) => BLAST_COLUMNS.reduce(
+  (found, column) => found.concat(columns.findIndex((c) => c === column)), []);
+"""
+
+_SYNTHETIC_PY = """\
+import pandas as pd
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+
+class Reader:
+    def read(self, path):
+        return pd.read_csv(path, sep="\\t", names=list(COMPARISON_COLUMNS))
+
+
+def relabel(frame):
+    frame.columns = COMPARISON_COLUMNS
+    return frame
+
+
+ORDER = list(COMPARISON_COLUMNS)
+"""
+
+
+def test_column_mapping_detector_names_each_mapping_by_function() -> None:
+    """The one-reader guard sees each spelling of a mapping, by file and function, and reads the twin rows."""
+
+    readers = {}
+    for path, text in (("gbdraw/web/js/x.js", _SYNTHETIC_JS), ("gbdraw/y.py", _SYNTHETIC_PY)):
+        for site in _column_mappings(path, text):
+            readers[site] = readers.get(site, 0) + 1
+    assert readers == {
+        "gbdraw/web/js/x.js:registeredReorder": 1,
+        "gbdraw/web/js/x.js:unregisteredRows": 1,
+        "gbdraw/web/js/x.js:namedFields": 1,
+        "gbdraw/web/js/x.js:looped": 1,
+        "gbdraw/web/js/x.js:aliased": 1,
+        "gbdraw/y.py:Reader.read": 1,
+        "gbdraw/y.py:relabel": 1,
+    }
+
+    registry = {"twins": [
+        {"pythonOwner": ["gbdraw/y.py:Reader.read"], "jsOwner": ["gbdraw/web/js/x.js:registeredReorder"]},
+        {"pythonOwner": [], "jsOwner": ["gbdraw/web/js/x.js:namedFields"], "pending": True},
+    ]}
+    assert _unregistered_column_mappings(
+        {**readers, f"{_OWNER_MODULE}:read_comparison_table": 1}, registry
+    ) == {
+        "gbdraw/web/js/x.js:unregisteredRows": 1,
+        "gbdraw/web/js/x.js:namedFields": 1,
+        "gbdraw/web/js/x.js:looped": 1,
+        "gbdraw/web/js/x.js:aliased": 1,
+        "gbdraw/y.py:relabel": 1,
+    }
 
 
 # --- CO-06: record-ID binding --------------------------------------------------
