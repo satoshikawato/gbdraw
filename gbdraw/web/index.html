@@ -3328,7 +3328,7 @@
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
                                     <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ seq.windows.length > 1 ? t('Windows') : t('Region') }}</span>
-                                    <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #<number>. A region that reaches past the record end is drawn to the record end.')"></help-tip>
+                                    <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or {selector}. A region that reaches past the record end is drawn to the record end.', { selector: CODE_TEXT.recordNumber })"></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div class="grid grid-cols-1 gap-1">
@@ -3792,7 +3792,7 @@
                                         <div class="linear-primary-label">{{ t('Record orientation') }}</div>
                                         <div class="flex items-center gap-2">
                                             <button type="button" data-history-ignore @click="recordAutoOrientation.orient()" :disabled="!semanticMutationAvailable || !recordAutoOrientation.enabled.value" :aria-busy="recordAutoOrientation.pending.value ? 'true' : 'false'" aria-describedby="help-linear-auto-orientation" class="btn rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40" data-testid="linear-auto-orientation-button">{{ t('Orient records from comparisons') }}</button>
-                                            <help-tip id="help-linear-auto-orientation" :text="t('Sets the Reverse complement of each record below the top row from the comparisons of the last Generate with the rule of --auto_orient: checked when the nucleotide hits of the record against the row above weigh mostly on the reverse strand, unchecked otherwise, including a record whose checkbox you set yourself. The top row keeps its orientation. First add a BLAST TSV or select LOSATN or TLOSATX, then Generate. Generate again to draw the new orientation; Undo restores the previous checkboxes.')"></help-tip>
+                                            <help-tip id="help-linear-auto-orientation" :text="t('Sets the Reverse complement of each record below the top row from the comparisons of the last Generate with the rule of {option}: checked when the nucleotide hits of the record against the row above weigh mostly on the reverse strand, unchecked otherwise, including a record whose checkbox you set yourself. The top row keeps its orientation. First add a BLAST TSV or select LOSATN or TLOSATX, then Generate. Generate again to draw the new orientation; Undo restores the previous checkboxes.', { option: '--auto_orient' })"></help-tip>
                                         </div>
                                         <p v-if="recordAutoOrientation.status.value" role="status" aria-live="polite" class="ui-hint" data-testid="linear-auto-orientation-status">{{ recordAutoOrientation.status.value }}</p>
                                     </div>
@@ -3821,7 +3821,7 @@
                                         <div class="linear-primary-label">{{ t('Search limits') }}</div>
                                         <div class="grid min-w-0 grid-cols-1 gap-2">
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
-                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein ({option}). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.', { option: '--max-target-seqs' })"></help-tip></span>
                                         <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.candidateLimit" v-blank-null :aria-label="t('LOSATP Max target seqs')" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
@@ -4098,7 +4098,7 @@
                                     </div>
                                 </div>
                                 <div class="min-w-0 space-y-1.5 border-t border-slate-200 pt-2" data-feature-anchor>
-                                    <span class="linear-primary-label mb-1"><label for="linear-anchor-feature-selector">{{ t('Align at feature') }}</label> <help-tip id="help-linear-anchor-feature" :text="t('Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as gene=COX1 or locus_tag=<tag>. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.')"></help-tip></span>
+                                    <span class="linear-primary-label mb-1"><label for="linear-anchor-feature-selector">{{ t('Align at feature') }}</label> <help-tip id="help-linear-anchor-feature" :text="t('Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as {example} or {selector}. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.', { example: CODE_TEXT.featureSelectorExample, selector: CODE_TEXT.featureSelectorForm })"></help-tip></span>
                                     <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-1">
                                         <input type="text" id="linear-anchor-feature-selector" v-model.trim="featureAnchorSelector" data-history-ignore aria-describedby="help-linear-anchor-feature" class="form-input min-w-0 px-2 py-1.5 text-xs" placeholder="gene=COX1" :disabled="!semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-selector">
                                         <button type="button" data-history-managed class="btn btn-secondary px-2 py-1 text-xs" @click="resolveFeatureAnchor" :disabled="!svgContent || !featureAnchorSelector || !semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-resolve">{{ t('Align at feature…') }}</button>
@@ -4904,7 +4904,7 @@
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
                                                         <div class="track-slot-field" data-setting="track-geometry">
-                                                            <span class="track-slot-field-label">h <setting-note :id="`linear-slot-height-timing-${entry.slot.id}`" setting="track-geometry" :item="{ slotId: entry.slot.id }"></setting-note> <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.') : t('Linear track height in pixels (px optional; positive). Leave blank for the automatic height.')"></help-tip></span>
+                                                            <span class="track-slot-field-label">h <setting-note :id="`linear-slot-height-timing-${entry.slot.id}`" setting="track-geometry" :item="{ slotId: entry.slot.id }"></setting-note> <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height ({option}). Auto values vary by record.', { option: '--feature_height' }) : t('Linear track height in pixels (px optional; positive). Leave blank for the automatic height.')"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder truncate">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
                                                                 <input
@@ -6203,7 +6203,7 @@
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
-                                    <h4 class="group-heading mb-2" :aria-label="t('QUALIFIER PRIORITY')">{{ t('QUALIFIER PRIORITY') }} <help-tip :text="t('Define label priority order (e.g. CDS -> product,gene,locus_tag).')"></help-tip></h4>
+                                    <h4 class="group-heading mb-2" :aria-label="t('QUALIFIER PRIORITY')">{{ t('QUALIFIER PRIORITY') }} <help-tip :text="t('Define label priority order (e.g. {example}).', { example: 'CDS -> product,gene,locus_tag' })"></help-tip></h4>
 
                                     <div class="space-y-1 mb-3">
                                         <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
@@ -7783,7 +7783,7 @@
                             <template v-if="clickedFeature.qualifierRows.length > 0">
                                 <div class="flex justify-end -mb-1">
                                     <button type="button" @click="copyClickedFeatureQualifiers" class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                                            :title="t('Copy every qualifier as /key=&quot;value&quot; lines')">
+                                            :title="t('Copy every qualifier as {form} lines', { form: '/key=&quot;value&quot;' })">
                                         <i class="ph ph-copy" aria-hidden="true"></i><span>{{ t('Copy qualifiers') }}</span>
                                     </button>
                                 </div>
@@ -9200,11 +9200,11 @@
                             <div class="flex items-start justify-between gap-2">
                                 <action-menu :label="t('Import / export')" icon="ph-file-arrow-down" :title="t('Export or load label and feature-edit tables')"
                                              :items="[
-                                               { section: t('Labels'), help: t('Label TSV value patterns use case-insensitive Python regex. Examples: NADH|ATPase and (?P<name>NADH).'), helpLabel: t('Help: Label TSV') },
+                                               { section: t('Labels'), help: t('Label TSV value patterns use case-insensitive Python regex. Examples: {example} and {otherExample}.', { example: 'NADH|ATPase', otherExample: '(?P<name>NADH)' }), helpLabel: t('Help: Label TSV') },
                                                { label: t('Export Label TSV'), icon: 'ph-download-simple', run: downloadLabelOverrideTable },
                                                { label: t('Load Label TSV'), icon: 'ph-upload-simple', disabled: !semanticMutationAvailable, run: () => $refs.labelTableInput.click() },
                                                { label: t('Reset Label Edits'), icon: 'ph-arrow-counter-clockwise', disabled: !semanticMutationAvailable, run: resetAllLabelTextOverrides },
-                                               { section: t('Features'), help: t('Per-feature Feature visibility, Label visibility, and label text edits of this diagram\'s records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows whose record or feature is not in this diagram are counted and not applied.'), helpLabel: t('Help: Feature Edits TSV'), helpId: 'help-feature-edits-tsv' },
+                                               { section: t('Features'), help: t('Per-feature Feature visibility, Label visibility, and label text edits of this diagram\'s records, in the {option} format of the CLI and Python API. Load replaces those edits; rows whose record or feature is not in this diagram are counted and not applied.', { option: '--feature_override_table' }), helpLabel: t('Help: Feature Edits TSV'), helpId: 'help-feature-edits-tsv' },
                                                { label: t('Export Feature Edits TSV'), icon: 'ph-download-simple', describedby: 'help-feature-edits-tsv', run: downloadFeatureEditTable },
                                                { label: t('Load Feature Edits TSV'), icon: 'ph-upload-simple', describedby: 'help-feature-edits-tsv', disabled: !semanticMutationAvailable, run: () => $refs.featureEditTableInput.click() }
                                              ]"></action-menu>

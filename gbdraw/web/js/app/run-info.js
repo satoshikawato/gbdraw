@@ -1465,7 +1465,7 @@ const legendRowsCell = (value, key) => (
  * @returns {string | null}
  */
 const legendRowsTable = ({ names = [], hidden = [], order = [] }) => {
-  const lost = () => recipeUnavailable(msg('the Legend row edits cannot be written as a --legend_rows table.'));
+  const lost = () => recipeUnavailable(msg('the Legend row edits cannot be written as a {option} table.'), { option: '--legend_rows' });
   const pairs = Array.isArray(names) ? names : null;
   if (!pairs || !Array.isArray(hidden) || !Array.isArray(order)) throw lost();
   if (!pairs.every((pair) => Array.isArray(pair) && pair.length === 2 && legendRowsCell(pair[0], true) && legendRowsCell(pair[1], false))
@@ -1588,7 +1588,7 @@ const appendConfigOverrides = (args, request, files) => {
       && hasSizedOverride('objects.scale.font_size')
       && !hasSizedOverride('objects.scale.ruler_label_font_size')
     ) {
-      throw recipeUnavailable(msg('the CLI ruler labels follow --scale_font_size, while this render keeps the default ruler-label font sizes.'));
+      throw recipeUnavailable(msg('the CLI ruler labels follow {option}, while this render keeps the default ruler-label font sizes.'), { option: '--scale_font_size' });
     }
     appendBooleanOption(args, take('objects.definition.linear.show_replicon'), '--show_replicon');
     appendBooleanOption(args, take('objects.definition.linear.show_accession'), '', '--hide_accession');
@@ -2825,7 +2825,8 @@ export const buildRunInfo = ({
       params: { files: helperFileList(sourceHelpers) }
     });
     noteParts.push({
-      text: msg('To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a .gbdraw file) and load it again; you do not need to keep these TSV files for that.')
+      text: msg('To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a {extension} file) and load it again; you do not need to keep these TSV files for that.'),
+      params: { extension: '.gbdraw' }
     });
   }
   if (source.unresolvedFileArgs.length > 0) {

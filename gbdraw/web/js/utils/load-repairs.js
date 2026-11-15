@@ -1,7 +1,7 @@
 // @ts-check
 
 import { SESSION_TABLE_LABELS } from './error-normalization.js';
-import { listText, t, tm, tn } from './i18n.js';
+import { CODE_TEXT, listText, t, tm, tn } from './i18n.js';
 import { limitedList, moreLine } from './limited-list.js';
 
 /**
@@ -282,8 +282,9 @@ const WORDING = {
   ],
   'hash-selector-unmapped': (repairs) => [
     tn(total(repairs),
-      '{count} hash= value from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so the value may now match another feature or none.',
-      '{count} hash= values from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so each may now match another feature or none.')
+      '{count} {selector} value from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. {selector} now names a feature by its hash in the source record, so the value may now match another feature or none.',
+      '{count} {selector} values from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. {selector} now names a feature by its hash in the source record, so each may now match another feature or none.',
+      { selector: CODE_TEXT.hashSelector })
   ],
   'table-row-joined': (repairs) => tableLines(repairs, (table, lines, count) => tn(count,
     '{table}: line {lines} had extra cells, joined into the last column with one space.',

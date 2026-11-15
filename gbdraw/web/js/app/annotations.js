@@ -67,8 +67,9 @@ const REGENERATE_TO_ANNOTATE_NOTICE = () => t('Generate the diagram again to ann
  */
 const tableExportNotice = (placed, skipped) => (placed > 0 || skipped > 0 ? () => joinSentences(...[
   placed > 0 ? tn(placed,
-    '{count} annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. It names the same feature only while the record order stays as drawn.',
-    '{count} annotations of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.') : '',
+    '{count} annotation of a selected feature was written as {recordSelector} and {featureSelector}. It names the same feature only while the record order stays as drawn.',
+    '{count} annotations of selected features were written as {recordSelector} and {featureSelector}. They name the same features only while the record order stays as drawn.',
+    { recordSelector: 'record=#<position>', featureSelector: 'feature_selector=hash=<feature hash>' }) : '',
   skipped > 0 ? tn(skipped,
     '{count} annotation of a selected feature that the current diagram does not draw was not exported.',
     '{count} annotations of selected features that the current diagram does not draw were not exported.') : ''

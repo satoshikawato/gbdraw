@@ -1086,3 +1086,33 @@ test('a field a user can type or choose is named by its control label', () => {
     ['multi_record_row_gap_ratio', 'Row Gap Ratio']
   ]) assert.equal(labels({ code: 'INPUT_INVALID', stage: 'request-validation', context: { field, reason: 'FINITE' } }), label, field);
 });
+
+// OV-2790: a sentence of the wording owner names its code text by a placeholder, and the owner passes the code as the
+// value, so the English shows the code as before and a right-to-left UI inserts it as one run. A REASONS text or a
+// DEFINITIONS message has a placeholder exactly when its code text entry names it.
+test('a correction names its code text by a placeholder whose value its code text entry gives (OV-2790)', async () => {
+  const { probeModule } = await import('./helpers/count-baseline.mjs');
+  const { REASONS: reasons, DEFINITIONS: definitions, REASON_CODE_TEXT: reasonCode, MESSAGE_CODE_TEXT: messageCode } = await probeModule(
+    new URL('../../gbdraw/web/js/utils/error-normalization.js', import.meta.url),
+    'export { REASONS, DEFINITIONS, REASON_CODE_TEXT, MESSAGE_CODE_TEXT };'
+  );
+  const names = (text) => [...text.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]).sort();
+  for (const [reason, text] of Object.entries(reasons)) assert.deepEqual(names(text), Object.keys(reasonCode[reason] ?? {}).sort(), reason);
+  for (const [code, [message]] of Object.entries(definitions)) assert.deepEqual(names(message), Object.keys(messageCode[code] ?? {}).sort(), code);
+  const summary = (context, code = 'INPUT_INVALID') => normalizeUserFacingError({ code, stage: 'render', context }).summary;
+  for (const [reason, english] of [
+    ['SELECTOR_NO_MATCH', 'No record has a feature that this selector names. Check the key and the value, for example gene=COX1.'],
+    ['SELECTOR_AMBIGUOUS', 'In one record, this selector names features that start at different bases. Use a selector that names one feature, such as locus_tag=<tag>.'],
+    ['UNTERMINATED_SET', 'Close the character set with ].'],
+    ['UNTERMINATED_GROUP', 'Close the group with ).'],
+    ['AMBIGUOUS', 'Use #<number> to distinguish records with the same ID.'],
+    ['SELECTOR_FORMAT', 'Use #<number> or a record ID.'],
+    ['REGION_FORMAT', 'Use record_id:start-end[:rc] or #<number>:start-end[:rc].'],
+    ['FILENAME', 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.'],
+    ['FASTA_NO_ENTRIES', 'The FASTA file has no sequence entry: no line starts with ">".'],
+    ['FONT_FILE', 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.']
+  ]) assert.equal(summary({ reason }), `An input value is invalid. ${english}`, reason);
+  const commands = '(Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).';
+  assert.ok(summary({ reason: 'REPLY_TOO_LARGE' }, 'RESULT_INVALID').endsWith(`the gbdraw command line ${commands}`));
+  assert.ok(summary({}, OUT_OF_MEMORY_CODE).endsWith(`the gbdraw command line ${commands}`));
+});

@@ -643,7 +643,7 @@ test('OV-1476: no key names a control, row or syntax the UI does not have', asyn
   assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
   for (const key of [
     'Selected LOSAT comparisons require LOSATP Pairwise mode. For Similarity groups or Collinear blocks, choose Run LOSAT for all adjacent pairs.',
-    '{label} font size', '{count} record awaiting a choice', 'Use #<number> to distinguish records with the same ID.'
+    '{label} font size', '{count} record awaiting a choice', 'Use {selector} to distinguish records with the same ID.'
   ]) assert.ok(keys.includes(key), key);
 });
 
@@ -657,6 +657,108 @@ test('OV-1477: track, mode, control and setting names are not placeholders insid
     'Hide GC content?', 'Keep GC skew', 'Hidden by Hide GC Content',
     'Choosing "{setting}" removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
   ]) assert.ok(keys.includes(key), key);
+});
+
+// OV-2790: code text (a CLI option, a selector, a <word> token, a regex group,
+// a mapping arrow, a file extension, a closing sign) is never written into a
+// key: a right-to-left UI would move a leading `--` or `.`, or a closing `>`,
+// `]` or `)`, onto the other side of the code. The key names it by a
+// placeholder and the call passes the code as a value, which t() and tn()
+// insert as one isolated run (D-05). Upper-case notation (KEY=VALUE) and
+// English prose are no code.
+const CODE_TEXT_PATTERNS = [
+  ['a CLI option', /(?<![\w-])--[A-Za-z]/],
+  ['a name=value selector', /(?<![\w=])\/?[a-z_][a-z0-9_]*=/],
+  ['a <word> token', /<[A-Za-z][\w ]*>/],
+  ['a regex group', /\(\?P</],
+  ['a mapping arrow', /->/],
+  ['a file extension', /(?<![\w.])\.[a-z][a-z0-9]{1,5}\b/],
+  ['a closing sign', /(?:^|\s)[\])](?=[.,;:]?(?:\s|$))|["“„«‘「][\])<>]["”“»’」]/],
+  ['a list of signs', /(?:^|\s)(?:[\\/:*?"<>|]\s+){3,}/]
+];
+/** @param {string} english @returns {string[]} the kinds of code text the English writes outside its placeholders */
+const codeTextIn = (english) => {
+  const prose = english.replace(PLACEHOLDER, 'X');
+  return CODE_TEXT_PATTERNS.filter(([, pattern]) => pattern.test(prose)).map(([kind]) => kind);
+};
+
+test('OV-2790: the code text check finds code outside placeholders and leaves prose and notation alone', () => {
+  for (const [text, kinds] of [
+    ['the rule of --auto_orient: checked', ['a CLI option']],
+    ['such as gene=COX1 or locus_tag=<tag>.', ['a name=value selector', 'a <word> token']],
+    ['Copy every qualifier as /key="value" lines', ['a name=value selector']],
+    ['Use #<number> or a record ID.', ['a <word> token']],
+    ['Examples: NADH|ATPase and (?P<name>NADH).', ['a <word> token', 'a regex group']],
+    ['(e.g. CDS -> product,gene,locus_tag)', ['a mapping arrow']],
+    ['save the Session (a .gbdraw file)', ['a file extension']],
+    ['Close the group with ).', ['a closing sign']],
+    ['no line starts with ">".', ['a closing sign']],
+    ['the rule of {option}: checked', []],
+    ['Type a KEY=VALUE selector, such as {example} or {selector}.', []],
+    ['Close the character set with {sign}.', []],
+    ['no line starts with "{sign}".', []],
+    ['Rows {from}–{to} (1-based, inclusive), e.g. 1..20 or Node.js; a so-called "band" (px optional).', []],
+    ['Add Depth TSV series to all files (file {n})', []],
+    ['Manual scale interval (in bp; must be > 0).', []],
+    ['no / \\ : * ? " < > | or control characters', ['a list of signs']],
+    ['no {signs} or control characters', []],
+    ['Pair: #{query} to #{subject}.', []]
+  ]) assert.deepEqual(codeTextIn(text), kinds, text);
+});
+
+test('OV-2790: no English key writes code text outside a placeholder', async () => {
+  const { keys } = await sourceKeys();
+  const problems = [...keys.values()].flatMap(({ english, sites }) => {
+    const kinds = codeTextIn(english);
+    return kinds.length ? [`${sites.map((site) => `${site.file}:${site.line}`).join(' ')}: ${kinds.join(', ')}: ${english.slice(0, 120)}`] : [];
+  });
+  assert.deepEqual(problems, []);
+});
+
+// OV-2790: each key that now names its code text by a placeholder shows, with the value its call passes, the
+// English it showed before, byte for byte; the error wording owner's keys are checked in error-normalization.test.mjs.
+test('OV-2790: a key with its code text as a value shows the English it showed before', async () => {
+  const { CODE_TEXT } = await import('../../gbdraw/web/js/utils/i18n.js');
+  const { ANNOTATION_TARGET_MIGRATION_NOTICE } = await import('../../gbdraw/web/js/services/feature-edit-migration.js');
+  const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
+  const { keys } = await sourceKeys();
+  const selectors = { recordSelector: 'record=#<position>', featureSelector: 'feature_selector=hash=<feature hash>' };
+  for (const [key, params, english] of [
+    ['Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or {selector}. A region that reaches past the record end is drawn to the record end.',
+      { selector: CODE_TEXT.recordNumber },
+      'Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #<number>. A region that reaches past the record end is drawn to the record end.'],
+    ['Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as {example} or {selector}. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.',
+      { example: CODE_TEXT.featureSelectorExample, selector: CODE_TEXT.featureSelectorForm },
+      'Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as gene=COX1 or locus_tag=<tag>. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.'],
+    ['Raw LOSATP search limit per query protein ({option}). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.',
+      { option: '--max-target-seqs' },
+      'Raw LOSATP search limit per query protein (--max-target-seqs). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.'],
+    ['Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height ({option}). Auto values vary by record.',
+      { option: '--feature_height' },
+      'Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.'],
+    ['Define label priority order (e.g. {example}).', { example: 'CDS -> product,gene,locus_tag' }, 'Define label priority order (e.g. CDS -> product,gene,locus_tag).'],
+    ['Copy every qualifier as {form} lines', { form: '/key="value"' }, 'Copy every qualifier as /key="value" lines'],
+    ['Label TSV value patterns use case-insensitive Python regex. Examples: {example} and {otherExample}.', { example: 'NADH|ATPase', otherExample: '(?P<name>NADH)' },
+      'Label TSV value patterns use case-insensitive Python regex. Examples: NADH|ATPase and (?P<name>NADH).'],
+    ['the Legend row edits cannot be written as a {option} table.', { option: '--legend_rows' }, 'the Legend row edits cannot be written as a --legend_rows table.'],
+    ['the CLI ruler labels follow {option}, while this render keeps the default ruler-label font sizes.', { option: '--scale_font_size' },
+      'the CLI ruler labels follow --scale_font_size, while this render keeps the default ruler-label font sizes.'],
+    ['To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a {extension} file) and load it again; you do not need to keep these TSV files for that.',
+      { extension: '.gbdraw' },
+      'To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a .gbdraw file) and load it again; you do not need to keep these TSV files for that.']
+  ]) {
+    assert.ok(keys.has(key), key);
+    assert.equal(t(key, params), english);
+  }
+  assert.ok([...keys.keys()].some((key) => key.includes('with the rule of {option}: checked')));
+  assert.ok([...keys.keys()].some((key) => key.includes('in the {option} format of the CLI and Python API')));
+  assert.equal(tn(1, '{count} annotation of a selected feature was written as {recordSelector} and {featureSelector}. It names the same feature only while the record order stays as drawn.',
+    '{count} annotations of selected features were written as {recordSelector} and {featureSelector}. They name the same features only while the record order stays as drawn.', selectors),
+  '1 annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. It names the same feature only while the record order stays as drawn.');
+  assert.equal(ANNOTATION_TARGET_MIGRATION_NOTICE(2),
+    '2 annotations from an older Session named a feature by hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.');
+  assert.ok(describeLoadRepairs([{ code: 'hash-selector-unmapped', path: 'config.rules', effect: 'changed', count: 1 }])?.items.includes(
+    '1 hash= value from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so the value may now match another feature or none.'));
 });
 
 // The cross-locale check (i18n-crossfix-20261022): the English names the

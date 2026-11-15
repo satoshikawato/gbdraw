@@ -456,6 +456,24 @@ export const numberText = (value, fractionDigits) => {
 };
 
 /**
+ * The code text that the UI sentences of more than one key show: never
+ * translated, the same in every language, and never written into a key (OV-2790).
+ * A key names a code text by a placeholder and its call passes the code as the
+ * value, so `t()` and `tn()` insert it as one run that a right-to-left
+ * sentence does not reorder. A code text that one key shows is passed where
+ * that key is called.
+ */
+export const CODE_TEXT = Object.freeze({
+  // The record selector of a record's position among the records (gbdraw/io/record_select.py).
+  recordNumber: '#<number>',
+  // A feature selector, as an example and as the form that names one feature (Align at feature).
+  featureSelectorExample: 'gene=COX1',
+  featureSelectorForm: 'locus_tag=<tag>',
+  // The feature selector key of a feature hash.
+  hashSelector: 'hash='
+});
+
+/**
  * Splits a shown text at the placeholders that `slots` names. Another
  * placeholder takes its value from `params`, or stays as written. The values
  * are filled after the split, so a value never becomes a slot.

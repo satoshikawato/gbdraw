@@ -6,7 +6,7 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import {
   INPUT_NAME_CHARACTERS, SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
 } from '../contracts/schema.generated.js';
-import { fillText, msg, numberText } from './i18n.js';
+import { CODE_TEXT, fillText, msg, numberText } from './i18n.js';
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
@@ -95,8 +95,8 @@ const REASONS = Object.freeze({
   // context, the FIGURE_SIZE phrases word the parts and the smallest size; this is the text without them.
   FIGURE_TOO_NARROW: 'The figure cannot be this narrow. Set a larger Figure width, or leave it empty (Auto).',
   FIGURE_TOO_SHORT: 'The figure cannot be this short. Set a larger Figure height, or leave it empty (Auto).',
-  SELECTOR_NO_MATCH: 'No record has a feature that this selector names. Check the key and the value, for example gene=COX1.',
-  SELECTOR_AMBIGUOUS: 'In one record, this selector names features that start at different bases. Use a selector that names one feature, such as locus_tag=<tag>.',
+  SELECTOR_NO_MATCH: 'No record has a feature that this selector names. Check the key and the value, for example {example}.',
+  SELECTOR_AMBIGUOUS: 'In one record, this selector names features that start at different bases. Use a selector that names one feature, such as {selector}.',
   // Align at feature reads the drawn request, so new Record Layout rows count after a Generate (OV-2501).
   ANCHOR_SHARED_ROW: 'Records that share a row cannot be aligned at a feature. Give each record its own row in Record Layout, click Generate Diagram, then use Align at feature again.',
   ANCHOR_STALE: 'The diagram changed after the preview. Align at feature again.',
@@ -124,8 +124,8 @@ const REASONS = Object.freeze({
   ROW_AUTO_GAPS: 'The Auto record gaps of one Linear row, with the marks between its windows, need more width than the figure has. Type a small Record gap, such as 0, move some records to another row in Record Layout, or draw fewer windows in that row.',
   ROW_WINDOW_MARKS: 'The marks between the windows of one Linear row need more width than the figure has. Move some records to another row in Record Layout, or draw fewer windows in that row.',
   GFF_FASTA_MATCH: 'Ensure every GFF3 record has a matching FASTA entry.',
-  UNTERMINATED_SET: 'Close the character set with ].',
-  UNTERMINATED_GROUP: 'Close the group with ).', UNBALANCED_GROUP: 'Check the matching parentheses.',
+  UNTERMINATED_SET: 'Close the character set with {sign}.',
+  UNTERMINATED_GROUP: 'Close the group with {sign}.', UNBALANCED_GROUP: 'Check the matching parentheses.',
   NOTHING_TO_REPEAT: 'Place a value before the repetition operator.', MULTIPLE_REPEAT: 'Remove the repeated repetition operator.',
   FLAGS_POSITION: 'Place global flags at the start of the pattern.', LOOKBEHIND_WIDTH: 'Use a fixed-width lookbehind.',
   INVALID_ESCAPE: 'Check the escape sequence.', UNKNOWN_EXTENSION: 'Check the Python group syntax.',
@@ -168,7 +168,7 @@ const REASONS = Object.freeze({
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
   COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits. Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.',
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
-  FILENAME: 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
+  FILENAME: 'Use one file name without a folder: no {signs} or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
   FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',
   FONT_NOT_LOADED: 'This font is no longer loaded in this page. Load it again in Font, or choose another font.',
   BOOLEAN: 'Use true or false.', INTEGER: 'Use an integer.', NONNEGATIVE: 'Use a finite value of zero or greater.',
@@ -183,10 +183,10 @@ const REASONS = Object.freeze({
   DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
   REFERENCE_REQUIRED: 'Fill in the reference name on every row of the Depth TSV.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
   WORKSPACE: 'Retry the operation.', OUT_OF_RANGE: 'Choose a record within the loaded range.',
-  NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #<number> to distinguish records with the same ID.',
-  SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
+  NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use {selector} to distinguish records with the same ID.',
+  SELECTOR_FORMAT: 'Use {selector} or a record ID.', SELECT_ONE: 'Select exactly one record.',
   NONE_DRAWN: 'Turn on at least one record to draw.',
-  REGION_FORMAT: 'Use record_id:start-end[:rc] or #<number>:start-end[:rc].',
+  REGION_FORMAT: 'Use {form} or {otherForm}.',
   CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it on the other side of the Axis.',
   CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
   SPLIT_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use split feature lanes (Track Preset Middle).',
@@ -239,16 +239,16 @@ const REASONS = Object.freeze({
   INPUT_MEMORY: 'There was not enough memory to prepare the inputs for drawing. Close other tabs and retry, or save a Session and reload the page before retrying.',
   // A drawn diagram whose Worker reply the page cannot receive (a `messageerror` of the run in
   // services/diagram-generation.js, PD-OI-118). It states the whole failure, so the code's message is not shown.
-  REPLY_TOO_LARGE: 'The diagram was drawn, but it is too large for this browser page to receive. Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).',
+  REPLY_TOO_LARGE: 'The diagram was drawn, but it is too large for this browser page to receive. Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `{circularCommand}` or `{linearCommand}`).',
   SEQUENCE_UNDEFINED: 'Sequence content is undefined: a record has no sequence after ORIGIN. Use a GenBank/DDBJ file that includes the sequence.',
   GFF_NO_FEATURES: 'The GFF3 file has no feature lines.',
-  FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
+  FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with "{sign}".',
   // gbdraw/io/genome.py require_nucleotide_records: a FASTA given without GFF3 holds nucleotide records only.
   NOT_NUCLEOTIDE: 'This FASTA file holds a sequence that is not nucleotide, such as a protein; gbdraw draws nucleotide records. Use a FASTA file of DNA or RNA sequences (IUPAC codes A C G T U R Y S W K M B D H V N).',
   // gbdraw/io/genome.py load_query_fasta: a Sequence search query is a nucleotide or a protein sequence.
   NOT_SEQUENCE: 'A query holds a character that is neither a nucleotide nor an amino acid code. Give DNA, RNA or protein sequences in FASTA: letters, and * for a stop.',
   EMPTY_SEQUENCE: 'A record of this FASTA file has no sequence. Give each FASTA record its sequence.',
-  FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
+  FONT_FILE: 'Choose a readable TrueType or OpenType font file ({trueType}, {openType}, {trueTypeCollection}, {openTypeCollection}) that names its font family.',
   FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
   FONT_RASTER: 'The PNG cannot draw this font. Choose another font.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.',
@@ -262,6 +262,19 @@ const REASON_ACTIONS = Object.freeze({ GZIP_EXPANDED_SIZE: ['select-input'], REP
   INPUT_MEMORY: ['retry', 'save-session', 'reload'] });
 // The reasons that state the whole failure: the code's message is not shown with them.
 const WHOLE_FAILURE_REASONS = new Set(['REPLY_TOO_LARGE', 'INPUT_MEMORY']);
+// The code text that a sentence of REASONS or a message of DEFINITIONS names by a placeholder, by its reason or code:
+// never translated, and inserted as a value so that a right-to-left UI keeps its order (OV-2790). A text has a
+// placeholder exactly when its entry here names it (tests/web/error-normalization.test.mjs).
+const SESSION_COMMANDS = Object.freeze({ circularCommand: 'gbdraw circular --session', linearCommand: 'gbdraw linear --session' });
+/** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
+const REASON_CODE_TEXT = Object.freeze({
+  SELECTOR_NO_MATCH: { example: CODE_TEXT.featureSelectorExample }, SELECTOR_AMBIGUOUS: { selector: CODE_TEXT.featureSelectorForm },
+  UNTERMINATED_SET: { sign: ']' }, UNTERMINATED_GROUP: { sign: ')' },
+  AMBIGUOUS: { selector: CODE_TEXT.recordNumber }, SELECTOR_FORMAT: { selector: CODE_TEXT.recordNumber },
+  REGION_FORMAT: { form: 'record_id:start-end[:rc]', otherForm: `${CODE_TEXT.recordNumber}:start-end[:rc]` },
+  FILENAME: { signs: '/ \\ : * ? " < > |' },
+  REPLY_TOO_LARGE: SESSION_COMMANDS, FASTA_NO_ENTRIES: { sign: '>' }, FONT_FILE: { trueType: '.ttf', openType: '.otf', trueTypeCollection: '.ttc', openTypeCollection: '.otc' }
+});
 // What a decline names as changed under an evaluation of rule inputs (OV-447,
 // OV-449): the label table import and the Specific rules import read it here.
 // A key of its own (OV-1415): the label table's notice shows it with `tm`.
@@ -273,6 +286,9 @@ export const OUT_OF_MEMORY_CODE = 'OUT_OF_MEMORY';
 // Apply is disabled with this sentence, and an Apply that still reaches the check fails with ALIGNMENT_STALE, whose
 // message it is (OV-2447).
 export const ALIGNMENT_STALE_TEXT = msg('The diagram changed after this review opened. Start alignment again.');
+
+/** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
+const MESSAGE_CODE_TEXT = Object.freeze({ [OUT_OF_MEMORY_CODE]: SESSION_COMMANDS });
 /**
  * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
  * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
@@ -290,7 +306,7 @@ const DEFINITIONS = Object.freeze({
   // OUT_OF_MEMORY_CODE: Python's MEMORY_REFUSAL_CODE (gbdraw/web_support/error_adapter.py), a MemoryError by its
   // class. The engine's memory never shrinks, so services/diagram-generation.js replaces that engine and Retry runs
   // on a new one (OV-3027, PD-OI-125).
-  [OUT_OF_MEMORY_CODE]: ['The diagram engine ran out of memory and was replaced with a new one. Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).', ['retry', 'save-session']],
+  [OUT_OF_MEMORY_CODE]: ['The diagram engine ran out of memory and was replaced with a new one. Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `{circularCommand}` or `{linearCommand}`).', ['retry', 'save-session']],
   // Python does not draw every forced label (an underlay feature, Embedded Only);
   // Generate fails the same way until the feature's popup choice changes.
   LABEL_NOT_DRAWN: ['Label visibility is On for a feature, but this diagram does not draw its label.', ['edit-input']],
@@ -588,6 +604,13 @@ const renderPart = (part, shown) => {
  */
 export const renderErrorText = (parts, shown = fillText, separator = ' ') =>
   parts.map((part) => renderPart(part, shown)).join(separator);
+/**
+ * A part of a table text with the code text its placeholders name, if any (`REASON_CODE_TEXT`, `MESSAGE_CODE_TEXT`).
+ * @param {string} text
+ * @param {Readonly<Record<string, string>> | undefined} codeText
+ * @returns {ErrorTextPart}
+ */
+const codeTextPart = (text, codeText) => (codeText ? { text, params: codeText } : { text });
 /**
  * The leading whole parts whose English text fits in `limit` characters, so the
  * summary and the shown text are one cut; a first part longer than `limit` is
@@ -1230,7 +1253,7 @@ export const normalizeUserFacingError = (value, {
   // One part per sentence, in the order the summary shows them.
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
-    !WHOLE_FAILURE_REASONS.has(/** @type {string} */ (reason)) && { text: lead.text },
+    !WHOLE_FAILURE_REASONS.has(/** @type {string} */ (reason)) && codeTextPart(lead.text, MESSAGE_CODE_TEXT[result.code]),
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
     sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
     inputOrdinal !== undefined && { text: (!CARD_ORDINAL_FIELDS.has(field ?? '') && ORDINAL_LABELS[result.code]) || PHRASES.sequence, params: { n: inputOrdinal } },
@@ -1257,7 +1280,8 @@ export const normalizeUserFacingError = (value, {
     exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
     ...figureSizeSentences,
     !lead.coversReason && (sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
-      : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null))),
+      : (REASONS[/** @type {string} */ (reason)] ? codeTextPart(REASONS[/** @type {string} */ (reason)], REASON_CODE_TEXT[/** @type {string} */ (reason)])
+        : DEFINITIONS[result.code][2] ? { text: /** @type {string} */ (DEFINITIONS[result.code][2]) } : null))),
     losatMessage !== undefined && { text: PHRASES.losatReported, params: { message: shownLosatMessage(losatMessage) } },
     reason === 'GENETIC_CODE' && geneticCodes !== undefined && { text: PHRASES.geneticCodes, params: { codes: geneticCodes } },
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
