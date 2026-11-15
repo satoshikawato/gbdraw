@@ -181,6 +181,7 @@ import {
   EXPANDED_RECORD_KEY_SEPARATOR,
   INPUT_FILE_MEDIA_TYPE,
   LOSATP_NO_SEARCH_MODE,
+  RECORD_GAP_AUTO_SCHEMA,
   STORED_REGION_FIELDS,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
   WRITTEN_RESOURCE_MEDIA_TYPES
@@ -7924,6 +7925,13 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   if (![5, 6, 7, 8, 9].includes(promoted.schema)) {
     throw new Error('Only canonical renderRequest schemas 5 to 9 can be promoted to the current schema.');
   }
+  // A stored Linear record gap is null (Auto) only from RECORD_GAP_AUTO_SCHEMA on, as Python's decoder reads it
+  // (`_stored_record_gap`): no earlier writer stored null, so such a request is a Session-format error, as Python
+  // refuses it (OV-3572). Any other value is kept for the repair, which reads it as at the current schema.
+  if (promoted.mode === 'linear' && promoted.schema < RECORD_GAP_AUTO_SCHEMA && isPlainObject(promoted.layout)
+    && Object.hasOwn(promoted.layout, 'recordGapPx') && promoted.layout.recordGapPx === null) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+  }
   if (promoted.schema < 8) promoteRenderRequestToSchema8(promoted, promotion);
   // Schema 9 adds per-feature edits by source identity (design Q4).
   if (promoted.schema < 9) promoted.diagramOptions = { ...promoted.diagramOptions, featureOverrides: [] };
@@ -8055,8 +8063,12 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
+      // The stored gap as stored, for the repair to read as at the current schema (a wrong one with a row); a
+      // request without a layout drew none of its own: Auto.
+      const storedGap = !hadLayout ? { recordGapPx: null }
+        : storedLayout && Object.hasOwn(storedLayout, 'recordGapPx') ? { recordGapPx: storedLayout.recordGapPx } : {};
       promoted.layout = {
-        recordGapPx: readLinearRecordGap(storedLayout?.recordGapPx).value,
+        ...storedGap,
         multiRecordPositions: null,
         recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),

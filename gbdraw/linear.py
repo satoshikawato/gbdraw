@@ -44,6 +44,7 @@ from .layout.similarity_alignment import (
 from .layout.record_placement import (
     parse_record_row_position,
 )
+from .layout.linear_multi_record import DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE
 from .api.requests import (
     LinearDiagramRequest,
     RecordCardinality,
@@ -336,7 +337,8 @@ def _add_linear_input_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Gap in pixels between records in the same Linear row. A gap you set is kept, and a row it does not "
-            "fit is refused (default: 24, narrowed in a row whose gaps would take more than a quarter of its width)."
+            f"fit is refused (default: {DEFAULT_RECORD_GAP_PX:g} px, narrowed in a row whose gaps would take more "
+            f"than {ROW_GAPS_MAX_SHARE:.0%}% of its width)."
         ),
     )
 

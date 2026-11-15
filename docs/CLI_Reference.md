@@ -959,7 +959,7 @@ One table row represents one displayed record, except that rows sharing a `recor
 
 A `:rc` suffix and `reverse_complement` draw the same window. `region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both crop 1000..9000 of the record as stored in the file, then reverse-complement the crop. `--region` and `--reverse_complement` follow the same order.
 
-For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` sets the gap between them, and the figure keeps it; a row that cannot hold the gaps is refused. Without it the gap is 24 px, narrowed in a row whose gaps would take more than a quarter of its width, so a row of many records (the contigs of a draft assembly) still draws. Multi-record rows cannot be combined with `--normalize_length`.
+For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` sets the gap between them, and the figure keeps it; a row that cannot hold the gaps is refused. Without it the gap is 24 px, narrowed in a row whose gaps would take more than 25% of its width, so a row of many records (the contigs of a draft assembly) still draws. Multi-record rows cannot be combined with `--normalize_length`.
 
 Minimal GenBank records table:
 
@@ -1404,8 +1404,8 @@ options:
   --linear_record_gap PX
                         Gap in pixels between records in the same Linear row.
                         A gap you set is kept, and a row it does not fit is
-                        refused (default: 24, narrowed in a row whose gaps
-                        would take more than a quarter of its width).
+                        refused (default: 24 px, narrowed in a row whose gaps
+                        would take more than 25% of its width).
   --comparisons_table TSV
                         TSV manifest with blast, query, and subject columns.
   -b, --blast [BLAST ...]

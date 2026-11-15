@@ -281,7 +281,7 @@ keys in a request of schema 9 or older (`ONE_CIRCLE_LAYOUT_OPTIONS` and `RECORD_
 reached `main`). `tests/test_session_request_codec.py` holds the positive and refusal cases.
 
 Request schema 10 also lets a Linear request's `layout.recordGapPx` be null, the default (Auto) record gap
-(OV-3572): Python draws 24 px, narrowed in a row whose gaps would take more than a quarter of its width
+(OV-3572): Python draws 24 px, narrowed in a row whose gaps would take more than 25% of its width
 (`DEFAULT_RECORD_GAP_PX` and `ROW_GAPS_MAX_SHARE` in `gbdraw/layout/linear_multi_record.py`). A number is a gap the
 user set and is drawn as set; a row it does not fit is refused (`INPUT_INVALID` / `ROW_WIDTH`). The CLI, the Python
 API (`LinearMultiRecordOptions.record_gap_px`, `LinearLayout.record_gap`) and the Web app write null unless a gap is

@@ -238,7 +238,7 @@ nucleotide table, and saving the Session again stores it in the new form.
 
 A schema-10 Linear request's `layout.recordGapPx` may be `null`, the
 default (Auto) record gap: 24 px, narrowed in a row whose gaps would take more
-than a quarter of its width. A number is a gap you set, drawn as set; a row
+than 25% of its width. A number is a gap you set, drawn as set; a row
 that cannot hold it is refused. A schema 1–9 request, and the
 `config.linearRecordLayout.recordGap` of a Session 50 or older, stored the gap
 the figure drew: it reads as set, so the figure stays as it was.

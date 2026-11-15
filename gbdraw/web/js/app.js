@@ -42,6 +42,7 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, numberText, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
 import { INTERACTIVE_GALLERY_URL } from './utils/gallery-routes.js';
+import { DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE } from './contracts/schema.generated.js';
 import { settingApplicationHelp, settingApplicationSentence } from './services/setting-application.js';
 
 const { createApp } = window.Vue;
@@ -58,9 +59,11 @@ const app = createApp({
 // sentences shown together are separated by `sentenceSeparator()` (none in
 // Japanese and Chinese); `UI_LOCALES` lists the header Language menu;
 // `INTERACTIVE_GALLERY_URL` is the Gallery the header and the footer open.
+// `DEFAULT_RECORD_GAP_PX` and `ROW_GAPS_MAX_SHARE` are Python's Auto Linear
+// record gap, which the Record gap help states (OV-3572).
 // `settleCommittedField` hands an asynchronous commit of a `v-committed-value`
 // field to that directive (app/committed-value.js).
-Object.assign(app.config.globalProperties, { t, tn, tx, tm, numberText, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL, settleCommittedField });
+Object.assign(app.config.globalProperties, { t, tn, tx, tm, numberText, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL, DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE, settleCommittedField });
 // A sentence with elements inside it: <i18n-text :text="t('…{name}…')"> with a #name slot.
 app.component('I18nText', I18nText);
 app.directive('dialog-focus', dialogFocus);

@@ -51,6 +51,15 @@ export const DISPLAY_PLACEMENT_SCHEMA = 7;
 // gbdraw/session_request_codec.py: FEATURE_OVERRIDE_SCHEMA
 export const FEATURE_OVERRIDE_SCHEMA = 9;
 
+// gbdraw/session_request_codec.py: RECORD_GAP_AUTO_SCHEMA
+export const RECORD_GAP_AUTO_SCHEMA = 10;
+
+// gbdraw/layout/linear_multi_record.py: DEFAULT_RECORD_GAP_PX
+export const DEFAULT_RECORD_GAP_PX = 24.0;
+
+// gbdraw/layout/linear_multi_record.py: ROW_GAPS_MAX_SHARE
+export const ROW_GAPS_MAX_SHARE = 0.25;
+
 // gbdraw/session_request_codec.py: STORED_REGION_FIELDS
 /** @type {readonly string[]} */
 export const STORED_REGION_FIELDS = Object.freeze(['end', 'reverseComplement', 'selector', 'start']);

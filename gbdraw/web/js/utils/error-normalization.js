@@ -115,9 +115,11 @@ const REASONS = Object.freeze({
   OBSOLETE_TRACK_FIELD: 'Custom Track Slots no longer read this field. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.',
   SEPARATE_LINEAR_ROWS: 'Turn Normalize Record Lengths off or assign each record to a separate Linear row.',
   // A Linear row whose record gaps, as the user set them, or window marks need its whole width
-  // (`solve_linear_horizontal_layout` in gbdraw/layout/linear_multi_record.py); the Auto gap shrinks to fit
-  // (OV-3456, OV-3572). Record Layout moves records; the windows of one record share its row.
+  // (`solve_linear_horizontal_layout` in gbdraw/layout/linear_multi_record.py). The Auto gap shrinks to fit, so
+  // Python sends ROW_WINDOW_MARKS when no gap is set: then only the marks can take the row (OV-3456, OV-3572).
+  // Record Layout moves records; the windows of one record share its row.
   ROW_WIDTH: 'The record gaps of one Linear row, with the marks between its windows, need more width than the figure has. Lower Record gap or leave it blank (Auto), move some records to another row in Record Layout, or draw fewer windows in that row.',
+  ROW_WINDOW_MARKS: 'The marks between the windows of one Linear row need more width than the figure has. Move some records to another row in Record Layout, or draw fewer windows in that row.',
   GFF_FASTA_MATCH: 'Ensure every GFF3 record has a matching FASTA entry.',
   UNTERMINATED_SET: 'Close the character set with ].',
   UNTERMINATED_GROUP: 'Close the group with ).', UNBALANCED_GROUP: 'Check the matching parentheses.',

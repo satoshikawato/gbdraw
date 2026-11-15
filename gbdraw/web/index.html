@@ -4075,7 +4075,7 @@
                                         </div>
                                     </template>
                                     <div>
-                                        <span class="linear-primary-label block">{{ t('Record gap (px)') }} <help-tip id="help-linear-record-gap" :text="t('Gap between the records of one row. Blank (Auto): 24 px, narrowed in a row whose gaps would take more than a quarter of its width. A gap you type is kept; a row that cannot hold it is not drawn.')"></help-tip></span>
+                                        <span class="linear-primary-label block">{{ t('Record gap (px)') }} <help-tip id="help-linear-record-gap" :text="t('Gap between the records of one row. Blank (Auto): {gap} px, narrowed in a row whose gaps would take more than {share}% of its width. A gap you type is kept; when a row cannot hold it, Generate stops and draws nothing.', { gap: numberText(DEFAULT_RECORD_GAP_PX), share: numberText(ROW_GAPS_MAX_SHARE * 100) })"></help-tip></span>
                                         <input type="number" min="0" step="1" v-model.number="linearRecordGap" :aria-label="t('Linear record gap')" aria-describedby="help-linear-record-gap" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
                                     </div>
                                 </div>

@@ -919,9 +919,9 @@ runs pairs only between records that are on.
 **Arrange in rows** is on by default; with it on, you assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
 that row. Left blank (**Auto**), the gap is 24 px, narrowed in a row whose gaps
-would take more than a quarter of its width, so a row of many records still
-draws. A gap you type is kept; a row that cannot hold it is not drawn, and the
-message asks for a smaller gap. Records that share a row use one bp-per-pixel scale. Row placement is
+would take more than 25% of its width, so a row of many records still draws. A
+gap you type is kept; when a row cannot hold it, Generate stops and draws
+nothing, and the message asks for a smaller gap. Records that share a row use one bp-per-pixel scale. Row placement is
 independent of the comparison plan: **No comparison** draws the records without
 links. A normal layout gives each File its own consecutive rows: one row for all
 of its records, or one row per record as a CLI Session loads them. Moving a File

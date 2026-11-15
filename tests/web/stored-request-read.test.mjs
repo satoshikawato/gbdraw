@@ -196,6 +196,41 @@ test('a wrong value in a required field that takes null is read as null, not as 
   ]);
 });
 
+// OV-3572: one rule for a stored Linear record gap at every request schema, as Python's decoder reads it
+// (`_stored_record_gap`): null (Auto) only from RECORD_GAP_AUTO_SCHEMA on, which no earlier writer stored, so an
+// earlier request with it is a Session-format error; any other value reads at schemas 5 to 9 as at the current one
+// (a promotion keeps it for the repair), never silently as Auto.
+test('a stored Linear record gap reads by one rule at request schemas 5 to 10; null is refused before schema 10 (OV-3572)', () => {
+  const schema5 = read('tests/fixtures/sessions/lambda_basic_linear.v40-schema5.json');
+  const schema8 = read('tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  const full = (recordGapPx) => ({ recordGapPx, multiRecordPositions: null, recordTranslations: [], similarityAlignment: null });
+  const cases = {
+    10: [gallery('lambda_basic_linear'), full],
+    8: [schema8, full],
+    5: [schema5, (recordGapPx) => ({ recordGapPx, multiRecordPositions: null })]
+  };
+  const outcome = (schema, gap) => {
+    const [session, layoutOf] = cases[schema];
+    try {
+      const result = readRequest(session, (request) => { request.layout = layoutOf(gap); });
+      return { gap: result.value.layout.recordGapPx,
+        rows: rows(result).filter((row) => row.path.startsWith('renderRequest.layout.recordGapPx')) };
+    } catch (error) {
+      return { refused: error.context?.reason ?? error.message };
+    }
+  };
+  assert.deepEqual(outcome(10, null), { gap: null, rows: [] });
+  for (const schema of [5, 8]) {
+    assert.deepEqual(outcome(schema, null), { refused: 'SESSION_FORMAT' }, String(schema));
+    assert.deepEqual(outcome(schema, 30), { gap: 30, rows: [] }, String(schema));
+    for (const gap of ['x', -1, true]) assert.deepEqual(outcome(schema, gap), outcome(10, gap), `${schema} ${gap}`);
+  }
+  // A wrong value is never read silently as Auto: one that is no number takes the default with a row; a negative
+  // number is kept, and the request owner refuses it (`projectCanonicalSessionRequest`), as Python's decoder does.
+  const replaced = { gap: null, rows: [{ code: 'setting-replaced', path: 'renderRequest.layout.recordGapPx' }] };
+  assert.deepEqual(['x', -1, true].map((gap) => outcome(10, gap)), [replaced, { gap: -1, rows: [] }, replaced]);
+});
+
 test('a Linear layout that omits fields with a default is read as a Linear layout, not as the empty one', () => {
   const result = readRequest(gallery('lambda_basic_linear'), (request) => { request.layout = { recordGapPx: 10 }; });
   assert.deepEqual(result.value.layout, { recordGapPx: 10, multiRecordPositions: null, recordTranslations: [], similarityAlignment: null });

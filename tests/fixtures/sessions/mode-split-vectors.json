@@ -362,7 +362,7 @@
           "pointer": "/modes/circular/config/linearRecordLayout",
           "value": {
             "enabled": true,
-            "recordGap": 24,
+            "recordGap": null,
             "rows": []
           },
           "projected": false
@@ -5199,7 +5199,7 @@
           "pointer": "/modes/circular/config/linearRecordLayout",
           "value": {
             "enabled": true,
-            "recordGap": 24,
+            "recordGap": null,
             "rows": []
           },
           "projected": false

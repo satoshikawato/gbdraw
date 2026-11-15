@@ -316,7 +316,7 @@ class LinearLayout:
     """Optional layout for linear records arranged in multiple rows.
 
     ``record_gap`` is the gap in px between the records of one row, drawn as set. ``None`` (the default) draws
-    24 px, narrowed in a row whose gaps would take more than a quarter of its width.
+    24 px, narrowed in a row whose gaps would take more than 25% of its width.
     """
 
     record_gap: float | None = None

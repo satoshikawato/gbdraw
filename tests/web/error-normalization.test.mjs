@@ -123,6 +123,11 @@ const rowWidth = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'rende
 assert.match(rowWidth.summary, /record gaps of one Linear row, with the marks between its windows, need more width than the figure has\. Lower Record gap or leave it blank \(Auto\), move some records to another row in Record Layout/);
 assert.doesNotMatch(rowWidth.summary, /Move some windows/);
 assert.doesNotMatch(rowWidth.summary, /Python exception/);
+// With the Auto gap only the window marks can take the row (OV-3572): the Web names them, and never asks the user
+// to lower or clear a Record gap they left blank.
+const rowMarks = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'render', context: { reason: 'ROW_WINDOW_MARKS' } });
+assert.match(rowMarks.summary, /The marks between the windows of one Linear row need more width than the figure has\. Move some records to another row in Record Layout, or draw fewer windows in that row/);
+assert.doesNotMatch(rowMarks.summary, /Record gap|blank/);
 assert.doesNotMatch(pngFont.summary, /Embed font/);
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);

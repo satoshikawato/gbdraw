@@ -130,7 +130,7 @@ Linear mode also accepts one `--multi_record_position SELECTOR@ROW` per
 displayed record. Records in one row share a bp-per-pixel scale and keep input
 order. `--linear_record_gap` sets the gap within that row, and the figure keeps it.
 Without it the gap is 24 px, narrowed in a row whose gaps would take more than
-a quarter of its width.
+25% of its width.
 `--record_label` and `--record_subtitle` follow displayed-record order.
 Multi-record rows cannot be combined with `--normalize_length`.
 

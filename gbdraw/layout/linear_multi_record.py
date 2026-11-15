@@ -421,14 +421,20 @@ def solve_linear_horizontal_layout(
         # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
         gap_width = row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
         if width <= gap_width:
-            # A set gap, or the marks of a windowed row, take the whole width; the default gap keeps to its share.
+            # A set gap, or the marks of a windowed row, take the whole width. The Auto gap keeps to its share, so
+            # without a set gap only the marks can: the advice names the cause (OV-3572).
             raise ValidationError(
                 "Linear row cannot fit a positive bp scale: "
                 f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
                 f"gaps_with_window_marks_px={gap_width:g}, available_width={width:g}. "
-                "Set a smaller record gap or leave it at the default, move some records to another row, "
-                "or draw fewer windows in the row.",
-                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WIDTH"},
+                + (
+                    "The marks between the windows of the row need more width than the figure has: "
+                    "move some records to another row, or draw fewer windows in the row."
+                    if gap is None
+                    else "Set a smaller record gap or leave it unset (Auto), move some records to another row, "
+                    "or draw fewer windows in the row."
+                ),
+                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WINDOW_MARKS" if gap is None else "ROW_WIDTH"},
             )
         row_px.append(width - gap_width)
         row_bp.append(sum(item.sequence_length for item in row_items))

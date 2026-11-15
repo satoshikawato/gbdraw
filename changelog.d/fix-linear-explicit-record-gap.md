@@ -1,4 +1,6 @@
-- Changed: A Linear record gap you set (`--linear_record_gap`, the Web app's **Record gap (px)**, or the Python
-  API's `record_gap`) is drawn as set, also in a long row; a row that cannot hold it is refused with the reason.
-  Only the default gap narrows in a long row. The Web app's **Record gap (px)** field is blank (**Auto**) by
-  default, and a Session saved with a gap keeps it.
+- Changed: The Linear record gap now defaults to Auto. `LinearLayout.record_gap` and
+  `LinearMultiRecordOptions.record_gap_px` default to `None` instead of `24.0`, and `--linear_record_gap` has no
+  default value; code that reads these defaults as numbers (such as `LinearLayout().record_gap + 10`) must allow
+  `None`. Auto draws 24 px, narrowed in a row whose gaps would take more than 25% of its width. A gap you set is
+  drawn as set; when a row cannot hold it, the diagram is refused with the reason. The Web app's **Record gap (px)**
+  field is blank (**Auto**) by default, and a Session saved with a gap keeps it.
