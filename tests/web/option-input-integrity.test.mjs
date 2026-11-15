@@ -73,6 +73,7 @@ const baseState = (mode, adv = {}) => ({
   linearRecordGap: ref(24),
   linearRecordRows: [],
   annotationSets: [],
+  recordsNamed: [],
   unmanagedConfigOverrides: {}
 });
 const filesFor = (mode) => (mode === 'circular'
