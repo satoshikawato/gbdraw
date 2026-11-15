@@ -296,6 +296,9 @@
            Open 48px and 44px wide for the English names) take their name's width and 0.5em of room at its sides. */
         :root[data-ui-text-style="nastaliq"] .preview-feature-search :is(.gfs-input, .gfs-select, .gfs-button) { height: auto; min-height: 26px; }
         :root[data-ui-text-style="nastaliq"] .preview-feature-search .gfs-button { flex-basis: auto; padding-inline: 0.5em; }
+        /* The query field starts narrower (5em, it still grows to the free room), so the wider Urdu buttons leave room for
+           the Hide button on the bar's first line instead of a line of its own (OV-3657). */
+        :root[data-ui-text-style="nastaliq"] .preview-feature-search .gfs-query { flex-basis: 5em; }
         /* Below 1280px the Preview's tool row shows its icons alone, as the header's file buttons do, so the zoom box stays
            in the Result pane's view (OV-3657). Each name stays the button's accessible name and tooltip; the match count
            of a hidden search stays beside its icon, as at 768px and below. */
