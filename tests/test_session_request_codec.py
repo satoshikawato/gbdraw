@@ -711,7 +711,7 @@ def test_schema5_linear_records_without_selector_or_region_draw_every_record(
                 RecordInput(source=GenBankInputSource(source), selector=parse_record_selector("#2")),
                 RecordInput(source=GenBankInputSource(source), region=parse_region_spec("#1:1-10")),
             ),
-            layout=LinearMultiRecordOptions(multi_record_positions=("#1@2", "#2@1", "#3@1")),
+            layout=LinearMultiRecordOptions(multi_record_positions=("#1@2", "#2@1", "#3@1"), record_gap_px=24.0),
         )
     )
     payload = _payload_for_schema(encoded, schema)
