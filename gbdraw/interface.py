@@ -119,7 +119,7 @@ class FeatureOptions:
     visibility: TableSource | None = None
     shapes: Mapping[str, str] | None = None
     placements: TableSource | Sequence[FeaturePlacementOverride] | None = None
-    # CDS predicted from the sequence of each record without CDS of its own (off when None).
+    # CDS predicted from the sequence of each record, drawn in their own lanes beside its own features (off when None).
     orf_prediction: OrfPredictionParameters | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:

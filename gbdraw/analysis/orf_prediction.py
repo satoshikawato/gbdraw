@@ -71,6 +71,11 @@ RECORD_FALLBACK_GENETIC_CODE = 11
 _INFERENCE_PREFIX = "ab initio prediction:gbdraw:"
 PREDICTED_ORF_CAPTION = "Predicted ORF"
 PREDICTED_ORF_COLOR = "#e58fa6"
+# The Legend row of predicted ORFs, as the Legend names a color rule's row: its caption and color. It is gbdraw's
+# own row, not a user's rule: it does not rename the row of the annotated CDS (``legend.table.feature_type_rows``).
+PREDICTED_ORF_LEGEND_ROW = (PREDICTED_ORF_CAPTION, PREDICTED_ORF_COLOR)
+# The record annotation that names the features ORF prediction added to a record (``PredictedFeatures``).
+PREDICTED_FEATURES_ANNOTATION = "gbdraw_predicted_features"
 """A rose that no packaged palette gives another feature type (tRNA is #e8b441 in the default palette)."""
 
 
@@ -476,6 +481,22 @@ def predict_record_orf_features(
         record.seq, topology=topology, parameters=replace(parameters, genetic_code=table)
     )
     return predicted_orf_features(orfs, record_length=len(record.seq), genetic_code=table)
+
+
+@dataclass(frozen=True)
+class PredictedFeatures:
+    """The source feature indexes of the features ORF prediction added to a record: the typed mark of a predicted
+    feature, kept on the record (``PREDICTED_FEATURES_ANNOTATION``). A crop or reverse complement copies the
+    record's annotations and carries each feature's source feature index, so the mark holds on every drawn unit."""
+
+    source_feature_indexes: frozenset[int]
+
+
+def predicted_source_feature_indexes(record: SeqRecord) -> frozenset[int]:
+    """The source feature indexes of the predicted features of ``record`` (``PredictedFeatures``); none without."""
+
+    mark = (getattr(record, "annotations", None) or {}).get(PREDICTED_FEATURES_ANNOTATION)
+    return mark.source_feature_indexes if isinstance(mark, PredictedFeatures) else frozenset()
 
 
 def predicted_orf_color_rule() -> DataFrame:

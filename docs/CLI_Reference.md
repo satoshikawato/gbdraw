@@ -107,10 +107,13 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT]
-              [--overwrite] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS]
-              [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES]
-              [--strain STRAIN] [-k FEATURES] [--feature_shape TYPE=SHAPE]
+              [--fasta [FASTA_FILE ...]] [--predict_orfs]
+              [--orf_min_length AA] [--orf_genetic_code {record,N}]
+              [--orf_start_codons {methionine,table}] [--orf_keep_nested]
+              [--records_table TSV] [-o OUTPUT] [--overwrite] [-p PALETTE]
+              [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
+              [--species SPECIES] [--strain STRAIN] [-k FEATURES]
+              [--feature_shape TYPE=SHAPE]
               [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
               [--arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO]
               [--block_stroke_color BLOCK_STROKE_COLOR]
@@ -248,6 +251,22 @@ options:
                         FASTA file, plain or gzip-compressed: with --gff, its
                         sequences; alone (instead of --gbk), each nucleotide
                         entry is a record without features
+  --predict_orfs        Draw the ORFs predicted from each record's sequence as
+                        CDS, in their own Legend row ("Predicted ORF"); beside
+                        a record's own features they take their own lanes,
+                        outside the circle or below the line (default: off).
+  --orf_min_length AA   Fewest residues of a predicted protein, stop not
+                        counted (default: 50).
+  --orf_genetic_code {record,N}
+                        Genetic code table of the prediction: a table number,
+                        or record: the table the record's CDS all state in
+                        /transl_table, else 11 (default: record).
+  --orf_start_codons {methionine,table}
+                        Start codons: methionine, the codons the table reads
+                        as M; table, also the table's alternative start codons
+                        (default: methionine).
+  --orf_keep_nested     Keep a predicted ORF that lies inside another
+                        (default: left out).
   --records_table TSV   TSV manifest for row-based input records and circular
                         placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
@@ -1257,9 +1276,12 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [--records_table TSV]
-              [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
-              [--comparisons_table TSV] [-b [BLAST ...]] [--auto_orient]
+              [--fasta [FASTA_FILE ...]] [--predict_orfs]
+              [--orf_min_length AA] [--orf_genetic_code {record,N}]
+              [--orf_start_codons {methionine,table}] [--orf_keep_nested]
+              [--records_table TSV] [--multi_record_position SELECTOR@ROW]
+              [--linear_record_gap PX] [--comparisons_table TSV]
+              [-b [BLAST ...]] [--auto_orient]
               [--losat {losatn,tlosatx,losatp}]
               [--losatp_mode {similarity_groups,collinear,pairwise}]
               [--losatn_task {megablast,blastn,dc-megablast}]
@@ -1398,6 +1420,22 @@ options:
                         FASTA file, plain or gzip-compressed: with --gff, its
                         sequences; alone (instead of --gbk), each nucleotide
                         entry is a record without features
+  --predict_orfs        Draw the ORFs predicted from each record's sequence as
+                        CDS, in their own Legend row ("Predicted ORF"); beside
+                        a record's own features they take their own lanes,
+                        outside the circle or below the line (default: off).
+  --orf_min_length AA   Fewest residues of a predicted protein, stop not
+                        counted (default: 50).
+  --orf_genetic_code {record,N}
+                        Genetic code table of the prediction: a table number,
+                        or record: the table the record's CDS all state in
+                        /transl_table, else 11 (default: record).
+  --orf_start_codons {methionine,table}
+                        Start codons: methionine, the codons the table reads
+                        as M; table, also the table's alternative start codons
+                        (default: methionine).
+  --orf_keep_nested     Keep a predicted ORF that lies inside another
+                        (default: left out).
   --records_table TSV   TSV manifest for row-based input records and per-
                         record options.
   --multi_record_position SELECTOR@ROW

@@ -378,14 +378,22 @@ def measure_circular_feature_stack(
         else max(0.0, float(lane_spacing_px))
     )
     axis = float(axis_radius_px)
-    ids = tuple(sorted({int(track_id) for track_id in track_ids})) or (0,)
-    lane_count = len(ids)
-    band_width = _feature_stack_band_width(lane_count, width, spacing)
+    all_ids = tuple(sorted({int(track_id) for track_id in track_ids})) or (0,)
+    lane_count = len(all_ids)
     normalized_preset = (
         normalize_circular_track_preset(preset)
         if preset is not None
         else circular_preset_for_feature_lane_direction(lane_direction)
     )
+    # An inside stack draws the lanes of their own (predicted ORFs beside annotated features, Owner D-131) outside
+    # the circle line, from the line out; the stack's own band holds its other lanes. The mark is the placement's
+    # ``own_lane``, never its side: with two features slots the features carry the first slot's sides.
+    outside = frozenset(
+        int(track_id) for track_id, assignment in (placements_by_track_id or {}).items()
+        if normalized_preset == "tuckin" and assignment.own_lane
+    )
+    ids = tuple(track_id for track_id in all_ids if track_id not in outside) or (0,)
+    band_width = _feature_stack_band_width(len(ids), width, spacing)
     center = float(center_radius_px) if center_radius_px is not None else axis
 
     if center_radius_px is None:
@@ -445,6 +453,10 @@ def measure_circular_feature_stack(
             lane_width_px=width,
             lane_spacing_px=spacing,
         )
+        lane_centers.update({
+            track_id: axis + spacing + (0.5 * width) + (rank * (width + spacing))
+            for rank, track_id in enumerate(sorted(outside))
+        })
 
     lane_bands = [
         RadialBand(center_px - (0.5 * width), center_px + (0.5 * width))
@@ -462,6 +474,7 @@ def measure_circular_feature_stack(
         inner_radius_px=float(all_band.inner_px),
         outer_radius_px=float(all_band.outer_px),
         lane_centers_by_track_id=lane_centers,
+        outside_track_ids=outside,
     )
 
 
@@ -530,12 +543,14 @@ def build_circular_feature_layout(
         if placements and direction == "split" and not strandedness
         else band_union(primary_lanes) or all_band
     )
+    packed = [lane.band_px for track_id, lane in lanes.items() if track_id not in metrics.outside_track_ids]
     return CircularFeatureLayout(
         anchor_radius_px=anchor,
         width_px=width,
         lanes_by_track_id=lanes,
         primary_band_px=primary_band,
         all_band_px=all_band,
+        packing_band_px=band_union(packed) if metrics.outside_track_ids else None,
     )
 
 
@@ -927,6 +942,9 @@ class _SlotBands(NamedTuple):
     draw_band_px: RadialBand | None
     reserved_band_px: RadialBand
     payload: CircularFeatureLayout | CircularTickLayout | None
+    # How far the reserved band reaches past the band the slot itself takes, without moving it: the lanes an inside
+    # feature stack draws outside the circle line.
+    room_past_px: float = 0.0
 
 
 def _feature_lanes_bands(at: _SlotAt) -> _SlotBands:
@@ -950,13 +968,15 @@ def _feature_lanes_bands(at: _SlotAt) -> _SlotBands:
         return _SlotBands(at.anchor_offset_px, at.anchor_radius_px, band, band, band, None)
     anchor_radius_px = float(feature_layout.anchor_radius_px)
     band = feature_layout.all_band_px
+    packing = feature_layout.packing_band_px or band
     return _SlotBands(
         float(anchor_radius_px) - float(measure.axis_radius_px),
         anchor_radius_px,
-        band,
+        packing,
         feature_layout.primary_band_px,
         band,
         feature_layout,
+        max(0.0, float(band.outer_px) - float(packing.outer_px)),
     )
 
 
@@ -1065,6 +1085,7 @@ def _measure_radial_slot(
         explicit_anchor=bool(intent.explicit_anchor),
         explicit_width=bool(intent.explicit_width),
         compressed=bool(compressed),
+        lanes_past_band_px=bands.room_past_px,
     ))
 
 

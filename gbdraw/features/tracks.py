@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Any, Dict, List, NoReturn, Optional, Tuple, cast
+from typing import Any, Dict, List, Literal, NamedTuple, NoReturn, Optional, Tuple, cast
 
 from ..exceptions import ValidationError
 from ..layout.spatial import IntervalIndex, split_circular_interval
@@ -326,6 +326,47 @@ def _find_best_track_split_overlaps_by_strand_indexed(
     _raise_feature_track_limit(feature, max_track)
 
 
+class OwnLanes(NamedTuple):
+    """Features drawn in lanes of their own, after the lanes every other feature takes: which features, and on which
+    side. ``sign`` is the sign of the own lanes' track IDs where the sign of a track ID picks its side; ``None`` in a
+    slot whose lanes are all on one side, where the own lanes follow all other lanes."""
+
+    feature_ids: frozenset[str]
+    sign: Literal[1, -1] | None
+
+
+def _pack_own_lanes(
+    feature_dict: Dict[str, FeatureObject],
+    sorted_features: List[Tuple[str, dict]],
+    own_lanes: OwnLanes,
+    feature_metrics: dict[str, dict[str, Any]],
+    genome_length: Optional[int],
+    tolerance_bp: int,
+) -> None:
+    """Pack the features of ``own_lanes``, longest first, each into the first of their own lanes where it overlaps
+    none of them (overlapping ones take further lanes), numbered on from the last lane the other features take on
+    their side."""
+
+    taken = [feature.feature_track_id for key, feature in feature_dict.items() if key not in own_lanes.feature_ids]
+    sign = own_lanes.sign or 1
+    first = 1 + max(
+        (abs(track) for track in taken if own_lanes.sign is None or track * sign > 0 or (track == 0 and sign > 0)),
+        default=0 if own_lanes.sign is not None else -1,
+    )
+    tracks: Dict[str, List[dict]] = {}
+    indexes: dict[str, IntervalIndex] = {}
+    bucket_size = _feature_interval_bucket_size(genome_length)
+    for feat_id, metrics in sorted_features:
+        if feat_id not in own_lanes.feature_ids:
+            continue
+        lane = _find_best_track_indexed(
+            metrics, tracks, indexes, feature_metrics, False, True, genome_length, tolerance_bp=tolerance_bp,
+        )
+        tracks.setdefault(f"track_{lane}", []).append(metrics)
+        _insert_feature_track_index(indexes, f"track_{lane}", metrics, genome_length, bucket_size)
+        feature_dict[feat_id].feature_track_id = sign * (first + lane)
+
+
 def arrange_feature_tracks(
     feature_dict: Dict[str, FeatureObject],
     separate_strands: bool,
@@ -335,6 +376,7 @@ def arrange_feature_tracks(
     *,
     fixed_tracks: dict[str, int] | None = None,
     tolerance_bp: int = 0,
+    own_lanes: OwnLanes | None = None,
 ) -> Dict[str, FeatureObject]:
     """
     Arrange features in tracks with improved strand handling and track assignment.
@@ -347,6 +389,7 @@ def arrange_feature_tracks(
             uses shared center track 0 plus strand-specific displacement pools.
             Intended for circular middle resolve_overlaps behavior.
         genome_length: Total genome length (for origin-spanning feature detection)
+        own_lanes: features placed in lanes of their own after every other feature (``_pack_own_lanes``)
 
     Returns:
         Updated feature_dict with feature_track_id set on each feature
@@ -421,9 +464,10 @@ def arrange_feature_tracks(
     fixed_tracks = fixed_tracks or {}
     for feat_id, track_num in fixed_tracks.items():
         reserve(feat_id, track_num, fixed=True)
+    own = own_lanes.feature_ids - set(fixed_tracks) if own_lanes is not None else frozenset()
 
     for feat_id, feat_metrics in sorted_features:
-        if feat_id in fixed_tracks:
+        if feat_id in fixed_tracks or feat_id in own:
             continue
         if split and resolve_overlaps:
             track_num = _find_best_track_split_overlaps_by_strand_indexed(
@@ -441,10 +485,16 @@ def arrange_feature_tracks(
                 genome_length, tolerance_bp=tolerance_bp,
             )
         reserve(feat_id, track_num)
+    if own_lanes is not None:
+        _pack_own_lanes(
+            feature_dict, sorted_features, own_lanes._replace(feature_ids=frozenset(own)), feature_metrics,
+            genome_length, tolerance_bp,
+        )
     return feature_dict
 
 
 __all__ = [
+    "OwnLanes",
     "arrange_feature_tracks",
     "calculate_feature_metrics",
     "check_feature_overlap",

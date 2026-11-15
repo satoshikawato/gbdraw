@@ -190,7 +190,8 @@ def _add_orf_prediction_args(parser: argparse.ArgumentParser) -> None:
         "--predict_orfs", action="store_true",
         help=(
             "Draw the ORFs predicted from each record's sequence as CDS, in their own Legend row "
-            "(\"Predicted ORF\"); only records without CDS of their own (default: off)."
+            "(\"Predicted ORF\"); beside a record's own features they take their own lanes, outside the circle "
+            "or below the line (default: off)."
         ),
     )
     parser.add_argument(

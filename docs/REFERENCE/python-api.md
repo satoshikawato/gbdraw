@@ -28,7 +28,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 |---|---|
 | Result | `Diagram` |
 | Record display / placement | `RecordDisplayOptions`, `FeaturePlacementOverride`, `FeaturePlacementTarget` |
-| Shared presentation | `FeatureOptions`, `LabelOptions`, `TitleOptions`, `Thresholds`, `DepthTrackOptions` |
+| Shared presentation | `FeatureOptions`, `OrfPredictionParameters`, `LabelOptions`, `TitleOptions`, `Thresholds`, `DepthTrackOptions` |
 | Circular | `CircularOptions`, `CircularLayout`, `CircularTrackOptions`, `ComparisonRingOptions`, `ComparisonRingTrackOptions` |
 | Linear | `LinearOptions`, `LinearLayout`, `LinearTrackOptions`, `LinearComparisonOptions`, `SimilarityAlignmentReference` |
 | Compatibility aliases | `ConservationOptions`, `ConservationTrackOptions` |
@@ -46,6 +46,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | `FeatureOptions.visibility` | path or `DataFrame` | `None` |
 | `FeatureOptions.shapes` | mapping | `None` |
 | `FeatureOptions.placements` | TSV path, DataFrame, exact override sequence, or `None` | `None` |
+| `FeatureOptions.orf_prediction` | `OrfPredictionParameters` or `None` (off) | `None` |
 | `LabelOptions.whitelist` | path or `DataFrame` | `None` |
 | `LabelOptions.qualifier_priority` | path or `DataFrame` | `None` |
 | `LabelOptions.overrides` | path or `DataFrame` | `None` |

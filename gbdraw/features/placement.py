@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -419,12 +419,17 @@ class FeaturePlacementAssignment:
 
     Identity remains on the runtime feature's source_feature_index and record context.
     This value is derived, never a requested target or a persistence authority.
+    ``own_lane``: the feature is in lanes of its own after every other feature
+    (predicted ORFs beside the record's own features, ``tracks.OwnLanes``); an
+    inside Circular stack draws those lanes outside the circle line
+    (``radial_layout.measure_circular_feature_stack``).
     """
 
     side: Literal["main", "outward", "inward", "above", "below"]
     strand_pool: Literal["combined", "positive", "negative"]
     level: int
     requested_target: FeaturePlacementTarget | None = None
+    own_lane: bool = False
 
 
 def _assignment_for_track(
@@ -477,7 +482,7 @@ def plan_feature_placements(
     so display fragments must not replace these metrics or create placement units.
     """
     from gbdraw.config.models.canvas import validate_feature_overlap_tolerance
-    from .tracks import arrange_feature_tracks, _strand_pool
+    from .tracks import OwnLanes, arrange_feature_tracks, _strand_pool
 
     tolerance_bp = validate_feature_overlap_tolerance(tolerance_bp)
     overrides = record_features.placements if record_features is not None else ()
@@ -506,15 +511,25 @@ def plan_feature_placements(
             track_id = -(1 + int(slot.separate_strands)) if target.side in ("inward", "below") else 1
         targets[key] = target
         fixed[key] = track_id
+    # Predicted ORFs beside features of the record's own take lanes of their own, outside the circle and below the
+    # line, packed among themselves (Owner D-131); on a record with no other feature they are its features.
+    predicted = frozenset(key for key, feature in feature_dict.items() if feature.predicted)
+    own_lanes = OwnLanes(
+        predicted, (1 if slot.mode == "circular" else -1) if slot.bidirectional or slot.separate_strands else None,
+    ) if predicted and len(predicted) < len(feature_dict) else None
     arrange_feature_tracks(
         feature_dict, slot.separate_strands, resolve_overlaps,
         # Linear Auto retains its existing all-above order in overlay geometry.
         split_overlaps_by_strand=slot.mode == "circular" and slot.bidirectional,
-        genome_length=genome_length, fixed_tracks=fixed, tolerance_bp=tolerance_bp,
+        genome_length=genome_length, fixed_tracks=fixed, tolerance_bp=tolerance_bp, own_lanes=own_lanes,
     )
     assignments = {}
     for key, feature in feature_dict.items():
         assignment = _assignment_for_track(slot, feature.feature_track_id, targets.get(key))
+        if own_lanes is not None and key in predicted and key not in fixed:
+            # An inside slot draws these lanes outside the circle (``radial_layout.measure_circular_feature_stack``).
+            assignment = replace(assignment, side="outward" if slot.direction == "inside" else assignment.side,
+                                 own_lane=True)
         assignments[key] = assignment
         feature.placement = assignment
         feature.feature_track_id = placement_track_id(assignment, slot)

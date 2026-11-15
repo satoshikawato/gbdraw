@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import logging
+import weakref
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -19,7 +20,12 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityResult,
 )
-from gbdraw.analysis.orf_prediction import OrfPredictionParameters, predict_record_orf_features
+from gbdraw.analysis.orf_prediction import (
+    PREDICTED_FEATURES_ANNOTATION,
+    OrfPredictionParameters,
+    PredictedFeatures,
+    predict_record_orf_features,
+)
 from gbdraw.analysis.origin_arcs import location_center
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
@@ -2117,25 +2123,69 @@ def _uncropped_length(record: SeqRecord) -> int:
     return length if isinstance(length, int) else len(record)
 
 
-def _with_predicted_orfs(
+# Each record's predictions, by record object (``id``) while it lives, then by parameters and drawn topology.
+_PREDICTED_RECORDS: dict[int, tuple[weakref.ref[SeqRecord], dict[tuple[OrfPredictionParameters, bool], tuple[SeqRecord, SourceFeatureCatalog]]]] = {}
+
+
+def _forget_predictions(key: int) -> Callable[[weakref.ref[SeqRecord]], None]:
+    """Drop the predictions of the record that had ``id`` ``key`` once it is gone."""
+
+    def forget(_gone: weakref.ref[SeqRecord]) -> None:
+        _PREDICTED_RECORDS.pop(key, None)
+
+    return forget
+
+
+def with_predicted_orfs(
     record: SeqRecord, parameters: OrfPredictionParameters, *, circular: bool,
 ) -> tuple[SeqRecord, SourceFeatureCatalog]:
-    """``record`` with the CDS predicted from its sequence added after its features, and its source feature catalog.
+    """``record`` as drawn with ORF prediction: the CDS predicted from its sequence added after its features, marked
+    as predicted (``PredictedFeatures``), and its source feature catalog.
 
-    The predicted CDS are source features like the file's: each is found by its hash (record, type, location).
-    A record that has CDS of its own is refused until where predicted CDS draw beside annotated ones is decided.
+    The one owner of a record with prediction: the record loading path draws it and LOSATP counts its proteins from
+    it (``request_render._losatp_database_sizes``), so both read one prediction, made once per record object,
+    parameters and topology. The predicted CDS are source features like the file's: each is found by its hash
+    (record, type, location).
     """
-    annotated = sum(1 for feature in record.features if feature.type == "CDS")
-    if annotated:
-        raise ValidationError(
-            f"ORF prediction adds CDS only to a record without CDS of its own; record {record.id!r} has {annotated}.",
-            diagnostic={"code": "INPUT_INVALID", "reason": "ORF_PREDICTION_ANNOTATED_RECORD"},
+
+    held = _PREDICTED_RECORDS.get(id(record))
+    if held is None or held[0]() is not record:
+        held = _PREDICTED_RECORDS[id(record)] = (weakref.ref(record, _forget_predictions(id(record))), {})
+    predictions = held[1]
+    if (parameters, circular) not in predictions:
+        predicted = _detached_record(record)
+        added = predict_record_orf_features(
+            record, topology="circular" if circular else "linear", parameters=parameters,
         )
-    predicted = _detached_record(record)
-    predicted.features.extend(predict_record_orf_features(
-        record, topology="circular" if circular else "linear", parameters=parameters,
-    ))
-    return predicted, capture_source_features(predicted)
+        predicted.features.extend(added)
+        indexes = _feature_source_index_map(predicted.features)
+        predicted.annotations[PREDICTED_FEATURES_ANNOTATION] = PredictedFeatures(
+            frozenset(indexes[id(feature)] for feature in added)
+        )
+        predictions[parameters, circular] = (predicted, capture_source_features(predicted))
+    return predictions[parameters, circular]
+
+
+def source_records_as_drawn(
+    records: Sequence[SeqRecord],
+    orf_prediction: OrfPredictionParameters | None,
+    *,
+    display: RecordDisplayOptions,
+    source_kind: str,
+) -> list[SeqRecord]:
+    """Every record of one source as its card draws it: with the ORFs predicted from it when prediction is on
+    (``with_predicted_orfs``, read in the topology the card draws the record in), else as given. What a reader of a
+    whole source's features reads (LOSATP's count of a source's proteins), as the record loading path draws them."""
+
+    if orf_prediction is None:
+        return list(records)
+    return [
+        with_predicted_orfs(
+            record, orf_prediction,
+            circular=drawn_circular(display.is_circular, detected_topology(record, source_kind)),
+        )[0]
+        for record in records
+    ]
 
 
 def resolve_record_inputs(
@@ -2207,7 +2257,7 @@ def resolve_record_inputs(
                 )
             source_catalog = parsed.source_features[source_record_index]
             if orf_prediction is not None:
-                source_record, source_catalog = _with_predicted_orfs(
+                source_record, source_catalog = with_predicted_orfs(
                     source_record, orf_prediction,
                     circular=drawn_circular(record_input.display.is_circular, detected_topology(source_record, source_kind)),
                 )
@@ -2859,6 +2909,8 @@ def resolve_implicit_record_output_prefix(record_id: object) -> str:
 
 __all__ = [
     "DrawnUnitName",
+    "source_records_as_drawn",
+    "with_predicted_orfs",
     "SourceFileContents",
     "RecordInputManifest",
     "ResolvedRecordCollection",

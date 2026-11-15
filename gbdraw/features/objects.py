@@ -136,6 +136,9 @@ class FeatureObject:
         self.placement: FeaturePlacementAssignment | None = None
         self.feature_track_id: int = 0
         self.source_feature_index: int | None = None
+        # Whether ORF prediction made the feature (``orf_prediction.PredictedFeatures``), read by its source
+        # feature index: the lane planner draws predicted features in their own lanes (``placement.plan_feature_placements``).
+        self.predicted: bool = False
         # The source-record feature hash that every SVG ID drawn for this
         # feature starts with (`ids.compute_source_feature_hash`).
         self.feature_hash: SourceFeatureHash | None = None

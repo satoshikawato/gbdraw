@@ -68,6 +68,8 @@ class CircularFeatureStackMetrics:
     inner_radius_px: float
     outer_radius_px: float
     lane_centers_by_track_id: Mapping[int, float]
+    # The lanes an inside stack draws outside the circle line (predicted ORFs beside annotated features).
+    outside_track_ids: frozenset[int] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -84,6 +86,9 @@ class CircularFeatureLayout:
     lanes_by_track_id: Mapping[int, CircularFeatureLane]
     primary_band_px: RadialBand
     all_band_px: RadialBand
+    # The band the slot packs among the other rows when it is not ``all_band_px``: an inside stack packs its own
+    # lanes and reserves the lanes it draws outside the circle line beyond them.
+    packing_band_px: RadialBand | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -180,6 +185,10 @@ class CircularResolvedSlot:
     # How far ``reserved_band_px`` reaches past the slot's own reservation, on the label side, for the labels of a
     # span overlay that covers this slot: other slots keep out of it, but it does not move the slot itself.
     span_label_room_px: float = 0.0
+    # How far ``reserved_band_px`` reaches past the slot's own band for the lanes an inside feature stack draws
+    # outside the circle line (predicted ORFs beside annotated features): other slots keep out of it and the figure
+    # holds it, but it does not move the slot itself.
+    lanes_past_band_px: float = 0.0
     # An annotation overlay whose labels the layout keeps a room for past its outer edge, where set radii allow: the
     # room lies past the slot that holds it (the outermost slot it covers, split feature lanes included, or its
     # anchor when it spans nothing), so only a span whose outer edge is another overlay (a plot overlay) keeps none.
@@ -224,18 +233,23 @@ class CircularResolvedSlot:
         the room of the span labels past it, which never moves the slot itself."""
 
         reserved = self.reserved_band_px
-        if reserved is None or self.span_label_room_px <= 0.0:
+        room = self.span_label_room_px + self.lanes_past_band_px
+        if reserved is None or room <= 0.0:
             return reserved
-        return RadialBand(reserved.inner_px, float(reserved.outer_px) - self.span_label_room_px)
+        return RadialBand(reserved.inner_px, float(reserved.outer_px) - room)
 
     @property
     def band_without_label_rooms_px(self) -> RadialBand | None:
         """The band the slot takes without the room it keeps for region labels: an annotation slot's own band
-        without its labels' room, else ``own_reserved_band_px`` (without the room of the span labels past it)."""
+        without its labels' room, else its reserved band without the room of the span labels past it (the lanes an
+        inside feature stack draws outside the circle line stay in it)."""
 
         if self.renderer == "annotations" and self.side != "overlay":
             return self.packing_band_px
-        return self.own_reserved_band_px
+        reserved = self.reserved_band_px
+        if reserved is None or self.span_label_room_px <= 0.0:
+            return reserved
+        return RadialBand(reserved.inner_px, float(reserved.outer_px) - self.span_label_room_px)
 
     @property
     def feature_layout(self) -> CircularFeatureLayout | None:

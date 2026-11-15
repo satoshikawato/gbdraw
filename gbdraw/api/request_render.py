@@ -230,6 +230,7 @@ from .record_planning import (
     comparison_record_bindings,
     decide_linear_wrap,
     effective_record_presentation,
+    source_records_as_drawn,
     has_source_bound_results,
     project_similarity_alignment_centers,
     project_source_bound_results,
@@ -2469,7 +2470,8 @@ def _losatp_database_sizes(loaded: _LoadedLinearRequest) -> GenomeDatabaseSizes:
     file's; an in-memory crop, the record it was cut from, as its genome length does), with the proteins LOSATP's
     extraction takes under the drawing's visibility rules and the request's feature edits of each drawn record,
     bound to the uncropped record, so an edit outside a crop or window counts too (an undrawn record has none):
-    ``source_protein_letters``, read once per source.
+    ``source_protein_letters``, read once per source, with its predicted ORFs when prediction is on
+    (``source_records_as_drawn``).
     """
 
     collection, inputs = loaded.collection, loaded.inputs
@@ -2488,10 +2490,15 @@ def _losatp_database_sizes(loaded: _LoadedLinearRequest) -> GenomeDatabaseSizes:
         if item.source_kind != "memory" and isinstance(source, InMemoryRecordSource):
             source = _file_source(item.source_kind, item.source_paths)
         parsed = loaded.parsed_sources.get(_source_key(source))
-        source_records = [
-            window_source(record).record if record.annotations.get("gbdraw_region_applied") else record
-            for record in (parsed if parsed is not None else load_render_source_records(source)).records
-        ]
+        source_records = source_records_as_drawn(
+            [
+                window_source(record).record if record.annotations.get("gbdraw_region_applied") else record
+                for record in (parsed if parsed is not None else load_render_source_records(source)).records
+            ],
+            loaded.request.options.orf_prediction,
+            display=loaded.request.records[item.input_index].display,
+            source_kind=item.source_kind,
+        )
         drawn: dict[int, ResolvedRecordProvenance] = {}
         for other in provenance:
             if source_of(other) == key:

@@ -144,8 +144,9 @@ def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
 def outer_label_scale_floor_px(radial_layout: CircularRadialLayout) -> float:
     """The radius outer horizontal labels and their leader elbows keep past: the outer edge of a scale that stands
     outside the lanes the outer labels name (``CircularRadialLayout.label_lanes``, the outermost features slot),
-    between the features and their labels (OV-3301). The band is the ticks slot's own reserved band (its ticks and
-    numbers, from the tick geometry owner); 0 when no scale stands there."""
+    between the features and their labels (OV-3301), and the outer edge of the lanes an inside feature stack of that
+    slot draws outside the circle line (predicted ORFs beside annotated features). The band is the ticks slot's own
+    reserved band (its ticks and numbers, from the tick geometry owner); 0 when neither stands there."""
 
     features = radial_layout.label_lanes.outer
     if features is None:
@@ -159,7 +160,7 @@ def outer_label_scale_floor_px(radial_layout: CircularRadialLayout) -> float:
             and slot.reserved_band_px is not None
             and float(slot.reserved_band_px.inner_px) >= feature_outer - 1e-6
         ),
-        default=0.0,
+        default=feature_outer if features.packing_band_px is not None else 0.0,
     )
 
 

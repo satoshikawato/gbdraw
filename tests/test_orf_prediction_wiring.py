@@ -1,6 +1,6 @@
 """ORF prediction through the one record loading path: the CLI options, the typed request field, its canonical
-form, and the Python API (D-87: off unless asked; D-126 defaults). Predicted CDS are added only to records without
-CDS of their own until their placement beside annotated CDS is decided."""
+form, and the Python API (D-87: off unless asked; D-126 defaults). Every record gets its predicted CDS; on a record
+with CDS of its own they are drawn beside them (D-131)."""
 
 from __future__ import annotations
 
@@ -82,11 +82,12 @@ def test_the_record_is_read_in_the_topology_it_is_drawn_in(tmp_path: Path) -> No
     assert "drew 118 features (118 CDS)" in output
 
 
-def test_a_record_with_cds_of_its_own_is_refused_for_now(tmp_path: Path) -> None:
-    code, output, _ = _draw(tmp_path, "linear", "--gbk", str(INPUTS / "NC_001416.gb"), "--predict_orfs")
-    assert code != 0
-    assert "ORF prediction adds CDS only to a record without CDS of its own" in output
-    assert "has 73" in output
+def test_a_record_with_cds_of_its_own_draws_them_with_its_predicted_cds(tmp_path: Path) -> None:
+    # Owner D-131 H1=A: both are drawn, the predicted ones in their own lanes (tests/test_orf_placement.py).
+    code, output, svg = _draw(tmp_path, "linear", "--gbk", str(INPUTS / "NC_001416.gb"), "--predict_orfs")
+    assert code == 0, output
+    assert "drew 183 features (183 CDS)" in output
+    assert PREDICTED_ORF_CAPTION in svg
 
 
 @pytest.mark.parametrize(
