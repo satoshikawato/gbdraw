@@ -992,6 +992,27 @@ const regionText = ({ start, end, reverseComplement }) => (
 );
 
 /**
+ * The `--region` arguments of a command line's records: each window under its record's name. A record without a
+ * selector (the record of a file of one record, as the CLI writes it) is named by its place among the records the CLI
+ * reads (`assign_region_specs` in `gbdraw/io/regions.py`), not among the request's records.
+ * @param {readonly CanonicalRecord[]} records
+ * @param {(index: number) => number | Promise<number>} readCount How many records the CLI reads of record `index`'s input.
+ * @returns {Promise<string[]>}
+ */
+const regionArgs = async (records, readCount) => {
+  const placed = records.map((record) => record.windows.length > 0 && !selectorText(record.selector));
+  /** @type {string[]} */
+  const args = [];
+  let readBefore = 0;
+  for (const [index, record] of records.entries()) {
+    const selector = selectorText(record.selector) || `#${readBefore + 1}`;
+    record.windows.forEach((window) => args.push('--region', `${selector}:${regionText(window)}`));
+    if (placed.slice(index + 1).some(Boolean)) readBefore += await readCount(index);
+  }
+  return args;
+};
+
+/**
  * @param {unknown} value
  * @returns {number | ''}
  */
@@ -1181,14 +1202,14 @@ const appendInputArgs = async (args, request, files, planRecordPlaces) => {
     return next + count;
   }, 1);
 
+  const loadComparison = request.mode === 'linear'
+    && Array.isArray(request.comparisons)
+    && request.comparisons.length > 0;
+  const effectiveCardinality = request.mode === 'circular'
+    ? 'all'
+    // gbdraw/linear.py `_linear_cli_record_cardinality`: compared `--gff` input, or several inputs, read each file's first record.
+    : ((options.includes('gff') || records.length > 1) && loadComparison ? 'first' : 'all');
   if (!recordsTableRequired) {
-    const loadComparison = request.mode === 'linear'
-      && Array.isArray(request.comparisons)
-      && request.comparisons.length > 0;
-    const effectiveCardinality = request.mode === 'circular'
-      ? 'all'
-      // gbdraw/linear.py `_linear_cli_record_cardinality`: compared `--gff` input, or several inputs, read each file's first record.
-      : ((options.includes('gff') || records.length > 1) && loadComparison ? 'first' : 'all');
     for (const [index, record] of records.entries()) {
       const canonicalCardinality = String(record.cardinality || '');
       const cliCardinality = record.selector
@@ -1224,10 +1245,8 @@ const appendInputArgs = async (args, request, files, planRecordPlaces) => {
   if (reverseFlags.some(Boolean)) {
     args.push(...reverseFlags.flatMap((value) => ['--reverse_complement', value ? '1' : '0']));
   }
-  records.forEach((record, index) => {
-    const selector = selectorText(record.selector) || `#${index + 1}`;
-    record.windows.forEach((window) => args.push('--region', `${selector}:${regionText(window)}`));
-  });
+  args.push(...await regionArgs(records, (index) => (selectors[index] || effectiveCardinality === 'first'
+    ? 1 : files.resourceRecordCount(specs[index].ids.at(-1), countFormat))));
   const rows = requestedRows.length
     ? requestedRows
     : records.map((record) => gridCoordinate(record.presentation?.gridRow));

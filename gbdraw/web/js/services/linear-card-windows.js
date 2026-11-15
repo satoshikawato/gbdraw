@@ -215,6 +215,17 @@ export const cardRecordFacts = (records, fileCount) => {
 };
 
 /**
+ * How many records a card's file holds as the request reads it (`CardRecordFacts.fileCount`): known once the card
+ * draws records of the file (`drawn`), else null, so the request keeps a name that names no record of the file and
+ * Python refuses it, as Generate's catalog does (RECORD_SELECTION). The one producer for Generate's catalog
+ * (`sourceRecordCount`), the card while editing and a rebuilt request (`cardFileRecordFacts`).
+ * @param {readonly unknown[]} fileRecords The records of the card's file.
+ * @param {readonly unknown[]} drawn The records the card draws of them.
+ * @returns {number | null}
+ */
+export const cardFileCount = (fileRecords, drawn) => (drawn.length > 0 ? fileRecords.length : null);
+
+/**
  * The records a card draws of its file's `records`: the one its record selector names, else every record when it
  * names none ([] when it names no single record of the file).
  * @template {{ recordId?: unknown, selector?: unknown }} R
@@ -234,8 +245,10 @@ export const cardDrawnRecords = (records, selector) => {
  * @param {unknown} selector The card's `region_record_id`.
  * @returns {CardRecordFacts}
  */
-export const cardFileRecordFacts = (records, selector) => cardRecordFacts(cardDrawnRecords(records, selector),
-  records.length || null);
+export const cardFileRecordFacts = (records, selector) => {
+  const drawn = cardDrawnRecords(records, selector);
+  return cardRecordFacts(drawn, cardFileCount(records, drawn));
+};
 
 /**
  * The records a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place among the

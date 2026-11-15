@@ -34,7 +34,9 @@ import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadat
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { catalogCardRecord } from '../services/linear-card-windows.js';
 /** @import { CardRecordFacts, LinearRecordCatalogRecords } from '../services/linear-card-windows.js' */
-import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
+import {
+  buildSimilarityAlignmentResetReceipt, validateGeneratedSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt
+} from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatJobsByFile, runLosatPairsParallel, runUntilCanceled } from '../services/losat.js';
 import {
   requestedLosatExecutionMode, requestedLosatParallelWorkers, requestedLosatThreadsPerJob, requestedLosatTotalThreadBudget
@@ -85,7 +87,8 @@ import {
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
   linearRecordGridRows,
-  savedPipelineSearchDrawing
+  savedPipelineSearchDrawing,
+  cardNamesRequestRecord
 } from '../services/session-request.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
@@ -861,7 +864,7 @@ const canReuseResolvedProteinArtifacts = ({
     const end = Number(seq.region_end) || null;
     const reverse = Boolean(seq.region_reverse)
       || (start !== null && end !== null && start > end);
-    const { selector, windows } = record;
+    const { windows } = record;
     /** @param {{ start: unknown, end: unknown, reverseComplement: unknown }} window */
     const spanText = (window) => `${window.start}-${window.end}:${Boolean(window.reverseComplement)}`;
     // A card whose windows its crop fields cannot hold (several, or one across the origin) holds them as the
@@ -869,7 +872,8 @@ const canReuseResolvedProteinArtifacts = ({
     const [only] = windows.length === 1 ? windows : [null];
     return record.recordKey !== seq.uid
       || (record.presentation?.gridRow ?? null) !== (gridRows[index] ?? null)
-      || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
+      // The record the card names, in either form the request names it (`cardNamesRequestRecord`).
+      || !cardNamesRequestRecord(seq, record)
       || (seq.windows.length > 0 || windows.length > 1
         ? seq.windows.map(spanText).join(',') !== windows.map(spanText).join(',')
         : (only?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
@@ -5359,8 +5363,10 @@ export const createRunAnalysis = ({
         );
       }
       logPostGbdrawTimings(postGbdrawTimingEntries);
-      await validateSimilarityAlignmentResetReceipt(
-        state.similarityAlignmentResetReceipt?.value, canonical
+      // The receipt binds the committed request; Generate may name a record in the CLI's form (OV-3632).
+      const generatedResetReceipt = await validateGeneratedSimilarityAlignmentResetReceipt(
+        state.similarityAlignmentResetReceipt?.value, canonical,
+        typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.renderRequest : null
       );
       recordSessionLifecycleEvent('preview-result-commit-start');
       const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
@@ -5373,6 +5379,7 @@ export const createRunAnalysis = ({
       /** @type {Record<string, any>} */
       let candidateOwnerSet = {
         ...currentOwnerSet,
+        similarityAlignmentResetReceipt: generatedResetReceipt,
         results: candidateCommit.results,
         featureCatalog: candidateCatalog,
         extractedFeatures: candidateExtractedFeatures,

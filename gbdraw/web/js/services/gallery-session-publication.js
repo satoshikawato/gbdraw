@@ -406,8 +406,8 @@ const rebuildIntent = async (session, owners) => {
     if (failed) throw failed.error;
     drawing.circularRecordList.value = reads.flatMap(({ records }) => records);
   }
-  // It reads the records of each Linear card too, as Generate does (`catalogCardRecord`): the request names a card's
-  // record by the records its file holds (`cliRecordSelector`).
+  // It reads the records of each Linear card too: the request names a card's record by the records its file holds
+  // (`cliRecordSelector`), which Generate's catalog and this read count with one producer (`cardFileCount`).
   if (projection.mode === 'linear') {
     await Promise.all(filesData.linearSeqs.map(async (sequence) => {
       const { spec, primaryFile, pairedFile } = inputSourceFiles(drawing.inputType.value, sequence);

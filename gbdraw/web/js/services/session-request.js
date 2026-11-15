@@ -101,7 +101,7 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordSelectorNumber
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordSelectorNumber, sameSelectedRecord
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
@@ -1429,6 +1429,19 @@ const selectorPayload = (rawValue) => {
  */
 const linearCardNamedSelector = (seq) => selectorPayload(seq.region_record_id);
 /**
+ * Whether a request record of a Linear card's source selects the record the
+ * card names (`sameSelectedRecord`): the named record, also when the request
+ * names it in the CLI's form (an `exactly_one` record without a selector, the
+ * record of a file of one record); none when the card names none.
+ * @param {{ region_record_id?: unknown }} seq
+ * @param {{ cardinality?: string, selector?: CanonicalRecord['selector'] }} record
+ */
+export const cardNamesRequestRecord = (seq, record) => {
+  const named = linearCardNamedSelector(seq);
+  return named === null ? requestRecordSelector(record) === null
+    : sameSelectedRecord({ cardinality: 'exactly_one', selector: named }, record);
+};
+/**
  * The selector a Linear card's request record carries (`buildRecords`): the
  * CLI's form of the record it names (`cliRecordSelector`, one rule with
  * Circular), none for the record of a file of one record, by the records its
@@ -1444,10 +1457,6 @@ const linearCardSelector = (seq) => cliRecordSelector({ fileValue: String(seq.re
  * @returns {CanonicalRecord['selector']}
  */
 const requestRecordSelector = (record) => record?.selector || null;
-/** @param {CanonicalRecord['selector']} a @param {CanonicalRecord['selector']} b */
-const sameRecordSelector = (a, b) => (a === null || b === null ? a === b
-  : a.kind === 'recordIndex' ? b.kind === 'recordIndex' && a.index === b.index
-    : b.kind === 'recordId' && a.value === b.value);
 
 /** @param {{ label?: unknown, subtitle?: unknown, reverseComplement?: unknown, gridRow?: number | null, gridColumn?: number | null }} [options] */
 const presentationPayload = ({
@@ -2306,9 +2315,7 @@ const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key],
  * (`fileOf` of its refs) name the record's source (`recordSourceOwnedBy`, by
  * payload identity; a replaced File does not, whatever its definition says),
  * and the card's Generate selects the same record: the record under the
- * card's key the record the card names (`linearCardNamedSelector`), or the
- * only record of its file when the record has the CLI's form of it (an
- * `exactly_one` record without a selector, `cliRecordSelector`), a split
+ * card's key the record the card names (`cardNamesRequestRecord`), a split
  * member (F-18) none. A changed selection applies on Generate (G3), and the
  * card's definition follows it.
  * @param {LiveSettingCard} seq @param {string} cardKey @param {CanonicalRecord} record
@@ -2320,10 +2327,7 @@ const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
   const drawn = recordSourceOwnedBy(resources, source.kind, fileOf(primaryFile), pairedFile === null ? null : fileOf(pairedFile));
   return drawn !== null && drawn.kind === source.kind
     && recordSourceResourceIds(drawn).join('\n') === recordSourceResourceIds(source).join('\n')
-    && (record.recordKey === cardKey
-      ? sameRecordSelector(linearCardNamedSelector(seq), requestRecordSelector(record))
-        || (record.selector === null && record.cardinality === 'exactly_one')
-      : linearCardNamedSelector(seq) === null);
+    && (record.recordKey === cardKey ? cardNamesRequestRecord(seq, record) : linearCardNamedSelector(seq) === null);
 };
 /**
  * The draft card index of each committed Linear record: the card whose
@@ -5303,10 +5307,19 @@ const compositionSourceIdentity = (source, resources) => {
 /**
  * @param {CommittedCanonicalSession | null | undefined} canonical A committed Session, or a candidate's.
  * @param {unknown} keys The record keys of one Result, unchecked; checked here.
+ * @param {CommittedCanonicalSession | null} [reference] The committed Session a candidate follows: a record of the
+ *   candidate that selects the record the committed one under its key selects (`sameSelectedRecord`) reads with the
+ *   committed selector, so a record Generate now names in the CLI's form keeps its identity (OV-3632).
  */
-export const projectCompositionRecordIdentity = (canonical, keys) => {
+export const projectCompositionRecordIdentity = (canonical, keys, reference = null) => {
   const request = canonical?.renderRequest;
   if (!request || !Array.isArray(keys) || !keys.length || new Set(keys).size !== keys.length) return null;
+  const committed = new Map((reference?.renderRequest?.records || []).map((record) => [record.recordKey, record]));
+  /** @param {CanonicalRecord} record */
+  const selectorOf = (record) => {
+    const before = committed.get(record.recordKey);
+    return before && sameSelectedRecord(before, record) ? before.selector : record.selector;
+  };
   const records = [];
   for (const key of [...keys].sort()) {
     // The renderer's validated catalog expands an ALL source as
@@ -5316,7 +5329,7 @@ export const projectCompositionRecordIdentity = (canonical, keys) => {
       if (record.recordKey === key) {
         // With no windows or selector, successful EXACTLY_ONE selects the sole
         // source record; FIRST selects #1, and unexpanded ALL also proves one.
-        const selector = record.selector ?? (!record.windows.length && ['exactly_one', 'first', 'all'].includes(record.cardinality)
+        const selector = selectorOf(record) ?? (!record.windows.length && ['exactly_one', 'first', 'all'].includes(record.cardinality)
           ? { kind: /** @type {const} */ ('recordIndex'), index: 0 } : null);
         return [{ record, selector }];
       }

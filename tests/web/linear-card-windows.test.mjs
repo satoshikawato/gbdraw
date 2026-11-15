@@ -19,8 +19,9 @@ globalThis.window = {
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
   addCardWindow, cardWindowList, editCardWindow, orientLinearCard, windowSpanOf,
-  removeCardWindow, UNKNOWN_CARD_RECORD, cardRecordFacts, catalogCardRecord
+  removeCardWindow, UNKNOWN_CARD_RECORD, cardRecordFacts, catalogCardRecord, cardFileRecordFacts
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
+const { buildAnnotationRecordCatalog } = await import('../../gbdraw/web/js/app/annotations/record-catalog.js');
 const {
   linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf, linearWindowsPayload
 } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -406,4 +407,20 @@ test('Up and Down on a window cell change only the places, so the unit indexes s
   moveLinearLayoutCell(cards, entries, { uid: 'a', window: 1 }, -1);
   assert.notDeepEqual(cards[0].windows.map(({ column }) => column), [null, null]);
   assert.deepEqual(unitsOf(), before);
+});
+
+// OV-3632 (F4 of the PR #2058 review): a request rebuilt outside the app (a Gallery publication) reads a card's file
+// count as Generate's catalog does: known once the card selects a record of its file. A card that names no record of
+// its file of one record keeps its name, so Python refuses it as Generate's catalog does, and never draws the only
+// record in the CLI's form.
+test('the file count of a card is the one Generate\'s catalog gives, for every selection', () => {
+  const one = [{ recordId: 'recone.1', recordLength: 10 }];
+  const two = [{ recordId: 'reca.1', recordLength: 10 }, { recordId: 'recb.1', recordLength: 20 }];
+  for (const [records, selector] of [[one, 'recone.1'], [one, ''], [one, 'stale.1'], [two, 'recb.1'], [two, '#2'],
+    [two, ''], [two, 'stale.1']]) {
+    const catalog = buildAnnotationRecordCatalog({ mode: 'linear', linearSources: [{ sourceKey: 'k', selector,
+      drawn: true, hasInput: true, status: 'ready', error: '', records }] });
+    assert.equal(cardFileRecordFacts(records, selector).fileCount, catalogCardRecord(catalog, 0).fileCount,
+      `${records.length} record(s), selector ${JSON.stringify(selector)}`);
+  }
 });

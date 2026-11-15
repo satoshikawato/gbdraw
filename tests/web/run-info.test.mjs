@@ -2457,3 +2457,34 @@ test('feature density tracks have their CLI words in the Source recipe of either
     assert.match(unavailable.unavailableReason, /feature density track/);
   }
 });
+
+// OV-3632: the Source recipe names a record without a selector (the record of a file of one record, as the CLI and the
+// Web write it) in its `--region` by its place among the records the CLI reads, not among the request records: a file
+// drawn whole before it reads each of its records.
+test('the Source recipe names a window of a record without a selector by its place among the records the CLI reads', async () => {
+  const record = (id) => [`LOCUS       ${id}                    20 bp    DNA     linear   UNK 01-JAN-2000`,
+    'ORIGIN', '        1 acgtacgtac gtacgtacgt', '//', ''].join('\n');
+  const session = canonical({
+    mode: 'linear',
+    records: [
+      { recordKey: 'whole', cardinality: 'all', source: { kind: 'genbank', resourceId: 'two' }, selector: null,
+        windows: [], presentation: presentation() },
+      { recordKey: 'cropped', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'one' }, selector: null,
+        windows: [{ start: 2, end: 8, reverseComplement: false, column: null }], presentation: presentation() }
+    ],
+    resources: { two: resource('genbank', 'two.gb', `${record('reca')}${record('recb')}`),
+      one: resource('genbank', 'one.gb', record('recc')) },
+    webFiles: { resourceOriginalNames: { two: 'two.gb', one: 'one.gb' } }
+  });
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const regions = recipe.args.flatMap((token, index) => (token === '--region' ? [recipe.args[index + 1]] : []));
+  assert.deepEqual(regions, ['#3:2-8']);
+  await assertCliParserAccepts(recipe);
+  const info = buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe });
+  const output = await readFile(await materializeAndRunRecipe(session, recipe, info, 'region of a record without a selector'), 'utf8');
+  // The CLI crops recc, the record the request crops, and draws reca and recb whole.
+  const cropped = [...output.matchAll(/<g [^>]*data-gbdraw-record-source-start="2"[^>]*>/g)]
+    .map(([tag]) => tag.match(/data-gbdraw-record-id="([^"]*)"/)?.[1]);
+  assert.deepEqual(cropped, ['recc']);
+});

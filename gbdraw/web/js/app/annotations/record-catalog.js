@@ -5,6 +5,7 @@ import {
 } from './target-actions.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../../services/record-options.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
+import { cardFileCount } from '../../services/linear-card-windows.js';
 
 /**
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
@@ -246,7 +247,10 @@ const buildLinearCatalog = (sources) => {
       issues.push(catalogIssue('RECORD_SELECTION', { inputOrdinal, reason: selected.error }));
       return;
     }
-    records.push(...selected.records.map((record) => ({ ...record, sourceIndex, sourceRecordCount: availableRecords.length })));
+    // Null only when nothing is selected, which adds no record.
+    const sourceRecordCount = cardFileCount(availableRecords, selected.records);
+    if (sourceRecordCount === null) return;
+    records.push(...selected.records.map((record) => ({ ...record, sourceIndex, sourceRecordCount })));
   });
   const finalized = finalizeRecords(records);
   return {

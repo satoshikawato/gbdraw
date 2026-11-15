@@ -168,7 +168,7 @@ export const createLegendLayout = ({
   return {
     /**
      * @param {Record<string, unknown> | null | undefined} canonical The committed canonical Session; null before one is committed.
-     * @param {(source: Record<string, unknown> | null | undefined, recordKeys: unknown) => unknown} projectRecordIdentity
+     * @param {(source: Record<string, unknown> | null | undefined, recordKeys: unknown, reference?: Record<string, unknown> | null) => unknown} projectRecordIdentity
      * @param {Record<string, any>} drawing The drawing of the run that keeps the decorations.
      */
     captureDecorationContinuity: (canonical, projectRecordIdentity, drawing) => captureDecorationContinuity({

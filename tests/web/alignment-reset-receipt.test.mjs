@@ -3,7 +3,8 @@ import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 const { buildSimilarityAlignmentResetReceipt: build, validateSimilarityAlignmentResetReceipt: admit,
-  validateAlignmentResetReceiptShape: admitShape, readStoredSimilarityAlignmentResetReceipt: readStored
+  validateAlignmentResetReceiptShape: admitShape, readStoredSimilarityAlignmentResetReceipt: readStored,
+  validateGeneratedSimilarityAlignmentResetReceipt: admitGenerated
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
@@ -183,4 +184,44 @@ for (const [placement, binding] of [
   const changed = structuredClone(canonical);
   changed.renderRequest.records[1].windows[0].end = 11;
   assert.deepEqual(await readStored(receipt, changed, stored), { value: null, stale: true });
+});
+
+// OV-3632: Generate writes the record of a file of one record in the CLI's form, an `exactly_one` record without a
+// selector, where a request committed before (a Session saved before that) named it. The receipt of the committed
+// request still binds the same records: Generate reads it with the committed selector of each record that selects
+// the same record, and rebinds it to the request it built, which Python's verifier then reads as stored.
+test('Generate rebinds a receipt whose record it now writes in the CLI form of a file of one record', async () => {
+  const f = fixture();
+  for (const { renderRequest } of [f.before, f.after]) {
+    renderRequest.records.forEach((record) => { record.selector = { kind: 'recordId', value: record.recordKey }; });
+  }
+  const receipt = await build(f);
+  const committed = f.after.renderRequest;
+  const generated = structuredClone(f.after);
+  generated.renderRequest.records[1].selector = null;
+  // The committed request's own receipt reads as before; Generate's request needs the rebind.
+  assert.equal(await admitGenerated(receipt, f.after, committed), receipt);
+  await assert.rejects(admit(receipt, generated), stale);
+  const rebound = await admitGenerated(receipt, generated, committed);
+  assert.deepEqual({ ...rebound, binding: receipt.binding }, receipt);
+  assert.notEqual(rebound.binding, receipt.binding);
+  assert.equal(await admit(rebound, generated), rebound);
+  const script = 'import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt, split_resource_bytes; document, sources = split_resource_bytes(json.load(sys.stdin)); _validate_alignment_reset_receipt(document, sources)';
+  const verified = spawnSync(process.env.PYTHON || 'python', ['-c', script], {
+    input: JSON.stringify({ ...generated, editorState: { alignmentResetReceipt: rebound } }), encoding: 'utf8' });
+  if (verified.error) throw verified.error;
+  assert.equal(verified.status, 0, verified.stderr);
+  // Another record, a record drawn with every record of its file, or other bytes are other records: still stale.
+  for (const change of [
+    (record) => { record.selector = { kind: 'recordId', value: 'another-record' }; },
+    (record) => { record.selector = null; record.cardinality = 'all'; },
+    (record, canonical) => {
+      record.selector = null; record.source = { kind: 'genbank', resourceId: 'other' };
+      canonical.resources.other = { ...resource, data: Buffer.from('other bytes').toString('base64'), size: 11 };
+    }
+  ]) {
+    const other = structuredClone(f.after);
+    change(other.renderRequest.records[1], other);
+    await assert.rejects(admitGenerated(receipt, other, committed), stale);
+  }
 });

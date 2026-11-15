@@ -10,6 +10,7 @@ import { paintOf, setFeatureStroke } from './drawing/paint.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { CircularCardMark } from './drawing/inputs.js' */
+/** @import { CanonicalRecord } from '../contracts/request.generated.js' */
 // Which records of a drawing are drawn (D-01..D-10, record-selection). A
 // drawing holds the keys of its OFF records in `recordsOff`: a Linear record
 // card's `uid`, or a Circular record's identity (`recordIdentity`: its source
@@ -131,6 +132,29 @@ export const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${in
  * @param {string} cardKey @param {string} recordKey
  */
 export const cardHoldsRecordKey = (cardKey, recordKey) => recordKey === cardKey || recordKeyExpansion(recordKey, cardKey) !== null;
+
+/**
+ * A request record as `sameSelectedRecord` reads it: a selector names a record by its ID or its place in its file.
+ * @typedef {{ cardinality?: string, selector?: CanonicalRecord['selector'] }} SelectingRecord
+ */
+/** @param {CanonicalRecord['selector']} a @param {CanonicalRecord['selector']} b */
+export const sameRecordSelector = (a, b) => (a === null || b === null ? a === b
+  : a.kind === 'recordIndex' ? b.kind === 'recordIndex' && a.index === b.index
+    : b.kind === 'recordId' && a.value === b.value);
+/**
+ * Whether two request records of one source select the same record of it, whatever form each names it in: the same
+ * named record, or the record of a file of one record, named in one and in the CLI's form in the other (an
+ * `exactly_one` record without a selector, which Python draws only from a file of one record, so the other names
+ * that record). The one rule of "which record a Linear record selects" for the card's live match
+ * (`cardDrawsRecord`), the reuse of resolved protein results (`canReuseResolvedProteinArtifacts`) and the alignment
+ * reset receipt Generate reads (`validateGeneratedSimilarityAlignmentResetReceipt`).
+ * @param {SelectingRecord} a @param {SelectingRecord} b
+ */
+export const sameSelectedRecord = (a, b) => {
+  const [selectorA, selectorB] = [a.selector ?? null, b.selector ?? null];
+  return sameRecordSelector(selectorA, selectorB)
+    || ((selectorA === null) !== (selectorB === null) && a.cardinality === 'exactly_one' && b.cardinality === 'exactly_one');
+};
 
 /**
  * Whether a drawn record's stored translation moves it sideways (x other than 0), whatever wrote it: Align at
