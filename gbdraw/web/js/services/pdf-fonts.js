@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Wording } from '../utils/i18n.js' */
 import { t } from '../utils/i18n.js';
 /** @typedef {'normal' | 'bold' | 'italic' | 'bolditalic'} PdfFontStyle */
 
@@ -108,9 +109,9 @@ const anchorTextsAtStart = (doc, svg, drawnWith) => {
 
 /**
  * @param {PdfFontSubstitution} substitution
- * @returns {string}
+ * @returns {Wording}
  */
-const substitutionWarning = ({ family, substitute, reason }) => (reason === 'license'
+const substitutionWarning = ({ family, substitute, reason }) => () => (reason === 'license'
   ? t('Font {family} is not embedded in the PDF: its license (OS/2 fsType) does not allow embedding. Its text is drawn in {substitute}.', { family, substitute })
   : t('Font {family} could not be prepared for the PDF. Its text is drawn in {substitute}.', { family, substitute }));
 
@@ -121,7 +122,7 @@ const substitutionWarning = ({ family, substitute, reason }) => (reason === 'lic
  * @param {PdfFontDocument} doc
  * @param {Element} svg
  * @param {ResolvePdfFonts | undefined} resolveFonts The Worker's `pdfFonts` helper; PDF export passes it, and a missing one fails here.
- * @returns {Promise<string[]>} One warning per custom font drawn with a substitute.
+ * @returns {Promise<Wording[]>} One warning per custom font drawn with a substitute.
  */
 export const preparePdfFonts = async (doc, svg, resolveFonts) => {
   /** @type {Array<Node & { parentElement: HTMLElement, textContent: string }>} */

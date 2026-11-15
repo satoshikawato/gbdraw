@@ -33,6 +33,7 @@
 // - in ja at 1280 and 390 px: no Japanese word of the settings pane (every
 //   section open, the color rule hint shown) or of the footer is split over
 //   two lines (OV-2448);
+// - a notice shown before a choice (Session loaded) shows in the chosen language (OV-2796);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // - in every language, the "Suggest a translation fix" link beside the menu is
 //   named in that language (English where the catalog has no entry), opens a
@@ -293,6 +294,21 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
 const recordCounts = (page) => page.evaluate(async () => {
   const { tn } = await import('./js/utils/i18n.js');
   return [0, 1, 2].map((count) => tn(count, '{count} record', '{count} records'));
+});
+
+// OV-2796: a notice shown before a language choice shows in the chosen language, as the rest of the page does.
+test('a notice shown before a language choice rewords in the chosen language', async ({ page }) => {
+  test.setTimeout(300_000);
+  const ja = await catalogOf('ja');
+  const file = 'hepatoplasmataceae_collinear.gbdraw';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', file));
+  const noticeText = page.locator('[data-app-notice] p').first();
+  await expect(noticeText).toHaveText(`Session loaded: ${file}.`, { timeout: 180_000 });
+  await menu(page).selectOption('ja');
+  await expect.poll(() => pageLanguage(page)).toBe('ja');
+  await expect(noticeText).toHaveText(ja['Session loaded: {file}.'].replace('{file}', file));
 });
 
 test('French and Korean show their catalogs and plural forms, and French changes no Session or Source recipe', async ({ page }, testInfo) => {

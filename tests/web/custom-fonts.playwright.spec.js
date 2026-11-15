@@ -107,10 +107,13 @@ const loadFontFile = async (page, fontFile, family) => {
   await expect(select.locator('option:checked')).toHaveText(family, { timeout: 180_000 });
 };
 
-/** Run an export action and return its outcome and the downloaded bytes. */
+/** Run an export action and return its outcome, with its font warnings worded as shown, and the downloaded bytes. */
 const exported = async (page, action) => {
   const pending = page.waitForEvent('download');
-  const outcome = await page.evaluate((name) => window.__GBDRAW_APP__[name](), action);
+  const outcome = await page.evaluate(async (name) => {
+    const result = await window.__GBDRAW_APP__[name]();
+    return { ...result, fontWarnings: result.fontWarnings.map((warning) => warning()) };
+  }, action);
   return { outcome, bytes: readFileSync(await (await pending).path()) };
 };
 

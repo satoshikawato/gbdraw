@@ -14,6 +14,8 @@ installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
 const ref = (value) => ({ value });
+// A notice as the banner shows it in the shown UI language: its wordings worded (OV-2796).
+const wordedNotice = ({ text, items, ...rest }) => ({ text: text(), ...(items ? { items: items.map((item) => item()) } : {}), ...rest });
 
 // Per-feature label and visibility edits are identity rows of the drawing of
 // the Result's mode (design Q4, R2; PR-1: the drawing is the mode, so a row
@@ -681,7 +683,7 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   const harness = buildHarness({
     svg: displayed,
     featureId: 'fa',
-    showNotice: (notice) => messages.push(notice),
+    showNotice: (notice) => messages.push(wordedNotice(notice)),
     snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
     async evaluateLabelRules({ features, rules }) {
       evaluated.push(features.map((feature) => feature.label));
@@ -742,7 +744,7 @@ test('a Label TSV load with a location row is declined for a label whose drawn v
   const harness = buildHarness({
     svg,
     featureId: 'fa',
-    showNotice: (notice) => messages.push(notice),
+    showNotice: (notice) => messages.push(wordedNotice(notice)),
     snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
     evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
   });
@@ -804,7 +806,7 @@ for (const [name, body, tsv, message] of [
     const harness = buildHarness({
       svg,
       featureId: 'fa',
-      showNotice: (notice) => messages.push(notice),
+      showNotice: (notice) => messages.push(wordedNotice(notice)),
       snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
       async evaluateLabelRules({ features, rules }) {
         return { winners: features.map((feature) => rules.findIndex((rule) => (
@@ -881,7 +883,7 @@ const heldLabelImport = ({ preparationFollowsRows = false } = {}) => {
   const harness = buildHarness({
     svg,
     featureId: 'fa',
-    showNotice: (notice) => messages.push(notice),
+    showNotice: (notice) => messages.push(wordedNotice(notice)),
     snapshotRuleInputs: snapshot, isRuleInputCurrent: (before) => before === snapshot(),
     evaluateLabelRules: ({ features }) => new Promise((resolve) => {
       evaluations.push(() => resolve({ winners: features.map(() => 0) }));

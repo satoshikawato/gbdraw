@@ -8,6 +8,7 @@ import { escapeRegexLiteral } from './feature-selector.js';
 import { featureIdentityKeyOf } from './feature-placement.js';
 import { serializeLabelOverrideRows } from './label-override-table.js';
 import { RULE_INPUT_CHANGE_WORDS } from '../utils/error-normalization.js';
+/** @import { Wording } from '../utils/i18n.js' */
 import { joinSentences, t, tm, tn } from '../utils/i18n.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
@@ -40,7 +41,7 @@ import { normalizeTsvCell } from '../utils/tsv-cell.js';
  * applies when it edits a label.
  * @typedef {{ declined: LabelImportDecline } | { undecided: number } | { plan: LabelImportPlan }} LabelImportOutcome
  */
-/** @typedef {{ text: string, items?: string[], tone?: 'warning' }} LabelImportNotice */
+/** @typedef {{ text: Wording, items?: Wording[], tone?: 'warning' }} LabelImportNotice */
 /**
  * The drawing members that hold the label intent.
  * @typedef {{ featureOverrides: unknown, labelTextBulkOverrides: unknown }} LabelIntentHolder
@@ -97,27 +98,32 @@ const declinedSentence = (reason) => ({
  * @returns {LabelImportNotice}
  */
 export const labelImportNotice = (rowCount, outcome) => {
-  const loadedRowsText = tn(rowCount, 'Loaded {count} row.', 'Loaded {count} rows.');
-  if ('declined' in outcome) return { text: joinSentences(loadedRowsText, declinedSentence(outcome.declined)), tone: 'warning' };
+  const loadedRowsText = () => tn(rowCount, 'Loaded {count} row.', 'Loaded {count} rows.');
+  if ('declined' in outcome) {
+    const { declined } = outcome;
+    return { text: () => joinSentences(loadedRowsText(), declinedSentence(declined)), tone: 'warning' };
+  }
   if ('undecided' in outcome) {
-    return { text: joinSentences(loadedRowsText, t('Not applied.')), items: [
-      tn(outcome.undecided,
+    const { undecided } = outcome;
+    return { text: () => joinSentences(loadedRowsText(), t('Not applied.')), items: [
+      () => tn(undecided,
         'location and record_location rows cannot be matched to {count} label on a cropped, reverse-complemented, or rotated record until the diagram records where it drew it. Generate the diagram again, then load the table.',
         'location and record_location rows cannot be matched to {count} labels on cropped, reverse-complemented, or rotated records until the diagram records where it drew them. Generate the diagram again, then load the table.')
     ] };
   }
   const { applicable, skippedNonTrackableCount } = outcome.plan;
   if (applicable.length === 0) {
-    return { text: joinSentences(loadedRowsText, t('Not applied; the existing label edits were kept.')), items: [
+    return { text: () => joinSentences(loadedRowsText(), t('Not applied; the existing label edits were kept.')), items: [
       skippedNonTrackableCount > 0
-        ? tn(skippedNonTrackableCount, 'The {count} matched label lacked a feature key.', 'The {count} matched labels lacked a feature key.')
-        : t('No row matched a label of the diagram.')
+        ? () => tn(skippedNonTrackableCount, 'The {count} matched label lacked a feature key.', 'The {count} matched labels lacked a feature key.')
+        : () => t('No row matched a label of the diagram.')
     ] };
   }
+  const appliedCount = applicable.length;
   return {
-    text: joinSentences(loadedRowsText, tn(applicable.length, 'Applied to {count} label.', 'Applied to {count} labels.')),
+    text: () => joinSentences(loadedRowsText(), tn(appliedCount, 'Applied to {count} label.', 'Applied to {count} labels.')),
     items: skippedNonTrackableCount > 0
-      ? [tn(skippedNonTrackableCount, '{count} match lacked a feature key and was not applied.', '{count} matches lacked a feature key and were not applied.')]
+      ? [() => tn(skippedNonTrackableCount, '{count} match lacked a feature key and was not applied.', '{count} matches lacked a feature key and were not applied.')]
       : []
   };
 };

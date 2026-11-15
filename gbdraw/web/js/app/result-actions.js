@@ -410,7 +410,7 @@ export const createResultExport = ({
       const result = await exportMethod(snapshot, exportPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       if (result.fontWarnings.length > 0) {
-        showNotice({ text: t('Exported {file}.', { file: result.filename }), items: result.fontWarnings });
+        showNotice({ text: () => t('Exported {file}.', { file: result.filename }), items: result.fontWarnings });
       }
       return result;
     } catch (error) {

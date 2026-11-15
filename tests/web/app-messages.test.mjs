@@ -41,6 +41,7 @@ test('the Web app asks and reports in its own dialog and notice, never alert() o
 
 const { createChoicePrompt, createNoticeBanner } = await import(pathToFileURL(join(webJsRoot, 'app', 'app-messages.js')));
 const reactive = (value) => value;
+const { SOURCE_LOCALE, setUiLocale, t, tn, tx } = await import(pathToFileURL(join(webJsRoot, 'utils', 'i18n.js')));
 
 test('the choice prompt resolves to the chosen action, and a new question cancels the open one', async () => {
   const { prompt, ask, resolve } = createChoicePrompt({ reactive });
@@ -72,12 +73,13 @@ test('the choice prompt list of options starts its focus on Cancel; its button r
 
 test('the notice banner shows warnings as a list and is cleared by dismiss', () => {
   const { notice, show, dismiss } = createNoticeBanner({ reactive });
-  show({ text: 'Session loaded: a.gbdraw-session.json', items: ['', 'One warning'] });
-  assert.deepEqual({ ...notice }, {
+  show({ text: () => 'Session loaded: a.gbdraw-session.json', items: [() => '', () => 'One warning'] });
+  const { text, items, tone, announcement, link } = notice;
+  assert.deepEqual({ text, items, tone, announcement, link }, {
     text: 'Session loaded: a.gbdraw-session.json', items: ['One warning'], tone: 'warning',
     announcement: 'Session loaded: a.gbdraw-session.json One warning', link: null
   });
-  show({ text: 'Session saved: a.gbdraw-session.json.' });
+  show({ text: () => 'Session saved: a.gbdraw-session.json.' });
   assert.equal(notice.tone, 'info');
   assert.deepEqual(notice.items, []);
   dismiss();
@@ -88,8 +90,8 @@ test('the notice banner shows warnings as a list and is cleared by dismiss', () 
 // D-06: the handle a notice returns ends that notice and leaves a later one.
 test('a notice handle dismisses only the notice it showed', () => {
   const { notice, show } = createNoticeBanner({ reactive });
-  const loaded = show({ text: 'Loaded 3 rows. Applied to 2 labels.' });
-  const later = show({ text: 'Label table saved.' });
+  const loaded = show({ text: () => 'Loaded 3 rows. Applied to 2 labels.' });
+  const later = show({ text: () => 'Label table saved.' });
   loaded.dismiss();
   assert.equal(notice.text, 'Label table saved.');
   later.dismiss();
@@ -102,16 +104,16 @@ test('a notice handle dismisses only the notice it showed', () => {
 // with no notice shown there is nothing to join.
 test('a notice link joins the shown notice and goes with it', () => {
   const { notice, show, dismiss, addLink } = createNoticeBanner({ reactive });
-  const link = { text: 'This diagram has a step-by-step tutorial.', label: 'Open the tutorial', href: 'https://gbdraw.app/gallery/a#Tutorial' };
+  const link = { text: () => 'This diagram has a step-by-step tutorial.', label: () => 'Open the tutorial', href: 'https://gbdraw.app/gallery/a#Tutorial' };
   addLink(link);
   assert.equal(notice.link, null);
-  show({ text: 'Session loaded: a.gbdraw-session.json' });
+  show({ text: () => 'Session loaded: a.gbdraw-session.json' });
   addLink(link);
-  assert.deepEqual(notice.link, link);
+  assert.deepEqual(notice.link, { text: 'This diagram has a step-by-step tutorial.', label: 'Open the tutorial', href: link.href });
   assert.equal(notice.announcement, 'Session loaded: a.gbdraw-session.json This diagram has a step-by-step tutorial.');
-  show({ text: 'Session saved: a.gbdraw-session.json.' });
+  show({ text: () => 'Session saved: a.gbdraw-session.json.' });
   assert.equal(notice.link, null);
-  show({ text: 'Session loaded: a.gbdraw-session.json' });
+  show({ text: () => 'Session loaded: a.gbdraw-session.json' });
   addLink(link);
   dismiss();
   assert.equal(notice.link, null);
@@ -123,13 +125,47 @@ test('a repeated notice is announced again', () => {
   const { notice, show } = createNoticeBanner({ reactive });
   const spoken = [];
   for (let count = 0; count < 3; count += 1) {
-    show({ text: 'Label table saved.' });
+    show({ text: () => 'Label table saved.' });
     spoken.push(notice.announcement);
   }
   assert.equal(notice.text, 'Label table saved.');
   assert.deepEqual(spoken.map((entry) => entry.trim()), Array(3).fill('Label table saved.'));
   assert.notEqual(spoken[0], spoken[1]);
   assert.notEqual(spoken[1], spoken[2]);
+});
+
+// OV-2796: a notice keeps how to word its text, its warnings and its link, and
+// words them where it shows, so a UI language change rewords a shown notice.
+// The status region spoke the notice when it was shown, and does not again.
+test('a shown notice rewords its text, items and link after a UI language change', async () => {
+  const { notice, show, addLink } = createNoticeBanner({ reactive });
+  show({
+    text: () => t('Session loaded: {file}.', { file: 'a.gbdraw' }),
+    items: [() => tn(2, 'Loaded {count} row.', 'Loaded {count} rows.')]
+  });
+  addLink({
+    text: () => t('This diagram has a step-by-step tutorial.'),
+    label: () => tx('English-only Gallery tutorial', 'Open the tutorial'),
+    href: 'https://gbdraw.app/gallery/a#Tutorial'
+  });
+  const spoken = notice.announcement;
+  assert.equal(spoken, 'Session loaded: a.gbdraw. Loaded 2 rows. This diagram has a step-by-step tutorial.');
+  await setUiLocale('ja', async () => ({ default: {
+    'Session loaded: {file}.': '読み込み：{file}',
+    'Loaded {count} rows.': '{count} 行',
+    'This diagram has a step-by-step tutorial.': 'チュートリアルがあります。',
+    'English-only Gallery tutorial\u0004Open the tutorial': '開く'
+  } }));
+  try {
+    assert.equal(notice.text, '読み込み：a.gbdraw');
+    assert.deepEqual(notice.items, ['2 行']);
+    assert.deepEqual(notice.link, { text: 'チュートリアルがあります。', label: '開く', href: 'https://gbdraw.app/gallery/a#Tutorial' });
+    assert.equal(notice.tone, 'warning');
+    assert.equal(notice.announcement, spoken);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+  assert.equal(notice.text, 'Session loaded: a.gbdraw.');
 });
 
 test('the choice prompt asks for text with a field: OK resolves to the text, Cancel and a later question to null', async () => {

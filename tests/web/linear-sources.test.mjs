@@ -756,7 +756,7 @@ test('the banner shows each per-file warning of the searched pairs once, transla
   const { warningOf } = readGenomeScales(reply, reply.recordKeys);
   /** @type {{ text: string, tone: string }[]} */
   const shown = [];
-  const notice = perFileWarningNotice((entry) => shown.push(entry));
+  const notice = perFileWarningNotice((entry) => shown.push({ ...entry, text: entry.text() }));
   for (const [query, subject] of [[0, 1], [1, 0], [0, 2], [1, 2]]) notice(warningOf(query, subject));
   const english = 'The search space of genomes a.gb and b.gb (9,223,372,036,854,775,808) is past the largest LOSAT reads '
     + '(9,223,372,036,854,775,807), so their E-values are computed per file, not per genome.';
@@ -767,7 +767,7 @@ test('the banner shows each per-file warning of the searched pairs once, transla
   await setUiLocale('ja', async () => ({ default: { [GENOME_SCALE_WARNING_TEXT]: '{first} / {second}: per file' } }));
   try {
     const translated = [];
-    const translatedNotice = perFileWarningNotice((entry) => translated.push(entry.text));
+    const translatedNotice = perFileWarningNotice((entry) => translated.push(entry.text()));
     translatedNotice(warningOf(0, 1));
     translatedNotice(warningOf(2, 2));
     // Two warnings join with the locale's sentence separator (none in Japanese).

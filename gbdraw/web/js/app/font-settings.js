@@ -1,7 +1,8 @@
 // @ts-check
 /** @import { WebFontEntry, WebFontSource, RegisterFontsInWorker } from '../services/font-store.js' */
 /** @import { FontFamilyList, FontFamilyName } from '../services/font-families.js' */
-/** @import { AskChoice } from './app-messages.js' */
+/** @import { AskChoice, NoticeRequest } from './app-messages.js' */
+/** @import { LostWorkerFont } from '../services/diagram-generation.js' */
 /** @import { WebState } from '../state.js' */
 import { loadWebFonts, mergeWebFonts, standardInstalledFaces, webFontFamilies, webFontFamilyNames } from '../services/font-store.js';
 import {
@@ -66,6 +67,17 @@ const BUNDLED_CHOICES = Object.freeze([
  * @property {() => unknown} committedFontFamily The text font of the shown Result's committed
  *   request (`requestFontFamily`), which its exports carry (OV-742).
  */
+
+/**
+ * The notice of fonts the diagram Worker could not register again (OV-686),
+ * which lists them by name.
+ * @param {readonly LostWorkerFont[]} lost
+ * @returns {NoticeRequest}
+ */
+export const lostFontsNotice = (lost) => ({
+  text: () => t('Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.'),
+  items: lost.map(({ label }) => () => label)
+});
 
 /** @param {FontSettingsOptions} options */
 export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, askChoice, committedFontFamily }) => {

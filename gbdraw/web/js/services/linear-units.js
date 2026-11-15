@@ -13,7 +13,8 @@
 import { linearComparisonEdgeKey } from './linear-comparisons.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { sentenceSeparator, tm } from '../utils/i18n.js';
+/** @import { Wording } from '../utils/i18n.js' */
+import { joinSentences, tm } from '../utils/i18n.js';
 
 const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearUnits' });
 
@@ -208,21 +209,22 @@ export const readRingScales = (result, ringCount) => {
 
 /**
  * The banner of one Generate's per-file warnings: `notice(warning)` for each search it builds shows the warnings so
- * far, each once and translated (`tm(text, params)`: its English text is the one the command line logs), in the order
- * the searches ask for them. Generate calls it only for the pairs it searches, so a pair of the reply that no search
- * reads shows nothing.
- * @param {(notice: { text: string, tone: 'warning' }) => void} show
+ * far, each once and translated where shown (`tm(text, params)`: its English text is the one the command line logs),
+ * in the order the searches ask for them. Generate calls it only for the pairs it searches, so a pair of the reply
+ * that no search reads shows nothing.
+ * @param {(notice: { text: Wording, tone: 'warning' }) => void} show
  * @returns {(warning: Pick<GenomeScaleWarning, 'text' | 'params'> | null) => void}
  */
 export const perFileWarningNotice = (show) => {
-  /** @type {Set<string>} */
-  const shown = new Set();
+  /** The shown warnings, by their English text and parameters. @type {Map<string, Pick<GenomeScaleWarning, 'text' | 'params'>>} */
+  const shown = new Map();
   return (warning) => {
     if (!warning) return;
-    const text = tm(warning.text, { ...warning.params });
-    if (shown.has(text)) return;
-    shown.add(text);
-    show({ text: [...shown].join(sentenceSeparator()), tone: 'warning' });
+    const identity = JSON.stringify([warning.text, Object.entries(warning.params).sort(([a], [b]) => a.localeCompare(b))]);
+    if (shown.has(identity)) return;
+    shown.set(identity, warning);
+    const warnings = [...shown.values()];
+    show({ text: () => joinSentences(...warnings.map(({ text, params }) => tm(text, { ...params }))), tone: 'warning' });
   };
 };
 
