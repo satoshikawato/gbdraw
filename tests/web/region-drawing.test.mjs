@@ -835,6 +835,32 @@ test('OV-3531: a stored Circular canvas of two records of a file of three draws 
   app.selectDrawing(source.id);
 });
 
+// OV-3534: the places of such a canvas (`--multi_record_position '#1@2' --multi_record_position '#2@1'`) name its
+// records by the identity Load gives them (`<card uid>:<k>`, as the records it leaves off), so Load draws each record
+// on the row the CLI drew it on.
+test('OV-3534: a stored Circular canvas of two records of a file of three keeps their places at Load', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  const { envelope } = await projectOf(source);
+  const resourceId = Object.keys(envelope.resources).find((id) => envelope.resources[id].kind === 'genbank');
+  const renderRequest = structuredClone(envelope.renderRequest);
+  renderRequest.records = ['recA.1', 'recD.1'].map((recordId, index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index + 1}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordId', value: recordId }, source: { kind: 'genbank', resourceId }
+  }));
+  renderRequest.layout = { ...renderRequest.layout, multiRecordPositions: ['#1@2', '#2@1'] };
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  assert.deepEqual(prepared.repairs, []);
+  const made = createDrawingState('circular-32', prepared.mode);
+  installPreparedDrawing(made, prepared);
+  state.addDrawing(made, 'OV-3534'); history.addMember(made.id);
+  const [{ uid }] = made.circularSources;
+  // Record Order lists its rows by row.
+  assert.deepEqual(made.adv.multi_record_positions, [{ selector: `${uid}:3`, row: 1 }, { selector: `${uid}:1`, row: 2 }]);
+  assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  assert.deepEqual(await drawnCircularRows(made), [2, 1]);
+  app.selectDrawing(source.id);
+});
+
 const { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, keptRequestArtifact } = await import(
   '../../gbdraw/web/js/services/artifact-slot.js');
 // D-24 (R15): Copy to another drawing projects the drawing it pastes into while another drawing is shown. The
@@ -915,12 +941,28 @@ const pasteAndInstall = async (source, target, regions, choices = {}) => {
   installPastedRecords(target, await preparePastedRecords({ pasted, sent, targetSent }));
   return { pasted, sent, targetSent };
 };
-/** The target's draft request after the paste is the request Python returned, but at the paths of `open`. */
-const assertPastedRequest = async (target, paste, open = []) => {
+/**
+ * `request` with each record named as `named` names the record at its place (its key, everywhere the request names
+ * it, and its selector): a pasted Circular card takes a new uid in the target, so the target names the pasted records
+ * by their identities there and by record ID, Python by keys of its own and by place in the file. The caller checks
+ * that the records drawn are the same ones (`drawnCircularRecordIds`).
+ */
+const namedAs = (request, named) => {
+  const keys = new Map(request.records.map(({ recordKey }, index) => [recordKey, named.records[index]?.recordKey ?? recordKey]));
+  const renamed = JSON.parse(JSON.stringify(request), (_key, value) => (typeof value === 'string' && keys.has(value) ? keys.get(value) : value));
+  renamed.records.forEach((record, index) => { record.selector = named.records[index]?.selector ?? record.selector; });
+  return renamed;
+};
+/**
+ * The target's draft request after the paste is the request Python returned, but at the paths of `open`; with
+ * `sameRecords`, as the pasted records are named aside (`namedAs`).
+ */
+const assertPastedRequest = async (target, paste, open = [], { sameRecords = false } = {}) => {
   const { envelope } = await projectOf(target);
   const comparison = await compareCanonicalRenderRequests({
     expectedRequest: paste.pasted.renderRequest, expectedResources: pastedResources(paste),
-    actualRequest: envelope.renderRequest, actualResources: envelope.resources
+    actualRequest: sameRecords ? namedAs(envelope.renderRequest, paste.pasted.renderRequest) : envelope.renderRequest,
+    actualResources: envelope.resources
   });
   assert.deepEqual(comparison.differences.map(({ path }) => path), open, 'the target writes the pasted request');
 };
@@ -965,10 +1007,10 @@ test('a paste of whole records into a Circular drawing draws them after its own 
   assert.equal(target.form.multi_record_canvas, true);
   // The target's own card reads a file of one record, which its request names without a selector.
   assert.deepEqual(await drawnCircularRecordIds(target), [null, 'recA.1', 'recD.1']);
-  // OV-3534 (open): Python places the pasted records on one new row (#2@2, #3@2), but the paste install drops their
-  // places (the reader names them by request record key, the install maps card keys), so the read places them on the
-  // Web's default grid, the first beside the target's own record (#2@1).
-  await assertPastedRequest(target, paste, ['$.layout.multiRecordPositions[1]']);
+  // Python places the pasted records on one new row after the target's own (#1@1, #2@2, #3@2); the request reader
+  // names each place by the identity it gives the record, so the install keeps them (OV-3534).
+  assert.deepEqual(await drawnCircularRows(target), [1, 2, 2]);
+  await assertPastedRequest(target, paste, [], { sameRecords: true });
   app.selectDrawing(source.id);
 });
 

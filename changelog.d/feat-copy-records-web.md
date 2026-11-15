@@ -16,6 +16,9 @@
   `gbdraw circular --records_table --multi_record_canvas` drew only some
   records of that file on one canvas; it now draws the records the Session
   names.
+- Fixed: the Web app lost the rows (`--multi_record_position`) of such a
+  Session's records, and of the records pasted into a Circular canvas, and
+  drew them on its own grid; it now keeps the rows the request gives.
 - Changed: `derive_region_drawing()` of several whole Circular records
   keeps each record on the row the source canvas draws it on, without the
   rows that hold none of them, instead of placing the records in order; and

@@ -2223,15 +2223,20 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
  * record of that ID (`placeCircularRecordChoices`, OV-2906).
  * @param {readonly { recordKey?: unknown, selector?: unknown }[]} records The committed request's records.
  * @param {string} token
+ * @param {(index: number) => string | null} identityAt The identity the reader gives the request's record at that
+ *   index when a File card reads it (`canvasRecordIdentity`), null when it gives none; the record's key names it then.
  */
-const positionRecordIdentity = (records, token) => {
+const positionRecordIdentity = (records, token, identityAt) => {
   const number = recordSelectorNumber(token);
-  const record = number !== null
-    ? records[number - 1]
-    : records.find(({ selector }) => {
+  const index = number !== null
+    ? number - 1
+    : records.findIndex(({ selector }) => {
       const named = /** @type {{ kind?: unknown, value?: unknown } | null} */ (selector && typeof selector === 'object' ? selector : null);
       return named?.kind === 'recordId' && named.value === token;
     });
+  const record = records[index];
+  const identity = record ? identityAt(index) : null;
+  if (identity !== null) return identity;
   return typeof record?.recordKey === 'string' && record.recordKey ? record.recordKey : token;
 };
 // OV-1072: the identity of each record a committed Circular request draws, for
@@ -6863,6 +6868,55 @@ const projectQuantitativeTrackDraft = (overrides, depthColor) => ({
 });
 
 /**
+ * The records of the file a request record reads, in file order, when Load read that file's record list
+ * (`storedFileRecordsKey`); else null.
+ * @param {{ source?: Readonly<Record<string, unknown>> | null }} record
+ * @param {StoredLeafReadings} readings
+ * @returns {{ recordId: string }[] | null}
+ */
+const readFileRecords = (record, readings) => {
+  const fileRecords = readings.get(storedFileRecordsKey(storedRecordSourceResourceIds(record.source)));
+  return Array.isArray(fileRecords) ? fileRecords.map((recordId) => ({ recordId: String(recordId) })) : null;
+};
+/**
+ * The identity the reader gives a record its File card `uid` reads (`recordIdentity`), as it names the records a card
+ * leaves off (`unnamedFileRecordsOff`): the record's place in its file when Load read the file's record list, the
+ * card itself for a record that names no record of its file and draws one record; else null (the record's key names
+ * it). A Multi-Record Canvas place (`adv.multi_record_positions`) names its record by it, so Load and a paste
+ * (`installPastedRecords`, which gives the cards new uids) read the places one way (OV-3534).
+ * @param {(IdentityRequestRecord & { source?: Readonly<Record<string, unknown>> | null }) | undefined} record
+ * @param {ReadonlyMap<unknown, string>} cardOfRecord The card uid each request record reads.
+ * @param {StoredLeafReadings} readings
+ * @returns {string | null}
+ */
+const canvasRecordIdentity = (record, cardOfRecord, readings) => {
+  const uid = record === undefined ? undefined : cardOfRecord.get(record);
+  if (record === undefined || uid === undefined) return null;
+  const entries = readFileRecords(record, readings);
+  const sourceIndex = entries === null ? null : selectedPosition(record, entries);
+  if (entries !== null && sourceIndex !== null) return recordIdentity({ uid, sourceIndex, recordCount: entries.length });
+  return entries === null && !record.selector && record.cardinality === 'exactly_one' ? uid : null;
+};
+/**
+ * The Multi-Record Canvas places of a request (`layout.multiRecordPositions`, `#k@row` tokens) as the draft holds them
+ * (`adv.multi_record_positions`): each names its record by the identity the reader gives it (`canvasRecordIdentity`),
+ * else as `positionRecordIdentity` reads the token.
+ * @param {unknown} tokens
+ * @param {readonly { recordKey?: unknown, selector?: unknown }[]} sourceRecords The request's records, in its order.
+ * @param {{ records: readonly IdentityRequestRecord[], projectedIndexBySourceIndex: ReadonlyMap<number, number>,
+ *   cardOfRecord: ReadonlyMap<unknown, string>, readings: StoredLeafReadings }} reading `records`: the projected
+ *   records the card of each is read for (`projectedIndexBySourceIndex` places a request record among them).
+ * @returns {{ selector: string, row: number }[]}
+ */
+const canvasRecordPositions = (tokens, sourceRecords, { records, projectedIndexBySourceIndex, cardOfRecord, readings }) => {
+  /** @param {number} index */
+  const identityAt = (index) => canvasRecordIdentity(records[projectedIndexBySourceIndex.get(index) ?? -1], cardOfRecord, readings);
+  return (Array.isArray(tokens) ? tokens : []).map((/** @type {unknown} */ token) => {
+    const split = String(token).lastIndexOf('@');
+    return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split), identityAt), row: Number(String(token).slice(split + 1)) };
+  });
+};
+/**
  * The records a Circular canvas or batch leaves off: a card draws its file, and when every request record of the card
  * names one record of a file whose record list Load read (`storedFileRecordsKey`), the file's other records are off
  * (OV-3530: Python's copy of some records of a file; OV-3531: a CLI records table). Without that list (a record that
@@ -6879,10 +6933,8 @@ const unnamedFileRecordsOff = (cardOfRecord, grouping, readings) => {
   cardOfRecord.forEach((uid, record) => recordsOfCard.set(uid, [...(recordsOfCard.get(uid) ?? []),
     /** @type {IdentityRequestRecord & { source?: unknown }} */ (record)]));
   const off = [...recordsOfCard].flatMap(([uid, cardRecords]) => {
-    const source = /** @type {{ source?: Readonly<Record<string, unknown>> | null }} */ (cardRecords[0]).source;
-    const fileRecords = readings.get(storedFileRecordsKey(storedRecordSourceResourceIds(source)));
-    if (!Array.isArray(fileRecords)) return [];
-    const entries = fileRecords.map((recordId) => ({ recordId }));
+    const entries = readFileRecords(/** @type {{ source?: Readonly<Record<string, unknown>> | null }} */ (cardRecords[0]), readings);
+    if (entries === null) return [];
     const named = new Set(cardRecords.map((record) => selectedPosition(record, entries)));
     return named.has(null) ? [] : entries.flatMap((_entry, sourceIndex) => (named.has(sourceIndex) ? []
       : [recordIdentity({ uid, sourceIndex, recordCount: entries.length })]));
@@ -7848,9 +7900,9 @@ export const projectCanonicalSessionRequest = ({
     linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
     linear_track_slots_axis_index: renderRequest.mode === 'linear' ? linearStack.axisIndex : null,
     linear_track_slots: linearStack.slots,
-    multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
-      const split = String(token).lastIndexOf('@');
-      return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: Number(String(token).slice(split + 1)) };
+    multi_record_positions: canvasRecordPositions(renderRequest.layout?.multiRecordPositions, sourceRecords, {
+      records, projectedIndexBySourceIndex: normalizedRecordOrdering.projectedIndexBySourceIndex,
+      cardOfRecord: circularCardOfRecord, readings: leafReadings
     })
   };
   const storedRows = storedLinearRecordRows(records, renderRequest.layout?.multiRecordPositions);
