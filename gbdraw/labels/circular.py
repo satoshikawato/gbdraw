@@ -4245,11 +4245,11 @@ def _resolve_arc_overlaps(field: _ArcLabelField, max_angle_shift_deg: float, max
 def improved_label_placement_fc(
     labels: list[CircularLabel],
     ellipse: _LabelEllipse,
-    start_angle,
-    end_angle,
-    y_margin=0.3,
-    max_angle_shift_deg=25.0,
-    max_iterations=60,
+    start_angle: float,
+    end_angle: float,
+    y_margin: float = 0.3,
+    max_angle_shift_deg: float = 25.0,
+    max_iterations: int = 60,
     spacing_px: float | None = None,
 ):
     """Move labels placed on an arc toward their features and out of overlaps; returns them in sorted order."""

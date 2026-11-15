@@ -47,7 +47,7 @@ def _closest_label_gap_px(
     )
     following = [*arcs[1:], (arcs[0][0] + 1.0, arcs[0][1] + 1.0, arcs[0][2])]
     return min(
-        (right[0] - left[1]) * 2.0 * math.pi * min(left[2], right[2]) for left, right in zip(arcs, following)
+        position_turn_rad(right[0] - left[1], 1.0) * min(left[2], right[2]) for left, right in zip(arcs, following)
     )
 
 
