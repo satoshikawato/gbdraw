@@ -935,6 +935,8 @@ under "Cited ids without a record".
 - [PD-OI-128](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-128-feature-sequences-read-from-python-on-demand): Feature sequences read from Python on demand. ACCEPTED, concern `web.feature-sequence.on-demand`, scenario revision 1.
   - `tests/web/export-lazy-loading.playwright.spec.js`
 
+- [PD-OI-2052](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-2052-gfa-1-segments-as-records): GFA 1 segments as records. ACCEPTED, concern `input.gfa-segments`, scenario revision 1.
+
 ### Cited ids without a record
 
 - `PD-OI-086`: no record. Records that mention it: [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette), [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings).

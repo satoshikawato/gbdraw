@@ -14638,6 +14638,105 @@ Decision date: 2026-11-08
 }
 ```
 
+### PD-OI-2052: GFA 1 segments as records
+
+- Concern key: `input.gfa-segments`
+- Scenario revision: `1`
+- Supersedes: none. `PD-OI-068` (the record universe of FASTA and GFF3+FASTA
+  inputs) and `PD-OI-091` (per-record draw on and off) stay.
+- Status: `ACCEPTED`
+- Selected outcome: `A GFA1-SEGMENT-RECORDS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies of `2026-11-14` and `2026-11-15` quoted in
+  its Revision #2052 entry below. The receipt and JSON below reproduce the
+  approved fields without translation or additional terms. The runtime that
+  implements it merges with it (static Product Contract co-change); this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `25cbdc578382ca7af0e9ceacd9ac3a450a48e31f6ccdc32b81a06057010e1be9`.
+
+```text
+PRODUCT_DECISION
+Concern: input.gfa-segments
+Scenario revision: 1
+Choice: A GFA1-SEGMENT-RECORDS. Read GFA 1 in both modes (Circular and Linear), CLI, Python API and Web: each segment (S line) is a record with its sequence and no features.
+  - The segment's name is the record ID. Segments keep their order in the file.
+  - A segment whose sequence is not in the file (`*`) is refused before Generate, with the reason and the segment's name. So are a segment that is not nucleotide and two segments with the same name.
+  - A segment with a link from its end back to its own start (`L s + s +`, or `L s - s -`) is circular; every other segment is linear. Other links are not drawn.
+  - Where that link says the segment's two ends overlap by n bases (overlap `nM`), the record drops the last n bases, so each base of the circle is drawn once. An overlap of `*`, `0M` or none drops nothing.
+  - A self-loop whose overlap is any other CIGAR string (with insertions or deletions, for example), one as long as the segment or longer, or two self-loops of one segment with different overlaps, is refused before Generate, with the reason and the segment's name.
+  - As a FASTA record is, every segment is drawn as a circle in Circular and as a line in Linear; only a record marked circular (a circular segment, or in the Web one whose checkbox is on) takes a Display start and spans across the origin.
+  - P (path) and W (walk) lines are not used, and one notice per file says so.
+  - A GFA 2 file is refused before Generate, with the reason.
+  - A graph with many segments goes through record selection, as other large inputs do (PD-OI-091).
+  - The Web offers a source choice "GFA" beside GenBank, GFF3 + FASTA and FASTA. Each GFA record gets the per-record "Circular record" checkbox, on at first for a circular segment and off for the others, so the user can change it as for FASTA. Switching a drawing between FASTA and GFA keeps the chosen file, as other source switches do; its card then shows why the other reader cannot read it, and switching back reads it again.
+Rationale: 描画、検索、領域の切り出し、再描画の流れを、アセンブリの結果である GFA からも始められるようにする。
+Must preserve: GenBank、GFF3 と FASTA の組、FASTA だけの入力の record の集合、表示、CLI の出力。GFA の segment の順序。Session を読み込む動作（0.14.5 までに保存した Session を含む）。配列のない segment と GFA 2 は理由を示して断ること。
+May retire: GFA ファイルを入力として受け付けないこと。
+Accepted residual risk: グラフの構造（link、path、walk）は描かない。segment は feature を持たないので、feature とそのラベルは描かない（GC content と skew、depth、注釈、検索の hit、比較は描く）。overlap を落とすのは自分自身へ戻る link だけで、ほかの link の overlap はそのまま残る。
+Owner: satoshikawato
+Decision date: 2026-11-15
+```
+
+```json
+{
+  "concern": "input.gfa-segments",
+  "scenarioRevision": 1,
+  "choice": "A GFA1-SEGMENT-RECORDS. Read GFA 1 in both modes (Circular and Linear), CLI, Python API and Web: each segment (S line) is a record with its sequence and no features.\n  - The segment's name is the record ID. Segments keep their order in the file.\n  - A segment whose sequence is not in the file (`*`) is refused before Generate, with the reason and the segment's name. So are a segment that is not nucleotide and two segments with the same name.\n  - A segment with a link from its end back to its own start (`L s + s +`, or `L s - s -`) is circular; every other segment is linear. Other links are not drawn.\n  - Where that link says the segment's two ends overlap by n bases (overlap `nM`), the record drops the last n bases, so each base of the circle is drawn once. An overlap of `*`, `0M` or none drops nothing.\n  - A self-loop whose overlap is any other CIGAR string (with insertions or deletions, for example), one as long as the segment or longer, or two self-loops of one segment with different overlaps, is refused before Generate, with the reason and the segment's name.\n  - As a FASTA record is, every segment is drawn as a circle in Circular and as a line in Linear; only a record marked circular (a circular segment, or in the Web one whose checkbox is on) takes a Display start and spans across the origin.\n  - P (path) and W (walk) lines are not used, and one notice per file says so.\n  - A GFA 2 file is refused before Generate, with the reason.\n  - A graph with many segments goes through record selection, as other large inputs do (PD-OI-091).\n  - The Web offers a source choice \"GFA\" beside GenBank, GFF3 + FASTA and FASTA. Each GFA record gets the per-record \"Circular record\" checkbox, on at first for a circular segment and off for the others, so the user can change it as for FASTA. Switching a drawing between FASTA and GFA keeps the chosen file, as other source switches do; its card then shows why the other reader cannot read it, and switching back reads it again.",
+  "rationale": "描画、検索、領域の切り出し、再描画の流れを、アセンブリの結果である GFA からも始められるようにする。",
+  "mustPreserve": "GenBank、GFF3 と FASTA の組、FASTA だけの入力の record の集合、表示、CLI の出力。GFA の segment の順序。Session を読み込む動作（0.14.5 までに保存した Session を含む）。配列のない segment と GFA 2 は理由を示して断ること。",
+  "mayRetire": "GFA ファイルを入力として受け付けないこと。",
+  "acceptedResidualRisk": "グラフの構造（link、path、walk）は描かない。segment は feature を持たないので、feature とそのラベルは描かない（GC content と skew、depth、注釈、検索の hit、比較は描く）。overlap を落とすのは自分自身へ戻る link だけで、ほかの link の overlap はそのまま残る。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-15"
+}
+```
+
+#### Revision #2052
+
+`PD-OI-2052` is added (concern `input.gfa-segments`, scenario revision `1`; the
+outcome `A GFA1-SEGMENT-RECORDS`). gbdraw reads GFA 1 in both modes, on the
+CLI, in the Python API and on the Web: each segment (S line) is a record with
+its sequence and no features, named after the segment and kept in file order.
+A segment with a link from its end back to its own start is circular, and an
+overlap `nM` on that link drops the record's last n bases. A segment without a
+sequence, a segment that is not nucleotide, two segments with the same name, a
+self-loop overlap that is not `nM` or is as long as the segment, two self-loops
+of one segment with different overlaps, and a GFA 2 file are refused before
+Generate with the reason. P and W lines are not used, with one notice per
+file. The Web offers the source choice "GFA" with the per-record "Circular
+record" checkbox, and switching a drawing between FASTA and GFA keeps the
+chosen file. It comes from the Product Decision Owner `satoshikawato`'s
+replies to the campaign `region-select-seq-search-20261104` (`DECISIONS.md`
+`D-126`, `D-130`). The receipt names the record by its concern key and is
+recorded byte for byte.
+
+- D-126 (`2026-11-14`). The Owner answered 「推奨通り」 (session board message
+  `a99d1635-acd1-46df-972d-3fe146b1af5d`) to a report whose question Q2,
+  「GFA 入力（PR-G）: 自分自身へ戻る link に overlap があるとき（Q-G2）」, recommended
+  its option A,
+  「overlap が `nM` なら最後の n 塩基を落とす（`*`、`0M`、なしなら落とさない）。」,
+  and whose question Q3, 「GFA 入力（PR-G）: Web の操作（Q-G3）」, recommended its
+  option A,
+  「入力元の選択に「GFA」を足し（GenBank、GFF3 + FASTA、FASTA の横）、各 GFA レコードに FASTA と同じ「Circular record」チェックボックスを付ける。自己ループのある segment は最初からオン。」
+- D-130 (`2026-11-15`). The complete text of the receipt was shown on a page
+  headed 「領域ラベル（OV-2654）と GFA 入力の Contract 改訂文：承認のお願い」, which asked
+  for the answer 「PD-OI-119 r8=承認 GFA r1=承認」, or 「GFA r1=切り替えで消す」 to
+  clear the chosen file on a switch between FASTA and GFA instead of keeping
+  it. The Owner answered 「PD-OI-119 r8=承認 GFA r1=承認」 (session board message
+  `3c03431b-ea1c-4660-8ad8-f0000352df20`) and 「推奨通り」
+  (`0ffc43b5-1c06-4f67-b38b-41bb2aed1f5b`). The receipt and JSON reproduce the
+  approved fields without translation or additional terms. The same answer
+  approved `PD-OI-119` scenario revision `8`, which another pull request
+  records.
+- New receipt SHA-256: `PD-OI-2052` scenario revision `1`
+  `25cbdc578382ca7af0e9ceacd9ac3a450a48e31f6ccdc32b81a06057010e1be9`.
+- No record is superseded, amended, or retired.
+- This change is a static Product Contract co-change: the runtime that
+  implements it, its tests, and its documentation are in the same pull
+  request, and the Review is `REQUIRED`.
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
