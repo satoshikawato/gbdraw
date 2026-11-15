@@ -112,6 +112,7 @@ def test_a_segment_without_sequence_is_refused_with_its_name(tmp_path: Path) -> 
     [
         "H\tVN:Z:2.0\nS\ts1\t4\tACGT\n",
         "S\ts1\t4\tACGT\nE\te1\ts1+\ts1+\t0\t4$\t0\t4$\t4M\n",
+        "S\tctg1\t1000\tACGTACGT\n",
     ],
 )
 def test_a_gfa_2_file_is_refused(tmp_path: Path, text: str) -> None:
