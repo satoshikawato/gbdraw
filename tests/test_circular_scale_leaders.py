@@ -216,3 +216,49 @@ def test_inner_leaders_through_the_default_scale_pass_behind_backed_numbers(tmp_
     assert measured["crossed"]
     assert measured["unbacked"] == []
     assert measured["on_numbers"] == []
+
+
+@pytest.mark.circular
+def test_the_tick_group_is_built_again_only_when_its_backed_numbers_change(tmp_path, monkeypatch) -> None:
+    """The ticks read the leaders only for the numbers they back: a leader that meets no number (one that moves
+    with the arrow shape of another record on the circle, case C2 of the render-stage universe) reuses the tick
+    group of an earlier render, and a change of the backed numbers builds it again."""
+
+    from gbdraw.api.prepared import PreparedBiologicalInputCache, register_prepared_value_identity
+    from gbdraw.diagrams.circular import builders
+    from gbdraw.render.drawers.circular.annotations import LeaderSegment
+
+    calls: list[tuple[tuple, dict]] = []
+    drawn = builders.tick_group_content
+
+    def recording(*args, **kwargs):
+        calls.append((args, kwargs))
+        return drawn(*args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(builders, "tick_group_content", recording)
+        _draw(tmp_path, ZEBRAFISH, "--labels", "both")
+    [(args, kwargs)] = calls
+    leaders = kwargs.pop("feature_leaders")
+    assert leaders
+    # A leader inside the numbers' circle, across from nothing they print.
+    clear = (*leaders, LeaderSegment((0.0, 0.0), (1.0, 0.0), 0.5))
+
+    def render(feature_leaders: tuple[LeaderSegment, ...]) -> tuple[dict[str, int], str]:
+        diagnostics: dict[str, object] = {}
+        with cache.transaction(resource_paths={}, diagnostics=diagnostics):
+            register_prepared_value_identity(args[0], ("test-record", "NC_002333.2"))
+            content = builders.tick_group_content(*args, **kwargs, feature_leaders=feature_leaders)
+        metrics = diagnostics["metrics"]
+        assert isinstance(metrics, dict)
+        return metrics, "".join(child.tostring() for child in content.children)
+
+    cache = PreparedBiologicalInputCache()
+    _cold, backed = render(leaders)
+    warm, same = render(clear)
+    assert warm.get("renderStageBuild:ticks_content", 0) == 0
+    assert warm.get("renderStageHit:ticks_content", 0) >= 1
+    assert same == backed
+    changed, unbacked = render(())
+    assert changed.get("renderStageBuild:ticks_content", 0) >= 1
+    assert "fill-opacity" in backed and "fill-opacity" not in unbacked

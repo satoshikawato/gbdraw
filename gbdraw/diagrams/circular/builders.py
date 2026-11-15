@@ -46,6 +46,7 @@ from ...render.group_content import (
     place_content,
 )
 from ...render_stages import render_stage
+from ...render.groups.circular.ticks import backed_tick_content, build_tick_slot_layout
 from ...svg.ids import stable_svg_id
 from ...render.groups.circular.definition import DefinitionNameLines, DefinitionRecordFacts
 from .positioning import (
@@ -474,10 +475,13 @@ def tick_group_content(
     record_transform: RecordDisplayTransform | None = None,
     feature_leaders: tuple[LeaderSegment, ...] = (),
 ) -> GroupContent:
-    """The tick group of a tick slot: its ticks and scale labels (a render stage: a Worker transaction reuses a second build)."""
-    return render_stage(
-        "ticks_content",
-        build_group_content,
+    """The tick group of a tick slot: its ticks and scale labels, the numbers ``feature_leaders`` run behind backed
+    (OV-3301). Two render stages, so a Worker transaction reuses a second build: ``ticks_layout`` builds the group
+    without the leaders, and ``ticks_content`` takes only which numbers they back, so a leader that meets no number
+    (one that moves with the arrow shape) builds neither again."""
+    layout = render_stage(
+        "ticks_layout",
+        build_tick_slot_layout,
         TickGroup,
         gb_record,
         canvas_config.geometry(),
@@ -489,8 +493,8 @@ def tick_group_content(
         track_preset=track_preset,
         slot_id=slot_id,
         record_transform=record_transform,
-        feature_leaders=feature_leaders,
     )
+    return render_stage("ticks_content", backed_tick_content, layout, layout.backed_numbers(feature_leaders))
 
 
 def add_tick_group_on_canvas(
