@@ -577,13 +577,17 @@ def _format_size(num_bytes: int) -> str:
     return f"{num_bytes / 1024:.0f} KB"
 
 
-def _load_session(example: GallerySessionExample) -> dict[str, Any]:
+def _load_session(example: GallerySessionExample) -> tuple[dict[str, Any], str | None]:
+    """The view of the drawing the example's Session shows, and that drawing's ID when the Session
+    holds others, which a ``--session`` replay then names with ``--drawing``."""
+
     from tools.refresh_gallery_sessions import _gallery_view, _read_session_file
 
     session = _read_session_file(example.session_path)
     if not isinstance(session, dict):
         raise ValueError(f"{example.session_path} did not contain a JSON object.")
-    return _gallery_view(session)[0]
+    view, drawing_id = _gallery_view(session)
+    return view, drawing_id if len(session.get("drawings") or ()) > 1 else None
 
 
 def _session_cli_invocation(session: dict[str, Any]) -> dict[str, Any]:
@@ -618,7 +622,7 @@ def _session_cli_options(session: dict[str, Any]) -> dict[str, Any]:
     return cli_options if isinstance(cli_options, dict) else {}
 
 
-def _session_command(session: dict[str, Any]) -> str:
+def _session_command(session: dict[str, Any], drawing: str | None = None) -> str:
     cli = _session_cli_invocation(session)
     ui = session.get("ui") if isinstance(session.get("ui"), dict) else {}
     cli_options = _session_cli_options(session)
@@ -626,7 +630,7 @@ def _session_command(session: dict[str, Any]) -> str:
     raw_args = _session_raw_args(session)
     if raw_args:
         return shlex.join(["gbdraw", mode, *raw_args])
-    return shlex.join(["gbdraw", mode, "--session", "session.gbdraw"])
+    return shlex.join(["gbdraw", mode, "--session", "session.gbdraw", *(["--drawing", drawing] if drawing else [])])
 
 
 # Settings a Web-saved Session stores as configuration overrides (key, with the Session's mode) and the CLI
@@ -680,8 +684,8 @@ def _with_session_values(command: str, session: dict[str, Any]) -> str:
     return " ".join(tokens)
 
 
-def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
-    command = example.command or _session_command(session)
+def _example_command(example: GallerySessionExample, session: dict[str, Any], drawing: str | None = None) -> str:
+    command = example.command or _session_command(session, drawing)
     if example.command and not example.session_from_command:
         command = _with_session_values(command, session)
     return command.replace("interactive-svg", "interactive_svg")
@@ -1825,7 +1829,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
     for example in EXAMPLES:
         _validate_session_interactive_orthogroups(
             example,
-            _load_session(example),
+            _load_session(example)[0],
         )
 
     EXAMPLE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -1836,7 +1840,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
 
     payload: list[dict[str, object]] = []
     for example in EXAMPLES:
-        session = _load_session(example)
+        session, drawing = _load_session(example)
         source = _read_or_create_source_svg(
             example,
             session,
@@ -1862,7 +1866,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
             "sourceNote": example.source_note,
             "featureSources": list(example.feature_sources) or _session_feature_sources(session),
             "fileSizeLabel": _format_size(example.gallery_svg_path.stat().st_size),
-            "command": _example_command(example, session),
+            "command": _example_command(example, session, drawing),
             "commandKind": example.command_kind,
             "commandNote": example.command_note,
             "description": example.description,

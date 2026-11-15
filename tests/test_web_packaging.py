@@ -975,6 +975,29 @@ def test_interactive_gallery_svg_embeds_the_current_viewer(entry: dict[str, obje
 
 
 @pytest.mark.gallery
+def test_gallery_session_commands_select_one_drawing(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    # A card command that replays the Session selects the drawing the Gallery shows: a Find in other files
+    # Session also holds the reference drawing its tutorial starts in, and `--session` alone would refuse it.
+    from gbdraw.session import _select_drawing
+    from gbdraw.session_drawings import read_session_drawings
+
+    replayed = 0
+    for entry in json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8")):
+        args = entry["command"].split()
+        if "--session" not in args:
+            continue
+        replayed += 1
+        document = load_cached_gallery_session(GALLERY_ROOT / "sessions" / f"{entry['id']}.gbdraw")
+        drawings = read_session_drawings(document)
+        selector = args[args.index("--drawing") + 1] if "--drawing" in args else None
+        selected = _select_drawing(drawings, selector, mode=args[1])
+        assert selected.artifacts.fields.get("renderRequest") is not None, entry["id"]
+    assert replayed >= 2
+
+
+@pytest.mark.gallery
 def test_runnable_gallery_support_downloads_exist() -> None:
     expected_local_downloads = {
         "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
