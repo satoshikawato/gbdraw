@@ -46,7 +46,8 @@ from gbdraw.labels.label_style import FeatureLabelStyle
 from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
-from gbdraw.svg.arrows import calculate_circular_arrow_length
+from gbdraw.svg.arrows import calculate_circular_arrow_length, resolve_circular_arrow_head_length_bp
+from gbdraw.svg.circular_features import circular_feature_edge_radii_at
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 
@@ -1074,7 +1075,7 @@ def mjenmv_inner_tuckin_labels() -> tuple[list[dict], int, GbdrawConfig, int]:
     ("head_length_ratio", "shaft_width_ratio", "expected_short"),
     [(1.0, 1.0, False), (2.0, 1.0, True), ("auto", 0.5, True)],
 )
-def test_circular_label_fit_uses_drawer_head_span(
+def test_circular_label_fit_uses_drawer_head_span_and_anchors_on_its_outline(
     monkeypatch: pytest.MonkeyPatch,
     head_length_ratio: str | float,
     shaft_width_ratio: float,
@@ -1193,12 +1194,19 @@ def test_circular_label_fit_uses_drawer_head_span(
         float(label["feature_anchor_x"]),
         float(label["feature_anchor_y"]),
     )
-    expected_anchor_radius = (
-        float(label["feature_center_radius_px"])
-        if expected_short
-        else float(label["feature_outer_radius_px"])
-    )
-    assert anchor_radius == pytest.approx(expected_anchor_radius)
+    # The leader starts on the outline the drawer draws at the label's angle: inside the head, which narrows toward
+    # its tip, that lies between the centre and the lane's outer edge (OV-3641), whether the arrow is all head or not.
+    from tests.test_circular_outside_features_slot import _outline
+
+    (_kind, path_d, *_rest), = drawer.generate_circular_gene_path(feature)
+    outline = _outline(path_d)
+    anchor = (float(label["feature_anchor_x"]), float(label["feature_anchor_y"]))
+    assert min(
+        math.hypot(x1 + t * (x2 - x1) - anchor[0], y1 + t * (y2 - y1) - anchor[1])
+        for (x1, y1), (x2, y2) in zip(outline, outline[1:] + outline[:1])
+        for t in [max(0.0, min(1.0, ((anchor[0] - x1) * (x2 - x1) + (anchor[1] - y1) * (y2 - y1)) / (((x2 - x1) ** 2 + (y2 - y1) ** 2) or 1.0)))]
+    ) < 0.05
+    assert float(label["feature_center_radius_px"]) < anchor_radius < float(label["feature_outer_radius_px"])
 
 
 def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[list[dict], int]:
@@ -3195,7 +3203,10 @@ def test_hmmtdna_resolve_overlaps_feature_width_font22_keeps_current_bbox_margin
     assert min_bbox_clearance >= -6.0
 
 
-def test_hmmtdna_resolve_overlaps_short_directional_features_use_center_anchor() -> None:
+def test_hmmtdna_resolve_overlaps_short_directional_features_anchor_on_their_outline() -> None:
+    """An arrow shorter than one head is all head: its leader starts on the head's edge at the label's angle, between
+    the centre and the lane's edge, not at the centre (which drew the leader over the head) nor at the lane's edge
+    (white space beside it, OV-3641)."""
     external_labels, total_length, cfg = _load_hmmtdna_external_labels_with_config(
         label_font_size=14.0,
         strandedness=False,
@@ -3293,8 +3304,23 @@ def test_hmmtdna_resolve_overlaps_short_directional_features_use_center_anchor()
 
         if key in short_directional_feature_keys:
             short_anchors_checked += 1
-            assert math.isclose(anchor_x, middle_x, abs_tol=1e-6)
-            assert math.isclose(anchor_y, middle_y, abs_tol=1e-6)
+            inner, center, outer = (
+                float(label["feature_inner_radius_px"]),
+                float(label["feature_center_radius_px"]),
+                float(label["feature_outer_radius_px"]),
+            )
+            drawn = circular_feature_edge_radii_at(
+                feature_dict[label["stable_id"]],
+                float(label["middle"]),
+                total_length,
+                circular_arrow_length_bp,
+                (inner, center, outer),
+                float(cfg.objects.features.arrow_geometry.shaft_width_ratio),
+            )
+            anchor_radius = math.hypot(anchor_x, anchor_y)
+            assert math.isclose(anchor_radius, drawn[0] if label.get("is_inner") else drawn[1], abs_tol=1e-6)
+            assert min(inner, outer) + 0.5 < anchor_radius < max(inner, outer) - 0.5
+            assert not math.isclose(anchor_radius, center, abs_tol=0.5)
         elif key in non_short_feature_keys:
             if math.hypot(anchor_x - middle_x, anchor_y - middle_y) > 0.5:
                 shifted_non_short_anchors += 1
@@ -3671,7 +3697,10 @@ def test_nc001454_tuckin_resolve_overlaps_inner_middle_to_label_segments_avoid_f
         assert not segment_crosses_feature_annulus(middle_point, leader_start)
 
 
-def test_nc001454_tuckin_resolve_overlaps_inner_non_short_directional_labels_use_inward_feature_anchor() -> None:
+def test_nc001454_tuckin_resolve_overlaps_inner_labels_anchor_on_the_feature_inner_outline() -> None:
+    """Inner leaders of a displaced lane start on the inner edge their feature is drawn with at the label's angle:
+    the lane's inner edge on a shaft, the head's edge inside an arrowhead (OV-3641; arrows shorter than one head
+    anchored at the centre before)."""
     external_labels, total_length, cfg, feature_dict = _load_nc001454_external_labels_with_inner_resolve(
         label_font_size=14.0,
         strandedness=False,
@@ -3681,98 +3710,33 @@ def test_nc001454_tuckin_resolve_overlaps_inner_non_short_directional_labels_use
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
 
-    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
-    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
-    track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
-    cds_ratio, offset = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
-    circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
-
-    short_directional_feature_keys: set[tuple[float, float, float]] = set()
-    non_short_feature_inner_radius_by_key: dict[tuple[float, float, float], float] = {}
-    for feature_object in feature_dict.values():
-        if get_label_text(feature_object, label_filtering) == "":
-            continue
-        if str(getattr(feature_object, "strand", "")) != "negative":
-            continue
-
-        longest_segment_length = 0
-        longest_segment_start = 0
-        longest_segment_end = 0
-        longest_segment_middle = 0.0
-        coordinate_strand = "undefined"
-        for coordinate in feature_object.coordinates:
-            coordinate_start = int(coordinate.start)
-            coordinate_end = int(coordinate.end)
-            coordinate_strand = get_strand(coordinate.strand)
-            interval_length = abs(int(coordinate_end - coordinate_start) + 1)
-            interval_middle = float(coordinate_end + coordinate_start) / 2.0
-            if interval_length > longest_segment_length:
-                longest_segment_start = coordinate_start
-                longest_segment_end = coordinate_end
-                longest_segment_middle = interval_middle
-                longest_segment_length = interval_length
-
-        track_id = int(getattr(feature_object, "feature_track_id", 0))
-        factors = calculate_feature_position_factors_circular(
-            total_length,
-            coordinate_strand,
-            cfg.canvas.circular.track_ratio,
-            cds_ratio,
-            offset,
-            cfg.canvas.circular.track_type,
-            cfg.canvas.strandedness,
-            track_id,
-        )
-        feature_middle_x = (float(cfg.canvas.circular.radius) * float(factors[1])) * math.cos(
-            math.radians(360.0 * (longest_segment_middle / total_length) - 90)
-        )
-        feature_middle_y = (float(cfg.canvas.circular.radius) * float(factors[1])) * math.sin(
-            math.radians(360.0 * (longest_segment_middle / total_length) - 90)
-        )
-        feature_inner_radius = float(cfg.canvas.circular.radius) * min(float(factors[0]), float(factors[2]))
-        key = (
-            round(feature_middle_x, 6),
-            round(feature_middle_y, 6),
-            round(longest_segment_middle, 6),
-        )
-        longest_segment_bp = abs(int(longest_segment_end - longest_segment_start))
-        is_short_directional = bool(getattr(feature_object, "is_directional", False)) and (
-            longest_segment_bp < circular_arrow_length_bp
-        )
-        if is_short_directional:
-            short_directional_feature_keys.add(key)
-        else:
-            non_short_feature_inner_radius_by_key[key] = feature_inner_radius
-
-    shifted_non_short_anchor_count = 0
-    checked_short_anchor_count = 0
+    shaft_width_ratio = float(cfg.objects.features.arrow_geometry.shaft_width_ratio)
+    automatic_head_bp = calculate_circular_arrow_length(total_length)
+    in_head = 0
     for label in inner_labels:
-        key = (
-            round(float(label["feature_middle_x"]), 6),
-            round(float(label["feature_middle_y"]), 6),
-            round(float(label["middle"]), 6),
+        feature_object = feature_dict[label["stable_id"]]
+        inner, center, outer = (
+            float(label["feature_inner_radius_px"]),
+            float(label["feature_center_radius_px"]),
+            float(label["feature_outer_radius_px"]),
         )
-        anchor_radius = math.hypot(
-            float(label.get("feature_anchor_x", label["feature_middle_x"])),
-            float(label.get("feature_anchor_y", label["feature_middle_y"])),
+        head_bp = resolve_circular_arrow_head_length_bp(
+            cfg.objects.features.arrow_geometry.head_length_ratio,
+            outer - inner,
+            automatic_head_bp,
+            total_length,
+            center,
+            shaft_width_ratio,
         )
-        middle_radius = math.hypot(float(label["feature_middle_x"]), float(label["feature_middle_y"]))
+        drawn_inner, _drawn_outer = circular_feature_edge_radii_at(
+            feature_object, float(label["middle"]), total_length, head_bp, (inner, center, outer), shaft_width_ratio
+        )
+        anchor_radius = math.hypot(float(label["feature_anchor_x"]), float(label["feature_anchor_y"]))
+        assert math.isclose(anchor_radius, drawn_inner, abs_tol=1e-6)
+        assert inner - 1e-6 <= anchor_radius <= center - 0.5
+        in_head += int(anchor_radius > inner + 0.5)
 
-        if key in short_directional_feature_keys:
-            checked_short_anchor_count += 1
-            assert math.isclose(anchor_radius, middle_radius, abs_tol=1e-6)
-        elif key in non_short_feature_inner_radius_by_key:
-            shifted_non_short_anchor_count += 1
-            assert anchor_radius <= middle_radius - 0.5
-            assert math.isclose(
-                anchor_radius,
-                float(non_short_feature_inner_radius_by_key[key]),
-                abs_tol=1.5,
-            )
-
-    assert shifted_non_short_anchor_count > 0
-    if short_directional_feature_keys:
-        assert checked_short_anchor_count > 0
+    assert in_head > 0
 
 
 def test_circular_assembly_reuses_precalculated_labels_once() -> None:

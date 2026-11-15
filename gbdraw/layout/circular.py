@@ -328,6 +328,12 @@ class CircularRadialLayout:
         return slots_feature_layout(self.slots)
 
     @property
+    def label_lanes(self) -> CircularLabelLanes:
+        """The lanes this layout's outer and inner labels name their features on (``slots_label_lanes``)."""
+
+        return slots_label_lanes(self.slots, self.axis.radius_px)
+
+    @property
     def ticks(self) -> CircularTickLayout | None:
         for slot in self.slots:
             if slot.renderer == "ticks" and isinstance(slot.payload, CircularTickLayout):

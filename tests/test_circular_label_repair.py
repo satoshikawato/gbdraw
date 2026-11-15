@@ -870,3 +870,21 @@ def test_each_region_label_is_cleared_on_its_own_and_the_others_kept() -> None:
     assert made_way is not None and made_way[1] == (0,)
     assert not _over(made_way[0], total_length, own)
     assert not _over(made_way[0], total_length, taken)
+
+
+def test_an_elbow_move_never_lowers_an_outer_elbow_below_its_lane_clearance() -> None:
+    """An outer label kept clear of its feature's lane (``min_outer_middle_radius_px``, OV-3627) keeps its leader
+    elbow past that radius: the repair's elbow move lowered it to 2 px from the features, so the elbow->label segment
+    ran under the neighbouring features. A move outward, or inward while the elbow stays past the floor, still
+    applies."""
+
+    labels, total_length, definition = _fixture("o_plasmid37_f14")
+    index = next(at for at, label in enumerate(labels) if not label.get("is_embedded") and not label.get("is_inner"))
+    elbow = math.hypot(float(labels[index]["middle_x"]), float(labels[index]["middle_y"]))
+    labels[index]["min_outer_middle_radius_px"] = elbow - 1.0
+    search = repair_module._Repair(labels, total_length, definition)
+
+    assert search._elbow([index], [-2.0]) == {}
+    for delta in (-0.5, 2.0):
+        moved = search._elbow([index], [delta])
+        assert math.hypot(float(moved[index]["middle_x"]), float(moved[index]["middle_y"])) == pytest.approx(elbow + delta)

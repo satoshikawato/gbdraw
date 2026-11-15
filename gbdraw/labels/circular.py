@@ -64,6 +64,7 @@ from ..svg.arrows import (
 )
 from ..layout.text_geometry import annular_sector_parts
 from ..svg.circular_arcs import circle_point, circle_point_rad, position_angle, position_angle_rad, position_turn_angle
+from ..svg.circular_features import circular_feature_edge_radii_at
 from ..svg.ids import instance_svg_id
 
 # Keep dense large-font labels from being pushed excessively far from features.
@@ -115,7 +116,8 @@ LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS = 2.0
 
 
 def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
-    """The radius inner radial labels keep outside: the centre definition's band and the inside tracks' bands.
+    """The radius inner radial labels keep outside: the centre definition's band and the bands of the tracks inside
+    the lanes the inner labels name (``CircularRadialLayout.label_lanes``, the innermost features slot).
 
     The labels read the centre band only through this value, which the labels stage takes instead of the band:
     beside a plot title the tracks keep the band of the untitled definition (OV-1710), and a band that stays
@@ -126,9 +128,8 @@ def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
     definition_band = radial_layout.definition_reserved_band_px
     if definition_band is not None:
         reserve = max(reserve, float(definition_band.outer_px))
-    feature_inner_radius = (
-        float(radial_layout.features.all_band_px.inner_px) if radial_layout.features is not None else float("inf")
-    )
+    inner_lanes = radial_layout.label_lanes.inner
+    feature_inner_radius = float(inner_lanes.all_band_px.inner_px) if inner_lanes is not None else float("inf")
     for resolved_slot in radial_layout.slots:
         if resolved_slot.renderer in {"features", "feature_labels"}:
             continue
@@ -142,10 +143,11 @@ def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
 
 def outer_label_scale_floor_px(radial_layout: CircularRadialLayout) -> float:
     """The radius outer horizontal labels and their leader elbows keep past: the outer edge of a scale that stands
-    outside the feature track, between the features and their labels (OV-3301). The band is the ticks slot's own
-    reserved band (its ticks and numbers, from the tick geometry owner); 0 when no scale stands there."""
+    outside the lanes the outer labels name (``CircularRadialLayout.label_lanes``, the outermost features slot),
+    between the features and their labels (OV-3301). The band is the ticks slot's own reserved band (its ticks and
+    numbers, from the tick geometry owner); 0 when no scale stands there."""
 
-    features = radial_layout.features
+    features = radial_layout.label_lanes.outer
     if features is None:
         return 0.0
     feature_outer = float(features.all_band_px.outer_px)
@@ -5621,17 +5623,6 @@ def rearrange_labels_fc(
     return _assign_leader_start_points(best_labels, total_length)
 
 
-def _segment_span_bp(
-    segment_start: int,
-    segment_end: int,
-    total_length: int,
-) -> float:
-    """Return segment span in bp, supporting origin-spanning segments."""
-    if segment_start <= segment_end or total_length <= 0:
-        return float(abs(int(segment_end - segment_start)))
-    return float((float(total_length) - float(segment_start)) + float(segment_end))
-
-
 def _is_label_embedded_in_segment(
     label_start: float,
     label_end: float,
@@ -5838,11 +5829,6 @@ def prepare_label_list(
             feature_middle_x, feature_middle_y = circle_point(feature_center_radius, feature_angle_deg)
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
-            longest_segment_bp = _segment_span_bp(
-                longest_segment_start,
-                longest_segment_end,
-                total_length,
-            )
             circular_arrow_length_bp = resolve_circular_arrow_head_length_bp(
                 arrow_head_length_ratio,
                 abs(feature_outer_radius - feature_inner_radius),
@@ -5851,15 +5837,20 @@ def prepare_label_list(
                 feature_center_radius,
                 arrow_shaft_width_ratio,
             )
-            is_short_directional_feature = (
-                bool(getattr(feature_object, "is_directional", False))
-                and longest_segment_bp < circular_arrow_length_bp
+            # The feature's drawn outline at the label's angle: beside an arrowhead it lies inside the lane's edge.
+            ink_inner_radius, ink_outer_radius = circular_feature_edge_radii_at(
+                feature_object,
+                label_middle,
+                total_length,
+                circular_arrow_length_bp,
+                (feature_inner_radius, feature_center_radius, feature_outer_radius),
+                arrow_shaft_width_ratio,
             )
             if is_outer_label:
-                if outer_lane_clearance and not is_short_directional_feature:
+                if outer_lane_clearance:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
-                    feature_anchor_x, feature_anchor_y = circle_point(feature_outer_radius, feature_angle_deg)
+                    feature_anchor_x, feature_anchor_y = circle_point(ink_outer_radius, feature_angle_deg)
                 # With an arena, its inner edge is the "anchor" radius for leader lines.
                 middle_radius = (
                     float(outer_arena[0]) if outer_arena is not None else radius_factor * radius
@@ -5875,10 +5866,10 @@ def prepare_label_list(
                     )
                 middle_x, middle_y = circle_point(middle_radius, feature_angle_deg)
             else:
-                if lane_clearance and not is_short_directional_feature:
+                if lane_clearance:
                     # For displaced inner features, anchor leaders on the inner edge so lines
                     # do not cross over raised feature bodies.
-                    feature_anchor_x, feature_anchor_y = circle_point(feature_inner_radius, feature_angle_deg)
+                    feature_anchor_x, feature_anchor_y = circle_point(ink_inner_radius, feature_angle_deg)
                 middle_x, middle_y = circle_point(inner_radius_factor * radius, feature_angle_deg)
             is_embedded = _is_label_embedded_in_segment(
                 label_start,
