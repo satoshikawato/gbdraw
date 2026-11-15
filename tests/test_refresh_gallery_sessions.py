@@ -2505,6 +2505,41 @@ def test_gallery_session_keeps_a_render_only_for_its_shown_drawing() -> None:
     assert refresh_gallery_sessions_module._keep_render_of_shown_drawing(document) == 0
 
 
+def test_refreshed_gallery_session_keeps_the_drawing_its_tutorial_starts_in() -> None:
+    """The publication writes the shown drawing alone; the refresh puts the others back, undrawn.
+
+    A Find in other files tutorial starts in a reference drawing and creates
+    the shown one from it; its capture replays the steps in the reference
+    drawing, so the refreshed Session keeps it, without a render, in its place.
+    A Session of one drawing is the finalized Session as it is.
+    """
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = {
+        "createdAt": "2026-01-02T00:00:00Z",
+        **_staged_geometry_session(mode="linear", records=None),
+        "runMetadata": {"tool": "gbdraw"},
+    }
+    source = _drawings_document(
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=1, project_views=[view, view]
+    )
+    finalized_view = {**view, "runMetadata": {"tool": "gbdraw", "refreshed": True}}
+    finalized = _drawings_document(
+        [finalized_view], ids=["linear-2"], names=["Linear 2"], active=0, project_views=[finalized_view]
+    )
+
+    refreshed = refresh_gallery_sessions_module._with_source_drawings(finalized, source)
+
+    assert [drawing["id"] for drawing in refreshed["drawings"]] == ["linear", "linear-2"]
+    assert refreshed["ui"]["activeDrawingId"] == "linear-2"
+    reference, shown = refreshed["drawings"]
+    assert reference["renderRequest"] is None and reference["results"] == []
+    assert shown["runMetadata"] == {"tool": "gbdraw", "refreshed": True}
+    one = _drawings_document([view], ids=["linear"], names=["Linear"], active=0, project_views=[view])
+    assert refresh_gallery_sessions_module._with_source_drawings(finalized, one) is finalized
+
+
 def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_validate_session(
     tmp_path: Path,
 ) -> None:

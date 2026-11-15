@@ -1307,6 +1307,24 @@ def _gallery_document(
     return replace_session_drawings(document, {drawing_id: view})
 
 
+def _with_source_drawings(finalized: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+    """The finalized Session with the source's other drawings back in place, undrawn.
+
+    The publication writes the drawing it shows alone (``galleryPublicationDocument``).
+    A tutorial that creates that drawing from another, as **Find in other
+    files** does, replays its steps in the other one, so the refreshed Session
+    keeps it as :func:`_keep_render_of_shown_drawing` leaves it. A Session of
+    one drawing is ``finalized`` as it is.
+    """
+
+    if len(source.get("drawings") or ()) < 2:
+        return finalized
+    _keep_render_of_shown_drawing(source)
+    view, drawing_id = _gallery_view(finalized)
+    assert drawing_id is not None
+    return _gallery_document(source, view, drawing_id)
+
+
 def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
     """A document the Session readers take: a Session 51 drawing's one-drawing
     view (:func:`_gallery_view`) as the Session 51 of that one drawing, with
@@ -1871,7 +1889,10 @@ def _refresh_one_session(
             finalized_staged_path,
             env=env,
         )
-        _write_session_file(finalized_path, _read_session_file(finalized_staged_path))
+        _write_session_file(
+            finalized_path,
+            _with_source_drawings(_read_session_file(finalized_staged_path), _read_session_file(session_path)),
+        )
         load_session(finalized_path)
         gc.collect()
         shutil.move(str(finalized_path), destination_path or session_path)
