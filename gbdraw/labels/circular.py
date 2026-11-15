@@ -2725,11 +2725,18 @@ class _FixedRadiiRun:
         self.angles = [_start_angle_near(label, target) for label, target in zip(labels, targets)]
 
     def separate(self) -> None:
-        """Order the angles, then separate overlapping neighbours and other overlapping pairs, up to 120 passes."""
+        """Order the angles, then separate overlapping neighbours and other overlapping pairs, up to 120 passes.
+
+        The passes end when one moves no label, or when its moves cancel out and it leaves every angle
+        as it was. A pass reads only the angles and the start points, which `_apply` writes from the
+        angles at fixed radii, so a pass that starts from the angles it ended with repeats itself
+        exactly: every later pass would make the same moves and end at the same place.
+        """
         self._order_angles()
         for idx in range(len(self.labels)):
             self._apply(idx)
         for _ in range(120):
+            before = list(self.angles)
             changed = False
             for idx in range(len(self.labels) - 1):
                 if self._overlaps(idx, idx + 1) and self._separate_neighbours(idx):
@@ -2738,7 +2745,7 @@ class _FixedRadiiRun:
             for idx, jdx in _candidate_label_pairs(self.labels, self.total_length, padding=self.padding):
                 if jdx > idx + 1 and self._overlaps(idx, jdx) and self._separate_pair(idx, jdx):
                     changed = True
-            if not changed:
+            if not changed or self.angles == before:
                 break
 
     def _order_angles(self) -> None:

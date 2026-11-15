@@ -812,6 +812,50 @@ def test_circular_fixed_radius_overlap_pass_keeps_order_reach_and_radii() -> Non
     )
 
 
+@pytest.mark.circular
+def test_circular_fixed_radius_overlap_pass_stops_when_a_pass_leaves_every_angle_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Three labels in a 5-degree reach whose moves cancel out within the fourth pass.
+
+    Every later pass would repeat that pass, so the run stops there instead of at the 120-pass cap,
+    with the start points that the 120 passes gave.
+    """
+    module = circular_labels_module
+    total_length, radius, cap = 100000, 150.0, 5.0
+    labels = []
+    for middle, width, height in [(56970.5, 150.0, 8.0), (57820.1, 40.0, 14.0), (58952.6, 150.0, 14.0)]:
+        label = _make_label(middle, width, height)
+        label["start_x"] = radius * math.cos(math.radians(position_angle(middle, total_length)))
+        label["start_y"] = radius * math.sin(math.radians(position_angle(middle, total_length)))
+        labels.append(label)
+    passes = 0
+    candidate_pairs = module._candidate_label_pairs
+
+    def counting(labels: list[dict], total_length: int, padding: float) -> Iterator[tuple[int, int]]:
+        nonlocal passes
+        passes += 1  # once per pass, for its non-neighbour pairs
+        return candidate_pairs(labels, total_length, padding=padding)
+
+    monkeypatch.setattr(module, "_candidate_label_pairs", counting)
+
+    result = module._resolve_outer_label_overlaps_with_fixed_radii(labels, total_length, max_angle_shift_deg=cap)
+
+    assert passes == 4
+    assert [value for label in result for value in (label["start_x"], label["start_y"])] == pytest.approx(
+        [
+            -51.53371091944852,
+            140.86971512312613,
+            -70.77267299157299,
+            132.25440921809707,
+            -90.75108003464531,
+            119.43299993111367,
+        ],
+        rel=1e-12,
+        abs=1e-9,
+    )
+
+
 def test_segments_through_rect_interior_counts_every_crossing_segment() -> None:
     box = (0.0, 0.0, 10.0, 10.0)
     crossing = [((-5.0, 5.0), (15.0, 5.0)), ((5.0, -5.0), (5.0, 15.0))]  # two leader segments, both through
