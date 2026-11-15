@@ -357,7 +357,9 @@ const DEFINITIONS = Object.freeze({
 /** @type {Readonly<Record<string, Readonly<Record<string, readonly [string, readonly string[], string?]>>>>} */
 const OPERATION_DEFINITIONS = Object.freeze({
   'session-save': Object.freeze(/** @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>} */ ({
-    WORKER_INIT: ['The diagram runtime could not start, so the Session was not saved. Retry; if it fails again, reload the page.', ['retry', 'reload']]
+    WORKER_INIT: ['The diagram runtime could not start, so the Session was not saved. Retry; if it fails again, reload the page.', ['retry', 'reload']],
+    CLEANUP_FAILED: ['Temporary resource cleanup failed, so the Session was not saved. Retry; if it fails again, reload the page.', ['retry', 'reload']],
+    UNKNOWN: ['The Session was not saved, and the failure gave no recognized diagnostic information. Retry; if it fails again, reload the page.', ['retry', 'reload']]
   })),
   readFeatureSequences: Object.freeze(/** @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>} */ ({
     FEATURE_IDENTITY: ['The request of the shown Result does not draw this feature, so its sequence cannot be read. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']]

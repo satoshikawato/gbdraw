@@ -487,13 +487,22 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   assert.equal(saveFailure.operation, 'session-save');
   // The normalizer leaves Save Session out of a failed Save's actions (R6), so the panel shows the button by its
   // actions alone; a model normalized again (`errorDisplay`) keeps that.
-  assert.deepEqual(saveFailure.actions, ['retry']);
-  assert.deepEqual(normalizeUserFacingError(saveFailure).actions, ['retry']);
+  assert.deepEqual(saveFailure.actions, ['retry', 'reload']);
+  assert.deepEqual(normalizeUserFacingError(saveFailure).actions, ['retry', 'reload']);
   assert.match(indexHtml, /<button v-if="errorDisplay\.actions\.includes\('save-session'\) \|\| generationFailureRecovery === 'restore-failed'"/);
   const saveInit = normalizeUserFacingError({ code: 'WORKER_INIT', operation: 'listSequenceRecords' }, { operation: 'session-save' });
   assert.deepEqual(saveInit.actions, ['retry', 'reload']);
   assert.doesNotMatch(saveInit.summary, /Save a Session/);
   assert.deepEqual(normalizeUserFacingError({ code: 'WORKER_INIT' }, { operation: 'generate' }).actions, ['save-session', 'reload', 'retry']);
+  // No failure of a Save tells the user to save a Session: each code whose own sentence says so has a Save sentence
+  // that names what failed and offers only Retry and Reload.
+  for (const code of ['WORKER_INIT', 'CLEANUP_FAILED', 'UNKNOWN']) {
+    const failed = normalizeUserFacingError({ code }, { operation: 'session-save' });
+    assert.equal(failed.code, code);
+    assert.match(failed.summary, /the Session was not saved/i, code);
+    assert.doesNotMatch(failed.summary, /save a Session/i, code);
+    assert.deepEqual(failed.actions, ['retry', 'reload'], code);
+  }
 });
 
 // #941 residual: every action of an operation error panel is the same small

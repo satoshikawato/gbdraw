@@ -35,5 +35,7 @@
   those windows. Each list line of the SVG names its record
   (`data-gbdraw-record-index`, `data-gbdraw-record-id`); the figure looks the
   same.
-- Fixed: in the Web app, a Save that fails because the diagram runtime cannot
-  start no longer tells you to save a Session; it offers Retry and Reload.
+- Fixed: in the Web app, a failed Save no longer tells you to save a Session
+  (when the diagram runtime cannot start, when temporary files cannot be
+  cleaned up, or when the failure is not recognized); it offers Retry and
+  Reload.
