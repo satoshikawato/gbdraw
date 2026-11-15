@@ -1493,9 +1493,11 @@
       "id": "vector:tests/fixtures/given-comparison-table-vectors.json",
       "concern": "A comparison table that a request of schema 2 or 5 to 9 stored as a precomputedProteinComparison under the resource ID a CLI or Python render gave a table it was given (comparison-explicit-<n>): whether it holds protein matches (no protein column), and the BLAST rows of a table of the BLAST columns alone, in any order (OV-3573, OV-3574)",
       "pythonOwner": [
-        "gbdraw/session_request_codec.py:_stored_protein_matches"
+        "gbdraw/session_request_codec.py:_stored_protein_matches",
+        "gbdraw/io/comparisons.py:comparison_table_text"
       ],
       "jsOwner": [
+        "gbdraw/web/js/services/session-request.js:storedGivenComparisonTable",
         "gbdraw/web/js/services/session-request.js:storedGivenTable"
       ],
       "vector": "tests/fixtures/given-comparison-table-vectors.json",
