@@ -470,3 +470,30 @@ test('a staging that runs out of memory says so, not that the input is wrong (OV
     error.code === 'RESOURCE_INVALID' && error.stage === 'resource-staging' && error.context.reason === 'INPUT_MEMORY'
   ));
 });
+
+// OV-3591: the input summary names a record by the file the page read (`resourceManifest[].name`, which the
+// Worker passes to gbdraw/api/input_summary.py), not by its Session resource name. After a Load the payload
+// owner is a Session resource view whose `name` is the file name Load gave it (the name the File chip and the
+// Source recipe show); a File gives its own name; a descriptor with no named owner gives its own name.
+test('the manifest names a resource by its File or Session resource view (OV-3591)', async () => {
+  const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
+    '../../gbdraw/web/js/services/session-resource-backing.js'
+  );
+  const text = (id) => `LOCUS ${id}\nORIGIN\n//\n`;
+  const table = adoptCurrentSessionResources({
+    'record-1-genbank': descriptor(text('loaded'), 'record-1-genbank-BGC0000708.gbk')
+  });
+  const view = createSessionResourceFileView(table, 'record-1-genbank', { name: 'BGC0000708.gbk' });
+  const upload = new File([text('upload')], 'BGC0000709.gbk', { type: 'text/plain' });
+  const unnamed = { arrayBuffer: async () => new TextEncoder().encode(text('unnamed')).buffer };
+  const request = genbankRequest('record-1-genbank', 'record-2-genbank', 'record-3-genbank', 'record-4-genbank');
+  const resources = {
+    'record-1-genbank': setResourcePayloadOwner(descriptor(text('loaded'), 'record-1-genbank-BGC0000708.gbk'), view),
+    'record-2-genbank': setResourcePayloadOwner(descriptor(text('upload'), 'record-2-genbank-BGC0000709.gbk'), upload),
+    'record-3-genbank': setResourcePayloadOwner(descriptor(text('unnamed'), 'record-3-genbank-a.gbk'), unnamed),
+    'record-4-genbank': descriptor(text('inline'), 'record-4-genbank-b.gbk')
+  };
+  const staged = await createDiagramResourceTransport().prepare({ request, resources });
+  assert.deepEqual(staged.resourceManifest.map(({ name }) => name),
+    ['BGC0000708.gbk', 'BGC0000709.gbk', 'record-3-genbank-a.gbk', 'record-4-genbank-b.gbk']);
+});

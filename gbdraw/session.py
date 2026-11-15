@@ -1005,6 +1005,41 @@ def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
         raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
 
 
+def _with_stored_file_names(
+    result: RequestRenderResult | CircularBatchRenderResult,
+    drawing: SessionDrawingParts,
+    resource_paths: Mapping[str, Path],
+) -> RequestRenderResult | CircularBatchRenderResult:
+    """``result`` with its input summary naming each file by the name a Web Save stored for it (OV-3591).
+
+    A Web Save names a resource "<resource ID>-<file>" and stores the file the
+    user chose in ``webFiles.resourceOriginalNames``; a Load shows that name,
+    and the Web's input summary names the file by it. The replay reads the copy
+    named by the resource, so it names the file by the same stored value.
+    """
+
+    from gbdraw.api.input_summary import source_names_by_file, with_source_names
+    from gbdraw.api.request_render import CircularBatchRenderResult
+
+    web_files = drawing.artifacts.fields.get("webFiles")
+    stored = web_files.get("resourceOriginalNames") if isinstance(web_files, Mapping) else None
+    names = source_names_by_file(
+        {
+            resource_id: name
+            for resource_id, name in (stored.items() if isinstance(stored, Mapping) else ())
+            if resource_id in resource_paths and isinstance(name, str) and name
+        },
+        resource_paths,
+    )
+    if not names:
+        return result
+    if isinstance(result, CircularBatchRenderResult):
+        return replace(result, items=tuple(
+            replace(item, input_summary=with_source_names(item.input_summary, names)) for item in result.items
+        ))
+    return replace(result, input_summary=with_source_names(result.input_summary, names))
+
+
 def _render_session_drawing_plans(
     materialized: MaterializedSession,
     plans: Sequence[_SessionDrawingRender],
@@ -1026,10 +1061,14 @@ def _render_session_drawing_plans(
     try:
         for plan in plans:
             with noting_session_png_dpi(plan.png_dpi):
-                results[plan.drawing.id] = render_session_compatible_request(
-                    plan.request,
-                    plan.drawing.artifacts,
-                    include_feature_catalog=include_feature_catalog,
+                results[plan.drawing.id] = _with_stored_file_names(
+                    render_session_compatible_request(
+                        plan.request,
+                        plan.drawing.artifacts,
+                        include_feature_catalog=include_feature_catalog,
+                    ),
+                    plan.drawing,
+                    materialized.resource_paths,
                 )
     except SessionError:
         raise

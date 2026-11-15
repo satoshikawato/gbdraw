@@ -19,6 +19,7 @@ import logging
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Literal, TypedDict
 
 from Bio.SeqRecord import SeqRecord
@@ -504,12 +505,26 @@ def log_input_summary(summary: InputSummary, *, warned: set[InputWarningKey] | N
     log_input_warnings(summary, warned=warned)
 
 
+def source_names_by_file(names: Mapping[str, str], resource_paths: Mapping[str, str | Path]) -> dict[str, str]:
+    """``names`` (by resource ID) by the name of the file each resource is read from, for :func:`with_source_names`.
+
+    The Web page keeps one resource for files with the same bytes, so they share the first name.
+    """
+
+    by_file: dict[str, str] = {}
+    for resource_id, name in names.items():
+        by_file.setdefault(Path(resource_paths[resource_id]).name, name)
+    return by_file
+
+
 def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputSummary:
     """The summary with each source file named by ``names`` (file name read -> file name shown).
 
     The Web reads each file from a staged copy named by its content; the page
-    knows the name of the file it read. A comparison keeps the name its request
-    gave it (``stored_comparison_name`` in gbdraw.session_request_codec).
+    knows the name of the file it read. A Session replay reads each file from
+    a copy named by its resource; a Web Save stored the file the user chose
+    (``webFiles.resourceOriginalNames``). A comparison keeps the name its
+    request gave it (``stored_comparison_name`` in gbdraw.session_request_codec).
     """
 
     return replace(
@@ -586,6 +601,7 @@ __all__ = [
     "input_warnings",
     "log_input_summary",
     "log_input_warnings",
+    "source_names_by_file",
     "summarize_inputs",
     "with_source_names",
 ]

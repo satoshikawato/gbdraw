@@ -9,7 +9,7 @@ import shutil
 from time import perf_counter
 from typing import AbstractSet, Any, Iterator, Literal, Mapping, MutableMapping, TypedDict, cast
 
-from gbdraw.api.input_summary import InputSummaryPayload, input_summary_payload, with_source_names
+from gbdraw.api.input_summary import InputSummaryPayload, input_summary_payload, source_names_by_file, with_source_names
 from gbdraw.api.run_metadata import RenderedResult, build_run_metadata
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
@@ -379,7 +379,7 @@ def _render_canonical_web_request(
             if catalog_revision is not None and catalog_revision == held_feature_catalog_revision
             else build_feature_catalog(feature_catalog_items)
         )
-    source_names = None if resource_names is None else staged_names_by_file(resource_names, resource_paths)
+    source_names = None if resource_names is None else source_names_by_file(resource_names, resource_paths)
     input_summaries = [
         input_summary_payload(
             with_source_names(item.input_summary, source_names) if source_names else item.input_summary,
@@ -621,7 +621,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
         )
     except BaseException as exc:
         render_error = exc
-        _name_chosen_inputs(exc, None if resource_names is None else staged_names_by_file(resource_names, validated_paths))
+        _name_chosen_inputs(exc, None if resource_names is None else source_names_by_file(resource_names, validated_paths))
         raise
     finally:
         if owns_workspace:
@@ -715,23 +715,13 @@ def staged_resource_names(
     return {str(resource_id): str(name) for resource_id, name in names.items()}
 
 
-def staged_names_by_file(names: Mapping[str, str], resource_paths: Mapping[str, str | Path]) -> dict[str, str]:
-    """``names`` (by resource ID) by the name of the staged file each resource is read from. The page keeps one
-    resource for files with the same bytes, so they share the first name."""
-
-    staged: dict[str, str] = {}
-    for resource_id, name in names.items():
-        staged.setdefault(Path(resource_paths[resource_id]).name, name)
-    return staged
-
-
 def staged_source_names(
     names: Mapping[str, object] | None, resource_paths: Mapping[str, Path]
 ) -> dict[str, str] | None:
     """The file name of each staged resource, by the name of the file the request reads."""
 
     validated = staged_resource_names(names, resource_paths)
-    return None if validated is None else staged_names_by_file(validated, resource_paths)
+    return None if validated is None else source_names_by_file(validated, resource_paths)
 
 
 def _validate_prepared_resource_identities(
