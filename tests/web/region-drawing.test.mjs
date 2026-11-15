@@ -898,11 +898,22 @@ test('OV-3534: a stored Circular canvas of two records of a file of three keeps 
   app.selectDrawing(source.id);
 });
 
-const { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, keptRequestArtifact } = await import(
+const { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } = await import(
   '../../gbdraw/web/js/services/artifact-slot.js');
 // D-24 (R15): Copy to another drawing projects the drawing it pastes into while another drawing is shown. The
-// projection reads that drawing's Result-bound values from the slot that keeps them, so it is the projection the drawing
-// has while shown, whatever the shown drawing holds.
+// projection reads that drawing's Result-bound values and its own Similarity alignment from the slot that keeps them,
+// so it is the projection the drawing has while shown, whatever the shown drawing holds (its own plan included).
+/** A Linear plan and record translations for the drawing's one record, `seq-1`, named by its group. */
+const alignmentOf = (groupId, x) => {
+  const anchor = { recordKey: 'seq-1', biologicalFeatureId: `${groupId}-f1`, sourceFeatureIndex: 0, stableFeatureSvgId: null };
+  return {
+    similarityAlignmentPlan: { schema: 2, groupId, reference: anchor,
+      records: [{ recordKey: 'seq-1', status: 'reference', rationale: 'reference', anchor }] },
+    linearRecordTranslations: [{ recordKey: 'seq-1', x, y: 0 }]
+  };
+};
+// A reader under which the projected drawing is the shown one.
+const readAsShown = (_drawingId, _shownDrawingId, readShown) => readShown();
 for (const mode of ['linear', 'circular']) {
   test(`a ${mode} drawing's draft request while not shown is its draft request while shown`, async () => {
     const drawing = mode === 'circular' ? circularSource([recordA]) : (() => {
@@ -915,9 +926,11 @@ for (const mode of ['linear', 'circular']) {
     state.results.value = [{ name: 'shown', content: '<svg xmlns="http://www.w3.org/2000/svg"/>' }];
     state.selectedResultIndex.value = 0;
     state.originalLegendOrder.value = ['CDS', 'tRNA'];
-    const shown = (await projectOf(drawing)).envelope;
-    // Another drawing is shown: every slot value of the state is that drawing's (here an empty one's), as a switch
-    // installs them; the drawing's own are kept in its slot.
+    if (mode === 'linear') Object.entries(alignmentOf('own', 5)).forEach(([key, value]) => { state[key].value = value; });
+    const facts = await factsOf(drawing);
+    const shown = (await projectDraftRequest(state, drawing, { ...facts, readOfDrawing: readAsShown })).envelope;
+    // Another drawing is shown: every slot value of the state is that drawing's, as a switch installs them (an empty
+    // one's, and for a Linear drawing a plan of another group); the drawing's own are kept in its slot.
     const kept = createArtifactSlot({
       drawing: { id: drawing.id, mode },
       values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
@@ -925,11 +938,22 @@ for (const mode of ['linear', 'circular']) {
     });
     ARTIFACT_SLOT_KEYS.forEach((key) => { state[key].value = ARTIFACT_SLOT_EMPTY[key](mode, state[key].value); });
     state.originalLegendOrder.value = [];
-    const notShown = (await projectDraftRequest({ ...state, ...keptRequestArtifact(kept) }, drawing, await factsOf(drawing))).envelope;
-    const withOtherValues = (await projectOf(drawing)).envelope;
+    if (mode === 'linear') Object.entries(alignmentOf('other', 40)).forEach(([key, value]) => { state[key].value = value; });
+    const slots = createArtifactSlotStore();
+    slots.putSlot(kept);
+    const shownDrawingId = state.activeDrawingId.value;
+    state.activeDrawingId.value = 'another-drawing';
+    const notShown = (await projectDraftRequest(state, drawing, { ...facts, readOfDrawing: slots.readOfDrawing })).envelope;
+    state.activeDrawingId.value = shownDrawingId;
+    const withOtherValues = (await projectDraftRequest(state, drawing, { ...facts, readOfDrawing: readAsShown })).envelope;
     assert.notDeepEqual(withOtherValues.renderRequest, shown.renderRequest, 'the request reads the Result-bound values');
+    if (mode === 'linear') {
+      assert.equal(shown.renderRequest.layout.similarityAlignment.groupId, 'own');
+      assert.equal(withOtherValues.renderRequest.layout.similarityAlignment.groupId, 'other', 'and the alignment');
+    }
     assert.deepEqual(notShown.renderRequest, shown.renderRequest);
     assert.deepEqual(notShown.resources, shown.resources);
+    ARTIFACT_SLOT_KEYS.forEach((key) => { state[key].value = ARTIFACT_SLOT_EMPTY[key](mode, state[key].value); });
   });
 }
 
