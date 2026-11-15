@@ -818,6 +818,7 @@ under "Cited ids without a record".
 
 - [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing): Select region on the drawing. ACCEPTED, concern `web.result.region-select`, scenario revision 2, supersedes scenario revision 1.
   - `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.provenance.json`
+  - `tests/test_linear_row_windows.py`
   - `tests/test_web_record_spans.py`
   - `tests/web/annotations.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`
