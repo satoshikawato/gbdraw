@@ -1039,6 +1039,7 @@ GC content (name inserted after entre ellas, Circular fit notice)					el conteni
 GC skew (name inserted after entre ellas, Circular fit notice)					el sesgo GC												GC skew	es: As GC content.; ur: kept in English: no Urdu term in use
 Layout edit (as the subject of a sentence)					el modo Edición del diseño												موڈ “لے آؤٹ ترمیم”	es: STYLE 6.2: the name is not the subject. Masculine: Desactívelo. Rows 1482, 1483, 1484.
 range (numeric limits)					rango												رینج	es: Rows 83, 2659, 2673, 2808, 2860. Interval, the setting, is intervalo.
+Group paths (count row of the similarity group popup)					Número de caminos del grupo													es: The value is a count (pairwise-match-popup.js:1739), so STYLE 6.1 asks Número de. Row 1912. Caminos del grupo stays for the path sense.
 Similarity groups (mode cited with a word that agrees with it)					el modo Grupos de similitud												موڈ “مماثلت کے گروپ”	es: The plural name takes no singular participle: con el modo Grupos de similitud activado. Rows 197, 862, 1378, 1864, 2817.
 Percent (GC Content Mode)					Porcentaje												فیصد	es: Option label (row 985). Cited with its capital in a sentence: Con Porcentaje (983), en modo Porcentaje (987, 989, 994, 995). Sibling of Deviation (GC Content Mode).
 CLI (gender in prose)						le CLI											CLI	fr: [audit-r1] Masculine: du CLI, dans le CLI. The catalog had 27 rows with le and 2 with la (n=1431, n=2054); Claude audit asked for the row. API stays feminine (l’API Python).; ur: untranslated
