@@ -514,3 +514,42 @@ test('Copy into an existing Circular drawing of records of the same file: record
   expect(tops.RECA, 'RECA and RECB on one row').toBe(tops.RECB);
   expect(tops.RECD, 'the pasted record on a row below').toBeGreaterThan(tops.RECA);
 });
+
+// PD-OI-115 r2: in Linear, Shift+drag over a record's name selects it, also when the record wraps onto several rows
+// (its name is drawn once, above its first row).
+test('Linear Wrap Rows: Shift+drag over the record name selects the record, and Copy opens the dialog with it whole', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const page = await load(browser, seeds.linear);
+  try {
+    const wrap = page.locator('#linear-wrap-rows');
+    await wrap.scrollIntoViewIfNeeded();
+    await wrap.check();
+    await generate(page);
+    expect(await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const { readRegionAxisRecords } = await import('./js/services/region-axis.js');
+      return readRegionAxisRecords(state.trackSlotResolvedGeometry.value, state.selectedResultIndex.value)[0].axis.rows.length;
+    }), 'the record wraps').toBeGreaterThan(1);
+    await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+    let last = '';
+    await expect.poll(async () => {
+      const now = JSON.stringify(await recordNameBoxes(page));
+      const settled = now === last;
+      last = now;
+      return settled;
+    }, { intervals: [250] }).toBe(true);
+    const [name] = JSON.parse(last);
+    await page.keyboard.down('Shift');
+    await page.mouse.move(name.left - 12, name.top - 12);
+    await page.mouse.down();
+    await page.mouse.move(name.right + 12, name.bottom + 12, { steps: 8 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    const records = page.locator('[data-selected-records]');
+    await expect(records).toContainText(`1 record: ${name.id}`);
+    await records.locator('[data-selected-records-copy]').click();
+    await expect.poll(() => dialogRows(page), { timeout: 180_000 }).toEqual([[name.id, true, 'whole']]);
+  } finally {
+    await page.context().close();
+  }
+});
