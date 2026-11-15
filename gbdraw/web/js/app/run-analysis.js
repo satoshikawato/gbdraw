@@ -175,6 +175,7 @@ import {
   readOncePerFile,
   readCircularSourceRecords,
   readParsedSequenceRecords,
+  countWorkerInputRecords,
   circularDepthRowsAfterRead,
   planRingScales
 } from '../services/record-discovery.js';
@@ -5244,7 +5245,7 @@ export const createRunAnalysis = ({
         sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
           generatedFileNameHints,
-          readResourceRecordCount: (/** @type {string} */ id, /** @type {SequenceFormat} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
+          readResourceRecordCount: (/** @type {string} */ id, /** @type {SequenceFormat} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind, countWorkerInputRecords),
           readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
           readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id),
           drawnUnits: requestDrawnUnits,

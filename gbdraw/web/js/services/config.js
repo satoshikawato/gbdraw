@@ -58,7 +58,7 @@ import {
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
 import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
-import { readStoredRecordIdPlaces } from './record-discovery.js';
+import { countWorkerInputRecords, readStoredRecordIdPlaces } from './record-discovery.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -4947,7 +4947,7 @@ export const getCommittedLinearDefinitionVisibility = () => (
  * @param {SequenceFormat} kind
  */
 export const readCommittedResourceRecordCount = (resourceId, kind) => (
-  readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
+  readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind, countWorkerInputRecords)
 );
 
 /**

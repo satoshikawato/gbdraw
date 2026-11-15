@@ -637,6 +637,7 @@ under "Cited ids without a record".
   - `tests/web/track-layout-transition.playwright.spec.js`
 
 - [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff): Per-record draw ON/OFF. ACCEPTED, concern `diagram-generation.record-draw-selection`, scenario revision 1.
+  - `tests/test_gfa_input.py`
   - `tests/web/mode-scoped-session.test.mjs`
   - `tests/web/record-draw-selection.playwright.spec.js`
 

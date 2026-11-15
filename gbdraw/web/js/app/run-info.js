@@ -607,6 +607,9 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     let count;
     if (typeof readResourceRecordCount === 'function') {
       count = await readResourceRecordCount(resourceId, kind);
+    } else if (kind === 'gfa') {
+      // The browser has no GFA reader; Generate and Export Feature Edits TSV pass the Worker's count.
+      throw new Error('A GFA source needs the Worker\'s record count (readResourceRecordCount).');
     } else {
       count = countSequenceRecords(descriptorText(descriptors, resourceId), kind);
     }

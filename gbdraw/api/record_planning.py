@@ -269,6 +269,29 @@ def comparison_unit_pairs(query_units: Sequence[int], subject_units: Sequence[in
 
 
 @dataclass(frozen=True)
+class GraphLinesNotDrawn:
+    """The path and walk lines (P, W) of one GFA file, which are not drawn; the input summary names them once per file.
+
+    ``source_path`` is the file the loader read the record from (its ``gbdraw_source_file`` stamp, which a record of
+    ``gbdraw.read_gfa`` keeps as an in-memory record), the notice's subject; ``source_name`` is its shown name.
+    """
+
+    source_path: str
+    source_name: str
+    lines: int
+
+
+def graph_lines_not_drawn(record: SeqRecord) -> GraphLinesNotDrawn | None:
+    """The P and W lines of the GFA file ``record`` was read from (``GFA_PATH_LINES_ANNOTATION``), or ``None``."""
+
+    lines = int(record.annotations.get(GFA_PATH_LINES_ANNOTATION, 0))
+    if not lines:
+        return None
+    path = str(record.annotations.get("gbdraw_source_file") or "")
+    return GraphLinesNotDrawn(path, Path(path).name if path else "in-memory record", lines)
+
+
+@dataclass(frozen=True)
 class ResolvedRecordProvenance:
     """Stable source coordinates for one displayed record (one drawn unit of a record with windows)."""
 
@@ -299,7 +322,7 @@ class ResolvedRecordProvenance:
     # was planned, by type (the GFF3 type filter); the input summary counts them.
     feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
     # The path and walk lines (P, W) of the record's GFA file, which are not drawn; the input summary names them.
-    graph_lines_not_drawn: int = field(default=0, kw_only=True)
+    graph_lines_not_drawn: GraphLinesNotDrawn | None = field(default=None, kw_only=True)
     # The window this unit draws, when the record is drawn through windows; ``record_key`` is then the unit's key.
     window: ResolvedWindow | None = field(default=None, kw_only=True)
     # The record whose window an earlier plan drew this record as, when this plan draws it whole (``RecordOrigin``).
@@ -2220,7 +2243,7 @@ def resolve_record_inputs(
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
                 feature_types_left_out_at_load=types_left_out,
-                graph_lines_not_drawn=int(source_record.annotations.get(GFA_PATH_LINES_ANNOTATION, 0)),
+                graph_lines_not_drawn=graph_lines_not_drawn(source_record),
             )
             for unit in units:
                 _apply_record_key(unit, record_key=record_key)
@@ -2827,6 +2850,7 @@ __all__ = [
     "SourceFileContents",
     "RecordInputManifest",
     "ResolvedRecordCollection",
+    "GraphLinesNotDrawn",
     "ResolvedRecordProvenance",
     "depth_track_inputs_from_cli",
     "parse_cli_bool",

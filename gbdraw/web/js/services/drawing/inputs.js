@@ -14,7 +14,6 @@
 /** @import { SliceHandle } from './slice-handle.js' */
 import { CIRCULAR_SOURCE_FILE_SLOTS } from '../../contracts/schema.generated.js';
 import { isInputFileRef } from '../history-files.js';
-import { inputTypeSpec } from '../input-types.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { reactive, ref } from '../../utils/reactivity.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
@@ -399,15 +398,16 @@ const FILE_KIND_OF_SLOT = Object.freeze({
   qualifier_priority: 'qualifier_priority'
 });
 /**
- * The kind of the files a drawing of `inputType` binds in an uploader slot: a GFA input holds its GFA in the
- * sequence slot (`fasta`) of its cards and rows, so its files there are GFA files; any other slot has its own kind.
+ * The kind of the files a drawing of `inputType` binds in an uploader slot: the GFA input type holds its GFA in the
+ * sequence slot (`fasta`) of its cards and rows (`INPUT_TYPES.gfa` in services/input-types.js, which a slice does not
+ * import; tests/web/drawing-inputs.test.mjs checks the two agree for every input type), so its files there are GFA
+ * files; any other slot has its own kind.
  * @param {unknown} inputType
  * @param {ReplaceableInputSlot | CardFileSlot} slot
  * @returns {InputFileKind}
  */
 const boundFileKind = (inputType, slot) => (
-  (slot === 'source.fasta' || slot === 'row.fasta') && inputTypeSpec(inputType).sourceKind === 'gfa'
-    ? 'gfa' : FILE_KIND_OF_SLOT[slot]
+  (slot === 'source.fasta' || slot === 'row.fasta') && inputType === 'gfa' ? 'gfa' : FILE_KIND_OF_SLOT[slot]
 );
 
 /**

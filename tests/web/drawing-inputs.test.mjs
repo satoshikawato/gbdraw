@@ -464,7 +464,11 @@ test('a GFA bound in a sequence slot is offered as a GFA, not as a FASTA', async
   const bindings = { drawingList: () => [graph.view, fasta.view] };
   assert.deepEqual(sessionFilesOfKind(bindings, 'gfa'), [gfa]);
   assert.deepEqual(sessionFilesOfKind(bindings, 'fasta'), [contigs]);
-  assert.equal(circularSlotFileKind('fasta', 'gfa'), 'gfa');
-  assert.equal(circularSlotFileKind('fasta', 'fasta'), 'fasta');
-  assert.equal(circularSlotFileKind('fasta', 'gff'), 'fasta');
+  // The slice names the GFA input type itself (a slice does not import services/input-types.js): it agrees with
+  // INPUT_TYPES for every input type, so an input type whose source kind is gfa holds GFA files in its sequence slot.
+  const { INPUT_TYPES } = await import('../../gbdraw/web/js/services/input-types.js');
+  for (const [inputType, spec] of Object.entries(INPUT_TYPES)) {
+    assert.equal(circularSlotFileKind('fasta', inputType), spec.sourceKind === 'gfa' ? 'gfa' : 'fasta', inputType);
+    if (spec.sourceKind === 'gfa') assert.equal(spec.primary, 'fasta', inputType);
+  }
 });

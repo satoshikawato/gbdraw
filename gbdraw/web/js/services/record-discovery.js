@@ -31,7 +31,7 @@ import { isInputExpansionRefusal } from './session-resource-backing.js';
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
-/** @import { InputTypeSpec } from './input-types.js' */
+/** @import { InputType, InputTypeSpec } from './input-types.js' */
 /** @import { UnreadStoredRecord } from './stored-leaf-readings.js' */
 /** @import { CircularCardMark, CircularSource, DrawingInputFiles } from './drawing/inputs.js' */
 
@@ -52,7 +52,7 @@ import { isInputExpansionRefusal } from './session-resource-backing.js';
  * @typedef {object} CircularRecordDiscovery
  * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
  * @property {UserFacingError | ''} error The first failed card's error, or '' when there is none.
- * @property {'' | 'gb' | 'gff' | 'fasta'} inputType
+ * @property {'' | InputType} inputType
  * @property {CircularSourceDiscovery[]} sources
  */
 /**
@@ -1146,6 +1146,19 @@ export const discoverWorkerInputRecords = async ({ file, format, runHelperOperat
     return normalizeSequenceRecords(response.result);
   }));
 };
+
+/**
+ * How many records the Python loader reads from a FASTA given without GFF3 or a GFA: the length of the Worker's
+ * listing (`discoverWorkerInputRecords`, read once per File, so the listing the drawing's record discovery read
+ * serves). A GFA's record count comes only from here: the browser has no GFA reader.
+ * @param {FileLike} file
+ * @param {'fasta' | 'gfa'} format
+ * @param {HelperOperationRunner<SequenceRecordsPayload>} [runHelperOperation]
+ * @returns {Promise<number>}
+ */
+export const countWorkerInputRecords = async (file, format, runHelperOperation = runDiagramHelperOperation) => (
+  (await discoverWorkerInputRecords({ file, format, runHelperOperation })).length
+);
 
 /**
  * Per record source kind: the reader of an input's records and the helper

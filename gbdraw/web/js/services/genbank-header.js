@@ -168,12 +168,12 @@ export const countGenBankRecords = (text) => {
   return count;
 };
 
-// The number of records the loader reads from a sequence file of each format: GenBank/DDBJ or EMBL records
-// (countGenBankRecords), FASTA entries (lines that start with ">"), or GFA segments (S lines, gbdraw/io/gfa.py).
-// The one counter of a source file's records in the browser: a recipe names a record by #index only when its file
-// holds more than one.
-/** @param {unknown} text @param {SequenceFormat} format */
+// The number of records the loader reads from a GenBank/DDBJ or EMBL file (countGenBankRecords) or a FASTA file
+// (lines that start with ">"): the one browser counter of a source file's records. A GFA has no browser reader;
+// its count is the Worker's listing (`readSourceRecordCount` in record-discovery.js).
+/** @typedef {Exclude<SequenceFormat, 'gfa'>} BrowserCountedFormat The formats whose records the browser counts. */
+/** @param {unknown} text @param {BrowserCountedFormat} format */
 export const countSequenceRecords = (text, format) => {
   if (format === 'genbank') return countGenBankRecords(text);
-  return (String(text || '').match(format === 'gfa' ? /^S\t/gm : /^>/gm) || []).length;
+  return (String(text || '').match(/^>/gm) || []).length;
 };

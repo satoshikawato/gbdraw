@@ -36,7 +36,7 @@ from gbdraw.io.comparisons import ComparisonThresholdName, ComparisonThresholdTa
 from gbdraw.layout.linear_wrap import LinearWrapSummary
 from gbdraw.linear_comparison import ComparisonTableTally
 
-from .record_planning import ResolvedRecordProvenance
+from .record_planning import GraphLinesNotDrawn, ResolvedRecordProvenance
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +108,8 @@ class RecordInputSummary:
     # The shortest record one circle draws, when this record is shorter and so not drawn
     # (``gbdraw.layout.record_units.left_off_circle``); ``features`` is then empty.
     left_off_circle_under_bp: int | None = None
-    # The path and walk lines (P, W) of the record's GFA file, which are not drawn.
-    graph_lines_not_drawn: int = 0
+    # The path and walk lines (P, W) of the record's GFA file, which are not drawn, with that file.
+    graph_lines_not_drawn: GraphLinesNotDrawn | None = None
 
     @property
     def drawn_features(self) -> int:
@@ -475,17 +475,18 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message, (item.source_path,))
         for item in summary.repeated_comparison_ids
     )
-    # One warning per GFA file (its records share the subject), whose paths and walks are not drawn (D-86).
+    # One warning per GFA file, named and keyed by the file its records were read from, also when they are
+    # in-memory records (``read_gfa``): its paths and walks are not drawn (D-86).
     warnings.extend(
         InputWarning(
             GFA_PATHS_NOT_DRAWN,
-            f"{record.source_name}: its "
-            f"{_count(record.graph_lines_not_drawn, 'path or walk line (P, W) is', 'path and walk lines (P, W) are')} "
+            f"{graph.source_name}: its "
+            f"{_count(graph.lines, 'path or walk line (P, W) is', 'path and walk lines (P, W) are')} "
             "not drawn; each segment (S) is drawn as a record.",
-            record.source_paths,
+            (graph.source_path,),
         )
-        for record in summary.records
-        if record.graph_lines_not_drawn
+        for graph in (record.graph_lines_not_drawn for record in summary.records)
+        if graph is not None
     )
     return tuple(_first_per_input(warnings, set()))
 
@@ -531,7 +532,12 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
     return replace(
         summary,
         records=tuple(
-            replace(record, source_name=names.get(record.source_name, record.source_name))
+            replace(
+                record,
+                source_name=names.get(record.source_name, record.source_name),
+                graph_lines_not_drawn=None if (graph := record.graph_lines_not_drawn) is None
+                else replace(graph, source_name=names.get(graph.source_name, graph.source_name)),
+            )
             for record in summary.records
         ),
         comparisons=tuple(

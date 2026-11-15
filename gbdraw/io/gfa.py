@@ -29,9 +29,9 @@ from ..exceptions import ValidationError
 from .input_text import read_sequence_text
 
 # The annotation of a GFA record that counts the P and W lines of its file, which are not drawn
-# (``ResolvedRecordProvenance.graph_lines_not_drawn``; the input summary names them).
+# (``gbdraw.api.record_planning.graph_lines_not_drawn``, with the file the loader stamps; the input summary names them).
 GFA_PATH_LINES_ANNOTATION = "gbdraw_gfa_path_lines"
-# Record types only GFA 2 has; a file with one of them, or whose header says VN:Z:2, or whose S line has a length where GFA 1 has the sequence, is GFA 2.
+# Record types only GFA 2 has; a file with a line of one of them, or whose header says VN:Z:2, or whose S line has a length where GFA 1 has the sequence, is GFA 2.
 _GFA2_RECORD_TYPES = frozenset("EFGOU")
 _GFA2_VERSION = re.compile(r"\tVN:Z:2(\.|\t|$)")
 _MATCH_OVERLAP = re.compile(r"([0-9]+)M")
@@ -73,6 +73,10 @@ def _segment_lines(lines: Iterator[str], file_name: str) -> tuple[list[_Segment]
     path_lines = 0
     for line_number, line in enumerate(lines, start=1):
         fields = line.rstrip("\r\n").split("\t")
+        # A GFA record is a tab-separated line: a line without a tab (a FASTA line given as GFA, such as a last base
+        # G or S) is no record of either version.
+        if len(fields) < 2:
+            continue
         kind = fields[0]
         if (
             kind == "H" and _GFA2_VERSION.search(line.rstrip("\r\n"))

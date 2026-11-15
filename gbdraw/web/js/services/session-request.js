@@ -8,6 +8,7 @@ import {
 /** @import { LosatRequestRing } from './circular-conservation-keys.js' */
 import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot, SequenceFormat } from './input-types.js' */
+/** @import { BrowserCountedFormat } from './genbank-header.js' */
 /** @import { CircularLayoutDraft } from './one-circle-layout.js' */
 import {
   canonicalFeatureOverrides,
@@ -6024,7 +6025,7 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
   return bytesToText(bytes, { fatal: true });
 };
 
-/** @type {WeakMap<WeakKey, Record<SequenceFormat, number>>} */
+/** @type {WeakMap<WeakKey, Record<BrowserCountedFormat, number>>} */
 const sourceRecordCounts = new WeakMap();
 
 /**
@@ -6070,19 +6071,46 @@ export const readCanonicalResourceFileBytes = async (resources, resourceId) => {
 };
 
 /**
+ * The resource as a File: the File that holds its bytes, else a view of the bytes its descriptor holds, for a reader
+ * only the Worker has (a GFA's).
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {string} resourceId
+ * @returns {Promise<FileLike>}
+ */
+const readCanonicalResourceFile = async (resources, resourceId) => {
+  const descriptor = resources?.[resourceId];
+  const fileOwner = resourceFileOwner(descriptor);
+  // A set payload owner other than the descriptor is the File that holds the resource's bytes.
+  if (fileOwner) return /** @type {FileLike} */ (fileOwner);
+  const bytes = await readCanonicalResourceFileBytes(resources, resourceId)
+    ?? textToBytes(decodeCanonicalResourceText(resources, resourceId));
+  const name = String(/** @type {{ name?: unknown }} */ (descriptor ?? {}).name ?? resourceId);
+  return { name, size: bytes.byteLength, arrayBuffer: async () => bytes.slice().buffer };
+};
+
+/**
+ * How many records the CLI loader reads from a committed source resource, the count a Source recipe reads before it
+ * names a record by #index: GenBank and FASTA records counted in the browser (`countSequenceRecords`); a GFA's
+ * segments by `countWorkerRecords`, the Worker's listing through `load_gfa` (`countWorkerInputRecords` in
+ * record-discovery.js), since the browser has no GFA reader.
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {string} resourceId
  * @param {SequenceFormat} kind
+ * @param {(file: FileLike, format: 'gfa') => Promise<number>} [countWorkerRecords] Required for a GFA.
+ * @returns {Promise<number>}
  */
-export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
+export const readCanonicalResourceRecordCount = async (resources, resourceId, kind, countWorkerRecords) => {
+  if (kind === 'gfa') {
+    if (!countWorkerRecords) throw new Error('Only the Worker counts the records of a GFA resource.');
+    return countWorkerRecords(await readCanonicalResourceFile(resources, resourceId), kind);
+  }
   const fileOwner = resourceFileOwner(resources?.[resourceId]);
   let counts = fileOwner ? sourceRecordCounts.get(fileOwner) : undefined;
   if (!counts) {
     const text = await readCanonicalResourceText(resources, resourceId);
     counts = {
       genbank: countSequenceRecords(text, 'genbank'),
-      fasta: countSequenceRecords(text, 'fasta'),
-      gfa: countSequenceRecords(text, 'gfa')
+      fasta: countSequenceRecords(text, 'fasta')
     };
     // Immutable File/view identity outlives transferred bytes. Retain only counts;
     // a replacement source gets its own entry, and ownerless descriptors stay uncached.

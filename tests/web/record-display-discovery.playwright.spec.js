@@ -339,6 +339,20 @@ for (const mode of ['circular', 'linear']) {
 // summary says once that the path line is not drawn.
 const gfaGraph = `H\tVN:Z:1.0\nS\tcircle\t${'acgt'.repeat(60)}ACGTACGTAC\nS\tleft\t${'ggcc'.repeat(45)}\n`
   + 'L\tcircle\t+\tcircle\t+\t10M\nL\tcircle\t+\tleft\t+\t0M\nP\tp1\tcircle+,left+\t*\n';
+/**
+ * The Circular record box of each segment of `gfaGraph`: on for the self-looped `circle`, off for `left`. In Linear
+ * the boxes are in each record card's Record options, under the file's record list.
+ */
+const expectGfaCircularBoxes = async (page, mode) => {
+  if (mode === 'linear') {
+    await page.getByRole('button', { name: 'Records for file 1', exact: true }).click();
+    for (const sequence of [1, 2]) {
+      await page.getByRole('button', { name: `Record options for sequence ${sequence}`, exact: true }).click();
+    }
+  }
+  await expect(page.getByRole('checkbox', { name: 'Circular record circle #1', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Circular record left #2', exact: true })).not.toBeChecked();
+};
 for (const mode of ['circular', 'linear']) {
   test(`a GFA lists its segments and Generate draws them in ${mode}`, async ({ page }) => {
     test.setTimeout(240000);
@@ -360,6 +374,8 @@ for (const mode of ['circular', 'linear']) {
       await expect(circularRows.nth(1)).not.toBeChecked();
     } else {
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 180000 }).toBe(2);
+      // Each Linear record card's Circular record box starts from the segment's topology too.
+      await expectGfaCircularBoxes(page, mode);
     }
     await generateAndWaitForResult(page);
     const drawn = await drawnText(page);
@@ -367,6 +383,46 @@ for (const mode of ['circular', 'linear']) {
     expect(drawn).toContain('left');
     await expect(page.getByTestId('input-summary-notice').locator('[data-input-warning="gfa_paths_not_drawn"]'))
       .toHaveText(/its 1 path or walk line \(P, W\) is not drawn/);
+  });
+}
+
+// Switching a drawing between FASTA and GFA keeps the chosen file, as other source switches do (input.gfa-segments
+// r1): its card shows why the FASTA reader cannot read the graph, the GFA reader lists its segments, and switching
+// back reads the file as FASTA again.
+const fastaRefusal = /no line starts with ">"/;
+for (const mode of ['circular', 'linear']) {
+  test(`switching between FASTA and GFA keeps the file and reads it again in ${mode}`, async ({ page }) => {
+    test.setTimeout(300000);
+    await openApp(page);
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
+    await page.locator('input[type=radio][value=fasta]').first().check();
+    const upload = mode === 'linear' ? page.getByTestId('linear-fasta-1') : circularFileInput(page, 'fasta');
+    await upload.setInputFiles({ name: 'graph.gfa', mimeType: 'text/plain', buffer: Buffer.from(gfaGraph) });
+    const refusal = mode === 'linear'
+      ? page.locator('p.text-red-600', { hasText: fastaRefusal })
+      : page.locator('[data-circular-discovery-status]');
+    const expectRefused = async () => {
+      if (mode === 'circular') await waitStatus(page, 'error');
+      await expect(refusal.first()).toContainText(fastaRefusal, { timeout: 180000 });
+    };
+    await expectRefused();
+    await page.locator('input[type=radio][value=gfa]').first().check();
+    if (mode === 'circular') {
+      await waitStatus(page, 'ready');
+      expect((await snapshot(page)).rows).toEqual([['#1', 'circle'], ['#2', 'left']]);
+    } else {
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 180000 }).toBe(2);
+    }
+    await expectGfaCircularBoxes(page, mode);
+    await page.locator('input[type=radio][value=fasta]').first().check();
+    await expectRefused();
+    // The file stayed in the drawing's sequence slot through both switches.
+    expect(await page.evaluate(async (mode) => {
+      const { state } = await import('./js/state.js');
+      const drawing = state.drawingList().find((item) => item.mode === mode);
+      const ref = mode === 'linear' ? drawing.linearSeqs[0].fasta : drawing.circularSources[0].fasta;
+      return state.inputFiles.fileOf(ref)?.name;
+    }, mode)).toBe('graph.gfa');
   });
 }
 

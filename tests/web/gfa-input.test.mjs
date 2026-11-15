@@ -8,8 +8,9 @@ const {
   recordSourceSlotIds
 } = await import('../../gbdraw/web/js/services/input-types.js');
 const {
-  discoverInputRecords, discoverWorkerInputRecords, readAllSequenceRecords, readParsedSequenceRecords
+  countWorkerInputRecords, discoverInputRecords, discoverWorkerInputRecords, readAllSequenceRecords, readParsedSequenceRecords
 } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { readCanonicalResourceRecordCount } = await import('../../gbdraw/web/js/services/session-request.js');
 const { countSequenceRecords } = await import('../../gbdraw/web/js/services/genbank-header.js');
 const { RECORD_SOURCE_FILES } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 
@@ -62,8 +63,32 @@ test('the Worker lists a GFA input\'s records through load_gfa; the browser read
   assert.deepEqual(formats, ['gfa']);
 });
 
-test('a GFA file counts one record per segment (S line)', () => {
-  assert.equal(countSequenceRecords(GRAPH, 'gfa'), 2);
-  assert.equal(countSequenceRecords('>a\nAC\n>b\nGT\n', 'fasta'), 2);
+// A Source recipe names a record by #index only when its file holds more than one. The browser counts GenBank and
+// FASTA records; a GFA's count is the Worker's listing (load_gfa), so no JavaScript copy of the segment rule exists.
+test('a GFA resource counts the records the Worker lists; GenBank and FASTA count in the browser', async () => {
+  /** @param {string} name @param {string} text */
+  const descriptor = (name, text) => ({
+    kind: 'source', name, type: 'text/plain', size: text.length, lastModified: 0, encoding: 'base64',
+    data: Buffer.from(text).toString('base64')
+  });
+  const resources = { graph: descriptor('graph.gfa', GRAPH), reads: descriptor('reads.fasta', '>a\nAC\n>b\nGT\n') };
+  /** @type {{ operation: string, format: string, name: string, text: string }[]} */
+  const calls = [];
+  /** @param {string} operation @param {{ format: string, files: { name: string, blob: Blob }[] }} payload */
+  const runHelperOperation = async (operation, payload) => {
+    calls.push({ operation, format: payload.format, name: payload.files[0].name, text: await payload.files[0].blob.text() });
+    return { result: { records: [
+      { selector: '#1', record_id: 'circle', record_length: 8, topology: 'circular' },
+      { selector: '#2', record_id: 'left', record_length: 4, topology: 'linear' },
+      { selector: '#3', record_id: 'right', record_length: 4, topology: 'linear' }
+    ] } };
+  };
+  /** @param {object} file @param {'gfa'} format */
+  const countWorkerRecords = (file, format) => countWorkerInputRecords(file, format, runHelperOperation);
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'graph', 'gfa', countWorkerRecords), 3);
+  assert.deepEqual(calls, [{ operation: 'listSequenceRecords', format: 'gfa', name: 'graph.gfa', text: GRAPH }]);
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'reads', 'fasta', countWorkerRecords), 2);
+  assert.equal(calls.length, 1);
+  await assert.rejects(readCanonicalResourceRecordCount(resources, 'graph', 'gfa'), /Only the Worker counts/);
   assert.equal(countSequenceRecords('LOCUS       a\n//\n', 'genbank'), 1);
 });

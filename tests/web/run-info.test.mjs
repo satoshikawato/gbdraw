@@ -40,6 +40,9 @@ const { setResourcePayloadOwner } = await import(
 const { readCanonicalResourceFileBytes, readCanonicalResourceRecordCount } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))
 );
+const { countWorkerInputRecords } = await import(
+  pathToFileURL(join(tempDir, 'js', 'services', 'record-discovery.js'))
+);
 const { createDiagramResourceTransport } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'diagram-resource-staging.js'))
 );
@@ -276,8 +279,23 @@ test('source recipe of a GFA gives --gfa in both modes and a gfa records-table c
         resources: { source: resource('gfa', 'graph.gfa', text) },
         webFiles: { resourceOriginalNames: { source: 'graph.gfa' } }
       });
-      const recipe = await buildSourceRecipe(session);
+      // The browser has no GFA reader: the count is the Worker's listing of the file (load_gfa), here its two segments.
+      /** @type {string[]} */
+      const listed = [];
+      const recipe = await buildSourceRecipe({
+        ...session,
+        readResourceRecordCount: (id, kind) => readCanonicalResourceRecordCount(session.resources, id, kind, (file, format) => (
+          countWorkerInputRecords(file, format, async (operation, payload) => {
+            listed.push(`${operation}:${payload.format}`);
+            return { result: { records: [
+              { selector: '#1', record_id: 'circle', record_length: 116, topology: 'circular' },
+              { selector: '#2', record_id: 'left', record_length: 120, topology: 'linear' }
+            ] } };
+          })
+        ))
+      });
       assert.equal(recipe.available, true, `${mode}: ${recipe.unavailableReason}`);
+      if (mode === 'circular') assert.deepEqual(listed, ['listSequenceRecords:gfa'], mode);
       assert.equal(['--gbk', '--gff', '--fasta'].some((option) => recipe.args.includes(option)), false, mode);
       if (recipe.args.includes('--records_table')) {
         const [header, row] = recipe.generatedFiles[0].data.split('\n');

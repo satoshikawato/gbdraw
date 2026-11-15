@@ -17,7 +17,7 @@ import pytest
 import gbdraw
 from gbdraw.api import GfaInputSource
 from gbdraw.api.input_summary import input_warnings
-from gbdraw.api.record_planning import record_input_manifest_from_table, resolve_record_inputs
+from gbdraw.api.record_planning import GraphLinesNotDrawn, record_input_manifest_from_table, resolve_record_inputs
 from gbdraw.api.requests import RecordCardinality, RecordInput
 from gbdraw.circular import circular_main
 from gbdraw.cli_utils.common import add_input_args, validate_input_args
@@ -129,6 +129,10 @@ def test_a_gfa_2_file_is_refused(tmp_path: Path, text: str) -> None:
         ("S\ts1\tACGT\nS\ts1\tGGCC\n", {"code": "INPUT_INVALID", "reason": "UNIQUE_IDS", "recordName": "s1"}),
         ("S\ts1\n", {"code": "INPUT_UNREADABLE", "reason": "GFA_LINE", "row": 1}),
         ("S\ts1\tACGT\nL\ts1\t+\n", {"code": "INPUT_UNREADABLE", "reason": "GFA_LINE", "row": 2}),
+        # A FASTA given as GFA: its lines have no tab, so none is a GFA record, also a line that is one letter
+        # (the last base G, or S) that names a GFA 2 or S record type (the FASTA <-> GFA switch).
+        (">r1\n" + "A" * 60 + "\nG\n", {"code": "NO_RECORDS", "reason": "GFA_NO_SEGMENTS"}),
+        (">r1\n" + "A" * 60 + "\nS\n", {"code": "NO_RECORDS", "reason": "GFA_NO_SEGMENTS"}),
         (
             "S\ts1\tMKLVE\n",
             {"code": "INPUT_INVALID", "reason": "GFA_NOT_NUCLEOTIDE", "recordName": "s1", "recordPosition": 1,
@@ -153,7 +157,9 @@ def test_paths_and_walks_are_not_drawn_and_one_warning_names_them(tmp_path: Path
     resolved = resolve_record_inputs(inputs, gff_candidate_features=None, gff_keep_all_features=True)
 
     assert [record.id for record in resolved.records] == ["circle", "left", "right"]
-    assert [item.graph_lines_not_drawn for item in resolved.provenance] == [2, 2, 2]
+    assert {item.graph_lines_not_drawn for item in resolved.provenance} == {
+        GraphLinesNotDrawn(str(path), "graph.gfa", 2)
+    }
     from gbdraw.api.input_summary import summarize_inputs
 
     summary = summarize_inputs(
@@ -164,6 +170,49 @@ def test_paths_and_walks_are_not_drawn_and_one_warning_names_them(tmp_path: Path
     assert [item.message for item in warnings] == [
         "graph.gfa: its 2 path and walk lines (P, W) are not drawn; each segment (S) is drawn as a record."
     ]
+
+
+def test_the_python_api_names_each_gfa_file_in_its_own_notice(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Records of ``read_gfa`` are in-memory records: the notice still names each file the loader read them from."""
+
+    first = _graph(tmp_path / "a.gfa", extra="P\tp1\tleft+,right+\t4M\n")
+    second = _graph(tmp_path / "b.gfa", extra="P\tp1\tleft+\t*\nP\tp2\tright+\t*\n")
+
+    with caplog.at_level("WARNING"):
+        gbdraw.draw_linear(gbdraw.read_gfa([first, second]))
+
+    assert [record.getMessage() for record in caplog.records if "(P, W)" in record.getMessage()] == [
+        "a.gfa: its 1 path or walk line (P, W) is not drawn; each segment (S) is drawn as a record.",
+        "b.gfa: its 2 path and walk lines (P, W) are not drawn; each segment (S) is drawn as a record.",
+    ]
+
+
+def test_a_graph_of_many_segments_lists_each_and_a_selector_takes_one(tmp_path: Path) -> None:
+    """A graph above the record list's 20 records (PD-OI-091): every segment is a record, in file order, and a
+    record selector takes one by its name or its place, as for any file of several records."""
+
+    path = tmp_path / "many.gfa"
+    path.write_text("".join(f"S\tctg{index}\t{'ACGT' * (index + 1)}\n" for index in range(1, 22)))
+
+    assert [record.id for record in load_gfa([str(path)])] == [f"ctg{index}" for index in range(1, 22)]
+    assert [record.id for record in load_gfa([str(path)], record_selectors=["#21"])] == ["ctg21"]
+    assert [record.id for record in load_gfa([str(path)], record_selectors=["ctg7"])] == ["ctg7"]
+
+
+def test_only_a_circular_segment_takes_a_display_start(tmp_path: Path) -> None:
+    circle = tmp_path / "circle.gfa"
+    circle.write_text(f"S\tcircle\t{CIRCLE}{CIRCLE[:10]}\nL\tcircle\t+\tcircle\t+\t10M\n")
+    line = tmp_path / "line.gfa"
+    line.write_text(f"S\tleft\t{CIRCLE}\n")
+
+    circular_main(["--gfa", str(circle), "--display_start_coordinate", "100", "-o", str(tmp_path / "circle"),
+                   "-f", "svg"])
+    assert (tmp_path / "circle.svg").is_file()
+    with pytest.raises(ValidationError, match="An explicit display start requires a circular record"):
+        circular_main(["--gfa", str(line), "--display_start_coordinate", "100", "-o", str(tmp_path / "line"),
+                       "-f", "svg"])
 
 
 def test_load_gfa_reads_gzip_and_applies_selector_and_reverse(tmp_path: Path) -> None:

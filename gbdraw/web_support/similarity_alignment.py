@@ -14,7 +14,7 @@ from gbdraw.api.record_planning import (
     project_similarity_alignment_anchor_fact, similarity_alignment_evidence_edges,
 )
 from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request, resolve_request_records
-from gbdraw.api.requests import LinearDiagramRequest, _source_details
+from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.session_request_codec import StoredRecordWindow, decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
     SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
