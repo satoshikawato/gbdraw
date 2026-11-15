@@ -134,9 +134,10 @@ const firstUnusedSchemeIndex = (series) => {
  */
 /**
  * Each series place's drawn position (outermost first), as Python counts it for the scheme colours
- * (`_drawn_ring_colors`): the enabled `sequence_conservation` slots in stack order, each naming its ring by
- * `params.track_index` (the 1-based series place); without a stack (`slots` null), the series order. A ring no slot
- * draws follows the drawn ones, in series order.
+ * (`resolve_drawn_conservation_rings` in `gbdraw/analysis/conservation.py`): the enabled
+ * `sequence_conservation` slots in stack order, each naming its ring by `params.track_index` (the 1-based
+ * series place); without a stack (`slots` null), the series order. A ring no slot draws follows the drawn
+ * ones, in series order.
  * @param {number} count The number of series entries.
  * @param {readonly RingSlot[] | null} slots
  * @returns {number[]}
