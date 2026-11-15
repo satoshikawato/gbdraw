@@ -1,0 +1,1 @@
+- Added: Web UI: العربية (Arabic) and فارسی (Persian) in the Language menu.

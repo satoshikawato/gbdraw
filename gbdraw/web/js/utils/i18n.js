@@ -25,7 +25,7 @@
 /**
  * The BCP 47 tag of a UI locale: `en`, or the name of a catalog module. It is
  * also the page's `lang`.
- * @typedef {'en' | 'id' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'vi' | 'tr' | 'ru' | 'uk' | 'th' | 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'} UiLocale
+ * @typedef {'en' | 'id' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'vi' | 'tr' | 'ru' | 'uk' | 'ar' | 'fa' | 'th' | 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'} UiLocale
  */
 /**
  * A language the Web UI can be shown in (PD-OI-106).
@@ -109,6 +109,8 @@ export const UI_LOCALES = Object.freeze([
   Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ar'), name: 'العربية', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'rtl' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('fa'), name: 'فارسی', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'rtl' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'ltr' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr' }),

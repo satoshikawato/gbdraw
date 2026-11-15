@@ -704,21 +704,21 @@ test('OV-1506: Layout, Labels and Features have rail keys of their own', async (
   assert.deepEqual(rail.map(({ context, english }) => `${context}:${english}`), ['rail:Layout', 'rail:Features', 'rail:Labels']);
 });
 
-test('the UI languages are the seventeen of the Language menu, Latin script first, then Cyrillic, then Thai, each named in itself', () => {
+test('the UI languages are the nineteen of the Language menu, Latin script first, then Cyrillic, Arabic, Persian, Thai, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
     ['en', 'English'], ['id', 'Bahasa Indonesia'], ['de', 'Deutsch'], ['es', 'Español'], ['fr', 'Français'], ['it', 'Italiano'],
     ['pl', 'Polski'], ['pt', 'Português'], ['vi', 'Tiếng Việt'], ['tr', 'Türkçe'],
-    ['ru', 'Русский'], ['uk', 'Українська'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
+    ['ru', 'Русский'], ['uk', 'Українська'], ['ar', 'العربية'], ['fa', 'فارسی'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
-  // Upper-casing and tracking stay only in the cased scripts; Thai also gets the 12 px floor (index.html).
+  // Upper-casing and tracking stay only in the cased scripts; Arabic, Persian and Thai also get the 12 px floor (index.html).
   const tagsOf = (style) => UI_LOCALES.filter(({ textStyle }) => textStyle === style).map(({ tag }) => tag);
   assert.deepEqual(['cased', 'no-caps', 'tall-marks'].map(tagsOf), [
-    ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'tr', 'ru', 'uk'], ['vi', 'ja', 'zh-Hans', 'zh-Hant', 'ko'], ['th']
+    ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'tr', 'ru', 'uk'], ['vi', 'ja', 'zh-Hans', 'zh-Hant', 'ko'], ['ar', 'fa', 'th']
   ]);
   assert.equal(tagsOf('cased').length + tagsOf('no-caps').length + tagsOf('tall-marks').length, UI_LOCALES.length);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
-  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'xx', null, undefined, 3, '../x']) {
+  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'ar-SA', 'fa-IR', 'xx', null, undefined, 3, '../x']) {
     assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
   }
 });
@@ -899,11 +899,11 @@ test('a locale outside the UI languages is refused', async () => {
   assert.equal(uiLocale.value, SOURCE_LOCALE);
 });
 
-test('two sentences are joined with a space in English, the other Latin-script languages, Thai and Korean and with nothing in Japanese and Chinese', async () => {
+test('two sentences are joined with a space in English, the other Latin-script languages, Arabic, Persian, Thai and Korean and with nothing in Japanese and Chinese', async () => {
   assert.equal(sentenceSeparator(), ' ');
   assert.equal(joinSentences('Exported a.svg.', 'Find it in your browser\'s downloads.'), 'Exported a.svg. Find it in your browser\'s downloads.');
   try {
-    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ko']) {
+    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'ar', 'fa', 'th', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       assert.equal(sentenceSeparator(), ' ', tag);
       assert.equal(joinSentences('A.', 'B.'), 'A. B.', tag);
@@ -959,6 +959,10 @@ test('the shown locale sets the page language, direction and text style, and onl
     assert.deepEqual([root.lang, root.dir, root.textStyle], ['zh-Hant', 'ltr', 'no-caps']);
     await setUiLocale('th', async () => ({ default: {} }));
     assert.deepEqual([root.lang, root.dir, root.textStyle], ['th', 'ltr', 'tall-marks']);
+    await setUiLocale('ar', async () => ({ default: {} }));
+    assert.deepEqual([root.lang, root.dir, root.textStyle], ['ar', 'rtl', 'tall-marks']);
+    await setUiLocale('fa', async () => ({ default: {} }));
+    assert.deepEqual([root.lang, root.dir, root.textStyle], ['fa', 'rtl', 'tall-marks']);
     await setUiLocale('zh-Hant', async () => ({ default: {} }));
     await assert.rejects(setUiLocale('ja', async () => { throw new Error('offline'); }), /offline/);
     assert.deepEqual([root.lang, root.dir, root.textStyle], ['zh-Hant', 'ltr', 'no-caps'], 'a catalog that fails to load changes nothing');
@@ -990,6 +994,9 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
       ['tr', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       ['ru', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       ['uk', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      // fa takes `one` for 0 too; ar has its own `zero` and `two`, which take `other`.
+      ['fa', ['one:0', 'one:1', 'other:2', 'other:1000000']],
+      ['ar', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       ['ja', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1000000']],
@@ -1051,7 +1058,7 @@ test('a language with few and many forms: the `one` form is the text for exactly
 //   one; where the locale's rule calls another count `one` (0 and fractions in
 //   fr and pt), the value is an object, so that count shows a plural text
 //   (OV-2779).
-const PLURAL_FORMS_NEEDED = Object.freeze({ pl: ['few', 'many'], ru: ['one', 'few', 'many'], uk: ['one', 'few', 'many'] });
+const PLURAL_FORMS_NEEDED = Object.freeze({ ar: ['zero', 'two', 'few', 'many'], pl: ['few', 'many'], ru: ['one', 'few', 'many'], uk: ['one', 'few', 'many'] });
 const MANY_SHOWS_OTHER = Object.freeze(['es', 'fr', 'it', 'pt']);
 // Counts other than exactly 1 that reach every category of the UI languages' rules.
 const PLURAL_SAMPLE = [0, 0.5, 1.5, ...Array.from({ length: 119 }, (_, index) => index + 2), 1000, 1000000, 1000001, 2000000];

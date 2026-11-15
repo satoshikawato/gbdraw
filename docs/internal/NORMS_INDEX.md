@@ -750,6 +750,8 @@ under "Cited ids without a record".
   - `tests/web/browser-preferences.test.mjs`
   - `tests/web/i18n-catalogs.test.mjs`
   - `tests/web/physical-sides.test.mjs`
+  - `tests/web/i18n-lint/ar.tsv`
+  - `tests/web/i18n-lint/fa.tsv`
   - `tests/web/sequence-search.playwright.spec.js`
   - `tests/web/ui-language.playwright.spec.js`
 
