@@ -852,7 +852,7 @@ under "Cited ids without a record".
   - `tests/web/error-boundary.playwright.spec.js`
   - `tests/web/error-normalization.test.mjs`
 
-- [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place): Region label place. ACCEPTED, concern `product.region-label-place`, scenario revision 7, supersedes scenario revision 6.
+- [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place): Region label place. ACCEPTED, concern `product.region-label-place`, scenario revision 8, supersedes scenario revision 7.
   - `tests/test_annotation_label_origin.py`
   - `tests/test_annotation_lane_room.py`
   - `tests/test_linear_annotation_tracks.py`
