@@ -408,7 +408,7 @@
     {"mode": "circular", "length": 152047976, "scaleInterval": 10000000, "window": 1000000, "step": 100000, "depthWindow": 100000, "depthStep": 10000},
     {"mode": "circular", "length": 201210406, "scaleInterval": 10000000, "window": 1000000, "step": 100000, "depthWindow": 100000, "depthStep": 10000},
     {"mode": "circular", "length": 201210407, "scaleInterval": 10000000, "window": 1000000, "step": 100000, "depthWindow": 100000, "depthStep": 10000},
-    {"mode": "linear", "length": 1, "scaleInterval": 100, "window": 1, "step": 1, "depthWindow": 100, "depthStep": 1},
+    {"mode": "linear", "length": 1, "scaleInterval": 1, "window": 1, "step": 1, "depthWindow": 100, "depthStep": 1},
     {"mode": "linear", "length": 671, "scaleInterval": 100, "window": 67, "step": 6, "depthWindow": 100, "depthStep": 1},
     {"mode": "linear", "length": 1999, "scaleInterval": 100, "window": 199, "step": 19, "depthWindow": 100, "depthStep": 1},
     {"mode": "linear", "length": 2000, "scaleInterval": 1000, "window": 200, "step": 20, "depthWindow": 100, "depthStep": 2},

@@ -216,6 +216,14 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "above": 500000000,
       "tiers": [
         [
+          10,
+          1
+        ],
+        [
+          100,
+          10
+        ],
+        [
           2000,
           100
         ],
