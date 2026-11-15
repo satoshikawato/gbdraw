@@ -3380,9 +3380,9 @@ export const requestRunsProteinSearch = (request) => {
   const stored = /** @type {UnvalidatedFields<'mode' | 'comparisons'>} */ (request);
   return stored?.mode === 'linear' && Array.isArray(stored.comparisons) && stored.comparisons.some((item) => {
     const comparison = /** @type {UnvalidatedFields<'kind' | 'mode' | 'pairs'>} */ (item);
-    if (comparison?.kind !== 'generatedProteinComparison' || comparison.mode === LOSATP_NO_SEARCH_MODE) return false;
-    return comparison.mode !== 'pairwise' || (Array.isArray(comparison.pairs) && comparison.pairs.length > 0)
-      || requestMayDrawSeveralRows(request);
+    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== LOSATP_NO_SEARCH_MODE
+      && (comparison.mode !== 'pairwise' || (Array.isArray(comparison.pairs) && comparison.pairs.length > 0)
+        || requestMayDrawSeveralRows(request));
   });
 };
 
