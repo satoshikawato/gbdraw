@@ -333,15 +333,25 @@ def test_drawn_unit_rows_read_grid_rows_else_one_row_per_record_shared_by_its_wi
         drawn_unit_rows((1, None), ("a", "b"))
 
 
-@pytest.mark.parametrize(("gap", "reason"), ((24.0, "ROW_WIDTH"), (None, "ROW_WINDOW_MARKS")))
-def test_layout_refuses_a_row_whose_window_marks_take_its_width(gap: float | None, reason: str) -> None:
-    """The room a windowed row's marks need is not shrunk: a row whose marks take the whole width is refused, and
-    the Web says why (OV-3456). The advice follows the cause (OV-3572): with a gap the user set, a smaller gap is
-    one way out; with the Auto gap, which keeps to its share, only the window marks can take the row."""
+@pytest.mark.parametrize(
+    ("inset", "gap", "reason", "smaller_gap_advice"),
+    (
+        (20.0, None, "ROW_WINDOW_MARKS", False),
+        (20.0, 0.0, "ROW_WINDOW_MARKS", False),
+        (20.0, 24.0, "ROW_WINDOW_MARKS", False),
+        (5.0, 40.0, "ROW_WIDTH", True),
+    ),
+)
+def test_layout_refuses_a_row_by_what_takes_its_width(
+    inset: float, gap: float | None, reason: str, smaller_gap_advice: bool
+) -> None:
+    """A row whose marks or gap take the whole width is refused, and the Web says why (OV-3456). The advice follows
+    what takes the row (OV-3572), not whether a gap was set: when the window marks alone fill the row (insets 20 + 20
+    in 40 px) no gap, not even 0, helps; only a set gap that is the cause gets the advice of a smaller one."""
 
     measurements = (
-        LinearRecordMeasurement(0, RecordKey("a"), 10, right_inset=20.0),
-        LinearRecordMeasurement(1, RecordKey("b"), 10, left_inset=20.0),
+        LinearRecordMeasurement(0, RecordKey("a"), 10, right_inset=inset),
+        LinearRecordMeasurement(1, RecordKey("b"), 10, left_inset=inset),
     )
     with pytest.raises(ValidationError, match="record_count=2") as refused:
         solve_linear_horizontal_layout(
@@ -353,7 +363,7 @@ def test_layout_refuses_a_row_whose_window_marks_take_its_width(gap: float | Non
     payload = serialize_web_error(refused.value, operation="generate", stage="render")
     assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": reason})
     message = str(refused.value)
-    assert ("smaller record gap" in message) is (gap is not None), message
+    assert ("smaller record gap" in message) is smaller_gap_advice, message
     assert "fewer windows" in message and "move some records to another row" in message
 
 

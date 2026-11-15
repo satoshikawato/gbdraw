@@ -200,19 +200,24 @@ test('a wrong value in a required field that takes null is read as null, not as 
 // (`_stored_record_gap`): null (Auto) only from RECORD_GAP_AUTO_SCHEMA on, which no earlier writer stored, so an
 // earlier request with it is a Session-format error; any other value reads at schemas 5 to 9 as at the current one
 // (a promotion keeps it for the repair), never silently as Auto.
-test('a stored Linear record gap reads by one rule at request schemas 5 to 10; null is refused before schema 10 (OV-3572)', () => {
+test('a stored Linear record gap reads by one rule at request schemas 5, 8, 9 and 10; null is refused before schema 10 (OV-3572)', () => {
   const schema5 = read('tests/fixtures/sessions/lambda_basic_linear.v40-schema5.json');
   const schema8 = read('tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   const full = (recordGapPx) => ({ recordGapPx, multiRecordPositions: null, recordTranslations: [], similarityAlignment: null });
   const cases = {
     10: [gallery('lambda_basic_linear'), full],
+    9: [schema8, full],
     8: [schema8, full],
     5: [schema5, (recordGapPx) => ({ recordGapPx, multiRecordPositions: null })]
   };
   const outcome = (schema, gap) => {
     const [session, layoutOf] = cases[schema];
     try {
-      const result = readRequest(session, (request) => { request.layout = layoutOf(gap); });
+      const result = readRequest(session, (request) => {
+        // Schema 9 is what 0.14.5 writes: the schema 8 body stamped as 9 reads by the same rule.
+        if (schema === 9) request.schema = 9;
+        request.layout = layoutOf(gap);
+      });
       return { gap: result.value.layout.recordGapPx,
         rows: rows(result).filter((row) => row.path.startsWith('renderRequest.layout.recordGapPx')) };
     } catch (error) {
@@ -220,7 +225,7 @@ test('a stored Linear record gap reads by one rule at request schemas 5 to 10; n
     }
   };
   assert.deepEqual(outcome(10, null), { gap: null, rows: [] });
-  for (const schema of [5, 8]) {
+  for (const schema of [5, 8, 9]) {
     assert.deepEqual(outcome(schema, null), { refused: 'SESSION_FORMAT' }, String(schema));
     assert.deepEqual(outcome(schema, 30), { gap: 30, rows: [] }, String(schema));
     for (const gap of ['x', -1, true]) assert.deepEqual(outcome(schema, gap), outcome(10, gap), `${schema} ${gap}`);

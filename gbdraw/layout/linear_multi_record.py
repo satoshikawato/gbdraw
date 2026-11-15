@@ -421,8 +421,12 @@ def solve_linear_horizontal_layout(
         # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
         gap_width = row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
         if width <= gap_width:
-            # A set gap, or the marks of a windowed row, take the whole width. The Auto gap keeps to its share, so
-            # without a set gap only the marks can: the advice names the cause (OV-3572).
+            # What takes the row names the advice (OV-3572): the marks of a windowed row, which no gap, not even 0,
+            # shrinks, or else a set gap. Without a set gap the Auto gap keeps to its share of the row, so the marks are the cause.
+            marks_width = compensated_sum(
+                left.right_inset + right.left_inset for left, right in zip(row_items, row_items[1:])
+            )
+            marks_fill_row = gap is None or width <= marks_width
             raise ValidationError(
                 "Linear row cannot fit a positive bp scale: "
                 f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
@@ -430,11 +434,11 @@ def solve_linear_horizontal_layout(
                 + (
                     "The marks between the windows of the row need more width than the figure has: "
                     "move some records to another row, or draw fewer windows in the row."
-                    if gap is None
+                    if marks_fill_row
                     else "Set a smaller record gap or leave it unset (Auto), move some records to another row, "
                     "or draw fewer windows in the row."
                 ),
-                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WINDOW_MARKS" if gap is None else "ROW_WIDTH"},
+                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WINDOW_MARKS" if marks_fill_row else "ROW_WIDTH"},
             )
         row_px.append(width - gap_width)
         row_bp.append(sum(item.sequence_length for item in row_items))
