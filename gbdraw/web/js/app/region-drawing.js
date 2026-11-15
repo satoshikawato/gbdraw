@@ -114,6 +114,8 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
  * @property {PageExistingDrawingCopy['duplicates']} duplicates "Skip it" or "Add it again" for what the drawing has already.
  * @property {string[]} alreadyPresent The lines of what the existing drawing has already.
  * @property {string[]} leftOut The lines of what the existing drawing leaves out, with the reason.
+ * @property {boolean} addsNothing A paste that adds no record (each choice is already there with Skip it, or left out):
+ *   Copy is off, and the lines above say why (D-35).
  */
 
 /**
@@ -226,8 +228,8 @@ export const derivedDrawingNotes = ({ mode, returnedToAuto, notCarried }) => ({
   notCarried: notCarried.map((item) => notCarriedLine(mode, item.kind))
 });
 
-/** The lines of a derived drawing or a paste, none shown. */
-const NO_LINES = Object.freeze({ returnedToAuto: [], notCarried: [], alreadyPresent: [], leftOut: [] });
+/** The lines of a derived drawing or a paste, none shown (and so no paste that adds nothing). */
+const NO_LINES = Object.freeze({ returnedToAuto: [], notCarried: [], alreadyPresent: [], leftOut: [], addsNothing: false });
 /** The dialog as it opens and after Close. @returns {Omit<RegionDialogView, 'show' | 'rows'>} */
 const startingChoices = () => ({
   keepValues: false, newMode: null, settings: 'keep', mode: null, status: 'idle', message: '', ...NO_LINES,
@@ -425,9 +427,10 @@ export const createRegionDrawing = (ports) => {
       // The reason alone, from the wording owner of its vocabulary: the dialog's rows are the region.
       if (offer.status === 'refused') return showStatus('refused', refusalText(offer));
       Object.assign(dialog, { status: 'derived', message: '', mode: offer.mode, ...NO_LINES, ...(offer.status === 'pasted'
-        ? pasteLinesOf(offer, captionOf, dialog.targets.find(({ id }) => id === dialog.target)?.name ?? '')
+        ? { ...pasteLinesOf(offer, captionOf, dialog.targets.find(({ id }) => id === dialog.target)?.name ?? ''),
+            addsNothing: offer.pastedRecordKeys.length === 0 }
         : derivedDrawingNotes(offer)) });
-      create = offer.create;
+      create = dialog.addsNothing ? null : offer.create;
     } catch (error) {
       if (mine !== request) return undefined;
       const normalized = normalizeUserFacingError(error);

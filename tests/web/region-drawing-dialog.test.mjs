@@ -50,14 +50,15 @@ const derivedReply = (adaptSizes) => ({
   notCarried: [{ kind: 'OTHER_MODE_SETTINGS', count: 0, items: ['canvas.circular.track_type'] }, { kind: 'COMPARISON_TABLES', count: 1, items: [] }]
 });
 
+// A paste that adds one record (`record-3`) besides the lines of what it does not add.
 const pastedReply = {
   status: 'pasted', mode: 'linear', renderRequest: { mode: 'linear' }, resourceSources: {}, targetResourceSources: {},
-  addedResources: [], pastedRecordKeys: [],
+  addedResources: [], pastedRecordKeys: ['record-3'],
   alreadyPresent: [{ recordKey: 'record-1', start: 1, end: 1200, whole: true, targetRecordKey: 'record-1' }],
   leftOut: [{ recordKey: 'record-2', start: 11, end: 20, reason: 'CIRCULAR_WHOLE_RECORDS' }],
   notCarried: [{ kind: 'ANNOTATIONS', count: 2 }]
 };
-const harness = ({ reply = null, refusal = 'START_AFTER_END', pasteTargets = pasteTargetPorts() } = {}) => {
+const harness = ({ reply = null, refusal = 'START_AFTER_END', pasteTargets = pasteTargetPorts(), pasted = () => pastedReply } = {}) => {
   const calls = { derive: [], created: [], busy: false };
   /** @type {Array<() => void>} */
   const pending = [];
@@ -71,7 +72,7 @@ const harness = ({ reply = null, refusal = 'START_AFTER_END', pasteTargets = pas
       if ('start' in first && first.start > first.end) {
         return { result: { status: 'refused', reason: refusal, recordKey: first.recordKey, start: first.start, end: first.end } };
       }
-      if (payload.copy.into === 'existing') return { result: pastedReply };
+      if (payload.copy.into === 'existing') return { result: pasted(payload) };
       return { result: derivedReply(payload.adaptSizes) };
     },
     // Adds the drawing it makes to the Session, as the drawing list does.
@@ -630,4 +631,27 @@ test('a paste History refuses answers busy; the dialog stays open with the reaso
   assert.deepEqual(await owner.confirm(), { status: 'ok', drawingId: 'linear-2' });
   assert.equal(owner.dialog.show, false);
   assert.equal(pasteTargets.pasted.length, 1);
+});
+
+// D-35 A: a paste that would add nothing (every choice is already there with Skip it, or left out) leaves Copy off; the
+// lines of what is there already and what is left out say why. Add it again adds, and Copy is on.
+test('Copy is off while a paste would add nothing; Add it again turns it on', async () => {
+  const { owner, pasteTargets } = harness({
+    pasted: (payload) => ({ ...pastedReply, pastedRecordKeys: payload.copy.duplicates === 'add' ? ['record-1'] : [] })
+  });
+  await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'whole' } });
+  await owner.setChoice({ target: 'linear-2' });
+  assert.equal(owner.dialog.status, 'derived');
+  assert.equal(owner.dialog.addsNothing, true);
+  assert.equal(owner.dialog.alreadyPresent.length, 1, 'the line that says why');
+  assert.equal(await owner.confirm(), null);
+  assert.deepEqual([owner.dialog.show, pasteTargets.pasted], [true, []]);
+  await owner.setChoice({ duplicates: 'add' });
+  assert.equal(owner.dialog.addsNothing, false);
+  assert.deepEqual(await owner.confirm(), { status: 'ok', drawingId: 'linear-2' });
+  assert.equal(pasteTargets.pasted.length, 1);
+  // A new drawing always adds what it copies.
+  await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'whole' } });
+  await owner.setChoice({ target: 'new' });
+  assert.equal(owner.dialog.addsNothing, false);
 });

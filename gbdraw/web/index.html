@@ -10050,7 +10050,7 @@
             <div class="mt-3 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore data-region-drawing-cancel @click="regionDrawings.close()" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
                 <button type="button" data-history-managed data-region-drawing-create @click="regionDrawings.confirm()" class="btn btn-primary btn-sm"
-                        :disabled="regionDrawings.dialog.status !== 'derived' || !drawingSwitchAvailable">{{ t('Copy') }}</button>
+                        :disabled="regionDrawings.dialog.status !== 'derived' || regionDrawings.dialog.addsNothing || !drawingSwitchAvailable">{{ t('Copy') }}</button>
             </div>
         </choice-dialog>
         <!-- Find in other files (PD-OI-123): the view of app/find-in-other-files.js, which owns open, close and every input.
