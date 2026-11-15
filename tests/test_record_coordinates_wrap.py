@@ -257,14 +257,12 @@ def _location_lines(locations: list[SimpleLocation], origin_length: int | None) 
 _OVER_THE_ORIGIN = pytest.mark.parametrize(
     ("exons", "gaps", "rows"),
     [
-        # Over the origin: parts of one strand that come in the other order along it.
+        # Over the origin: parts of one strand that come in the other order along it, on either side of the
+        # origin (the shortest arc that covers them runs over it).
         ([(28_000, 28_500, 1), (1_500, 2_000, 1)], [(28_500, 30_000), (0, 1_500)], [(2, 8_500, 10_000), (0, 0, 1_500)]),
-        ([(12_000, 13_000, 1), (5_000, 6_000, 1)], [(13_000, 30_000), (0, 5_000)],
-         [(1, 3_000, 10_000), (2, 0, 10_000), (0, 0, 5_000)]),
-        ([(5_000, 6_000, -1), (12_000, 13_000, -1)], [(0, 5_000), (13_000, 30_000)],
-         [(0, 0, 5_000), (1, 3_000, 10_000), (2, 0, 10_000)]),
+        ([(1_500, 2_000, -1), (28_000, 28_500, -1)], [(0, 1_500), (28_500, 30_000)], [(0, 0, 1_500), (2, 8_500, 10_000)]),
     ],
-    ids=["origin", "out_of_order", "out_of_order_minus"],
+    ids=["origin", "origin_minus"],
 )
 
 
@@ -283,6 +281,21 @@ def test_a_wrapped_linear_record_adds_no_connection_its_unwrapped_figure_does_no
     locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
     assert _location_lines(locations, None) == []
     assert _connectors(locations, _WRAPPED_LINEAR) == []
+
+
+@pytest.mark.parametrize(
+    "exons",
+    [[(12_000, 13_000, 1), (5_000, 6_000, 1)], [(5_000, 6_000, -1), (12_000, 13_000, -1)]],
+    ids=["plus", "minus"],
+)
+@pytest.mark.parametrize("transform", [_WRAPPED, None], ids=["wrapped", "whole"])
+def test_parts_in_the_other_order_away_from_the_origin_connect_in_no_view(exons, transform) -> None:
+    # The shortest arc that covers 5001..6000 and 12001..13000 of 30,000 bp does not run over the origin.
+    locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
+    if transform is None:
+        assert _location_lines(locations, 30_000) == []
+    else:
+        assert _connectors(locations, transform, 30_000) == []
 
 
 @pytest.mark.parametrize(

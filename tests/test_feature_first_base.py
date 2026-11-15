@@ -22,9 +22,14 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw import RecordDisplayOptions, draw_circular, draw_linear, read_genbank
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
+from gbdraw.api.request_render import plan_request
+from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, LinearDiagramRequest, RecordInput
 from gbdraw.features.coordinates import get_exon_and_intron_coordinates
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.features.tracks import arrange_feature_tracks, get_feature_ends
+from gbdraw.io.regions import parse_region_spec
 from gbdraw.layout.spatial import Interval, split_circular_interval
 from gbdraw.svg.circular_features import (
     generate_circular_arrow_path_with_radii,
@@ -105,6 +110,19 @@ def test_linear_location_path_and_display_start_path_draw_the_same_block(tmp_pat
         shown_start, shown_end = _linear_extent_bp(drawn_shown, px_per_bp)
         # Base 4001 is drawn at position 0: each block moves by 6,000 bp and keeps its length.
         assert (shown_start, shown_end) == (start + 6000, end + 6000)
+
+
+def test_a_region_that_starts_inside_a_feature_draws_its_block_from_the_first_drawn_base(tmp_path: Path) -> None:
+    # GenBank 191..736 cut by the region 701..760 (OV-3652): the crop shifts the
+    # part to [0, 36), so its block starts at the region's first base.
+    path = _record_file(tmp_path, SimpleLocation(190, 736, 1), topology="linear")
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(read_genbank(path)[0]), region=parse_region_spec("r1:701-760")),),
+    )
+    drawing = plan_request(request).build().drawing
+    block = _block_paths(drawing.tostring())[0]
+
+    assert _linear_extent_bp(block, 2000 / 60) == (0.0, 36.0)
 
 
 def test_circular_draws_a_block_at_the_first_base_from_that_base(tmp_path: Path) -> None:
@@ -277,3 +295,39 @@ def test_a_linear_record_draws_no_connector_over_the_origin(tmp_path: Path) -> N
         _record_file(tmp_path, SimpleLocation(9700, 9990, 1) + SimpleLocation(0, 300, 1), topology="linear")
     )
     assert _block_paths(draw_linear(records).to_svg(), "connector") == []
+
+
+# DnaFeaturesViewer#85: CJ_0003 join(complement(1501..1700),complement(1801..2000)) lists its parts low to high on
+# the minus strand. It overlaps nothing and covers 1501..2000; it does not run round the ring.
+_DFV85 = Path(__file__).parent / "fixtures" / "input_variants" / "dfv85_complement_join.gb"
+
+
+def _dfv85(topology: str) -> RecordInput:
+    record = SeqIO.read(_DFV85, "genbank")
+    record.annotations["topology"] = topology
+    return RecordInput(InMemoryRecordSource(record))
+
+
+@pytest.mark.parametrize("topology", ["linear", "circular"])
+def test_a_join_listed_low_to_high_on_the_minus_strand_keeps_one_lane_in_linear(topology: str) -> None:
+    options = LinearDiagramOptions(config=apply_config_overrides(None, {"canvas.resolve_overlaps": True}))
+    svg = plan_request(LinearDiagramRequest(records=(_dfv85(topology),), options=options)).build().drawing.tostring()
+    assert {min(y for _, y in _points(d)) for d in _block_paths(svg)} == {-20.0}
+    assert len(_block_paths(svg, "connector")) == 3
+
+
+@pytest.mark.parametrize("resolve_overlaps", [False, True])
+@pytest.mark.parametrize("start", [None, 1001])
+def test_a_join_listed_low_to_high_on_the_minus_strand_does_not_cross_the_origin(
+    resolve_overlaps: bool, start: int | None
+) -> None:
+    options = CircularDiagramOptions(config=apply_config_overrides(None, {"canvas.resolve_overlaps": resolve_overlaps}))
+    record = _dfv85("circular")
+    if start is not None:
+        record = RecordInput(record.source, display=RecordDisplayOptions(start_coordinate=start))
+    svg = plan_request(CircularDiagramRequest(records=(record,), options=options)).build().tostring()
+    # One lane: every block's inner edge lies on one circle.
+    assert len({round(min(math.hypot(x, y) for x, y in _points(d)), 1) for d in _block_paths(svg)}) == 1
+    # The connector lines span the three gaps, 400 of 3,000 bp (48 degrees), and none runs round the ring.
+    sweep = sum(abs(s) for d in _block_paths(svg, "connector") for s in _arc_sweeps(d))
+    assert sweep == pytest.approx(48.0, abs=0.5)

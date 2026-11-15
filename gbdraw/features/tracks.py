@@ -5,7 +5,7 @@ from typing import Any, Dict, List, NoReturn, Optional, Tuple, cast
 
 from ..exceptions import ValidationError
 from ..layout.spatial import IntervalIndex, split_circular_interval
-from .coordinates import origin_envelope
+from .coordinates import uncovered_gap
 from .objects import FeatureObject
 
 
@@ -13,8 +13,12 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
     """
     Get feature start/end positions and the strand the feature is drawn on (``FeatureObject.strand``).
 
-    For origin-spanning features on circular genomes, returns start > end
-    to indicate the feature crosses the origin.
+    A feature takes the shortest arc that covers what it draws, its blocks and connector lines, with half-open,
+    0-based bounds (a part at the first base starts at 0). Where that arc runs over the record's origin
+    (``uncovered_gap``), returns start > end: the feature occupies [start, length) and [0, end). Its connector
+    lines say whether its parts connect over the origin (``connector_gaps``). Parts that reach both ends of the
+    record are read by their blocks alone: the Circular drawer joins them over the origin and draws no line
+    between them.
 
     Args:
         feature: FeatureObject with location/coordinates
@@ -24,16 +28,18 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
         (start, end, strand) tuple. If start > end, feature spans the origin.
     """
     strand = feature.strand
-    # The drawn blocks, in location order, with half-open, 0-based bounds: a part at the first base starts at 0.
     blocks = [part for part in feature.location if part.kind == "block"]
     if not blocks:
         return 0, 0, strand
-
-    is_trans_spliced = "trans_splicing" in feature.qualifiers
-    envelope = origin_envelope(blocks, int(genome_length), is_trans_spliced=is_trans_spliced) if genome_length else None
-    if envelope is not None and envelope[0] > envelope[1]:
-        return envelope[0], envelope[1], strand
-    return min(int(p.start) for p in blocks), max(int(p.end) for p in blocks), strand
+    drawn = [part for part in feature.location if part.kind in ("block", "line")]
+    start, end = min(int(p.start) for p in drawn), max(int(p.end) for p in drawn)
+    if not genome_length:
+        return start, end, strand
+    length = int(genome_length)
+    gap = uncovered_gap(drawn, length)
+    if gap is None and start == 0 and end >= length:
+        gap = uncovered_gap(blocks, length)
+    return (gap[1], gap[0], strand) if gap is not None else (start, end, strand)
 
 
 def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> Tuple[int, int]:

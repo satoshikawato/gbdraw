@@ -53,61 +53,67 @@ class _Span(Protocol):
     def end(self) -> int: ...
 
 
-def crosses_origin(previous: _Span, part: _Span, step: int) -> bool:
-    """Whether a location runs over the record's origin from one part to the next part of its strand
-    (``step``: 1 or -1): the next part lies wholly behind it along the strand, so the location goes on past the
-    record's end into its start, as a join reads on a circular record. Connector lines (``connector_gaps``) and
-    the origin envelope (``origin_envelope``) read it."""
+class OriginCrossing(NamedTuple):
+    """A location that crosses its record's origin: the record's length and the gap between its parts that the
+    location does not cover (``uncovered_gap``)."""
 
-    return previous.start >= part.end if step == 1 else part.start >= previous.end
+    length: int
+    gap_start: int
+    gap_end: int
 
 
-def origin_envelope(
-    blocks: Sequence[FeatureLocationPart], length: int, *, is_trans_spliced: bool
-) -> tuple[int, int] | None:
-    """Where the drawn blocks of a location cross the record's origin: the envelope ``(start, end)`` from the
-    blocks before the crossing over the origin to the blocks after it (start > end), or None.
+def uncovered_gap(parts: Sequence[_Span], length: int) -> tuple[int, int] | None:
+    """The gap a set of parts leaves out when the shortest arc that covers them crosses the record's origin: the
+    largest empty gap between the parts, when it is larger than the gap over the origin; else None.
 
-    Two blocks of one strand cross where ``crosses_origin`` says so (an undefined strand is read +1, as the
-    display path orders its geometry). The parts of a trans-spliced feature come from separate transcripts, so
-    their order says nothing about the origin. A location in another order (a GFF3 reader sorts its rows, or a
-    trans-spliced one) crosses where one block ends at the record's end and another starts at 0. Lane
-    placement (``get_feature_ends``) reads this envelope.
+    The arc follows the positions of the parts, not their order, so a location whose parts come in either order
+    (a GFF3 reader sorts its rows; a trans-spliced feature's parts come from separate transcripts) is read alike.
     """
 
-    for index in range(1, 0 if is_trans_spliced else len(blocks)):
-        previous, part = blocks[index - 1], blocks[index]
-        step = -1 if part.strand == "negative" else 1
-        if previous.strand == part.strand and crosses_origin(previous, part, step):
-            high, low = (blocks[:index], blocks[index:]) if step == 1 else (blocks[index:], blocks[:index])
-            return min(int(p.start) for p in high), max(int(p.end) for p in low)
-    if len(blocks) > 1 and min(int(p.start) for p in blocks) == 0 and max(int(p.end) for p in blocks) >= length:
-        return max(int(p.start) for p in blocks), min(int(p.end) for p in blocks)
-    return None
+    spans = sorted((int(p.start), int(p.end)) for p in parts if int(p.start) < int(p.end))
+    if len(spans) < 2:
+        return None
+    best: tuple[int, int] | None = None
+    reach = spans[0][1]
+    for start, end in spans[1:]:
+        if start > reach and (best is None or start - reach > best[1] - best[0]):
+            best = (reach, start)
+        reach = max(reach, end)
+    over_origin = length - reach + spans[0][0]
+    return best if best is not None and best[1] - best[0] > over_origin else None
+
+
+def origin_crossing(parts: Sequence[_Span], origin_length: int | None) -> OriginCrossing | None:
+    """Where a location crosses its record's origin, on a record whose spans may cross it (``origin_length``, its
+    length; ``spans_may_cross_origin``), else None. Connector lines (``connector_gaps``) read it."""
+
+    gap = uncovered_gap(parts, origin_length) if origin_length is not None else None
+    return OriginCrossing(origin_length, *gap) if gap is not None and origin_length is not None else None
 
 
 def connector_gaps(
-    previous: _Span, part: _Span, previous_strand: object, strand: object, origin_length: int | None
+    previous: _Span, part: _Span, previous_strand: object, strand: object, crossing: OriginCrossing | None
 ) -> list[tuple[int, int]]:
     """The half-open gaps a connector line spans from one part to the next (Biopython strands).
 
-    The gap along the first part's strand; parts that touch, overlap or come in the other order have none. On a
-    record whose spans may cross its origin (``origin_length``, its length; ``spans_may_cross_origin``), two parts
-    of one strand that cross it (``crosses_origin``) connect over the origin, in two pieces. The location path
-    and the display path both draw these gaps; a display start or wrapping adds and drops no connection.
+    The gap along the first part's strand, as the location reads; parts that touch or overlap have none. Parts
+    of one strand in the other order say nothing by their order: they connect over the origin, in two pieces,
+    only when they lie on either side of the gap a location over the origin leaves out (``crossing``), and
+    otherwise not at all. The location path and the display path both draw these gaps; a display start or
+    wrapping adds and drops no connection.
     """
 
     if previous_strand == 1 and previous.end < part.start:
         return [(previous.end, part.start)]
     if previous_strand == -1 and part.end < previous.start:
         return [(part.end, previous.start)]
-    if origin_length is None or previous_strand != strand or strand not in (1, -1):
+    if crossing is None or previous_strand != strand or strand not in (1, -1):
         return []
-    step = 1 if strand == 1 else -1
-    if not crosses_origin(previous, part, step):
+    low, high = (previous, part) if previous.start <= part.start else (part, previous)
+    if not (low.end <= crossing.gap_start and crossing.gap_end <= high.start):
         return []
-    pieces = [(previous.end, origin_length), (0, part.start)] if step == 1 else [(0, previous.start), (part.end, origin_length)]
-    return [(start, end) for start, end in pieces if start < end]
+    pieces = [(high.end, crossing.length), (0, low.start)]
+    return [(start, end) for start, end in (pieces if strand == 1 else pieces[::-1]) if start < end]
 
 
 def project_feature_parts(
@@ -126,6 +132,7 @@ def project_feature_parts(
     """
     if not transform.projects:
         raise ValueError("Unset feature geometry must use the existing local path")
+    crossing = None if is_trans_spliced else origin_crossing(exons, origin_length)
     parts = [SourceInterval(
         int(exon.start), int(exon.end),
         exon.strand if exon.strand in (-1, 1) else 1,
@@ -146,7 +153,7 @@ def project_feature_parts(
             continue
         if previous_index is not None and not is_trans_spliced:
             previous = parts[previous_index]
-            gaps = connector_gaps(previous, part, exons[previous_index].strand, exons[index].strand, origin_length)
+            gaps = connector_gaps(previous, part, exons[previous_index].strand, exons[index].strand, crossing)
             for start, end in gaps:
                 connector = SourceInterval(start, end, part.strand, index, False, False)
                 result.extend(FeatureDisplayPart("line", get_strand(exons[index].strand), f)
@@ -194,7 +201,7 @@ def get_intron_coordinate(
     current_exon: FeatureLocationPart,
     previous_intron_count: int,
     strands: tuple[object, object],
-    origin_length: int | None,
+    crossing: OriginCrossing | None,
 ) -> tuple[int, list[FeatureLocationPart]]:
     """
     The connector line from one part to the next, on the first part's strand (``strands``: the two parts'
@@ -207,7 +214,7 @@ def get_intron_coordinate(
     intron_id: str = str(intron_count).zfill(3)
     return intron_count, [
         FeatureLocationPart("line", intron_id, previous_exon.strand, start, end, False)
-        for start, end in connector_gaps(previous_exon, current_exon, *strands, origin_length)
+        for start, end in connector_gaps(previous_exon, current_exon, *strands, crossing)
     ]
 
 
@@ -233,6 +240,7 @@ def get_exon_and_intron_coordinates(
         coordinates_list.append(exon_coord)
 
     elif num_exons > 1 and not is_trans_spliced:
+        crossing = origin_crossing(exons, origin_length)
         for i, exon in enumerate(exons):
             is_last_exon = i == num_exons - 1
             exon_count, exon_coord = get_exon_coordinate(exon, i, is_last_exon, partial_ends[i])
@@ -240,7 +248,7 @@ def get_exon_and_intron_coordinates(
             if i > 0:
                 previous_exon_coord = coordinates_list[-1]
                 intron_count, intron_coords = get_intron_coordinate(
-                    previous_exon_coord, exon_coord, intron_count, (exons[i - 1].strand, exon.strand), origin_length
+                    previous_exon_coord, exon_coord, intron_count, (exons[i - 1].strand, exon.strand), crossing
                 )
                 coordinates_list.extend(intron_coords)
 
@@ -281,9 +289,10 @@ def get_strand(strand_value: int) -> Strand:
 
 __all__ = [
     "PartialEnds",
+    "OriginCrossing",
     "connector_gaps",
-    "crosses_origin",
-    "origin_envelope",
+    "origin_crossing",
+    "uncovered_gap",
     "get_coordinate",
     "get_exon_and_intron_coordinates",
     "get_exon_coordinate",
