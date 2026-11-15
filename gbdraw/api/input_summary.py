@@ -508,7 +508,8 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
     """The summary with each source file named by ``names`` (file name read -> file name shown).
 
     The Web reads each file from a staged copy named by its content; the page
-    knows the name of the file it read.
+    knows the name of the file it read. A comparison keeps the name its request
+    gave it (``stored_comparison_name`` in gbdraw.session_request_codec).
     """
 
     return replace(
@@ -516,11 +517,6 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
         records=tuple(
             replace(record, source_name=names.get(record.source_name, record.source_name))
             for record in summary.records
-        ),
-        comparisons=tuple(
-            replace(table, source_name=names.get(table.source_name, table.source_name))
-            if table.source_name is not None else table
-            for table in summary.comparisons
         ),
         repeated_comparison_ids=tuple(
             replace(item, source_name=names.get(item.source_name, item.source_name))

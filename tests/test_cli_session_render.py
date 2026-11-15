@@ -703,9 +703,10 @@ def test_a_cli_similarity_groups_session_on_a_row_layout_replays_its_links(
 def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """OV-3511: with every record in one row, Pairwise compares no pair. The
-    Session stores that empty result, so its replay draws the same figure and
-    searches nothing."""
+    """OV-3511: with every record in one row, Pairwise compares no pair, so
+    its replay draws the same figure and searches nothing. OV-3566: the Session
+    keeps the Pairwise search it asked for (mode 'pairwise', no pairs), not the
+    marker of no comparison, so a Load can still run it for new rows."""
 
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module
     from tests.test_render_stage_protein_analysis import _no_search
@@ -716,7 +717,8 @@ def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
         *(argument for position in rows for argument in ("--multi_record_position", position)),
     )
     session = drawing_view(read_session_payload(sidecar), mode="linear")
-    assert _protein_comparison_kinds(session) == [("generatedProteinComparison", "none")]
+    assert _protein_comparison_kinds(session) == [("generatedProteinComparison", "pairwise")]
+    assert session["renderRequest"]["comparisons"][0]["pairs"] == []
     fresh = (tmp_path / "fresh.svg").read_text(encoding="utf-8")
     assert "data-query-record-index=" not in fresh
 
@@ -726,7 +728,7 @@ def test_a_cli_pairwise_session_without_a_displayed_pair_replays_its_figure(
          "-f", "svg", "--session_output", str(resaved))
     assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == fresh
     replayed = drawing_view(read_session_payload(resaved), mode="linear")
-    assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "none")]
+    assert _protein_comparison_kinds(replayed) == [("generatedProteinComparison", "pairwise")]
 
 
 @pytest.mark.parametrize("rows", ["rec0\trec1\t90\t40\t0\t0\t1\t40\t1\t40\t1e-20\t200\n", ""], ids=["one-row", "empty"])
@@ -829,6 +831,44 @@ def test_a_released_cli_comparisons_table_session_still_reads_its_table_as_a_nuc
     session = drawing_view(read_session_payload(resaved), mode="linear")
     (stored,) = [item for item in session["renderRequest"]["comparisons"] if "resourceId" in item]
     assert stored["kind"] == "nucleotideBlast"
+
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.mark.parametrize("fixture", [
+    # Session 47, request schema 9: the Gallery Session of main (a Web LOSATP Similarity groups drawing).
+    _FIXTURES / "sessions" / "BGC0000708-BGC0000713.v47.gbdraw-session.json.gz",
+    # Session 40, request schema 5: a Web collinear LOSATP Session of main (#378, #477).
+    _FIXTURES / "performance" / "hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz",
+], ids=["v47-schema9", "v40-schema5"])
+def test_a_released_losatp_session_still_reads_its_tables_as_protein_comparisons(tmp_path: Path, fixture: Path) -> None:
+    """Review M3: request schemas 2-9 stored a LOSATP pair and a BLAST table alike as
+    `precomputedProteinComparison`; the reader takes a table with the protein column `query_protein_id` as a
+    protein comparison. Each released LOSATP table has it and replays as one ("Protein comparison ...")."""
+
+    import gzip
+
+    from gbdraw.api.input_summary import input_summary_lines
+    from gbdraw.session import session_to_request
+
+    sidecar = tmp_path / "released.gbdraw-session.json"
+    sidecar.write_bytes(gzip.decompress(fixture.read_bytes()))
+    released = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert released["renderRequest"]["schema"] < 10
+    stored = [item for item in released["renderRequest"]["comparisons"] if item["kind"] == "precomputedProteinComparison"]
+    assert len(stored) == 4
+    for item in stored:
+        header = base64.b64decode(released["resources"][item["resourceId"]]["data"]).split(b"\n", 1)[0].split(b"\t")
+        assert b"query_protein_id" in header
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "replay") as materialized:
+        comparisons = session_to_request(materialized).options.linear_comparisons
+        assert [item.protein_matches for item in comparisons] == [True] * 4
+        if "hepatoplasmataceae" in fixture.name:
+            return
+        lines = input_summary_lines(render_session(materialized).input_summary)
+    comparison_lines = [line for line in lines if "omparison of" in line]
+    assert len(comparison_lines) == 4 and all(line.startswith("Protein comparison of ") for line in comparison_lines), lines
 
 
 def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(

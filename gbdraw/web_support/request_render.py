@@ -239,7 +239,7 @@ def _render_canonical_web_request_with_prepared_inputs(
     _label_fit_searches: LabelFitRowSearches | None,
     _held_feature_catalog_revision: str | None,
     _held_segments: AbstractSet[str],
-    _source_names: Mapping[str, str] | None = None,
+    _resource_names: Mapping[str, str] | None = None,
 ) -> WebRenderReply:
     def render() -> WebRenderReply:
         # The request's color table is the app's rule list, not a saved file.
@@ -257,7 +257,7 @@ def _render_canonical_web_request_with_prepared_inputs(
                 label_fit_searches=_label_fit_searches,
                 held_feature_catalog_revision=_held_feature_catalog_revision,
                 held_segments=_held_segments,
-                source_names=_source_names,
+                resource_names=_resource_names,
             )
 
     if _prepared_input_cache is None:
@@ -291,7 +291,7 @@ def _render_canonical_web_request(
     label_fit_searches: LabelFitRowSearches | None,
     held_feature_catalog_revision: str | None,
     held_segments: AbstractSet[str],
-    source_names: Mapping[str, str] | None,
+    resource_names: Mapping[str, str] | None,
 ) -> WebRenderReply:
 
     if not isinstance(payload, Mapping):
@@ -309,6 +309,7 @@ def _render_canonical_web_request(
                 payload,
                 resource_paths=resource_paths,
                 output_directory=output_root,
+                resource_names=resource_names,
             ),
             embed_fonts=False,
         )
@@ -378,6 +379,7 @@ def _render_canonical_web_request(
             if catalog_revision is not None and catalog_revision == held_feature_catalog_revision
             else build_feature_catalog(feature_catalog_items)
         )
+    source_names = None if resource_names is None else staged_names_by_file(resource_names, resource_paths)
     input_summaries = [
         input_summary_payload(
             with_source_names(item.input_summary, source_names) if source_names else item.input_summary,
@@ -548,7 +550,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     output_directory = workspace_path / "outputs"
     owns_workspace = False
     render_error: BaseException | None = None
-    source_names: dict[str, str] | None = None
+    resource_names: dict[str, str] | None = None
     try:
         marker_path = workspace_path / _STAGED_WORKSPACE_MARKER
         if (
@@ -589,7 +591,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             # its source then names a file that lives as long as its key does
             # (OV-1581), and the workspace is removed below.
             validated_paths[resource_id] = resolved
-        source_names = staged_source_names(_resource_names, validated_paths)
+        resource_names = staged_resource_names(_resource_names, validated_paths)
         validated_identities = _validate_prepared_resource_identities(
             _resource_identities,
             resource_paths=validated_paths,
@@ -615,11 +617,11 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             _label_fit_searches=_label_fit_searches,
             _held_feature_catalog_revision=_held_feature_catalog_revision,
             _held_segments=_held_segments,
-            _source_names=source_names,
+            _resource_names=resource_names,
         )
     except BaseException as exc:
         render_error = exc
-        _name_chosen_inputs(exc, source_names)
+        _name_chosen_inputs(exc, None if resource_names is None else staged_names_by_file(resource_names, validated_paths))
         raise
     finally:
         if owns_workspace:
@@ -690,14 +692,13 @@ def _name_chosen_inputs(error: BaseException, source_names: Mapping[str, str] | 
         current = current.__cause__ or current.__context__
 
 
-def staged_source_names(
+def staged_resource_names(
     names: Mapping[str, object] | None, resource_paths: Mapping[str, Path]
 ) -> dict[str, str] | None:
-    """The file name of each staged resource, by the name of the file the request reads.
+    """The name of the file the page read for each staged resource, by resource ID (``resourceManifest[].name``).
 
     The Worker stages a resource under its content token; the input summary
-    names the file the page read (``resourceManifest[].name``). The page keeps
-    one resource for files with the same bytes, so they share the first name.
+    and the request's decoder name the file the page read.
     """
 
     if names is None:
@@ -706,14 +707,31 @@ def staged_source_names(
         raise ValidationError(
             "The staged Web render resource names do not match its manifest.", diagnostic={"code": "HELPER_PROTOCOL"}
         )
-    staged: dict[str, str] = {}
     for resource_id, name in names.items():
         if not isinstance(name, str) or not name:
             raise ValidationError(
                 f"Invalid staged Web render resource name for {resource_id!r}.", diagnostic={"code": "HELPER_PROTOCOL"}
             )
-        staged.setdefault(resource_paths[resource_id].name, name)
+    return {str(resource_id): str(name) for resource_id, name in names.items()}
+
+
+def staged_names_by_file(names: Mapping[str, str], resource_paths: Mapping[str, str | Path]) -> dict[str, str]:
+    """``names`` (by resource ID) by the name of the staged file each resource is read from. The page keeps one
+    resource for files with the same bytes, so they share the first name."""
+
+    staged: dict[str, str] = {}
+    for resource_id, name in names.items():
+        staged.setdefault(Path(resource_paths[resource_id]).name, name)
     return staged
+
+
+def staged_source_names(
+    names: Mapping[str, object] | None, resource_paths: Mapping[str, Path]
+) -> dict[str, str] | None:
+    """The file name of each staged resource, by the name of the file the request reads."""
+
+    validated = staged_resource_names(names, resource_paths)
+    return None if validated is None else staged_names_by_file(validated, resource_paths)
 
 
 def _validate_prepared_resource_identities(

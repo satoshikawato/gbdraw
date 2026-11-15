@@ -89,6 +89,7 @@ def _read_with_canonical_codec(path: Path) -> pd.DataFrame:
         mode="linear",
         schema=CANONICAL_REQUEST_SCHEMA,
         resource_paths={"comparison-nucleotide-1": path},
+        resource_names={},
     )
     return decoded["linear_comparisons"][0].matches
 

@@ -364,6 +364,40 @@ def _replay(session: Path, prefix: Path, *extra: str) -> str:
 
 
 @pytest.mark.linear
+def test_a_feature_bound_table_that_is_no_protein_comparison_replays_with_its_fresh_wording(tmp_path: Path) -> None:
+    """OV-3574: a Python table whose rows are bound to features but that holds no protein matches keeps its
+    binding columns in the Session, and the Session says it holds no protein matches: the replay words it as the
+    fresh render does ("Comparison of ...", not "Protein comparison ..."), and draws the same figure."""
+
+    from dataclasses import replace
+
+    from gbdraw.api import RenderOutputRequest, render_request
+    from gbdraw.api.input_summary import input_summary_lines
+    from gbdraw.session import load_session_document, materialize_session, render_session, save_session_document
+
+    request = _bound_row_request(tmp_path)
+    request = replace(request, output=RenderOutputRequest(
+        output_prefix="fresh", formats=("svg",), output_directory=tmp_path / "fresh",
+    ))
+    assert request.options.linear_comparisons[0].protein_matches is False
+    fresh = render_request(request)
+    fresh_lines = [line for line in input_summary_lines(fresh.input_summary) if "omparison" in line]
+    assert fresh_lines and all(line.startswith("Comparison of ") for line in fresh_lines), fresh_lines
+    session = tmp_path / "bound.gbdraw"
+    save_session_document(session, request)
+    with materialize_session(load_session_document(session), output_directory=tmp_path / "replay") as materialized:
+        replayed = render_session(materialized)
+    assert [line for line in input_summary_lines(replayed.input_summary) if "omparison" in line] == fresh_lines
+    payload = session_view(read_session_payload(session))
+    (stored,) = [item for item in payload["renderRequest"]["comparisons"] if "resourceId" in item]
+    assert (stored["kind"], stored.get("proteinMatches")) == ("precomputedProteinComparison", False)
+    assert b"query_feature_svg_id" in _stored_comparison_table(session)
+    assert _ribbon_spans(_replay(session, tmp_path / "cli")) == _ribbon_spans(
+        (tmp_path / "fresh" / "fresh.svg").read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.linear
 def test_cli_session_replay_keeps_feature_bound_rows_of_a_reversed_record_in_the_search_frame(
     tmp_path: Path,
 ) -> None:

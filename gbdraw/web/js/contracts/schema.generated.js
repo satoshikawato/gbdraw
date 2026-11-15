@@ -64,6 +64,10 @@ export const ROW_GAPS_MAX_SHARE = 0.25;
 /** @type {readonly string[]} */
 export const STORED_REGION_FIELDS = Object.freeze(['end', 'reverseComplement', 'selector', 'start']);
 
+// gbdraw/io/comparisons.py: COMPARISON_COLUMNS
+/** @type {readonly ['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']} */
+export const COMPARISON_COLUMNS = Object.freeze(['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']);
+
 // gbdraw/session_request_codec.py: SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 /** @type {readonly number[]} */
 export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7, 8, 9, 10]);
@@ -277,6 +281,9 @@ export const DEFAULT_PNG_DPI = 300;
 
 // gbdraw/session_legacy_values.py: LEGACY_SCALAR_AXIS_LABELS
 export const LEGACY_SCALAR_AXIS_LABELS = 'numbered';
+
+// gbdraw/session_legacy_values.py: LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX
+export const LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX = 'comparison-explicit-';
 
 // gbdraw/tracks/circular.py: CIRCULAR_SLOT_UNREAD_PARAM_KEYS
 /** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features' | 'ticks' | 'sequence_conservation', readonly string[]>>} */

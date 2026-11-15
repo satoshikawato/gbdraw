@@ -234,6 +234,14 @@ RECORD_LAYOUT_SCHEMA = 10
 # ``precomputedProteinComparison`` holds protein matches; schemas 2-9 also stored a BLAST table given without its file's
 # text (a ``--comparisons_table`` row, a Python ``LinearComparison``) there (OV-3512).
 PROTEIN_ONLY_PRECOMPUTED_SCHEMA = 10
+# Schema 10 stores the name of the file the user gave on a nucleotide comparison (``sourceName``; null for a table
+# gbdraw made), so the CLI replay and the Web name it alike (OV-3557).
+COMPARISON_SOURCE_NAME_SCHEMA = 10
+# A writer that holds no user file names a table it made after its resource ID; the Web prefixes a resource's name
+# with its ID, and a resource adopted under another ID with ``resource-NNNN-``. Read for a stored nucleotide table
+# without ``sourceName`` only: the request writers before schema 10 named comparisons this way (OV-3557).
+_OLDER_WRITER_NAME_PREFIX = re.compile(r"(?:resource-\d{4}|comparison-[a-z]+(?:-[a-z]+)*-\d+(?:-\d+)*)-")
+_OLDER_WRITER_TABLE_NAME = re.compile(r"comparison-(?:losat|resolved|table|explicit)-\d+(?:-\d+)*")
 # The ``CircularMultiRecordOptions`` fields of those settings (the request writes them in camel case).
 ONE_CIRCLE_LAYOUT_OPTIONS = frozenset({"record_layout", "one_circle_gap_degrees", "one_circle_min_length", "one_circle_record_band"})
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
@@ -870,13 +878,17 @@ def decode_canonical_request(
     *,
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
+    resource_names: Mapping[str, str] | None = None,
 ) -> DiagramRequest:
     """Decode every supported canonical schema and normalize validation failures.
 
     A current-schema request must also match its description
     (:func:`describe_canonical_request`): it is checked before the typed
     constructors convert any value, and refused after the decoder's own
-    checks, whose messages are more specific.
+    checks, whose messages are more specific. ``resource_names`` names a
+    resource the caller staged under another file name (the Web Worker: the
+    name the page gave it); a comparison stored without its name is named by
+    it (:func:`stored_comparison_name`).
     """
 
     try:
@@ -885,6 +897,7 @@ def decode_canonical_request(
             payload,
             resource_paths=resource_paths,
             output_directory=output_directory,
+            resource_names=resource_names,
         )
     except CanonicalRequestCodecError:
         raise
@@ -906,6 +919,7 @@ def _decode_canonical_request(
     *,
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
+    resource_names: Mapping[str, str] | None,
 ) -> DiagramRequest:
     """Decode a supported schema using caller-owned materialized resources."""
 
@@ -963,7 +977,8 @@ def _decode_canonical_request(
         resource_paths=resource_paths,
     )
     comparison_kwargs = _decode_comparisons(
-        top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
+        top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths,
+        resource_names=resource_names or {},
     )
     legacy_similarity_alignment = comparison_kwargs.pop(
         "_legacy_similarity_alignment",
@@ -4498,6 +4513,7 @@ def _encode_comparisons(
                     "resourceId": resource_id,
                     "queryRecordIndex": comparison.query_record_index,
                     "subjectRecordIndex": comparison.subject_record_index,
+                    "sourceName": comparison.source_name,
                 }
             )
             continue
@@ -4523,12 +4539,15 @@ def _encode_comparisons(
                     "resourceId": resource_id,
                     "queryRecordIndex": comparison.query_record_index,
                     "subjectRecordIndex": comparison.subject_record_index,
+                    "sourceName": comparison.source_name,
                 }
             )
             continue
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources
         )
+        # A table bound to features keeps its binding columns, which BLAST text drops; one that holds no protein
+        # matches says so (OV-3574).
         result.append(
             {
                 "kind": "precomputedProteinComparison",
@@ -4536,6 +4555,7 @@ def _encode_comparisons(
                 "encoding": "canonicalTsv",
                 "queryRecordIndex": comparison.query_record_index,
                 "subjectRecordIndex": comparison.subject_record_index,
+                **({} if comparison.protein_matches else {"proteinMatches": False}),
             }
         )
     for index, path in enumerate(options.blast_files or (), start=1):
@@ -4551,6 +4571,8 @@ def _encode_comparisons(
                 "resourceId": resource_id,
                 "queryRecordIndex": index - 1,
                 "subjectRecordIndex": index,
+                # The name the fresh render shows (``Path(path).name``, linear_comparison_rows).
+                "sourceName": Path(str(path)).name,
             }
         )
     for index, table in enumerate(options.protein_comparisons or (), start=1):
@@ -4684,22 +4706,48 @@ def _read_blast_edge(resource_path: Path, label: str) -> tuple[str, bytes | None
     return text, stored, read_comparison_table(StringIO(text), label=label)
 
 
-def _user_file_name(resource_id: str, file_name: str) -> str | None:
-    """The name of the user's file a comparison resource holds, or None for a table a writer made.
+def stored_comparison_name(item: Mapping[str, Any], resource_name: str) -> str | None:
+    """The name a stored nucleotide comparison is shown by: the file the user gave, or None for a table gbdraw made.
 
-    The input summary names a comparison by its file only when the user gave one (OV-3557). A writer that holds no
-    user file names the table after its resource ID: a LOSAT search result (``comparison-losat-<n>.tsv`` on the CLI,
-    ``comparison-resolved-<n>.tsv`` on the Web), a table given without its file (``comparison-table-<n>.tsv``), with
-    ``.<k>`` before the extension when another resource holds that name. The Web writes each resource's name after a
-    ``<resource ID>-`` prefix (``normalizeResourceName``), which is not part of the user's file name.
+    The one reader of a comparison's shown name, for the CLI replay and the Web Worker alike (OV-3557). A request
+    writer stores the name on the comparison (``sourceName``; null for a table it made). An entry without it was
+    written before (request schemas 2-9, and schema 10 before ``sourceName``): its name is read from the resource's
+    name, ``resource_name`` (the Session's name, or the name the Web page gave the resource), as those writers
+    named their tables.
     """
 
-    name = file_name.removeprefix(f"{resource_id}-") or file_name
-    stem, _dot, rest = name.partition(".")
-    ordinal = rest.partition(".")[0]
-    if resource_id in {stem, f"{stem}-{ordinal}"}:
+    if "sourceName" in item:
+        stored = item["sourceName"]
+        if stored is not None and not (isinstance(stored, str) and stored):
+            raise CanonicalRequestDecodingError("A comparison's sourceName must be a file name or null.")
+        return stored
+    name = resource_name
+    while True:
+        stripped = name.removeprefix(f"{item['resourceId']}-")
+        if stripped == name and (match := _OLDER_WRITER_NAME_PREFIX.match(name)):
+            stripped = name[match.end():]
+        if stripped in {name, ""}:
+            break
+        name = stripped
+    stem = name.partition(".")[0]
+    if stem == item["resourceId"] or _OLDER_WRITER_TABLE_NAME.fullmatch(stem):
         return None
     return name
+
+
+def _stored_protein_matches(item: Mapping[str, Any], table: DataFrame, *, schema: int, path: str) -> bool:
+    """Whether a stored ``precomputedProteinComparison`` holds protein matches.
+
+    Schema 10 says so unless the entry has ``proteinMatches: false`` (a table bound to features that holds no
+    protein matches, OV-3574). Schemas 2-9 also stored a BLAST table under this kind; it has none of a protein
+    table's protein ID columns (OV-3512).
+    """
+
+    if schema < PROTEIN_ONLY_PRECOMPUTED_SCHEMA:
+        return "query_protein_id" in table.columns
+    if item.get("proteinMatches", False) is not False:
+        raise CanonicalRequestDecodingError(f"{path}.proteinMatches is false or absent.")
+    return "proteinMatches" not in item
 
 
 def _decode_comparisons(
@@ -4708,6 +4756,7 @@ def _decode_comparisons(
     mode: Literal["circular", "linear"],
     schema: int,
     resource_paths: Mapping[str, str | Path],
+    resource_names: Mapping[str, str],
 ) -> dict[str, Any]:
     comparisons = _array(value, path="renderRequest.comparisons")
     if mode == "circular" and comparisons:
@@ -4727,7 +4776,9 @@ def _decode_comparisons(
             required = {"kind", "resourceId"}
             if schema >= 2:
                 required |= {"queryRecordIndex", "subjectRecordIndex"}
-            _require_exact_fields(item, path=path, required=required)
+            _require_exact_fields(
+                item, path=path, required=required, optional={"sourceName"} if schema >= COMPARISON_SOURCE_NAME_SCHEMA else set()
+            )
             resource_path = _resolve_resource(
                 item["resourceId"],
                 path=f"{path}.resourceId",
@@ -4767,7 +4818,9 @@ def _decode_comparisons(
                         register_prepared_resource_value(table, resource_path),
                         search_frame_text=text,
                         search_frame_gzip=stored,
-                        source_name=_user_file_name(item["resourceId"], resource_path.name),
+                        source_name=stored_comparison_name(
+                            item, resource_names.get(item["resourceId"]) or resource_path.name
+                        ),
                     )
                 )
             else:
@@ -4776,7 +4829,10 @@ def _decode_comparisons(
             required = {"kind", "resourceId", "encoding"}
             if schema >= 2:
                 required |= {"queryRecordIndex", "subjectRecordIndex"}
-            _require_exact_fields(item, path=path, required=required)
+            _require_exact_fields(
+                item, path=path, required=required,
+                optional={"proteinMatches"} if schema >= PROTEIN_ONLY_PRECOMPUTED_SCHEMA else set(),
+            )
             if item["encoding"] != "canonicalTsv":
                 raise CanonicalRequestDecodingError(
                     f"Unsupported protein comparison encoding at {path}."
@@ -4801,10 +4857,9 @@ def _decode_comparisons(
                 subject_index = _non_negative_index(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
-                # An older schema's BLAST table has none of a protein table's protein ID columns.
                 explicit_comparisons.append(LinearComparison(
                     query_index, subject_index, table,
-                    protein_matches=schema >= PROTEIN_ONLY_PRECOMPUTED_SCHEMA or "query_protein_id" in table.columns,
+                    protein_matches=_stored_protein_matches(item, table, schema=schema, path=path),
                 ))
             else:
                 protein_tables.append(table)
@@ -6321,13 +6376,17 @@ def describe_canonical_request() -> dict[str, Any]:
         types_[f"Canonical{name}"] = shape
         return ref(f"Canonical{name}")
 
-    def kinds(name: str, suffix: str, variants: Mapping[str, Mapping[str, Shape]]) -> Shape:
-        """An object tagged by ``kind``; each variant is named ``<Kind><suffix>``."""
+    def kinds(
+        name: str, suffix: str, variants: Mapping[str, Mapping[str, Shape]],
+        optional: Mapping[str, Sequence[str]] | None = None,
+    ) -> Shape:
+        """An object tagged by ``kind``; each variant is named ``<Kind><suffix>``; ``optional`` names a variant's
+        optional fields."""
 
         return named(name, union(*(
             named(
                 kind[0].upper() + kind[1:] + ("" if kind.endswith(suffix) else suffix),
-                obj({"kind": literal(kind), **variant}),
+                obj({"kind": literal(kind), **variant}, optional=(optional or {}).get(kind, ())),
             )
             for kind, variant in variants.items()
         )))
@@ -6638,9 +6697,12 @@ def describe_canonical_request() -> dict[str, Any]:
     }
     pair = {"queryRecordIndex": INTEGER, "subjectRecordIndex": INTEGER}
     comparison = kinds("Comparison", "Comparison", {
-        "nucleotideBlast": {"resourceId": STRING, **pair},
+        # _encode_comparisons: the name of the file the user gave, null for a table gbdraw made (absent in a
+        # request written before it; stored_comparison_name).
+        "nucleotideBlast": {"resourceId": STRING, **pair, "sourceName": nullable(STRING)},
+        # A table bound to features that holds no protein matches (OV-3574); absent, it holds protein matches.
         "precomputedProteinComparison": {
-            "resourceId": STRING, "encoding": literal("canonicalTsv"), **pair,
+            "resourceId": STRING, "encoding": literal("canonicalTsv"), **pair, "proteinMatches": literal(False),
         },
         "orthogroupResult": {"resourceId": STRING, "encoding": literal("canonicalJson")},
         "collinearityResult": {
@@ -6668,7 +6730,7 @@ def describe_canonical_request() -> dict[str, Any]:
                 },
             )),
         },
-    })
+    }, optional={"nucleotideBlast": ("sourceName",), "precomputedProteinComparison": ("proteinMatches",)})
 
     # _encode_canonical_request and decode_canonical_request.
     # A CircularDiagramRequest resolves its grouping; a CircularBatchRequest is "batch".

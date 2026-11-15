@@ -3337,6 +3337,17 @@ numericColumnCanonical.renderRequest.comparisons = [{
   subjectRecordIndex: 2
 }];
 const numericColumnProjection = projectCanonicalSessionRequest(numericColumnCanonical);
+// OV-3557: Load names a comparison file by the name the user gave it, which the request stores.
+assert.equal(
+  projectCanonicalSessionRequest({
+    ...numericColumnCanonical,
+    renderRequest: {
+      ...numericColumnCanonical.renderRequest,
+      comparisons: [{ ...numericColumnCanonical.renderRequest.comparisons[0], sourceName: 'my hits.tsv' }]
+    }
+  }).files.linearComparisons[0].file.name,
+  'my hits.tsv'
+);
 assert.deepEqual(
   numericColumnProjection.files.linearSeqs.map((sequence) => sequence.uid),
   ['second', 'first', 'third']
@@ -6018,6 +6029,11 @@ assert.deepEqual(
     ['nucleotideBlast', 2, 3]
   ],
   'mixed comparison descriptors must follow dense plan ordinal order'
+);
+// OV-3557: an uploaded table stores the name of the File the user chose; a LOSAT result stores none.
+assert.deepEqual(
+  mixedCanonical.renderRequest.comparisons.map((comparison) => /** @type {{ sourceName?: unknown }} */ (comparison).sourceName),
+  [null, blastTable.name, null]
 );
 assert.equal(
   Buffer.from(
