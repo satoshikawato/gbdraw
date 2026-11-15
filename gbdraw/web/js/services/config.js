@@ -7515,10 +7515,14 @@ const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) =>
   return prepared;
 };
 /**
- * Whether a File card names every record of its file, so its placement leaves no record OFF and needs no read: its
- * named records use one kind of selector, as many distinct ones as the file holds records, each place within them.
- * The count is the one that reads no Python (`readFileRecordCount`): a GenBank or FASTA file. A GFF3 + FASTA card
- * draws the records its GFF3 names, which that counter does not read, so it is read; so is a card whose count fails.
+ * Whether a File card names every record of its file, so its placement leaves no record OFF and needs no read: as
+ * many distinct places (a record ID, or a recordIndex within the count) as the file holds records. The CLI's
+ * expansion of a whole file names a record whose ID repeats in the file, or is unsafe, by its place and the others by
+ * ID, so both kinds count together. The count is the one that reads no Python (`readFileRecordCount`): a GenBank or
+ * FASTA file. A GFF3 + FASTA card draws the records its GFF3 names, which that counter does not read, so it is read
+ * (by the one read, without Python when the browser reader takes both files); so is a card whose count fails.
+ * Unlike the read, this does not check that a named record ID is in the file: a hand-edited card that names an ID
+ * its file lacks, with as many places as the file holds records, saves every record ON where the read fails NO_MATCH.
  * @template F
  * @param {readonly NamedCardRecord[]} named
  * @param {CircularSourceInput<F>} input
@@ -7527,7 +7531,7 @@ const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) =>
  */
 const namesWholeFile = async (named, { spec: { sourceKind }, primaryFile }, fileOf) => {
   const file = fileOf(primaryFile);
-  if (sourceKind === 'gffFasta' || !file || new Set(named.map(({ selector }) => selector.kind)).size !== 1) return false;
+  if (sourceKind === 'gffFasta' || !file) return false;
   const count = await readFileRecordCount(file, sourceKind).catch(() => -1);
   const places = new Set(named.map(({ selector }) => (selector.kind === 'recordIndex' ? selector.index : selector.value)));
   return places.size === count && named.every(({ selector }) => selector.kind !== 'recordIndex' || selector.index < count);
@@ -7563,8 +7567,9 @@ const readAndPlaceNamedRecords = async (config, { named, records, inputs }, file
  * Writes in a saved draft the records OFF of a drawing whose File cards still name some records of their files
  * (`recordsNamed`), which no Session holds and a Load of a Web draft does not read from its request: each such card
  * is placed (`readAndPlaceNamedRecords`) from the drawing as Save captured it, read only when the drawing has not read
- * it. The drawing is not changed. A card Save cannot place fails the Save, with its read's error (R6) or as a record
- * selection its file lacks, so no Session draws a card's whole file that the drawing drew some records of.
+ * it. The drawing is not changed. A card Save reads and cannot place fails the Save, with its read's error (R6) or
+ * as a record selection its file lacks, so no Session draws a card's whole file that the drawing drew some records of;
+ * a card Save does not read (`namesWholeFile`) is saved whole, its record IDs unchecked.
  * @param {{ recordsOff?: unknown, adv?: unknown }} config The saved draft config, changed in place.
  * @param {SavedNamedRecords} namedRecords
  */

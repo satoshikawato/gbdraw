@@ -37,5 +37,5 @@
   same.
 - Fixed: in the Web app, a failed Save no longer tells you to save a Session
   (when the diagram runtime cannot start, when temporary files cannot be
-  cleaned up, or when the failure is not recognized); it offers Retry and
-  Reload.
+  cleaned up, or when the failure is not recognized); it asks you to retry
+  and offers Reload.

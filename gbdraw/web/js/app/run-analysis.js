@@ -2234,7 +2234,7 @@ export const createRunAnalysis = ({
     }
     // A refused replay Session (or an input unreadable now) is shown where Save shows its errors.
     const materializedFiles = await materializeCliHelperFiles(latestCliHelperFiles)
-      .catch((error) => { errorLog.value = formatError(error, 'session-save', 'write'); return null; });
+      .catch((error) => { errorLog.value = formatError(error, 'reproducibility-files', 'write'); return null; });
     if (!materializedFiles) return;
     const archiveNames = new Set();
     materializedFiles.forEach((file) => {

@@ -417,6 +417,71 @@ await test('a Save of a plain CLI Session of a multi-record FASTA canvas, with n
   }
 });
 
+// The edges of a card that names its whole file (`namesWholeFile`), each a Session whose three-record card names the
+// records `selectors` gives: a record named twice counts once, and a place past the file's records is not one of
+// them, so neither card names its whole file and Save reads it (the read needs the Worker, which Node lacks). The
+// CLI names a record whose ID repeats in its file by its place and the others by ID, and that card does name its
+// whole file, so its Save reads nothing.
+const threeRecordCard = async (directory, fasta, selectors) => {
+  await writeFile(path.join(directory, 'three.fa'), fasta);
+  await writeFile(path.join(directory, 'one.fa'), '>solo\nACGTACGTACGT\n');
+  const { bytes } = await cliSession(directory, ['--fasta', 'three.fa', 'one.fa', '--multi_record_canvas']);
+  if (!selectors) return bytes;
+  const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+  return writeSessionFile(withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+    const records = view.renderRequest.records;
+    view.renderRequest.records = [...selectors.map((selector, index) => ({ ...records[index], selector })), records[3]];
+  }), resourceBytes);
+};
+const FA123 = '>fa1\nACGTACGTAC\n>fa2\nACGTACGTAC\n>fa3\nACGTACGTAC\n';
+for (const [name, fasta, selectors, saves] of [
+  ['names fa1 twice and fa2', FA123, [{ kind: 'recordId', value: 'fa1' }, { kind: 'recordId', value: 'fa1' },
+    { kind: 'recordId', value: 'fa2' }], false],
+  ['names places 1, 2 and 6', FA123, [0, 1, 5].map((index) => ({ kind: 'recordIndex', index })), false],
+  ['is the CLI\'s of a file whose ID x repeats (#1, #2 and y)', '>x\nACGTACGTAC\n>x\nACGTACGTAC\n>y\nACGTACGTAC\n', null, true]
+]) {
+  await test(`a Save with no edit of a three-record card that ${name} ${saves ? 'reads no card' : 'reads it'}`, async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-whole-'));
+    try {
+      assert.equal((await load(await threeRecordCard(directory, fasta, selectors))).status, 'ok');
+      const drawing = modeDrawing(state, 'circular');
+      assert.deepEqual(drawing.recordsNamed.map(({ named }) => named.length), [3]);
+      if (!saves) {
+        await assert.rejects(saveShown('whole'), /diagram runtime could not start/);
+        return;
+      }
+      assert.deepEqual(drawing.recordsNamed[0].named.map(({ selector }) => selector),
+        [{ kind: 'recordIndex', index: 0 }, { kind: 'recordIndex', index: 1 }, { kind: 'recordId', value: 'y' }]);
+      const result = await saveShown('whole');
+      assert.equal(result?.status, 'saved', JSON.stringify(result));
+      assert.equal(Object.hasOwn(await savedConfigOf(result.blob, drawing.id), 'recordsOff'), false, 'no record OFF');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+// A GFF3 + FASTA card is read at Save (its records are those its GFF3 names, which the counter does not read), by the
+// one read, which reads a GFF3 and FASTA pair without Python when the browser reader takes both files: the Save of a
+// plain CLI Session of such a canvas needs no diagram Worker either.
+await test('a Save of a plain CLI Session of a multi-record GFF3 + FASTA canvas, with no edit, needs no Worker', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-gff-all-'));
+  try {
+    await writeFile(path.join(directory, 'a.fa'), '>c1\nACGTACGTAC\n>c2\nACGTACGTAC\n>c3\nACGTACGTAC\n');
+    await writeFile(path.join(directory, 'a.gff3'), `##gff-version 3\n${['c1', 'c2', 'c3']
+      .map((id, index) => `${id}\t.\tCDS\t1\t9\t.\t+\t0\tID=cds${index}\n`).join('')}`);
+    const { bytes } = await cliSession(directory, ['--gff', 'a.gff3', '--fasta', 'a.fa', '--multi_record_canvas']);
+    assert.equal((await load(bytes)).status, 'ok');
+    const drawing = modeDrawing(state, 'circular');
+    assert.deepEqual(drawing.recordsNamed.map(({ named }) => named.length), [3], 'the CLI names c1, c2 and c3');
+    const result = await saveShown('gff-all');
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    assert.equal(Object.hasOwn(await savedConfigOf(result.blob, drawing.id), 'recordsOff'), false, 'no record OFF');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // A Save that fails because the diagram runtime cannot start does not offer Save as the way out (R6): the action it
 // offers must be one that can work.
 await test('a Save that fails because the diagram runtime cannot start offers no Save Session', async () => {

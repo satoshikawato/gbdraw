@@ -26,7 +26,8 @@ export const errorTextKeyTables = {
 export const errorVocabulary = {
   codes: Object.keys(DEFINITIONS), reasons: Object.keys(REASONS), labelledFields: Object.keys(FIELD_LABELS),
   sessionTables: Object.keys(SESSION_TABLE_LABELS), switchedTracks: Object.keys(SWITCHED_TRACKS),
-  operations: Object.keys(OPERATION_TITLES), recoveries: Object.keys(RECOVERY_GUIDANCE)
+  operations: Object.keys(OPERATION_TITLES), recoveries: Object.keys(RECOVERY_GUIDANCE),
+  definedOperations: Object.keys(OPERATION_DEFINITIONS)
 };`;
 
 const probe = () => probeModule(SOURCE, PROBE);
@@ -39,7 +40,8 @@ export const errorTextKeyTables = async () => (await probe()).errorTextKeyTables
 
 /**
  * The codes, reasons, labelled fields, Session tables, switched tracks,
- * operations and recoveries the wording owner words.
+ * operations, recoveries and operations with their own code sentences
+ * (`definedOperations`) the wording owner words.
  * @returns {Promise<Record<string, string[]>>}
  */
 export const errorVocabulary = async () => (await probe()).errorVocabulary;

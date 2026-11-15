@@ -503,6 +503,18 @@ test('the operation error panel offers Generate and no Save after a failed Save 
     assert.doesNotMatch(failed.summary, /save a Session/i, code);
     assert.deepEqual(failed.actions, ['retry', 'reload'], code);
   }
+  // The reproducibility-files download writes the replay Session with Save's writer but is not a Save: it keeps each
+  // code's own sentence, and, as a Session write, offers no Save Session and gives a size refusal Save's sentences.
+  for (const [code, summary, actions] of [
+    ['WORKER_INIT', 'The diagram runtime could not start. Save a Session and reload before retrying.', ['reload', 'retry']],
+    ['CLEANUP_FAILED', 'Temporary resource cleanup failed. Save a Session and reload before retrying.', ['reload', 'retry']],
+    ['UNKNOWN', 'The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.', ['retry']]
+  ]) {
+    const failed = normalizeUserFacingError({ code }, { operation: 'reproducibility-files', stage: 'write' });
+    assert.deepEqual([failed.operation, failed.summary, failed.actions], ['reproducibility-files', summary, actions], code);
+  }
+  const replayTooLarge = sessionLimit({ sessionBytes: 600 * 1024 * 1024, sessionByteLimit: 512 * 1024 * 1024 }, 'reproducibility-files');
+  assert.deepEqual([replayTooLarge.summary, replayTooLarge.actions], [saveTooLarge.summary, saveTooLarge.actions]);
 });
 
 // #941 residual: every action of an operation error panel is the same small
