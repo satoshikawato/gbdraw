@@ -7260,17 +7260,30 @@ const readStoredDrawingDraft = async (view, repairs) => {
  * @property {{ features: Readonly<Record<string, unknown>> } & LoadedDraft} draft
  * @property {boolean} resolveTrackPlacements
  * @property {boolean} applyCanvasPadding False for the drawing that opens: its padding follows its mounted Result.
+ * @property {StoredLayoutPreferences | null} requestLayout The layout the drawing's request sets
+ *   (`requestLayoutPreferences`); null: the drawing holds no request.
  */
 /**
  * Installs one loaded drawing's input type and settings over its mode's
- * defaults (a new drawing state, or one `resetDrawingSettings` reset).
+ * defaults (a new drawing state, or one `resetDrawingSettings` reset). Layout
+ * preferences (the legend and plot title positions): a drawing's slice holds
+ * its mode's slot; a drawing whose slice has none takes its own request's,
+ * opened or not (OV-2493), and so does a drawing made from a request outside a
+ * Load (a copy, a paste: OV-3583); a Session 27-44's layout was read before
+ * Python converted it (OV-1967).
  * @param {DrawingState} drawing
  * @param {StoredDrawingInstall} install
  * @returns {DrawingAlignment} The alignment its draft holds (`applyModeSliceData`).
  */
-const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPlacements, applyCanvasPadding }) => {
+const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPlacements, applyCanvasPadding, requestLayout }) => {
   INPUTS_SLICE.install(drawing.slices.inputs, { inputType });
-  return applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
+  const alignment = applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
+  if (!requestLayout || isPlainObject(slice.ui?.layoutPreferences)) return alignment;
+  SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
+    ...cloneJsonData(drawing.layoutPreferences),
+    [drawing.mode]: normalizeLayoutPreferences(requestLayout)[drawing.mode]
+  }) });
+  return alignment;
 };
 /**
  * One drawing to install outside a whole Load (a New drawing from a region):
@@ -7333,7 +7346,11 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
       slice: part.slice,
       draft: { features: inputs.requestFeatureEdits ? featureEditsOverProjection(undefined, inputs.requestFeatureEdits) : {}, ...draft },
       resolveTrackPlacements: true,
-      applyCanvasPadding: true
+      applyCanvasPadding: true,
+      // The positions the request states (a copy into the source's mode keeps them, OV-3583); a request into the
+      // other mode states none, and the new drawing starts with its mode's Web layout (Owner Q3, R17-39 A).
+      requestLayout: isPlainObject(/** @type {{ diagramOptions?: { output?: unknown } }} */ (renderRequest).diagramOptions?.output)
+        ? inputs.layoutPreferences : null
     },
     settle: {
       inputs: liveFileStateOf(files),
@@ -8875,7 +8892,8 @@ const importSessionDocument = async (e, options = {}) => {
         // where its draft has none (OV-220), opened or not (OV-1786).
         draft: withRecoveredPaint(id, loadedFeatureEditsOf(id), draftOf(id)),
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
-        applyCanvasPadding: id !== plan.activeDrawingId
+        applyCanvasPadding: id !== plan.activeDrawingId,
+        requestLayout: requestLayoutOf(id)
       }));
     }
     // App-level settings: LOSAT execution (after the drafts, whose request
@@ -8896,17 +8914,6 @@ const importSessionDocument = async (e, options = {}) => {
       setDrawingIds: new Set([committedSetDrawingId, ...storedSetSlots.map((slot) => slot.drawingId)]), draftAlignments
     });
     restoreAppliedPaletteFromSession(shownDrawing, ui);
-    // Layout preferences: a drawing's slice holds its mode's slot; a drawing
-    // whose slice has none takes its own request's, opened or not (OV-2493);
-    // a Session 27-44's layout was read before Python converted it (OV-1967).
-    for (const drawing of committed) {
-      const requestLayout = requestLayoutOf(drawing.id);
-      if (!requestLayout || isPlainObject(draftPartOf(drawing.id).slice.ui?.layoutPreferences)) continue;
-      SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
-        ...cloneJsonData(drawing.layoutPreferences),
-        [drawing.mode]: normalizeLayoutPreferences(requestLayout)[drawing.mode]
-      }) });
-    }
 
     /** @type {Map<LoadedFiles, { inputs: LiveFileState, bound: ReturnType<typeof bindLoadedInputs> }>} One state per set of files, so each binds once. */
     const liveFileStates = new Map();

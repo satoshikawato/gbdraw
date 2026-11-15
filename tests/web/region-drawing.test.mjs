@@ -494,6 +494,25 @@ test('(a) round trip of the Linear region drawing of a Circular source', async (
     { ...at(envelope.renderRequest, '$.diagramOptions.output').value, legend: 'bottom', plotTitlePosition: 'bottom' });
 });
 
+// OV-3583 in Linear: a Linear copy of a Linear drawing keeps its plot title, position and size; a copy into the other
+// mode carries the title's text and size (settings of both modes) and starts at that mode's positions (Owner Q3 above).
+test('OV-3583: a Linear copy keeps the plot title and its position; a copy into the other mode keeps its text and size', async () => {
+  const source = await circularSourceWithLook();
+  Object.assign(source.form, { plot_title: 'Look' });
+  source.adv.plot_title_font_size = 28;
+  const { made: linear } = await deriveAndInstall(source, LOOK_REGION, true, 'linear-85');
+  const titleOf = async (drawing) => {
+    const { plotTitle, plotTitleFontSize, output } = (await projectOf(drawing)).envelope.renderRequest.diagramOptions;
+    return [plotTitle, plotTitleFontSize, output?.plotTitlePosition];
+  };
+  assert.deepEqual(await titleOf(linear), ['Look', 28, 'bottom'], 'into the other mode: its text and size, Linear\'s position');
+  linear.layoutPreferences.linear.plotTitlePosition = 'top';
+  state.addDrawing(linear, 'OV-3583 linear'); history.addMember(linear.id);
+  const { made: again } = await deriveAndInstall(linear, [{ recordKey: linear.linearSeqs[0].uid, start: 1, end: 300 }], true, 'linear-86');
+  assert.deepEqual(await titleOf(again), ['Look', 28, 'top']);
+  app.selectDrawing(source.id);
+});
+
 test('the draft request of a card drawn in two windows writes the unit pairs Generate writes', async () => {
   // OV-2738 on Save without a Result and on New drawing from a region: Python reads a request's comparison indexes
   // as drawn units, so the draft request plans the units as Generate does (`planLinearUnitSearch`).
@@ -814,6 +833,24 @@ for (const [picked, sourceRows] of [[[1, 2], [1, 1]], [[1, 3], [1, 2]]]) {
     app.selectDrawing(source.id);
   });
 }
+
+// OV-3583: a copy that keeps the source's settings carries its plot title as every other setting: its text and size
+// (the request's options) and its position (the layout the request sets, which a drawing whose draft holds none takes,
+// as at Load).
+test('OV-3583: a Circular copy that keeps the settings draws the source\'s plot title, position and size', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true, plot_title: '<i>Big</i> title' });
+  source.adv.plot_title_font_size = 32;
+  source.layoutPreferences.circular.multi.plotTitlePosition = 'bottom';
+  const { made } = await deriveAndInstall(source, [
+    { recordKey: 'record-1:1', start: 1, end: 900 }, { recordKey: 'record-1:2', start: 1, end: 1000 }
+  ], true, 'circular-83');
+  state.addDrawing(made, 'OV-3583'); history.addMember(made.id);
+  assert.equal(made.form.plot_title, '<i>Big</i> title');
+  assert.equal(made.layoutPreferences.circular.multi.plotTitlePosition, 'bottom');
+  const { plotTitle, plotTitleFontSize, output } = (await projectOf(made)).envelope.renderRequest.diagramOptions;
+  assert.deepEqual([plotTitle, plotTitleFontSize, output?.plotTitlePosition], ['<i>Big</i> title', 32, 'bottom']);
+  app.selectDrawing(source.id);
+});
 
 // OV-3531: a CLI Session whose Circular canvas draws some records of one file (`--records_table`) names them by record
 // ID over one shared resource; Load draws those records.

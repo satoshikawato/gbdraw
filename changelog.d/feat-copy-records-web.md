@@ -19,6 +19,11 @@
 - Fixed: the Web app lost the rows (`--multi_record_position`) of such a
   Session's records, and of the records pasted into a Circular canvas, and
   drew them on its own grid; it now keeps the rows the request gives.
+- Fixed: **Copy to another drawing…** with the drawing's settings kept
+  drew the new drawing without the plot title's position (and so, on a
+  Circular canvas, without the title); a copy into the same mode now keeps
+  the title's text, size and position, and a copy into the other mode keeps
+  its text and size.
 - Changed: `derive_region_drawing()` of several whole Circular records
   keeps each record on the row the source canvas draws it on, without the
   rows that hold none of them, instead of placing the records in order; and
