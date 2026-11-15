@@ -55,8 +55,9 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
-import { readStoredCanvasFileRecords, readStoredRecordIdPlaces } from './record-discovery.js';
+import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, placeNamedCardRecords } from './record-draw-selection.js';
+import { circularRecordEntries } from './record-options.js';
+import { readCircularSourceRecords, readStoredRecordIdPlaces } from './record-discovery.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -386,7 +387,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs, NamedCardRecord, NamedCardRecordsMark } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -1474,21 +1475,18 @@ const readStoredLeaves = async (data) => {
 
 /**
  * Adds to `readings` the place in its file of each stored record ID that a record text reads as a `#N` (OV-3311),
- * and the record IDs of each file a Circular canvas draws some records of (OV-3530, OV-3531), read through `table`,
- * the resources Load adopted, so a card's own read of the file is this one; `repairs` lists each such ID Load could
- * not place, which keeps its text.
+ * read through `table`, the resources Load adopted, so a card's own read of the file is this one; `repairs` lists
+ * each such ID Load could not place, which keeps its text.
  * @param {SessionInput | Session51} data The Session Load reads, or the document of a stored drawing.
  * @param {ReturnType<typeof adoptCurrentSessionResources>} table
  * @param {Map<string, unknown>} readings `readStoredLeaves`'s.
  * @param {LoadRepair[]} repairs
  */
 const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
-  const requests = storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest }));
-  /** @param {string} resourceId */
-  const fileOf = (resourceId) => createSessionResourceFileView(table, resourceId);
-  const { places, unresolved } = await readStoredRecordIdPlaces(requests, fileOf);
+  const { places, unresolved } = await readStoredRecordIdPlaces(
+    storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
+    (resourceId) => createSessionResourceFileView(table, resourceId));
   places.forEach((place, key) => readings.set(key, place));
-  (await readStoredCanvasFileRecords(requests, fileOf)).forEach((recordIds, key) => readings.set(key, recordIds));
   repairs.push(...unresolved.map(({ path, recordId }) => loadRepair({ code: 'record-id-unresolved', path, effect: 'changed', stored: recordId })));
 };
 
@@ -5318,7 +5316,12 @@ const withStoredComparisonPlan = (config, readFiles) => {
  *   circularRecordDiscovery: Record<string, unknown>, linearReorderNotice: { value: string }, cInputType: { value: string }
  * }} LoadCandidateInputs
  */
-/** A Circular source card as Load reads it back: each file as stored. @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null }} RestoredCircularSource */
+/**
+ * A Circular source card as Load reads it back: each file as stored, and the records a Circular request's projection
+ * names of its file (`namedCardRecords` in services/session-request.js) when it names some.
+ * @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null,
+ *   named?: readonly NamedCardRecord[] }} RestoredCircularSource
+ */
 /**
  * Reads the saved inputs into the Load candidate (`targetState`).
  * `targetDrawing` holds the Linear record layout and comparison plan that the
@@ -5373,7 +5376,9 @@ const applyFiles = (filesData, {
       uid: String(source.uid),
       gb: slotFile(source.gb),
       gff: slotFile(source.gff),
-      fasta: slotFile(source.fasta)
+      fasta: slotFile(source.fasta),
+      // Only a Circular request's projection names the records of a card.
+      ...(circularRequest && Array.isArray(source.named) ? { named: /** @type {readonly NamedCardRecord[]} */ (source.named) } : {})
     }));
   // OV-2881: the cards a Circular request draws are read when Generate needs
   // their records (`readDrawingRecordIdentities`), not after Load, so the
@@ -5391,6 +5396,11 @@ const applyFiles = (filesData, {
     .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }))));
   targetState.files.c_legacy_record_cards = legacyRecordPositions && cardsTakeLegacyRecordPositions(circularSources)
     ? loadedCards : null;
+  // OV-3530, OV-3531: the cards whose request records name some records of their file; the drawing's first settled
+  // read draws those (`placeNamedCardRecords`), so Load reads no file for them.
+  const namedOf = new Map(circularSources.flatMap(({ uid, named }) => (named ? [[uid, named]] : [])));
+  const namedCards = loadedCards.flatMap((card) => (namedOf.has(card.uid) ? [{ ...card, named: namedOf.get(card.uid) ?? [] }] : []));
+  targetState.files.c_named_records = namedCards.length ? namedCards : null;
   // A Depth slot holds a list. The rows of a record-major matrix stand for the
   // records of the cards as loaded (OV-2868), however their read is deferred.
   targetState.files.c_depth = deserializeFile(read.c_depth);
@@ -7481,7 +7491,30 @@ const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) =>
   for (const { resourceId, name, text } of added) resources[resourceId] = writtenTextResource(resourceId, name, text);
   const prepared = await prepareStoredDrawing({ mode, renderRequest, resources, sourceFiles });
   if (prepared.repairs.length > 0) throw derivedReplyInvalid();
+  await placeCopiedNamedRecords(prepared);
   return prepared;
+};
+/**
+ * A copy or a paste reads now the cards whose records its request names some of (`c_named_records`, OV-3530), as
+ * the drawing's first settled read places them (`placeNamedCardRecords`): its draft draws those records alone before
+ * any read, so a Save before Generate keeps them (the marks are not saved). Python derived the request, so the read
+ * reuses the Worker that derived it; a Load leaves the marks to the drawing's own read.
+ * @param {PreparedStoredDrawing} prepared
+ */
+const placeCopiedNamedRecords = async ({ install, settle }) => {
+  const marks = /** @type {readonly NamedCardRecordsMark[] | null} */ (settle.inputs.files.c_named_records);
+  if (!marks) return;
+  const marked = new Set(marks.map(({ uid }) => uid));
+  const inputs = circularSourceInputs(install.inputType, settle.inputs.circularSources).filter(({ uid }) => marked.has(uid));
+  const reads = await readCircularSourceRecords(inputs, (file) => /** @type {FileLike | null} */ (/** @type {unknown} */ (file)));
+  const { config } = install.draft;
+  const placed = placeNamedCardRecords({
+    recordsOff: Array.isArray(config.recordsOff) ? config.recordsOff : [], selector: '',
+    positions: Array.isArray(config.adv?.multi_record_positions) ? config.adv.multi_record_positions : []
+  }, marks, marks, circularRecordEntries(reads.flatMap(({ records }) => records)));
+  config.recordsOff = placed.recordsOff;
+  if (isPlainObject(config.adv)) config.adv.multi_record_positions = placed.positions;
+  settle.inputs = { ...settle.inputs, files: { ...settle.inputs.files, c_named_records: null } };
 };
 /**
  * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a stored drawing (`prepareDerivedRequest`):

@@ -891,11 +891,48 @@ test('OV-3534: a stored Circular canvas of two records of a file of three keeps 
   installPreparedDrawing(made, prepared);
   state.addDrawing(made, 'OV-3534'); history.addMember(made.id);
   const [{ uid }] = made.circularSources;
-  // Record Order lists its rows by row.
-  assert.deepEqual(made.adv.multi_record_positions, [{ selector: `${uid}:3`, row: 1 }, { selector: `${uid}:1`, row: 2 }]);
   assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  // The card's read names the places of its drawn records by identity; Record Order lists its rows by row.
+  assert.deepEqual(made.recordsOff, [`${uid}:2`]);
+  assert.deepEqual(made.adv.multi_record_positions.filter(({ selector }) => !made.recordsOff.includes(selector)),
+    [{ selector: `${uid}:3`, row: 1 }, { selector: `${uid}:1`, row: 2 }]);
   assert.deepEqual(await drawnCircularRows(made), [2, 1]);
   app.selectDrawing(source.id);
+});
+
+// A Load of such a canvas reads no file: the records a card names are drawn alone from the card's own read, so a FASTA
+// source, which only the Python loader lists (R4), leaves the Worker unconstructed (Runtime data flow).
+test('a stored Circular canvas of some records of a FASTA file installs without the Worker', async () => {
+  const drawing = installShownDrawing('circular');
+  drawing.inputType.value = 'fasta';
+  replaceCircularSources(drawing.slices.inputs, [createCircularSource({ uid: 'record-1' })]);
+  bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, 'record-1', 'fasta',
+    new File(['>fa1\nACGTACGTAC\n>fa2\nACGTACGTAC\n>fa3\nACGTACGTAC\n'], 'three.fasta', { type: 'text/plain', lastModified: 1 }));
+  const { envelope } = await projectOf(drawing);
+  const renderRequest = structuredClone(envelope.renderRequest);
+  assert.equal(renderRequest.records[0].source.kind, 'fasta');
+  renderRequest.records = ['fa1', 'fa3'].map((recordId, index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index + 1}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordId', value: recordId }
+  }));
+  renderRequest.grouping = 'grid';
+  const hooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  const helpers = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = { ...hooks, onStructuralMetric: (metric) => {
+    if (metric.name === 'diagramHelperRequest') helpers.push(metric.operation);
+  } };
+  try {
+    const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+    const made = createDrawingState('circular-fasta', prepared.mode);
+    installPreparedDrawing(made, prepared);
+    assert.deepEqual(helpers, [], 'no Worker helper');
+    assert.deepEqual(prepared.repairs, []);
+    const [{ uid }] = made.circularSources;
+    assert.deepEqual(made.files.c_named_records?.map((mark) => [mark.uid, mark.named.map(({ selector }) => selector.value)]),
+      [[uid, ['fa1', 'fa3']]], 'the card draws the records it names once it is read');
+  } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = hooks;
+  }
 });
 
 const { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } = await import(

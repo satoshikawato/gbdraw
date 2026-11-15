@@ -9,10 +9,10 @@ import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { readRingScales } from './linear-units.js';
 import {
-  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec, storedRecordSourceResourceIds
+  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec
 } from './input-types.js';
 import { recordIdentity, recordSelectorNumber, resliceCardRows } from './record-draw-selection.js';
-import { storedFileRecordsKey, storedRecordIdOf } from './stored-leaf-readings.js';
+import { storedRecordIdOf } from './stored-leaf-readings.js';
 import { sessionResourceReadOwner } from './session-resource-backing.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
@@ -1206,45 +1206,6 @@ export const readStoredRecordIdPlaces = async (requests, fileOf) => {
     }
   }
   return { places, unresolved };
-};
-
-/**
- * The record IDs, in file order, of each file a stored Circular canvas or batch draws some records of, by
- * `storedFileRecordsKey`: every request record of the file selects one record (Python's copy of some records of a file,
- * a CLI records table), so the request's reader turns the file's other records off (OV-3530, OV-3531). A file that a
- * record draws whole, or that cannot be listed, has none: its records stay as the request reads them. Only such files
- * are read.
- * @param {readonly { renderRequest: unknown }[]} requests Each stored request (`storedResultSets`).
- * @param {(resourceId: string) => FileLike} fileOf As `readStoredRecordIdPlaces` reads a file.
- * @returns {Promise<Map<string, string[]>>}
- */
-export const readStoredCanvasFileRecords = async (requests, fileOf) => {
-  /** @type {Map<string, { resourceIds: string[], kind: unknown, whole: boolean }>} */
-  const files = new Map();
-  for (const { renderRequest } of requests) {
-    const request = typeof renderRequest === 'object' && renderRequest !== null
-      ? /** @type {{ readonly mode?: unknown, readonly grouping?: unknown, readonly records?: unknown }} */ (renderRequest) : null;
-    if (request?.mode !== 'circular' || request.grouping === 'single' || !Array.isArray(request.records)) continue;
-    for (const record of /** @type {({ readonly cardinality?: unknown } & UnreadStoredRecord | null)[]} */ (request.records)) {
-      const resourceIds = storedRecordSourceResourceIds(record?.source);
-      if (resourceIds.length === 0) continue;
-      const key = storedFileRecordsKey(resourceIds);
-      const file = files.get(key) ?? { resourceIds, kind: record?.source?.kind, whole: false };
-      file.whole ||= record?.cardinality !== 'exactly_one';
-      files.set(key, file);
-    }
-  }
-  /** @type {Map<string, string[]>} */
-  const fileRecords = new Map();
-  for (const [key, { resourceIds: [primaryFile, pairedFile], kind, whole }] of files) {
-    if (whole) continue;
-    const listed = await Promise.resolve()
-      .then(() => discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(kind)), fileOf(primaryFile),
-        pairedFile === undefined ? null : fileOf(pairedFile)))
-      .catch(() => null);
-    if (listed && listed.length > 1) fileRecords.set(key, listed.map((entry) => String(entry.recordId)));
-  }
-  return fileRecords;
 };
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */

@@ -9,7 +9,7 @@ import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from '.
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
 /** @import { InputFileRef } from './history-files.js' */
-/** @import { CircularCardMark } from './drawing/inputs.js' */
+/** @import { CircularCardMark, NamedCardRecordsMark } from './drawing/inputs.js' */
 /** @import { CanonicalRecord } from '../contracts/request.generated.js' */
 // Which records of a drawing are drawn (D-01..D-10, record-selection). A
 // drawing holds the keys of its OFF records in `recordsOff`: a Linear record
@@ -394,6 +394,45 @@ export const placeFlatRecordSelectors = ({ recordsOff, selector, positions }, so
     positions: positions.flatMap((row) => {
       const placed = place(row.selector);
       return placed === null ? [] : [{ ...row, selector: placed }];
+    })
+  };
+};
+
+/**
+ * The choices with the records of each named card (`c_named_records`: a card whose request records each name one
+ * record of its file, OV-3530, OV-3531) placed by the drawing's first settled read: a Record Order row that names
+ * such a record by its request key names it by its identity (OV-3534), and when every record the card names is read,
+ * the other records of its file are OFF. A card gone, or whose files changed, places nothing; other keys stay.
+ * @template {{ selector: string }} P
+ * @param {CircularRecordChoices<P>} choices
+ * @param {readonly NamedCardRecordsMark[]} marks
+ * @param {readonly { uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }[]} inputs The
+ *   drawing's cards now (`circularSourceInputs`).
+ * @param {readonly (RecordSourceEntry & { uid: string, value: string })[]} entries The records read, named
+ *   (`circularRecordEntries`: `value` is a record's identity).
+ * @returns {CircularRecordChoices<P>}
+ */
+export const placeNamedCardRecords = ({ recordsOff, selector, positions }, marks, inputs, entries) => {
+  const off = [...recordsOff];
+  /** @type {Map<string, string>} */
+  const identityOfKey = new Map();
+  marks.filter((mark) => inputs.some(({ uid, primaryFile, pairedFile }) => uid === mark.uid
+    && primaryFile === mark.primaryFile && pairedFile === mark.pairedFile)).forEach((mark) => {
+    const cardEntries = entries.filter((entry) => entry.uid === mark.uid);
+    const drawn = mark.named.map(({ recordKey, selector: named }) => {
+      const position = selectedPosition({ recordKey, selector: named, windows: [] }, cardEntries);
+      const entry = cardEntries.find((candidate) => position !== null && Number(candidate.sourceIndex) === position);
+      if (entry) identityOfKey.set(recordKey, entry.value);
+      return entry;
+    });
+    if (cardEntries.length === 0 || drawn.includes(undefined)) return;
+    off.push(...cardEntries.filter((entry) => !drawn.includes(entry) && !off.includes(entry.value)).map((entry) => entry.value));
+  });
+  return {
+    recordsOff: off, selector,
+    positions: positions.map((row) => {
+      const identity = identityOfKey.get(row.selector);
+      return identity === undefined ? row : { ...row, selector: identity };
     })
   };
 };

@@ -41,13 +41,3 @@ export const storedRecordIdOf = (record) => {
   if (typeof recordId !== 'string' || resourceIds.length === 0) return null;
   return { recordId, resourceIds, key: storedLeafKey('records.selector', [resourceIds, recordId]) };
 };
-
-/**
- * The key of the record IDs, in file order, of one file a stored Circular canvas (or batch) draws some records of:
- * each of its request records selects one record of the file, so Load reads the file's record list
- * (`readStoredCanvasFileRecords`, services/record-discovery.js) and the request's reader turns off the records of
- * the file that no request record names (OV-3530, OV-3531). The one builder of the key, for its writer and its
- * reader.
- * @param {readonly string[]} resourceIds The file's resource IDs (`storedRecordSourceResourceIds`).
- */
-export const storedFileRecordsKey = (resourceIds) => storedLeafKey('records.fileRecords', resourceIds);
