@@ -71,7 +71,7 @@ export const pasteLinesOf = ({ alreadyPresent, leftOut, notCarried }, captionOf,
 /**
  * The last target of the open Session (not saved in it): a new drawing at first; after a copy, the drawing it went
  * into, the one a copy into a new drawing made included (D-29); a copy refused as busy changes nothing. A remembered
- * drawing that is no longer the same drawing (removed, or replaced by a Load or New Session) gives a new drawing.
+ * drawing that is no longer the same drawing (removed, or replaced by a Load) gives a new drawing.
  * @param {PasteTargetPorts['drawingOf']} drawingOf
  */
 export const createLastTarget = (drawingOf) => {

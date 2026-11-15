@@ -535,7 +535,7 @@ test('the last target is remembered while the same drawings are open; a drawing 
   await owner.open();
   assert.equal(owner.dialog.target, 'linear-2', 'the last target');
   owner.close();
-  // A Load or a New Session replaces the drawings: a drawing of the same ID is another drawing.
+  // A Load replaces the drawings: a drawing of the same ID is another drawing.
   pasteTargets.drawings.set('linear-2', { id: 'linear-2' });
   await owner.open();
   assert.equal(owner.dialog.target, 'new');
