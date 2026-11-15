@@ -2846,7 +2846,8 @@ left to right, and the app isolates each inserted `{value}`. Text uses the syste
 - **Kept apart**: هم‌ترازی is a sequence alignment (BLAST, LOSAT), تراز کردن / ترازبندی putting records
   in line (Align). نقشه is the drawn genome map (Diagram; نقشهٔ حلقوی / نقشهٔ خطی), نمودار a content,
   skew or depth plot, ترسیم one drawing of a Session and the way labels are drawn (Rendering).
-  یافته is a match of Sequence search, تطابق a BLAST or LOSAT hit, تطبیق a table row matched to a label.
+  یافته is a match of Search features (Previous / Next match), تطابق a BLAST, LOSAT or Sequence search hit,
+  تطبیق a table row matched to a label.
   راهنما is the Legend, راهنمایی the Help tip («راهنمایی: …»). دامنه is a Scope, محدوده a numeric
   range, بازه an interval or span of coordinates, گستره a block envelope. محیط اجرا is a Runtime (the
   diagram, search or LOSAT runtime), مدت اجرا a run time. برش is Crop, بریدن the Clip overflow. پاک
