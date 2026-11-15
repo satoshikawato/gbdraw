@@ -198,6 +198,9 @@ export const FEATURE_HASH_SELECTOR_KEY = 'hash';
 /** @type {readonly ['\r\n', '\r', '\n', ',', '،']} */
 export const TYPED_LIST_SEPARATORS = Object.freeze(['\r\n', '\r', '\n', ',', '،']);
 
+// gbdraw/core/typed_list.py: TYPED_LIST_TRIMMED
+export const TYPED_LIST_TRIMMED = '\t\n\u000B\u000C\r\u001C\u001D\u001E\u001F \u0085\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF';
+
 // gbdraw/api/record_planning.py: CLI_RECORD_KEY_PREFIX
 export const CLI_RECORD_KEY_PREFIX = 'record-';
 

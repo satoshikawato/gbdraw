@@ -35,6 +35,8 @@ def test_the_separators_are_the_comma_the_arabic_comma_and_the_line_breaks() -> 
         ("hypothetical،putative", ["hypothetical", "putative"]),
         ("hypothetical, putative", ["hypothetical", "putative"]),
         ("hypothetical protein", ["hypothetical protein"]),
+        # Pasted from a file Windows Notepad saved: its byte order mark is no part of the first keyword.
+        ("\ufeffhypothetical, putative", ["hypothetical", "putative"]),
     ],
 )
 def test_the_cli_label_blacklist_reads_the_typed_list(typed: str, keywords: list[str]) -> None:
@@ -46,3 +48,15 @@ def test_a_stored_label_blacklist_text_reads_the_typed_list() -> None:
         {"label_blacklist": "hypothetical، putative"}, mode="circular", path="diagramOptions.configOverrides",
     )
     assert migrated == {"labels.filtering.blacklist_keywords": ["hypothetical", "putative"]}
+
+
+@pytest.mark.parametrize(
+    ("text", "items"),
+    [
+        ("\ufeffa", ["a"]),
+        ("\x85a\x1c,\u3000b\u00a0", ["a", "b"]),
+        ("a\u200bb", ["a\u200bb"]),
+    ],
+)
+def test_an_item_loses_the_trimmed_characters_at_its_ends_only(text: str, items: list[str]) -> None:
+    assert split_typed_list(text) == items

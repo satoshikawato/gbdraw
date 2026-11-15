@@ -126,6 +126,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("FEATURE_HASH_SELECTOR_KEY", "gbdraw.features.selector_values", "FEATURE_HASH_SELECTOR_KEY"),
     # The separators of a list typed as one text (ring names, the Label filtering Blacklist).
     ("TYPED_LIST_SEPARATORS", "gbdraw.core.typed_list", "TYPED_LIST_SEPARATORS"),
+    ("TYPED_LIST_TRIMMED", "gbdraw.core.typed_list", "TYPED_LIST_TRIMMED"),
     ("CLI_RECORD_KEY_PREFIX", "gbdraw.api.record_planning", "CLI_RECORD_KEY_PREFIX"),
     ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.requests", "EXPANDED_RECORD_KEY_SEPARATOR"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.core.numeric", "UNSET_NUMBER_SPELLINGS"),
@@ -252,9 +253,19 @@ def _scalar(value: object) -> str:
         raise TypeError(f"Unsupported Web contract value: {value!r}")
     if isinstance(value, int):
         return str(value)
-    # A line break is written as its escape: a JavaScript string literal holds none.
-    escaped = value.replace("\\", "\\\\").replace("'", "\\'").replace("\r", "\\r").replace("\n", "\\n")
-    return "'" + escaped + "'"
+    # A character that prints as nothing or as a blank (a control, a space other than the ASCII
+    # one, a format character) is written as its escape, so the generated text shows it.
+    return "'" + "".join(_SCALAR_ESCAPES.get(character) or _escaped(character) for character in value) + "'"
+
+
+_SCALAR_ESCAPES = {"\\": "\\\\", "'": "\\'", "\t": "\\t", "\n": "\\n", "\r": "\\r"}
+
+
+def _escaped(character: str) -> str:
+    if character.isprintable():
+        return character
+    code = ord(character)
+    return f"\\u{code:04X}" if code <= 0xFFFF else f"\\u{{{code:X}}}"
 
 
 def _frozen(value: object, indent: str = "") -> str:

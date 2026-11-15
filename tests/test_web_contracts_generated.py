@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import dataclasses
 import functools
 import importlib
@@ -888,10 +889,18 @@ process.stdout.write(JSON.stringify(read));
 _TYPED_LIST_SCRIPT = """
 const { TYPED_LIST_SEPARATORS } = await import('./gbdraw/web/js/contracts/schema.generated.js');
 const { splitTypedList } = await import('./gbdraw/web/js/utils/typed-list.js');
+const { parseBlacklistWords } = await import('./gbdraw/web/js/services/file-imports.js');
+const { bytesToText } = await import('./gbdraw/web/js/services/byte-utils.js');
 const { readFileSync } = await import('node:fs');
-const texts = JSON.parse(readFileSync(0, 'utf8'));
-process.stdout.write(JSON.stringify({ separators: TYPED_LIST_SEPARATORS, items: texts.map(splitTypedList) }));
+const { texts, files } = JSON.parse(readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({
+  separators: TYPED_LIST_SEPARATORS,
+  items: texts.map(splitTypedList),
+  fileWords: files.map((file) => parseBlacklistWords(bytesToText(Buffer.from(file, 'base64'))).words)
+}));
 """
+
+_BMP = [chr(code) for code in range(0x10000) if not 0xD800 <= code <= 0xDFFF]
 
 
 @pytest.mark.browser
@@ -947,20 +956,32 @@ def test_the_web_owner_reads_every_bmp_character_in_a_record_order_row_as_python
 
 
 @pytest.mark.browser
-def test_the_web_cuts_a_typed_list_at_the_separators_python_owns() -> None:
-    """OV-2792: the CLI and the Web cut a typed list (a label blacklist, ring names) at the same separators."""
+def test_the_web_cuts_and_trims_a_typed_list_as_python_owns_it() -> None:
+    """OV-2792: the CLI and the Web cut a typed list (a label blacklist, ring names) at the same separators and
+    trim the same characters from each item's ends, so a CLI Session draws the same in the Web."""
 
-    from gbdraw.core.typed_list import TYPED_LIST_SEPARATORS, split_typed_list
+    from gbdraw.core.typed_list import TYPED_LIST_SEPARATORS, TYPED_LIST_TRIMMED, split_typed_list
 
-    texts = [f"a{chr(code)}b" for code in range(0x10000) if not 0xD800 <= code <= 0xDFFF]
-    texts += ["a, b،c\nd\r\ne\rf", ",،\n a ,, \n،b,", "x\r\n\r\ny", ""]
+    cut = [f"a{c}b" for c in _BMP]
+    trimmed = [f"{c}a{c},{c}b{c}" for c in _BMP]
+    texts = cut + trimmed + ["a, b\u060cc\nd\r\ne\rf", ",\u060c\n a ,, \n\u060cb,", "x\r\n\r\ny", ""]
+    # A Blacklist file that Windows Notepad saved: a byte order mark, then words on CRLF lines.
+    notepad = "\ufeffhypothetical\r\nputative\u060c unknown\r\n".encode("utf-8")
     completed = subprocess.run(
         ["node", "--input-type=module", "-e", _TYPED_LIST_SCRIPT],
-        input=json.dumps(texts), cwd=REPO_ROOT, check=True, capture_output=True, text=True, encoding="utf-8",
+        input=json.dumps({"texts": texts, "files": [base64.b64encode(notepad).decode("ascii")]}),
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True, encoding="utf-8",
     )
     web = json.loads(completed.stdout)
     assert tuple(web["separators"]) == TYPED_LIST_SEPARATORS
     differing = [(text, items) for text, items in zip(texts, web["items"]) if items != split_typed_list(text)]
     assert differing == []
     # Four characters cut "a?b" in two: CR, LF, the comma and the Arabic comma, and nothing else.
-    assert sorted(text[1] for text in texts[:-4] if len(split_typed_list(text)) == 2) == ["\n", "\r", ",", "،"]
+    assert sorted(text[1] for text in cut if len(split_typed_list(text)) == 2) == ["\n", "\r", ",", "\u060c"]
+    # The characters taken from an item's ends are the owner's set, and nothing else (the two commas cut instead).
+    taken = {text[0] for text in trimmed if split_typed_list(text) == ["a", "b"]}
+    assert taken - {",", "،"} == set(TYPED_LIST_TRIMMED)
+    # The same file read by the Web's file import and pasted into --label_blacklist gives the same words.
+    expected = ["hypothetical", "putative", "unknown"]
+    assert web["fileWords"] == [expected]
+    assert split_typed_list(notepad.decode("utf-8")) == expected

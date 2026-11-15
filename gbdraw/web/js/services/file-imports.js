@@ -2,7 +2,9 @@
 import { normalizeDefaultColor, normalizeSpecificRuleColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
-import { endsWithTypedListSeparator, splitTypedList, splitTypedListKeepingSeparators } from '../utils/typed-list.js';
+import {
+  endsWithTypedListSeparator, splitTypedList, splitTypedListKeepingSeparators, trimTypedListItem, trimTypedListStart
+} from '../utils/typed-list.js';
 import { CARD_ROW_MARKS } from './card-row-marks.js';
 /** @import { CardRowMarks } from './card-row-marks.js' */
 
@@ -348,7 +350,7 @@ export const withoutImportedDefaultColors = (current, imported, paletteColors) =
  * @param {readonly string[]} words
  */
 const blacklistWithWords = (before, words) => {
-  const existing = before ? before.trim() : '';
+  const existing = before ? trimTypedListItem(before) : '';
   const separator = existing && !endsWithTypedListSeparator(existing) ? ', ' : '';
   return existing + separator + words.join(', ');
 };
@@ -375,12 +377,12 @@ export const withoutImportedBlacklistWords = (text, { words, before }) => {
   [...words].reverse().forEach((word) => {
     let at = -1;
     for (let index = parts.length - 1; index >= 0 && at < 0; index -= 2) {
-      if (parts[index].trim() === word) at = index;
+      if (trimTypedListItem(parts[index]) === word) at = index;
     }
     if (at > 0) parts.splice(at - 1, 2);
     else if (at === 0 && parts.length > 1) {
       parts.splice(0, 2);
-      parts[0] = parts[0].replace(/^\s+/, '');
+      parts[0] = trimTypedListStart(parts[0]);
     } else if (at === 0) parts[0] = '';
   });
   return parts.join('');
