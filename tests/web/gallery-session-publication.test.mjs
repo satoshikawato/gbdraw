@@ -206,7 +206,10 @@ for (const name of sessionNames) {
   const canonical = (renderRequest) => ({ renderRequest, resources: source.resources });
   const receipt = await buildSimilarityAlignmentResetReceipt({ before: canonical(asStored), after: canonical(asStored) });
   const { windows: _windows, ...unwindowed } = promoted.records[0];
-  const storedRequest = { ...structuredClone(source.renderRequest), schema: 9, records: promoted.records.map((record, index) => {
+  // Schema 9 stored the gap the figure drew (24 by default), never null (OV-3572).
+  const storedRequest = { ...structuredClone(source.renderRequest), schema: 9,
+    layout: { ...structuredClone(source.renderRequest.layout), recordGapPx: 24 },
+    records: promoted.records.map((record, index) => {
     const { windows: _recordWindows, ...rest } = record;
     return index === 0
       ? { ...unwindowed, selector: null, region: { selector, start: window.start, end: window.end, reverseComplement: false } }
