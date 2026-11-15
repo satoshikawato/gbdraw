@@ -529,7 +529,8 @@ class _Repair:
             label = self.labels[index].copy()
             x, y = float(label["middle_x"]), float(label["middle_y"])
             radius = math.hypot(x, y)
-            if radius <= _EPS:
+            # An outer elbow stays past its feature's lane (``min_outer_middle_radius_px``, OV-3627).
+            if radius <= _EPS or radius + delta < float(label.get("min_outer_middle_radius_px", 0.0)) - _EPS:
                 return {}
             label["middle_x"] = x * (radius + delta) / radius
             label["middle_y"] = y * (radius + delta) / radius

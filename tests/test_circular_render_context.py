@@ -83,7 +83,7 @@ def test_circular_record_render_context_is_frozen_and_owns_feature_layout() -> N
         radial_layout=radial_layout,
     )
 
-    assert context.feature_layout is radial_layout.features
+    assert context.slot_feature_context(radial_layout.slots[0]).feature_layout is radial_layout.features
     with pytest.raises(FrozenInstanceError):
         context.track_preset = "spreadout"  # type: ignore[misc]
 
@@ -95,7 +95,7 @@ def test_circular_record_render_context_deep_freezes_layout_collections() -> Non
         feature_lane_direction="inside",
         radial_layout=_feature_radial_layout(),
     )
-    feature_layout = context.feature_layout
+    feature_layout = context.slot_feature_context(context.radial_layout.slots[0]).feature_layout
 
     assert feature_layout is not None
     with pytest.raises(TypeError):

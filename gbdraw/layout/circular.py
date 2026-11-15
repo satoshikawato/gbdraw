@@ -237,6 +237,13 @@ class CircularResolvedSlot:
         return self.own_reserved_band_px
 
     @property
+    def feature_layout(self) -> CircularFeatureLayout | None:
+        """The lanes of a features slot, which this slot alone owns (each features slot of a stack has its own);
+        ``None`` for any other row."""
+
+        return self.payload if isinstance(self.payload, CircularFeatureLayout) else None
+
+    @property
     def draw_width_px(self) -> float:
         return float(self.draw_band_px.width_px) if self.draw_band_px is not None else 0.0
 
@@ -258,12 +265,43 @@ def content_outer_radius_px(
 
 
 def slots_feature_layout(slots: Sequence[CircularResolvedSlot]) -> CircularFeatureLayout | None:
-    """The feature lanes' layout: the payload of the features slot among ``slots``."""
+    """The lanes of the first features slot among ``slots``: the lanes the record's labels read."""
 
     for slot in slots:
-        if slot.renderer == "features" and isinstance(slot.payload, CircularFeatureLayout):
-            return slot.payload
+        if slot.renderer == "features" and slot.feature_layout is not None:
+            return slot.feature_layout
     return None
+
+
+@dataclass(frozen=True)
+class CircularLabelLanes:
+    """The feature lanes a record's labels name their features on.
+
+    Outer labels name the features of the outermost features slot and inner labels those of the innermost, so a
+    label never reaches its feature across another copy of it (OV-3626); with one features slot both are its lanes.
+    ``outer_past_axis``: the outer labels' lanes lie wholly outside the axis circle, in the room the outer labels
+    would take, so the labels keep clear of each feature's own lane there (OV-3627).
+    """
+
+    outer: CircularFeatureLayout | None
+    inner: CircularFeatureLayout | None
+    outer_past_axis: bool = False
+
+
+# The lanes of a record without a features slot: the labels read the configured preset's lane radii.
+NO_LABEL_LANES = CircularLabelLanes(None, None)
+
+
+def slots_label_lanes(slots: Sequence[CircularResolvedSlot], axis_radius_px: float) -> CircularLabelLanes:
+    """The lanes the labels of ``slots`` read (``CircularLabelLanes``), around an axis of ``axis_radius_px``."""
+
+    lanes = [slot.feature_layout for slot in slots if slot.renderer == "features" and slot.feature_layout is not None]
+    if not lanes:
+        return NO_LABEL_LANES
+    outer = max(lanes, key=lambda layout: float(layout.all_band_px.outer_px))
+    inner = min(lanes, key=lambda layout: float(layout.all_band_px.inner_px))
+    past_axis = float(outer.all_band_px.inner_px) >= float(axis_radius_px) - LAYOUT_EPSILON
+    return CircularLabelLanes(outer, inner, past_axis)
 
 
 @dataclass(frozen=True)
@@ -332,13 +370,11 @@ class CircularRecordRenderContext:
 
         return self if circle == self.circle else replace(self, circle=circle)
 
-    @property
-    def feature_layout(self) -> CircularFeatureLayout | None:
-        return self.radial_layout.features
+    def slot_feature_context(self, slot: CircularResolvedSlot) -> CircularFeatureRenderContext:
+        """What the feature group of the features slot ``slot`` reads: that slot's own lanes, so a second features
+        slot draws its features at its own radii, not at the first one's (OV-3626)."""
 
-    @property
-    def feature_context(self) -> CircularFeatureRenderContext:
-        return CircularFeatureRenderContext(self.profile, self.track_preset, self.feature_layout, self.circle)
+        return CircularFeatureRenderContext(self.profile, self.track_preset, slot.feature_layout, self.circle)
 
 
 def band_union(bands: Sequence[RadialBand]) -> RadialBand | None:
@@ -513,6 +549,9 @@ def calculate_feature_position_factors_circular(
 
 __all__ = [
     "slots_feature_layout",
+    "slots_label_lanes",
+    "CircularLabelLanes",
+    "NO_LABEL_LANES",
     "CircularAxisLayout",
     "CircularFeatureLabelLayout",
     "CircularFeatureLaneDirection",

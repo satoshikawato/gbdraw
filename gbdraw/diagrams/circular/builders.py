@@ -19,7 +19,7 @@ from ...render.drawers.circular.annotations import LeaderSegment
 from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGroup
 from ...features.factory import FeatureBuildResult
 from ...labels.circular_types import CircularLabel
-from ...layout.circular import CircularRecordRenderContext
+from ...layout.circular import CircularFeatureRenderContext
 from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
@@ -411,7 +411,7 @@ def add_record_group_on_canvas(
     *,
     group_key: GroupKey,
     feature_layers: FeatureBuildResult,
-    render_context: CircularRecordRenderContext,
+    render_context: CircularFeatureRenderContext,
     precalculated_labels: tuple[CircularLabel, ...] = (),
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
@@ -429,7 +429,7 @@ def add_record_group_on_canvas(
         geometry=canvas_config.geometry(),
         feature_config=feature_config,
         feature_layers=feature_layers,
-        render_context=render_context.feature_context,
+        render_context=render_context,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_anchor_radius_px=feature_anchor_radius_px,

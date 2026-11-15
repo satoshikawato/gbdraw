@@ -1,0 +1,111 @@
+"""Circular features slots outside the axis circle: each slot draws at its own radii, and the outer leaders of an
+outward feature stack leave their feature from its outer edge."""
+
+from __future__ import annotations
+
+import math
+import re
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+import pytest
+
+from tests.utils.cli_in_process import run_gbdraw
+
+LAMBDA = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
+SVG = "{http://www.w3.org/2000/svg}"
+_NUMBER = r"-?\d+(?:\.\d+)?(?:e-?\d+)?"
+
+
+def _draw(tmp_path: Path, *slots: str) -> ET.Element:
+    args = ["circular", "--gbk", str(LAMBDA), "--labels", "out", "-o", "out", "-f", "svg"]
+    for slot in slots:
+        args += ["--circular_track_slot", slot]
+    result = run_gbdraw(args, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    return ET.parse(tmp_path / "out.svg").getroot()
+
+
+def _path_points(d: str) -> list[tuple[float, float]]:
+    """The vertices of a feature path: the points of its moves and lines and the end points of its arcs."""
+
+    tokens = re.findall(rf"[MLAZmlaz]|{_NUMBER}", d)
+    points: list[tuple[float, float]] = []
+    command = ""
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.isalpha():
+            command = token
+            index += 1
+            continue
+        if command == "A":
+            points.append((float(tokens[index + 5]), float(tokens[index + 6])))
+            index += 7
+        else:
+            points.append((float(token), float(tokens[index + 1])))
+            index += 2
+    return points
+
+
+def _slot_radii(root: ET.Element, slot_id: str) -> list[float]:
+    group = next(g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-slot-id") == slot_id)
+    return [
+        math.hypot(x, y)
+        for path in group.iter(f"{SVG}path")
+        if path.get("data-gbdraw-feature-id")
+        for x, y in _path_points(path.get("d", ""))
+    ]
+
+
+def _slot_paths(root: ET.Element, slot_id: str) -> list[str]:
+    group = next(g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-slot-id") == slot_id)
+    return [path.get("d", "") for path in group.iter(f"{SVG}path") if path.get("data-gbdraw-feature-id")]
+
+
+def test_a_second_features_slot_outside_draws_at_its_own_radii(tmp_path: Path) -> None:
+    """OV-3626: the outside slot drew its features at the first slot's radii, one copy over the other."""
+
+    root = _draw(tmp_path, "features:features", "outer:features@side=outside,lane_direction=outside")
+
+    assert _slot_paths(root, "outer") != _slot_paths(root, "features")
+    axis = float(next(root.iter(f"{SVG}circle")).get("r", "nan"))
+    assert max(_slot_radii(root, "features")) <= axis + 1e-6
+    assert min(_slot_radii(root, "outer")) >= axis - 1e-6
+
+
+def _nearest_to_centre(x1: float, y1: float, x2: float, y2: float) -> float:
+    """The distance from the circle's centre to the nearest point of the segment."""
+
+    dx, dy = x2 - x1, y2 - y1
+    t = max(0.0, min(1.0, -(x1 * dx + y1 * dy) / ((dx * dx + dy * dy) or 1.0)))
+    return math.hypot(x1 + t * dx, y1 + t * dy)
+
+
+@pytest.mark.parametrize(
+    "slots",
+    [
+        pytest.param(("features:features@side=outside,lane_direction=outside",), id="one-slot-outside"),
+        pytest.param(
+            ("features:features", "outer:features@side=outside,lane_direction=outside"), id="second-slot-outside"
+        ),
+    ],
+)
+def test_outer_leaders_of_an_outward_stack_never_enter_its_lane(tmp_path: Path, slots: tuple[str, ...]) -> None:
+    """OV-3627: the leaders ran from the feature's centre to an elbow inside the lane and from there at a shallow
+    angle under the neighbouring features of the lane. Only the radial stub at the feature itself may lie in the
+    lane; every other leader segment stays past the lane's outer edge. With two slots the labels name the outer copy
+    (OV-3626), so the leaders never cross it either."""
+
+    root = _draw(tmp_path, *slots)
+    lane_outer = max(_slot_radii(root, slots[-1].split(":", 1)[0]))
+    segments = [
+        tuple(float(line.get(key, "nan")) for key in ("x1", "y1", "x2", "y2"))
+        for line in root.iter(f"{SVG}line")
+        if line.get("data-label-feature-id")
+    ]
+    radial = [abs(math.remainder(math.atan2(y1, x1) - math.atan2(y2, x2), math.tau)) < 1e-3 for x1, y1, x2, y2 in segments]
+
+    assert len(segments) > 40 and not all(radial)
+    entering = [segment for segment, is_radial in zip(segments, radial) if not is_radial and _nearest_to_centre(*segment) < lane_outer - 0.5]
+    assert entering == []
