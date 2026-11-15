@@ -169,7 +169,7 @@ test('the reference flag of the alignment overlay is translated', async ({ page 
   await loadAmbiguousSession(page, testInfo);
   await page.evaluate(async () => {
     const { setUiLocale } = await import('./js/utils/i18n.js');
-    await setUiLocale('ja', async () => ({ default: { reference: '基準' } }));
+    await setUiLocale('ja', async () => ({ default: { 'similarity alignment\u0004reference': '基準' } }));
   });
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
     await page.locator('.drawer-toggle').click();

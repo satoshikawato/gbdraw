@@ -57,7 +57,7 @@ import {
   getFeatureIdentity,
   normalizeFeatureIdentity
 } from '../../services/feature-dom.js';
-import { t } from '../../utils/i18n.js';
+import { t, tx } from '../../utils/i18n.js';
 
 // The hover highlight of a feature or band is written once the pointer has
 // rested on it this long (OV-900, D-01): a pointer passing over bands writes
@@ -1441,7 +1441,7 @@ export const createFeatureSvgActions = ({
         const flag = document.createElement('span');
         flag.className = 'gbdraw-alignment-flag truncate';
         const flagName = Object.assign(document.createElement('span'), { className: 'truncate', textContent: reference.name });
-        flag.append(flagName, ` · ${t('reference')}`);
+        flag.append(flagName, ` · ${tx('similarity alignment', 'reference')}`);
         const tag = document.createElement('span');
         tag.className = 'gbdraw-alignment-tag truncate';
         [referenceRing, flag, tag].forEach((part) => part.setAttribute('aria-hidden', 'true'));
