@@ -12,11 +12,18 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+from Bio.SeqFeature import SeqFeature, SimpleLocation
+
 from gbdraw.analysis.orf_prediction import (
+    PREDICTED_ORF_CAPTION,
+    PREDICTED_ORF_COLOR,
     OrfPredictionParameters,
     PredictedOrf,
     predict_orfs,
+    predict_record_orf_features,
+    predicted_orf_color_rule,
     predicted_orf_features,
+    record_genetic_code,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.version import __version__
@@ -98,7 +105,7 @@ def test_a_circular_plasmid_differs_from_orfind_only_over_the_origin() -> None:
 
 
 ORIGIN_SEQUENCE = "CCCCCCCCCCCCCCCTAA" + "C" * 29 + "A" + "ATG" + "CCC" * 10
-SHORT = OrfPredictionParameters(min_protein_length=5)
+SHORT = OrfPredictionParameters(genetic_code=1, min_protein_length=5)
 
 
 def test_an_orf_crosses_the_origin_of_a_circular_record() -> None:
@@ -126,7 +133,7 @@ def test_a_frame_without_a_start_codon_gives_no_orf() -> None:
     # record that contained, and so removed, the real ORF.
     sequence = "ATG" + "CCC" * 60 + "TAA"
     assert _spans(
-        predict_orfs(sequence, topology="linear", parameters=OrfPredictionParameters())
+        predict_orfs(sequence, topology="linear", parameters=OrfPredictionParameters(genetic_code=1))
     ) == [(0, 186, 1, False, "M" + "P" * 60)]
 
 
@@ -136,7 +143,7 @@ def test_orfs_with_the_same_span_are_both_kept() -> None:
     orfs = predict_orfs(
         sequence,
         topology="linear",
-        parameters=OrfPredictionParameters(min_protein_length=10),
+        parameters=OrfPredictionParameters(genetic_code=1, min_protein_length=10),
     )
     assert [orf[:4] for orf in _spans(orfs)] == [(0, 48, -1, True), (0, 48, 1, True)]
 
@@ -188,7 +195,7 @@ def test_table_2_stops_at_aga() -> None:
 
 
 def test_case_u_and_ambiguity_codes_read_as_biopython_translates_them() -> None:
-    parameters = OrfPredictionParameters(min_protein_length=3)
+    parameters = OrfPredictionParameters(genetic_code=1, min_protein_length=3)
     assert [
         orf.protein
         for orf in predict_orfs(
@@ -225,12 +232,12 @@ def test_the_sweep_removes_exactly_the_orfs_inside_another(topology: str) -> Non
         everything = predict_orfs(
             sequence,
             topology=topology,
-            parameters=OrfPredictionParameters(min_protein_length=5, keep_nested=True),
+            parameters=OrfPredictionParameters(genetic_code=1, min_protein_length=5, keep_nested=True),
         )
         kept = predict_orfs(
             sequence,
             topology=topology,
-            parameters=OrfPredictionParameters(min_protein_length=5),
+            parameters=OrfPredictionParameters(genetic_code=1, min_protein_length=5),
         )
         arcs = {orf: _arc(orf, len(sequence)) for orf in everything}
         expected = tuple(
@@ -315,7 +322,13 @@ def test_feature_qualifiers_say_the_cds_is_predicted_and_carry_no_label() -> Non
 
 @pytest.mark.parametrize(
     "arguments",
-    [{"genetic_code": 7}, {"start_codons": "all"}, {"min_protein_length": 0}],
+    [
+        {"genetic_code": 7},
+        {"genetic_code": "records"},
+        {"genetic_code": True},
+        {"start_codons": "all"},
+        {"min_protein_length": 0},
+    ],
 )
 def test_parameters_are_checked(arguments: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
@@ -325,3 +338,82 @@ def test_parameters_are_checked(arguments: dict[str, object]) -> None:
 def test_topology_is_checked() -> None:
     with pytest.raises(ValidationError):
         predict_orfs("ATG", topology="ring", parameters=SHORT)  # type: ignore[arg-type]
+
+
+def _cds(*tables: str) -> SeqFeature:
+    return SeqFeature(
+        SimpleLocation(0, 9, 1),
+        type="CDS",
+        qualifiers={"transl_table": list(tables)} if tables else {},
+    )
+
+
+def test_the_defaults_are_the_owners_answers() -> None:
+    # D-126 (Owner 2026-11-14): Q5=A 50 aa, Q6=C the record's table, Q7=A methionine starts; nested ORFs left out.
+    assert OrfPredictionParameters() == OrfPredictionParameters(
+        genetic_code="record",
+        start_codons="methionine",
+        min_protein_length=50,
+        keep_nested=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("features", "table"),
+    [
+        ([_cds("2"), _cds("2")], 2),
+        ([_cds("4")], 4),
+        # Mixed tables, a CDS that states none, a value that names no table, or no CDS at all: table 11.
+        ([_cds("2"), _cds("11")], 11),
+        ([_cds("2"), _cds()], 11),
+        ([_cds("2", "4")], 11),
+        ([_cds("x")], 11),
+        ([_cds("7")], 11),
+        ([], 11),
+        # Only CDS state the record's table; another feature's qualifier is not read.
+        ([SeqFeature(SimpleLocation(0, 9, 1), type="gene", qualifiers={"transl_table": ["2"]})], 11),
+    ],
+)
+def test_the_record_genetic_code_is_the_one_its_cds_all_state_else_11(
+    features: list[SeqFeature], table: int
+) -> None:
+    assert record_genetic_code(features) == table
+
+
+def test_a_record_choice_must_be_resolved_before_a_sequence_is_read() -> None:
+    with pytest.raises(ValidationError, match="record"):
+        predict_orfs("ATG", topology="linear", parameters=OrfPredictionParameters())
+
+
+@pytest.mark.parametrize(
+    ("name", "table", "count"),
+    [("HmmtDNA.gbk", "2", 16), ("NC_001416.gb", "11", 110)],
+)
+def test_record_features_read_the_record_table(name: str, table: str, count: int) -> None:
+    record = SeqIO.read(INPUTS / name, "genbank")
+    features = predict_record_orf_features(
+        record, topology="linear", parameters=OrfPredictionParameters()
+    )
+    assert len(features) == count
+    assert {feature.qualifiers["transl_table"][0] for feature in features} == {table}
+    chosen = predict_record_orf_features(
+        record, topology="linear", parameters=OrfPredictionParameters(genetic_code=1)
+    )
+    assert {feature.qualifiers["transl_table"][0] for feature in chosen} == {"1"}
+
+
+def test_the_predicted_orf_color_rule_matches_predicted_cds_only() -> None:
+    (feature,) = predicted_orf_features(
+        predict_orfs(ORIGIN_SEQUENCE, topology="circular", parameters=SHORT),
+        record_length=len(ORIGIN_SEQUENCE),
+        genetic_code=1,
+    )
+    rule = predicted_orf_color_rule()
+    assert list(rule.columns) == ["feature_type", "qualifier_key", "value", "color", "caption"]
+    ((feature_type, key, pattern, color, caption),) = rule.itertuples(index=False)
+    assert (feature_type, color, caption) == ("CDS", PREDICTED_ORF_COLOR, PREDICTED_ORF_CAPTION)
+    assert caption == "Predicted ORF"
+    import re
+
+    assert re.search(pattern, feature.qualifiers[key][0])
+    assert not re.search(pattern, "ab initio prediction:Prodigal:2.6")

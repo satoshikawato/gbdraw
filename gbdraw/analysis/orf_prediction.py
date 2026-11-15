@@ -17,9 +17,14 @@ frame, is left out. Four changes are made to those rules:
   with a start codon inside the sequence, so no ORF is 5'-partial; the open stretch before a frame's first start
   codon is not an ORF, as in orfind.
 - The start codons are those of the genetic code table (``"table"``) or, as in orfind, the codons that the table
-  translates to methionine (``"methionine"``). Both sets come from Biopython's codon tables, as do the stop codons
+  translates to methionine (``"methionine"``, the default). Both sets come from Biopython's codon tables, as do the stop codons
   and the translation, including the IUPAC ambiguity codes Biopython resolves. A frame without any start codon has
   no ORF (orfind read one from the frame's last codon, with a negative start, OV-3567).
+
+The defaults are the Owner's (D-126, 2026-11-14): proteins of at least 50 residues, methionine start codons, and the
+genetic code the record's CDS all state (``/transl_table``), else table 11 (``record_genetic_code``); orfind read
+table 1. Predicted ORFs are drawn as ``CDS`` (D-87) in their own Legend row, "Predicted ORF"
+(``predicted_orf_color_rule``), and carry no qualifier that gbdraw shows as a label.
 
 Codon meanings are read once per table from Biopython's ``Seq.translate`` into lookup arrays, and each frame is then
 read with array operations, so a 13 Mb record takes seconds.
@@ -27,9 +32,9 @@ read with array operations, so a 13 Mb record takes seconds.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Literal, get_args
 
 import numpy as np
@@ -42,12 +47,15 @@ from Bio.SeqFeature import (
     SeqFeature,
     SimpleLocation,
 )
+from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
+from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.version import __version__
 
 StartCodonSet = Literal["methionine", "table"]
+RecordGeneticCode = Literal["record"]
 Topology = Literal["linear", "circular"]
 Strand = Literal[1, -1]
 
@@ -57,6 +65,13 @@ _COMPLEMENTS = "TGCAYRSWMKVHDBN"
 _INVALID = len(_LETTERS)
 _CODES = 16
 _CODONS = _CODES**3
+
+RECORD_FALLBACK_GENETIC_CODE = 11
+"""The table of a record whose CDS do not all state one table, and of a record without CDS (a FASTA record)."""
+_INFERENCE_PREFIX = "ab initio prediction:gbdraw:"
+PREDICTED_ORF_CAPTION = "Predicted ORF"
+PREDICTED_ORF_COLOR = "#e58fa6"
+"""A rose that no packaged palette gives another feature type (tRNA is #e8b441 in the default palette)."""
 
 
 def _byte_codes() -> bytes:
@@ -75,10 +90,12 @@ _COMPLEMENT_CODES = np.array(
 
 @dataclass(frozen=True, slots=True)
 class OrfPredictionParameters:
-    """How ORFs are predicted. The defaults are orfind's (table 1, ATG, 50 residues, contained ORFs left out)."""
+    """How ORFs are predicted. The defaults are the Owner's (D-126): the record's table, methionine starts, 50
+    residues, contained ORFs left out."""
 
-    genetic_code: int = 1
-    """An NCBI genetic code table id, as Biopython's codon tables number them."""
+    genetic_code: int | RecordGeneticCode = "record"
+    """An NCBI genetic code table id, as Biopython's codon tables number them, or ``"record"``: the table the
+    record's CDS all state, else 11 (``record_genetic_code``)."""
     start_codons: StartCodonSet = "methionine"
     """``"methionine"``: the codons the table translates to M (orfind); ``"table"``: the table's start codons."""
     min_protein_length: int = 50
@@ -87,12 +104,12 @@ class OrfPredictionParameters:
     """Keep an ORF whose span lies inside another ORF's span."""
 
     def __post_init__(self) -> None:
-        if self.genetic_code not in CodonTable.unambiguous_dna_by_id:
+        if self.genetic_code != "record" and not _known_table(self.genetic_code):
             known = ", ".join(
                 str(table) for table in sorted(CodonTable.unambiguous_dna_by_id)
             )
             raise ValidationError(
-                f"Unknown genetic code {self.genetic_code}; the tables are {known}."
+                f"Unknown genetic code {self.genetic_code!r}; the tables are {known}, or 'record'."
             )
         if self.start_codons not in get_args(StartCodonSet):
             raise ValidationError(
@@ -102,6 +119,31 @@ class OrfPredictionParameters:
             raise ValidationError(
                 f"The minimum protein length is at least 1, not {self.min_protein_length}."
             )
+
+
+def _known_table(value: object) -> bool:
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and value in CodonTable.unambiguous_dna_by_id
+    )
+
+
+def record_genetic_code(features: Iterable[SeqFeature]) -> int:
+    """The genetic code of a record: the table its CDS all state, each with one ``/transl_table`` naming a known
+    table, else ``RECORD_FALLBACK_GENETIC_CODE`` (mixed tables, a CDS stating none, or no CDS; D-126 Q6=C)."""
+
+    stated: set[int] = set()
+    for feature in features:
+        if feature.type != "CDS":
+            continue
+        values = feature.qualifiers.get("transl_table", [])
+        text = str(values[0]).strip() if len(values) == 1 else ""
+        table = int(text) if text.isdigit() else None
+        if not _known_table(table):
+            return RECORD_FALLBACK_GENETIC_CODE
+        stated.add(int(text))
+    return stated.pop() if len(stated) == 1 else RECORD_FALLBACK_GENETIC_CODE
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +345,11 @@ def predict_orfs(
         raise ValidationError(
             f"Topology must be one of {get_args(Topology)}, not {topology!r}."
         )
+    if parameters.genetic_code == "record":
+        raise ValidationError(
+            "The genetic code 'record' is read from a record's CDS: predict a record's ORFs with "
+            "predict_record_orf_features, or give a table."
+        )
     meanings = _codon_meanings(parameters.genetic_code, parameters.start_codons)
     plus = _plus_strand_codes(sequence)
     if len(plus) < 3:
@@ -399,7 +446,7 @@ def predicted_orf_features(
     and gbdraw finds a feature by its own identity, not by a name.
     """
 
-    inference = f"ab initio prediction:gbdraw:{__version__}"
+    inference = f"{_INFERENCE_PREFIX}{__version__}"
     return [
         SeqFeature(
             _orf_location(orf, record_length),
@@ -412,3 +459,30 @@ def predicted_orf_features(
         )
         for orf in orfs
     ]
+
+
+def predict_record_orf_features(
+    record: SeqRecord, *, topology: Topology, parameters: OrfPredictionParameters
+) -> list[SeqFeature]:
+    """The ORFs of a record as ``CDS`` features, read with the parameters' table or, for ``"record"``, the table
+    of ``record_genetic_code``: the one entry the record loading path calls."""
+
+    table = (
+        record_genetic_code(record.features)
+        if parameters.genetic_code == "record"
+        else parameters.genetic_code
+    )
+    orfs = predict_orfs(
+        record.seq, topology=topology, parameters=replace(parameters, genetic_code=table)
+    )
+    return predicted_orf_features(orfs, record_length=len(record.seq), genetic_code=table)
+
+
+def predicted_orf_color_rule() -> DataFrame:
+    """The color rule that gives predicted ORFs their own Legend row and color (D-126 Q8=B): it matches the
+    ``inference`` qualifier ``predicted_orf_features`` writes, in the columns of a color table."""
+
+    return DataFrame(
+        [("CDS", "inference", f"^{_INFERENCE_PREFIX}", PREDICTED_ORF_COLOR, PREDICTED_ORF_CAPTION)],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
