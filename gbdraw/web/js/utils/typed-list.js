@@ -1,19 +1,22 @@
 // @ts-check
 
 // The separators of a list typed into one text field: ring names and the Label filtering
-// Blacklist (its text and the words of a Blacklist file). A comma, the Arabic comma ،
-// (U+060C), which fa and ar keyboards type and their catalogs write for "comma", or a line
-// break (CRLF, LF or CR) separates two items (OV-2792). No typed list takes ';', so the
-// Arabic semicolon is no separator either. Text the user does not type as a list (slot specs,
-// numbers, colors, font stacks, joins the Web writes) keeps its own ',' rules; Python reads
-// these lists as arrays the Web sends and never splits this text.
+// Blacklist (its text and the words of a Blacklist file), OV-2792. Python owns them
+// (`TYPED_LIST_SEPARATORS` in gbdraw/core/typed_list.py, which its CLI options and stored
+// `label_blacklist` text read too), and the contract generator carries them here: the comma,
+// the Arabic comma ، (U+060C) that fa and ar keyboards type and their catalogs write for
+// "comma", and a line break, CRLF as one. Text the user does not type as a list (slot specs,
+// numbers, colors, font stacks, joins the Web writes) keeps its own ',' rules.
+import { TYPED_LIST_SEPARATORS } from '../contracts/schema.generated.js';
 
-/** One separator: CRLF is one line break. */
-const SEPARATOR = /(\r\n|[\r\n,،])/;
+/** The separators as alternatives of a pattern, CRLF before CR and LF as Python orders them. */
+const SEPARATORS = TYPED_LIST_SEPARATORS.map((separator) => separator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+/** One separator. */
+const SEPARATOR = new RegExp(`(${SEPARATORS})`);
 /** A run of separators between two items. */
-const SEPARATOR_RUN = /[\r\n,،]+/;
+const SEPARATOR_RUN = new RegExp(`(?:${SEPARATORS})+`);
 /** A separator at the end of a text. */
-const TRAILING_SEPARATOR = /[\r\n,،]$/;
+const TRAILING_SEPARATOR = new RegExp(`(?:${SEPARATORS})$`);
 
 /**
  * The items of a typed list: the text cut at each run of separators, each item trimmed, blank

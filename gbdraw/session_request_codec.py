@@ -85,6 +85,7 @@ from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.record_planning import _source_details
 from gbdraw.core.numeric import ascii_float
+from gbdraw.core.typed_list import split_typed_list
 from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
@@ -2717,7 +2718,7 @@ def migrate_flat_config_overrides(
         if value is None:
             continue
         if legacy_name == "label_blacklist" and isinstance(value, str):
-            value = [item.strip() for item in value.split(",") if item.strip()]
+            value = split_typed_list(value)
         for canonical_path in canonical_paths:
             assign(canonical_path, value, source=legacy_name)
 

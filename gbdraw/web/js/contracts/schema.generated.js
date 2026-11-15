@@ -194,6 +194,10 @@ export const RECORD_INDEX_SELECTOR_PREFIX = '#';
 // gbdraw/features/selector_values.py: FEATURE_HASH_SELECTOR_KEY
 export const FEATURE_HASH_SELECTOR_KEY = 'hash';
 
+// gbdraw/core/typed_list.py: TYPED_LIST_SEPARATORS
+/** @type {readonly ['\r\n', '\r', '\n', ',', '،']} */
+export const TYPED_LIST_SEPARATORS = Object.freeze(['\r\n', '\r', '\n', ',', '،']);
+
 // gbdraw/api/record_planning.py: CLI_RECORD_KEY_PREFIX
 export const CLI_RECORD_KEY_PREFIX = 'record-';
 

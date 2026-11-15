@@ -885,6 +885,15 @@ process.stdout.write(JSON.stringify(read));
 """
 
 
+_TYPED_LIST_SCRIPT = """
+const { TYPED_LIST_SEPARATORS } = await import('./gbdraw/web/js/contracts/schema.generated.js');
+const { splitTypedList } = await import('./gbdraw/web/js/utils/typed-list.js');
+const { readFileSync } = await import('node:fs');
+const texts = JSON.parse(readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({ separators: TYPED_LIST_SEPARATORS, items: texts.map(splitTypedList) }));
+"""
+
+
 @pytest.mark.browser
 def test_the_web_python_strip_removes_every_bmp_space_python_removes() -> None:
     # OV-3760: `pythonStrip` (services/genbank-header.js), run by Node over the BMP, strips what `str.strip` strips.
@@ -935,3 +944,23 @@ def test_the_web_owner_reads_every_bmp_character_in_a_record_order_row_as_python
     # The tokens reach both branches: the spaces Python's `\s` holds and the ten ASCII digits.
     assert [python[2 * ord(digit) + 1] for digit in "0123456789"] == list(range(10, 20))
     assert sum(row == 1 for row in python[0::2]) > 20
+
+
+@pytest.mark.browser
+def test_the_web_cuts_a_typed_list_at_the_separators_python_owns() -> None:
+    """OV-2792: the CLI and the Web cut a typed list (a label blacklist, ring names) at the same separators."""
+
+    from gbdraw.core.typed_list import TYPED_LIST_SEPARATORS, split_typed_list
+
+    texts = [f"a{chr(code)}b" for code in range(0x10000) if not 0xD800 <= code <= 0xDFFF]
+    texts += ["a, b،c\nd\r\ne\rf", ",،\n a ,, \n،b,", "x\r\n\r\ny", ""]
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", _TYPED_LIST_SCRIPT],
+        input=json.dumps(texts), cwd=REPO_ROOT, check=True, capture_output=True, text=True, encoding="utf-8",
+    )
+    web = json.loads(completed.stdout)
+    assert tuple(web["separators"]) == TYPED_LIST_SEPARATORS
+    differing = [(text, items) for text, items in zip(texts, web["items"]) if items != split_typed_list(text)]
+    assert differing == []
+    # Four characters cut "a?b" in two: CR, LF, the comma and the Arabic comma, and nothing else.
+    assert sorted(text[1] for text in texts[:-4] if len(split_typed_list(text)) == 2) == ["\n", "\r", ",", "،"]

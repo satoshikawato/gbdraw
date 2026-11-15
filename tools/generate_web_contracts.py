@@ -124,6 +124,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # The sign of a `#N` record selector and the key of a `hash=` feature selector, as the Web writes them.
     ("RECORD_INDEX_SELECTOR_PREFIX", "gbdraw.io.record_select", "RECORD_INDEX_SELECTOR_PREFIX"),
     ("FEATURE_HASH_SELECTOR_KEY", "gbdraw.features.selector_values", "FEATURE_HASH_SELECTOR_KEY"),
+    # The separators of a list typed as one text (ring names, the Label filtering Blacklist).
+    ("TYPED_LIST_SEPARATORS", "gbdraw.core.typed_list", "TYPED_LIST_SEPARATORS"),
     ("CLI_RECORD_KEY_PREFIX", "gbdraw.api.record_planning", "CLI_RECORD_KEY_PREFIX"),
     ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.requests", "EXPANDED_RECORD_KEY_SEPARATOR"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.core.numeric", "UNSET_NUMBER_SPELLINGS"),
@@ -250,7 +252,9 @@ def _scalar(value: object) -> str:
         raise TypeError(f"Unsupported Web contract value: {value!r}")
     if isinstance(value, int):
         return str(value)
-    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    # A line break is written as its escape: a JavaScript string literal holds none.
+    escaped = value.replace("\\", "\\\\").replace("'", "\\'").replace("\r", "\\r").replace("\n", "\\n")
+    return "'" + escaped + "'"
 
 
 def _frozen(value: object, indent: str = "") -> str:

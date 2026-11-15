@@ -18,6 +18,7 @@ from gbdraw.api.options import ColorOptions, DepthTrackInput
 from gbdraw.api.request_render import RequestRenderResult
 from gbdraw.api.requests import RenderOutputRequest
 from gbdraw.cli_utils.common import cli_font_family, feature_density_tracks_from_args, handle_output_formats
+from gbdraw.core.typed_list import split_typed_list
 from gbdraw.features.overrides import log_feature_identity_notices
 from gbdraw.features.shapes import FeatureShape
 from gbdraw.labels.label_style import LabelStyleMode
@@ -93,12 +94,12 @@ def label_style_overrides(args: argparse.Namespace, *, mode: LabelStyleMode) -> 
 def label_filtering_override(
     filtering: Mapping[str, object], label_blacklist: str | Sequence[str] | None
 ) -> dict[str, object]:
-    """``labels.filtering`` of the config, with the keywords of ``--label_blacklist`` (comma-separated) when given."""
+    """``labels.filtering`` of the config, with the keywords of ``--label_blacklist`` (a typed list) when given."""
 
     override = dict(filtering)
     if label_blacklist is not None:
         override["blacklist_keywords"] = (
-            [keyword.strip() for keyword in label_blacklist.split(",") if keyword.strip()]
+            split_typed_list(label_blacklist)
             if isinstance(label_blacklist, str)
             else label_blacklist
         )
