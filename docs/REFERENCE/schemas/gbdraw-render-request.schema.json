@@ -1641,6 +1641,63 @@
       ],
       "additionalProperties": false
     },
+    "CanonicalOrfPredictionParameters": {
+      "type": "object",
+      "properties": {
+        "geneticCode": {
+          "enum": [
+            "record",
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33
+          ]
+        },
+        "startCodons": {
+          "enum": [
+            "methionine",
+            "table"
+          ]
+        },
+        "minProteinLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "keepNested": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "geneticCode",
+        "startCodons",
+        "minProteinLength",
+        "keepNested"
+      ],
+      "additionalProperties": false
+    },
     "CanonicalCircularDepthTrack": {
       "type": "object",
       "properties": {
@@ -2101,6 +2158,16 @@
           "anyOf": [
             {
               "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "orfPrediction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalOrfPredictionParameters"
             },
             {
               "type": "null"
@@ -2687,6 +2754,16 @@
           "anyOf": [
             {
               "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "orfPrediction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalOrfPredictionParameters"
             },
             {
               "type": "null"

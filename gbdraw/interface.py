@@ -76,6 +76,7 @@ from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.features.overrides import FeatureIdentityNotice
 from gbdraw.features.placement import FeaturePlacementOverride
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentPlan,
@@ -118,6 +119,8 @@ class FeatureOptions:
     visibility: TableSource | None = None
     shapes: Mapping[str, str] | None = None
     placements: TableSource | Sequence[FeaturePlacementOverride] | None = None
+    # CDS predicted from the sequence of each record without CDS of its own (off when None).
+    orf_prediction: OrfPredictionParameters | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         validate_feature_type_names(self.types, field_name="types")
@@ -956,6 +959,7 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
         "label_override_table": override_table,
         "label_override_file": override_file,
         "feature_shapes": features.shapes,
+        "orf_prediction": features.orf_prediction,
         "dinucleotide": options.dinucleotide,
         "window": options.window,
         "step": options.step,

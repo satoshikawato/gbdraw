@@ -19,6 +19,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityResult,
 )
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters, predict_record_orf_features
 from gbdraw.analysis.origin_arcs import location_center
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
@@ -2116,10 +2117,32 @@ def _uncropped_length(record: SeqRecord) -> int:
     return length if isinstance(length, int) else len(record)
 
 
+def _with_predicted_orfs(
+    record: SeqRecord, parameters: OrfPredictionParameters, *, circular: bool,
+) -> tuple[SeqRecord, SourceFeatureCatalog]:
+    """``record`` with the CDS predicted from its sequence added after its features, and its source feature catalog.
+
+    The predicted CDS are source features like the file's: each is found by its hash (record, type, location).
+    A record that has CDS of its own is refused until where predicted CDS draw beside annotated ones is decided.
+    """
+    annotated = sum(1 for feature in record.features if feature.type == "CDS")
+    if annotated:
+        raise ValidationError(
+            f"ORF prediction adds CDS only to a record without CDS of its own; record {record.id!r} has {annotated}.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "ORF_PREDICTION_ANNOTATED_RECORD"},
+        )
+    predicted = _detached_record(record)
+    predicted.features.extend(predict_record_orf_features(
+        record, topology="circular" if circular else "linear", parameters=parameters,
+    ))
+    return predicted, capture_source_features(predicted)
+
+
 def resolve_record_inputs(
     record_inputs: Sequence[RecordInput],
     *,
     record_options: RecordCollectionOptions | None = None,
+    orf_prediction: OrfPredictionParameters | None = None,
     gff_candidate_features: Sequence[str] | None,
     gff_keep_all_features: bool,
     genbank_loader: GenBankLoader = load_gbks,
@@ -2131,6 +2154,8 @@ def resolve_record_inputs(
 
     ``parsed_sources`` keeps the parses across calls: a caller that resolves the
     same sources again with other GFF3 candidate types does not parse them again.
+    ``orf_prediction`` adds the CDS predicted from each record's sequence, read
+    in the topology the record is drawn in, to the record after its load.
     """
 
     inputs = tuple(record_inputs)
@@ -2180,6 +2205,12 @@ def resolve_record_inputs(
                 source_record = filter_features_by_type(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
                 )
+            source_catalog = parsed.source_features[source_record_index]
+            if orf_prediction is not None:
+                source_record, source_catalog = _with_predicted_orfs(
+                    source_record, orf_prediction,
+                    circular=drawn_circular(record_input.display.is_circular, detected_topology(source_record, source_kind)),
+                )
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
             record = _detached_record(source_record)
             reverse = record_input.presentation.reverse_complement
@@ -2224,7 +2255,7 @@ def resolve_record_inputs(
                 source_file_length=origin.source_file_length if origin else file_length,
                 detected_topology=detected_topology(source_record, source_kind),
                 is_cropped=source_cropped,
-                source_features=parsed.source_features[source_record_index],
+                source_features=source_catalog,
                 feature_types_left_out_at_load=types_left_out,
             )
             for unit in units:

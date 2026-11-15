@@ -36,6 +36,7 @@ from typing import (
 )
 
 from Bio import SeqIO
+from Bio.Data import CodonTable
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame, read_csv
@@ -65,6 +66,7 @@ from gbdraw.analysis.feature_density import (
     FeatureDensityStyle,
     FeatureDensityTrack,
 )
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters, RecordGeneticCode, StartCodonSet
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource
 from gbdraw.analysis.protein_colinearity import (
@@ -3288,6 +3290,32 @@ def _decode_feature_density_tracks(value: object) -> tuple[FeatureDensityTrack, 
     return tuple(decoded)
 
 
+def _encode_orf_prediction(value: OrfPredictionParameters) -> dict[str, object]:
+    """The parameters as one object with a key per field (camelCase)."""
+
+    return {key: getattr(value, item.name) for key, item in _class_field_defs(OrfPredictionParameters).items()}
+
+
+def _decode_orf_prediction(value: object) -> OrfPredictionParameters:
+    path = "renderRequest.diagramOptions.orfPrediction"
+    raw = _object(value, path=path, required=frozenset(_class_field_defs(OrfPredictionParameters)))
+    genetic_code = raw["geneticCode"]
+    try:
+        return OrfPredictionParameters(
+            # OrfPredictionParameters.__post_init__ refuses a table Biopython does not know, other text, and a
+            # start set or length outside its domain.
+            genetic_code=(
+                cast("RecordGeneticCode", genetic_code) if isinstance(genetic_code, str)
+                else _integer(genetic_code, f"{path}.geneticCode")
+            ),
+            start_codons=cast("StartCodonSet", _string(raw["startCodons"], f"{path}.startCodons")),
+            min_protein_length=_integer(raw["minProteinLength"], f"{path}.minProteinLength"),
+            keep_nested=_boolean(raw["keepNested"], f"{path}.keepNested"),
+        )
+    except ValidationError as error:
+        raise CanonicalRequestDecodingError(f"{path}: {error}", diagnostic=_REQUEST_FIELDS_INVALID) from error
+
+
 def _without_unwritten_feature_tolerance(name: str, value: object, error_type):
     if name not in {"config", "config_overrides"} or not isinstance(value, MappingABC):
         return value
@@ -3370,6 +3398,8 @@ def _encode_option_value(
         return _encode_depth_tracks(value, resources=resources)
     if name == "feature_density_tracks" and value is not None:
         return _encode_feature_density_tracks(value)
+    if name == "orf_prediction" and isinstance(value, OrfPredictionParameters):
+        return _encode_orf_prediction(value)
     if name in _TABLE_FIELDS:
         return _table_ref(name, value, resources=resources)
     if name in _FILE_FIELDS:
@@ -3427,6 +3457,8 @@ def _decode_option_value(
         return _decode_depth_tracks(value, resource_paths=resource_paths)
     if name == "feature_density_tracks" and value is not None:
         return _decode_feature_density_tracks(value)
+    if name == "orf_prediction" and value is not None:
+        return _decode_orf_prediction(value)
     if name in _TABLE_FIELDS:
         return _decode_table_ref(
             value,
@@ -6391,6 +6423,23 @@ def _describe_feature_density(data: Callable[..., Shape], of: Callable[[object],
     })
 
 
+def _describe_feature_options(data: Callable[..., Shape], of: Callable[[object], Shape], color: Shape) -> None:
+    """Describe the option objects about a record's features that their own encoders write: the density tracks
+    (``_describe_feature_density``) and the ORF prediction.
+
+    ``_decode_orf_prediction`` reads every key; ``OrfPredictionParameters.__post_init__`` takes a table Biopython
+    knows or ``"record"``, and a protein of at least one residue.
+    """
+
+    from .contract_shapes import bounded, literal
+
+    _describe_feature_density(data, of, color)
+    data(OrfPredictionParameters, replace={
+        "genetic_code": literal("record", *sorted(CodonTable.unambiguous_dna_by_id)),
+        "min_protein_length": bounded(of(_class_type_hints(OrfPredictionParameters)["min_protein_length"]), minimum=1),
+    })
+
+
 def describe_canonical_request() -> dict[str, Any]:
     """Describe the JSON of a current-schema request as neutral data.
 
@@ -6623,7 +6672,7 @@ def describe_canonical_request() -> dict[str, Any]:
             return non_null(shape)
         return shape
 
-    _describe_feature_density(data, of, color)
+    _describe_feature_options(data, of, color)
     diagram_options: dict[str, Shape] = {}
     for mode, (options_class, track_class, output_class) in modes.items():
         title = mode.capitalize()

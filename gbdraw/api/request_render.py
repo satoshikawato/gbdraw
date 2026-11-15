@@ -29,7 +29,7 @@ from typing import (
 )
 
 from Bio.SeqRecord import SeqRecord
-from pandas import DataFrame
+from pandas import DataFrame, concat
 from svgwrite import Drawing
 
 from gbdraw.analysis.collinearity import (
@@ -41,6 +41,7 @@ from gbdraw.analysis.depth_tracks import (
     depth_track_count,
     normalize_depth_tracks,
 )
+from gbdraw.analysis.orf_prediction import predicted_orf_color_rule
 from gbdraw.analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
     DerivedLosatpPair,
@@ -1303,6 +1304,11 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         raise ValidationError("Unsupported diagram request type.")
     options = request.options
     color_table = _color_table(options)
+    if options.orf_prediction is not None:
+        # The request's own rules come first: a rule a user gives a predicted CDS wins (D-126 Q8=B).
+        color_table = concat(
+            [table for table in (color_table, predicted_orf_color_rule()) if table is not None], ignore_index=True,
+        ).fillna({"caption": ""})
     feature_visibility_table = _visibility_table(options)
     colors = options.colors
     default_colors = colors.default_colors if colors is not None else None
@@ -1503,6 +1509,7 @@ def _normalize_request_records(
         return resolve_record_inputs(
             request.records,
             record_options=request.record_options,
+            orf_prediction=request.options.orf_prediction,
             gff_candidate_features=inputs.gff_candidate_features,
             gff_keep_all_features=inputs.gff_keep_all_features,
             genbank_loader=genbank_loader,
@@ -1552,6 +1559,7 @@ def _normalize_request_records(
         input_keys,
         collection_key,
         gff_type_key,
+        request.options.orf_prediction,
     )
     collection = get_or_build_resolved_records(key, resource_identities, resolve)
     # Per-record identity (design 2.1, M1): the elements of the key above that
@@ -1571,6 +1579,7 @@ def _normalize_request_records(
                 input_index,
                 provenance.source_record_index,
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
+                request.options.orf_prediction,
                 # Each window of a record is its own drawn record (D-01).
                 *(() if provenance.window is None else (provenance.window.index,)),
             )

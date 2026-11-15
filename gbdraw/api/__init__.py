@@ -55,6 +55,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from .diagram import LinearDiagramMetadata
 from gbdraw.analysis.feature_density import FeatureDensityTrack
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters
 from gbdraw.features.query import FeatureQuery
 from .options import (
     AnnotationOptions,
@@ -339,6 +340,7 @@ __all__ = [
     "ColorOptions",
     "DepthTrackInput",
     "FeatureDensityTrack",
+    "OrfPredictionParameters",
     "FeatureQuery",
     # render
     "InteractiveSvgContext",

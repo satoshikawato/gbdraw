@@ -11,6 +11,7 @@ from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, cast
 
 from pandas import DataFrame
 
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters
 from gbdraw.features.overrides import FeatureOverride, normalize_feature_override_inputs
 from gbdraw.features.placement import FeaturePlacementOverride, normalize_feature_placements
 
@@ -1071,6 +1072,8 @@ class _ModeDiagramOptions:
     feature_overrides: tuple[FeatureOverride, ...] = field(default=(), kw_only=True)
     feature_override_table: DataFrame | None = field(default=None, kw_only=True)
     feature_override_table_file: str | Path | None = field(default=None, kw_only=True)
+    # CDS predicted from each record's sequence (D-87: off unless given).
+    orf_prediction: OrfPredictionParameters | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         placements = normalize_feature_placements(self.feature_placements)
@@ -1093,6 +1096,7 @@ class _ModeDiagramOptions:
         nested_types: tuple[tuple[str, object, type], ...] = (
             ("colors", self.colors, ColorOptions),
             ("annotations", self.annotations, AnnotationOptions),
+            ("orf_prediction", self.orf_prediction, OrfPredictionParameters),
         )
         for field_name, value, expected_type in nested_types:
             if value is not None and not isinstance(value, expected_type):

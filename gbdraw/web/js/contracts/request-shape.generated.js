@@ -779,6 +779,49 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       open: false,
       defaults: Object.freeze({caption: null, color: null, step: null, window: null})
     }),
+    CanonicalOrfPredictionParameters: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        geneticCode: Object.freeze({
+          kind: "literal",
+          values: Object.freeze([
+            "record",
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33
+          ])
+        }),
+        startCodons: Object.freeze({kind: "literal", values: Object.freeze(["methionine", "table"])}),
+        minProteinLength: Object.freeze({kind: "integer", minimum: 1}),
+        keepNested: Object.freeze({kind: "boolean"})
+      }),
+      optional: Object.freeze([]),
+      open: false
+    }),
     CanonicalCircularDepthTrack: Object.freeze({
       kind: "object",
       fields: Object.freeze({
@@ -1015,6 +1058,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
         }),
+        orfPrediction: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "ref", name: "CanonicalOrfPredictionParameters"}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
         tracks: Object.freeze({kind: "ref", name: "CanonicalCircularTrackOptions"}),
         output: Object.freeze({kind: "ref", name: "CanonicalCircularOutputOptions"}),
         conservationBlastFiles: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalFileRef"})}),
@@ -1089,6 +1139,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         "labelOverrideTable",
         "labelWhitelistFile",
         "labelWhitelistTable",
+        "orfPrediction",
         "output",
         "pairwiseMatchStyle",
         "plotTitle",
@@ -1345,6 +1396,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "integer"}), Object.freeze({kind: "null"})])
         }),
+        orfPrediction: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "ref", name: "CanonicalOrfPredictionParameters"}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
         tracks: Object.freeze({kind: "ref", name: "CanonicalLinearTrackOptions"}),
         output: Object.freeze({kind: "ref", name: "CanonicalLinearOutputOptions"}),
         pairwiseMatchStyle: Object.freeze({kind: "literal", values: Object.freeze(["ribbon", "curve"])}),
@@ -1390,6 +1448,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         "labelOverrideTable",
         "labelWhitelistFile",
         "labelWhitelistTable",
+        "orfPrediction",
         "output",
         "pairwiseMatchStyle",
         "plotTitle",

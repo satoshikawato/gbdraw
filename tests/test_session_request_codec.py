@@ -24,6 +24,7 @@ from gbdraw.analysis.collinearity import (
     LosslessCollinearityParameters,
 )
 from gbdraw.analysis.feature_density import FeatureDensityTrack
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.annotations import (
     AnnotationGradient,
@@ -4051,3 +4052,30 @@ def test_a_stored_region_reads_as_the_windows_the_web_promotion_writes(case: dic
         assert (decoded.start, decoded.end, decoded.reverse_complement) == (
             window["start"], window["end"], window["reverseComplement"]
         )
+
+
+def test_orf_prediction_round_trips_in_both_modes(tmp_path: Path) -> None:
+    """The ORF prediction settings are stored as one object with a key per field (D-87, D-126); unset, none."""
+
+    fasta = tmp_path / "sequence.fasta"
+    fasta.write_text(">sequence\n" + "ATGAAACCCGGGTTT" * 20 + "\n")
+    parameters = OrfPredictionParameters(genetic_code=2, start_codons="table", min_protein_length=30)
+    for request_type, options_type in (
+        (CircularDiagramRequest, CircularDiagramOptions), (LinearDiagramRequest, LinearDiagramOptions),
+    ):
+        unset = request_type(records=(RecordInput(source=FastaInputSource(fasta)),), options=options_type())
+        assert "orfPrediction" not in encode_canonical_request(unset).payload["diagramOptions"]
+        for value, stored in (
+            (parameters, {"geneticCode": 2, "startCodons": "table", "minProteinLength": 30, "keepNested": False}),
+            (OrfPredictionParameters(), {
+                "geneticCode": "record", "startCodons": "methionine", "minProteinLength": 50, "keepNested": False,
+            }),
+        ):
+            encoded = encode_canonical_request(replace(unset, options=options_type(orf_prediction=value)))
+            assert encoded.payload["diagramOptions"]["orfPrediction"] == stored
+            decoded = decode_canonical_request(
+                encoded.payload,
+                resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+                output_directory=tmp_path / "output",
+            )
+            assert decoded.options.orf_prediction == value

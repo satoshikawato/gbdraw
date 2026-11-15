@@ -14,6 +14,7 @@ import sys
 from dataclasses import dataclass, replace
 from typing import Sequence, get_args
 
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters, RecordGeneticCode, StartCodonSet
 from gbdraw.analysis.feature_density import (
     FeatureDensityTrack,
     parse_feature_density_words,
@@ -164,6 +165,78 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
         ),
         type=str,
         nargs='*')
+    _add_orf_prediction_args(parser)
+
+
+_ORF_DEFAULTS = OrfPredictionParameters()
+_ORF_FLAGS = ("--orf_min_length", "--orf_genetic_code", "--orf_start_codons", "--orf_keep_nested")
+
+
+def _orf_genetic_code(text: str) -> int | RecordGeneticCode:
+    """``record`` or a table number, checked by ``OrfPredictionParameters``."""
+
+    value: int | RecordGeneticCode = "record" if text == "record" else argparse_integer(text)
+    try:
+        OrfPredictionParameters(genetic_code=value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
+
+
+def _add_orf_prediction_args(parser: argparse.ArgumentParser) -> None:
+    """ORF prediction (D-87: off unless asked); each default is ``OrfPredictionParameters``'."""
+
+    parser.add_argument(
+        "--predict_orfs", action="store_true",
+        help=(
+            "Draw the ORFs predicted from each record's sequence as CDS, in their own Legend row "
+            "(\"Predicted ORF\"); only records without CDS of their own (default: off)."
+        ),
+    )
+    parser.add_argument(
+        "--orf_min_length", metavar="AA", type=argparse_integer, default=None,
+        help=f"Fewest residues of a predicted protein, stop not counted (default: {_ORF_DEFAULTS.min_protein_length}).",
+    )
+    parser.add_argument(
+        "--orf_genetic_code", metavar="{record,N}", type=_orf_genetic_code, default=None,
+        help=(
+            "Genetic code table of the prediction: a table number, or record: the table the record's CDS all "
+            f"state in /transl_table, else 11 (default: {_ORF_DEFAULTS.genetic_code})."
+        ),
+    )
+    parser.add_argument(
+        "--orf_start_codons", choices=get_args(StartCodonSet), default=None,
+        help=(
+            "Start codons: methionine, the codons the table reads as M; table, also the table's alternative "
+            f"start codons (default: {_ORF_DEFAULTS.start_codons})."
+        ),
+    )
+    parser.add_argument(
+        "--orf_keep_nested", action="store_true", default=None,
+        help="Keep a predicted ORF that lies inside another (default: left out).",
+    )
+
+
+def orf_prediction_from_args(args: argparse.Namespace) -> OrfPredictionParameters | None:
+    """The ORF prediction ``--predict_orfs`` asks for; an ``--orf_*`` option without it is refused."""
+
+    given = {
+        name: getattr(args, name)
+        for name in ("orf_min_length", "orf_genetic_code", "orf_start_codons", "orf_keep_nested")
+        if getattr(args, name) is not None
+    }
+    if not args.predict_orfs:
+        if given:
+            raise ValidationError(
+                f"{', '.join('--' + name for name in given)} needs --predict_orfs.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        return None
+    names = {
+        "orf_min_length": "min_protein_length", "orf_genetic_code": "genetic_code",
+        "orf_start_codons": "start_codons", "orf_keep_nested": "keep_nested",
+    }
+    return replace(_ORF_DEFAULTS, **{names[name]: value for name, value in given.items()})
 
 
 def _add_window_step_args(parser: argparse.ArgumentParser) -> None:

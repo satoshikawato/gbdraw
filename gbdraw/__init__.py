@@ -26,6 +26,7 @@ from .interface import (
 )
 from .version import __version__
 from .api.requests import RecordDisplayOptions
+from .analysis.orf_prediction import OrfPredictionParameters
 from .features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from .layout.similarity_alignment import SimilarityAlignmentReference
 
@@ -47,6 +48,7 @@ __all__ = [
     "LinearLayout",
     "LinearOptions",
     "LinearTrackOptions",
+    "OrfPredictionParameters",
     "RecordDisplayOptions",
     "SimilarityAlignmentReference",
     "Thresholds",

@@ -12,12 +12,18 @@ from pathlib import Path
 from typing import Mapping, Sequence, TypedDict
 
 from gbdraw.analysis.feature_density import FeatureDensityTrack
+from gbdraw.analysis.orf_prediction import OrfPredictionParameters
 from gbdraw.annotations.models import AnnotationOptions
 from gbdraw.api.input_summary import InputWarningKey, log_input_summary
 from gbdraw.api.options import ColorOptions, DepthTrackInput
 from gbdraw.api.request_render import RequestRenderResult
 from gbdraw.api.requests import RenderOutputRequest
-from gbdraw.cli_utils.common import cli_font_family, feature_density_tracks_from_args, handle_output_formats
+from gbdraw.cli_utils.common import (
+    cli_font_family,
+    feature_density_tracks_from_args,
+    handle_output_formats,
+    orf_prediction_from_args,
+)
 from gbdraw.features.overrides import log_feature_identity_notices
 from gbdraw.features.shapes import FeatureShape
 from gbdraw.labels.label_style import LabelStyleMode
@@ -186,6 +192,7 @@ class ModeOptionFields(TypedDict):
     depth_step: int | None
     depth_tracks: tuple[DepthTrackInput, ...] | None
     feature_density_tracks: tuple[FeatureDensityTrack, ...] | None
+    orf_prediction: OrfPredictionParameters | None
     plot_title: str | None
     plot_title_font_size: float | None
     evalue: float
@@ -228,6 +235,7 @@ def mode_option_fields(
         "depth_step": args.depth_step,
         "depth_tracks": depth_tracks,
         "feature_density_tracks": feature_density_tracks_from_args(args),
+        "orf_prediction": orf_prediction_from_args(args),
         "plot_title": plot_title or None,
         "plot_title_font_size": args.plot_title_font_size,
         "evalue": args.evalue,

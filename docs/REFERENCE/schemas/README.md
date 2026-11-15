@@ -359,6 +359,7 @@ classDiagram
   CanonicalCircularDiagramOptions --> CanonicalFileRef : 6 fields
   CanonicalCircularDiagramOptions --> CanonicalCircularDepthTrack : depthTracks
   CanonicalCircularDiagramOptions --> CanonicalFeatureDensityTrack : featureDensityTracks
+  CanonicalCircularDiagramOptions --> CanonicalOrfPredictionParameters : orfPrediction
   CanonicalCircularDiagramOptions --> CanonicalCircularTrackOptions : tracks
   CanonicalCircularDiagramOptions --> CanonicalCircularOutputOptions : output
   class CanonicalCircularLayout
@@ -373,6 +374,7 @@ classDiagram
   CanonicalLinearDiagramOptions --> CanonicalFileRef : 4 fields
   CanonicalLinearDiagramOptions --> CanonicalLinearDepthTrack : depthTracks
   CanonicalLinearDiagramOptions --> CanonicalFeatureDensityTrack : featureDensityTracks
+  CanonicalLinearDiagramOptions --> CanonicalOrfPredictionParameters : orfPrediction
   CanonicalLinearDiagramOptions --> CanonicalLinearTrackOptions : tracks
   CanonicalLinearDiagramOptions --> CanonicalLinearOutputOptions : output
   class CanonicalLinearLayout
@@ -414,6 +416,7 @@ classDiagram
   class CanonicalFeatureDensityTrack
   CanonicalFeatureDensityTrack --> CanonicalFeatureQuery : query
   CanonicalFeatureDensityTrack --> CanonicalAnnotationColor : color
+  class CanonicalOrfPredictionParameters
   class CanonicalCircularTrackOptions
   CanonicalCircularTrackOptions --> CanonicalCircularTrackSlot : circularTrackSlots
   class CanonicalCircularOutputOptions

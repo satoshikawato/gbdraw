@@ -287,6 +287,13 @@
  * @property {string | null} caption
  */
 /**
+ * @typedef {object} CanonicalOrfPredictionParameters
+ * @property {'record' | 1 | 2 | 3 | 4 | 5 | 6 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33} geneticCode
+ * @property {'methionine' | 'table'} startCodons
+ * @property {number} minProteinLength
+ * @property {boolean} keepNested
+ */
+/**
  * @typedef {object} CanonicalCircularDepthTrack
  * @property {CanonicalFileRef | CanonicalTableRef | (CanonicalFileRef | CanonicalTableRef | null)[]} source
  * @property {string | null} label
@@ -346,6 +353,7 @@
  * @property {number | null} [bitscore]
  * @property {number | null} [identity]
  * @property {number | null} [alignmentLength]
+ * @property {CanonicalOrfPredictionParameters | null} [orfPrediction]
  * @property {CanonicalCircularTrackOptions} [tracks]
  * @property {CanonicalCircularOutputOptions} [output]
  * @property {CanonicalFileRef[]} [conservationBlastFiles]
@@ -422,6 +430,7 @@
  * @property {number | null} [bitscore]
  * @property {number | null} [identity]
  * @property {number | null} [alignmentLength]
+ * @property {CanonicalOrfPredictionParameters | null} [orfPrediction]
  * @property {CanonicalLinearTrackOptions} [tracks]
  * @property {CanonicalLinearOutputOptions} [output]
  * @property {'ribbon' | 'curve'} [pairwiseMatchStyle]
