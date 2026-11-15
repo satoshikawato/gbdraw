@@ -267,7 +267,7 @@ FUNCTION_STATEMENTS: dict[str, int] = {
     "gbdraw/render/interactive_svg.py::enrich_svg": 96,
     "gbdraw/render_stages.py::render_stage": 59,
     "gbdraw/session_contract.py::describe_session_admission": 81,
-    "gbdraw/session_io.py::_append_linear_gui_args": 72,
+    "gbdraw/session_io.py::_append_linear_gui_args": 60,
     "gbdraw/session_io.py::_canonicalize_legacy_session_cli_args": 65,
     "gbdraw/session_io.py::_legacy_feature_index": 69,
     "gbdraw/session_io.py::_validate_current_comparison_authority": 76,

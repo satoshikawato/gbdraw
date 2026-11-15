@@ -64,7 +64,7 @@ from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.cli_tables import COMPARISON_SEQUENCE_SEPARATOR
 from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
-from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
+from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename, unique_filenames
 from .io.regions import region_text
 from .render.formats import normalize_format_token
 from .session_container import (
@@ -7452,41 +7452,15 @@ def _append_linear_gui_args(
     if not isinstance(linear_seqs, list) or not linear_seqs:
         raise ValidationError("Linear GUI session has no embedded sequence files.")
     input_type = str(ui.get("lInputType") or "gb")
-    if input_type == "gb":
-        _append_flag(run_args, invocation_args, "--gbk")
-        for index, seq in enumerate(linear_seqs):
-            if isinstance(seq, Mapping) and seq.get("gb"):
-                _append_materialized_value(
-                    run_args,
-                    invocation_args,
-                    bindings,
-                    session=session,
-                    slot=f"files.linearSeqs[{index}].gb",
-                    temp_dir=temp_dir,
-                )
-    else:
-        _append_flag(run_args, invocation_args, "--gff")
-        for index, seq in enumerate(linear_seqs):
-            if isinstance(seq, Mapping) and seq.get("gff"):
-                _append_materialized_value(
-                    run_args,
-                    invocation_args,
-                    bindings,
-                    session=session,
-                    slot=f"files.linearSeqs[{index}].gff",
-                    temp_dir=temp_dir,
-                )
-        _append_flag(run_args, invocation_args, "--fasta")
-        for index, seq in enumerate(linear_seqs):
-            if isinstance(seq, Mapping) and seq.get("fasta"):
-                _append_materialized_value(
-                    run_args,
-                    invocation_args,
-                    bindings,
-                    session=session,
-                    slot=f"files.linearSeqs[{index}].fasta",
-                    temp_dir=temp_dir,
-                )
+    _append_linear_record_files(
+        run_args,
+        invocation_args,
+        bindings,
+        session=session,
+        linear_seqs=linear_seqs,
+        gff=input_type != "gb",
+        temp_dir=temp_dir,
+    )
     blast_slots = [
         index for index, seq in enumerate(linear_seqs)
         if isinstance(seq, Mapping) and seq.get("blast")
@@ -7514,6 +7488,7 @@ def _append_linear_gui_args(
         run_args,
         invocation_args,
         linear_seqs=linear_seqs,
+        card_files=_linear_card_files(run_args, bindings, "gb" if input_type == "gb" else "gff"),
     )
     if form.get("show_depth") is True:
         depth_rows = [
@@ -7569,11 +7544,82 @@ def _append_linear_definition_line_style_args(
             _append_pair(run_args, invocation_args, "--definition_line_style", f"{line_kind}:{','.join(parts)}")
 
 
+def _append_linear_record_files(
+    run_args: list[str],
+    invocation_args: list[str],
+    bindings: list[SessionFileBinding],
+    *,
+    session: Mapping[str, Any],
+    linear_seqs: Sequence[Any],
+    gff: bool,
+    temp_dir: Path,
+) -> None:
+    """The record files of the Linear cards: ``--gbk``, or ``--gff`` and ``--fasta``, one per card in card order."""
+
+    first = len(bindings)
+    for option, role in ((("--gff", "gff"), ("--fasta", "fasta")) if gff else (("--gbk", "gb"),)):
+        _append_flag(run_args, invocation_args, option)
+        for index, seq in enumerate(linear_seqs):
+            if isinstance(seq, Mapping) and seq.get(role):
+                _append_materialized_value(
+                    run_args,
+                    invocation_args,
+                    bindings,
+                    session=session,
+                    slot=f"files.linearSeqs[{index}].{role}",
+                    temp_dir=temp_dir,
+                )
+    _name_record_files_apart(invocation_args, bindings, first)
+
+
+def _name_record_files_apart(
+    invocation_args: list[str], bindings: list[SessionFileBinding], first: int
+) -> None:
+    """Give the record files from ``bindings[first:]`` distinct names on the shown command line (``unique_filenames``).
+
+    A file region names its card's file (``<file>:#1:<span>``); two cards of one file name would both match it.
+    """
+
+    record_files = bindings[first:]
+    for at, (binding, name) in enumerate(
+        zip(record_files, unique_filenames([binding.name for binding in record_files])), start=first
+    ):
+        if name != binding.name:
+            invocation_args[binding.argIndex] = name
+            bindings[at] = SessionFileBinding(argIndex=binding.argIndex, slot=binding.slot, name=name)
+
+
+_LINEAR_CARD_SLOT_RE = re.compile(r"files\.linearSeqs\[(?P<index>\d+)\]\.(?P<role>gb|gff)")
+
+
+class _CardFile(NamedTuple):
+    """A Linear card's record file: its name on the command line run here and on the command line shown."""
+
+    run_name: str
+    shown_name: str
+
+
+def _linear_card_files(
+    run_args: Sequence[str], bindings: Sequence[SessionFileBinding], role: str
+) -> dict[int, _CardFile]:
+    """The record file of each Linear card (its ``gb``, or its ``gff`` beside a FASTA), by card index."""
+
+    files: dict[int, _CardFile] = {}
+    for binding in bindings:
+        match = _LINEAR_CARD_SLOT_RE.fullmatch(binding.slot)
+        if match and match.group("role") == role:
+            files[int(match.group("index"))] = _CardFile(
+                run_name=Path(run_args[binding.argIndex]).name, shown_name=binding.name
+            )
+    return files
+
+
 def _append_linear_gui_sequence_options(
     run_args: list[str],
     invocation_args: list[str],
     *,
     linear_seqs: Sequence[Any],
+    card_files: Mapping[int, _CardFile],
 ) -> None:
     labels = [
         str(seq.get("definition") or "") if isinstance(seq, Mapping) else ""
@@ -7593,7 +7639,16 @@ def _append_linear_gui_sequence_options(
 
     record_selectors: list[str] = []
     reverse_flags: list[bool] = []
-    region_specs: list[str] = []
+    # Each region names the first record the CLI reads of its card's file (OV-3634): a bare ``#k`` counts every
+    # record the CLI reads, and a card drawn whole reads every record of its file.
+    region_specs: list[tuple[str, str]] = []
+
+    def card_region(index: int, span: str) -> tuple[str, str]:
+        card_file = card_files.get(index)
+        if card_file is None:
+            raise ValidationError(f"Linear sequence #{index + 1} has a region but no record file.")
+        return f"{card_file.run_name}:#1:{span}", f"{card_file.shown_name}:#1:{span}"
+
     for index, seq in enumerate(linear_seqs):
         if not isinstance(seq, Mapping):
             record_selectors.append("")
@@ -7606,7 +7661,7 @@ def _append_linear_gui_sequence_options(
             # A card whose windows its crop fields cannot hold: several (D-01), or one across the origin (D-34). One
             # region per window, in order. The CLI places them in that order; the Record Layout columns are not
             # written, as for every other record.
-            region_specs.extend(_card_window_region_spec(index, window) for window in card_windows)
+            region_specs.extend(card_region(index, _card_window_span(index, window)) for window in card_windows)
             reverse_flags.append(False)
             continue
         start = seq.get("region_start")
@@ -7632,7 +7687,7 @@ def _append_linear_gui_sequence_options(
                 )
             # The card's crop fields: an End before the Start reverses the span, as a region string without :origin.
             suffix = ":rc" if wants_reverse else ""
-            region_specs.append(f"#{index + 1}:{start_int}-{end_int}{suffix}")
+            region_specs.append(card_region(index, f"{start_int}-{end_int}{suffix}"))
             reverse_flags.append(False)
         else:
             reverse_flags.append(wants_reverse)
@@ -7643,18 +7698,19 @@ def _append_linear_gui_sequence_options(
     if any(reverse_flags):
         for flag in reverse_flags:
             _append_pair(run_args, invocation_args, "--reverse_complement", "1" if flag else "0")
-    for spec in region_specs:
-        _append_pair(run_args, invocation_args, "--region", spec)
+    for run_spec, shown_spec in region_specs:
+        run_args.extend(["--region", run_spec])
+        invocation_args.extend(["--region", shown_spec])
 
 
-def _card_window_region_spec(index: int, window: Mapping[str, object]) -> str:
-    """The ``--region`` of one window of Linear card ``index`` (0-based)."""
+def _card_window_span(index: int, window: Mapping[str, object]) -> str:
+    """The span of a ``--region`` of one window of Linear card ``index`` (0-based)."""
 
     start = _nonnegative_integer(window.get("start"))
     end = _nonnegative_integer(window.get("end"))
     if not start or not end:
         raise ValidationError(f"Linear sequence #{index + 1} has a window without a valid start and end.")
-    return f"#{index + 1}:{region_text(start, end, _js_truthy(window.get('reverseComplement')))}"
+    return region_text(start, end, _js_truthy(window.get('reverseComplement')))
 
 
 def _gui_linear_losat_program(config: Mapping[str, Any], adv: Mapping[str, Any]) -> str:

@@ -3267,7 +3267,10 @@ def test_gui_only_linear_session_restores_row_options(tmp_path: Path) -> None:
     assert spec.args[first_reverse + 1] == "1"
     second_reverse = spec.args.index("--reverse_complement", first_reverse + 2)
     assert spec.args[second_reverse + 1] == "0"
-    assert spec.args[spec.args.index("--region") + 1] == "#2:10-20:rc"
+    # The region names the first record read of its card's file (OV-3634); the run reads the staged copy.
+    assert spec.args[spec.args.index("--region") + 1] == "files_linearSeqs_1_gb-b.gb:#1:10-20:rc"
+    shown = spec.cli_invocation_args
+    assert shown[shown.index("--region") + 1] == "b.gb:#1:10-20:rc"
 
 
 def _windows_cli_args(tmp_path: Path, windows: list[dict[str, object]]) -> list[str]:
@@ -3287,9 +3290,9 @@ def _windows_cli_args(tmp_path: Path, windows: list[dict[str, object]]) -> list[
         },
         mode="linear",
     )
-    return session_to_cli_args(
+    return list(session_to_cli_args(
         session, mode="linear", temp_dir=tmp_path, output_override=None, format_override=None
-    ).args
+    ).cli_invocation_args)
 
 
 def test_gui_only_linear_session_writes_each_window_of_a_card_as_a_region(tmp_path: Path) -> None:
@@ -3300,7 +3303,7 @@ def test_gui_only_linear_session_writes_each_window_of_a_card_as_a_region(tmp_pa
         {"start": 6001, "end": 8000, "reverseComplement": True, "column": 0},
     ])
     regions = [args[index + 1] for index, token in enumerate(args) if token == "--region"]
-    assert regions == ["#1:1001-3000", "#1:6001-8000:rc"]
+    assert regions == ["a.gb:#1:1001-3000", "a.gb:#1:6001-8000:rc"]
     assert "--reverse_complement" not in args
 
 
@@ -3308,13 +3311,13 @@ def test_gui_only_linear_session_writes_each_window_of_a_card_as_a_region(tmp_pa
     ("windows", "regions"),
     [
         # One window across the origin is the card's only window (its crop fields cannot hold it).
-        ([{"start": 16001, "end": 500, "reverseComplement": False, "column": None}], ["#1:16001-500:origin"]),
+        ([{"start": 16001, "end": 500, "reverseComplement": False, "column": None}], ["a.gb:#1:16001-500:origin"]),
         (
             [
                 {"start": 16001, "end": 500, "reverseComplement": True, "column": None},
                 {"start": 6001, "end": 8000, "reverseComplement": False, "column": None},
             ],
-            ["#1:16001-500:origin:rc", "#1:6001-8000"],
+            ["a.gb:#1:16001-500:origin:rc", "a.gb:#1:6001-8000"],
         ),
     ],
     ids=["one-window", "two-windows"],
@@ -3330,6 +3333,101 @@ def test_gui_only_linear_session_writes_a_window_across_the_origin_with_origin(
     assert [(spec.start, spec.end, spec.reverse_complement) for spec in map(parse_region_spec, written)] == [
         (window["start"], window["end"], window["reverseComplement"]) for window in windows
     ]
+
+
+_LEGACY_REGION_CARDS = {
+    "window": {"windows": [{"start": 1001, "end": 3000, "reverseComplement": False, "column": None}]},
+    "crop-fields": {"region_start": 1001, "region_end": 3000, "region_reverse": False},
+}
+
+
+def _legacy_linear_cards_session(names: list[str], region: dict[str, object]) -> dict:
+    """A legacy GUI Linear Session of one card per file in ``names``; the last card has ``region``."""
+
+    inputs = Path(__file__).parent / "test_inputs"
+    cards: list[dict[str, object]] = [{"gb": _file_entry(name, (inputs / name).read_bytes())} for name in names]
+    cards[-1].update(region)
+    return _minimal_session({"linearSeqs": cards}, mode="linear")
+
+
+def _replay_legacy_linear(session: dict, out: Path, caplog: pytest.LogCaptureFixture, regions: list[str] | None = None):
+    """Run the CLI on the Session's command line (its ``--region`` values replaced by ``regions`` when given)."""
+
+    spec = session_to_cli_args(session, mode="linear", temp_dir=out / "inputs", output_override=str(out / "out"),
+                               format_override="svg")
+    args = list(spec.args)
+    if regions is not None:
+        at = [index + 1 for index, token in enumerate(args) if token == "--region"]
+        assert len(at) == len(regions)
+        for index, value in zip(at, regions):
+            args[index] = value
+    caplog.clear()
+    with caplog.at_level("INFO"):
+        linear_main(args)
+    crops = [message for message in caplog.messages if message.startswith("Cropping record ")]
+    return spec, crops, (out / "out.svg").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("region", sorted(_LEGACY_REGION_CARDS))
+def test_legacy_gui_linear_region_names_its_card_file_after_a_file_drawn_whole(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, region: str
+) -> None:
+    """OV-3634: a card after one that draws a file of three records whole crops its own record.
+
+    The CLI's ``#k`` counts every record it reads, so the region names the record in its card's file.
+    """
+
+    session = _legacy_linear_cards_session(["CAVP11_contigs_79_80_86.gbk", "HmmtDNA.gbk"], _LEGACY_REGION_CARDS[region])
+    spec, crops, _svg = _replay_legacy_linear(session, tmp_path, caplog)
+    assert crops == ["Cropping record NC_012920.1 to 1001..3000."]
+    shown = spec.cli_invocation_args
+    assert shown[shown.index("--region") + 1] == "HmmtDNA.gbk:#1:1001-3000"
+
+
+@pytest.mark.parametrize("region", sorted(_LEGACY_REGION_CARDS))
+def test_legacy_gui_linear_shown_command_crops_the_same_card_when_file_names_repeat(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, region: str
+) -> None:
+    """Two cards of one file name: the shown command names each card's file apart (``unique_filenames``), so it
+    crops the card the run crops (OV-3634 review r1)."""
+
+    session = _legacy_linear_cards_session(["HmmtDNA.gbk", "HmmtDNA.gbk"], _LEGACY_REGION_CARDS[region])
+    spec, _crops, _svg = _replay_legacy_linear(session, tmp_path / "run", caplog)
+
+    def cropped_files() -> list[str]:
+        return [message.split("(", 1)[1].split(")", 1)[0] for message in caplog.messages
+                if message.startswith("Record ") and "1,001..3,000 of" in message]
+
+    assert cropped_files() == ["files_linearSeqs_1_gb-HmmtDNA.gbk"]
+    shown = list(spec.cli_invocation_args)
+    at = shown.index("--gbk") + 1
+    assert shown[at:at + 2] == ["HmmtDNA.gbk", "HmmtDNA.2.gbk"]
+    assert shown[shown.index("--region") + 1] == "HmmtDNA.2.gbk:#1:1001-3000"
+    # The shown command, run in a folder that holds each file under the name it shows.
+    folder = tmp_path / "shown"
+    folder.mkdir()
+    for binding in spec.file_bindings:
+        (folder / shown[binding.argIndex]).write_bytes(Path(spec.args[binding.argIndex]).read_bytes())
+    monkeypatch.chdir(folder)
+    caplog.clear()
+    with caplog.at_level("INFO"):
+        linear_main([*shown, "-o", str(folder / "out"), "-f", "svg"])
+    assert cropped_files() == ["HmmtDNA.2.gbk"]
+
+
+def test_legacy_gui_linear_regions_of_one_record_files_draw_as_before(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Cards of one-record files: the file-scoped regions draw what the card-position ones drew (OV-3634)."""
+
+    session = _legacy_linear_cards_session(["HmmtDNA.gbk", "NC_001454.1.gbk"], _LEGACY_REGION_CARDS["window"])
+    session["files"]["linearSeqs"][0].update(_LEGACY_REGION_CARDS["crop-fields"])
+    _spec, crops, svg = _replay_legacy_linear(session, tmp_path / "file", caplog)
+    _before, before_crops, before_svg = _replay_legacy_linear(
+        session, tmp_path / "position", caplog, regions=["#1:1001-3000", "#2:1001-3000"]
+    )
+    assert crops == before_crops and len(crops) == 2
+    assert svg == before_svg
 
 
 def test_gui_only_linear_session_restores_orthogroup_alignment_target(tmp_path: Path) -> None:
