@@ -22,11 +22,11 @@
 // - in every text style (en cased, ja no-caps, th tall-marks): the page's
 //   text style, the figure's English stack, and a truncated text cut at its
 //   sides only;
-// - at 1024x768, 1280x800 and 1440x900, in all 17 languages: every rail name
+// - at 1024x768, 1280x800 and 1440x900, in all 18 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
 //   scroll, with nothing drawn over it and the settings pane, its Generate
-//   bar and the Result pane ending above it (stacked: en, ja; rail: all 17)
+//   bar and the Result pane ending above it (stacked: en, ja; rail: all 18)
 //   (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
 //   the header's mode and Session names keep one line (OV-1515), and each
 //   footer item stays whole on one line, with spacing between items (OV-1517);
@@ -188,10 +188,10 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   await expect(menu(page)).toHaveAccessibleName('Language');
   await expect(menu(page).locator('option')).toHaveText([
     'English', 'Bahasa Indonesia', 'Deutsch', 'Español', 'Français', 'Italiano', 'Polski', 'Português', 'Tiếng Việt', 'Türkçe', 'Русский',
-    'Українська', 'ไทย', '日本語', '简体中文', '繁體中文', '한국어'
+    'Українська', 'اردو', 'ไทย', '日本語', '简体中文', '繁體中文', '한국어'
   ]);
   expect(await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.lang)))
-    .toEqual(['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
+    .toEqual(['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'ur', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
   await expect(loadButton(page)).toHaveAccessibleName('Load Session');
   expect(await stored(page)).toEqual([]);
 
@@ -415,7 +415,7 @@ test('every text style keeps the figure in English type, and a truncated text is
     const style = getComputedStyle(element);
     return [style.overflowX, style.overflowY, style.textOverflow, style.minWidth];
   });
-  for (const [tag, textStyle] of [['en', 'cased'], ['ja', 'no-caps'], ['th', 'tall-marks'], ['en', 'cased']]) {
+  for (const [tag, textStyle] of [['en', 'cased'], ['ja', 'no-caps'], ['ur', 'tall-marks'], ['th', 'tall-marks'], ['en', 'cased']]) {
     await menu(page).selectOption(tag);
     await expect.poll(() => pageLanguage(page)).toBe(tag);
     expect(await page.evaluate(() => document.documentElement.dataset.uiTextStyle)).toBe(textStyle);
@@ -423,6 +423,18 @@ test('every text style keeps the figure in English type, and a truncated text is
       .every((family) => family.startsWith('Inter')))).toBe(true);
     expect(await clipOf()).toEqual(['clip', 'visible', 'ellipsis', '0px']);
   }
+  expect(errors).toEqual([]);
+});
+
+// Urdu takes the vendored Nastaliq font first.
+test('Urdu takes the Noto Nastaliq Urdu font', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await openApp(page);
+  await menu(page).selectOption('ur');
+  await expect.poll(() => pageLanguage(page)).toBe('ur');
+  const body = await page.locator('body').evaluate((element) => getComputedStyle(element).fontFamily);
+  expect(body.split(',')[0].trim().replace(/["']/g, '')).toBe('Noto Nastaliq Urdu');
   expect(errors).toEqual([]);
 });
 
@@ -585,7 +597,7 @@ test('rail names stay inside the rail and keep each word on one line, nothing co
   const fit = { outside: [], splitWords: [], wrappedHeaderNames: [], splitItems: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
   for (const display of ['stacked', 'rail']) {
     if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
-    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th', 'de', 'it', 'pl', 'tr', 'ru', 'uk'] : ['en', 'ja']) {
+    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th', 'de', 'it', 'pl', 'tr', 'ru', 'uk', 'ur'] : ['en', 'ja']) {
       await menu(page).selectOption(tag);
       await expect.poll(() => pageLanguage(page)).toBe(tag);
       for (const viewport of viewports) {
@@ -652,7 +664,7 @@ test('in every language, the link beside the menu opens the feedback form with o
   // Beside the menu: the next element after it.
   expect(await menu(page).evaluate((select) => select.nextElementSibling?.matches('a[data-translation-feedback]'))).toBe(true);
   const tags = await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.value));
-  expect(tags).toHaveLength(17);
+  expect(tags).toHaveLength(18);
   const minTitle = await page.evaluate(async () => (await import('./js/app/header-fit.js')).SESSION_TITLE_MIN_PX);
   expect(minTitle).toBeGreaterThan(0);
   for (const tag of tags) {

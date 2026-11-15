@@ -1,0 +1,1 @@
+- Added: Web UI: اردو (Urdu) in the Language menu, as a first draft of the translation.

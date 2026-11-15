@@ -256,6 +256,8 @@
         :root:lang(ko) .input-label { overflow-wrap: anywhere; }
         /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
+        /* Urdu UI text: the vendored Noto Nastaliq Urdu first (@font-face above), then system fonts. */
+        :root:lang(ur) body { font-family: 'Noto Nastaliq Urdu', 'Inter', 'Segoe UI', 'Tahoma', sans-serif; }
         /* The figure keeps the English stack in every UI language. */
         :root svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
         /* The page's data-ui-text-style is the shown locale's textStyle (UI_LOCALES, js/utils/i18n.js); the figure is exempt.
