@@ -1555,9 +1555,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         kind: Object.freeze({kind: "literal", values: Object.freeze(["nucleotideBlast"])}),
         resourceId: Object.freeze({kind: "string"}),
         queryRecordIndex: Object.freeze({kind: "integer"}),
-        subjectRecordIndex: Object.freeze({kind: "integer"})
+        subjectRecordIndex: Object.freeze({kind: "integer"}),
+        sourceName: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
+        })
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["sourceName"]),
       open: false
     }),
     CanonicalPrecomputedProteinComparison: Object.freeze({
@@ -1567,9 +1571,10 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         resourceId: Object.freeze({kind: "string"}),
         encoding: Object.freeze({kind: "literal", values: Object.freeze(["canonicalTsv"])}),
         queryRecordIndex: Object.freeze({kind: "integer"}),
-        subjectRecordIndex: Object.freeze({kind: "integer"})
+        subjectRecordIndex: Object.freeze({kind: "integer"}),
+        proteinMatches: Object.freeze({kind: "literal", values: Object.freeze([false])})
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["proteinMatches"]),
       open: false
     }),
     CanonicalOrthogroupResultComparison: Object.freeze({

@@ -176,10 +176,14 @@ import { featureDensityTrackIds, projectFeatureDensityTracks, requestFeatureDens
 import { NO_STORED_READINGS, storedRecordIdOf } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
+  COMPARISON_COLUMNS,
   CONFIG_UNSET_NUMBER_PATHS,
   CONFIG_UNSET_NUMBER_SPELLINGS,
   EXPANDED_RECORD_KEY_SEPARATOR,
   INPUT_FILE_MEDIA_TYPE,
+  LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN,
+  LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX,
+  LEGACY_GIVEN_COMPARISON_SCHEMAS,
   LOSATP_NO_SEARCH_MODE,
   RECORD_GAP_AUTO_SCHEMA,
   STORED_REGION_FIELDS,
@@ -266,7 +270,9 @@ import {
   webBindingInputSlot,
   webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
-import { LINEAR_COMPARISON_SOURCES, normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import {
+  LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, normalizeLinearComparisonPlan
+} from './linear-comparisons.js';
 import { createDefaultAdv, createDefaultForm, createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
@@ -3365,14 +3371,58 @@ const drawsNoComparison = (comparisons) => comparisons.length > 0
  * pipeline's mode `none`, and Load answers a search with the rows a Session
  * saved (OV-3545), so only a search no saved rows answered stays. The
  * browser's Python has no LOSAT: such a request is drawn only by Generate.
+ * A Pairwise pipeline without pairs searches the pairs of adjacent rows, which
+ * records that all share one row do not have (OV-3566): it searches nothing
+ * (`requestMayDrawSeveralRows`).
  * @param {unknown} request A request as a file stores it or as it is committed.
  */
 export const requestRunsProteinSearch = (request) => {
   const stored = /** @type {UnvalidatedFields<'mode' | 'comparisons'>} */ (request);
   return stored?.mode === 'linear' && Array.isArray(stored.comparisons) && stored.comparisons.some((item) => {
-    const comparison = /** @type {UnvalidatedFields<'kind' | 'mode'>} */ (item);
-    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== LOSATP_NO_SEARCH_MODE;
+    const comparison = /** @type {UnvalidatedFields<'kind' | 'mode' | 'pairs'>} */ (item);
+    return comparison?.kind === 'generatedProteinComparison' && comparison.mode !== LOSATP_NO_SEARCH_MODE
+      && (comparison.mode !== 'pairwise' || (Array.isArray(comparison.pairs) && comparison.pairs.length > 0)
+        || requestMayDrawSeveralRows(request));
   });
+};
+
+/**
+ * The rows a stored Linear request gives its records, the one reading of them (the Load projection's layout rows and
+ * `requestMayDrawSeveralRows`): each record's grid row when a record has one (`fromRecords`), else the row of each
+ * token of `layout.multiRecordPositions`; a missing or unreadable row is the entry's place. No rows: one row per record.
+ * @param {readonly unknown[]} records The request's records (unvalidated).
+ * @param {unknown} positions The request's `layout.multiRecordPositions` (unvalidated).
+ * @returns {{ rows: number[], fromRecords: boolean }}
+ */
+const storedLinearRecordRows = (records, positions) => {
+  const gridRows = records.map((record) => (
+    /** @type {UnvalidatedFields<'presentation', UnvalidatedFields<'gridRow'>>} */ (record)?.presentation?.gridRow));
+  const fromRecords = gridRows.some((row) => row != null);
+  const tokens = fromRecords || !Array.isArray(positions) ? [] : positions;
+  return {
+    rows: fromRecords ? gridRows.map((row, index) => Number(row) || index + 1)
+      : tokens.map((/** @type {unknown} */ token, /** @type {number} */ index) => (
+        Number(String(token).slice(String(token).lastIndexOf('@') + 1)) || index + 1)),
+    fromRecords
+  };
+};
+
+/**
+ * Whether a Linear request's records may take more than one row (`storedLinearRecordRows`). A record entry of
+ * cardinality `all` stands for every record of its file, whose rows only Python reads
+ * (`resolve_record_row_positions`): such a request may.
+ * @param {unknown} request A request as a file stores it or as it is committed (unvalidated).
+ * @returns {boolean}
+ */
+const requestMayDrawSeveralRows = (request) => {
+  const stored = /** @type {UnvalidatedFields<'records' | 'layout'>} */ (request);
+  const records = Array.isArray(stored?.records) ? stored.records : [];
+  if (records.some((record) => /** @type {UnvalidatedFields<'cardinality'>} */ (record)?.cardinality === 'all')) {
+    return true;
+  }
+  const { rows } = storedLinearRecordRows(records,
+    /** @type {UnvalidatedFields<'multiRecordPositions'>} */ (stored?.layout)?.multiRecordPositions);
+  return rows.length > 0 ? new Set(rows).size > 1 : records.length > 1;
 };
 
 /**
@@ -4093,7 +4143,9 @@ const addResolvedComparisonResource = ({
       String(comparison.text || '')
     ),
     queryRecordIndex: edge.queryIndex,
-    subjectRecordIndex: edge.subjectIndex
+    subjectRecordIndex: edge.subjectIndex,
+    // A LOSAT result holds no file the user gave: the comparison is named by its records (OV-3557).
+    sourceName: null
   };
 };
 
@@ -4128,12 +4180,37 @@ const addCanonicalInputProteinComparisonResource = ({
   ),
   encoding: String(comparison.encoding || 'canonicalTsv'),
   queryRecordIndex: Number(comparison.queryRecordIndex),
-  subjectRecordIndex: Number(comparison.subjectRecordIndex)
+  subjectRecordIndex: Number(comparison.subjectRecordIndex),
+  // A table that holds no protein matches stays one (OV-3574).
+  ...(comparison.proteinMatches === false ? { proteinMatches: /** @type {const} */ (false) } : {})
 });
 
 /**
+ * The comparisons of an empty plan (No comparison, or no pairs): none, except a LOSATP Pairwise search over adjacent
+ * rows of two or more records that has no pair to compare (every record in one row). It is stored as asked, the
+ * pipeline of mode `pairwise` without pairs and with the draft's settings, as the CLI stores it
+ * (`stored_protein_result_request`, OV-3566): a Load keeps the mode, and a render of it compares no pair, so it runs
+ * no LOSAT.
+ * @param {{ state: RequestState, drawing: RequestDrawing, snapshot: LinearComparisonResolution,
+ *   recordCount: number }} input
+ * @returns {{ kind: 'generatedProteinComparison', mode: 'pairwise', pairs: never[],
+ *   settings: ReturnType<typeof generatedProteinSettings> }[]}
+ */
+const pairlessComparisons = ({ state, drawing, snapshot, recordCount }) => (
+  snapshot.mode === LINEAR_COMPARISON_MODES.ADJACENT && snapshot.defaultSource === LINEAR_COMPARISON_SOURCES.LOSAT
+  && drawing.losatProgram?.value === 'blastp' && recordCount > 1
+  && String(drawing.losat?.blastp?.mode || '').trim().toLowerCase() === 'pairwise'
+    ? [{
+        kind: 'generatedProteinComparison', mode: 'pairwise', pairs: [],
+        settings: generatedProteinSettings(drawing, state.losatExecution)
+      }]
+    : []
+);
+
+/**
  * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
- *   resources: ResourceBuilder, comparisonPlanSnapshot: LinearComparisonResolution | null, resolvedComparisons?: Record<string, any>[] }} input
+ *   resources: ResourceBuilder, comparisonPlanSnapshot: LinearComparisonResolution | null,
+ *   resolvedComparisons?: Record<string, any>[], recordCount: number }} input
  */
 const buildComparisons = ({
   state,
@@ -4141,7 +4218,8 @@ const buildComparisons = ({
   filesData,
   resources,
   comparisonPlanSnapshot,
-  resolvedComparisons = []
+  resolvedComparisons = [],
+  recordCount
 }) => {
   const mode = requestDrawingMode(drawing);
   if (mode !== 'linear') return [];
@@ -4149,7 +4227,9 @@ const buildComparisons = ({
   const edges = orderedComparisonPlanEdges(snapshot);
   // The plan is the permission boundary. Do not inspect dormant uploads,
   // committed artifacts, or generated-protein metadata for an empty plan.
-  if (snapshot.mode === 'none' || edges.length === 0) return [];
+  if (snapshot.mode === 'none' || edges.length === 0) {
+    return pairlessComparisons({ state, drawing, snapshot, recordCount });
+  }
 
   const comparisons = [];
   /** @type {RequestComparisonRef[]} */
@@ -4327,7 +4407,9 @@ const buildComparisons = ({
         kind: 'nucleotideBlast',
         resourceId: resources.addFile(resourceId, 'nucleotide-blast', file),
         queryRecordIndex: edge.queryIndex,
-        subjectRecordIndex: edge.subjectIndex
+        subjectRecordIndex: edge.subjectIndex,
+        // The name of the file the user chose, which the CLI replay and the Web show (OV-3557).
+        ...uploadedComparisonSourceName(file)
       });
       continue;
     }
@@ -5219,7 +5301,8 @@ const projectCanonicalRenderInput = ({
       filesData,
       resources,
       comparisonPlanSnapshot,
-      resolvedComparisons
+      resolvedComparisons,
+      recordCount: records.length
     }),
       output
     }),
@@ -5513,6 +5596,53 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
   const { kind: _kind, ...file } = entry;
   return file;
+};
+
+/**
+ * The name a stored nucleotide comparison's file is loaded under: the name of the file the user gave, which the
+ * request stores (`sourceName`, OV-3557), not its Session name; none when the request stores no name.
+ * @param {{ sourceName?: unknown }} comparison
+ * @returns {{ name?: string }}
+ */
+const storedComparisonFileName = (comparison) => (
+  typeof comparison.sourceName === 'string' ? { name: comparison.sourceName } : {}
+);
+
+/**
+ * The loaded tables a stored request names no file for, by their payload (`getResourcePayloadIdentity`, the Session
+ * resource every view of it stands for): `null` for a table gbdraw made (a LOSAT result, OV-3557), `undefined` for
+ * an entry an older writer stored without `sourceName`, whose name Python reads from the resource. Load makes every
+ * stored nucleotide table a file of the draft; the writer stores such a file as the request stored it, so a Generate
+ * or Save after Load names it as the CLI replay does. A file the user chooses later is another payload.
+ * @type {WeakMap<object, null | undefined>}
+ */
+const unnamedComparisonTables = new WeakMap();
+
+/**
+ * Load: remember a loaded table the stored request names no file for (`unnamedComparisonTables`).
+ * @template T
+ * @param {T} file The file Load bound for the comparison.
+ * @param {{ sourceName?: unknown }} comparison The stored comparison (unvalidated).
+ * @returns {T} `file`.
+ */
+const rememberUnnamedComparisonTable = (file, comparison) => {
+  if (typeof comparison.sourceName !== 'string' && file && typeof file === 'object') {
+    unnamedComparisonTables.set(getResourcePayloadIdentity(file), Object.hasOwn(comparison, 'sourceName') ? null : undefined);
+  }
+  return file;
+};
+
+/**
+ * The `sourceName` a nucleotide comparison of an uploaded file stores: the name of the file the user chose, or what
+ * the loaded request stored for a table it named no file for; none (the field left out) for an older writer's entry.
+ * @param {{ name?: unknown }} file
+ * @returns {{ sourceName?: string | null }}
+ */
+const uploadedComparisonSourceName = (file) => {
+  const identity = getResourcePayloadIdentity(file);
+  if (!unnamedComparisonTables.has(identity)) return { sourceName: normalizeOriginalResourceName(file.name) || null };
+  const stored = unnamedComparisonTables.get(identity);
+  return stored === undefined ? {} : { sourceName: stored };
 };
 
 /**
@@ -7013,16 +7143,17 @@ export const projectCanonicalSessionRequest = ({
       .filter((/** @type {UnvalidatedFields<'kind'>} */ comparison) => comparison?.kind === 'nucleotideBlast')
       .forEach((
         // The filter kept only comparisons with a kind: none is null.
-        /** @type {NonNullable<UnvalidatedFields<'queryRecordIndex' | 'subjectRecordIndex' | 'resourceId'>>} */ comparison,
+        /** @type {NonNullable<UnvalidatedFields<'queryRecordIndex' | 'subjectRecordIndex' | 'resourceId' | 'sourceName'>>} */ comparison,
         /** @type {number} */ index
       ) => {
         const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
           .get(Number(comparison.queryRecordIndex));
         const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
           .get(Number(comparison.subjectRecordIndex));
-        const file = resolveResourceFile
-          ? resolveResourceFile(comparison.resourceId)
-          : resourceAsLegacyFile(resources, comparison.resourceId);
+        const file = rememberUnnamedComparisonTable(resolveResourceFile
+          ? resolveResourceFile(comparison.resourceId, storedComparisonFileName(comparison))
+          : { ...resourceAsLegacyFile(resources, comparison.resourceId), ...storedComparisonFileName(comparison) },
+        comparison);
         // An unmapped source index is undefined; it never named a sequence here.
         if (queryIndex === undefined || subjectIndex === undefined) return;
         if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
@@ -7658,38 +7789,28 @@ export const projectCanonicalSessionRequest = ({
       return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: Number(String(token).slice(split + 1)) };
     })
   };
-  const presentationOwnsLinearRows = records.some(
-    (record) => record.presentation?.gridRow != null
-  );
-  const linearLayoutRows = presentationOwnsLinearRows
-    ? records.map((record, index) => {
-        const row = Number(record.presentation?.gridRow) || index + 1;
-        const sourceColumn = sourceRecords[
-          normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
-        ]?.presentation?.gridColumn;
-        return {
-          uid: files.linearSeqs[index]?.uid || '', row,
-          ...(initializeCliInputs && storedConfig == null
-            && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
-            ? { canonicalCardinality: 'exactly_one' } : {}),
-          // An integer is a number.
-          ...(initializeCliInputs && storedConfig == null
-            && Number.isInteger(sourceColumn) && /** @type {number} */ (sourceColumn) > 0
-            ? { canonicalRow: row, canonicalColumn: sourceColumn }
-            : {})
-        };
-      })
-    : (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token, /** @type {number} */ index) => {
-        const split = String(token).lastIndexOf('@');
-        return {
-          uid: files.linearSeqs[index]?.uid || '',
-          row: Number(String(token).slice(split + 1)) || index + 1
-        };
-      });
+  const storedRows = storedLinearRecordRows(records, renderRequest.layout?.multiRecordPositions);
+  const presentationOwnsLinearRows = storedRows.fromRecords;
+  const linearLayoutRows = storedRows.rows.map((row, index) => {
+    if (!presentationOwnsLinearRows) return { uid: files.linearSeqs[index]?.uid || '', row };
+    const sourceColumn = sourceRecords[
+      normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
+    ]?.presentation?.gridColumn;
+    return {
+      uid: files.linearSeqs[index]?.uid || '', row,
+      ...(initializeCliInputs && storedConfig == null
+        && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
+        ? { canonicalCardinality: 'exactly_one' } : {}),
+      // An integer is a number.
+      ...(initializeCliInputs && storedConfig == null
+        && Number.isInteger(sourceColumn) && /** @type {number} */ (sourceColumn) > 0
+        ? { canonicalRow: row, canonicalColumn: sourceColumn }
+        : {})
+    };
+  });
   const linearLayout = renderRequest.mode === 'linear'
     ? {
-        enabled: presentationOwnsLinearRows ||
-          (renderRequest.layout?.multiRecordPositions || []).length > 0,
+        enabled: storedRows.rows.length > 0,
         recordGap: renderRequest.layout?.recordGapPx ?? null,
         rows: linearLayoutRows,
         recordTranslations,
@@ -7966,6 +8087,136 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   promoteRingFilesToLists(promoted.diagramOptions);
   promoted.schema = CANONICAL_REQUEST_SCHEMA;
   return promoted;
+};
+
+/** The header of a canonical TSV of the BLAST columns alone, in `COMPARISON_COLUMNS` order. */
+const BLAST_TABLE_HEADER = COMPARISON_COLUMNS.join('\t');
+/**
+ * Whether a resource ID is one a 0.14.x CLI or Python render gave a comparison table it was given
+ * (`--comparisons_table`, a `LinearComparison`): the prefix and a number. The Web stored its LOSATP tables under other IDs, and so did
+ * the CLI's protein tables, so a Web LOSATP table is never read as a BLAST table by its columns alone.
+ * @param {unknown} resourceId
+ * @returns {resourceId is string}
+ */
+const isGivenComparisonResourceId = (resourceId) => typeof resourceId === 'string'
+  && resourceId.startsWith(LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX)
+  && /^[1-9]\d*$/.test(resourceId.slice(LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX.length));
+
+/**
+ * A stored table under a given table's ID as Python's decoder reads it (`_stored_protein_matches`) and its encoder
+ * writes it again (`comparison_table_text`): null for a protein table (it has the protein column
+ * `LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN`) or a resource an older JSON Session did not store as a canonical TSV.
+ * Any other table holds no protein matches: `blastRows` are its rows as a BLAST table, in `COMPARISON_COLUMNS`
+ * order, when it has those columns alone in any order (a table without rows may have fewer), or null for a table
+ * with other columns (bound to features), which has no BLAST form.
+ * @param {unknown} resource A Session resource (unvalidated).
+ * @returns {{ blastRows: string | null } | null}
+ */
+const storedGivenTable = (resource) => {
+  const entry = /** @type {UnvalidatedFields<'kind' | 'encoding' | 'data'>} */ (resource);
+  if (entry?.kind !== 'canonical-tsv' || entry.encoding !== 'base64' || typeof entry.data !== 'string') return null;
+  let text;
+  try {
+    text = bytesToText(base64ToBytes(entry.data), { fatal: true });
+  } catch {
+    return null;
+  }
+  const lineEnd = text.indexOf('\n');
+  const header = (lineEnd < 0 ? text : text.slice(0, lineEnd)).replace(/\r$/, '');
+  const body = lineEnd < 0 ? '' : text.slice(lineEnd + 1);
+  const columns = header.split('\t');
+  if (columns.includes(LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN)) return null;
+  if (header === BLAST_TABLE_HEADER) return { blastRows: body };
+  const rows = body.split('\n').map((line) => line.replace(/\r$/, '')).filter((line) => line !== '');
+  const positions = COMPARISON_COLUMNS.map((column) => columns.indexOf(column));
+  const blastForm = new Set(columns).size === columns.length
+    && columns.every((column) => /** @type {readonly string[]} */ (COMPARISON_COLUMNS).includes(column))
+    && (rows.length === 0 || positions.every((position) => position >= 0));
+  if (!blastForm) return { blastRows: null };
+  return { blastRows: rows.map((line) => {
+    const fields = line.split('\t');
+    return `${positions.map((position) => fields[position]).join('\t')}\n`;
+  }).join('') };
+};
+
+/**
+ * The table of a stored comparison that a request of schema 2 or 5 to 9 (`LEGACY_GIVEN_COMPARISON_SCHEMAS`) stored
+ * as a `precomputedProteinComparison` under the resource ID a CLI or Python render gave a table it was given
+ * (`storedGivenTable`), or null for any other comparison.
+ * @param {unknown} item A stored comparison (unvalidated).
+ * @param {unknown} schema The request's schema.
+ * @param {unknown} resources The Session's resources (unvalidated).
+ */
+const storedGivenComparisonTable = (item, schema, resources) => {
+  const comparison = /** @type {UnvalidatedFields<'kind' | 'encoding' | 'resourceId'>} */ (item);
+  if (!LEGACY_GIVEN_COMPARISON_SCHEMAS.includes(/** @type {number} */ (schema)) || !isPlainObject(resources)
+    || comparison?.kind !== 'precomputedProteinComparison' || comparison.encoding !== 'canonicalTsv'
+    || !isGivenComparisonResourceId(comparison.resourceId)) return null;
+  return storedGivenTable(ownEntry(resources, comparison.resourceId));
+};
+
+/**
+ * OV-3573: a request of schema 2 or 5 to 9 stored a table that a CLI or Python render was given as a
+ * `precomputedProteinComparison`, the kind of a protein table, under the resource ID those writers gave such a table
+ * (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX` and a number). Such a table without the protein column holds no protein
+ * matches, as Python's decoder reads it (`storedGivenTable`). Load reads each such table of the BLAST columns alone
+ * (in any order), before any reader sees the file, as Python's encoder writes it again: as the BLAST comparison it
+ * is, `nucleotideBlast`, its resource the same rows as a BLAST table (`nucleotide-blast`, without the header line,
+ * the columns in `COMPARISON_COLUMNS` order), a form those schemas hold. A table bound to features has no BLAST form:
+ * Load's request reader marks it (`withStoredTablesWithoutProteinMatches`). A protein table and a request of any
+ * other schema are left as stored; nothing changes when no table is read so.
+ * @param {readonly unknown[]} requests The stored requests (unvalidated).
+ * @param {unknown} resources The Session's resources (unvalidated).
+ * @returns {{ requests: unknown[], resources: unknown }} The same values when nothing changed.
+ */
+export const readStoredBlastTables = (requests, resources) => {
+  /** @type {Map<string, string>} */
+  const rowsById = new Map();
+  const read = requests.map((request) => {
+    const stored = /** @type {UnvalidatedFields<'schema' | 'comparisons'>} */ (request);
+    const storedComparisons = stored?.comparisons;
+    if (!Array.isArray(storedComparisons)) return request;
+    const comparisons = storedComparisons.map((/** @type {unknown} */ item) => {
+      const blastRows = storedGivenComparisonTable(item, stored?.schema, resources)?.blastRows ?? null;
+      if (blastRows === null) return item;
+      const { encoding: _encoding, ...kept } = /** @type {Record<string, unknown>} */ (item);
+      rowsById.set(/** @type {string} */ (kept.resourceId), blastRows);
+      return { ...kept, kind: 'nucleotideBlast' };
+    });
+    return comparisons.some((item, index) => item !== storedComparisons[index])
+      ? { .../** @type {object} */ (request), comparisons } : request;
+  });
+  if (rowsById.size === 0 || !isPlainObject(resources)) return { requests: read, resources };
+  const rewritten = { ...resources };
+  for (const [resourceId, rows] of rowsById) {
+    // A stored checksum named the canonical TSV's bytes.
+    const { checksum: _checksum, ...entry } = /** @type {Record<string, unknown>} */ (ownEntry(resources, resourceId));
+    const bytes = textToBytes(rows);
+    rewritten[resourceId] = { ...entry, kind: 'nucleotide-blast', size: bytes.byteLength, data: bytesToBase64(bytes) };
+  }
+  return { requests: read, resources: rewritten };
+};
+
+/**
+ * OV-3574: a stored request as Load's request reader reads it (`readResultSetRequest` in services/config.js, which
+ * classifies it and promotes it to the current schema): each table under a given table's ID that holds no protein
+ * matches and has no BLAST form (bound to features, `storedGivenTable`) with `proteinMatches: false`, as Python's
+ * decoder reads it and its encoder writes it again. Request schemas 2 and 5 to 9 have no such field, so the file
+ * keeps the requests as stored for every reader that hands it to Python (a Session 27-50's conversion, its saved
+ * LOSAT rows).
+ * @param {unknown} request The stored request (unvalidated).
+ * @param {unknown} resources The Session's resources (unvalidated), after `readStoredBlastTables`.
+ * @returns {unknown} The same request when no table is marked.
+ */
+export const withStoredTablesWithoutProteinMatches = (request, resources) => {
+  const stored = /** @type {UnvalidatedFields<'schema' | 'comparisons'>} */ (request);
+  const storedComparisons = stored?.comparisons;
+  if (!Array.isArray(storedComparisons)) return request;
+  const comparisons = storedComparisons.map((/** @type {unknown} */ item) => (
+    storedGivenComparisonTable(item, stored?.schema, resources)?.blastRows === null
+      ? { .../** @type {object} */ (item), proteinMatches: false } : item));
+  return comparisons.some((item, index) => item !== storedComparisons[index])
+    ? { .../** @type {object} */ (request), comparisons } : request;
 };
 
 /**

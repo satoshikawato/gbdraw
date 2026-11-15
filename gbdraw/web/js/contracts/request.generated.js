@@ -473,6 +473,7 @@
  * @property {string} resourceId
  * @property {number} queryRecordIndex
  * @property {number} subjectRecordIndex
+ * @property {string | null} [sourceName]
  */
 /**
  * @typedef {object} CanonicalPrecomputedProteinComparison
@@ -481,6 +482,7 @@
  * @property {'canonicalTsv'} encoding
  * @property {number} queryRecordIndex
  * @property {number} subjectRecordIndex
+ * @property {false} [proteinMatches]
  */
 /**
  * @typedef {object} CanonicalOrthogroupResultComparison

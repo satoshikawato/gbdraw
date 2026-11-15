@@ -868,9 +868,11 @@ const validateCurrentSemanticCoverage = (request) => {
     if (comparison?.kind !== 'nucleotideBlast') {
       throw recipeUnavailable(msg('comparison "{comparison}" has no lossless current CLI projection.'), { comparison: String(comparison?.kind || 'unknown') });
     }
+    // `sourceName`, the name of the file the user gave (null for a LOSAT result), names the table in Run info and
+    // draws nothing; the recipe's `-b` file is the resource, whose name a CLI run stores again.
     coverObject(coverage, comparison, path, [
       'kind', 'resourceId', 'queryRecordIndex', 'subjectRecordIndex'
-    ]);
+    ], ['sourceName']);
   });
   const [output, outputPath] = Array.isArray(request.output) ? [request.output[0], 'output[0]'] : [request.output, 'output'];
   coverObject(coverage, output, outputPath, ['prefix', 'formats', 'overwrite', 'interactiveMetadataPolicy']);

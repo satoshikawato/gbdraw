@@ -1,0 +1,500 @@
+{
+ "description": [
+  "Tables that requests of schemas 2 and 5-9 stored as a precomputedProteinComparison, and how both surfaces read",
+  "them: Python's decoder (gbdraw.session_request_codec._stored_protein_matches, with its encoder's",
+  "gbdraw.io.comparisons.comparison_table_text; tests/test_cli_session_render.py) and the Web Load",
+  "(readStoredBlastTables in gbdraw/web/js/services/session-request.js; tests/web/web-load-comparison-kind.test.mjs).",
+  "Each case is a canonical TSV of columns (its header) and rows under resourceId, stored by a request of schema.",
+  "read: protein, a table of protein matches, left as stored; blast, a table that holds no protein matches and has",
+  "a BLAST form, read as nucleotideBlast whose rows are blastRows; table, one that holds no protein matches and has",
+  "no BLAST form, read with proteinMatches false (OV-3512, OV-3573, OV-3574)."
+ ],
+ "cases": [
+  {
+   "id": "blast-columns-in-order",
+   "schema": 9,
+   "resourceId": "comparison-explicit-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200"
+    ]
+   ],
+   "read": "blast",
+   "blastRows": "rec0\trec1\t90.5\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n",
+   "note": "A 0.14.x CLI --comparisons_table table."
+  },
+  {
+   "id": "blast-columns-in-another-order",
+   "schema": 9,
+   "resourceId": "comparison-explicit-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "bitscore",
+    "evalue"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "200",
+     "1e-20"
+    ]
+   ],
+   "read": "blast",
+   "blastRows": "rec0\trec1\t90.5\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n",
+   "note": "A 0.14.x Python LinearComparison whose DataFrame had another column order."
+  },
+  {
+   "id": "blast-columns-without-rows",
+   "schema": 9,
+   "resourceId": "comparison-explicit-2",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [],
+   "read": "blast",
+   "blastRows": ""
+  },
+  {
+   "id": "some-blast-columns-without-rows",
+   "schema": 9,
+   "resourceId": "comparison-explicit-2",
+   "columns": [
+    "query",
+    "subject"
+   ],
+   "rows": [],
+   "read": "blast",
+   "blastRows": ""
+  },
+  {
+   "id": "blast-and-feature-columns",
+   "schema": 9,
+   "resourceId": "comparison-explicit-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore",
+    "query_feature_index",
+    "subject_feature_index"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200",
+     "1",
+     "2"
+    ]
+   ],
+   "read": "table",
+   "note": "A 0.14.x Python LinearComparison bound to features: no BLAST form."
+  },
+  {
+   "id": "some-blast-columns-with-rows",
+   "schema": 9,
+   "resourceId": "comparison-explicit-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20"
+    ]
+   ],
+   "read": "table"
+  },
+  {
+   "id": "blast-and-protein-columns",
+   "schema": 9,
+   "resourceId": "comparison-explicit-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore",
+    "query_protein_id",
+    "subject_protein_id"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200",
+     "p1",
+     "p2"
+    ]
+   ],
+   "read": "protein",
+   "note": "A 0.14.x CLI Similarity groups pair table."
+  },
+  {
+   "id": "web-losatp-table",
+   "schema": 9,
+   "resourceId": "comparison-canonical-protein-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200"
+    ]
+   ],
+   "read": "protein",
+   "note": "The Web stored its LOSATP tables under other IDs."
+  },
+  {
+   "id": "cli-losatp-table",
+   "schema": 9,
+   "resourceId": "comparison-protein-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200"
+    ]
+   ],
+   "read": "protein"
+  },
+  {
+   "id": "resolved-table",
+   "schema": 9,
+   "resourceId": "comparison-resolved-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200"
+    ]
+   ],
+   "read": "protein"
+  },
+  {
+   "id": "unnumbered-given-id",
+   "schema": 9,
+   "resourceId": "comparison-explicit-1-copy",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200"
+    ]
+   ],
+   "read": "protein"
+  },
+  {
+   "id": "schema-2-given-blast-table",
+   "schema": 2,
+   "resourceId": "comparison-explicit-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200"
+    ]
+   ],
+   "read": "blast",
+   "blastRows": "rec0\trec1\t90.5\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n",
+   "note": "Schema 2 (first-parent main 0266acb7b) wrote a given table under the same ID."
+  },
+  {
+   "id": "schema-5-table-bound-to-features",
+   "schema": 5,
+   "resourceId": "comparison-explicit-3",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore",
+    "query_feature_index",
+    "subject_feature_index"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200",
+     "1",
+     "2"
+    ]
+   ],
+   "read": "table"
+  },
+  {
+   "id": "current-schema-given-blast-table",
+   "schema": 10,
+   "resourceId": "comparison-explicit-1",
+   "columns": [
+    "query",
+    "subject",
+    "identity",
+    "alignment_length",
+    "mismatches",
+    "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore"
+   ],
+   "rows": [
+    [
+     "rec0",
+     "rec1",
+     "90.5",
+     "100",
+     "0",
+     "0",
+     "1",
+     "100",
+     "1",
+     "100",
+     "1e-20",
+     "200"
+    ]
+   ],
+   "read": "protein",
+   "note": "The current schema says what a table holds (proteinMatches): its kind is read as stored."
+  }
+ ]
+}

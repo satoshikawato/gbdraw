@@ -1837,17 +1837,25 @@ export const openedDrawingOf = (document) => {
  * 27-50's top-level set and a Session 46-50's `otherModeResult`; each Session
  * 50 drawing that holds a request, the one it opens (`openedDrawingOf`)
  * projected (a drawing is found by its ID). The one place Load names where a
- * file holds a set; each set reader below reads one.
+ * file holds a set; each set reader below reads one. It reads a document as
+ * the file holds it too (Load's step before its readers): a drawing that is
+ * no object holds no set, and a Session 51 without its drawings none, which
+ * its band's reader refuses (`readSessionDocument`, OV-1768).
  * @param {SessionInput} data
  * @returns {StoredResultSet[]}
  */
 export const storedResultSets = (data) => {
   if (isDrawingsBand(/** @type {SessionChecked} */ (data))) {
-    const document = /** @type {Session51} */ (/** @type {unknown} */ (data));
+    const { drawings: storedDrawings } = /** @type {{ drawings?: unknown }} */ (data);
+    // The objects of the list, at their places; a drawing the file holds as another value is a hole.
+    const entries = /** @type {(Session51['drawings'][number] | null)[]} */ (Array.isArray(storedDrawings)
+      ? storedDrawings.map((entry) => (isPlainObject(entry) ? entry : null)) : []);
+    const drawings = entries.filter((entry) => entry !== null);
+    const document = /** @type {Session51} */ (/** @type {unknown} */ ({ ...data, drawings }));
     // A Session 51 whose every drawing was dropped holds no set (R4, `restoresNothing`).
-    const openedId = document.drawings.length > 0 ? openedDrawingOf(document).id : null;
+    const openedId = drawings.length > 0 ? openedDrawingOf(document).id : null;
     /** @type {StoredResultSet[]} */
-    const sets = document.drawings.flatMap((entry, index) => (entry.renderRequest == null ? [] : [{
+    const sets = entries.flatMap((entry, index) => (entry === null || entry.renderRequest == null ? [] : [{
       at: drawingSetPath(index),
       projected: entry.id === openedId,
       set: /** @type {SessionInput} */ (/** @type {unknown} */ (entry))

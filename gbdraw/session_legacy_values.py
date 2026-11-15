@@ -33,8 +33,21 @@ SCALAR_AXIS_LABEL_PATHS: tuple[str, ...] = tuple(
     f"objects.{section}.axis_labels" for section in LEGACY_SCALAR_AXIS_LABEL_SECTIONS
 )
 LEGACY_SCALAR_AXIS_LABELS = "numbered"
+# The resource IDs under which a CLI or Python render of gbdraw (request schemas 2 and 5-9) stored a comparison
+# table it was given (`--comparisons_table`, a `LinearComparison`): this prefix and its number. Those writers stored
+# such a table as a protein table; the Web named its LOSATP tables otherwise (OV-3573).
+LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX = "comparison-explicit-"
+# The request schemas of those writers: 2 and 5-9 on main from 2026-07-18, 9 in the releases.
+LEGACY_GIVEN_COMPARISON_SCHEMAS: tuple[int, ...] = (2, 5, 6, 7, 8, 9)
+# The column every protein table those writers stored has. Under those schemas a table under that prefix and without
+# this column holds no protein matches; every other stored protein table holds them. Python's decoder and the Web Load
+# read them by this rule (OV-3512, OV-3573, OV-3574).
+LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN = "query_protein_id"
 
 __all__ = [
+    "LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN",
+    "LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX",
+    "LEGACY_GIVEN_COMPARISON_SCHEMAS",
     "LEGACY_SCALAR_AXIS_LABELS",
     "LEGACY_SCALAR_AXIS_LABEL_SECTIONS",
     "SCALAR_AXIS_LABEL_PATHS",

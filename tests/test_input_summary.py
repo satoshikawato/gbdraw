@@ -9,6 +9,7 @@ first record (OV-2354).
 from __future__ import annotations
 
 import base64
+import gzip
 import subprocess
 import sys
 from pathlib import Path
@@ -29,7 +30,7 @@ from gbdraw.io.comparisons import ComparisonRowTally
 from gbdraw.linear_comparison import ComparisonTableTally
 from gbdraw.io.genome import parse_gff_fasta, read_flat_file_records
 from gbdraw.session import SessionDocument, build_session_document
-from tests.utils.session_files import embedded_session
+from tests.utils.session_files import embedded_session, load_session_mapping
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs,
     render_embedded_canonical_web_request,
@@ -294,42 +295,219 @@ def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -
     assert staged["metadata"]["inputSummaries"] == reply["metadata"]["inputSummaries"]
 
 
-@pytest.mark.parametrize(("resource_id", "name", "shown"), [
-    ("comparison-nucleotide-1", "blast_rows_below_identity.tsv", "blast_rows_below_identity.tsv"),
-    # The Web writes a resource's name after its ID.
-    ("comparison-nucleotide-1", "comparison-nucleotide-1-blast_rows_below_identity.tsv", "blast_rows_below_identity.tsv"),
-    # A LOSAT result of the CLI and of the Web, and a table given without its file, under another drawing's name.
-    ("comparison-losat-1", "comparison-losat-1.tsv", None),
-    ("comparison-resolved-1", "comparison-resolved-1-comparison-resolved-1.tsv", None),
-    ("comparison-table-1-2", "comparison-table-1.2.tsv", None),
-])
-def test_a_stored_comparison_is_named_by_the_users_file_only(
-    tmp_path: Path, resource_id: str, name: str, shown: str | None,
-) -> None:
-    """OV-3557: the input summary names a stored comparison by the file the user gave, never by the name a writer gave
-    a table it made, as the fresh render does."""
+_PAIR = "record #1 PROKKA01.1 and record #2 RAST0001.1"
 
-    request = LinearDiagramRequest(
-        records=tuple(RecordInput(source=GenBankInputSource(path)) for path in (QUERY, SUBJECT)),
-        options=LinearDiagramOptions(blast_files=(str(ROWS_BELOW_IDENTITY),), identity=70.0),
-        output=RenderOutputRequest(output_prefix="summary", formats=("svg",), output_directory=tmp_path / "cli"),
+
+def _staged_reply(payload: dict, resources: dict, folder: Path, names: dict[str, str] | None = None) -> dict:
+    """The Worker's reply: each resource staged under a content token, named by the page's ``resourceManifest``
+    name (``names``; else the Session's name, as after a Load)."""
+
+    workspace = folder / "gbdraw-web-render-1"
+    (workspace / "resources").mkdir(parents=True)
+    (workspace / ".gbdraw-worker-render-workspace").touch()
+    cache = folder / "gbdraw-web-render-resource-cache"
+    cache.mkdir()
+    paths, manifest = {}, {}
+    for index, (resource_id, entry) in enumerate(resources.items(), start=1):
+        token = cache / f"{index:064x}.bin"
+        token.write_bytes(base64.b64decode(entry["data"], validate=True))
+        paths[resource_id] = workspace / "resources" / f"{index:04d}.bin"
+        paths[resource_id].symlink_to(token)
+        manifest[resource_id] = (names or {}).get(resource_id, entry["name"])
+    return _render_staged_canonical_web_request_with_prepared_inputs(
+        payload, resource_paths=paths, workspace=workspace, _resource_names=manifest,
     )
-    document = _embedded(build_session_document(request))
-    payload = document["drawings"][0]["renderRequest"]
-    (comparison,) = payload["comparisons"]
-    resources = dict(document["resources"])
-    resources[resource_id] = {**resources.pop(comparison["resourceId"]), "name": name}
-    comparison["resourceId"] = resource_id
-    reply = render_embedded_canonical_web_request(payload, resources=resources, workspace=tmp_path / "web")
 
-    pair = "record #1 PROKKA01.1 and record #2 RAST0001.1"
-    label = f"Comparison table {shown} ({pair})" if shown else f"Comparison of {pair}"
+
+def _comparison_names(texts: list[str]) -> list[str | None]:
+    """The name each comparison line gives its table, or None for a comparison named by its records."""
+
+    names: list[str | None] = []
+    for text in texts:
+        if text.startswith("Comparison table "):
+            names.append(text.removeprefix("Comparison table ").partition(" (record #")[0])
+        elif text.startswith("Comparison of "):
+            names.append(None)
+    return names
+
+
+def _blast_request(folder: Path, files: list[tuple[str, bytes]]) -> LinearDiagramRequest:
+    """QUERY and SUBJECT compared by each of ``files`` (name, bytes): one as a BLAST file, more as tables given
+    without their files' text, as a Python caller gives them."""
+
+    paths = []
+    for index, (name, content) in enumerate(files, start=1):
+        path = folder / "in" / str(index) / name
+        path.parent.mkdir(parents=True)
+        path.write_bytes(content)
+        paths.append(path)
+    return LinearDiagramRequest(
+        records=tuple(RecordInput(source=GenBankInputSource(path)) for path in (QUERY, SUBJECT)),
+        options=LinearDiagramOptions(
+            linear_comparisons=tuple(
+                _blast_comparison(path) for path in paths
+            ) if len(paths) > 1 else None,
+            blast_files=(str(paths[0]),) if len(paths) == 1 else None,
+            identity=70.0,
+        ),
+        output=RenderOutputRequest(output_prefix="summary", formats=("svg",), output_directory=folder / "fresh"),
+    )
+
+
+def _blast_document(folder: Path, files: list[tuple[str, bytes]]) -> dict:
+    return _embedded(build_session_document(_blast_request(folder, files)))
+
+
+def _blast_comparison(path: Path) -> object:
+    from gbdraw.io.comparisons import read_comparison_table
+    from gbdraw.linear_comparison import LinearComparison
+
+    return LinearComparison(0, 1, read_comparison_table(path), source_name=path.name)
+
+
+def _older_entry(document: dict, resource_id: str, name: str, *, data: bytes | None = None) -> dict:
+    """``document`` as a writer before the stored name wrote it: the comparison resource under ``resource_id``
+    and ``name``, the entry without ``sourceName``."""
+
+    payload = document["drawings"][0]["renderRequest"]
+    (comparison,) = [item for item in payload["comparisons"] if item["kind"] == "nucleotideBlast"]
+    entry = document["resources"].pop(comparison["resourceId"])
+    if data is not None:
+        entry = {**entry, "data": base64.b64encode(data).decode("ascii"), "size": len(data)}
+    document["resources"][resource_id] = {**entry, "name": name}
+    comparison["resourceId"] = resource_id
+    comparison.pop("sourceName", None)
+    return document
+
+
+def _reencoded(document: dict, folder: Path) -> dict:
+    """``document`` decoded by the Python API and written again (OV-3557 review M2)."""
+
+    from gbdraw.session import materialize_session, session_to_request
+
+    with materialize_session(load_session_mapping(document), output_directory=folder / "decoded") as materialized:
+        request = session_to_request(materialized)
+        return _embedded(build_session_document(request))
+
+
+def _cli_replay_names(document: dict, folder: Path) -> list[str | None]:
+    """The comparison names the CLI replay (`gbdraw render --session`) of ``document`` logs."""
+
+    from gbdraw.session import materialize_session, render_session
+
+    with materialize_session(load_session_mapping(document), output_directory=folder / "replay") as materialized:
+        summary = render_session(materialized).input_summary
+    return _comparison_names(list(input_summary_lines(summary)))
+
+
+_ROWS = ROWS_BELOW_IDENTITY.read_bytes()
+_HITS = [("hits.tsv", _ROWS)]
+# Each case: the Session, the names the page's manifest gives its resources (None: the Session's names, as after a
+# Load), and the names the CLI replay and the Web show.
+_NAMING_CASES = {
+    "plain": (lambda folder: _blast_document(folder, _HITS), None, ["hits.tsv"]),
+    "empty": (lambda folder: _blast_document(folder, [("hits.tsv", b"")]), None, ["hits.tsv"]),
+    "sanitized": (lambda folder: _blast_document(folder, [("my hits.tsv", _ROWS)]), None, ["my hits.tsv"]),
+    "two-of-one-name": (
+        lambda folder: _blast_document(folder, [("hits.tsv", _ROWS), ("hits.tsv", _ROWS + _ROWS.splitlines(keepends=True)[-1])]),
+        None, ["hits.tsv", "hits.tsv"],
+    ),
+    "re-encoded": (lambda folder: _reencoded(_blast_document(folder, _HITS), folder), None, ["hits.tsv"]),
+    # The Web writes the File's name and names the resource "<id>-<sanitized name>"; Generate sends the File.
+    "web-upload": (
+        lambda folder: _with_source_name(_older_entry(
+            _blast_document(folder, _HITS), "comparison-nucleotide-1", "comparison-nucleotide-1-my_hits.tsv",
+        ), "my hits.tsv"),
+        {"comparison-nucleotide-1": "my hits.tsv"}, ["my hits.tsv"],
+    ),
+    "gbdraw-made": (
+        lambda folder: _with_source_name(_older_entry(
+            _blast_document(folder, _HITS), "comparison-losat-1", "comparison-losat-1.tsv",
+        ), None),
+        None, [None],
+    ),
+    # OV-3580: a Web LOSATN Generate stores its result as a table gbdraw made; the page stages it under its resource
+    # name, which never names the comparison.
+    "web-losat-generate": (
+        lambda folder: _with_source_name(_older_entry(
+            _blast_document(folder, _HITS), "comparison-resolved-1", "comparison-resolved-1-comparison-resolved-1.tsv",
+        ), None),
+        {"comparison-resolved-1": "comparison-resolved-1-comparison-resolved-1.tsv"}, [None],
+    ),
+    # Sessions written before the stored name: the name is read from the resource's name.
+    "older-web-upload": (
+        lambda folder: _older_entry(_blast_document(folder, _HITS), "comparison-nucleotide-1", "comparison-nucleotide-1-hits.tsv"),
+        None, ["hits.tsv"],
+    ),
+    "older-web-losat": (
+        lambda folder: _older_entry(
+            _blast_document(folder, _HITS), "comparison-resolved-1", "comparison-resolved-1-comparison-resolved-1.tsv",
+        ),
+        None, [None],
+    ),
+    "older-cli-losat": (
+        lambda folder: _older_entry(_blast_document(folder, _HITS), "comparison-losat-1", "comparison-losat-1.tsv"),
+        None, [None],
+    ),
+    "older-renamed-losat": (
+        lambda folder: _older_entry(
+            _blast_document(folder, _HITS), "resource-0001",
+            "resource-0001-comparison-resolved-1-comparison-resolved-1.tsv",
+        ),
+        None, [None],
+    ),
+    "older-renamed-upload": (
+        lambda folder: _older_entry(
+            _blast_document(folder, _HITS), "resource-0001", "resource-0001-comparison-nucleotide-1-hits.tsv",
+        ),
+        None, ["hits.tsv"],
+    ),
+    "older-gzip-ordinal": (
+        lambda folder: _older_entry(
+            _blast_document(folder, _HITS), "comparison-losat-1-2", "comparison-losat-1.tsv.2.gz",
+            data=gzip.compress(_ROWS, mtime=0),
+        ),
+        None, [None],
+    ),
+}
+
+
+def _with_source_name(document: dict, name: str | None) -> dict:
+    for item in document["drawings"][0]["renderRequest"]["comparisons"]:
+        if item["kind"] == "nucleotideBlast":
+            item["sourceName"] = name
+    return document
+
+
+@pytest.mark.parametrize("case", list(_NAMING_CASES))
+def test_a_stored_comparison_is_named_alike_by_the_cli_replay_and_the_web(tmp_path: Path, case: str) -> None:
+    """OV-3557 (review H2, M1, M2, L1): one stored owner names a comparison. The Session stores the name of the
+    file the user gave (none for a table gbdraw made); the CLI replay and the Web Worker read it through one
+    function, and the page's manifest name never overrides it. Older Sessions are read by their resource names."""
+
+    build, manifest, shown = _NAMING_CASES[case]
+    document = build(tmp_path / "build")
+    payload = document["drawings"][0]["renderRequest"]
+    reply = _staged_reply(payload, document["resources"], tmp_path / "web", manifest)
     (summary,) = reply["metadata"]["inputSummaries"]
-    assert [warning["message"] for warning in summary["warnings"]] == [
-        FILTERED_OUT_WARNING.removeprefix("WARNING: ").replace(
-            f"Comparison table blast_rows_below_identity.tsv ({pair})", label,
-        )
+    web = _comparison_names(summary["lines"])
+    cli = _cli_replay_names(document, tmp_path / "cli")
+    assert (cli, web) == (shown, shown)
+
+
+@pytest.mark.parametrize("name", ["hits.tsv", "my hits.tsv"])
+def test_a_session_stores_the_name_its_fresh_render_shows(tmp_path: Path, name: str) -> None:
+    """The fresh render names a comparison file by its name as given, unsanitized, and the Session stores that name
+    on the comparison (review L1)."""
+
+    request = _blast_request(tmp_path, [(name, _ROWS)])
+    summary = render_request(request).input_summary
+    assert _comparison_names([item.message for item in input_warnings(summary)]) == [name]
+    document = _embedded(build_session_document(request))
+    (comparison,) = [
+        item for item in document["drawings"][0]["renderRequest"]["comparisons"] if item["kind"] == "nucleotideBlast"
     ]
+    assert comparison["sourceName"] == name
 
 
 def test_web_reply_warns_about_a_record_with_no_feature(tmp_path: Path) -> None:

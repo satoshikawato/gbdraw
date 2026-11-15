@@ -2944,6 +2944,16 @@
         },
         "subjectRecordIndex": {
           "type": "integer"
+        },
+        "sourceName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -2971,6 +2981,9 @@
         },
         "subjectRecordIndex": {
           "type": "integer"
+        },
+        "proteinMatches": {
+          "const": false
         }
       },
       "required": [

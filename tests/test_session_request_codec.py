@@ -138,6 +138,41 @@ def _source_file(path: Path, content: str = "source\n") -> Path:
     return path
 
 
+def test_a_feature_bound_table_says_whether_it_holds_protein_matches(tmp_path: Path) -> None:
+    """OV-3574: a table bound to features keeps its binding columns as a canonical table; one that holds no protein
+    matches is stored with ``proteinMatches: false`` and decodes as such, a protein one without the field."""
+
+    from gbdraw.linear_comparison import LinearComparison
+
+    table = pd.DataFrame([{
+        "query": "a", "subject": "b", "identity": 99.0, "alignment_length": 30, "mismatches": 0, "gap_opens": 0,
+        "qstart": 31, "qend": 60, "sstart": 31, "send": 60, "evalue": 1e-20, "bitscore": 50.0,
+        "query_feature_index": "0", "query_feature_svg_id": "f-a", "subject_feature_index": "0",
+        "subject_feature_svg_id": "f-b",
+    }])
+    request = LinearDiagramRequest(
+        records=tuple(RecordInput(source=GenBankInputSource(_source_file(tmp_path / f"{name}.gbk"))) for name in "ab"),
+        options=LinearDiagramOptions(linear_comparisons=(
+            LinearComparison(0, 1, table), LinearComparison(0, 1, table, protein_matches=True),
+        )),
+        output=RenderOutputRequest(output_prefix="bound"),
+    )
+    encoded = encode_canonical_request(request)
+    stored = [item for item in encoded.payload["comparisons"] if "resourceId" in item]
+    assert [(item["kind"], item.get("proteinMatches")) for item in stored] == [
+        ("precomputedProteinComparison", False), ("precomputedProteinComparison", None),
+    ]
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "replay",
+    )
+    assert isinstance(decoded, LinearDiagramRequest)
+    comparisons = decoded.options.linear_comparisons
+    assert [item.protein_matches for item in comparisons] == [False, True]
+    assert "subject_feature_svg_id" in comparisons[0].matches.columns
+
+
 def test_typed_collinearity_anchor_schema2_and_schema1_compatibility(
     tmp_path: Path,
 ) -> None:

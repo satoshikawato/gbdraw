@@ -276,6 +276,83 @@ await test('a main v42 CLI Linear BLAST sidecar keeps a read-only comparison wit
   assertNoReplacementDraft();
 });
 
+// OV-3573: a 0.14.0-0.14.5 CLI Session stored a --comparisons_table BLAST table as a protein table (request schema 9,
+// `precomputedProteinComparison` of the BLAST columns alone; the v0.14.5 CLI's form, HANDOFF evidence in the PR). Load
+// reads it as the BLAST table it is: the committed comparison and its resource are a BLAST table's, and the draft is
+// not a LOSATP Pairwise one, as for a CLI -b Session.
+await test('a 0.14.x CLI comparisons-table Session loads its BLAST table as a BLAST comparison', async () => {
+  const session = JSON.parse(await sessionJsonBytes(await readFile(path.join(
+    root, 'tests/fixtures/sessions/cli-linear-blacklist-file.v47.gbdraw-session.json.gz'
+  ))));
+  assert.equal(session.renderRequest.schema, 9);
+  const header = ['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend',
+    'sstart', 'send', 'evalue', 'bitscore'].join('\t');
+  const rows = 'record-1\trecord-2\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n';
+  const table = Buffer.from(`${header}\n${rows}`, 'utf8');
+  session.resources['comparison-explicit-1'] = {
+    kind: 'canonical-tsv', name: 'comparison-explicit-1.tsv', type: 'text/tab-separated-values',
+    size: table.byteLength, lastModified: 0, encoding: 'base64', data: table.toString('base64')
+  };
+  session.renderRequest.comparisons.unshift({
+    kind: 'precomputedProteinComparison', resourceId: 'comparison-explicit-1', encoding: 'canonicalTsv',
+    queryRecordIndex: 0, subjectRecordIndex: 1
+  });
+  const result = await load(JSON.stringify(session));
+  assert.equal(result.status, 'ok', result.error?.stack);
+  const committed = getCommittedCanonicalSession();
+  assert.deepEqual(committed.renderRequest.comparisons.map(item => [item.kind, item.mode ?? null]),
+    [['nucleotideBlast', null], ['generatedProteinComparison', 'none']]);
+  const { resourceId } = committed.renderRequest.comparisons[0];
+  assert.equal(committed.resources[resourceId].kind, 'nucleotide-blast');
+  const { readCanonicalResourceText } = await import('../../gbdraw/web/js/services/session-request.js');
+  assert.equal(await readCanonicalResourceText(committed.resources, resourceId), rows);
+  assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
+  assertNoReplacementDraft();
+});
+
+// OV-3566: a CLI LOSATP Pairwise render with every record in one row compares no pair, and its Session keeps the
+// Pairwise search (mode `pairwise`, no pairs). Load gives the controls that LOSATP Pairwise, a redraw needs no
+// Generate (it searches nothing), and once record #2 has a row of its own, Generate's request searches that pair.
+await test('a CLI LOSATP Pairwise Session without a displayed pair loads as LOSATP Pairwise', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
+  try {
+    const file = path.join(directory, 'pairwise.gbdraw');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', mito, lambda, '--losat', 'losatp',
+      '--losatp_mode', 'pairwise', '--multi_record_position', '#1@1', '--multi_record_position', '#2@1',
+      '-o', path.join(directory, 'pairwise'), '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const bytes = await sessionJsonBytes(await readFile(file));
+    const view = savedDrawingView(JSON.parse(bytes), 'linear');
+    assert.deepEqual(view.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
+      [['generatedProteinComparison', 'pairwise', []]]);
+    const result = await load(bytes);
+    assert.equal(result.status, 'ok', result.error?.stack);
+    const drawing = state.activeDrawing();
+    assert.equal(drawing.importedComparisonIntent.disposition, 'EDITABLE');
+    assert.deepEqual([drawing.losatProgram.value, drawing.losat.blastp.mode, drawing.linearComparisonPlan.mode],
+      ['blastp', 'pairwise', 'adjacent']);
+    const { requireRedrawableCommittedSession } = await import('../../gbdraw/web/js/services/session-request.js');
+    const committed = getCommittedCanonicalSession();
+    assert.equal(requireRedrawableCommittedSession(committed), committed);
+    const filesData = await serializeActiveRenderFiles(state, drawing);
+    const [first, second] = filesData.linearSeqs.map(seq => seq.uid);
+    const generateComparisons = (rows) => buildCanonicalRenderRequest({ state, drawing,
+      filesData: { ...filesData, linearCanonicalComparisons: [] },
+      comparisonPlanSnapshot: resolveLinearComparisonPlan({
+        plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs,
+        layout: [{ uid: first, row: 1 }, { uid: second, row: rows }],
+        losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
+      }) }).renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]);
+    // One row: the Web stores the search as the CLI did; record #2 in row 2: the pair is searched.
+    assert.deepEqual(generateComparisons(1), [['generatedProteinComparison', 'pairwise', []]]);
+    assert.deepEqual(generateComparisons(2),
+      [['generatedProteinComparison', 'pairwise', [{ queryRecordIndex: 0, subjectRecordIndex: 1 }]]]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // B3: one multi-record GenBank file with -b gives records `record-1:1` and
 // `record-1:2`. Each record becomes its own Linear row keyed by that recordKey
 // with the request's record selector, so Inherit binds the comparison to the

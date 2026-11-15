@@ -334,25 +334,27 @@ const unitInputsOf = (records) => records.map((record, index) => ({
 /**
  * The LOSATP mode whose results a request stores beside a pipeline marker of mode `none`, as the CLI and the Web
  * write them after a render: Collinear for a `collinearityResult`, Similarity groups for an `orthogroupResult`,
- * Pairwise for protein tables alone, and '' for none. The one reader of that mode: the classifier, Load's draft of
+ * Pairwise for protein tables alone, and '' for none. A table that says it holds no protein matches
+ * (`proteinMatches: false`, OV-3574) is no protein result. The one reader of that mode: the classifier, Load's draft of
  * a CLI Session, which has no saved controls (`projectCanonicalSessionRequest` in services/session-request.js), and
  * Generate's reuse of resolved protein results (`canReuseResolvedProteinArtifacts` in app/run-analysis.js).
  * @param {readonly { kind?: unknown }[]} comparisons The request's comparisons.
  * @returns {'collinear' | 'orthogroup' | 'pairwise' | ''}
  */
 export const storedProteinResultMode = (comparisons) => {
-  const stores = (/** @type {string} */ kind) => comparisons.some((comparison) => comparison?.kind === kind);
+  const stores = (/** @type {string} */ kind) => comparisons.some((comparison) => comparison?.kind === kind
+    && /** @type {{ proteinMatches?: unknown }} */ (comparison).proteinMatches !== false);
   if (stores('collinearityResult')) return 'collinear';
   if (stores('orthogroupResult')) return 'orthogroup';
   return stores('precomputedProteinComparison') ? 'pairwise' : '';
 };
 
-/** @param {{ comparisons: SavedComparison[], pipeline: SavedPipeline }} saved Its rows are editable. */
+/**
+ * A Pairwise pipeline without pairs is the LOSATP Pairwise search over adjacent rows, which the controls hold for
+ * records drawn whole (OV-3566): a CLI writes it, and a writer that compared no pair stores it so.
+ * @param {{ comparisons: SavedComparison[], pipeline: SavedPipeline }} saved Its rows are editable.
+ */
 const generatedPipelineIsProjectable = ({ comparisons, pipeline }) => {
-  const endpoints = comparisons.filter((comparison) => ENDPOINT_KINDS.has(comparison.kind));
-  if (pipeline.mode === 'pairwise' && pipeline.pairs.length === 0 && endpoints.length === 0) {
-    return false;
-  }
   // A disabled pipeline can carry CLI settings without any comparison work.
   if (pipeline.mode === LOSATP_NO_SEARCH_MODE && !storedProteinResultMode(comparisons)
     && (comparisons.length !== 1 || pipeline.pairs.length !== 0)) return false;
@@ -489,8 +491,9 @@ export const classifyImportedComparisonIntent = ({
     );
   }
   // The controls and their projection hold record pairs; the comparisons of a drawing with a record drawn in several
-  // windows join drawn units, and run as saved through Inherit.
-  if (drawsSeveralUnits(unitInputs) && executableEndpoints.length > 0) {
+  // windows join drawn units, and run as saved through Inherit: listed pairs, and a Pairwise search of the pairs of
+  // adjacent rows, which there are pairs of units.
+  if (drawsSeveralUnits(unitInputs) && (executableEndpoints.length > 0 || pipeline?.mode === 'pairwise')) {
     return preserved(
       msg('The saved comparison can run, but the current controls cannot edit the comparisons of records drawn in several windows.')
     );
@@ -512,9 +515,11 @@ export const classifyImportedComparisonIntent = ({
     );
   }
   if (pipeline && !generatedPipelineIsProjectable({ comparisons, pipeline })) {
-    return preserved(
-      msg('The saved protein comparison is executable, but current controls cannot represent it losslessly.')
-    );
+    // The message names what the comparisons hold: tables without protein matches beside a pipeline that searches
+    // nothing (the CLI stores its LOSATP settings so with `-b` tables, OV-3589), else a protein comparison.
+    return preserved(!storedProteinResultMode(comparisons) && pipeline.mode === LOSATP_NO_SEARCH_MODE
+      ? msg('The saved comparison tables can run, but the current controls cannot represent them losslessly.')
+      : msg('The saved protein comparison is executable, but current controls cannot represent it losslessly.'));
   }
 
   return editable(msg('The saved comparison is represented by the current controls.'));

@@ -130,27 +130,72 @@ Python writes them (`gbdraw/render/track_slot_metadata.py`); the Web app's Selec
 the version does not change. A saved Result without them loads as before, and Select region stays off until the next
 Generate; no reader adds them. Fixture: `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.*`.
 
-Request schema 10 stores only LOSATP protein tables as
-`precomputedProteinComparison` (OV-3512). Schemas 2 to 9 also stored there a
-BLAST table that the writer held without its file's text: a
+Request schema 10 stores only protein tables as
+`precomputedProteinComparison` without a mark (OV-3512). Schemas 2 to 9 also
+stored there a BLAST table that the writer held without its file's text: a
 `--comparisons_table` row, or a Python `LinearComparison` (gbdraw 0.14.0 to
 0.14.5 wrote them so). The schema-10 writer (`_encode_comparisons` in
 `gbdraw/session_request_codec.py`) stores such a table as `nucleotideBlast`:
 its rows as BLAST outfmt 6 text, in a resource named after the table's file
 (`comparison-table-<n>.tsv` when it has none). It chooses the kind from
-`LinearComparison.protein_matches`, which the protein analysis sets; a table
+`LinearComparison.protein_matches`, which the protein analysis sets. A table
 with columns beyond the 12 BLAST columns (rows bound to features) keeps
-`precomputedProteinComparison`, since BLAST text would lose them. The
-decoder reads a schema-10 `precomputedProteinComparison` as a protein
-comparison, so a LOSATP pair without a match is reported as "Protein
-comparison of ... has no protein match to draw." on replay and after a Web
-Generate, as the first render reported it. In a schema 2-9 request it reads
-one as a protein comparison only when the table has the protein columns
-(`query_protein_id`), which every protein table a release wrote has; a BLAST
-table without them stays a nucleotide table, and a re-save stores it as
-`nucleotideBlast`. Fixture:
-`tests/fixtures/sessions/BGC0000708-BGC0000709-comparisons-table.v50-cli0145.gbdraw-session.json.gz`.
-Request schema 10 has not reached `main`, so the schema does not change.
+`precomputedProteinComparison`, since BLAST text would lose them, and when it
+holds no protein matches the entry says so with `proteinMatches: false`
+(OV-3574; the Web refuses a `nucleotideBlast` entry whose resource is not a
+`nucleotide-blast` resource, so that kind cannot hold the binding columns).
+The decoder reads a schema-10 `precomputedProteinComparison` as a protein
+comparison unless it has `proteinMatches: false`, so a LOSATP pair without a
+match is reported as "Protein comparison of ... has no protein match to draw."
+on replay and after a Web Generate, as the first render reported it. A
+schema 2 or 5-9 request stored a table a CLI or Python render was given under
+its own resource ID, `comparison-explicit-<n>`
+(`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX` and `LEGACY_GIVEN_COMPARISON_SCHEMAS`
+in `gbdraw/session_legacy_values.py`, generated into the Web contracts). In
+such a request the decoder reads a `precomputedProteinComparison` as a table
+without protein matches when it is under that ID and has no protein column
+`query_protein_id`, and every other one as a protein comparison: the Web
+writer and the CLI stored their LOSATP tables under other IDs
+(`comparison-canonical-protein-<n>`, `comparison-resolved-<n>`,
+`comparison-protein-<n>`). The Web Load reads the same rule before any reader
+(`readStoredBlastTables`, OV-3573, OV-3574) and writes what Python's encoder
+writes again: such a table of the 12 BLAST columns alone, in any order,
+becomes the `nucleotideBlast` entry and `nucleotide-blast` resource the current
+writers store (rows in `COMPARISON_COLUMNS` order); a table bound to features
+has no BLAST form and gets `proteinMatches: false` from Load's request
+reader, which promotes the request to schema 10; the Load projection and the
+Web writer keep it. The file Load hands Python (a Session 27-44's conversion,
+a Session 46-50's saved LOSAT rows) keeps every request valid at its own
+schema. The shared vectors
+`tests/fixtures/given-comparison-table-vectors.json` pin both surfaces; the
+schema-2 case there is synthetic, its evidence `_encode_comparisons` at
+`0266acb7b` on first-parent `main`. Positive fixtures: the
+Gallery Session of Session 47
+(`tests/fixtures/sessions/BGC0000708-BGC0000713.v47.gbdraw-session.json.gz`)
+and the Session 40 collinear Session
+(`tests/fixtures/performance/hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz`)
+read as protein comparisons; the BLAST table of
+`tests/fixtures/sessions/BGC0000708-BGC0000709-comparisons-table.v50-cli0145.gbdraw-session.json.gz`
+reads as a nucleotide table on both surfaces, and a re-save stores it as
+`nucleotideBlast`.
+
+Request schema 10 also stores the name of the file the user gave on each
+`nucleotideBlast` entry, `sourceName` (OV-3557): the file's name as given
+(the CLI: the path's last part; the Web: the chosen File's name), or null for
+a table gbdraw made (a LOSAT result). The CLI replay, the Python API and the
+Web Worker name a comparison through one reader, `stored_comparison_name` in
+`gbdraw/session_request_codec.py`; the page's resource name never overrides
+it. An entry without `sourceName` (request schemas 2 to 9, a schema-10
+request written before the field, or one the Web promoted from schema 5 to 9)
+is named from its resource's name as those writers named their tables: without
+the Web's `<resource ID>-` and `resource-NNNN-` prefixes, and none for
+`comparison-losat-<n>`, `comparison-resolved-<n>`, `comparison-table-<n>` or
+`comparison-explicit-<n>` (with the ordinal a second drawing adds).
+The Web Load makes every stored nucleotide table a file of the draft; the Web
+writer stores a loaded table that its request named no file for as the request
+stored it (null, or no `sourceName`), so a Generate or Save after Load names it
+as the CLI replay does. Request schema 10 has not reached `main`, so the schema
+does not change.
 
 A drawing's `runMetadata` is declared once, in `SessionRunMetadata` (`gbdraw/session_contract.py`): the geometry's
 header and the rows of `annotationWarnings`, `featureIdentityNotices` and `comparisonWarnings`. One function builds it

@@ -230,11 +230,19 @@ one. A schema 1–9 request wrote one reference or `null` per ring; it reads as 
 ring of that one file or a ring without a comparison genome.
 
 Request schema 10 stores a BLAST table given in `--comparisons_table`, or as a
-Python `LinearComparison`, as a nucleotide comparison table (`nucleotideBlast`)
-under its file name; `precomputedProteinComparison` holds only LOSATP protein
-tables. A schema 2–9 request that stored such a table as
-`precomputedProteinComparison` (gbdraw 0.14.0 to 0.14.5) still reads it as a
-nucleotide table, and saving the Session again stores it in the new form.
+Python `LinearComparison`, as a nucleotide comparison table (`nucleotideBlast`);
+`precomputedProteinComparison` holds protein tables, and a table bound to
+features that holds no protein matches with `proteinMatches: false`. A
+`nucleotideBlast` entry stores the name of the file the user gave
+(`sourceName`, null for a LOSAT result), so `gbdraw render --session`, the
+Python API and the web app name a comparison as the first drawing did, also
+after the web app loads the Session and saves it again. A request of schema
+2–9 that stored such a BLAST table as `precomputedProteinComparison` (gbdraw
+0.14.0 to 0.14.5) still reads it as a nucleotide table, in `gbdraw render
+--session`, the Python API and the web app alike, and saving the Session again
+stores it in the new form; its LOSATP protein tables still read as protein
+comparisons. A comparison stored without `sourceName` is named from its stored
+file name.
 
 A schema-10 Linear request's `layout.recordGapPx` may be `null`, the
 default (Auto) record gap: 24 px, narrowed in a row whose gaps would take more

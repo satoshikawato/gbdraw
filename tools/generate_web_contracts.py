@@ -75,6 +75,9 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEFAULT_RECORD_GAP_PX", "gbdraw.layout.linear_multi_record", "DEFAULT_RECORD_GAP_PX"),
     ("ROW_GAPS_MAX_SHARE", "gbdraw.layout.linear_multi_record", "ROW_GAPS_MAX_SHARE"),
     ("STORED_REGION_FIELDS", "gbdraw.session_request_codec", "STORED_REGION_FIELDS"),
+    # The columns of a BLAST table: Load reads a given table of schema 2 or 5-9 that has these alone, in any order,
+    # as a BLAST table (OV-3573), as comparison_table_text writes one.
+    ("COMPARISON_COLUMNS", "gbdraw.io.comparisons", "COMPARISON_COLUMNS"),
     ("SUPPORTED_CANONICAL_REQUEST_SCHEMAS", "gbdraw.session_request_codec", "SUPPORTED_CANONICAL_REQUEST_SCHEMAS"),
     ("SIMILARITY_ALIGNMENT_PLAN_SCHEMA", "gbdraw.layout.similarity_alignment", "SIMILARITY_ALIGNMENT_PLAN_SCHEMA"),
     ("FEATURE_CATALOG_SCHEMA", "gbdraw.session_io", "CURRENT_FEATURE_CATALOG_SCHEMA"),
@@ -150,6 +153,11 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEFAULT_PNG_DPI", "gbdraw.render.export_limits", "DEFAULT_PNG_DPI"),
     # What an absent axis label style reads as: every writer before the setting drew numbered ticks.
     ("LEGACY_SCALAR_AXIS_LABELS", "gbdraw.session_legacy_values", "LEGACY_SCALAR_AXIS_LABELS"),
+    # The resource IDs, schemas and protein column by which a given comparison table of an older CLI or Python
+    # Session holds no protein matches: Load reads such a table as Python's decoder does (OV-3573, OV-3574).
+    ("LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX", "gbdraw.session_legacy_values", "LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX"),
+    ("LEGACY_GIVEN_COMPARISON_SCHEMAS", "gbdraw.session_legacy_values", "LEGACY_GIVEN_COMPARISON_SCHEMAS"),
+    ("LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN", "gbdraw.session_legacy_values", "LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN"),
     # The params keys each track renderer takes without reading them; the Source recipe leaves them out.
     ("CIRCULAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.circular", "CIRCULAR_SLOT_UNREAD_PARAM_KEYS"),
     # The label fit row statuses Apply can choose, the preferred first: the dialog selects by this order.

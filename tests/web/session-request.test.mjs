@@ -3337,6 +3337,17 @@ numericColumnCanonical.renderRequest.comparisons = [{
   subjectRecordIndex: 2
 }];
 const numericColumnProjection = projectCanonicalSessionRequest(numericColumnCanonical);
+// OV-3557: Load names a comparison file by the name the user gave it, which the request stores.
+assert.equal(
+  projectCanonicalSessionRequest({
+    ...numericColumnCanonical,
+    renderRequest: {
+      ...numericColumnCanonical.renderRequest,
+      comparisons: [{ ...numericColumnCanonical.renderRequest.comparisons[0], sourceName: 'my hits.tsv' }]
+    }
+  }).files.linearComparisons[0].file.name,
+  'my hits.tsv'
+);
 assert.deepEqual(
   numericColumnProjection.files.linearSeqs.map((sequence) => sequence.uid),
   ['second', 'first', 'third']
@@ -3998,6 +4009,29 @@ assert.equal(
   false,
   'projection provenance must not become part of the canonical comparison schema'
 );
+// OV-3574: a table that holds no protein matches keeps saying so through Load and a re-save.
+{
+  const unmatched = structuredClone(typedOptionCanonical);
+  const isTable = (comparison) => comparison.kind === 'precomputedProteinComparison';
+  unmatched.renderRequest.comparisons.find(isTable).proteinMatches = false;
+  const projection = projectCanonicalSessionRequest(unmatched);
+  assert.equal(projection.files.linearCanonicalComparisons.find(isTable).proteinMatches, false);
+  const unmatchedState = stateForCanonicalProjection(projection);
+  unmatchedState.losatProgram.value = 'blastn';
+  unmatchedState.linearComparisonPlan = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
+  assert.deepEqual(
+    buildCanonicalRenderRequestRaw({
+      state: unmatchedState, filesData: projection.files,
+      comparisonPlanSnapshot: comparisonSnapshotForState(unmatchedState, projection.files)
+    }).renderRequest.comparisons
+      .filter(isTable).map((comparison) => comparison.proteinMatches),
+    [false]
+  );
+  assert.equal(
+    typedOptionRoundTrip.renderRequest.comparisons.filter(isTable).some((comparison) => Object.hasOwn(comparison, 'proteinMatches')),
+    false
+  );
+}
 typedOptionState.linearComparisonPlan = {
   mode: 'none',
   defaultSource: 'losat',
@@ -6019,6 +6053,59 @@ assert.deepEqual(
   ],
   'mixed comparison descriptors must follow dense plan ordinal order'
 );
+// OV-3557: an uploaded table stores the name of the File the user chose; a LOSAT result stores none.
+assert.deepEqual(
+  mixedCanonical.renderRequest.comparisons.map((comparison) => /** @type {{ sourceName?: unknown }} */ (comparison).sourceName),
+  [null, blastTable.name, null]
+);
+// OV-3557 through Load: Load makes every stored nucleotide table a file of the draft; a table the request says
+// gbdraw made (`sourceName: null`, a LOSAT result) or names no file for (an older writer: no `sourceName`) is written
+// as the request stored it, so a Generate or Save after Load names it as the search, as the CLI replay does.
+{
+  const { adoptCurrentSessionResources, sessionResourceSource } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
+  );
+  const comparisons = mixedCanonical.renderRequest.comparisons;
+  const { sourceName: _older, ...olderEntry } = comparisons[2];
+  const stored = {
+    ...mixedCanonical,
+    renderRequest: { ...mixedCanonical.renderRequest, comparisons: [comparisons[0], comparisons[1], olderEntry] }
+  };
+  const sessionResourceTable = adoptCurrentSessionResources(stored.resources);
+  const loaded = projectCanonicalSessionRequest({ ...stored, sessionResourceTable });
+  const uidAt = (uid) => comparisonContractSequences[loaded.files.linearSeqs.findIndex((sequence) => sequence.uid === uid)].uid;
+  const loadedPlan = {
+    mode: 'selected',
+    defaultSource: 'losat',
+    edges: loaded.files.linearComparisons.map((binding) => ({
+      id: binding.id, queryUid: uidAt(binding.queryUid), subjectUid: uidAt(binding.subjectUid), included: true,
+      fileActive: true, losatFilenameActive: false, source: 'upload', file: binding.file, losatFilename: ''
+    }))
+  };
+  const resaved = (fileOf) => buildCanonicalRenderRequestRaw({
+    state: comparisonContractState,
+    filesData: {
+      ...comparisonContractFiles,
+      linearComparisons: loaded.files.linearComparisons.map((binding) => ({ id: binding.id, file: fileOf(binding.file) })),
+      linearCanonicalComparisons: []
+    },
+    comparisonPlanSnapshot: resolveLinearComparisonPlan({
+      plan: loadedPlan, sequences: comparisonContractSequences, losatProgram: 'blastn', blastpMode: 'pairwise'
+    })
+  }).renderRequest.comparisons.map((comparison) => [
+    comparison.queryRecordIndex, Object.hasOwn(comparison, 'sourceName') ? comparison.sourceName : 'absent'
+  ]).sort(([left], [right]) => left - right);
+  const expected = [[0, blastTable.name], [1, null], [2, 'absent']];
+  // The files of the draft, and the stored descriptors a Save or a Generate writes them from.
+  assert.deepEqual(resaved((file) => file), expected);
+  // A Save or a Generate writes a loaded file from its Session resource's descriptor (`serializeFile`), the same
+  // payload: the unnamed tables stay unnamed.
+  assert.deepEqual(resaved((file) => sessionResourceSource(file).descriptor).slice(1), expected.slice(1));
+  // A file the user chose for that pair afterwards is named by its name.
+  const losatResult = loaded.files.linearComparisons.find((binding) => uidAt(binding.queryUid) === 'b').file;
+  assert.deepEqual(resaved((file) => (file === losatResult ? { ...blastTableB } : file)),
+    [[0, blastTable.name], [1, blastTableB.name], [2, 'absent']]);
+}
 assert.equal(
   Buffer.from(
     mixedCanonical.resources[mixedCanonical.renderRequest.comparisons[0].resourceId].data,
@@ -6743,8 +6830,11 @@ for (const { name, record, windows, promotedSelector, refused } of REGION_WINDOW
 {
   const { requestRunsProteinSearch } = await import(pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js')));
   const { LOSATP_NO_SEARCH_MODE } = await import(pathToFileURL(join(tempRoot, 'js', 'contracts', 'schema.generated.js')));
+  // A listed pair: a Pairwise pipeline without pairs over one row searches nothing (OV-3566).
   const runs = (mode, extra = {}) => requestRunsProteinSearch({
-    mode: 'linear', comparisons: [{ kind: 'generatedProteinComparison', mode }], ...extra
+    mode: 'linear', comparisons: [{
+      kind: 'generatedProteinComparison', mode, pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }]
+    }], ...extra
   });
   assert.equal(typeof LOSATP_NO_SEARCH_MODE, 'string');
   assert.equal(runs(LOSATP_NO_SEARCH_MODE), false);
