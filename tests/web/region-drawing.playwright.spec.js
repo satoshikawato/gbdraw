@@ -12,7 +12,9 @@ const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { readSessionFile } = require('./helpers/session-file.cjs');
-const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, openApp } = require('./helpers/app-lifecycle.cjs');
+const {
+  evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, openApp, waitForPreviewAtRest
+} = require('./helpers/app-lifecycle.cjs');
 const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -277,15 +279,9 @@ test('a record popup and the records of a Shift+drag open Copy to another drawin
   // Shift+drag over both names selects the records (and the features in the box); Clear clears both. The box
   // starts and ends on the blank canvas inside the circles: a press on a name opens its popup.
   const shiftDragOverNames = async () => {
-    // The fit animates the preview transform: the names are read once they stand still.
-    let last = '';
-    await expect.poll(async () => {
-      const now = JSON.stringify(await recordNameBoxes(page));
-      const settled = now === last;
-      last = now;
-      return settled;
-    }, { intervals: [250] }).toBe(true);
-    const boxes = JSON.parse(last);
+    // The Fit moves the figure in a 0.2 s transform transition: the names are read once it has ended (OV-3587).
+    await waitForPreviewAtRest(page);
+    const boxes = await recordNameBoxes(page);
     const left = Math.min(...boxes.map((box) => box.left)) - 24;
     const top = Math.min(...boxes.map((box) => box.top)) - 24;
     const right = Math.max(...boxes.map((box) => box.right)) + 24;
@@ -531,14 +527,10 @@ test('Linear Wrap Rows: Shift+drag over the record name selects the record, and 
       return readRegionAxisRecords(state.trackSlotResolvedGeometry.value, state.selectedResultIndex.value)[0].axis.rows.length;
     }), 'the record wraps').toBeGreaterThan(1);
     await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
-    let last = '';
-    await expect.poll(async () => {
-      const now = JSON.stringify(await recordNameBoxes(page));
-      const settled = now === last;
-      last = now;
-      return settled;
-    }, { intervals: [250] }).toBe(true);
-    const [name] = JSON.parse(last);
+    // Two equal reads do not show the figure at rest: a transition that has not started yet reads the same twice,
+    // and the drag then lands where the figure was before the Fit (OV-3587).
+    await waitForPreviewAtRest(page);
+    const [name] = await recordNameBoxes(page);
     await page.keyboard.down('Shift');
     await page.mouse.move(name.left - 12, name.top - 12);
     await page.mouse.down();
@@ -585,14 +577,8 @@ test('Linear row of windows: Shift+drag over the row\'s list selects the records
     return { id: line.getAttribute('data-gbdraw-record-id'), index: line.getAttribute('data-gbdraw-record-index'),
       left, top, right, bottom };
   })));
-  let last = '';
-  await expect.poll(async () => {
-    const now = JSON.stringify(await listLines(page));
-    const settled = now === last;
-    last = now;
-    return settled;
-  }, { intervals: [250] }).toBe(true);
-  const rows = JSON.parse(last);
+  await waitForPreviewAtRest(page);
+  const rows = await listLines(page);
   expect(rows.length, 'two rows of windows').toBe(2);
   const [first] = rows;
   expect(first.length, 'one line per window').toBeGreaterThan(1);
