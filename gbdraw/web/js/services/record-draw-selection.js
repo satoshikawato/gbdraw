@@ -9,7 +9,7 @@ import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from '.
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
 /** @import { InputFileRef } from './history-files.js' */
-/** @import { CircularCardMark, NamedCardRecordsMark } from './drawing/inputs.js' */
+/** @import { CircularCardMark } from './drawing/inputs.js' */
 /** @import { CanonicalRecord } from '../contracts/request.generated.js' */
 // Which records of a drawing are drawn (D-01..D-10, record-selection). A
 // drawing holds the keys of its OFF records in `recordsOff`: a Linear record
