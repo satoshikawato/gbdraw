@@ -407,6 +407,77 @@ def test_an_auto_gap_row_that_its_marks_do_not_fill_names_the_gap_that_fits(
     assert f"Set a record gap smaller than {limit:g} px, move some records" in str(set_refused.value)
 
 
+def _rows_of_marks(*marks_by_row: tuple[float, ...]) -> tuple[tuple[LinearRecordMeasurement, ...], tuple[int, ...]]:
+    """Records in rows, one row per tuple of the window marks between its records (a row of ``n`` marks holds
+    ``n + 1`` records)."""
+
+    measurements: list[LinearRecordMeasurement] = []
+    rows: list[int] = []
+    for row, marks in enumerate(marks_by_row):
+        for right_inset in (*marks, 0.0):
+            index = len(measurements)
+            measurements.append(LinearRecordMeasurement(index, RecordKey(f"key-{index}"), 10, right_inset=right_inset))
+            rows.append(row)
+    return tuple(measurements), tuple(rows)
+
+
+def _refusal(
+    measurements: Sequence[LinearRecordMeasurement], rows: Sequence[int], width: float, gap: float | None
+) -> tuple[str, str]:
+    """The reason and the message of the layout's refusal."""
+
+    with pytest.raises(ValidationError, match="cannot fit a positive bp scale") as refused:
+        solve_linear_horizontal_layout(measurements, rows, available_width=width, record_gap_px=gap)
+    reason = serialize_web_error(refused.value, operation="generate", stage="render")["context"]["reason"]
+    return reason, str(refused.value)
+
+
+@pytest.mark.parametrize(
+    ("rows", "gap", "reason", "advice", "limit"),
+    (
+        # Row 0 is refused with Auto (5 px would fit it); 40 records in row 1 fit only below 50/39 px (OV-3631 r1).
+        (((45.0, 0.0), (0.0,) * 39), None, "ROW_AUTO_GAPS", "set a record gap smaller than 1.28 px, move", 1.28),
+        # Row 0 fits below 10/3 px and draws with Auto; row 1 is refused with Auto (6.25 px), so Auto is not offered.
+        (((40.0, 0.0, 0.0, 0.0), (44.0, 0.0)), 4.0, "ROW_WIDTH", "Set a record gap smaller than 3.33 px, move", 3.33),
+        # Both rows draw with Auto below their limits: Auto is offered with the smaller limit.
+        (((10.0,), (0.0,) * 3), 20.0, "ROW_WIDTH", "Set a record gap smaller than 16.66 px or leave it unset (Auto)", 16.66),
+    ),
+)
+def test_the_record_gap_advice_holds_for_every_row_of_the_figure(
+    rows: tuple[tuple[float, ...], ...], gap: float | None, reason: str, advice: str, limit: float
+) -> None:
+    """The record gap is one value for the whole figure, so the gap a refusal names, and its Auto suggestion, hold
+    for every row: following the advice never leads to another refusal (OV-3631 review r1)."""
+
+    measurements, row_of = _rows_of_marks(*rows)
+    refused_reason, message = _refusal(measurements, row_of, 50.0, gap)
+    assert refused_reason == reason and advice in message, message
+    solve_linear_horizontal_layout(measurements, row_of, available_width=50.0, record_gap_px=limit - 0.001)
+    _refusal(measurements, row_of, 50.0, limit + 0.01)
+    if "unset (Auto)" in advice:
+        solve_linear_horizontal_layout(measurements, row_of, available_width=50.0, record_gap_px=None)
+
+
+def test_a_row_its_marks_fill_is_named_before_a_row_a_gap_fills() -> None:
+    """No gap draws a figure with a row its window marks fill, so that row is named first, wherever it is: a smaller
+    gap would only lead to the next refusal (OV-3631 review r1)."""
+
+    measurements, row_of = _rows_of_marks((45.0, 0.0), (50.0,))
+    for gap in (None, 6.0, 0.0):
+        reason, message = _refusal(measurements, row_of, 50.0, gap)
+        assert reason == "ROW_WINDOW_MARKS" and "record_count=2" in message, message
+
+
+def test_the_gap_that_fits_is_rounded_down_without_rounding_up_first() -> None:
+    """The stated gap is never above the real limit (OV-3631 review r1): marks of 45.0000003 px in 50 px fit below
+    4.9999997 px, so the message says 4.99 px, not 5 px."""
+
+    measurements, row_of = _rows_of_marks((45.0000003, 0.0))
+    assert "set a record gap smaller than 4.99 px" in _refusal(measurements, row_of, 50.0, None)[1]
+    _refusal(measurements, row_of, 50.0, 4.9999999)
+    solve_linear_horizontal_layout(measurements, row_of, available_width=50.0, record_gap_px=4.9899)
+
+
 def _row_gaps_drawn(count: int, length: int, width: float, record_gap_px: float | None) -> list[float]:
     """The gaps between the records of one row of ``count`` records, as the solver places them."""
 
