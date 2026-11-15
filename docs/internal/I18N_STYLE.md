@@ -2903,7 +2903,8 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
 
 - **Sentence ends**: `۔` (U+06D4) attached to the last word; `؟` (U+061F) for a question; `!` only where the source has one;
   an ASCII `.` after Urdu text is an error. `.` stays inside numbers, versions, file names and code (0.65, v1.2, .gb).
-  Keys shown together join with one space.
+  Keys shown together join with one space. An Urdu value ends with `۔` exactly when its English source ends with a full
+  stop; a label or fragment whose English has none gets no `۔`.
 - **Comma, semicolon**: `،` (U+060C) and `؛` (U+061B), also between Latin items in an Urdu sentence (CDS، tRNA); the ASCII
   `,` stays only in digit grouping (1,234) and code. No space before `، ؛ ؟ ۔` or the colon; one space after.
 - **Label colon**: ASCII `:` attached to the word, one space after (حالت: {state}).
