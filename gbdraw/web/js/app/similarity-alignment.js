@@ -1196,6 +1196,16 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  */
 
 /**
+ * The open review's draft, as the alignment owner keeps it: the helper's response and its binding, the direction
+ * intent, the reference and the records the panel shows, the records that opened without a choice, and a repair
+ * review's note (shown again with its drawing).
+ * @typedef {{
+ *   response: AlignmentResolution, binding: string, intent: DirectionIntent, reference: ReturnType<typeof referenceView>,
+ *   rows: ReviewRow[], openedWithoutChoice: string[], repair?: AlignmentRepairNote
+ * }} ReviewDraft
+ */
+
+/**
  * The ports and state that the alignment owner receives. Ports are function
  * types; the shapes of requests and helper payloads belong to their owners
  * (the committed request to Python, R7) and stay `Record<string, any>`.
@@ -1205,7 +1215,8 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  *   the Web state members the alignment actions read and write: the shown drawing's alignment
  * @property {(drawingId: DrawingId, values: { similarityAlignmentPlan: null, similarityAlignmentResetReceipt: null }) => void}
  *   writeArtifactValues writes the artifact slot values of a drawing that is not shown (the History snapshot service's)
- * @property {(drawingId: DrawingId) => string} drawingNameOf a drawing's name as its tab shows it (the drawing bar's)
+ * @property {(drawingId: DrawingId) => string | null} drawingNameOf a drawing's name as its tab shows it (the drawing
+ *   bar's), null for one without a tab
  * @property {(groupId: string) => OrthogroupGroup | null} getOrthogroupById
  * @property {(group: OrthogroupGroup | string | null) => OrthogroupMember[]} getEnrichedOrthogroupMembers
  * @property {DrawnFeatureIdsOf} drawnFeatureIdsOf the drawn element IDs of an anchor's feature (the orthogroup owner's
@@ -1348,6 +1359,43 @@ const retainForStableReorder = (state, recordKeys) => {
 };
 
 /**
+ * The exact reference options of a group's enriched members, named by the committed request's record and feature names.
+ * @param {{ records: Map<string, RecordNameEntry>, factsOf: (anchor: AnchorIdentity) => FeatureFacts | null | undefined }} names
+ * @param {SelectedGroupDetail['members']} members
+ */
+const referenceOptionsOf = ({ records, factsOf }, members) => {
+  // `filter(Boolean)` drops the members whose anchor does not resolve (the `null` results).
+  const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string, location: string }[]} */ (members.map((member) => {
+    try {
+      const anchor = anchorFromSource(member, 'Drawer reference');
+      const record = shortRecordName(records.get(anchor.recordKey)) || t('Unavailable record');
+      // The option's name and location read one value: the catalog row of the anchor, else the member's own.
+      const facts = factsOf(anchor) || member;
+      return {
+        anchor,
+        canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
+        key: anchorKey(anchor),
+        label: `${record} · ${featureNameParts(anchor, facts).name}`,
+        location: sourceLocationText(facts)
+      };
+    } catch (_error) {
+      return null;
+    }
+  }).filter(Boolean));
+  const counts = new Map();
+  candidates.forEach(({ canonicalKey }) => {
+    counts.set(canonicalKey, (counts.get(canonicalKey) || 0) + 1);
+  });
+  const unique = candidates.filter(({ canonicalKey }) => counts.get(canonicalKey) === 1);
+  // Two features with the same record and name (inparalogs) also show their location.
+  const labels = new Map();
+  unique.forEach(({ label }) => labels.set(label, (labels.get(label) || 0) + 1));
+  return unique.map(({ canonicalKey: _canonicalKey, location, ...candidate }) => (
+    labels.get(candidate.label) > 1 ? { ...candidate, label: `${candidate.label} · ${location}` } : candidate
+  ));
+};
+
+/**
  * @param {SimilarityAlignmentActionsOptions} options
  */
 export const createSimilarityAlignmentActions = ({
@@ -1393,9 +1441,14 @@ export const createSimilarityAlignmentActions = ({
     || !resolveOperation
   ) throw new Error('Similarity alignment actions require their current artifact owners.');
 
+  // The open review's draft (`ReviewDraft`); window.Vue is untyped here, so a read that needs a field names the type.
   const draft = ref(null);
   const status = ref('idle');
-  const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
+  // The work in flight and why it holds Apply, Generate, a drawing switch and a list step's Undo or Redo: one
+  // derivation (`alignmentWorkBusy`). Every write of `actionId` that makes work in flight stale sets `status` (start,
+  // endWork, resetAlignment): a stale return leaves the status to the newer work (OV-3619).
+  const working = computed(() => alignmentWorkBusy(status.value));
+  const busy = computed(() => working.value !== null);
   const error = ref(null);
   const summary = ref(null);
   // A "cleared" notice holds only while no plan is active, so an Undo that
@@ -1627,7 +1680,7 @@ export const createSimilarityAlignmentActions = ({
    * @param {AlignmentResolution} response
    * @param {AlignmentHelperRequest} request
    * @param {ReviewRow[]} [rows]
-   * @param {{ repair?: AlignmentRepairNote }} [extra] A repair review's note
+   * @param {Pick<ReviewDraft, 'repair'>} [extra] A repair review's note
    */
   const installReviewDraft = (response, request,
     rows = reviewRows(response, request, displayFacts, recordLabels), extra = {}) => {
@@ -1867,6 +1920,12 @@ export const createSimilarityAlignmentActions = ({
   const endReviewOf = (drawingId) => {
     if (artifactStamp?.drawingId === drawingId) cancel();
   };
+  // A Load's commit: the review of a drawing it did not keep ends with it (`endReviewOf`); a Load that keeps the
+  // review's drawing ID keeps the review (PD-OI-039 r5, OV-3618).
+  /** @param {readonly DrawingId[]} drawingIds The drawings the store holds now. */
+  const endReviewOutside = (drawingIds) => {
+    if (artifactStamp && !drawingIds.includes(artifactStamp.drawingId)) endReviewOf(artifactStamp.drawingId);
+  };
 
   // A drawing switch, after the departing drawing's transient UI was reset:
   // the summary, the notice and the repair were the departing drawing's
@@ -1878,7 +1937,7 @@ export const createSimilarityAlignmentActions = ({
   // a switch.
   const arriveAtDrawing = () => {
     replaceSummary('');
-    const reviewRepair = /** @type {AlignmentRepairNote | undefined} */ (draft.value?.repair);
+    const reviewRepair = /** @type {ReviewDraft | null} */ (draft.value)?.repair;
     if (reviewRepair && workIsShown()) showRepair(reviewRepair);
     selectPlanGroup(state, getOrthogroupById, state.similarityAlignmentPlan.value);
   };
@@ -1895,41 +1954,6 @@ export const createSimilarityAlignmentActions = ({
     };
   });
 
-  // The exact reference options of a group's enriched members.
-  /** @param {SelectedGroupDetail['members']} members */
-  const referenceOptionsOf = (members) => {
-    const { records, factsOf } = committedNames.value;
-    // `filter(Boolean)` drops the members whose anchor does not resolve (the `null` results).
-    const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string, location: string }[]} */ (members.map((member) => {
-      try {
-        const anchor = anchorFromSource(member, 'Drawer reference');
-        const record = shortRecordName(records.get(anchor.recordKey)) || t('Unavailable record');
-        // The option's name and location read one value: the catalog row of the anchor, else the member's own.
-        const facts = factsOf(anchor) || member;
-        return {
-          anchor,
-          canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
-          key: anchorKey(anchor),
-          label: `${record} · ${featureNameParts(anchor, facts).name}`,
-          location: sourceLocationText(facts)
-        };
-      } catch (_error) {
-        return null;
-      }
-    }).filter(Boolean));
-    const counts = new Map();
-    candidates.forEach(({ canonicalKey }) => {
-      counts.set(canonicalKey, (counts.get(canonicalKey) || 0) + 1);
-    });
-    const unique = candidates.filter(({ canonicalKey }) => counts.get(canonicalKey) === 1);
-    // Two features with the same record and name (inparalogs) also show their location.
-    const labels = new Map();
-    unique.forEach(({ label }) => labels.set(label, (labels.get(label) || 0) + 1));
-    return unique.map(({ canonicalKey: _canonicalKey, location, ...candidate }) => (
-      labels.get(candidate.label) > 1 ? { ...candidate, label: `${candidate.label} · ${location}` } : candidate
-    ));
-  };
-
   // OV-920: the options of the drawer's selected group, from the members the
   // orthogroup owner enriched for its detail; every render reads them.
   /** @type {{ readonly value: { groupId: string, options: ReturnType<typeof referenceOptionsOf> } }} */
@@ -1941,7 +1965,7 @@ export const createSimilarityAlignmentActions = ({
     // The drawer's controls name the group by `id`, as `drawerReferenceOptions` reads it.
     return {
       groupId,
-      options: referenceOptionsOf(group === detail.group ? detail.members : getEnrichedOrthogroupMembers(group))
+      options: referenceOptionsOf(committedNames.value, group === detail.group ? detail.members : getEnrichedOrthogroupMembers(group))
     };
   });
 
@@ -1952,7 +1976,7 @@ export const createSimilarityAlignmentActions = ({
     if (selected.groupId && selected.groupId === id) return selected.options;
     const group = getOrthogroupById(id);
     if (!group) return [];
-    return referenceOptionsOf(getEnrichedOrthogroupMembers(group));
+    return referenceOptionsOf(committedNames.value, getEnrichedOrthogroupMembers(group));
   };
 
   // OV-381: a new plan (Apply, Session load, Undo) selects its own group in the
@@ -1980,9 +2004,7 @@ export const createSimilarityAlignmentActions = ({
 
   /** @param {ReturnType<typeof referenceOptionsOf>} options */
   const disabledReasonOf = (options) => {
-    if (['resolving', 'applying'].includes(status.value)) {
-      return t('Wait for the current alignment operation to finish.');
-    }
+    if (busy.value) return t('Wait for the current alignment operation to finish.');
     if (!options.length) return t('No exact reference features are available for this group.');
     if (!pickedReference(options)) {
       return t('Select an exact reference record and feature before aligning.');
@@ -2110,7 +2132,10 @@ export const createSimilarityAlignmentActions = ({
     const note = { kind: 'targets', groupId: plan.groupId,
       reason: t('One or more saved target anchors are no longer usable. Select or Skip each target.') };
     if (!workIsShown()) {
-      showRepair(note);
+      // The repair review opens after the open review ends: the notice says so, and names that review's drawing.
+      repair.value = deepFreeze(note);
+      publishNotice(t('Finish or cancel the alignment review in {name}, then Generate this drawing again.',
+        { name: drawingNameOf(workDrawingId()) ?? '' }));
       return { status: 'blocked', reason: 'stale-target' };
     }
     setReviewNames(request, members, currentRequest());
@@ -2142,8 +2167,11 @@ export const createSimilarityAlignmentActions = ({
     return { status: 'blocked', reason: 'stale-target' };
   };
 
+  // Generate waits for the alignment work in flight (OV-3619); its check sets no status, so it reads `actionId` and
+  // does not bump it: a review started meanwhile makes the check stale, never the check the review.
   const validateBeforeGenerate = async () => {
-    const expectedActionId = ++actionId;
+    if (working.value) return working.value;
+    const expectedActionId = actionId;
     const plan = state.similarityAlignmentPlan.value;
     if (!plan) {
       repair.value = null;
@@ -2259,9 +2287,10 @@ export const createSimilarityAlignmentActions = ({
   const unresolvedCount = computed(() => recordsNeedingChoice(draft.value?.rows || []).length);
 
   const applyDisabledReason = computed(() => {
-    const working = alignmentWorkBusy(status.value);
-    if (working) return tm(working.reason);
-    if (draft.value && !workIsShown()) return t('Show {name} to apply this alignment.', { name: drawingNameOf(workDrawingId()) });
+    if (working.value) return tm(working.value.reason);
+    // A drawing on its way out (a Load's commit) has no name: its review ends in the same task (OV-3618).
+    const name = draft.value && !workIsShown() ? drawingNameOf(workDrawingId()) : null;
+    if (name !== null) return t('Show {name} to apply this alignment.', { name });
     if (unresolvedCount.value > 0) {
       return tn(unresolvedCount.value, 'Choose a candidate or Skip for {count} record.', 'Choose a candidate or Skip for {count} records.');
     }
@@ -2344,8 +2373,11 @@ export const createSimilarityAlignmentActions = ({
     cancel,
     arriveAtDrawing,
     endReviewOf,
-    // A drawing switch waits for the alignment work in flight: it would end on another drawing than it began on.
-    switchBusy: () => alignmentWorkBusy(status.value),
+    endReviewOutside,
+    // A drawing switch, a list step's Undo or Redo and Generate wait for the alignment work in flight: it would end on
+    // another drawing than it began on, or against another Result.
+    workBusy: () => working.value,
+    workReason: computed(() => tm(working.value?.reason ?? '')),
     /** @param {AliasSource} anchor */
     previewCandidate: (anchor) => {
       if (typeof previewCandidate === 'function') previewCandidate(anchor);

@@ -325,6 +325,8 @@ const loadExportService = () => {
  * @property {{ value: string }} selectedPairwiseBlockOrthogroupId
  * @property {(() => any) | null} [captureSpecificRulePatternDrafts] The feature editor's capture of the unsaved rule pattern drafts.
  * @property {((drafts: any) => void) | null} [restoreSpecificRulePatternDrafts]
+ * @property {Pick<SimilarityAlignmentPorts, 'endReviewOutside'>} alignment The Similarity alignment owner's: a Load's
+ *   commit ends the review of a drawing it did not keep (OV-3618).
  */
 
 /**
@@ -350,7 +352,8 @@ export const createSessionImportRollbackState = ({
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId,
   captureSpecificRulePatternDrafts = null,
-  restoreSpecificRulePatternDrafts = null
+  restoreSpecificRulePatternDrafts = null,
+  alignment
 }) => ({
   capture: () => ({
     artifactSlots: artifactSlots.snapshot(),
@@ -362,8 +365,12 @@ export const createSessionImportRollbackState = ({
     selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
-  // A Load's commit: each drawing it made starts with an empty History.
-  replaceHistoryMembers,
+  // A Load's commit, in the task that writes the store: each drawing it made starts with an empty History, and the
+  // alignment review of a drawing it did not keep ends (OV-3618).
+  replaceHistoryMembers: (/** @type {readonly DrawingId[]} */ drawingIds) => {
+    replaceHistoryMembers(drawingIds);
+    alignment.endReviewOutside(drawingIds);
+  },
   // The previous drawings' Histories, which the Load replaced (`replaceMembers`): the rollback gives them back in the
   // task that restores the store, before `restore` (OV-2132).
   restoreHistoryMembers: (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
@@ -491,6 +498,7 @@ const provideSettingNoteReaders = () => {
  * @property {() => { status: 'busy', reason: string } | null} busy
  * @property {() => DrawingId} reviewDrawingId
  * @property {(drawingId: DrawingId) => void} endReviewOf
+ * @property {(drawingIds: readonly DrawingId[]) => void} endReviewOutside
  */
 /**
  * The alignment ports until the root assigns the owner's: no review, no work in flight.
@@ -503,7 +511,8 @@ const alignmentPortsBeforeOwner = (state) => ({
   arriveAtDrawing: () => {},
   busy: () => null,
   reviewDrawingId: () => state.activeDrawingId.value,
-  endReviewOf: () => {}
+  endReviewOf: () => {},
+  endReviewOutside: () => {}
 });
 
 export const createAppSetup = () => {
@@ -2132,7 +2141,8 @@ export const createAppSetup = () => {
     featureListScrollRef,
     selectedPairwiseBlockOrthogroupId,
     captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
-    restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts
+    restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts,
+    alignment: similarityAlignmentPorts
   });
   // A loaded Session says so in the notice banner, with what the load changed
   // without a loss as a list; what it could not restore was listed in the
@@ -2568,7 +2578,7 @@ export const createAppSetup = () => {
   });
 
   const {
-    installArrivingSlot, drawingSwitchBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
+    installArrivingSlot, drawingSwitchBusy, switchWorkBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
   } = createDrawingSwitch({
     state, results, selectedResultIndex, errorLog, failedGeneratePreservedResult, sessionOperationAvailability,
     historyAvailability: history.historyAvailability, historyRestoring: () => history.restoring.value,
@@ -2590,6 +2600,7 @@ export const createAppSetup = () => {
     drawingTabs: () => state.drawingTabs.value,
     shownDrawingId: () => state.activeDrawingId.value,
     switchBusy: drawingSwitchBusy,
+    switchWorkBusy,
     drawingOf: state.drawingOf,
     drawingHasResult: (drawingId) => resultsOf(drawingId).length > 0,
     drawingHasEdits: (drawingId) => drawingHasEdits(state.drawingOf(drawingId)),
@@ -2724,8 +2735,10 @@ export const createAppSetup = () => {
         if (similarityAlignmentActions?.validateBeforeGenerate) {
           const validation = await similarityAlignmentActions.validateBeforeGenerate();
           if (validation?.status !== 'ok') {
-            failedGeneratePreservedResult.value = results.value.length > 0;
-            if (similarityAlignmentActions.dialogOpen.value) {
+            // A Generate that waits for alignment work failed nothing; one blocked by another drawing's open review
+            // leaves the focus where it is: the notice says why (D-41).
+            failedGeneratePreservedResult.value = results.value.length > 0 && validation.status !== 'busy';
+            if (similarityAlignmentActions.dialogOpen.value && similarityAlignmentHoldShown()) {
               await focusSimilarityAlignmentDialog();
             }
             return validation;
@@ -2960,9 +2973,10 @@ export const createAppSetup = () => {
     refreshCanvas: refreshSimilarityAlignmentCanvas,
     editorDisabledReason: () => similarityAlignmentEditorDisabledReason.value,
     arriveAtDrawing: similarityAlignmentActions.arriveAtDrawing,
-    busy: similarityAlignmentActions.switchBusy,
+    busy: similarityAlignmentActions.workBusy,
     reviewDrawingId: similarityAlignmentActions.reviewDrawingId,
-    endReviewOf: similarityAlignmentActions.endReviewOf
+    endReviewOf: similarityAlignmentActions.endReviewOf,
+    endReviewOutside: similarityAlignmentActions.endReviewOutside
   });
   const {
     canUseClickedOrthogroupActions, clickedOrthogroupDetail, alignByClickedOrthogroup, highlightClickedOrthogroup,
@@ -3942,6 +3956,7 @@ export const createAppSetup = () => {
     resetRecordPositions: recordPositionReset.reset,
     similarityAlignmentStatus: similarityAlignmentActions.status,
     similarityAlignmentBusy: similarityAlignmentActions.busy,
+    similarityAlignmentWorkReason: similarityAlignmentActions.workReason,
     similarityAlignmentError: similarityAlignmentActions.error,
     similarityAlignmentSummary: similarityAlignmentActions.summary,
     similarityAlignmentNotice: similarityAlignmentActions.notice,

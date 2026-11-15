@@ -1523,7 +1523,9 @@ test('a Generate of another drawing whose plan needs repair keeps the open revie
   assert.equal(fixture.actions.reviewDrawingId(), 'linear-1');
   assert.equal(fixture.helperCalls.length, helpers, 'no repair review is resolved for the shown drawing');
   assert.equal(fixture.actions.repair.value.kind, 'targets');
-  assert.match(fixture.actions.notice.value, /^Alignment needs repair: One or more saved target anchors/);
+  // D-41 (S3): the notice says why nothing opened, and names the drawing whose review to finish.
+  assert.equal(fixture.actions.notice.value,
+    'Finish or cancel the alignment review in Drawing linear-1, then Generate this drawing again.');
 
   fixture.currentGroup.members.splice(0, 1);
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'blocked', reason: 'stale-reference' });
@@ -1539,17 +1541,20 @@ test('the alignment owner names the work a drawing switch waits for (D-40)', asy
     await new Promise((resolve) => { release = resolve; });
     return { result: responseFor(request) };
   } });
-  assert.equal(fixture.actions.switchBusy(), null);
+  assert.equal(fixture.actions.workBusy(), null);
+  assert.equal(fixture.actions.busy.value, false);
   const started = startReview(fixture);
-  assert.deepEqual(fixture.actions.switchBusy(), { status: 'busy', reason: 'Resolving the current alignment.' });
+  assert.deepEqual(fixture.actions.workBusy(), { status: 'busy', reason: 'Resolving the current alignment.' });
+  assert.equal(fixture.actions.busy.value, true, 'busy reads the same work in flight');
+  assert.equal(fixture.actions.workReason.value, 'Resolving the current alignment.');
   release();
   await started;
-  assert.equal(fixture.actions.switchBusy(), null, 'an open review does not hold a switch');
+  assert.equal(fixture.actions.workBusy(), null, 'an open review does not hold a switch');
   const applied = fixture.actions.applyDraft();
-  assert.deepEqual(fixture.actions.switchBusy(), { status: 'busy', reason: 'Applying the alignment plan.' });
+  assert.deepEqual(fixture.actions.workBusy(), { status: 'busy', reason: 'Applying the alignment plan.' });
   release();
   await applied;
-  assert.equal(fixture.actions.switchBusy(), null);
+  assert.equal(fixture.actions.workBusy(), null);
 });
 
 // D-40 (S3): a removed drawing takes its review with it, as Cancel ends it; another drawing's removal leaves it.
@@ -1582,4 +1587,45 @@ test('a repair review\'s note shows again with its drawing and stays after Cance
   assert.match(fixture.actions.notice.value, /^Alignment needs repair:/);
   fixture.actions.cancel();
   assert.equal(fixture.actions.repair.value.kind, 'targets', 'Cancel leaves the note');
+});
+
+// D-41 (B2, OV-3619): a Generate while a review resolves waits for it, and the review opens when the resolve returns;
+// before, the Generate's check made the resolve stale and left 'resolving' for good, which held every drawing switch.
+test('a Generate while a review resolves waits, and the review still opens (OV-3619)', async () => {
+  let release;
+  const fixture = create({ helper: async (_operation, { request }) => {
+    await new Promise((resolve) => { release = resolve; });
+    return { result: responseFor(request) };
+  } });
+  const started = startReview(fixture);
+  assert.equal(fixture.actions.status.value, 'resolving');
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'busy', reason: 'Resolving the current alignment.' }, 'Generate waits with the existing reason');
+  release();
+  assert.deepEqual(await started, { status: 'reviewing' }, 'the resolve is not made stale');
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  assert.equal(fixture.actions.dialogOpen.value, true);
+  assert.equal(fixture.actions.workBusy(), null, 'nothing holds a switch any more');
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' }, 'an open review does not hold Generate');
+  assert.equal(fixture.actions.status.value, 'reviewing', 'and the check leaves the review as it is');
+});
+
+// D-41 (B1, OV-3618): a Load's commit ends the review of a drawing it did not keep, as Cancel ends it; a Load that
+// keeps the review's drawing ID keeps the review (PD-OI-039 r5). A drawing without a name leaves the Apply line
+// without the clause that names it.
+test('a Load that drops the review\'s drawing ends the review, one that keeps it keeps it (OV-3618)', async () => {
+  const fixture = create({ drawingNameOf: (drawingId) => (drawingId === 'linear-1' ? null : `Drawing ${drawingId}`) });
+  await startReview(fixture);
+  showDrawing(fixture, 'linear-2');
+  assert.doesNotThrow(() => fixture.actions.applyDisabledReason.value);
+  assert.doesNotMatch(fixture.actions.applyDisabledReason.value, /^Show /, 'a drawing without a tab is not named');
+  fixture.actions.endReviewOutside(['linear-1', 'linear-2']);
+  assert.equal(fixture.actions.status.value, 'reviewing', 'the review\'s drawing is kept');
+  fixture.actions.endReviewOutside(['linear-2']);
+  assert.equal(fixture.actions.status.value, 'idle', 'the review leaves with its drawing');
+  assert.equal(fixture.actions.draft.value, null);
+  assert.equal(fixture.actions.dialogOpen.value, false);
+  assert.equal(fixture.generationCalls.length, 0);
+  fixture.actions.endReviewOutside([]);
+  assert.equal(fixture.actions.status.value, 'idle', 'without a review nothing ends');
 });

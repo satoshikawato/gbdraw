@@ -244,8 +244,9 @@ export const createSimilarityAlignmentReview = ({
       similarityAlignmentGeometry.value = null;
       return;
     }
-    if (alignmentStatus.value !== 'reviewing') {
-      // While Apply runs, the strips keep the figure they were measured from.
+    // While Apply runs, and while another drawing is shown, the strips keep the figure of the review's own drawing
+    // they were measured from: that Result cannot change meanwhile, and arriving home measures again (D-41).
+    if (alignmentStatus.value !== 'reviewing' || alignmentReviewDrawingId() !== state.activeDrawingId.value) {
       clearAlignmentOverlay();
       return;
     }

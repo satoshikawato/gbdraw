@@ -232,3 +232,36 @@ test('a switch waits while a Similarity alignment resolves or applies', async ()
   app.similarityAlignmentStatus.value = 'idle';
   assert.deepEqual(app.selectDrawing(first), { status: 'ok' });
 });
+
+// D-41 (S1): an Undo or Redo of a drawing list step switches the shown drawing inside History's traversal, so it
+// waits for the Similarity alignment work in flight through the switch's own wait, with its reason; so does a pick in
+// the History list that walks through such a step. Once the work ends, the step is taken.
+test('an Undo or Redo of a drawing list step waits while a Similarity alignment resolves', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const before = state.activeDrawingId.value;
+  const { drawingId: added } = app.drawingList.newDrawing('linear');
+  const busy = { status: 'busy', reason: 'Resolving the current alignment.' };
+  app.similarityAlignmentStatus.value = 'resolving';
+  assert.deepEqual(await history.undo(), busy, 'the Undo of New waits');
+  assert.deepEqual(await history.travelTo(null), busy, 'and so does a History list pick through it');
+  assert.equal(state.activeDrawingId.value, added, 'the shown drawing stays');
+  assert.ok(state.drawingTabs.value.some((tab) => tab.id === added), 'and so does the drawing');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(await history.undo(), true);
+  assert.equal(state.activeDrawingId.value, before);
+  app.similarityAlignmentStatus.value = 'applying';
+  assert.deepEqual(await history.redo(), { status: 'busy', reason: 'Applying the alignment plan.' }, 'the Redo waits');
+  assert.equal(state.activeDrawingId.value, before);
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(await history.redo(), true);
+  assert.equal(state.activeDrawingId.value, added);
+});
+
+// D-41 (B1, OV-3618): a text that names a drawing reads its tab's name without throwing for an ID that has no tab.
+test('the drawing bar names a drawing by its tab and has no name for an ID without one', () => {
+  const app = createAppSetup();
+  const { drawingId } = app.drawingList.newDrawing('linear');
+  assert.equal(typeof app.drawingBar.nameOf(drawingId), 'string');
+  assert.equal(app.drawingBar.nameOf('linear-99'), null);
+});

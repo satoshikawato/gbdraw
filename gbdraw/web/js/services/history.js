@@ -2266,7 +2266,10 @@ export const createHistoryManager = ({
  * @property {() => void} undo
  * @property {() => Iterable<string>} [fileIds] After `apply`: the files a drawing it takes out binds, which
  *   the step keeps stored until it is evicted (R11, R16-3).
- * @typedef {{ redo: () => void, undo: () => void, added: DrawingId[], removed: DrawingId[] }} ProjectListPart
+ * @property {() => HistoryBusy | null} [busy] Why its Undo and Redo wait now (they switch the shown drawing: the
+ *   drawing switch's wait for work outside History), or null.
+ * @typedef {{ redo: () => void, undo: () => void, added: DrawingId[], removed: DrawingId[],
+ *   busy?: () => HistoryBusy | null }} ProjectListPart
  *   A list step with the drawings it gave a History (`addMember`) and took one
  *   from (`removeMember`) when it was applied.
  * @typedef {{
@@ -2667,7 +2670,7 @@ export const createHistoryRouter = ({
     const project = nextProjectStep(direction);
     if (expected !== null && (project?.sequence ?? shown.topSequence(direction)) !== expected) return false;
     if (!project) return direction === 'undo' ? shown.undo() : shown.redo();
-    return traverseProject(project, direction);
+    return project.list?.busy?.() ?? traverseProject(project, direction);
   };
   /** @param {'undo' | 'redo'} direction The project step that Undo or Redo takes next, if any. */
   const nextProjectStep = (direction) => {
@@ -2867,7 +2870,7 @@ export const createHistoryRouter = ({
       }
       const added = [...managers.keys()].filter((drawingId) => !before.has(drawingId));
       recordProjectStep(label, ++sequence, [], sessionStep(label), null, removed, {
-        redo: step.redo, undo: step.undo, added, removed: removed.map((held) => held.drawingId)
+        redo: step.redo, undo: step.undo, added, removed: removed.map((held) => held.drawingId), busy: step.busy
       }, step.fileIds?.() ?? []);
     },
     markSavePoint: () => {

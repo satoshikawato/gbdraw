@@ -1219,7 +1219,8 @@ const sessionImportRollbackState = createSessionImportRollbackState({
   },
   featureListScrollTop: state.featureListScrollTop,
   featureListScrollRef,
-  selectedPairwiseBlockOrthogroupId
+  selectedPairwiseBlockOrthogroupId,
+  alignment: { endReviewOutside: () => {} }
 });
 
 const jsonClone = (value) => JSON.parse(JSON.stringify(value));

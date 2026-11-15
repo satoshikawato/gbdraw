@@ -6774,7 +6774,8 @@
             <!-- UI-12 (Owner decision 2026-10-07): last in Tab order; CSS keeps the bar fixed at the bottom. Beside the
                  rail alone the bar is the button's width: the second word folds away. -->
             <div class="generate-bar shrink-0 py-4 px-1 bg-white/95 backdrop-blur-sm border-y border-slate-100 z-30">
-            <button data-history-managed type="button" :aria-label="t('Generate Diagram')" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
+            <button data-history-managed type="button" :aria-label="t('Generate Diagram')" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing) || similarityAlignmentBusy"
+                :title="similarityAlignmentBusy ? similarityAlignmentWorkReason : null"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> <span class="generate-bar-short">{{ t('Generate') }}</span><span class="generate-bar-long">{{ t('Generate Diagram') }}</span></span>
                 <span v-else class="flex items-center justify-center gap-2"><gbdraw-loader class="gbdraw-loader-on-fill text-xl"></gbdraw-loader> <span class="generate-bar-long">{{ generationCancelRequested ? t('Canceling...') : t('Processing...') }}</span></span>

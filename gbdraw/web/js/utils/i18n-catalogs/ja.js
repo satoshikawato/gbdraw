@@ -883,6 +883,7 @@ export default Object.freeze({
   "Filter uploaded BLAST alignments before drawing comparison rings.": "比較リングを描画する前に、アップロードしたBLASTのアラインメントをフィルターで絞り込みます。",
   "Finalizing diagram results...": "図の結果を仕上げ中…",
   "Finish or cancel alignment review before opening Editor.": "エディターを開く前に、整列の確認を完了するかキャンセルしてください。",
+  "Finish or cancel the alignment review in {name}, then Generate this drawing again.": "{name}の整列の確認を完了するかキャンセルしてから、この図でもう一度「生成」してください。",
   "Finishing the choice being computed…": "現在の選択肢の計算が完了するのを待機中…",
   "First Record Only": "先頭のレコードのみ",
   "Fit": "全体表示",

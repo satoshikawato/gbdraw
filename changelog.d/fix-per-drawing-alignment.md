@@ -15,7 +15,8 @@
   Similarity Group changed." although nothing had changed. Showing the review's
   drawing again lets you Apply. A Generate of another drawing leaves the review
   open, and deleting the review's drawing ends the review as Cancel does.
-- Changed: In the Web app, switching drawings waits while a Similarity
-  alignment is resolved, applied, or reset.
+- Changed: In the Web app, switching drawings, Generate, and an Undo or Redo
+  that adds or deletes a drawing wait while a Similarity alignment is
+  resolved, applied, or reset.
 - Changed: In the Web app, switching drawings clears the "Similarity alignment
   applied" summary, which described the drawing shown before.

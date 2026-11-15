@@ -83,8 +83,10 @@ test('a Linear drawing and its copy each generate, save and load their own Simil
 // D-38 (PD-OI-039): a Similarity alignment review belongs to the drawing it was
 // opened in. Over a copy of that drawing (the same records and plan) it stays
 // open with its choices and marks nothing on the copy's figure; D-39: Apply
-// there is disabled, and its reason names the drawing to show. Back on its own
-// drawing, Apply aligns that drawing only. D-40: removing the review's drawing
+// there is disabled, and its reason names the drawing to show; D-41: the panel
+// keeps the strips measured on its own drawing (the "After Apply" bands, the
+// mini bands, the candidate order). Back on its own drawing the marks show again
+// and Apply aligns that drawing only. D-40: removing the review's drawing
 // ends the review as Cancel does, and the Undo of the removal does not bring it
 // back.
 const openReview = async (page, proteinId) => {
@@ -103,6 +105,8 @@ const openReview = async (page, proteinId) => {
   }
   return dialog;
 };
+const recordOrder = (dialog) => dialog.locator('[data-alignment-record-key]')
+  .evaluateAll((cards) => cards.map((card) => card.dataset.alignmentRecordKey));
 const shownAlignmentState = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   return JSON.stringify([state.similarityAlignmentPlan.value, state.linearRecordTranslations.value]);
@@ -131,14 +135,24 @@ test('an open alignment review stays with its drawing and applies only there', a
   const sourceName = await page.evaluate((id) => window.__GBDRAW_APP__.drawingBar.nameOf(id), source);
   const dialog = await openReview(page, 'CAG38712.1');
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
+  const caption = dialog.locator('.alignment-review-caption');
+  const strips = dialog.locator('[data-alignment-strip]');
+  await expect(caption).toBeVisible();
+  const stripCount = await strips.count();
+  expect(stripCount).toBeGreaterThan(0);
+  const order = await recordOrder(dialog);
   await show(page, copy);
   await expect(dialog, 'the review stays open over the copy').toBeVisible();
   await expect(page.locator('[data-similarity-alignment-canvas]'), 'and marks nothing on its figure').toHaveCount(0);
+  await expect(caption, 'the After Apply bands stay').toBeVisible();
+  await expect(strips, 'and so do the mini bands').toHaveCount(stripCount);
+  expect(await recordOrder(dialog), 'in the candidate order').toEqual(order);
   await expect(apply, 'Apply waits for the review\'s drawing').toBeDisabled();
   await expect(page.locator('#similarity-alignment-apply-reason')).toHaveText(`Show ${sourceName} to apply this alignment.`);
   expect({ figure: await recordOffsets(page), alignment: await shownAlignmentState(page) }).toEqual(copyBefore);
   await show(page, source);
   await expect(dialog).toBeVisible();
+  await expect(page.locator('[data-similarity-alignment-canvas]').first(), 'back home the marks show again').toBeAttached();
   await expect(apply).toBeEnabled();
   expect(await applyOutcome(page, dialog), 'Apply on the review\'s own drawing').toMatchObject({ summary: true });
   await show(page, copy);
@@ -157,4 +171,27 @@ test('an open alignment review stays with its drawing and applies only there', a
   expect(await page.evaluate(() => window.__GBDRAW_APP__.undoHistory())).toBe(true);
   await show(page, source);
   await expect(dialog, 'the Undo of the Delete brings the drawing back without the review').toBeHidden();
+});
+
+// D-41 (B1, OV-3618): a Session Load that does not keep the drawing of an open
+// review ends that review, as Cancel does, and the app goes on rendering. (A
+// Load that keeps the review's drawing ID keeps the review: PD-OI-039 r5.)
+test('a Load that drops the drawing of an open review ends the review and the app still renders', async ({ page }) => {
+  test.setTimeout(900000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(GALLERY_SESSION), 'BGC0000708-BGC0000713.gbdraw');
+  const source = await shownDrawingId(page);
+  const copy = await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(id).drawingId, source);
+  await expect.poll(() => shownDrawingId(page)).toBe(copy);
+  const dialog = await openReview(page, 'CAG38712.1');
+  await importSession(page, readFileSync(GALLERY_SESSION), 'BGC0000708-BGC0000713.gbdraw');
+  expect(await shownDrawingId(page)).toBe(source);
+  await expect(dialog, 'the review left with its drawing').toBeHidden();
+  await expect(page.getByRole('button', { name: 'Generate Diagram' }), 'the app still renders').toBeVisible();
+  expect(await page.evaluate(() => document.getElementById('app')?.childElementCount ?? 0)).toBeGreaterThan(0);
+  expect(pageErrors).toEqual([]);
 });
