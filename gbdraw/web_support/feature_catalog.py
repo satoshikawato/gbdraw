@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence, Set as AbstractSet
 import copy
 from dataclasses import dataclass, fields as dataclass_fields, replace
 import json
@@ -137,6 +137,9 @@ _ORTHOGROUP_COLLECTION_COUNTS = (
     ("relatedEdges", "relatedEdgeCount"),
 )
 _SEQUENCE_WHITESPACE_RE = re.compile(r"\s")
+# The origins of a sequence source that holds a record's own sequence, which a biological feature's nucleotide
+# sequence is read from (``match_sequence_sources`` writes one of them per record).
+_RECORD_SEQUENCE_ORIGINS = frozenset({"linear-record", "circular-reference"})
 _PRESENTATION_KIND_BY_SCOPE = {
     "adjacent_local": "collinear_gene_group",
     "global_collinear": "orthogroup",
@@ -2282,7 +2285,7 @@ def _reference_reconstructible_nucleotide_sequences(
         for source_index, source in enumerate(sequence_sources):
             if (
                 _text(source.get("origin"))
-                not in {"linear-record", "circular-reference"}
+                not in _RECORD_SEQUENCE_ORIGINS
                 or _integer_or_none(source.get("recordIndex")) != record_index
                 or _reconstruct_nucleotide_sequence(
                     feature,
@@ -3195,14 +3198,61 @@ def _require_catalog_sequence_fields(item: Mapping[str, object], catalog_schema:
         )
 
 
-def select_feature_catalog_item(
+# The values each field of a source anchor profile may take; ``promote_legacy_feature_catalog`` writes only these.
+_ANCHOR_PROFILE_VALUES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("precision", frozenset({"exact", "fuzzy", "unavailable"})),
+    ("operator", frozenset({"single", "join", "order", "unknown"})),
+    ("partOrder", frozenset({"biological", "source-forward", "ambiguous"})),
+    ("strand", frozenset({"+", "-", "unstranded", "mixed"})),
+)
+_ANCHOR_PROFILE_FIELDS = frozenset(field for field, _values in _ANCHOR_PROFILE_VALUES)
+_REQUIRED_ITEM_ARRAYS = (
+    "recordKeys",
+    "features",
+    "biologicalFeatures",
+    "orthogroups",
+    "annotations",
+    "comparisonMatches",
+)
+
+
+def _json_value_in(value: object, members: AbstractSet[object]) -> bool:
+    """Whether a JSON value is one of ``members``: an array or object has no hash, so it is in no set."""
+
+    try:
+        return value in members
+    except TypeError:
+        return False
+
+
+@dataclass(frozen=True)
+class _CatalogItemArrays:
+    """The arrays a catalog item must hold, once each is known to be one (``annotations`` is only required)."""
+
+    record_keys: Sequence[object]
+    features: Sequence[object]
+    biological_features: Sequence[object]
+    orthogroups: Sequence[object]
+    comparison_matches: Sequence[object]
+
+
+@dataclass(frozen=True)
+class _CatalogRecords:
+    """A catalog item's record keys, in drawing order, and the drawn units of each record by its key."""
+
+    keys: list[str]
+    units: dict[str, tuple[int, ...]]
+
+
+def _catalog_item_of_result(
     catalog: Mapping[str, object],
     *,
     result_index: int,
     result_name: str,
-    expected_schema: int | None = None,
-) -> dict[str, object]:
-    """Return one validated catalog item matched to a logical Result."""
+    expected_schema: int | None,
+) -> tuple[float, Mapping[str, object]]:
+    """The catalog's schema (a number equal to an allowed one; JSON may write it as 4.0) and its one item for the
+    Result."""
 
     catalog_schema = catalog.get("schema") if isinstance(catalog, Mapping) else None
     allowed_schemas = (
@@ -3217,7 +3267,7 @@ def select_feature_catalog_item(
     )
     if (
         not isinstance(catalog, Mapping)
-        or catalog_schema not in allowed_schemas
+        or not _json_value_in(catalog_schema, allowed_schemas)
     ):
         required = (
             str(expected_schema)
@@ -3242,32 +3292,115 @@ def select_feature_catalog_item(
             "Feature catalog must contain exactly one item for "
             f"Result {result_index} ({result_name})."
         )
+    return cast(float, catalog_schema), matches[0]
 
-    item = matches[0]
-    required_arrays = (
-        "recordKeys",
-        "features",
-        "biologicalFeatures",
-        "orthogroups",
-        "annotations",
-        "comparisonMatches",
-    )
+
+def _required_item_arrays(item: Mapping[str, object]) -> _CatalogItemArrays:
     if any(
         not isinstance(item.get(key), Sequence)
         or isinstance(item.get(key), (str, bytes))
-        for key in required_arrays
+        for key in _REQUIRED_ITEM_ARRAYS
     ):
         raise GbdrawError("Feature catalog item is missing required arrays.")
-    _require_catalog_sequence_fields(item, catalog_schema)
+    arrays = cast("Mapping[str, Sequence[object]]", item)
+    return _CatalogItemArrays(
+        record_keys=arrays["recordKeys"],
+        features=arrays["features"],
+        biological_features=arrays["biologicalFeatures"],
+        orthogroups=arrays["orthogroups"],
+        comparison_matches=arrays["comparisonMatches"],
+    )
 
-    record_keys = [_text(value) for value in item["recordKeys"]]
+
+def _catalog_records(item: Mapping[str, object], raw_record_keys: Sequence[object]) -> _CatalogRecords:
+    record_keys = [_text(value) for value in raw_record_keys]
     if any(not key for key in record_keys) or len(set(record_keys)) != len(
         record_keys
     ):
         raise GbdrawError(
             "Feature catalog record keys must be non-empty and unique."
         )
-    record_units = catalog_record_units(item, record_keys)
+    return _CatalogRecords(record_keys, catalog_record_units(item, record_keys))
+
+
+def _require_anchor_profile(profile: object) -> None:
+    if isinstance(profile, Mapping) and set(profile) == _ANCHOR_PROFILE_FIELDS:
+        for field, values in _ANCHOR_PROFILE_VALUES:
+            if not _json_value_in(profile.get(field), values):
+                break
+        else:
+            return
+    raise GbdrawError(
+        "Feature catalog contains an invalid source anchor profile."
+    )
+
+
+def _require_translation_source(feature: Mapping[str, object]) -> None:
+    """A feature that names ``translationFromAminoAcidSequence`` holds the amino acid sequence it names."""
+
+    qualifiers = feature.get("qualifiers")
+    amino_acid_sequence = (
+        feature.get("amino_acid_sequence")
+        if "amino_acid_sequence" in feature
+        else feature.get("aminoAcidSequence")
+    )
+    if (
+        feature.get("translationFromAminoAcidSequence") is not True
+        or not isinstance(amino_acid_sequence, str)
+        or not amino_acid_sequence.strip()
+        or (
+            isinstance(qualifiers, Mapping)
+            and "translation" in qualifiers
+        )
+    ):
+        raise GbdrawError(
+            "Feature catalog contains an invalid translation "
+            "source reference."
+        )
+
+
+def _require_nucleotide_source(
+    feature: Mapping[str, object],
+    sequence_sources: Sequence[object],
+    canonical_sources: Sequence[str | None],
+    record_index: int,
+) -> None:
+    """A feature that names ``sequenceSourceIndex`` reads its nucleotide sequence from that source, which holds the
+    sequence of the feature's record: ``record_index`` is the record's first drawn unit."""
+
+    source_index = feature.get("sequenceSourceIndex")
+    in_range = type(source_index) is int and 0 <= source_index < len(sequence_sources)
+    indexed_source = sequence_sources[cast(int, source_index)] if in_range else None
+    source = indexed_source if isinstance(indexed_source, Mapping) else None
+    if (
+        "nucleotide_sequence" in feature
+        or "nucleotideSequence" in feature
+        or source is None
+        or _text(source.get("origin"))
+        not in _RECORD_SEQUENCE_ORIGINS
+        or type(source.get("recordIndex")) is not int
+        or source.get("recordIndex") != record_index
+        or not _reconstruct_nucleotide_sequence(
+            feature,
+            source,
+            # source is not None only when source_index is an int.
+            source_sequence=canonical_sources[cast(int, source_index)],
+        )
+    ):
+        raise GbdrawError(
+            "Feature catalog contains an invalid nucleotide sequence "
+            "source reference."
+        )
+
+
+def _known_biological_features(
+    item: Mapping[str, object],
+    features: Sequence[object],
+    catalog_schema: float,
+    record_units: Mapping[str, tuple[int, ...]],
+) -> set[tuple[str, str]]:
+    """The references of the item's valid biological features, each read once; refuses the first invalid one."""
+
     known_features: set[tuple[str, str]] = set()
     biological_source_indexes: dict[
         tuple[str, str],
@@ -3280,15 +3413,12 @@ def select_feature_catalog_item(
             "Feature catalog contains an invalid nucleotide sequence "
             "source reference."
         )
-    for feature in item["biologicalFeatures"]:
+    for feature in features:
         if not isinstance(feature, Mapping):
             raise GbdrawError(
                 "Feature catalog biologicalFeatures must contain objects."
             )
-        reference = (
-            _text(feature.get("recordKey")),
-            _text(feature.get("biologicalFeatureId")),
-        )
+        reference = _feature_reference(feature)
         if (
             not all(reference)
             or reference[0] not in record_units
@@ -3298,87 +3428,34 @@ def select_feature_catalog_item(
                 "Feature catalog contains an invalid biological feature "
                 "reference."
             )
+        source_feature_index = feature.get("sourceFeatureIndex")
         if "sourceFeatureIndex" in feature and (
-            type(feature.get("sourceFeatureIndex")) is not int
-            or feature["sourceFeatureIndex"] < 0
+            type(source_feature_index) is not int or source_feature_index < 0
         ):
             raise GbdrawError(
                 "Feature catalog contains an invalid source feature index."
             )
-        if catalog_schema >= 4:
-            profile = feature.get("anchorProfile")
-            if (
-                not isinstance(profile, Mapping)
-                or set(profile) != {
-                    "precision",
-                    "operator",
-                    "partOrder",
-                    "strand",
-                }
-                or profile.get("precision")
-                not in {"exact", "fuzzy", "unavailable"}
-                or profile.get("operator")
-                not in {"single", "join", "order", "unknown"}
-                or profile.get("partOrder")
-                not in {"biological", "source-forward", "ambiguous"}
-                or profile.get("strand")
-                not in {"+", "-", "unstranded", "mixed"}
-            ):
-                raise GbdrawError(
-                    "Feature catalog contains an invalid source anchor profile."
-                )
+        if catalog_schema >= ANCHOR_FEATURE_CATALOG_SCHEMA:
+            _require_anchor_profile(feature.get("anchorProfile"))
         stable_id = _text(feature.get("stableFeatureId")) or reference[1]
-        source_feature_index = feature.get("sourceFeatureIndex")
         biological_source_indexes[(reference[0], stable_id)].append(
             source_feature_index
             if type(source_feature_index) is int
             else None
         )
         if "translationFromAminoAcidSequence" in feature:
-            qualifiers = feature.get("qualifiers")
-            amino_acid_sequence = (
-                feature.get("amino_acid_sequence")
-                if "amino_acid_sequence" in feature
-                else feature.get("aminoAcidSequence")
-            )
-            if (
-                feature.get("translationFromAminoAcidSequence") is not True
-                or not isinstance(amino_acid_sequence, str)
-                or not amino_acid_sequence.strip()
-                or (
-                    isinstance(qualifiers, Mapping)
-                    and "translation" in qualifiers
-                )
-            ):
-                raise GbdrawError(
-                    "Feature catalog contains an invalid translation "
-                    "source reference."
-                )
+            _require_translation_source(feature)
         if "sequenceSourceIndex" in feature:
-            source_index = feature.get("sequenceSourceIndex")
-            in_range = type(source_index) is int and 0 <= source_index < len(sequence_sources)
-            indexed_source = sequence_sources[cast(int, source_index)] if in_range else None
-            source = indexed_source if isinstance(indexed_source, Mapping) else None
-            if (
-                "nucleotide_sequence" in feature
-                or "nucleotideSequence" in feature
-                or source is None
-                or _text(source.get("origin"))
-                not in {"linear-record", "circular-reference"}
-                or type(source.get("recordIndex")) is not int
-                or source.get("recordIndex") != record_units[reference[0]][0]
-                or not _reconstruct_nucleotide_sequence(
-                    feature,
-                    source,
-                    # source is not None only when source_index is an int.
-                    source_sequence=canonical_sources[cast(int, source_index)],
-                )
-            ):
-                raise GbdrawError(
-                    "Feature catalog contains an invalid nucleotide sequence "
-                    "source reference."
-                )
+            _require_nucleotide_source(feature, sequence_sources, canonical_sources, record_units[reference[0]][0])
         known_features.add(reference)
+    _require_unique_source_feature_indexes(biological_source_indexes)
+    return known_features
+
+
+def _require_unique_source_feature_indexes(
+    biological_source_indexes: Mapping[tuple[str, str], Sequence[int | None]],
+) -> None:
+    """Features that share a stable source identity each name their own source feature index."""
 
     for source_identity, source_indexes in biological_source_indexes.items():
         if len(source_indexes) <= 1:
@@ -3393,26 +3470,30 @@ def select_feature_catalog_item(
                 f"{source_identity!r}."
             )
 
+
+def _require_rendered_features(
+    features: Sequence[object],
+    catalog_schema: float,
+    records: _CatalogRecords,
+    known_features: set[tuple[str, str]],
+) -> None:
     rendered_ids: set[str] = set()
-    for feature in item["features"]:
+    for feature in features:
         if not isinstance(feature, Mapping):
             raise GbdrawError(
                 "Feature catalog features must contain objects."
             )
         svg_id = _text(feature.get("svgId"))
-        reference = (
-            _text(feature.get("recordKey")),
-            _text(feature.get("biologicalFeatureId")),
-        )
+        reference = _feature_reference(feature)
         # A row of a record drawn in windows names its unit; any other row's unit is its record's.
-        windowed = reference[0] not in record_keys
+        windowed = reference[0] not in records.keys
         unit = feature.get("recordIndex", _MISSING)
         if (
             not svg_id
             or svg_id in rendered_ids
             or reference not in known_features
             or windowed != (unit is not _MISSING)
-            or (windowed and (type(unit) is not int or unit not in record_units[reference[0]]))
+            or (windowed and (type(unit) is not int or unit not in records.units[reference[0]]))
         ):
             raise GbdrawError(
                 "Feature catalog contains an invalid rendered feature "
@@ -3427,54 +3508,71 @@ def select_feature_catalog_item(
             )
         rendered_ids.add(svg_id)
 
-    known_group_ids: set[str] = set()
+
+def _orthogroup_presentations(
+    orthogroups: Sequence[object],
+    known_features: set[tuple[str, str]],
+) -> dict[str, tuple[str, str] | None]:
+    """The presentation of each valid orthogroup by its ID; its keys are the item's orthogroup IDs."""
+
     presentation_by_group_id: dict[str, tuple[str, str] | None] = {}
-    for group in item["orthogroups"]:
+    for group in orthogroups:
         if not isinstance(group, Mapping):
             raise GbdrawError("Feature catalog orthogroups must contain objects.")
         group_id, group_id_valid = _text_alias_status(
             group,
             ("id", "orthogroupId", "orthogroup_id"),
         )
-        if not group_id_valid or not group_id or group_id in known_group_ids:
+        if not group_id_valid or not group_id or group_id in presentation_by_group_id:
             raise GbdrawError(
                 "Feature catalog orthogroups require one consistent, unique ID."
             )
-        known_group_ids.add(group_id)
         presentation_by_group_id[group_id] = _group_presentation(group)
-        members = group.get("members")
-        if not isinstance(members, Sequence) or isinstance(
-            members, (str, bytes)
-        ):
-            raise GbdrawError(
-                "Feature catalog orthogroup members must be an array."
-            )
-        known_member_references: set[tuple[str, str]] = set()
-        for member in members:
-            if not isinstance(member, Mapping):
-                raise GbdrawError(
-                    "Feature catalog orthogroup members must contain objects."
-                )
-            reference = (
-                _text(member.get("recordKey")),
-                _text(member.get("biologicalFeatureId")),
-            )
-            if reference not in known_features:
-                raise GbdrawError(
-                    "Feature catalog contains an unresolved orthogroup member."
-                )
-            if reference in known_member_references:
-                raise GbdrawError(
-                    f"Orthogroup {group_id!r} contains duplicate biological members."
-                )
-            known_member_references.add(reference)
+        _require_orthogroup_members(group_id, group.get("members"), known_features)
+    return presentation_by_group_id
 
+
+def _require_orthogroup_members(
+    group_id: str,
+    members: object,
+    known_features: set[tuple[str, str]],
+) -> None:
+    if not isinstance(members, Sequence) or isinstance(
+        members, (str, bytes)
+    ):
+        raise GbdrawError(
+            "Feature catalog orthogroup members must be an array."
+        )
+    known_member_references: set[tuple[str, str]] = set()
+    for member in members:
+        if not isinstance(member, Mapping):
+            raise GbdrawError(
+                "Feature catalog orthogroup members must contain objects."
+            )
+        reference = _feature_reference(member)
+        if reference not in known_features:
+            raise GbdrawError(
+                "Feature catalog contains an unresolved orthogroup member."
+            )
+        if reference in known_member_references:
+            raise GbdrawError(
+                f"Orthogroup {group_id!r} contains duplicate biological members."
+            )
+        known_member_references.add(reference)
+
+
+def _require_comparison_matches(
+    matches: Sequence[object],
+    known_features: set[tuple[str, str]],
+    presentation_by_group_id: Mapping[str, tuple[str, str] | None],
+) -> None:
     known_match_ids: set[str] = set()
-    for match in item["comparisonMatches"]:
+    for match in matches:
         if not isinstance(match, Mapping):
             raise GbdrawError(
                 "Feature catalog comparisonMatches must contain objects."
             )
+        # Unlike _text_alias_status, this reads every alias before it refuses a conflict.
         match_ids = {
             _text(match.get(key))
             for key in ("id", "matchId", "match_id")
@@ -3497,7 +3595,7 @@ def select_feature_catalog_item(
         if (
             any(not group_id for group_id in group_ids)
             or len(set(group_ids)) != len(group_ids)
-            or any(group_id not in known_group_ids for group_id in group_ids)
+            or any(group_id not in presentation_by_group_id for group_id in group_ids)
         ):
             raise GbdrawError(
                 "Feature catalog comparison match references invalid orthogroups."
@@ -3511,64 +3609,95 @@ def select_feature_catalog_item(
                 "Feature catalog comparison match has conflicting orthogroup presentation metadata."
             )
         for role in ("query", "subject"):
-            singular_reference = (
-                _text(match.get(f"{role}RecordKey")),
-                _text(match.get(f"{role}BiologicalFeatureId")),
+            _require_match_endpoint(match, role, known_features)
+
+
+def _require_match_endpoint(
+    match: Mapping[str, object],
+    role: str,
+    known_features: set[tuple[str, str]],
+) -> None:
+    """One end of a comparison match names known biological features, singular or plural, without conflict."""
+
+    singular_reference = (
+        _text(match.get(f"{role}RecordKey")),
+        _text(match.get(f"{role}BiologicalFeatureId")),
+    )
+    raw_references = match.get(f"{role}FeatureReferences")
+    references: list[tuple[str, str]] = []
+    if raw_references is not None:
+        if not isinstance(raw_references, Sequence) or isinstance(
+            raw_references,
+            (str, bytes),
+        ):
+            raise GbdrawError(
+                "Feature catalog comparison endpoint references must be an array."
             )
-            raw_references = match.get(f"{role}FeatureReferences")
-            references: list[tuple[str, str]] = []
-            if raw_references is not None:
-                if not isinstance(raw_references, Sequence) or isinstance(
-                    raw_references,
-                    (str, bytes),
-                ):
-                    raise GbdrawError(
-                        "Feature catalog comparison endpoint references must be an array."
-                    )
-                for raw_reference in raw_references:
-                    if not isinstance(raw_reference, Mapping):
-                        raise GbdrawError(
-                            "Feature catalog comparison endpoint references must contain objects."
-                        )
-                    references.append(
-                        (
-                            _text(raw_reference.get("recordKey")),
-                            _text(raw_reference.get("biologicalFeatureId")),
-                        )
-                    )
-                if (
-                    not references
-                    or len(set(references)) != len(references)
-                    or any(reference not in known_features for reference in references)
-                ):
-                    raise GbdrawError(
-                        "Feature catalog contains invalid comparison endpoint references."
-                    )
-            if any(singular_reference) and singular_reference not in known_features:
+        for raw_reference in raw_references:
+            if not isinstance(raw_reference, Mapping):
                 raise GbdrawError(
-                    "Feature catalog contains an unresolved comparison match."
+                    "Feature catalog comparison endpoint references must contain objects."
                 )
-            if (
-                any(singular_reference)
-                and (
-                    not all(singular_reference)
-                    or (
-                        references
-                        and references != [singular_reference]
-                    )
-                )
-            ):
-                raise GbdrawError(
-                    "Feature catalog comparison endpoint aliases are conflicting."
-                )
-            if len(references) == 1 and singular_reference != references[0]:
-                raise GbdrawError(
-                    "Feature catalog singular comparison endpoint is missing or conflicting."
-                )
-            if len(references) > 1 and any(singular_reference):
-                raise GbdrawError(
-                    "Feature catalog plural comparison endpoints cannot use singular aliases."
-                )
+            references.append(_feature_reference(raw_reference))
+        if (
+            not references
+            or len(set(references)) != len(references)
+            or any(reference not in known_features for reference in references)
+        ):
+            raise GbdrawError(
+                "Feature catalog contains invalid comparison endpoint references."
+            )
+    if any(singular_reference) and singular_reference not in known_features:
+        raise GbdrawError(
+            "Feature catalog contains an unresolved comparison match."
+        )
+    if (
+        any(singular_reference)
+        and (
+            not all(singular_reference)
+            or (
+                references
+                and references != [singular_reference]
+            )
+        )
+    ):
+        raise GbdrawError(
+            "Feature catalog comparison endpoint aliases are conflicting."
+        )
+    # Two or more references with a singular alias were refused above as conflicting aliases.
+    if len(references) == 1 and singular_reference != references[0]:
+        raise GbdrawError(
+            "Feature catalog singular comparison endpoint is missing or conflicting."
+        )
+
+
+def select_feature_catalog_item(
+    catalog: Mapping[str, object],
+    *,
+    result_index: int,
+    result_name: str,
+    expected_schema: int | None = None,
+) -> dict[str, object]:
+    """Return one validated catalog item matched to a logical Result.
+
+    The checks run in this order, and an item that breaks several rules is refused by the first: the schema and the
+    item, the required arrays, the stored sequences, the record keys, the biological features, the rendered
+    features, the orthogroups, then the comparison matches.
+    """
+
+    catalog_schema, item = _catalog_item_of_result(
+        catalog,
+        result_index=result_index,
+        result_name=result_name,
+        expected_schema=expected_schema,
+    )
+    arrays = _required_item_arrays(item)
+    _require_catalog_sequence_fields(item, catalog_schema)
+    records = _catalog_records(item, arrays.record_keys)
+    known_features = _known_biological_features(item, arrays.biological_features, catalog_schema, records.units)
+    _require_rendered_features(arrays.features, catalog_schema, records, known_features)
+    presentation_by_group_id = _orthogroup_presentations(arrays.orthogroups, known_features)
+    _require_comparison_matches(arrays.comparison_matches, known_features, presentation_by_group_id)
     return dict(item)
 
 

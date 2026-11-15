@@ -2068,3 +2068,35 @@ def test_schema5_invalid_reference_is_still_refused() -> None:
         select_feature_catalog_item(
             {"schema": INTERACTIVE_EMBED_SCHEMA, "items": [embedded]}, result_index=0, result_name="r.svg"
         )
+
+
+def _refusal(catalog: dict, **kwargs: object) -> str:
+    with pytest.raises(GbdrawError) as refused:
+        select_feature_catalog_item(catalog, result_index=0, result_name="r.svg", **kwargs)
+    return str(refused.value)
+
+
+@pytest.mark.parametrize("expected_schema", [None, 6])
+@pytest.mark.parametrize("schema", [[6], {"schema": 6}], ids=["array", "object"])
+def test_an_array_or_object_schema_is_refused_as_a_wrong_schema(schema: object, expected_schema: int | None) -> None:
+    """A JSON array or object as the catalog schema gets the refusal a wrong string gets, not a TypeError, so a
+    Session that holds one is reported as invalid."""
+
+    kwargs = {} if expected_schema is None else {"expected_schema": expected_schema}
+    item = _stored_ownership_item()
+    wrong_string = _refusal({"schema": "6", "items": [item]}, **kwargs)
+
+    assert _refusal({"schema": schema, "items": [item]}, **kwargs) == wrong_string
+
+
+@pytest.mark.parametrize("value", [["exact"], {"exact": True}], ids=["array", "object"])
+@pytest.mark.parametrize("field", ["precision", "operator", "partOrder", "strand"])
+def test_an_array_or_object_anchor_profile_value_is_refused_as_a_wrong_value(field: str, value: object) -> None:
+    catalog = {"schema": 6, "items": [_stored_ownership_item()]}
+    select_feature_catalog_item(catalog, result_index=0, result_name="r.svg")
+    wrong_string = json.loads(json.dumps(catalog))
+    wrong_string["items"][0]["biologicalFeatures"][0]["anchorProfile"][field] = "not-a-value"
+    broken = json.loads(json.dumps(catalog))
+    broken["items"][0]["biologicalFeatures"][0]["anchorProfile"][field] = value
+
+    assert _refusal(broken) == _refusal(wrong_string) == "Feature catalog contains an invalid source anchor profile."
