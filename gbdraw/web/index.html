@@ -257,8 +257,9 @@
         /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
         /* Urdu UI text: the vendored Noto Nastaliq Urdu first (@font-face above), then system fonts; the Preview's feature search
-           bar too, which sets Arial for the other languages (OV-3656). */
-        :root:lang(ur) :is(body, .preview-feature-search) { font-family: 'Noto Nastaliq Urdu', 'Inter', 'Segoe UI', 'Tahoma', sans-serif; }
+           bar too, which sets Arial for the other languages, and every placeholder, so a code field (font-mono: a sequence, a
+           regular expression) shows its Urdu hint in Nastaliq while the code typed in it stays monospace (OV-3656). */
+        :root:lang(ur) :is(body, .preview-feature-search), :root:lang(ur) ::placeholder { font-family: 'Noto Nastaliq Urdu', 'Inter', 'Segoe UI', 'Tahoma', sans-serif; }
         /* The figure keeps the English stack in every UI language. */
         :root svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
         /* The page's data-ui-text-style is the shown locale's textStyle (UI_LOCALES, js/utils/i18n.js); the figure is exempt.
@@ -279,14 +280,22 @@
         /* nastaliq (Urdu): a Nastaliq word is tall and slopes down to its end. Every UI line is 2.5em with the font's own
            metrics (its ascent and descent fill the line; the tallest letters rise above it), the icons aside. No small UI
            text under 13px; 14px text keeps its size. As for tall-marks, the floor of the text styles whose size their own
-           rule sets is not !important, so a header button that shows its icon alone keeps its words at 0px. A control of a
-           fixed .h-* height grows with its text. A one-line text cut with an ellipsis keeps 0.6em of room at its sides,
+           rule sets is not !important, so a header button that shows its icon alone keeps its words at 0px; the fields and
+           menu buttons whose own rule sets a small size take the floor at the text style's own weight (:where), so a larger
+           size of their own (the drawing picker's 14px at phone width) stays. A control of a fixed height grows with its
+           text: one of a fixed .h-* height, and the fields, menu buttons and header button whose own rule fixes it (OV-3656,
+           OV-3658). A one-line text cut with an ellipsis keeps 0.6em of room at its sides,
            where the first and last letters reach past the line's ends (the clip is at the sides only,
            css/tailwind.input.css). */
         :root[data-ui-text-style="nastaliq"] :not(svg, svg *, .ph) { line-height: 2.5 !important; }
         :root[data-ui-text-style="nastaliq"] :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-xs):not(svg, svg *) { font-size: 13px !important; }
         :root[data-ui-text-style="nastaliq"] :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span, .preview-feature-search) { font-size: 13px; }
-        :root[data-ui-text-style="nastaliq"] :is(button, select, input, a, summary, label):is(.h-5, .h-6, .h-7, .h-8, .h-9, .h-10, .h-11, .h-12) { height: auto !important; }
+        :root[data-ui-text-style="nastaliq"] :where(.form-input-compact, .auto-value-placeholder, .track-slot-auto-placeholder, .match-action, .action-menu-toggle) { font-size: 13px; }
+        :root[data-ui-text-style="nastaliq"] :is(:is(button, select, input, a, summary, label):is(.h-5, .h-6, .h-7, .h-8, .h-9, .h-10, .h-11, .h-12),
+            .form-input-compact, .track-slot-geometry-input, .circular-measure-controls .form-input, .match-action, .action-menu-toggle,
+            [data-definition-line-color-state], .app-header[data-header-wrapped] .app-session-button) { height: auto !important; }
+        /* The state shown in place of a definition line's color swatch (Auto, None) takes its word's width. */
+        :root[data-ui-text-style="nastaliq"] [data-definition-line-color-state] { width: auto; min-width: 2rem; }
         :root[data-ui-text-style="nastaliq"] .truncate { padding-inline: 0.6em; margin-inline: -0.6em; }
         /* The Preview's feature search bar: its fields and buttons, 26px tall, grow with their text, and its buttons (Clear and
            Open 48px and 44px wide for the English names) take their name's width and 0.5em of room at its sides. */

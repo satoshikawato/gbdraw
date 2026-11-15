@@ -24,8 +24,10 @@
 //   its sides only;
 // - in ur: the Noto Nastaliq Urdu font, 2.5em lines, the 13 px floor of the
 //   small text (14 px text keeps its size), no upper-casing or tracking, and
-//   controls of a fixed height, the empty Preview's two actions and the
-//   feature search bar that hold their text line (OV-2794, OV-3656);
+//   controls of a fixed height, the empty Preview's two actions, the
+//   feature search bar, and, with a Session, the compact fields, track stack
+//   sizes, menu buttons and Auto values that hold their text line at 13 px, and
+//   the Urdu hint of a code field in Nastaliq (OV-2794, OV-3656, OV-3658);
 // - at 1024x768, 1280x800 and 1440x900, in all 18 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
@@ -487,6 +489,35 @@ test('Urdu takes the Noto Nastaliq Urdu font, 2.5em lines, a 13 px floor and con
       searchBar
     };
   })).toEqual({ controls: true, overflowing: [], card: 2, short: [], searchBar: ['Noto Nastaliq Urdu', '13px', true] });
+  // With a Session, every section and the Circular custom track stack open: a code field (font-mono) keeps its typed
+  // text monospace and shows its Urdu hint in Nastaliq (OV-3656); each field, menu button and Auto value whose own rule
+  // gives it a fixed height and a small size in the other languages is 13 px and holds its line (OV-3658).
+  await loadSession(page);
+  await page.evaluate(() => document.querySelectorAll('details:not(.action-menu)').forEach((details) => { details.open = true; }));
+  await page.locator('[aria-controls="circular-custom-track-slots-panel"]').click();
+  await page.locator('[data-setting="track-slots"] label input[type="checkbox"]').first().check();
+  expect(await page.evaluate(() => {
+    const first = (family) => family.split(',')[0].replace(/["']/g, '').trim();
+    const query = document.getElementById('sequence-search-query');
+    const kinds = ['.form-input-compact', '.circular-measure-controls .form-input', '.action-menu-toggle', '.auto-value-placeholder'];
+    const shown = (element) => element.getClientRects().length > 0 && !element.closest('details:not([open]) > :not(summary)');
+    const misfit = (element) => {
+      const style = getComputedStyle(element);
+      const room = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((sum, key) => sum + parseFloat(style[key]), 0);
+      return parseFloat(style.fontSize) < 13 || element.getBoundingClientRect().height < parseFloat(style.lineHeight) + room - 0.5;
+    };
+    return {
+      code: [first(getComputedStyle(query).fontFamily), first(getComputedStyle(query, '::placeholder').fontFamily)],
+      fixed: kinds.map((kind) => {
+        const elements = [...document.querySelectorAll(kind)].filter(shown);
+        return [kind, elements.length > 0, elements.filter(misfit).map((element) => element.outerHTML.slice(0, 120))];
+      })
+    };
+  })).toEqual({
+    code: ['ui-monospace', 'Noto Nastaliq Urdu'],
+    fixed: [['.form-input-compact', true, []], ['.circular-measure-controls .form-input', true, []], ['.action-menu-toggle', true, []],
+      ['.auto-value-placeholder', true, []]]
+  });
   await page.getByRole('button', { name: (await catalogOf('ur'))['Collapse settings to icons'], exact: true }).click();
   expect(await text('.settings-index nav > button[data-settings-entry="font"] > span')).toEqual(['13px', '32.5px', 'none', 'normal']);
   expect(errors).toEqual([]);
