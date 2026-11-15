@@ -472,6 +472,7 @@ def _add_linear_feature_underlays(
         [result.underlay_features for result in feature_layers],
         records,
         mode="linear",
+        record_transforms=bind_record_transforms(records, record_transforms),
     )
     anchor_id = (
         feature_underlay_anchor_slot_id(slots, (f for result in feature_layers for f in result.underlay_features))

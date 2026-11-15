@@ -11,11 +11,13 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.objects import FeatureObject
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.svg.ids import instance_svg_id
 from gbdraw.tracks.parsing import SlotView, slots_draw_features
 
 from .models import (
     RegionAnnotationStyle,
+    RegionDisplayParts,
     ResolvedAnnotationBundle,
     ResolvedRegionAnnotation,
 )
@@ -52,6 +54,18 @@ def _feature_segments(feature: FeatureObject) -> tuple[tuple[int, int], ...]:
     return merge_annotation_segments(segments)
 
 
+def _underlay_display_parts(
+    feature: FeatureObject, transform: RecordDisplayTransform | None
+) -> RegionDisplayParts | None:
+    """The feature's blocks as the transform that projected them draws them, or ``None`` where nothing did."""
+
+    if feature.display_parts is None:
+        return None
+    if transform is None:
+        raise ValueError(f"Feature {feature.feature_id!r} has display parts but no transform projected them.")
+    return RegionDisplayParts.projected((part.fragment for part in feature.display_parts if part.kind == "block"), transform)
+
+
 def merge_feature_underlays(
     bundle: ResolvedAnnotationBundle,
     underlay_features_by_record: Sequence[Sequence[FeatureObject]],
@@ -59,8 +73,12 @@ def merge_feature_underlays(
     *,
     mode: str,
     record_indices: Sequence[int] | None = None,
+    record_transforms: Sequence[RecordDisplayTransform | None],
 ) -> tuple[ResolvedAnnotationBundle, str | None]:
-    """Append private resolved highlights without mutating the public bundle."""
+    """Append private resolved highlights without mutating the public bundle. ``record_transforms``, by record,
+    are those the records are drawn by, which projected the features' display parts (``None`` where nothing
+    projects them): an underlay's display parts carry what its transform says about the record's circle
+    (``RegionDisplayParts.projected``)."""
 
     if mode not in {"circular", "linear"}:
         raise ValidationError("Feature underlay mode must be 'circular' or 'linear'.")
@@ -69,6 +87,8 @@ def merge_feature_underlays(
     indices = tuple(record_indices or range(len(records)))
     if len(indices) != len(records):
         raise ValueError("record_indices must match records")
+    if len(record_transforms) != len(records):
+        raise ValueError("record_transforms must match records")
     if not any(underlay_features_by_record):
         return bundle, None
 
@@ -82,6 +102,7 @@ def merge_feature_underlays(
     ):
         record_index = int(indices[local_index])
         record_length = len(record.seq)
+        transform = record_transforms[local_index]
         stable_ids = [
             feature.feature_hash or str(feature.feature_id)
             for feature in features
@@ -118,8 +139,7 @@ def merge_feature_underlays(
                     set_id=set_id,
                     record_index=record_index,
                     segments=segments,
-                    display_parts=(tuple(part.fragment for part in feature.display_parts if part.kind == "block")
-                                   if feature.display_parts is not None else None),
+                    display_parts=_underlay_display_parts(feature, transform),
                     midpoint_bp=annotation_midpoint(segments, record_length, crosses_origin=False),
                     span_bp=sum(end - start for start, end in segments),
                     label="",

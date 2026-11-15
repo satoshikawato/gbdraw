@@ -605,6 +605,14 @@ def _reach(label: CircularAnnotationLabel, inner_radius_px: float, outer_radius_
     return far + label.label_offset - outer_radius_px if outward else inner_radius_px - near + label.label_offset
 
 
+def _label_centre_bp(annotation: ResolvedRegionAnnotation, *, join_origin: bool, record_length: int) -> float:
+    """Where a region's centred label stands on its record's circle: ``label_place``, which gives it in the frame of
+    the part it stands on (past the record's end on a part joined across the origin or the display cut), turned
+    back onto the record."""
+
+    return annotation.label_midpoint_bp(join_origin=join_origin) % max(1, record_length)
+
+
 def _along_region(
     annotation: ResolvedRegionAnnotation,
     default: CircularAnnotationLabel,
@@ -625,7 +633,7 @@ def _along_region(
     """
 
     length = max(1, record_length)
-    centre = annotation.label_midpoint_bp(join_origin=join_origin)
+    centre = _label_centre_bp(annotation, join_origin=join_origin, record_length=record_length)
     step = max(1e-9, length / (2.0 * math.pi * max(1.0, math.hypot(default.x, default.y))))
     candidates: set[float] = set()
     for start, end in annotation.geometry_segments:
@@ -737,7 +745,10 @@ def circular_annotation_labels(
                 ),
             )
         )
-    defaults = [label_at(annotation.label_midpoint_bp(join_origin=track.join_origin)) for annotation, label_at in entries]
+    defaults = [
+        label_at(_label_centre_bp(annotation, join_origin=track.join_origin, record_length=record_length))
+        for annotation, label_at in entries
+    ]
     letterless = [label.keeps_no_letter or track.leaves_out_letters(entry[0]) for entry, label in zip(entries, defaults)]
     without_letters = tuple(label for label, left_out in zip(defaults, letterless) if left_out)
     kept = [(entry, label) for entry, label, left_out in zip(entries, defaults, letterless) if not left_out]
@@ -986,6 +997,9 @@ def circular_annotation_label_extent(
     (``LabelSizing.extent``)."""
 
     edge = lanes_from_px + mark_offset_px if outward else lanes_from_px - mark_offset_px
+    # The packer gives the place in the frame of the part it stands on, which runs on past the record's end where
+    # it is joined across the origin or the display cut (``ResolvedRegionAnnotation.label_place``).
+    place_bp %= max(1, record_length)
     label = _label_at(
         place_bp,
         annotation_id="",

@@ -16,7 +16,14 @@ from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw
-from gbdraw.annotations import AnnotationGradient, MarkPart, ResolvedRegionAnnotation, mark_parts, resolve_annotations
+from gbdraw.annotations import (
+    AnnotationGradient,
+    MarkPart,
+    RegionDisplayParts,
+    ResolvedRegionAnnotation,
+    mark_parts,
+    resolve_annotations,
+)
 from gbdraw.api import (
     AnnotationOptions,
     AnnotationSet,
@@ -26,7 +33,8 @@ from gbdraw.api import (
     RegionAnnotation,
     RegionAnnotationStyle,
 )
-from gbdraw.layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval
+from gbdraw.annotations.resolve import annotation_midpoint
+from gbdraw.layout.record_coordinates import CirclePlace, DisplayFragment, RecordDisplayTransform, SourceInterval
 from gbdraw.render.drawers.annotation_marks import gradient_steps
 
 _SVG = "{http://www.w3.org/2000/svg}"
@@ -89,7 +97,7 @@ def test_three_segments_across_the_origin_run_from_the_stretch_over_the_origin()
     assert [steps[0][1], steps[-1][1]] == ["#ed0011", "#fd0001"]
 
 
-def _fragments(start: int | None, wrap: int | None = None, segments=((0, 1000), (9000, _LENGTH))) -> tuple[DisplayFragment, ...]:
+def _fragments(start: int | None, wrap: int | None = None, segments=((0, 1000), (9000, _LENGTH))) -> RegionDisplayParts:
     transform = RecordDisplayTransform(
         length=_LENGTH, source_base=1, source_step=1, start_coordinate=start, is_circular=True
     )
@@ -97,10 +105,10 @@ def _fragments(start: int | None, wrap: int | None = None, segments=((0, 1000), 
         transform = transform.with_wrap(wrap, _LENGTH)
     parts = transform.project_local_parts(tuple(SourceInterval(low, high) for low, high in segments))
     assert all(isinstance(part, DisplayFragment) for part in parts)
-    return tuple(part for part in parts if isinstance(part, DisplayFragment))
+    return RegionDisplayParts.projected((part for part in parts if isinstance(part, DisplayFragment)), transform)
 
 
-def _origin_annotation(fragments: tuple[DisplayFragment, ...]) -> ResolvedRegionAnnotation:
+def _origin_annotation(fragments: RegionDisplayParts) -> ResolvedRegionAnnotation:
     return ResolvedRegionAnnotation(
         id="a", set_id="s", record_index=0, segments=((0, 1000), (9000, _LENGTH)), midpoint_bp=0.0, span_bp=2000,
         label="A", mark="bracket", lane=None, style=RegionAnnotationStyle(), display_parts=fragments,
@@ -163,7 +171,7 @@ def test_wrapped_rows_keep_the_sides_of_the_origin_apart(
 _EXONS = ((1000, 3000), (4000, 5000), (6000, 6500))
 
 
-def _exons(fragments: tuple[DisplayFragment, ...]) -> ResolvedRegionAnnotation:
+def _exons(fragments: RegionDisplayParts) -> ResolvedRegionAnnotation:
     return ResolvedRegionAnnotation(
         id="a", set_id="s", record_index=0, segments=_EXONS, midpoint_bp=2750.0, span_bp=3500, label="A",
         mark="band", lane=None, style=RegionAnnotationStyle(), display_parts=fragments,
@@ -181,14 +189,176 @@ def test_label_of_a_region_the_display_does_not_cut_stands_at_its_midpoint(
     assert annotation.label_place(join_origin=False) == (expected, mark_parts(annotation, join_origin=False)[0])
 
 
-@pytest.mark.parametrize("join_origin", (True, False))
-def test_label_of_a_region_the_display_cut_cuts_stands_on_its_longest_part(join_origin: bool) -> None:
-    # PD-OI-119: display start 9501 cuts the side 9000-10000 at the display's ends (500 bp at each end); 0-1000
+def test_label_of_a_region_the_display_cut_cuts_stands_on_its_longest_part() -> None:
+    # PD-OI-119: display start 9501 cuts the side 9000-10000 at the ends of a Linear bar (500 bp at each end); 0-1000
     # follows it from display bp 500 to 1500: the label keeps the centre of that longest part, bp 750 (x 150 of a
-    # Linear bar of 2000 px), on a circle and on a Linear bar.
+    # bar of 2000 px).
     annotation = _origin_annotation(_fragments(9501))
 
-    assert annotation.label_midpoint_bp(join_origin=join_origin) == 750.0
+    assert annotation.label_midpoint_bp(join_origin=False) == 750.0
+
+
+def test_a_circle_joins_a_region_at_its_display_cut() -> None:
+    # The circle goes on at the display cut (display bp 0, bp 9500): the region is one part from display bp 9500
+    # over the cut to 11500, capped at its own ends, and its label stands halfway along it, at bp 0 of the record:
+    # display bp 500, given on the part as 10500, a turn on (OV-2654).
+    annotation = _origin_annotation(_fragments(9501))
+
+    joined = MarkPart(9500, 11500, True, True, 9000)
+    assert mark_parts(annotation, join_origin=True) == (joined,)
+    assert annotation.label_place(join_origin=True) == (10_500.0, joined)
+
+
+def test_the_centred_label_of_a_span_across_the_origin_stands_on_its_joined_part_in_its_frame() -> None:
+    # Without a display start the circle joins 9600-10000 to 0-1400 as one part from 9600 to 11400; halfway along
+    # the run (9600-10000, 0-1400, then 9000-9400) is bp 700 of the record, 10700 on that part, inside the stretch
+    # the label may cover (9000-11400).
+    segments = ((0, 1400), (9000, 9400), (9600, 10000))
+    annotation = ResolvedRegionAnnotation(
+        id="a", set_id="s", record_index=0, segments=segments,
+        midpoint_bp=annotation_midpoint(segments, _LENGTH, crosses_origin=True), span_bp=2200, label="A",
+        mark="band", lane=None, style=RegionAnnotationStyle(), crosses_origin=True,
+    )
+
+    place, stretch = annotation.label_stretch("center", join_origin=True)
+    assert (place.bp, place.part, stretch) == (10_700.0, MarkPart(9600, 11400, True, True, 9600), (9000, 11400))
+
+
+@pytest.mark.parametrize("start", (None, 5001, 5201))
+def test_a_centred_label_the_display_cut_moves_packs_its_lane_as_without_a_display_start(start: int | None) -> None:
+    # A spans 4000-4600 and 4800-6000; halfway along it is bp 5100, after the display cut from start 5001 (bp 5000)
+    # and before it from 5201 (bp 5200). Its 900 bp of letters (150 letters of 6 px at 1 bp per px) run from bp
+    # 4650 to 5550, over its own gap and over Q at 4660-4740 in that gap, but inside A's stretch: they do not leave
+    # A's mark, so Q keeps A's lane, as without a display start (OV-2654 review).
+    from gbdraw.annotations import LabelSizing, layout_annotation_track
+
+    a_segments, q_segments = ((4000, 4600), (4800, 6000)), ((4660, 4740),)
+    annotations = (
+        ResolvedRegionAnnotation(
+            id="a", set_id="s", record_index=0, segments=a_segments, midpoint_bp=5100.0, span_bp=1800,
+            label="X" * 150, mark="band", lane=None, style=RegionAnnotationStyle(),
+            display_parts=None if start is None else _fragments(start, None, a_segments),
+        ),
+        ResolvedRegionAnnotation(
+            id="q", set_id="s", record_index=0, segments=q_segments, midpoint_bp=4700.0, span_bp=80, label="",
+            mark="band", lane=None, style=RegionAnnotationStyle(),
+            display_parts=None if start is None else _fragments(start, None, q_segments),
+        ),
+    )
+    track = layout_annotation_track(
+        "regions", "s", annotations, record_lengths={0: _LENGTH},
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=_letters_6px_each), join_origin=True,
+    )
+
+    assert {placement.annotation.id: placement.lane for placement in track.placements} == {"a": 0, "q": 0}
+
+
+def _on_a_shared_circle(start: int | None, segments: tuple[tuple[int, int], ...]) -> ResolvedRegionAnnotation:
+    # The record is drawn from display bp 3000 of a circle of 25000 display bp that it shares with other records.
+    transform = RecordDisplayTransform(_LENGTH, 1, 1, start, True).with_circle(
+        CirclePlace(offset=3000, length=25_000, scale_length=_LENGTH), _LENGTH
+    )
+    parts = transform.project_local_parts(tuple(SourceInterval(low, high) for low, high in segments))
+    return ResolvedRegionAnnotation(
+        id="a", set_id="s", record_index=0, segments=segments, midpoint_bp=0.0, span_bp=2000, label="A",
+        mark="band", lane=None, style=RegionAnnotationStyle(),
+        display_parts=RegionDisplayParts.projected((part for part in parts if isinstance(part, DisplayFragment)), transform),
+        crosses_origin=segments[0][0] == 0 and len(segments) > 1,
+    )
+
+
+def test_a_record_that_shares_one_circle_ends_a_region_at_its_display_cut() -> None:
+    # From display start 5001 the record's arc runs from display bp 3000 to 13000 and its display cut (bp 5000) ends
+    # it, where the gap to the next record starts: 4000-6000 keeps its two parts, open at the cut, and its label
+    # the centre of its longest part, the earlier of two equal ones (PD-OI-119; OV-2654 review).
+    annotation = _on_a_shared_circle(5001, ((4000, 6000),))
+
+    assert mark_parts(annotation, join_origin=True) == (
+        MarkPart(12_000, 13_000, True, False, 4000), MarkPart(3000, 4000, False, True, 5000)
+    )
+    assert annotation.label_place(join_origin=True) == (3500.0, MarkPart(3000, 4000, False, True, 5000))
+
+
+@pytest.mark.parametrize("shared", (False, True))
+def test_a_region_knows_whether_its_record_shares_its_circle(shared: bool) -> None:
+    from types import SimpleNamespace
+
+    from gbdraw.annotations.planning import prepare_annotation_track_slots
+
+    transform = RecordDisplayTransform(_LENGTH, 1, 1, 5001, True)
+    if shared:
+        transform = transform.with_circle(CirclePlace(offset=3000, length=25_000, scale_length=_LENGTH), _LENGTH)
+    _slots, bundle, _auto = prepare_annotation_track_slots(
+        AnnotationOptions(sets=(AnnotationSet("s", (RegionAnnotation("x", CoordinateSpan(None, 4001, 6000)),)),)),
+        [_record()], None, mode="circular", default_slots=list,
+        slot_factory=lambda **fields: SimpleNamespace(width=None, enabled=True, **fields), record_transforms=[transform],
+    )
+
+    # The display parts and the fact that the record's arc ends at its display cut come from one transform.
+    (annotation,) = bundle.annotations
+    assert annotation.display_parts is not None
+    assert annotation.display_parts.shares_circle is shared
+
+
+@pytest.mark.parametrize(
+    ("start", "expected"),
+    (
+        # Without a display start the origin lies at the two ends of the record's arc: the sides stay apart there,
+        # each open where the span goes on (OV-3519).
+        (None, (MarkPart(3000, 4000, False, True, 0), MarkPart(12_000, 13_000, True, False, 9000))),
+        # From display start 5001 the sides meet in the middle of the arc, at display bp 8000: one part.
+        (5001, (MarkPart(7000, 9000, True, True, 9000),)),
+    ),
+)
+def test_a_record_that_shares_one_circle_joins_the_origin_only_where_its_sides_meet(
+    start: int | None, expected: tuple[MarkPart, ...]
+) -> None:
+    annotation = _on_a_shared_circle(start, ((0, 1000), (9000, _LENGTH)))
+
+    assert mark_parts(annotation, join_origin=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("start", "segments", "first", "last"),
+    (
+        # 4000-6000 from display start 5001: one part from display bp 9000 over the cut to 11000.
+        (5001, ((4000, 6000),), 9000.0, 11_000.0),
+        # 9000-10000 and 0-1000 from 501 or 9501: one part over the display cut and the origin.
+        (501, ((0, 1000), (9000, _LENGTH)), 8500.0, 10_500.0),
+        (9501, ((0, 1000), (9000, _LENGTH)), 9500.0, 11_500.0),
+    ),
+)
+def test_start_and_end_stand_on_the_part_a_circle_joins_at_its_display_cut(
+    start: int, segments: tuple[tuple[int, int], ...], first: float, last: float
+) -> None:
+    annotation = ResolvedRegionAnnotation(
+        id="a", set_id="s", record_index=0, segments=segments, midpoint_bp=0.0, span_bp=2000, label="A",
+        mark="band", lane=None, style=RegionAnnotationStyle(), display_parts=_fragments(start, segments=segments),
+        crosses_origin=len(segments) > 1,
+    )
+    (part,) = mark_parts(annotation, join_origin=True)
+
+    # The first and last bases stand on the joined part, where it draws them (review LOW 3: no StopIteration).
+    assert annotation.label_anchor("start", join_origin=True) == (first, part)
+    assert annotation.label_anchor("end", join_origin=True) == (last, part)
+
+
+@pytest.mark.parametrize("join_origin", (False, True))
+def test_end_of_a_region_that_takes_the_whole_record_stands_one_turn_on(join_origin: bool) -> None:
+    # 5000-10000 then 0-5000 across the origin, drawn from display start 5001: one part of the whole record from
+    # display bp 0 to 10000. Its first base and the base after its last are the same record base, 5000: the start
+    # stands at the part's start and the end one turn on, at its end (OV-2654 review LOW 3: no AssertionError).
+    segments = ((0, 5000), (5000, _LENGTH))
+    annotation = ResolvedRegionAnnotation(
+        id="a", set_id="s", record_index=0, segments=segments, midpoint_bp=0.0, span_bp=_LENGTH, label="A",
+        mark="band", lane=None, style=RegionAnnotationStyle(), display_parts=_fragments(5001, segments=segments),
+        crosses_origin=True,
+    )
+    (part,) = mark_parts(annotation, join_origin=join_origin)
+
+    assert (part.start, part.end) == (0, _LENGTH)
+    assert annotation.label_anchor("start", join_origin=join_origin) == (0.0, part)
+    assert annotation.label_anchor("end", join_origin=join_origin) == (float(_LENGTH), part)
 
 
 def test_a_row_boundary_ties_to_the_earlier_row() -> None:
@@ -212,6 +382,9 @@ _TARGETS = {
     "coordinate": CoordinateSpan(None, 9001, 1000, wraps_origin=True),
     # Unequal sides: 9500-10000 and 0-2000.
     "unequal": CoordinateSpan(None, 9501, 2000, wraps_origin=True),
+    # Spans that the display cut of display start 5001 (bp 5000) crosses: 4000-6000 in equal sides, 4500-6000 not.
+    "cut": CoordinateSpan(None, 4001, 6000),
+    "cut_unequal": CoordinateSpan(None, 4501, 6000),
 }
 
 
@@ -249,6 +422,17 @@ def test_circular_label_with_a_display_start_stands_on_the_centre_of_the_arc() -
 
     # The arc runs from 0.4 to 0.6 turn (bp 9000 to 1000 with the origin at 6 o'clock): its label at 0.5 turn.
     assert math.degrees(math.atan2(x, -y)) % 360.0 == pytest.approx(180.0, abs=0.5)
+
+
+@pytest.mark.parametrize(("kind", "degrees"), (("cut", 0.0), ("cut_unequal", 9.0)))
+def test_circular_label_stands_halfway_along_a_span_the_display_cut_crosses(kind: str, degrees: float) -> None:
+    # From display start 5001 the display cut (12 o'clock, bp 5000) lies inside the span, and the circle goes on
+    # there: the label stands halfway along the span (bp 5000 or 5250), not on the centre of one side (OV-2654).
+    (text,) = _label_item("circular", 5001, kind=kind).iter(f"{_SVG}text")
+    x, y = float(text.get("x", "nan")), float(text.get("y", "nan"))
+    angle = math.degrees(math.atan2(x, -y)) % 360.0
+
+    assert min(abs(angle - degrees), 360.0 - abs(angle - degrees)) == pytest.approx(0.0, abs=0.5)
 
 
 def test_linear_label_with_a_display_start_stands_on_the_centre_of_the_mark() -> None:
