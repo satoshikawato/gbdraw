@@ -189,7 +189,7 @@ test('the Choose records list of several cards groups its rows by file, sorted a
   };
   const owner = createRecordSelection({
     reactive, computed: Vue.computed,
-    recordsOff: () => [], source: (mode, key) => (mode === 'circular' && key === 'circular' ? source : null),
+    recordsOff: () => [], writeRecordsOff: () => {}, source: (mode, key) => (mode === 'circular' && key === 'circular' ? source : null),
     runUndoable: async (_label, change) => change(), withDialogChoice: (_label, handler) => handler,
     closeAfterDialogChoice: (close) => close(), afterRecordSetChange: () => {}, removeSource: () => true,
     askRemoveSource: () => null, deleteRecordSettings: () => true, prepareRecords: async () => {},
@@ -209,7 +209,7 @@ test('a list of one file has one group without a name, as before', async () => {
   const source = { key: 'f', name: 'f.gb', records: [{ key: 'f-1', recordId: 'x', length: 1 }] };
   const owner = createRecordSelection({
     reactive, computed: Vue.computed,
-    recordsOff: () => [], source: (_mode, key) => (key === 'f' ? source : null),
+    recordsOff: () => [], writeRecordsOff: () => {}, source: (_mode, key) => (key === 'f' ? source : null),
     runUndoable: async (_label, change) => change(), withDialogChoice: (_label, handler) => handler,
     closeAfterDialogChoice: (close) => close(), afterRecordSetChange: () => {}, removeSource: () => true,
     askRemoveSource: () => null, deleteRecordSettings: () => true, prepareRecords: async () => {},

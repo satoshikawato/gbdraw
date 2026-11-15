@@ -6,7 +6,7 @@
 // refresh as ports.
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { circularDrawingRecordSet, circularRecordEntries, circularRecordSelection, formatRecordLength } from '../services/record-options.js';
-import { cardHoldsRecordKey, circularRecordsToDraw, recordKeyExpansion } from '../services/record-draw-selection.js';
+import { cardHoldsRecordKey, circularRecordsOff, circularRecordsToDraw, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { circularSourceInputs } from '../services/input-types.js';
 import { msg, t, tm, tn } from '../utils/i18n.js';
 import { circularRecordLayoutOf } from '../services/one-circle-layout.js';
@@ -154,7 +154,7 @@ export const createCircularRecordPresentation = ({
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
     // The automatic option describes the all-records choice: the ON records it draws.
-    const drawnCount = circularRecordsToDraw(entries, drawing.recordsOff).length;
+    const drawnCount = circularRecordsToDraw(entries, circularRecordsOff(drawing, entries)).length;
     const layout = circularRecordLayoutOf(drawing);
     // OV-379: a source whose records are not read says so, as the Linear select does.
     const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'

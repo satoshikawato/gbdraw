@@ -18,6 +18,7 @@ import { circularSourceInputs } from '../services/input-types.js';
 import { groupLinearSourceRecords, planLinearSourceRemoval } from '../services/linear-sources.js';
 import {
   circularRecordDrawKey,
+  circularRecordsOff,
   heldCardPrefix,
   legacyCircularRecordKeys,
   linearCardHasSettings,
@@ -174,6 +175,26 @@ export const createRecordSettingsSources = ({
   });
   /** OV-2869, OV-2906: see `placeRecordChoices`. @param {DrawingState} drawing */
   const placeCircularRecordChoices = (drawing) => placeRecordChoices(drawing, circularEntriesOf(drawing), () => circularIdentitySources(drawing));
+  /**
+   * The records a drawing leaves OFF as its request draws them, which the Records list and its checkboxes show: a
+   * Circular drawing's also name the records its File cards leave out of their files (`circularRecordsOff`); none
+   * without a drawing.
+   * @param {DrawingState | null} drawing
+   * @returns {readonly string[]}
+   */
+  const drawnRecordsOff = (drawing) => (!drawing ? []
+    : drawing.mode === 'circular' ? circularRecordsOff(drawing, circularEntriesOf(drawing)) : drawing.recordsOff);
+  /**
+   * Writes a drawing's OFF list from a choice of the user, which names every OFF record (`drawnRecordsOff`): a
+   * Circular drawing places the records its cards name first, so none of them comes back ON.
+   * Writes nothing without a drawing.
+   * @param {DrawingState | null} drawing @param {readonly string[]} next
+   */
+  const writeRecordsOff = (drawing, next) => {
+    if (!drawing) return;
+    if (drawing.mode === 'circular') placeCircularRecordChoices(drawing);
+    drawing.recordsOff.splice(0, Infinity, ...next);
+  };
   /** @param {DrawingState} drawing @returns {RecordSettingsOwner[]} */
   const circularRecordSettingsOwners = (drawing) => {
     const discovery = getCircularRecordDiscoveryState(drawing);
@@ -257,7 +278,9 @@ export const createRecordSettingsSources = ({
       })
     };
   };
-  return { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf };
+  return {
+    circularIdentitySources, drawnRecordsOff, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf, writeRecordsOff
+  };
 };
 
 /**

@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { LinearSeqWindow } from './drawing/inputs.js' */
-import { circularRecordsToDraw, namedCardRecordReading } from './record-draw-selection.js';
+import { circularRecordsOff, circularRecordsToDraw } from './record-draw-selection.js';
 /** @import { NamedCardRecords } from './record-draw-selection.js' */
 /** @import { CircularListRecord } from './record-discovery.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -170,7 +170,7 @@ export const resolveCircularRequestRecordSet = ({
     return { recordSelectors, records: [selection.record], omittedRecords: [], presentedCount: 1,
       singlePresentation, selectionFailure };
   }
-  const drawnRecords = circularRecordsToDraw(recordSelectors, [...recordsOff, ...namedCardRecordReading(recordsNamed, recordSelectors).off]);
+  const drawnRecords = circularRecordsToDraw(recordSelectors, circularRecordsOff({ recordsOff, recordsNamed }, recordSelectors));
   const drawn = new Set(drawnRecords);
   return {
     recordSelectors,

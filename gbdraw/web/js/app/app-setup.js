@@ -3333,7 +3333,9 @@ export const createAppSetup = () => {
     setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
 
-  const { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
+  const {
+    circularIdentitySources, drawnRecordsOff, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf, writeRecordsOff
+  } = createRecordSettingsSources({
     shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearCardRecord,
     linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
     takeBackRuleRows: featureActions.takeBackRuleRows
@@ -3347,12 +3349,10 @@ export const createAppSetup = () => {
   const recordSelection = createRecordSelection({
     reactive,
     computed,
-    // The OFF list of the shown drawing when it is of `listMode` (every port
-    // here acts on the shown drawing; the lists and checkboxes are in its panel).
-    recordsOff: (listMode) => {
-      const drawing = shownDrawingOfMode(listMode);
-      return drawing ? drawing.recordsOff : [];
-    },
+    // The OFF records of the shown drawing when it is of `listMode`, as it draws them (every port here acts on the
+    // shown drawing; the lists and checkboxes are in its panel).
+    recordsOff: (listMode) => drawnRecordsOff(shownDrawingOfMode(listMode)),
+    writeRecordsOff: (listMode, next) => writeRecordsOff(shownDrawingOfMode(listMode), next),
     source: recordSourceOf,
     runUndoable: history.runUndoable,
     withDialogChoice: dialogChoice.withHistory,

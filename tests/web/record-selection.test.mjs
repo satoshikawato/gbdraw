@@ -29,6 +29,7 @@ const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, request
     reactive,
     computed,
     recordsOff: (mode) => offLists[mode],
+    writeRecordsOff: (mode, next) => { offLists[mode].splice(0, Infinity, ...next); },
     source: (mode, key) => sources[mode]?.find((entry) => entry.key === key) || null,
     runUndoable: async (label, change) => { log.push(`step:${label}`); return change(); },
     withDialogChoice: (label, handler, cancel) => (value) => {

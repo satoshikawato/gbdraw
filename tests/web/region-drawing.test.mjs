@@ -984,6 +984,24 @@ test('an Undo of a step made before the read keeps the named records drawn alone
   assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
 });
 
+// The screen shows what the figure draws: after an Undo across the first read, the Records list, the Record Order
+// rows and the drawn count read the records the cards name, as the request does (`circularRecordsOff`).
+test('after an Undo across the first read the Records list shows the records a card leaves out as OFF', async () => {
+  const made = await loadNamedCanvas('circular-undo-list');
+  app.selectDrawing(made.id);
+  await history.runUndoable('Change setting', () => { made.form.plot_title = 'Listed'; return true; });
+  await app.readShownRecords('circular');
+  await history.undo();
+  const [{ uid }] = made.circularSources;
+  assert.deepEqual([...made.recordsOff], [], 'the Undo gave back the draft before the placement');
+  assert.deepEqual([1, 2, 3].map((k) => app.recordSelection.isDrawn('circular', `${uid}:${k}`)), [true, false, true]);
+  assert.equal(app.circularDrawnRecordCount.value, 2);
+  // Turning recB ON there draws all three: the choice names every OFF record, the named records placed first.
+  await app.recordSelection.setRecordsDrawn('circular', 'circular', [`${uid}:2`], true);
+  assert.deepEqual([[...made.recordsOff], made.recordsNamed], [[], []]);
+  assert.deepEqual(await projectedRecordIds(made), ['recA.1', 'recB.1', 'recD.1']);
+});
+
 // S1: Reset this drawing keeps which records are drawn (OV-1249), placed or not.
 for (const readFirst of [false, true]) {
   test(`Reset this drawing keeps the named records of a Loaded canvas off (${readFirst ? 'after' : 'before'} its read)`, async () => {
@@ -1175,6 +1193,35 @@ test('a paste into a Loaded canvas that was never read keeps the records it leav
   const drawn = await drawnCircularRecordIds(target);
   assert.ok(!drawn.includes('recB.1') && drawn.includes('recA.1') && drawn.includes('recD.1'), JSON.stringify(drawn));
   app.selectDrawing(source.id);
+});
+
+// A pasted File card whose read failed keeps the records it names, under keys of the target (the identities the
+// placement would give them): its records and their places collide with none of the target's, whose own named
+// records also have the request keys `record-1` and `record-2`.
+test('a paste whose card was not read names its records and their places apart from the target\'s', async () => {
+  const target = await loadNamedCanvas('circular-c-paste');
+  const pastedFile = circularSource(['recX', 'recY', 'recZ'].map((name, index) => genbankRecord(name, 800 + index * 100, [[101, 400, `${name}1`]])),
+    { multi_record_canvas: true });
+  const { envelope } = await projectOf(pastedFile);
+  const resourceId = Object.keys(envelope.resources).find((key) => envelope.resources[key].kind === 'genbank');
+  const renderRequest = structuredClone(envelope.renderRequest);
+  renderRequest.records = [0, 2].map((index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index === 0 ? 1 : 2}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordIndex', index }, source: { kind: 'genbank', resourceId }
+  }));
+  renderRequest.layout = { ...renderRequest.layout, multiRecordPositions: ['#1@3', '#2@4'] };
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  assert.deepEqual(prepared.repairs, []);
+  installPastedRecords(target, { prepared, pastedRecordKeys: new Set(['record-1', 'record-2']), pastedCards: 1 });
+  const { uid } = target.circularSources[1];
+  assert.deepEqual(target.recordsNamed.map(({ uid: card, named }) => [card, named.map(({ recordKey }) => recordKey)]),
+    [[target.circularSources[0].uid, ['record-1', 'record-2']], [uid, [`${uid}:1`, `${uid}:3`]]]);
+  assert.deepEqual(target.adv.multi_record_positions.filter(({ selector }) => selector.startsWith(uid)),
+    [{ selector: `${uid}:1`, row: 3 }, { selector: `${uid}:3`, row: 4 }]);
+  const keys = (await projectOf(target)).envelope.renderRequest.records.map(({ recordKey }) => recordKey);
+  assert.equal(new Set(keys).size, keys.length, JSON.stringify(keys));
+  assert.deepEqual(await projectedRecordIds(target), ['recA.1', 'recD.1', 0, 2]);
+  app.selectDrawing(pastedFile.id);
 });
 
 test('a paste into a Linear drawing appends the pasted region with its edits; the target keeps its own', async () => {

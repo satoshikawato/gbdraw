@@ -216,6 +216,47 @@ await test('a record turned ON after the read of a stored canvas of some records
   }
 });
 
+// Save then Load draws the records each card draws, in every mix of cards placed by their read and cards that still
+// name some records of their files (`recordsNamed`): a stored grid of TESTA of TESTA/TESTB, R3c of R2c/R3c and the
+// mitogenome, whose drawing then holds the mix.
+const sharedBlock = path.join(root, 'tests/fixtures/web_comparison_shared_block.gb');
+for (const [name, mix] of [
+  ['the first card placed with TESTB OFF, the second still named', ([first, second]) => ({ off: [`${first}:2`], named: [second] })],
+  ['the first card placed with every record ON, the second still named', ([, second]) => ({ off: [], named: [second] })],
+  ['the first card still named, the second placed with every record ON', ([first]) => ({ off: [], named: [first] })],
+  ['both cards placed, R2c ON again', ([first]) => ({ off: [`${first}:2`], named: [] })]
+]) {
+  await test(`Save then Load draws each card's records: ${name}`, async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-mix-'));
+    try {
+      const { bytes } = await cliSession(directory, ['--gbk', twoRecords, sharedBlock, mito, '--multi_record_canvas']);
+      const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+      const named = withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+        const [testa, , , r3c, mitoRecord] = view.renderRequest.records;
+        view.renderRequest.records = [{ ...testa, selector: { kind: 'recordId', value: 'TESTA' } },
+          { ...r3c, selector: { kind: 'recordId', value: 'R3c' } }, mitoRecord];
+      });
+      assert.equal((await load(await writeSessionFile(named, resourceBytes))).status, 'ok');
+      const recordIdsOf = (records) => records.map(({ selector }) => selector?.value ?? selector?.index ?? null);
+      assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', 'R3c', null]);
+      const drawing = modeDrawing(state, 'circular');
+      const uids = drawing.circularSources.map(({ uid }) => uid);
+      const { off, named: namedCards } = mix(uids);
+      const cards = drawing.recordsNamed.filter(({ uid }) => namedCards.includes(uid));
+      drawing.recordsOff.splice(0, Infinity, ...off);
+      drawing.recordsNamed.splice(0, Infinity, ...cards);
+      const drawn = recordIdsOf(await nextGenerateRecords());
+      const result = await sessionConfig.exportSession('mix', { shownDrawing: state.activeDrawing,
+        readOfDrawing: (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore().readOfDrawing, askChoice: async () => 'download' });
+      assert.equal(result?.status, 'saved', JSON.stringify(result));
+      assert.equal((await load(result.blob)).status, 'ok');
+      assert.deepEqual(recordIdsOf(await nextGenerateRecords()), drawn, 'the Load draws what the drawing drew');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
 // The Web side of the cards (DESIGN section 7, failing-first tests 2, 3, 6, 7,
 // 8 and 9): a record's identity is its card's uid with its place in that
 // card's file, so edits of other cards move none of its rows.
