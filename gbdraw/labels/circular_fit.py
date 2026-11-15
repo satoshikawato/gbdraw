@@ -56,6 +56,7 @@ from .fit import (
     DEFINITION_ROW_KINDS,
     FITS,
     OFFERED_ROW_STATUSES,
+    REFUSED_LABEL_KINDS,
     REGION_WARNING_FIELDS,
     FONT_LIMIT_PT,
     FONT_SIZE_PATHS,
@@ -868,7 +869,7 @@ def _fit_records(layouts: Sequence[CircularLabelLayout]) -> tuple[LabelFitRecord
             label_count=int(layout.label_counts.get(kind, 0)),
             font_size=_kind_font_size(layout, kind),
             fit=layout.kind_fits.get(kind, FITS),
-            refused=layout.refused and kind not in _UNMOVED_LABEL_KINDS,
+            refused=layout.refused and kind in REFUSED_LABEL_KINDS,
             record_index=layout.record_index,
             capacity=layout.capacity.get(kind),
         )

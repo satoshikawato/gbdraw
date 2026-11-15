@@ -162,6 +162,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("LABEL_FIT_PLAIN_REASON_KINDS", "gbdraw.labels.fit", "PLAIN_REASON_KINDS"),
     # The label kinds of a record line and the counts the notice bar names: the Web words each (OV-3515).
     ("LABEL_FIT_LABEL_KINDS", "gbdraw.labels.fit", "LABEL_KINDS"),
+    ("LABEL_FIT_REFUSED_LABEL_KINDS", "gbdraw.labels.fit", "REFUSED_LABEL_KINDS"),
     ("LABEL_FIT_NOTICE_FIELDS", "gbdraw.labels.fit", "NOTICE_FIELDS"),
     ("LINEAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.linear", "LINEAR_SLOT_UNREAD_PARAM_KEYS"),
     # The media type a Session writer stores for a resource kind gbdraw makes, and for an input file (OV-2964).

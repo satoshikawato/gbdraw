@@ -890,6 +890,21 @@ test('the Web words exactly the label kinds whose room Python reads, in Python\'
   assert.ok(Object.isFrozen(LABEL_CAPACITY_KINDS));
 });
 
+test('the Web words exactly the label kinds Python can refuse, in Python\'s order', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { LABEL_FIT_REFUSED_LABEL_KINDS } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const { labelFitRecordText } = await import('../../gbdraw/web/js/services/label-fit.js');
+  const fit = await readFile(new URL('../../gbdraw/labels/fit.py', import.meta.url), 'utf8');
+  const literal = fit.match(/^RefusedLabelKind: TypeAlias = Literal\[([^\]]+)\]$/m)?.[1] || '';
+  const kinds = [...literal.matchAll(/"([a-z_]+)"/g)].map(([, kind]) => kind);
+  assert.deepEqual(kinds, ['circular_outer', 'circular_inner', 'circular_embedded']);
+  assert.deepEqual([...LABEL_FIT_REFUSED_LABEL_KINDS], kinds);
+  for (const labelKind of kinds) {
+    const line = labelFitRecordText({ labelKind, labelCount: 1, fontSize: 8, refused: true, capacity: null, counts: [] });
+    assert.match(line, /needs more room than the circular tracks leave/, labelKind);
+  }
+});
+
 test('the dialog over a capacity stop lists the remedies in Python\'s order, no rows, and only Close', async () => {
   const { readFile } = await import('node:fs/promises');
   const { dialog, steps, writes, generates } = dialogHarness();
@@ -928,7 +943,7 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
   // Every record line reads in the Web's words (OV-2179, OV-3515), the record ID in bold at its slot; an item is keyed
   // by the record's identity and label kind, not by its words.
-  assert.match(markup, /<li v-for="record in labelFitDialog\.records" :key="`\$\{record\.recordIndex\}:\$\{record\.recordId\}:\$\{record\.labelKind\}`">\s*<i18n-text :text="record\.line"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<\/li>/);
+  assert.match(markup, /<li v-for="\(record, position\) in labelFitDialog\.records" :key="`\$\{position\}:\$\{record\.recordIndex\}:\$\{record\.recordId\}:\$\{record\.labelKind\}`">\s*<i18n-text :text="record\.line"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<\/li>/);
 });
 
 // At a requested size the figure_size remedy names Python's estimate and the control (issue #1427, D-14).

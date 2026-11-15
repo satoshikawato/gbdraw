@@ -1621,3 +1621,15 @@ def test_dense_map_whose_spaced_rows_cross_draws_as_before(
     # with no drawn overlap). OV-1823 steps six labels out, so 1 leader runs through another label's letters
     # (origin/dev f5992e64a: 3). Before, the digest of origin/dev 3d748b78 (before OV-479) was cf67ec84...
     assert digest == (108, "b5b4275737da5e3af8fa8a8a48964c13769ad0950df6d1a17e406bb74d86bbbe")
+
+
+def test_refused_and_unmoved_label_kinds_split_the_circular_kinds() -> None:
+    """The kinds a record can be refused for and the kinds no label row moves are disjoint and together are the
+    Circular kinds, so a Circular kind is in exactly one of them (the Web reads the first from the generated
+    ``LABEL_FIT_REFUSED_LABEL_KINDS``)."""
+
+    from gbdraw.labels.circular_fit import _UNMOVED_LABEL_KINDS
+    from gbdraw.labels.fit import LABEL_KINDS, REFUSED_LABEL_KINDS
+
+    assert not set(REFUSED_LABEL_KINDS) & _UNMOVED_LABEL_KINDS
+    assert set(REFUSED_LABEL_KINDS) | _UNMOVED_LABEL_KINDS == {kind for kind in LABEL_KINDS if kind.startswith("circular_")}

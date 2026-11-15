@@ -19,7 +19,7 @@
 import { diagnosticError, isFigureLengthText } from '../utils/error-normalization.js';
 import { joinSentences, listText, msg, numberText, t, tn } from '../utils/i18n.js';
 import {
-  LABEL_FIT_FIELDS, LABEL_FIT_LABEL_KINDS, LABEL_FIT_LIMIT_REASON_KINDS, LABEL_FIT_NOTE_FIELDS, LABEL_FIT_NOTICE_FIELDS,
+  LABEL_FIT_FIELDS, LABEL_FIT_LABEL_KINDS, LABEL_FIT_LIMIT_REASON_KINDS, LABEL_FIT_NOTE_FIELDS, LABEL_FIT_NOTICE_FIELDS, LABEL_FIT_REFUSED_LABEL_KINDS,
   LABEL_FIT_OFFERED_ROW_STATUSES, LABEL_FIT_PLAIN_REASON_KINDS, LABEL_FIT_REGION_WARNING_FIELDS
 } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
@@ -59,6 +59,7 @@ import {
  */
 /** @typedef {typeof LABEL_FIT_REGION_WARNING_FIELDS[number]} LabelFitRegionField A region label warning. */
 /** @typedef {typeof LABEL_FIT_LABEL_KINDS[number]} LabelFitLabelKind A record's label kind (Python's `LabelKind`). */
+/** @typedef {typeof LABEL_FIT_REFUSED_LABEL_KINDS[number]} LabelFitRefusedKind A kind a record can be refused for (Python's `RefusedLabelKind`). */
 /**
  * @typedef {typeof LABEL_FIT_NOTICE_FIELDS[number]} LabelFitNoticeField A count the notice bar over a drawn figure
  *   names (Python's `NOTICE_FIELDS`).
@@ -401,23 +402,23 @@ const LABEL_FIT_RECORD_WORDS = Object.freeze({
 /**
  * The line for radial labels that need more room than the circular tracks leave (OV-699), by the kinds Python refuses
  * (the Circular kinds a label row moves). A report that refuses another kind is invalid.
+ * @type {Readonly<Record<LabelFitRefusedKind, (count: number, params: Record<string, string>) => string>>}
  */
 const LABEL_FIT_REFUSED_WORDS = Object.freeze({
-  /** @param {number} count @param {Record<string, string>} params */
   circular_outer: (count, params) => tn(count,
     '{record}: {count} radial outer label at {size} pt (it needs more room than the circular tracks leave)',
     '{record}: {count} radial outer labels at {size} pt (they need more room than the circular tracks leave)', params),
-  /** @param {number} count @param {Record<string, string>} params */
   circular_inner: (count, params) => tn(count,
     '{record}: {count} radial inner label at {size} pt (it needs more room than the circular tracks leave)',
     '{record}: {count} radial inner labels at {size} pt (they need more room than the circular tracks leave)', params),
-  /** @param {number} count @param {Record<string, string>} params */
   circular_embedded: (count, params) => tn(count,
     '{record}: {count} radial embedded label at {size} pt (it needs more room than the circular tracks leave)',
     '{record}: {count} radial embedded labels at {size} pt (they need more room than the circular tracks leave)', params)
 });
-/** @param {string} kind @returns {kind is keyof typeof LABEL_FIT_REFUSED_WORDS} */
-const isRefusedKind = (kind) => Object.hasOwn(LABEL_FIT_REFUSED_WORDS, kind);
+/** @type {ReadonlySet<string>} */
+const REFUSED_KINDS = new Set(LABEL_FIT_REFUSED_LABEL_KINDS);
+/** @param {string} kind @returns {kind is LabelFitRefusedKind} */
+const isRefusedKind = (kind) => REFUSED_KINDS.has(kind);
 
 /**
  * The dialog's line for a record, with `{record}` left for its slot: the room labels not placed need

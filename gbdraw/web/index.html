@@ -9706,7 +9706,7 @@
                 ? t('The figure is drawn.')
                 : t('Nothing was drawn.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
-                <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKind}`">
+                <li v-for="(record, position) in labelFitDialog.records" :key="`${position}:${record.recordIndex}:${record.recordId}:${record.labelKind}`">
                     <i18n-text :text="record.line"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
                 </li>
             </ul>

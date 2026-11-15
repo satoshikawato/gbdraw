@@ -319,6 +319,10 @@ export const LABEL_FIT_PLAIN_REASON_KINDS = Object.freeze(['outer_labels_only', 
 /** @type {readonly ['circular_outer', 'circular_inner', 'circular_embedded', 'circular_region', 'circular_definition', 'linear', 'linear_region']} */
 export const LABEL_FIT_LABEL_KINDS = Object.freeze(['circular_outer', 'circular_inner', 'circular_embedded', 'circular_region', 'circular_definition', 'linear', 'linear_region']);
 
+// gbdraw/labels/fit.py: REFUSED_LABEL_KINDS
+/** @type {readonly ['circular_outer', 'circular_inner', 'circular_embedded']} */
+export const LABEL_FIT_REFUSED_LABEL_KINDS = Object.freeze(['circular_outer', 'circular_inner', 'circular_embedded']);
+
 // gbdraw/labels/fit.py: NOTICE_FIELDS
 /** @type {readonly ['crossing_pairs', 'definition_overlaps', 'region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out', 'definition_track_overlaps']} */
 export const LABEL_FIT_NOTICE_FIELDS = Object.freeze(['crossing_pairs', 'definition_overlaps', 'region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out', 'definition_track_overlaps']);

@@ -50,6 +50,10 @@ LABEL_KINDS: tuple[LabelKind, ...] = get_args(LabelKind)
 # The label kinds whose room is read before they are placed (CAPACITY-STOP, CAPACITY-WARN): Circular horizontal labels.
 # The Web words each by id (`LABEL_CAPACITY_KIND_WORDS` in gbdraw/web/js/services/label-fit.js, OV-2179).
 HorizontalLabelKind: TypeAlias = Literal["circular_outer", "circular_inner"]
+# The label kinds a record can be refused for (OV-699): the Circular kinds a label row moves. The Web words each
+# (`LABEL_FIT_REFUSED_WORDS` in gbdraw/web/js/services/label-fit.js, OV-3515).
+RefusedLabelKind: TypeAlias = Literal["circular_outer", "circular_inner", "circular_embedded"]
+REFUSED_LABEL_KINDS: tuple[RefusedLabelKind, ...] = get_args(RefusedLabelKind)
 LabelFitOutcome: TypeAlias = Literal["fits", "warn", "stop"]
 LabelFitRowKind: TypeAlias = Literal[
     "outward_both",
@@ -706,43 +710,43 @@ class LabelFitReport:
 
     @property
     def overlap_pairs(self) -> int:
-        return sum(record.fit.overlap_pairs for record in self.records)
+        return self.count("overlap_pairs")
 
     @property
     def crossing_pairs(self) -> int:
-        return sum(record.fit.crossing_pairs for record in self.records)
+        return self.count("crossing_pairs")
 
     @property
     def definition_overlaps(self) -> int:
-        return sum(record.fit.definition_overlaps for record in self.records)
+        return self.count("definition_overlaps")
 
     @property
     def region_overlaps(self) -> int:
-        return sum(record.fit.region_overlaps for record in self.records)
+        return self.count("region_overlaps")
 
     @property
     def region_cuts(self) -> int:
-        return sum(record.fit.region_cuts for record in self.records)
+        return self.count("region_cuts")
 
     @property
     def region_cuts_left_out(self) -> int:
-        return sum(record.fit.region_cuts_left_out for record in self.records)
+        return self.count("region_cuts_left_out")
 
     @property
     def region_track_overlaps(self) -> int:
-        return sum(record.fit.region_track_overlaps for record in self.records)
+        return self.count("region_track_overlaps")
 
     @property
     def definition_track_overlaps(self) -> int:
-        return sum(record.fit.definition_track_overlaps for record in self.records)
+        return self.count("definition_track_overlaps")
 
     @property
     def region_rooms_past_centre(self) -> int:
-        return sum(record.fit.region_rooms_past_centre for record in self.records)
+        return self.count("region_rooms_past_centre")
 
     @property
     def region_rooms_clipped(self) -> int:
-        return sum(record.fit.region_rooms_clipped for record in self.records)
+        return self.count("region_rooms_clipped")
 
     @property
     def room_remedies(self) -> tuple[LabelCapacityRemedy, ...]:
@@ -1208,7 +1212,9 @@ __all__ = [
     "LabelFitCounts",
     "LabelFitField",
     "OFFERED_ROW_STATUSES",
+    "REFUSED_LABEL_KINDS",
     "REGION_WARNING_FIELDS",
+    "RefusedLabelKind",
     "RegionWarningField",
     "LabelFitOutcome",
     "LabelFitRecord",
