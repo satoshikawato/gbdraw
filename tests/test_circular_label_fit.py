@@ -60,7 +60,7 @@ from gbdraw.labels.fit import (
     UnfitReason,
     fit_counts,
     format_label_fit_report,
-    label_fit_notice,
+    label_fit_notice_counts,
     label_fit_outcome,
     label_fits_by_kind,
     overlapping_pairs,
@@ -1319,7 +1319,7 @@ def test_region_labels_over_other_labels_warn_with_no_fix_and_never_stop() -> No
     with pytest.warns(LabelLeadersCrossWarning) as caught:
         report = check_linear_label_fit(label_fit, _no_values, features_separated=False)
     assert report is not None and report.drawn and report.region_overlaps == 7 and report.rows == ()
-    assert label_fit_notice(report) == ("Region labels overlap other labels or lines (7).",)
+    assert label_fit_notice_counts(report) == (("region_overlaps", 7),)
     assert str(caught[0].message) == "rec: 3 region labels do not fit at 14 pt (7 region label overlaps). The figure is drawn."
 
 

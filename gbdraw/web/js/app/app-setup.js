@@ -34,7 +34,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
 import { ONE_CIRCLE_LIMITS } from '../services/one-circle-layout.js';
 import { catalogNameIndex } from '../services/feature-catalog.js';
-import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
+import { labelCapacityNoticeText, labelFitNoticeText } from '../services/label-fit.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { PNG_DPI_CHOICES } from '../services/session-active-config-contract.js';
 import { createSettingsPaneController } from './settings-pane.js';
@@ -3498,7 +3498,7 @@ export const createAppSetup = () => {
     runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
     ...labelFitTemplate,
-    labelCapacityText,
+    labelFitNoticeText,
     labelFitNotice,
     shownInputSummary,
     shownInputSummaryStale,

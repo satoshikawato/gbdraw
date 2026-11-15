@@ -6944,7 +6944,7 @@
                      role="status" aria-live="polite" aria-atomic="true" data-testid="label-fit-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p class="flex flex-wrap items-center gap-2">
-                        <span v-for="(sentence, index) in labelFitNotice.report.notice" :key="index" class="font-semibold">{{ sentence }}</span>
+                        <span v-for="(sentence, index) in labelFitNoticeText(labelFitNotice.report.notice)" :key="index" class="font-semibold">{{ sentence }}</span>
                         <button v-if="labelFitNotice.report.rows.length" type="button" data-history-ignore class="btn btn-secondary text-xs h-7 px-2" @click="openLabelFitNotice">{{ t('Choose a fix') }}</button>
                     </p>
                 </div>
@@ -9706,9 +9706,8 @@
                 ? t('The figure is drawn.')
                 : t('Nothing was drawn.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
-                <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
-                    <i18n-text v-if="record.capacity" :text="labelCapacityText(record.capacity)"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
-                    <template v-else><span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})</template>
+                <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKind}`">
+                    <i18n-text :text="record.line"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
                 </li>
             </ul>
             <fieldset v-if="labelFitDialog.rows.length" class="mt-3">

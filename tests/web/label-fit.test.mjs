@@ -39,10 +39,11 @@ const foundRow = (kind, value) => row(kind, 'found', {
 });
 const report = (rows, { drawn = false } = {}) => ({
   schema: 1, drawn, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0, regionOverlaps: 0,
-  notice: drawn ? ['Leader lines cross (5 pairs).'] : [],
-  records: [{ recordId: 'NC_1', recordIndex: 0, labelKind: 'circular_outer', labelKindTitle: 'outer labels',
+  notice: drawn ? [{ field: 'crossing_pairs', count: 5 }] : [],
+  records: [{ recordId: 'NC_1', recordIndex: 0, labelKind: 'circular_outer',
     labelCount: 80, fontSize: 18, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
-    regionOverlaps: 0, refused: false, capacityRatio: null, counts: '3 label pairs overlap, 5 leader pairs cross' }],
+    regionOverlaps: 0, refused: false, capacityRatio: null,
+    counts: [{ field: 'overlap_pairs', count: drawn ? 0 : 3 }, { field: 'crossing_pairs', count: 5 }] }],
   rows,
   remedies: []
 });
@@ -90,7 +91,7 @@ test('the failure reader keeps Python\'s rows in order, the record counts, and t
       settings: [{ name: 'Label Mode', unit: '', value: 'Out' }], canvasSize: { width: 900, height: 900 } })];
   const { report: parsed, rowToken } = normalizeLabelFitFailure(failure(report(rows), 'circular:2:0'));
   assert.equal(rowToken, 'circular:2:0');
-  assert.equal(parsed.records[0].counts, '3 label pairs overlap, 5 leader pairs cross');
+  assert.deepEqual(parsed.records[0].counts, [{ field: 'overlap_pairs', count: 3 }, { field: 'crossing_pairs', count: 5 }]);
   assert.deepEqual(parsed.rows[3].values, { 'labels.circular.scope': 'outer' });
   assert.equal(parsed.rows[3].settings[0].value, 'Out');
   assert.deepEqual(parsed.rows.map((item) => [item.kind, item.status]),
@@ -106,17 +107,36 @@ test('the failure reader keeps Python\'s rows in order, the record counts, and t
   assert.ok(Object.isFrozen(parsed.rows[0].values));
 });
 
-test('the notice bar shows Python\'s sentences and has no wording of its own', async () => {
+test('the notice bar words the counts Python names, read by field name, when it is shown (OV-3515)', async () => {
   const { readFile } = await import('node:fs/promises');
+  const { labelFitNoticeText } = await import('../../gbdraw/web/js/services/label-fit.js');
   const parsed = normalizeReport(report([], { drawn: true }));
-  assert.deepEqual(parsed.notice, ['Leader lines cross (5 pairs).']);
+  assert.deepEqual(parsed.notice, [{ field: 'crossing_pairs', count: 5 }]);
   assert.ok(Object.isFrozen(parsed.notice));
+  assert.deepEqual(labelFitNoticeText([{ field: 'crossing_pairs', count: 1 }, { field: 'definition_overlaps', count: 3 },
+    { field: 'region_overlaps', count: 1 }, { field: 'region_cuts', count: 2 }, { field: 'region_track_overlaps', count: 4 },
+    { field: 'region_rooms_past_centre', count: 1 }, { field: 'region_rooms_clipped', count: 2 },
+    { field: 'region_cuts_left_out', count: 1 }, { field: 'definition_track_overlaps', count: 2 }]), [
+    'Leader lines cross (1 pair).',
+    'Labels cover the definition text (3).',
+    'Region labels overlap other labels or lines (1).',
+    'Region labels are cut to fit their circle (2).',
+    'Region labels lie on other tracks: the set track radii leave them no room (4).',
+    'Region labels are left out: there is no room for them before the centre (1).',
+    'Region labels are left out: their clipped slots have no room for them, would cut their letters, or hide their marks (2).',
+    'Region labels are left out: no letter of them fits their circle (1).',
+    'The definition text overlaps a track (2 lines).'
+  ]);
   const invalid = (error) => error.code === 'RESULT_INVALID';
-  assert.throws(() => normalizeReport({ ...report([]), notice: [5] }), invalid);
-  assert.throws(() => normalizeReport({ ...report([]), notice: undefined }), invalid);
+  // Python's former sentences, a field the notice never names (overlapping labels), an unknown field, a bad count.
+  for (const notice of [['Leader lines cross (5 pairs).'], [5], undefined, [{ field: 'overlap_pairs', count: 1 }],
+    [{ field: 'crossings', count: 1 }], [{ field: 'crossing_pairs', count: -1 }], [{ field: 'crossing_pairs' }]]) {
+    assert.throws(() => normalizeReport({ ...report([]), notice }), invalid, JSON.stringify(notice));
+  }
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf("{{ t('Choose a fix') }}</button>"));
-  assert.match(bar, /labelFitNotice\.report\.notice/);
+  // The template words the counts on each render, so the bar follows a change of language.
+  assert.match(bar, /v-for="\(sentence, index\) in labelFitNoticeText\(labelFitNotice\.report\.notice\)"/);
   assert.doesNotMatch(bar, /Leader lines cross|definition text|'pairs'/);
 });
 
@@ -162,10 +182,10 @@ test('a malformed report or row is RESULT_INVALID', () => {
 // lines warns with its count and offers no fix.
 const regionReport = () => ({
   ...report([], { drawn: true }), crossingPairs: 0, regionOverlaps: 1,
-  notice: ['Region labels overlap other labels or lines (1).'],
-  records: [{ recordId: 'adjacent', recordIndex: null, labelKind: 'linear_region', labelKindTitle: 'region label', labelCount: 1,
+  notice: [{ field: 'region_overlaps', count: 1 }],
+  records: [{ recordId: 'adjacent', recordIndex: null, labelKind: 'linear_region', labelCount: 1,
     fontSize: 10, overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 1, refused: false,
-    capacityRatio: null, counts: '1 region label overlap' }]
+    capacityRatio: null, counts: [{ field: 'region_overlaps', count: 1 }] }]
 });
 
 test('a region label report carries its count, and its notice offers no fix without rows (LP-D82)', async () => {
@@ -175,7 +195,7 @@ test('a region label report carries its count, and its notice offers no fix with
   assert.equal(entry.report.regionOverlaps, 1);
   assert.equal(entry.report.records[0].regionOverlaps, 1);
   assert.deepEqual(entry.report.rows, []);
-  assert.deepEqual(entry.report.notice, ['Region labels overlap other labels or lines (1).']);
+  assert.deepEqual(entry.report.notice, [{ field: 'region_overlaps', count: 1 }]);
   const invalid = (error) => error.code === 'RESULT_INVALID';
   assert.throws(() => normalizeReport({ ...regionReport(), regionOverlaps: -1 }), invalid);
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
@@ -403,10 +423,104 @@ test('the Web\'s English for each count and note equals the CLI\'s words in gbdr
   }
 });
 
+// OV-3515: Python sends each record's counts by field name and the counts the notice bar names; the Web words the
+// dialog's record lines and the notice sentences in the shown language, never with Python's words.
+const wordedRecord = (labelKind, labelCount, fontSize, counts, extra = {}) => ({
+  recordId: 'NC_1', recordIndex: 0, labelKind, labelCount, fontSize, overlapPairs: 0, crossingPairs: 0,
+  definitionOverlaps: 0, regionOverlaps: 0, refused: false, capacityRatio: null, counts, ...extra
+});
+const wordedReport = () => ({
+  ...report([], { drawn: true }), crossingPairs: 5,
+  notice: [{ field: 'crossing_pairs', count: 5 }, { field: 'definition_track_overlaps', count: 1 }],
+  records: [
+    wordedRecord('circular_embedded', 3, 14, [{ field: 'overlap_pairs', count: 1 }, { field: 'crossing_pairs', count: 0 }]),
+    wordedRecord('circular_definition', 1, 18, [{ field: 'definition_track_overlaps', count: 1 }]),
+    wordedRecord('circular_inner', 2, 10.5, [{ field: 'overlap_pairs', count: 0 }, { field: 'crossing_pairs', count: 0 }],
+      { refused: true })
+  ]
+});
+
+test('the record lines and the notice sentences are worded from Python\'s counts in the shown language (OV-3515)', async () => {
+  const { labelFitNoticeText } = await import('../../gbdraw/web/js/services/label-fit.js');
+  const japanese = {
+    '{record}: {count} embedded label at {size} pt ({counts})': '{record}：埋め込みラベル {count} 個（{size} pt、{counts}）',
+    '{record}: {count} embedded labels at {size} pt ({counts})': '{record}：埋め込みラベル {count} 個（{size} pt、{counts}）',
+    '{record}: {count} definition line at {size} pt ({counts})': '{record}：定義の行 {count} 行（{size} pt、{counts}）',
+    '{record}: {count} definition lines at {size} pt ({counts})': '{record}：定義の行 {count} 行（{size} pt、{counts}）',
+    '{record}: {count} radial inner label at {size} pt (it needs more room than the circular tracks leave)':
+      '{record}：放射状の内側ラベル {count} 個（{size} pt）は円形トラックの残す余白に収まりません',
+    '{record}: {count} radial inner labels at {size} pt (they need more room than the circular tracks leave)':
+      '{record}：放射状の内側ラベル {count} 個（{size} pt）は円形トラックの残す余白に収まりません',
+    '{count} label pair overlaps': 'ラベル {count} 組が重なっています',
+    '{count} label pairs overlap': 'ラベル {count} 組が重なっています',
+    '{count} leader pair crosses': '引き出し線 {count} 組が交差しています',
+    '{count} leader pairs cross': '引き出し線 {count} 組が交差しています',
+    '{count} line overlaps a track': '{count} 行がトラックに重なっています',
+    '{count} lines overlap a track': '{count} 行がトラックに重なっています',
+    'Leader lines cross ({count} pair).': '引き出し線が交差しています（{count} 組）。',
+    'Leader lines cross ({count} pairs).': '引き出し線が交差しています（{count} 組）。',
+    'The definition text overlaps a track ({count} line).': '定義のテキストがトラックに重なっています（{count} 行）。',
+    'The definition text overlaps a track ({count} lines).': '定義のテキストがトラックに重なっています（{count} 行）。'
+  };
+  const shown = async () => {
+    const parsed = normalizeReport(wordedReport());
+    const { dialog } = dialogHarness();
+    await dialog.openLabelFitDialog(parsed, { drawing });
+    return { lines: dialog.labelFitDialog.records.map(({ line }) => line), notice: labelFitNoticeText(parsed.notice) };
+  };
+  assert.deepEqual(await shown(), {
+    lines: [
+      '{record}: 3 embedded labels at 14 pt (1 label pair overlaps and 0 leader pairs cross)',
+      '{record}: 1 definition line at 18 pt (1 line overlaps a track)',
+      '{record}: 2 radial inner labels at 10.5 pt (they need more room than the circular tracks leave)'
+    ],
+    notice: ['Leader lines cross (5 pairs).', 'The definition text overlaps a track (1 line).']
+  });
+  const page = globalThis.document;
+  globalThis.document = undefined;
+  try {
+    await setUiLocale('ja', async () => ({ default: japanese }));
+    assert.deepEqual(await shown(), {
+      lines: [
+        '{record}：埋め込みラベル 3 個（14 pt、ラベル 1 組が重なっています、引き出し線 0 組が交差しています）',
+        '{record}：定義の行 1 行（18 pt、1 行がトラックに重なっています）',
+        '{record}：放射状の内側ラベル 2 個（10.5 pt）は円形トラックの残す余白に収まりません'
+      ],
+      notice: ['引き出し線が交差しています（5 組）。', '定義のテキストがトラックに重なっています（1 行）。']
+    });
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+    globalThis.document = page;
+  }
+});
+
+test('each record line names its label kind as the CLI does, and a record of another shape is RESULT_INVALID (OV-3515)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { labelFitRecordText } = await import('../../gbdraw/web/js/services/label-fit.js');
+  const fit = await readFile(new URL('../../gbdraw/labels/fit.py', import.meta.url), 'utf8');
+  const block = fit.match(/^_KIND_WORDS: Mapping\[LabelKind, str\] = \{\n([\s\S]*?)^\}/m)?.[1] || '';
+  const kindWords = [...block.matchAll(/"([a-z_]+)": "([^"]+)"/g)].map(([, kind, words]) => ({ kind, words }));
+  assert.equal(kindWords.length, 7);
+  const counts = [{ field: 'overlap_pairs', count: 1 }];
+  for (const { kind, words } of kindWords) {
+    const noun = kind === 'circular_definition' ? 'line' : 'label';
+    const [parsed] = normalizeReport({ ...wordedReport(), records: [wordedRecord(kind, 2, 8, counts)] }).records;
+    assert.equal(labelFitRecordText(parsed), `{record}: 2 ${words} ${noun}s at 8 pt (1 label pair overlaps)`, kind);
+    assert.equal(labelFitRecordText({ ...parsed, labelCount: 1 }), `{record}: 1 ${words} ${noun} at 8 pt (1 label pair overlaps)`, kind);
+  }
+  const invalid = (error) => error.code === 'RESULT_INVALID';
+  for (const record of [wordedRecord('circular_side', 1, 8, counts), wordedRecord('circular_outer', 1, 8, '1 label pair overlaps'),
+    wordedRecord('circular_outer', 1, 8, [{ field: 'overlaps', count: 1 }]),
+    // Python refuses only the radial labels a label row moves.
+    wordedRecord('circular_definition', 1, 8, counts, { refused: true }), wordedRecord('linear', 1, 8, counts, { refused: true })]) {
+    assert.throws(() => normalizeReport({ ...wordedReport(), records: [record] }), invalid, JSON.stringify(record));
+  }
+});
+
 const definitionRecord = (recordId, recordIndex) => ({
-  recordId, recordIndex, labelKind: 'circular_definition', labelKindTitle: 'definition lines', labelCount: 1, fontSize: 18,
+  recordId, recordIndex, labelKind: 'circular_definition', labelCount: 1, fontSize: 18,
   overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 0, refused: false, capacityRatio: null,
-  counts: '1 line overlaps a track'
+  counts: [{ field: 'definition_track_overlaps', count: 1 }]
 });
 
 test('Edit Species / Strain closes the dialog, applies nothing, and shows that record\'s field by its index (E-b)', async () => {
@@ -439,9 +553,14 @@ test('the dialog shows each report record\'s display fields in order, and one de
   const parsed = normalizeReport(drawn);
   assert.notEqual(parsed.records[0].capacity, null);
   await dialog.openLabelFitDialog(parsed, { mode: 'circular' });
-  const shownFields = ['recordId', 'recordIndex', 'labelKind', 'labelKindTitle', 'labelCount', 'fontSize', 'counts', 'capacity'];
-  assert.deepEqual(dialog.labelFitDialog.records,
-    parsed.records.map((record) => Object.fromEntries(shownFields.map((field) => [field, record[field]]))));
+  assert.deepEqual(dialog.labelFitDialog.records, [
+    { recordId: 'NC_1', recordIndex: 0, labelKind: 'circular_outer',
+      line: '{record}: 80 outer labels at 18 pt need about 2.5 times the room around the map' },
+    { recordId: 'NC_2', recordIndex: 1, labelKind: 'circular_definition',
+      line: '{record}: 1 definition line at 18 pt (1 line overlaps a track)' },
+    { recordId: 'NC_3', recordIndex: 1, labelKind: 'circular_definition',
+      line: '{record}: 1 definition line at 18 pt (1 line overlaps a track)' }
+  ]);
   // The first record drawn at an index keeps its button.
   assert.deepEqual(dialog.labelFitDialog.definitionRecords, [{ recordIndex: 1, recordId: 'NC_2' }]);
 });
@@ -680,7 +799,7 @@ const capacityReport = (remedies = CAPACITY_REMEDIES, capacityRatio = 2.5) => {
   const value = report([]);
   return { ...value, overlapPairs: 0, crossingPairs: 0, remedies,
     records: [{ ...value.records[0], recordId: 'AP027078.1', labelCount: 562, fontSize: 8, overlapPairs: 0,
-      crossingPairs: 0, capacityRatio, counts: 'need about 2.5 times the room around the map' }] };
+      crossingPairs: 0, capacityRatio, counts: [{ field: 'overlap_pairs', count: 0 }, { field: 'crossing_pairs', count: 0 }] }] };
 };
 
 test('a capacity stop carries each record\'s ratio and Python\'s remedies; an unknown remedy is RESULT_INVALID', () => {
@@ -689,7 +808,6 @@ test('a capacity stop carries each record\'s ratio and Python\'s remedies; an un
     { labelKind: 'circular_outer', labelCount: 562, fontSize: 8, capacityRatio: 2.5 });
   assert.ok(Object.isFrozen(parsed.records[0].capacity));
   assert.equal('capacityRatio' in parsed.records[0], false);
-  assert.equal(parsed.records[0].counts, 'need about 2.5 times the room around the map');
   assert.deepEqual(parsed.remedies, CAPACITY_REMEDIES);
   assert.ok(Object.isFrozen(parsed.remedies));
   assert.deepEqual(parsed.rows, []);
@@ -785,8 +903,8 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
     ['Draw a Linear map.', {}]
   ]);
   assert.deepEqual(state.rows, []);
-  assert.deepEqual(state.records.map((record) => [record.recordId, record.capacity]),
-    [['AP027078.1', { labelKind: 'circular_outer', labelCount: 562, fontSize: 8, capacityRatio: 2.5 }]]);
+  assert.deepEqual(state.records.map((record) => [record.recordId, record.line]),
+    [['AP027078.1', '{record}: 562 outer labels at 8 pt need about 2.5 times the room around the map']]);
   assert.equal(state.selectedKind, '');
   await dialog.resolveLabelFitChoice('cancel');
   assert.equal(state.show, false);
@@ -795,7 +913,8 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
   assert.equal(state.capacity, false);
   assert.deepEqual(state.remedies, []);
-  assert.deepEqual(state.records.map((record) => record.capacity), [null]);
+  assert.deepEqual(state.records.map((record) => record.line),
+    ['{record}: 80 outer labels at 18 pt (3 label pairs overlap and 5 leader pairs cross)']);
 
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
@@ -807,8 +926,9 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   assert.match(markup, /<p v-else-if="!labelFitDialog\.capacity"[^>]*>\{\{ t\('No setting in this dialog makes these labels fit\.'\) \}\}<\/p>/);
   assert.match(markup, /<button v-if="!labelFitDialog\.capacity" [^>]*@click="resolveLabelFitChoice\('apply'\)"/);
   assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
-  // A record not placed for lack of room reads in the Web's words (OV-2179); other records keep their counts in brackets.
-  assert.match(markup, /<i18n-text v-if="record\.capacity" :text="labelCapacityText\(record\.capacity\)"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<template v-else><span[^>]*>\{\{ record\.recordId \}\}<\/span>: \{\{ record\.labelCount \}\} \{\{ record\.labelKindTitle \}\} at \{\{ record\.fontSize \}\} pt \(\{\{ record\.counts \}\}\)<\/template>/);
+  // Every record line reads in the Web's words (OV-2179, OV-3515), the record ID in bold at its slot; an item is keyed
+  // by the record's identity and label kind, not by its words.
+  assert.match(markup, /<li v-for="record in labelFitDialog\.records" :key="`\$\{record\.recordIndex\}:\$\{record\.recordId\}:\$\{record\.labelKind\}`">\s*<i18n-text :text="record\.line"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<\/li>/);
 });
 
 // At a requested size the figure_size remedy names Python's estimate and the control (issue #1427, D-14).

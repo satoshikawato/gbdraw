@@ -1,7 +1,7 @@
 // @ts-check
 // The label fit report Python sends (gbdraw/web_support/label_fit.py): the one
 // JavaScript reader of it. Python owns every value of the report and the words of
-// each record's counts text, the rows' titles, and the settings a row changes by
+// the rows' titles and the settings a row changes by
 // config path and by request track option, with the canvas sizes (LP-D43, LP-D48). Nothing here places labels or searches values; a row that was not
 // computed is computed by the Worker (`computeLabelFitRow`, OD-F14).
 // The exceptions are the Web's own words for labels that need much more room
@@ -11,14 +11,16 @@
 // A row's title and the names and option words of its settings are English
 // catalog keys: `tools/generate_web_contracts.py` lists them from Python for
 // the catalogs (`tools/i18n/source-keys.mjs`), and the dialog shows them with `tm()`.
-// Why a row has no value and what a row that draws with the notice leaves are
-// Python's data, which the Web words in the shown language: each reason kind
-// with its numbers, each count by its field name (OV-3109).
+// Why a row has no value and what a row that draws with the notice leaves
+// (OV-3109), each record's counts and the counts the notice bar over a drawn
+// figure names (OV-3515) are Python's data, which the Web words in the shown
+// language: each reason kind with its numbers, each record by its label kind,
+// each count by its field name.
 import { diagnosticError, isFigureLengthText } from '../utils/error-normalization.js';
 import { joinSentences, listText, msg, numberText, t, tn } from '../utils/i18n.js';
 import {
-  LABEL_FIT_FIELDS, LABEL_FIT_LIMIT_REASON_KINDS, LABEL_FIT_NOTE_FIELDS, LABEL_FIT_OFFERED_ROW_STATUSES,
-  LABEL_FIT_PLAIN_REASON_KINDS, LABEL_FIT_REGION_WARNING_FIELDS
+  LABEL_FIT_FIELDS, LABEL_FIT_LABEL_KINDS, LABEL_FIT_LIMIT_REASON_KINDS, LABEL_FIT_NOTE_FIELDS, LABEL_FIT_NOTICE_FIELDS,
+  LABEL_FIT_OFFERED_ROW_STATUSES, LABEL_FIT_PLAIN_REASON_KINDS, LABEL_FIT_REGION_WARNING_FIELDS
 } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
 
@@ -56,6 +58,16 @@ import {
  *   its note states in a sentence of its own.
  */
 /** @typedef {typeof LABEL_FIT_REGION_WARNING_FIELDS[number]} LabelFitRegionField A region label warning. */
+/** @typedef {typeof LABEL_FIT_LABEL_KINDS[number]} LabelFitLabelKind A record's label kind (Python's `LabelKind`). */
+/**
+ * @typedef {typeof LABEL_FIT_NOTICE_FIELDS[number]} LabelFitNoticeField A count the notice bar over a drawn figure
+ *   names (Python's `NOTICE_FIELDS`).
+ */
+/**
+ * @typedef {object} LabelFitNoticeCount One count the notice bar names (Python's `LabelFitNoticeCountPayload`).
+ * @property {LabelFitNoticeField} field
+ * @property {number} count
+ */
 /**
  * @typedef {object} LabelFitRemainingCount One count a row that draws with the notice leaves: a note field or a region
  *   label warning (Python's `row_remaining` gives no other field).
@@ -96,8 +108,7 @@ import {
  * @property {string} recordId
  * @property {number | null} recordIndex The index of the record's drawn groups (`data-gbdraw-record-index`), its
  *   identity where two records share an ID; null for a Linear record.
- * @property {string} labelKind
- * @property {string} labelKindTitle
+ * @property {LabelFitLabelKind} labelKind
  * @property {number} labelCount
  * @property {number} fontSize
  * @property {number} overlapPairs
@@ -108,7 +119,8 @@ import {
  * @property {LabelCapacity | null} capacity The room the labels need, when they were not placed (CAPACITY-STOP; from
  *   Python's `capacityRatio` and the record's kind, count and font size), worded by `labelCapacityText`; null
  *   otherwise.
- * @property {string} counts Python's counts, or why the labels were refused.
+ * @property {readonly LabelFitCount[]} counts The counts that state the record's fit, in Python's order; worded by
+ *   `labelFitRecordText` unless the record is `refused` or has a `capacity`.
  */
 /**
  * @typedef {object} LabelFitReport
@@ -117,7 +129,8 @@ import {
  * @property {number} crossingPairs
  * @property {number} definitionOverlaps Labels over the definition text.
  * @property {number} regionOverlaps Region labels over other labels or lines (Linear).
- * @property {readonly string[]} notice Python's sentences for the notice bar over a drawn figure.
+ * @property {readonly LabelFitNoticeCount[]} notice The counts the notice bar over a drawn figure names, in Python's
+ *   order; worded by `labelFitNoticeText`.
  * @property {readonly LabelFitRecord[]} records
  * @property {readonly LabelFitRow[]} rows In the dialog order.
  * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room, in Python's order: for the records not
@@ -363,6 +376,93 @@ export const labelFitRowReasonText = (reason) => {
   }
 };
 
+/**
+ * The dialog's line for a record's labels that do not fit, by Python's label kind (`LabelKind` in
+ * gbdraw/labels/fit.py): a whole sentence per kind and count, with `{record}` left for the dialog's slot (the record ID
+ * in bold) and `{counts}` the record's counts as one list (OV-3515).
+ * @type {Readonly<Record<LabelFitLabelKind, (count: number, params: Record<string, string>) => string>>}
+ */
+const LABEL_FIT_RECORD_WORDS = Object.freeze({
+  circular_outer: (count, params) => tn(count, '{record}: {count} outer label at {size} pt ({counts})',
+    '{record}: {count} outer labels at {size} pt ({counts})', params),
+  circular_inner: (count, params) => tn(count, '{record}: {count} inner label at {size} pt ({counts})',
+    '{record}: {count} inner labels at {size} pt ({counts})', params),
+  circular_embedded: (count, params) => tn(count, '{record}: {count} embedded label at {size} pt ({counts})',
+    '{record}: {count} embedded labels at {size} pt ({counts})', params),
+  circular_region: (count, params) => tn(count, '{record}: {count} region label at {size} pt ({counts})',
+    '{record}: {count} region labels at {size} pt ({counts})', params),
+  circular_definition: (count, params) => tn(count, '{record}: {count} definition line at {size} pt ({counts})',
+    '{record}: {count} definition lines at {size} pt ({counts})', params),
+  linear: (count, params) => tn(count, '{record}: {count} Linear label at {size} pt ({counts})',
+    '{record}: {count} Linear labels at {size} pt ({counts})', params),
+  linear_region: (count, params) => tn(count, '{record}: {count} region label at {size} pt ({counts})',
+    '{record}: {count} region labels at {size} pt ({counts})', params)
+});
+/**
+ * The line for radial labels that need more room than the circular tracks leave (OV-699), by the kinds Python refuses
+ * (the Circular kinds a label row moves). A report that refuses another kind is invalid.
+ */
+const LABEL_FIT_REFUSED_WORDS = Object.freeze({
+  /** @param {number} count @param {Record<string, string>} params */
+  circular_outer: (count, params) => tn(count,
+    '{record}: {count} radial outer label at {size} pt (it needs more room than the circular tracks leave)',
+    '{record}: {count} radial outer labels at {size} pt (they need more room than the circular tracks leave)', params),
+  /** @param {number} count @param {Record<string, string>} params */
+  circular_inner: (count, params) => tn(count,
+    '{record}: {count} radial inner label at {size} pt (it needs more room than the circular tracks leave)',
+    '{record}: {count} radial inner labels at {size} pt (they need more room than the circular tracks leave)', params),
+  /** @param {number} count @param {Record<string, string>} params */
+  circular_embedded: (count, params) => tn(count,
+    '{record}: {count} radial embedded label at {size} pt (it needs more room than the circular tracks leave)',
+    '{record}: {count} radial embedded labels at {size} pt (they need more room than the circular tracks leave)', params)
+});
+/** @param {string} kind @returns {kind is keyof typeof LABEL_FIT_REFUSED_WORDS} */
+const isRefusedKind = (kind) => Object.hasOwn(LABEL_FIT_REFUSED_WORDS, kind);
+
+/**
+ * The dialog's line for a record, with `{record}` left for its slot: the room labels not placed need
+ * (`labelCapacityText`), why radial labels were refused, or the record's counts.
+ * @param {LabelFitRecord} record
+ * @returns {string}
+ */
+export const labelFitRecordText = ({ labelKind, labelCount, fontSize, refused, capacity, counts }) => {
+  if (capacity) return labelCapacityText(capacity);
+  const size = numberText(fontSize);
+  if (refused && isRefusedKind(labelKind)) return LABEL_FIT_REFUSED_WORDS[labelKind](labelCount, { size });
+  return LABEL_FIT_RECORD_WORDS[labelKind](labelCount,
+    { size, counts: listText(counts.map(({ field, count }) => LABEL_FIT_COUNT_WORDS[field](count))) });
+};
+
+/**
+ * The sentence of each count the notice bar over a drawn figure names (Python's `NOTICE_FIELDS`; the Owner's Q8
+ * wording).
+ * @type {Readonly<Record<LabelFitNoticeField, (count: number) => string>>}
+ */
+const LABEL_FIT_NOTICE_WORDS = Object.freeze({
+  crossing_pairs: (count) => tn(count, 'Leader lines cross ({count} pair).', 'Leader lines cross ({count} pairs).'),
+  definition_overlaps: (count) => t('Labels cover the definition text ({count}).', { count }),
+  region_overlaps: (count) => t('Region labels overlap other labels or lines ({count}).', { count }),
+  region_cuts: (count) => t('Region labels are cut to fit their circle ({count}).', { count }),
+  region_track_overlaps: (count) => t(
+    'Region labels lie on other tracks: the set track radii leave them no room ({count}).', { count }),
+  region_rooms_past_centre: (count) => t(
+    'Region labels are left out: there is no room for them before the centre ({count}).', { count }),
+  region_rooms_clipped: (count) => t(
+    'Region labels are left out: their clipped slots have no room for them, would cut their letters, or hide their marks ({count}).',
+    { count }),
+  region_cuts_left_out: (count) => t('Region labels are left out: no letter of them fits their circle ({count}).',
+    { count }),
+  definition_track_overlaps: (count) => tn(count, 'The definition text overlaps a track ({count} line).',
+    'The definition text overlaps a track ({count} lines).')
+});
+
+/**
+ * The notice bar's sentences over a drawn figure, in the shown language: one per count Python names, in its order.
+ * @param {readonly LabelFitNoticeCount[]} notice
+ * @returns {string[]}
+ */
+export const labelFitNoticeText = (notice) => notice.map(({ field, count }) => LABEL_FIT_NOTICE_WORDS[field](count));
+
 const ROW_STATUSES = new Set(['found', 'found_with_notice', 'not_found', 'not_computed']);
 /** @type {ReadonlyMap<string, number>} Python's offered statuses, by preference (0 first). */
 const OFFERED_STATUS_RANK = new Map(LABEL_FIT_OFFERED_ROW_STATUSES.map((status, rank) => [status, rank]));
@@ -401,6 +501,12 @@ const isRemedy = (value) => typeof value === 'string' && Object.hasOwn(LABEL_CAP
 const isRatio = (value) => isNumber(value) && value > 0;
 /** @type {ReadonlySet<string>} */
 const FIELDS = new Set(LABEL_FIT_FIELDS);
+/** @type {ReadonlySet<string>} */
+const NOTICE_FIELDS = new Set(LABEL_FIT_NOTICE_FIELDS);
+/** @type {ReadonlySet<string>} */
+const LABEL_KINDS = new Set(LABEL_FIT_LABEL_KINDS);
+/** @param {unknown} value @returns {value is LabelFitLabelKind} */
+const isLabelKind = (value) => typeof value === 'string' && LABEL_KINDS.has(value);
 /** @type {ReadonlySet<string>} */
 const LIMIT_REASON_KINDS = new Set(LABEL_FIT_LIMIT_REASON_KINDS);
 /** @type {ReadonlySet<string>} */
@@ -489,16 +595,16 @@ const normalizeLabelFitReport = (parsed) => {
   if (!isObject(parsed) || parsed.schema !== 1 || typeof parsed.drawn !== 'boolean'
     || !isCount(parsed.overlapPairs) || !isCount(parsed.crossingPairs) || !isCount(parsed.definitionOverlaps)
     || !isCount(parsed.regionOverlaps)
-    || !Array.isArray(parsed.notice) || !parsed.notice.every((sentence) => typeof sentence === 'string')
     || !Array.isArray(parsed.records) || !Array.isArray(parsed.rows)
     || !Array.isArray(parsed.remedies) || !parsed.remedies.every(isRemedy)) throw invalid();
   const records = parsed.records.map((record) => {
     if (!isObject(record) || typeof record.recordId !== 'string'
-      || !(record.recordIndex === null || isCount(record.recordIndex)) || typeof record.labelKind !== 'string'
-      || typeof record.labelKindTitle !== 'string' || !isCount(record.labelCount)
+      || !(record.recordIndex === null || isCount(record.recordIndex)) || !isLabelKind(record.labelKind)
+      || !isCount(record.labelCount)
       || !isNumber(record.fontSize) || !isCount(record.overlapPairs) || !isCount(record.crossingPairs)
       || !isCount(record.definitionOverlaps) || !isCount(record.regionOverlaps) || typeof record.refused !== 'boolean'
-      || typeof record.counts !== 'string') {
+      // Python refuses only the radial labels a label row moves (OV-699).
+      || (record.refused && !isRefusedKind(record.labelKind))) {
       throw invalid();
     }
     // Only the kinds whose room Python reads carry a ratio.
@@ -513,7 +619,6 @@ const normalizeLabelFitReport = (parsed) => {
       recordId: record.recordId,
       recordIndex: record.recordIndex,
       labelKind: record.labelKind,
-      labelKindTitle: record.labelKindTitle,
       labelCount: record.labelCount,
       fontSize: record.fontSize,
       overlapPairs: record.overlapPairs,
@@ -522,7 +627,7 @@ const normalizeLabelFitReport = (parsed) => {
       regionOverlaps: record.regionOverlaps,
       refused: record.refused,
       capacity,
-      counts: record.counts
+      counts: /** @type {readonly LabelFitCount[]} */ (normalizeCounts(record.counts, FIELDS))
     });
   });
   return Object.freeze({
@@ -531,7 +636,7 @@ const normalizeLabelFitReport = (parsed) => {
     crossingPairs: parsed.crossingPairs,
     definitionOverlaps: parsed.definitionOverlaps,
     regionOverlaps: parsed.regionOverlaps,
-    notice: Object.freeze([...parsed.notice]),
+    notice: /** @type {readonly LabelFitNoticeCount[]} */ (normalizeCounts(parsed.notice, NOTICE_FIELDS)),
     records: Object.freeze(records),
     rows: Object.freeze(parsed.rows.map(normalizeLabelFitRow)),
     remedies: Object.freeze([...parsed.remedies]),

@@ -32,7 +32,7 @@ from gbdraw.labels.fit import (
     LabelFitValue,
     LabelFitVerification,
     format_label_fit_report,
-    label_fit_notice,
+    label_fit_notice_counts,
 )
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -153,7 +153,7 @@ def test_the_notice_names_the_definition_text_over_a_track() -> None:
     record = LabelFitRecord("rec", "circular_definition", 2, 18.0, LabelFit(0, 0, definition_track_overlaps=2))
     report = LabelFitReport(records=(record,), rows=(), drawn=True)
 
-    assert label_fit_notice(report) == ("The definition text overlaps a track (2 lines).",)
+    assert label_fit_notice_counts(report) == (("definition_track_overlaps", 2),)
     assert format_label_fit_report(report).startswith(
         "rec: 2 definition lines do not fit at 18 pt (2 lines overlap a track). The figure is drawn."
     )

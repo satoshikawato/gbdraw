@@ -45,6 +45,8 @@ LabelKind: TypeAlias = Literal[
     "linear",
     "linear_region",
 ]
+# The Web words each record's line by its kind (`LABEL_FIT_RECORD_WORDS` in gbdraw/web/js/services/label-fit.js, OV-3515).
+LABEL_KINDS: tuple[LabelKind, ...] = get_args(LabelKind)
 # The label kinds whose room is read before they are placed (CAPACITY-STOP, CAPACITY-WARN): Circular horizontal labels.
 # The Web words each by id (`LABEL_CAPACITY_KIND_WORDS` in gbdraw/web/js/services/label-fit.js, OV-2179).
 HorizontalLabelKind: TypeAlias = Literal["circular_outer", "circular_inner"]
@@ -697,6 +699,11 @@ class LabelFitReport:
     drawn: bool
     larger_figure: LargerFigure | None = None
 
+    def count(self, field_name: LabelFitField) -> int:
+        """One count of the figure by its field name: the sum over its records."""
+
+        return sum(record.fit.count(field_name) for record in self.records)
+
     @property
     def overlap_pairs(self) -> int:
         return sum(record.fit.overlap_pairs for record in self.records)
@@ -898,39 +905,26 @@ def row_note(row: LabelFitRow) -> str | None:
     return " and ".join(notes) or None
 
 
-def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
-    """The notice bar's sentences over a drawn figure (the Owner's Q8 wording)."""
+# What the notice bar over a drawn figure names, in its order, each when there are any (the Owner's Q8 wording,
+# which the Web words in its language from these counts, OV-3515). A drawn figure has no overlapping labels.
+NoticeField: TypeAlias = Literal[
+    "crossing_pairs",
+    "definition_overlaps",
+    "region_overlaps",
+    "region_cuts",
+    "region_track_overlaps",
+    "region_rooms_past_centre",
+    "region_rooms_clipped",
+    "region_cuts_left_out",
+    "definition_track_overlaps",
+]
+NOTICE_FIELDS: tuple[NoticeField, ...] = get_args(NoticeField)
 
-    sentences: list[str] = []
-    if report.crossing_pairs:
-        sentences.append(f"Leader lines cross ({_counted(report.crossing_pairs, 'pair', 'pairs')}).")
-    if report.definition_overlaps:
-        sentences.append(f"Labels cover the definition text ({report.definition_overlaps}).")
-    if report.region_overlaps:
-        sentences.append(f"Region labels overlap other labels or lines ({report.region_overlaps}).")
-    if report.region_cuts:
-        sentences.append(f"Region labels are cut to fit their circle ({report.region_cuts}).")
-    if report.region_track_overlaps:
-        sentences.append(
-            f"Region labels lie on other tracks: the set track radii leave them no room ({report.region_track_overlaps})."
-        )
-    if report.region_rooms_past_centre:
-        sentences.append(
-            "Region labels are left out: there is no room for them before the centre "
-            f"({report.region_rooms_past_centre})."
-        )
-    if report.region_rooms_clipped:
-        sentences.append(
-            "Region labels are left out: their clipped slots have no room for them, would cut their letters, "
-            f"or hide their marks ({report.region_rooms_clipped})."
-        )
-    if report.region_cuts_left_out:
-        sentences.append(f"Region labels are left out: no letter of them fits their circle ({report.region_cuts_left_out}).")
-    if report.definition_track_overlaps:
-        sentences.append(
-            f"The definition text overlaps a track ({_counted(report.definition_track_overlaps, 'line', 'lines')})."
-        )
-    return tuple(sentences)
+
+def label_fit_notice_counts(report: LabelFitReport) -> tuple[tuple[NoticeField, int], ...]:
+    """The counts the notice bar over a drawn figure names, in its order: each field of ``NOTICE_FIELDS`` with any."""
+
+    return tuple((name, report.count(name)) for name in NOTICE_FIELDS if report.count(name))
 
 
 _RADIAL_REFUSAL = "need more room than the circular tracks leave"
@@ -1033,13 +1027,6 @@ def label_kind_nouns(record: LabelFitRecord) -> tuple[str, str]:
     words = label_kind_words(record)
     noun = "line" if record.label_kind == "circular_definition" else "label"
     return f"{words} {noun}", f"{words} {noun}s"
-
-
-def label_kind_title(record: LabelFitRecord) -> str:
-    """A record's counted items as the Web dialog lists them (``outer labels``, ``definition line``)."""
-
-    singular, plural = label_kind_nouns(record)
-    return singular if record.label_count == 1 else plural
 
 
 def _cli_value(value: LabelFitValue) -> str:
@@ -1209,8 +1196,11 @@ __all__ = [
     "Y_OFFSET_PATH",
     "LABEL_FIT_FIELDS",
     "LIMIT_REASON_KINDS",
+    "LABEL_KINDS",
     "NOTE_FIELDS",
+    "NOTICE_FIELDS",
     "NoteField",
+    "NoticeField",
     "PLAIN_REASON_KINDS",
     "LabelCapacityRecord",
     "LabelCapacityRemedy",
@@ -1252,13 +1242,12 @@ __all__ = [
     "label_fit_error_counts",
     "largest_capacities",
     "label_capacity_sentence",
-    "label_fit_notice",
+    "label_fit_notice_counts",
     "label_fit_outcome",
     "label_fit_record_counts",
     "label_defects",
     "label_fits_by_kind",
     "label_kind_nouns",
-    "label_kind_title",
     "label_kind_words",
     "label_room_remedies",
     "overlapping_pairs",

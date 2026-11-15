@@ -1006,7 +1006,7 @@ def test_circular_annotation_labels_curve_along_the_circle_and_stay_upright(orie
 
 def test_circular_region_label_longer_than_its_circle_is_cut_and_warns() -> None:
     from gbdraw.api.diagram import label_fit_report
-    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.labels.fit import label_fit_notice_counts
     from gbdraw.web_support.label_fit import label_fit_report_payload
 
     record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
@@ -1044,11 +1044,12 @@ def test_circular_region_label_longer_than_its_circle_is_cut_and_warns() -> None
     # it offers no fix.
     report = label_fit_report(drawing)
     assert report is not None and report.drawn and report.region_cuts == 1 and report.rows == ()
-    assert label_fit_notice(report) == ("Region labels are cut to fit their circle (1).",)
+    assert label_fit_notice_counts(report) == (("region_cuts", 1),)
     payload = label_fit_report_payload(report, "circular")
-    assert payload["notice"] == ["Region labels are cut to fit their circle (1)."]
+    assert payload["notice"] == [{"field": "region_cuts", "count": 1}]
     ((record_payload),) = payload["records"]
-    assert record_payload["labelKind"] == "circular_region" and record_payload["counts"] == "1 region label cut"
+    assert record_payload["labelKind"] == "circular_region"
+    assert record_payload["counts"] == [{"field": "region_cuts", "count": 1}]
     assert record_payload["labelCount"] == 2 and record_payload["fontSize"] == 14.0
 
 
@@ -2245,7 +2246,7 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
     # LP-D86 (OV-1208): the GC ring set to r=0.8 leaves the inside slot's labels no room, so they are drawn on it;
     # the label fit warning counts them, the one report the command line and the Web read, and offers no fix.
     from gbdraw.api.diagram import label_fit_report
-    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.labels.fit import label_fit_notice_counts
     from gbdraw.web_support.label_fit import label_fit_report_payload
 
     slots = (
@@ -2263,13 +2264,12 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
     assert len(inside) == 2 and all(far > gc_inner and near < gc_outer for near, far in inside), inside
     report = label_fit_report(drawing)
     assert report is not None and report.drawn and report.region_track_overlaps == 2 and report.rows == ()
-    notice = "Region labels lie on other tracks: the set track radii leave them no room (2)."
-    assert label_fit_notice(report) == (notice,)
+    assert label_fit_notice_counts(report) == (("region_track_overlaps", 2),)
     payload = label_fit_report_payload(report, "circular")
-    assert payload["notice"] == [notice]
+    assert payload["notice"] == [{"field": "region_track_overlaps", "count": 2}]
     ((record_payload),) = payload["records"]
     assert record_payload["labelKind"] == "circular_region" and record_payload["labelCount"] == 4
-    assert record_payload["counts"] == "2 region labels on other tracks"
+    assert record_payload["counts"] == [{"field": "region_track_overlaps", "count": 2}]
 
 
 @pytest.mark.parametrize(

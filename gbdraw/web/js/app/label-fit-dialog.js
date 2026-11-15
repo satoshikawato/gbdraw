@@ -18,11 +18,13 @@
 // by the record's drawn index; it applies nothing. Labels that need much more
 // room than the map has were not placed (CAPACITY-STOP): the dialog has no rows
 // and lists the ways to make room Python names, with Close only; it words the
-// room they need from Python's values (`labelCapacityText`, OV-2179). When every
+// room they need from Python's values (`labelCapacityText`, OV-2179), and each
+// other record's line from its kind and counts (`labelFitRecordText`, OV-3515). When every
 // row is known not to fit, it lists the same ways under the rows (NO-ROW-WAYS,
 // OV-2180).
 import {
-  labelCapacityRemedyText, labelFitRowNoteText, labelFitRowOffered, labelFitRowRank, labelFitRowReasonText, normalizeLabelFitRow
+  labelCapacityRemedyText, labelFitRecordText, labelFitRowNoteText, labelFitRowOffered, labelFitRowRank, labelFitRowReasonText,
+  normalizeLabelFitRow
 } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
@@ -30,7 +32,7 @@ import { msg } from '../utils/i18n.js';
 /**
  * @import {
  *   LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting, LabelFitTrackOptions,
- *   LabelFitValue, LabelCapacity, LabelCapacityRemedy, LabelCapacityRemedyText, LargerFigure
+ *   LabelFitValue, LabelFitLabelKind, LabelCapacityRemedy, LabelCapacityRemedyText, LargerFigure
  * } from '../services/label-fit.js'
  */
 
@@ -54,15 +56,20 @@ import { msg } from '../utils/i18n.js';
  * @property {boolean} capacity True when a record was not placed for lack of room (CAPACITY-STOP).
  * @property {LabelCapacityRemedyText[]} remedies The ways to make room, as the Web words them, in Python's order; listed
  *   over labels not placed (CAPACITY-STOP) or once every row is known not to fit (NO-ROW-WAYS), else empty.
- * @property {{ recordId: string, recordIndex: number | null, labelKind: string, labelKindTitle: string,
- *   labelCount: number, fontSize: number, counts: string, capacity: LabelCapacity | null }[]} records Python's
- *   counts text per record (OV-699: a refused record says why); a record not placed for lack of room (`capacity`) is
- *   worded by `labelCapacityText` instead.
+ * @property {LabelFitDialogRecord[]} records The report's records, in its order.
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
  * @property {boolean} finishing Apply or Cancel waits for the row being computed.
  * @property {LabelFitDefinitionRecord[]} definitionRecords The drawn records whose centre definition text overlaps
  *   a track; none when nothing was drawn.
+ */
+/**
+ * @typedef {object} LabelFitDialogRecord What the dialog shows of a report record.
+ * @property {string} recordId Shown in bold at the line's `{record}` slot.
+ * @property {number | null} recordIndex
+ * @property {LabelFitLabelKind} labelKind With the record's identity, the item's key.
+ * @property {string} line The record's line in the shown language, with `{record}` left for the slot
+ *   (`labelFitRecordText`): its counts, why radial labels were refused (OV-699), or the room labels not placed need.
  */
 /**
  * @typedef {object} LabelFitDefinitionRecord A drawn record whose name lines "Edit Species / Strain…" shows.
@@ -109,7 +116,7 @@ const displayRow = (row) => ({
 });
 
 /**
- * The fields of each report record that the dialog shows, in report order.
+ * Each report record as the dialog shows it, in report order: its line worded in the shown language (OV-3515).
  * @param {LabelFitReport} report
  * @returns {LabelFitDialogState['records']}
  */
@@ -117,11 +124,7 @@ const dialogRecords = (report) => report.records.map((record) => ({
   recordId: record.recordId,
   recordIndex: record.recordIndex,
   labelKind: record.labelKind,
-  labelKindTitle: record.labelKindTitle,
-  labelCount: record.labelCount,
-  fontSize: record.fontSize,
-  counts: record.counts,
-  capacity: record.capacity
+  line: labelFitRecordText(record)
 }));
 
 /**
