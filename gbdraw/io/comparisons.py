@@ -8,18 +8,20 @@ import codecs
 import csv
 import io
 import logging
+import math
 import os
+import re
 import sys
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, Sequence
 
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
-from ..exceptions import ValidationError
+from ..exceptions import ParseError, ValidationError
 from .input_text import GZIP_ERRORS, read_input_bytes
 from .table_text import EXACT_FLOAT_READ_OPTIONS
 
@@ -43,6 +45,28 @@ _ID_COLUMNS = COMPARISON_COLUMNS[:2]
 _NUMERIC_COLUMNS = COMPARISON_COLUMNS[2:]
 _INTEGER_COLUMNS = frozenset(
     ("alignment_length", "mismatches", "gap_opens", "qstart", "qend", "sstart", "send")
+)
+# The strict outfmt 6 grammar that LOSATP writes: two IDs, then decimal numbers, the
+# integer columns without a point or an exponent.
+_STRICT_DECIMAL_INTEGER = r"[+-]?[0-9]+"
+# Digits with an optional point, or a point and digits; then an optional exponent.
+# "[0-9]+\.?[0-9]*" spells "[0-9]+(?:\.[0-9]*)?" without a group, which re matches faster.
+_STRICT_DECIMAL_NUMBER = r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+_STRICT_DECIMAL_INTEGER_RE = re.compile(rf"^{_STRICT_DECIMAL_INTEGER}$")
+_STRICT_DECIMAL_NUMBER_RE = re.compile(rf"^{_STRICT_DECIMAL_NUMBER}$")
+# The start of a data line that is not 12 tab-separated fields of the strict
+# grammar above, searched in "\n" + data: a literal "\n" lets re skip to each line
+# start, where "^" with re.MULTILINE would try every character.
+_NON_STRICT_OUTFMT6_LINE_RE = re.compile(
+    "\n(?!"
+    + "\t".join(
+        [r"[^\t\n]*", r"[^\t\n]*"]
+        + [
+            _STRICT_DECIMAL_INTEGER if column in _INTEGER_COLUMNS else _STRICT_DECIMAL_NUMBER
+            for column in _NUMERIC_COLUMNS
+        ]
+    )
+    + "(?:\n|\\Z))"
 )
 # Producer diagnostics (gbdraw.web_support.error_adapter): identifiers and
 # 1-based line/column locators only, never a file name or cell value.
@@ -260,6 +284,39 @@ def _scan_lines(lines: list[bytes], name: str) -> tuple[list[int], int, tuple[in
     if widest and narrow_width <= max(positions):
         raise _short_row_error(name, narrow_index + 1, narrow_width, max(positions) + 1)
     return skipped, widest, positions
+
+
+def is_strict_outfmt6(data: str) -> bool:
+    """Whether every line of ``data`` (outfmt 6 data lines joined by newlines) is of the strict grammar.
+
+    One regex pass; a value of the grammar whose float is not finite still passes.
+    """
+
+    return _NON_STRICT_OUTFMT6_LINE_RE.search("\n" + data) is None
+
+
+def _is_strict_outfmt6_numeric_field(column: str, value: str) -> bool:
+    pattern = _STRICT_DECIMAL_INTEGER_RE if column in _INTEGER_COLUMNS else _STRICT_DECIMAL_NUMBER_RE
+    if pattern.fullmatch(value) is None:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except ValueError:  # pragma: no cover - the grammar excludes float parse failures
+        return False
+
+
+def check_strict_outfmt6_lines(data_lines: Sequence[str], *, label: str) -> None:
+    """Raise ParseError at the first data line that is not 12 fields of the strict grammar with finite values."""
+
+    for line in data_lines:
+        fields = line.split("\t")
+        if len(fields) != len(COMPARISON_COLUMNS):
+            raise ParseError(f"{label} does not match outfmt 6 columns.")
+        if any(
+            not _is_strict_outfmt6_numeric_field(column, fields[index])
+            for index, column in enumerate(_NUMERIC_COLUMNS, start=len(_ID_COLUMNS))
+        ):
+            raise ParseError(f"{label} contains non-numeric outfmt 6 fields.")
 
 
 def read_comparison_table(
