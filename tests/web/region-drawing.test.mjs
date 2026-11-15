@@ -45,6 +45,7 @@ const { annotationSourceKey, buildAnnotationRecordCatalog } = await import(
   '../../gbdraw/web/js/app/annotations/record-catalog.js'
 );
 const { discoverSequenceRecords, readCircularSourceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { recordKeyExpansion } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
 const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
@@ -965,7 +966,8 @@ test('the draft request of a Loaded canvas, Loaded again, draws its named record
 });
 
 // B2: an Undo to a step before the first read brings back the named records with the records off they stand for.
-test('an Undo of a step made before the read keeps the named records drawn alone, and the next read places them', async () => {
+// The discovery the restore runs writes no setting outside the step (R11): the named records stay, drawn alone.
+test('an Undo of a step made before the read keeps the named records drawn alone, and its discovery places nothing', async () => {
   const made = await loadNamedCanvas('circular-b2');
   app.selectDrawing(made.id);
   const title = made.form.plot_title;
@@ -977,11 +979,11 @@ test('an Undo of a step made before the read keeps the named records drawn alone
   assert.equal(made.form.plot_title, title);
   assert.deepEqual(await projectedRecordIds(made), ['recA.1', 'recD.1'], 'the draft the step began with');
   assert.deepEqual(await drawnCircularRows(made), [2, 1]);
-  // The read is still the drawing's: its next Record Order (Generate's, a discovery that keeps the read) places them.
+  // The read is still the drawing's: a Record Order that keeps the read (the discovery a restore runs) writes nothing.
   await app.refreshCircularRecordOrder({ automatic: true });
-  assert.deepEqual([...made.recordsOff], [`${uid}:2`], 'the next Record Order places them again');
-  assert.deepEqual(made.recordsNamed, []);
+  assert.deepEqual([[...made.recordsOff], made.recordsNamed.map(({ uid: card }) => card)], [[], [uid]], 'nothing placed');
   assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  assert.deepEqual(await drawnCircularRows(made), [2, 1]);
 });
 
 // The screen shows what the figure draws: after an Undo across the first read, the Records list, the Record Order
@@ -1195,8 +1197,8 @@ test('a paste into a Loaded canvas that was never read keeps the records it leav
   app.selectDrawing(source.id);
 });
 
-// A pasted File card whose read failed keeps the records it names, under keys of the target (the identities the
-// placement would give them): its records and their places collide with none of the target's, whose own named
+// A pasted File card whose read failed keeps the records it names, under keys of the target (`<card uid>:<request
+// key>`, which spell no identity): its records and their places collide with none of the target's, whose own named
 // records also have the request keys `record-1` and `record-2`.
 test('a paste whose card was not read names its records and their places apart from the target\'s', async () => {
   const target = await loadNamedCanvas('circular-c-paste');
@@ -1215,9 +1217,11 @@ test('a paste whose card was not read names its records and their places apart f
   installPastedRecords(target, { prepared, pastedRecordKeys: new Set(['record-1', 'record-2']), pastedCards: 1 });
   const { uid } = target.circularSources[1];
   assert.deepEqual(target.recordsNamed.map(({ uid: card, named }) => [card, named.map(({ recordKey }) => recordKey)]),
-    [[target.circularSources[0].uid, ['record-1', 'record-2']], [uid, [`${uid}:1`, `${uid}:3`]]]);
+    [[target.circularSources[0].uid, ['record-1', 'record-2']], [uid, [`${uid}:record-1`, `${uid}:record-2`]]]);
   assert.deepEqual(target.adv.multi_record_positions.filter(({ selector }) => selector.startsWith(uid)),
-    [{ selector: `${uid}:1`, row: 3 }, { selector: `${uid}:3`, row: 4 }]);
+    [{ selector: `${uid}:record-1`, row: 3 }, { selector: `${uid}:record-2`, row: 4 }]);
+  // No key spells an identity of the card (`<uid>:<k>`) before its read names its records by identity.
+  assert.deepEqual(target.recordsNamed[1].named.map(({ recordKey }) => recordKeyExpansion(recordKey, uid)), [null, null]);
   const keys = (await projectOf(target)).envelope.renderRequest.records.map(({ recordKey }) => recordKey);
   assert.equal(new Set(keys).size, keys.length, JSON.stringify(keys));
   assert.deepEqual(await projectedRecordIds(target), ['recA.1', 'recD.1', 0, 2]);

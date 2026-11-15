@@ -56,11 +56,12 @@ import {
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
 import {
-  cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, namedCardRecordReading, pastedNamedCardRecords,
-  placeNamedCardRecords, readNamedCardRecords
+  cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, pastedNamedCardRecords, placeNamedRecordsInDraft,
+  readNamedCardRecords
 } from './record-draw-selection.js';
 import { circularRecordEntries } from './record-options.js';
 import { readCircularSourceRecords, readStoredRecordIdPlaces } from './record-discovery.js';
+import { isInputFileRef } from './history-files.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -392,7 +393,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { CircularSourceInput } from './input-types.js' */
 /** @import { NamedCardRecords } from './record-draw-selection.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
+/** @import { CircularListRecord } from './record-discovery.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedFileValue, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -6694,15 +6696,22 @@ const artifactUiState = (view) => ({
  * One drawing Save writes: the drawing, whether Save writes its inputs as
  * its draft request (the shown drawing's, without a Generate), its slice as
  * Save writes it, its artifact (null: no Result and no request it writes),
- * and its view keys (`ui` of its one-drawing view: its input type, the
- * generated layout of its Results, the shown one's viewport).
+ * its view keys (`ui` of its one-drawing view: its input type, the
+ * generated layout of its Results, the shown one's viewport), and the records
+ * its File cards name as Save captured them with its slice (`SavedNamedRecords`).
  * @typedef {{
  *   drawing: DrawingState,
  *   draftRequest: boolean,
  *   slice: SessionModeSlice & { config: ActiveWebConfig },
  *   artifact: SessionArtifactView | null,
- *   ui: Record<string, unknown>
+ *   ui: Record<string, unknown>,
+ *   namedRecords: SavedNamedRecords | null
  * }} SavedSessionDrawing
+ */
+/**
+ * The records a Circular drawing's File cards name of their files (`recordsNamed`) as Save captures them with the
+ * drawing's slice, before any of its awaits: the named records, the drawing's read records, and its cards.
+ * @typedef {{ named: NamedCardRecords[], records: CircularListRecord[], inputs: CircularSourceInput<InputFileRef>[] }} SavedNamedRecords
  */
 
 /**
@@ -6836,9 +6845,9 @@ const exportSessionDocument = async (
   // Each drawing's Results, catalog and committed request; its slice's
   // unmanaged overrides are checked against its own mode (PD-OI-009, OV-106).
   const parts = [];
-  for (const { drawing: saved, slice, artifact, ui, draftRequest } of written) {
+  for (const { drawing: saved, slice, artifact, ui, draftRequest, namedRecords } of written) {
     const config = slice.config;
-    const settleRecordsOff = await savedRecordsOff(saved, config);
+    if (namedRecords) await placeSavedNamedRecords(config, namedRecords);
     Object.assign(config.adv, normalizedArrowGeometryState(config.adv));
     config.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
       mode: saved.mode,
@@ -6857,14 +6866,13 @@ const exportSessionDocument = async (
         const adoptedCommitted = isAdoptedCanonicalSession(committed);
         // Save writes the drawing's bindings itself; the request is checked without the ones it holds.
         const { bindings: _heldBindings, ...requestWebFiles } = committed.webFiles ?? {};
-        const projected = projectCanonicalSessionRequest({
+        projectCanonicalSessionRequest({
           ...committed,
           webFiles: requestWebFiles,
           sessionResourceTable: adoptedCommitted ? artifact.activeSessionResourceTable : null,
           deferResourceContent: adoptedCommitted,
           adoptCanonicalPayloads: adoptedCommitted
         });
-        settleRecordsOff(projected.config);
         validateCurrentWriterActiveConfig({ mode: saved.mode, storedConfig: config });
       } catch (error) {
         console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
@@ -6879,7 +6887,6 @@ const exportSessionDocument = async (
         linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [], omittedAnnotationRecordKeys, planLinearUnits,
         readOfDrawing
       })).envelope;
-      settleRecordsOff(null);
     }
     // The pairs belong to the committed request; a draft request names none (D-15-124).
     const conservationPairs = artifact?.committedCanonicalSession ? artifact.conservationPairs : NO_CONSERVATION_PAIRS;
@@ -7507,75 +7514,71 @@ const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) =>
   return prepared;
 };
 /**
- * Places the records File cards name of their files (`named`, OV-3530, OV-3531) in a draft config, from a read of
- * those cards (`placeNamedCardRecords`), as the drawing's settled read would place them: the other records of each
- * read card's file OFF, and the places that named them by request key under their identities.
+ * Places the records File cards name of their files (`named`, OV-3530, OV-3531) in a draft config
+ * (`placeNamedRecordsInDraft`), from the drawing's read records (`records`) and a read of each named card they do not
+ * hold. `error` is the first failed read's.
  * @template F
  * @param {{ recordsOff?: unknown, adv?: unknown }} config The draft config, changed in place.
- * @param {readonly NamedCardRecords[]} named
- * @param {readonly CircularSourceInput<F>[]} inputs The drawing's cards (`circularSourceInputs`).
+ * @param {{ named: readonly NamedCardRecords[], records: readonly CircularListRecord[],
+ *   inputs: readonly CircularSourceInput<F>[] }} cards `inputs`: the drawing's cards (`circularSourceInputs`).
  * @param {(file: F | null) => FileLike | null | undefined} fileOf
- * @returns {Promise<NamedCardRecords[]>} The cards it could not place (their read failed).
+ * @returns {Promise<{ left: NamedCardRecords[], error: unknown }>} `left`: the cards it could not place.
  */
-const placeNamedRecordsInConfig = async (config, named, inputs, fileOf) => {
-  const cards = new Set(named.map(({ uid }) => uid));
-  const reads = await readCircularSourceRecords(inputs.filter(({ uid }) => cards.has(uid)), fileOf);
-  const adv = /** @type {{ multi_record_positions?: unknown }} */ (isPlainObject(config.adv) ? config.adv : {});
-  const placed = placeNamedCardRecords({
-    recordsOff: Array.isArray(config.recordsOff) ? config.recordsOff : [], selector: '',
-    positions: Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions : []
-  }, named, circularRecordEntries(reads.flatMap(({ records }) => records)));
-  config.recordsOff = placed.choices.recordsOff;
-  if (isPlainObject(config.adv)) adv.multi_record_positions = placed.choices.positions;
-  return placed.cards;
+const readAndPlaceNamedRecords = async (config, { named, records, inputs }, fileOf) => {
+  const held = new Set(records.map(({ uid }) => uid));
+  const reads = await readCircularSourceRecords(inputs.filter(({ uid }) => !held.has(uid) && named.some((card) => card.uid === uid)), fileOf);
+  const left = placeNamedRecordsInDraft(config, named, circularRecordEntries([...records, ...reads.flatMap((read) => read.records)]));
+  return { left, error: reads.find((read) => read.error !== null)?.error ?? null };
 };
 /**
- * The records OFF a Save writes for a Circular drawing, which no Session holds the named records of
- * (`recordsNamed`): its cards that still name some are read and placed in the saved draft (the drawing is not
- * changed), so the saved `recordsOff` names every OFF record of every card. Load reads a `recordsOff` the Session
- * holds before the request's named records, so Save writes it also when it is empty, when the saved request names
- * some records of a card that the drawing draws whole (a record turned ON after the read). A card whose read fails
- * keeps no place in it: a draft request names each card's drawn records itself, so its Save writes no `recordsOff`
- * and Load takes every card's records from it; a committed request cannot, and the card draws its file.
- * @param {DrawingState} drawing
+ * Writes in a saved draft the records OFF of a drawing whose File cards still name some records of their files
+ * (`recordsNamed`), which no Session holds and a Load of a Web draft does not read from its request: each such card
+ * is placed (`readAndPlaceNamedRecords`) from the drawing as Save captured it, read only when the drawing has not read
+ * it. The drawing is not changed. A card Save cannot place fails the Save, with its read's error (R6) or as a record
+ * selection its file lacks, so no Session draws a card's whole file that the drawing drew some records of.
  * @param {{ recordsOff?: unknown, adv?: unknown }} config The saved draft config, changed in place.
- * @returns {Promise<(projectedConfig: { recordsNamed?: unknown } | null) => void>} Settles `recordsOff` once the
- *   saved request is known: the projection of the committed request, or null for the draft request.
+ * @param {SavedNamedRecords} namedRecords
  */
-const savedRecordsOff = async (drawing, config) => {
-  const unplaced = drawing.mode === 'circular' && drawing.recordsNamed.length > 0
-    ? await placeNamedRecordsInConfig(config, drawing.recordsNamed, circularSourceInputs(drawing.inputType.value, drawing.circularSources),
-      (ref) => state.inputFiles.fileOf(ref))
-    : [];
-  return (projectedConfig) => {
-    if (drawing.mode !== 'circular') return;
-    const off = Array.isArray(config.recordsOff) ? config.recordsOff : [];
-    if (projectedConfig === null) {
-      if (unplaced.length > 0 || off.length === 0) delete config.recordsOff;
-      return;
-    }
-    const named = readNamedCardRecords(projectedConfig.recordsNamed);
-    if (off.length > 0 || named.length === 0) return;
-    // The saved request draws some records of a card alone; the drawing draws every record of it.
-    const { off: requestOff, read } = namedCardRecordReading(named, circularRecordEntries(drawing.circularRecordList.value));
-    if (requestOff.length > 0 || named.some(({ uid }) => !read.has(uid))) config.recordsOff = [];
-    else delete config.recordsOff;
-  };
+const placeSavedNamedRecords = async (config, namedRecords) => {
+  const { left, error } = await readAndPlaceNamedRecords(config, namedRecords, (ref) => state.inputFiles.fileOf(ref));
+  if (error !== null) throw error;
+  if (left.length > 0) throw diagnosticError('RECORD_SELECTION', { reason: 'NO_MATCH' });
 };
+/**
+ * What Save captures of a drawing's named card records (`SavedNamedRecords`), copied; null for a drawing whose cards
+ * name none.
+ * @param {DrawingState} drawing
+ * @returns {SavedNamedRecords | null}
+ */
+const savedNamedRecordsOf = (drawing) => (drawing.mode !== 'circular' || drawing.recordsNamed.length === 0 ? null : {
+  named: readNamedCardRecords(cloneJsonData(drawing.recordsNamed)),
+  records: [...drawing.circularRecordList.value],
+  inputs: circularSourceInputs(drawing.inputType.value, drawing.circularSources)
+});
+/** @param {LoadedFileValue} value @returns {value is readonly LoadedFileValue[]} */
+const isLoadedFileList = (value) => Array.isArray(value);
+/**
+ * The bytes a Load candidate's file names before Load binds it (`LoadedFileValue`): a File or a Session resource
+ * view; none for a ref (its bytes are the store's) or a list.
+ * @param {LoadedFileValue | null} value
+ * @returns {FileLike | null}
+ */
+const loadedFileBytes = (value) => (value === null || value === undefined || isLoadedFileList(value) || isInputFileRef(value) ? null : value);
 /**
  * A copy or a paste reads now the cards whose records its request names some of (`recordsNamed`, OV-3530) and places
- * them (`placeNamedRecordsInConfig`), as the drawing's first settled read would: a paste into a drawing with a Result
- * saves its records OFF, not the named records, which no Session holds. Python derived the request, so the read reuses
- * the Worker that derived it; a Load leaves them to the drawing's own read. A card whose read fails keeps its named
- * records, which its request records draw alone.
+ * them (`readAndPlaceNamedRecords`), as the drawing's first settled read would: its draft names the records OFF, not
+ * the named records, which no Session holds. Python derived the request, so the read reuses the Worker that derived
+ * it; a Load leaves them to the drawing's own read. A card whose read fails keeps its named records, which its request
+ * records draw alone, and Save places them (`placeSavedNamedRecords`).
  * @param {PreparedStoredDrawing} prepared
  */
 const placeCopiedNamedRecords = async ({ install, settle }) => {
   const { config } = install.draft;
   const named = readNamedCardRecords(config.recordsNamed);
   if (named.length === 0) return;
-  const left = await placeNamedRecordsInConfig(config, named, circularSourceInputs(install.inputType, settle.inputs.circularSources),
-    (file) => /** @type {FileLike | null} */ (/** @type {unknown} */ (file)));
+  const { left } = await readAndPlaceNamedRecords(config, {
+    named, records: [], inputs: circularSourceInputs(install.inputType, settle.inputs.circularSources)
+  }, loadedFileBytes);
   if (left.length) config.recordsNamed = left;
   else delete config.recordsNamed;
 };
@@ -9435,6 +9438,8 @@ export const exportSession = (titleOverride = null, options) => {
       selectedFeatureRecordIdx: saved.id === drawing.id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
     }))]));
     slices.forEach((slice) => validateModeSliceFields(slice));
+    // The records each drawing's cards name, captured with its slice: Save places them from these (D-50 D).
+    const namedRecords = new Map(savedDrawings.map((saved) => [saved.id, savedNamedRecordsOf(saved)]));
     const readArtifacts = () => sessionArtifactsByDrawing(drawing, options?.readKeptArtifacts?.() ?? []);
     let artifacts = readArtifacts();
     // A drawing is written when it has an input file, a setting or an edit
@@ -9473,6 +9478,7 @@ export const exportSession = (titleOverride = null, options) => {
         draftRequest,
         slice: /** @type {SavedSessionDrawing['slice']} */ (slices.get(saved.id)),
         artifact,
+        namedRecords: namedRecords.get(saved.id) ?? null,
         // The view keys of the drawing's one-drawing view: its mode and input
         // type, the generated layout of its Results, the shown one's viewport.
         ui: {

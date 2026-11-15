@@ -1850,18 +1850,6 @@ const losatResultRowsAccess = ({ losatCacheInfo, losatCache }) => {
 /** @type {NoticeRequest} */
 const NO_REPRODUCIBILITY_FILES_NOTICE = Object.freeze({ text: () => t('The latest run has no reproducibility files to download.') });
 
-/**
- * A Circular drawing whose File cards still name some records of their files (`recordsNamed`: an Undo to a step
- * before the read that placed them brings them back, OV-3530, OV-3531) places them at its next Record Order once its
- * read has settled on the current input; the placement changes no drawn record.
- * @param {DrawingState} drawing
- * @param {((drawing: DrawingState) => void) | null} place `placeCircularRecordChoices`
- */
-const placeNamedRecordsOfSettledRead = (drawing, place) => {
-  if (drawing.recordsNamed.length > 0 && drawing.circularRecordDiscovery.status === 'ready'
-    && circularDiscoveryForInput(drawing).current) place?.(drawing);
-};
-
 /** @param {RunAnalysisOptions} options */
 export const createRunAnalysis = ({
   state,
@@ -2724,13 +2712,15 @@ export const createRunAnalysis = ({
    * records keep their rows, and a read without records empties it. A read
    * that settled names the record choices by identity first
    * (`placeCircularRecordChoices`, OV-2869, OV-2903). A read already applied
-   * still places the records its File cards name (`recordsNamed`), which an
-   * Undo to a step before that read brings back (OV-3530, OV-3531).
+   * writes nothing: the records File cards name (`recordsNamed`, which an Undo
+   * to a step before that read brings back, OV-3530, OV-3531) draw alone
+   * through the one reading of the drawing's records (`circularRecordsOff`),
+   * and a History restore that runs a discovery writes no setting (R11).
    * @param {DrawingState} drawing
    * @param {number | null} generation
    */
   const applyCircularRecordOrder = (drawing, generation) => {
-    if (generation === null || unappliedCircularRecordReads.get(drawing) !== generation) return placeNamedRecordsOfSettledRead(drawing, placeCircularRecordChoices);
+    if (generation === null || unappliedCircularRecordReads.get(drawing) !== generation) return;
     unappliedCircularRecordReads.delete(drawing);
     if (generation !== circularRecordReadGeneration(drawing)) return;
     if (!Array.isArray(drawing.adv.multi_record_positions)) drawing.adv.multi_record_positions = [];

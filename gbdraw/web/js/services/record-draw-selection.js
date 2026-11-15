@@ -453,14 +453,14 @@ export const readNamedCardRecords = (value) => (Array.isArray(value) ? value : [
  * and the identity of each named record by its request key (`identityOfKey`); `read` lists those cards. A card not
  * read, or one that names a record its file lacks, says nothing: it draws its named records alone through its
  * request records (`circularRecordPlan` in services/session-request.js). The one reading of the named records: the
- * records a Circular drawing draws (`resolveCircularRequestRecordSet`), the places its request names
- * (`buildLayout`), and the placement (`placeNamedCardRecords`) read it.
+ * records a Circular drawing draws (`circularRecordsOff`) and the placement (`placeNamedCardRecords`, which the
+ * places a request names read too) read it.
  * @param {readonly NamedCardRecords[]} cards
  * @param {readonly (RecordSourceEntry & { uid?: unknown, value: string })[]} entries The drawing's read records,
  *   named (`circularRecordEntries`: `value` is a record's identity).
  * @returns {{ off: string[], identityOfKey: Map<string, string>, read: Set<string> }}
  */
-export const namedCardRecordReading = (cards, entries) => {
+const namedCardRecordReading = (cards, entries) => {
   /** @type {string[]} */
   const off = [];
   /** @type {Map<string, string>} */
@@ -524,12 +524,35 @@ export const placeNamedCardRecords = ({ recordsOff, selector, positions }, cards
 };
 
 /**
+ * Places the records File cards name of their files (`named`) in a draft config, as a settled read of the cards
+ * places them (`placeNamedCardRecords`): the other records of each card `entries` reads OFF, and the places that named
+ * them by request key under their identities. An empty `recordsOff` is left out, as a Session writes it (omission =
+ * every record ON). The one placement of a draft config: Save's, a copy's and a Gallery publication's.
+ * @param {{ recordsOff?: unknown, adv?: unknown }} config Changed in place.
+ * @param {readonly NamedCardRecords[]} named
+ * @param {readonly (RecordSourceEntry & { uid?: unknown, value: string })[]} entries The cards' read records, named
+ *   (`circularRecordEntries`).
+ * @returns {NamedCardRecords[]} The cards it could not place: not read, or naming a record their file lacks.
+ */
+export const placeNamedRecordsInDraft = (config, named, entries) => {
+  const adv = /** @type {{ multi_record_positions?: unknown }} */ (typeof config.adv === 'object' && config.adv !== null ? config.adv : {});
+  /** @type {{ selector: string }[]} */
+  const positions = Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions : [];
+  const placed = placeNamedCardRecords({
+    recordsOff: Array.isArray(config.recordsOff) ? config.recordsOff.map(String) : [], selector: '', positions
+  }, named, entries);
+  if (placed.choices.recordsOff.length > 0) config.recordsOff = placed.choices.recordsOff;
+  else delete config.recordsOff;
+  if (Array.isArray(adv.multi_record_positions)) adv.multi_record_positions = placed.choices.positions;
+  return placed.cards;
+};
+
+/**
  * The named records of the File cards a paste adds that its read could not place (`placeNamedCardRecords`), under
- * each card's uid in the target (`uids`, from the read request's): each named record takes the identity it has in
- * the target, `<card uid>:<k>` of its place, as the placement would name it, so neither the record nor its place
- * collides with a key the target holds; a record named by ID, whose place is not known, takes
- * `<card uid>:<request key>`, which no identity spells (an identity's place is a number). `moves` takes each read
- * request key to its new key (the places of the read request). A card the paste does not add is left out.
+ * each card's uid in the target (`uids`, from the read request's): each named record keeps its request key under the
+ * card, `<card uid>:<request key>`, which no key of the target holds (the card's uid is new), until the card's read
+ * names it by its identity, as the request key of every named record does. `moves` takes each read request key to
+ * its new key (the places of the read request). A card the paste does not add is left out.
  * @param {readonly NamedCardRecords[]} cards
  * @param {ReadonlyMap<string, string>} uids
  * @returns {{ cards: NamedCardRecords[], moves: Map<string, string> }}
@@ -541,7 +564,7 @@ export const pastedNamedCardRecords = (cards, uids) => {
     const card = uids.get(uid);
     if (card === undefined) return [];
     return [{ uid: card, named: named.map(({ recordKey, selector }) => {
-      const key = selector.kind === 'recordIndex' ? expandedRecordKey(card, selector.index + 1) : `${card}:${recordKey}`;
+      const key = `${card}:${recordKey}`;
       moves.set(recordKey, key);
       return { recordKey: key, selector };
     }) }];

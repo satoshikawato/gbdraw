@@ -102,8 +102,8 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, namedCardRecordReading, namedRecordSelectorOf, readNamedCardRecords, recordKeyExpansion,
-  recordSelectorNumber, sameSelectedRecord
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, namedRecordSelectorOf, placeNamedCardRecords, readNamedCardRecords,
+  recordKeyExpansion, recordSelectorNumber, sameSelectedRecord
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
@@ -4584,12 +4584,11 @@ const buildLayout = (state, drawing, records = [], drawnIdentities = []) => {
   }
   if (!drawing.form.multi_record_canvas) return {};
   // A Record Order row names a record its read card names by request key until the read's placement names it by its
-  // identity (`placeNamedCardRecords`); the request places it at that identity already.
-  const { identityOfKey } = namedCardRecordReading(drawing.recordsNamed, circularRecordEntries(drawing.circularRecordList.value));
-  const adv = identityOfKey.size === 0 ? drawing.adv : {
+  // identity; the request places it as the placement does (`placeNamedCardRecords`).
+  const adv = drawing.recordsNamed.length === 0 ? drawing.adv : {
     ...drawing.adv,
-    multi_record_positions: drawing.adv.multi_record_positions.map((/** @type {{ selector: string }} */ row) => (
-      identityOfKey.has(row.selector) ? { ...row, selector: identityOfKey.get(row.selector) } : row))
+    multi_record_positions: placeNamedCardRecords({ recordsOff: [], selector: '', positions: drawing.adv.multi_record_positions },
+      drawing.recordsNamed, circularRecordEntries(drawing.circularRecordList.value)).choices.positions
   };
   return /** @type {CanonicalCircularLayout} */ ({
     ...Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT)
@@ -6945,9 +6944,11 @@ const canvasRecordPositions = (tokens, sourceRecords, { records, projectedIndexB
  * the card names one record of its file by its place or ID (OV-3530: Python's copy of some records of a file; OV-3531:
  * a CLI records table): the card draws those records alone, before its read and after it
  * (`namedCardRecordReading`). Load reads no file for it, so a Load leaves the Worker unconstructed. A card with a
- * record that draws its file whole, or that names no record, draws its file. A stored draft's records off are the
- * drawing's own, as the draft holds them (`overlayModeSliceConfig`), so a draft with `recordsOff` names none. The
- * draft config's `recordsNamed`, when a card names some (never saved).
+ * record that draws its file whole, or that names no record, draws its file. Only a request without a stored Web
+ * draft names records (a CLI or Python Session, Python's copy or paste reply): a Web draft holds the drawing's own
+ * records off (`overlayModeSliceConfig`), its omission meaning every record ON, as dev and v0.14.5 read it, whatever
+ * request it was saved beside (a Result's, or a request kept from a Load and saved again after the draft changed).
+ * The draft config's `recordsNamed`, when a card names some (never saved).
  * @param {ReadonlyMap<unknown, string>} cardOfRecord The card uid each request record reads, in request order.
  * @param {string} grouping The request's grouping.
  * @param {unknown} storedConfig The stored draft config, if any.
@@ -6956,7 +6957,7 @@ const canvasRecordPositions = (tokens, sourceRecords, { records, projectedIndexB
 const namedCardRecordsConfig = (cardOfRecord, grouping, storedConfig) => {
   /** @type {Map<string, NamedCardRecord[] | null>} */
   const named = new Map();
-  if (grouping === 'single' || (isPlainObject(storedConfig) && Object.hasOwn(storedConfig, 'recordsOff'))) return {};
+  if (grouping === 'single' || storedConfig != null) return {};
   cardOfRecord.forEach((uid, record) => {
     const { recordKey, cardinality, selector } = /** @type {IdentityRequestRecord} */ (record);
     const names = namedRecordSelectorOf(selector);
