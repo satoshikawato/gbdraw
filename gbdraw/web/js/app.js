@@ -43,6 +43,7 @@ import { keepsListFocus } from './app/list-focus.js';
 import { titleCutHint } from './app/hint-title.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { CODE_TEXT, UI_LOCALES, joinSentences, numberText, sentenceSeparator, t, thenArrow, thenText, tm, tn, tx, uiLocale } from './utils/i18n.js';
+import { SELECTOR_TEXT } from './utils/selector-syntax.js';
 import { errorText } from './utils/error-text.js';
 import { readOtherDigitsInNumberFields } from './utils/number-field-digits.js';
 import { INTERACTIVE_GALLERY_URL } from './utils/gallery-routes.js';
@@ -70,7 +71,7 @@ const app = createApp({
 // field to that directive (app/committed-value.js). `thenText` writes "a, then b"
 // (`thenArrow` the arrow alone between two elements) and `comparisonPairLabel` a
 // comparison pair ("#1 → #2"), in the reading direction of the UI language.
-Object.assign(app.config.globalProperties, { t, tn, tx, tm, numberText, CODE_TEXT, thenArrow, thenText, comparisonPairLabel, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL, DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE, settleCommittedField });
+Object.assign(app.config.globalProperties, { t, tn, tx, tm, numberText, CODE_TEXT, SELECTOR_TEXT, thenArrow, thenText, comparisonPairLabel, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL, DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE, settleCommittedField });
 // A sentence with elements inside it: <i18n-text :text="t('…{name}…')"> with a #name slot.
 app.component('I18nText', I18nText);
 app.directive('dialog-focus', dialogFocus);

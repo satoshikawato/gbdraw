@@ -660,12 +660,15 @@ test('OV-1477: track, mode, control and setting names are not placeholders insid
 });
 
 // OV-2790: code text (a CLI option, a selector, a <word> token, a regex group,
-// a mapping arrow, a file extension, a closing sign) is never written into a
-// key: a right-to-left UI would move a leading `--` or `.`, or a closing `>`,
-// `]` or `)`, onto the other side of the code. The key names it by a
+// a mapping arrow, a file extension, a closing sign, a `#` before a letter, a
+// function form) is never written into a key: a right-to-left UI would move a
+// leading `--`, `.` or `#`, a closing `>`, `]` or `)`, or the `()` of `rgb()`,
+// onto the other side of the code. The key names it by a
 // placeholder and the call passes the code as a value, which t() and tn()
-// insert as one isolated run (D-05). Upper-case notation (KEY=VALUE) and
-// English prose are no code.
+// insert as one isolated run (D-05). Upper-case notation (KEY=VALUE), a code
+// word of letters only (none, transparent), and English prose are no code; so
+// is a `#` before a placeholder (`#{n}`, masked as X), a numero sign that shows
+// before the number in every script, isolated or not.
 const CODE_TEXT_PATTERNS = [
   ['a CLI option', /(?<![\w-])--[A-Za-z]/],
   ['a name=value selector', /(?<![\w=])\/?[a-z_][a-z0-9_]*=/],
@@ -674,7 +677,9 @@ const CODE_TEXT_PATTERNS = [
   ['a mapping arrow', /->/],
   ['a file extension', /(?<![\w.])\.[a-z][a-z0-9]{1,5}\b/],
   ['a closing sign', /(?:^|\s)[\])](?=[.,;:]?(?:\s|$))|["“„«‘「][\])<>]["”“»’」]/],
-  ['a list of signs', /(?:^|\s)(?:[\\/:*?"<>|]\s+){3,}/]
+  ['a list of signs', /(?:^|\s)(?:[\\/:*?"<>|]\s+){3,}/],
+  ['a # before a letter', /#\s?(?!X\b)[A-Za-z]/],
+  ['a function form', /\b[A-Za-z_]\w*\(\)/]
 ];
 /** @param {string} english @returns {string[]} the kinds of code text the English writes outside its placeholders */
 const codeTextIn = (english) => {
@@ -702,7 +707,15 @@ test('OV-2790: the code text check finds code outside placeholders and leaves pr
     ['Manual scale interval (in bp; must be > 0).', []],
     ['no / \\ : * ? " < > | or control characters', ['a list of signs']],
     ['no {signs} or control characters', []],
-    ['Pair: #{query} to #{subject}.', []]
+    ['Pair: #{query} to #{subject}.', []],
+    ['Bakta also sets the CDS default color to #cccccc and the Legend box size', ['a # before a letter']],
+    ['comparison gradient colors take #RGB or #RRGGBB.', ['a # before a letter']],
+    ['in the "# Fields:" line', ['a # before a letter']],
+    ['also accept transparent, rgb(), and hsl();', ['a function form']],
+    ['Feature parts joined with order() do not define an exact path.', ['a function form']],
+    ['Use none, a supported named color, or a hex color; also accept transparent, {rgbForm}, and {hslForm}.', []],
+    ['The actual reservation is max(measured, configured); Record #{position}. Remove Depth series #{series}?', []],
+    ['a track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.', []]
   ]) assert.deepEqual(codeTextIn(text), kinds, text);
 });
 
@@ -718,17 +731,17 @@ test('OV-2790: no English key writes code text outside a placeholder', async () 
 // OV-2790: each key that now names its code text by a placeholder shows, with the value its call passes, the
 // English it showed before, byte for byte; the error wording owner's keys are checked in error-normalization.test.mjs.
 test('OV-2790: a key with its code text as a value shows the English it showed before', async () => {
-  const { CODE_TEXT } = await import('../../gbdraw/web/js/utils/i18n.js');
+  const { SELECTOR_TEXT } = await import('../../gbdraw/web/js/utils/selector-syntax.js');
   const { ANNOTATION_TARGET_MIGRATION_NOTICE } = await import('../../gbdraw/web/js/services/feature-edit-migration.js');
   const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
   const { keys } = await sourceKeys();
   const selectors = { recordSelector: 'record=#<position>', featureSelector: 'feature_selector=hash=<feature hash>' };
   for (const [key, params, english] of [
     ['Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or {selector}. A region that reaches past the record end is drawn to the record end.',
-      { selector: CODE_TEXT.recordNumber },
+      { selector: SELECTOR_TEXT.recordNumber },
       'Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #<number>. A region that reaches past the record end is drawn to the record end.'],
     ['Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as {example} or {selector}. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.',
-      { example: CODE_TEXT.featureSelectorExample, selector: CODE_TEXT.featureSelectorForm },
+      { example: SELECTOR_TEXT.featureSelectorExample, selector: SELECTOR_TEXT.featureSelectorForm },
       'Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as gene=COX1 or locus_tag=<tag>. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.'],
     ['Raw LOSATP search limit per query protein ({option}). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.',
       { option: '--max-target-seqs' },
@@ -745,7 +758,12 @@ test('OV-2790: a key with its code text as a value shows the English it showed b
       'the CLI ruler labels follow --scale_font_size, while this render keeps the default ruler-label font sizes.'],
     ['To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a {extension} file) and load it again; you do not need to keep these TSV files for that.',
       { extension: '.gbdraw' },
-      'To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a .gbdraw file) and load it again; you do not need to keep these TSV files for that.']
+      'To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a .gbdraw file) and load it again; you do not need to keep these TSV files for that.'],
+    ['Bakta also sets the CDS default color to {color} and the Legend box size and font size to 12.', { color: '#cccccc' },
+      'Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.'],
+    ['Replaces the specific rules with the preset\'s rules. The palette is unchanged. Bakta also sets the CDS default color to {color} and the Legend box size and font size to 12.', { color: '#cccccc' },
+      'Replaces the specific rules with the preset\'s rules. The palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.'],
+    ['Feature parts joined with {operator} do not define an exact path.', { operator: 'order()' }, 'Feature parts joined with order() do not define an exact path.']
   ]) {
     assert.ok(keys.has(key), key);
     assert.equal(t(key, params), english);

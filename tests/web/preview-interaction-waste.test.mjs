@@ -31,7 +31,7 @@ const copyModule = async (source, destination = source) => writeFile(
   'utf8'
 );
 for (const source of [
-  'utils/error-normalization.js', 'app/ui.js', 'services/feature-dom.js', 'utils/vue-raw.js',
+  'utils/error-normalization.js', 'utils/selector-syntax.js', 'app/ui.js', 'services/feature-dom.js', 'utils/vue-raw.js',
   // error-normalization.js reads Python's figure length units from the generated mode profiles.
   'mode-profiles.generated.js',
   'app/feature-editor/svg-actions.js', 'services/feature-popup.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',

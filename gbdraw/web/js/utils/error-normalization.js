@@ -1,12 +1,13 @@
 // @ts-check
-// This module imports only leaves without imports of their own (the mode
-// profiles, the persisted contracts and utils/i18n.js), so a test that copies
-// it needs only those beside it.
+// This module imports only leaves (the mode profiles, the persisted contracts,
+// utils/i18n.js, and utils/selector-syntax.js, which imports only the persisted
+// contracts), so a test that copies it needs only those beside it.
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import {
   INPUT_NAME_CHARACTERS, SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
 } from '../contracts/schema.generated.js';
 import { CODE_TEXT, fillText, msg, numberText } from './i18n.js';
+import { SELECTOR_TEXT } from './selector-syntax.js';
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
@@ -166,7 +167,7 @@ const REASONS = Object.freeze({
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
   DEPTH_SERIES_SOURCE: 'Attach a Depth TSV to this series, or remove the series.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
-  COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits. Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.',
+  COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits. Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, {rgbForm}, and {hslForm}; comparison gradient colors take {shortHexForm} or {longHexForm}.',
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
   FILENAME: 'Use one file name without a folder: no {signs} or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
   FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',
@@ -226,7 +227,7 @@ const REASONS = Object.freeze({
   INHERIT_UNITS_CHANGED: 'The drawn records or windows changed since the comparison was saved. Choose Replace or Clear.',
   INHERIT_SOURCE_MISSING: 'This drawing holds no saved comparison to inherit. Choose Replace or Clear.',
   PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
-  OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
+  OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "{header}" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
   FASTA_IN_GENBANK: 'This file looks like FASTA. Choose FASTA (or GFF3 + FASTA when it has a GFF3 file) as the input type, or use a GenBank/DDBJ flat file.',
   // OV-1258, OV-1257: what a GenBank/DDBJ, GFF3, or FASTA slot file lacks.
@@ -268,11 +269,12 @@ const WHOLE_FAILURE_REASONS = new Set(['REPLY_TOO_LARGE', 'INPUT_MEMORY']);
 const SESSION_COMMANDS = Object.freeze({ circularCommand: 'gbdraw circular --session', linearCommand: 'gbdraw linear --session' });
 /** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
 const REASON_CODE_TEXT = Object.freeze({
-  SELECTOR_NO_MATCH: { example: CODE_TEXT.featureSelectorExample }, SELECTOR_AMBIGUOUS: { selector: CODE_TEXT.featureSelectorForm },
+  SELECTOR_NO_MATCH: { example: SELECTOR_TEXT.featureSelectorExample }, SELECTOR_AMBIGUOUS: { selector: SELECTOR_TEXT.featureSelectorForm },
   UNTERMINATED_SET: { sign: ']' }, UNTERMINATED_GROUP: { sign: ')' },
-  AMBIGUOUS: { selector: CODE_TEXT.recordNumber }, SELECTOR_FORMAT: { selector: CODE_TEXT.recordNumber },
-  REGION_FORMAT: { form: 'record_id:start-end[:rc]', otherForm: `${CODE_TEXT.recordNumber}:start-end[:rc]` },
-  FILENAME: { signs: '/ \\ : * ? " < > |' },
+  AMBIGUOUS: { selector: SELECTOR_TEXT.recordNumber }, SELECTOR_FORMAT: { selector: SELECTOR_TEXT.recordNumber },
+  REGION_FORMAT: { form: 'record_id:start-end[:rc]', otherForm: `${SELECTOR_TEXT.recordNumber}:start-end[:rc]` },
+  FILENAME: { signs: '/ \\ : * ? " < > |' }, OUTFMT7_FIELDS: { header: '# Fields:' },
+  COLOR: { rgbForm: 'rgb()', hslForm: 'hsl()', shortHexForm: '#RGB', longHexForm: '#RRGGBB' },
   REPLY_TOO_LARGE: SESSION_COMMANDS, FASTA_NO_ENTRIES: { sign: '>' }, FONT_FILE: { trueType: '.ttf', openType: '.otf', trueTypeCollection: '.ttc', openTypeCollection: '.otc' }
 });
 // What a decline names as changed under an evaluation of rule inputs (OV-447,

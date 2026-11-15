@@ -188,6 +188,12 @@ export const LOSATP_NO_SEARCH_MODE = 'none';
 // gbdraw/features/ids.py: FEATURE_INSTANCE_SEPARATOR
 export const FEATURE_INSTANCE_SEPARATOR = '@';
 
+// gbdraw/io/record_select.py: RECORD_INDEX_SELECTOR_PREFIX
+export const RECORD_INDEX_SELECTOR_PREFIX = '#';
+
+// gbdraw/features/selector_values.py: FEATURE_HASH_SELECTOR_KEY
+export const FEATURE_HASH_SELECTOR_KEY = 'hash';
+
 // gbdraw/api/record_planning.py: CLI_RECORD_KEY_PREFIX
 export const CLI_RECORD_KEY_PREFIX = 'record-';
 

@@ -229,6 +229,11 @@ def get_qualifier_values(qualifiers: dict, qualifier_key: str) -> list[str]:
     return []
 
 
+# The key of a feature selector that names a feature by its hash (``hash=<hash>``); the Web writes its hash selectors
+# and their help text with it (``js/utils/selector-syntax.js``).
+FEATURE_HASH_SELECTOR_KEY = "hash"
+
+
 def matches_feature_selector(
     *, key: str | None, value: str, feature_type: str,
     feature_hash: str | None, location: str | None,
@@ -236,7 +241,7 @@ def matches_feature_selector(
 ) -> bool:
     """Exact FeatureSelector matching; callers own match cardinality."""
     key = key.lower() if key else None
-    if key == "hash":
+    if key == FEATURE_HASH_SELECTOR_KEY:
         return feature_hash == value
     if key in {"location", "position"}:
         return location == value

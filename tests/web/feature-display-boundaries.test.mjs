@@ -15,6 +15,8 @@ for (const path of [
   'services/feature-sequence-fasta.js',
   'utils/optional-positive-number.js',
   'utils/error-normalization.js',
+  // error-normalization.js writes its selector forms with the selector syntax owner.
+  'utils/selector-syntax.js',
   // feature-utils.js and error-normalization.js write numbers with numberText.
   'utils/i18n.js',
   // error-normalization.js reads Python's figure length units from the generated mode profiles,

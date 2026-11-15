@@ -53,6 +53,7 @@ const copyModule = async (source, destination) => {
 };
 
 await copyModule('utils/error-normalization.js', 'utils/error-normalization.js');
+await copyModule('utils/selector-syntax.js', 'utils/selector-syntax.js');
 // error-normalization.js reads Python's figure length units from the generated mode profiles.
 await copyModule('mode-profiles.generated.js', 'mode-profiles.generated.js');
 await copyModule('utils/i18n.js', 'utils/i18n.js');

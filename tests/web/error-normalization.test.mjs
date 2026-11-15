@@ -1110,7 +1110,9 @@ test('a correction names its code text by a placeholder whose value its code tex
     ['REGION_FORMAT', 'Use record_id:start-end[:rc] or #<number>:start-end[:rc].'],
     ['FILENAME', 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.'],
     ['FASTA_NO_ENTRIES', 'The FASTA file has no sequence entry: no line starts with ">".'],
-    ['FONT_FILE', 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.']
+    ['FONT_FILE', 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.'],
+    ['COLOR', 'Use none, a supported named color, or a hex color with 3 or 6 digits. Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.'],
+    ['OUTFMT7_FIELDS', 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.']
   ]) assert.equal(summary({ reason }), `An input value is invalid. ${english}`, reason);
   const commands = '(Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).';
   assert.ok(summary({ reason: 'REPLY_TOO_LARGE' }, 'RESULT_INVALID').endsWith(`the gbdraw command line ${commands}`));

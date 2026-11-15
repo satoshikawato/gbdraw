@@ -17,6 +17,7 @@ import {
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { identityScalePathForMode } from '../mode-profiles.js';
 import { msg, t } from '../utils/i18n.js';
+import { hashSelector, recordIndexSelector } from '../utils/selector-syntax.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
@@ -282,7 +283,7 @@ const selectorText = (selector) => {
   if (selector.kind === 'recordId') return String(selector.value || '').trim();
   if (selector.kind === 'recordIndex') {
     const index = Number(selector.index);
-    return Number.isInteger(index) && index >= 0 ? `#${index + 1}` : '';
+    return Number.isInteger(index) && index >= 0 ? recordIndexSelector(index + 1) : '';
   }
   return '';
 };
@@ -358,7 +359,7 @@ const identityTableCells = (renderRequest, row, kind, cliPositions = null) => {
       ? msg('a placement names a feature identity that no table row can carry.')
       : msg('a feature edit names a feature identity that no table row can carry.'));
   }
-  return { record: `#${record.position}`, feature_selector: `hash=${id}` };
+  return { record: recordIndexSelector(record.position), feature_selector: hashSelector(id) };
 };
 
 // PD-OI-069 revision 2: a "This feature only" `hash` row names one feature
@@ -1187,7 +1188,7 @@ const appendRecordsTable = async (args, records, files, {
     };
     if (drawnRecords[index] > 1) {
       return cliPositions[index].map((order, at) => ({
-        ...row, record_id: `#${at + 1}`, order, column: gridCoordinate(placedColumns[at]) || row.column
+        ...row, record_id: recordIndexSelector(at + 1), order, column: gridCoordinate(placedColumns[at]) || row.column
       }));
     }
     if (record.windows.length <= 1) {
@@ -1340,7 +1341,7 @@ const appendInputArgs = async (args, request, files, planRecordPlaces) => {
     ? requestedRows
     : records.map((record) => gridCoordinate(record.presentation?.gridRow));
   rows.forEach((row, index) => {
-    if (row !== '') args.push('--multi_record_position', `#${index + 1}@${row}`);
+    if (row !== '') args.push('--multi_record_position', `${recordIndexSelector(index + 1)}@${row}`);
   });
   return { recordsTableUsed: false, cliPositions };
 };
@@ -2209,7 +2210,7 @@ const appendComparisonOptions = (args, request, files, units) => {
       slot: `generatedFiles.source_recipe.comparison_blasts[${index}]`,
       nameHintSlot: `generatedFiles.losat_blasts[${index}]`
     });
-    return { blastPath: path, query: `#${records[index].query + 1}`, subject: `#${records[index].subject + 1}` };
+    return { blastPath: path, query: recordIndexSelector(records[index].query + 1), subject: recordIndexSelector(records[index].subject + 1) };
   });
   // The pairs the search compares are `source=losat` rows, without a file, after the BLAST tables' `source=table` rows.
   const searchRows = losatRows.map(({ query, subject }) => ({ query: `#${query + 1}`, subject: `#${subject + 1}`, source: 'losat' }));

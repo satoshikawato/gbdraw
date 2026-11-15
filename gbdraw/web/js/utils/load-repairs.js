@@ -1,7 +1,8 @@
 // @ts-check
 
 import { SESSION_TABLE_LABELS } from './error-normalization.js';
-import { CODE_TEXT, listText, t, tm, tn } from './i18n.js';
+import { listText, t, tm, tn } from './i18n.js';
+import { SELECTOR_TEXT } from './selector-syntax.js';
 import { limitedList, moreLine } from './limited-list.js';
 
 /**
@@ -284,7 +285,7 @@ const WORDING = {
     tn(total(repairs),
       '{count} {selector} value from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. {selector} now names a feature by its hash in the source record, so the value may now match another feature or none.',
       '{count} {selector} values from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. {selector} now names a feature by its hash in the source record, so each may now match another feature or none.',
-      { selector: CODE_TEXT.hashSelector })
+      { selector: SELECTOR_TEXT.hashSelector })
   ],
   'table-row-joined': (repairs) => tableLines(repairs, (table, lines, count) => tn(count,
     '{table}: line {lines} had extra cells, joined into the last column with one space.',

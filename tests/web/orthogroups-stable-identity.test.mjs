@@ -36,6 +36,7 @@ await copyModule('gbdraw/web/js/utils/contract-shape.js', 'utils/contract-shape.
 await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
 // session-resource-backing.js raises its refusals as typed diagnostics.
 await copyModule('gbdraw/web/js/utils/error-normalization.js', 'utils/error-normalization.js');
+await copyModule('gbdraw/web/js/utils/selector-syntax.js', 'utils/selector-syntax.js');
 // depth-track-state.js reads a Depth series color by name.
 await copyModule('gbdraw/web/js/utils/color-utils.js', 'utils/color-utils.js');
 await copyModule('gbdraw/web/js/utils/named-colors.js', 'utils/named-colors.js');

@@ -33,8 +33,10 @@ logger = logging.getLogger(__name__)
 # around it and after ``#``, an optional ``+`` (Linear Record Order read ``#+2`` as record 2, OV-2988), and N in
 # ASCII digits, leading zeros allowed (``#01`` is record 1). The one reader of the form: Record Order in both modes,
 # ``--record_id``, ``--region``, and the Web, which reads this pattern from the generated contracts
-# (``RECORD_INDEX_SELECTOR_PATTERN``).
-RECORD_INDEX_SELECTOR_PATTERN = r"\s*#\s*\+?([0-9]+)\s*"
+# (``RECORD_INDEX_SELECTOR_PATTERN``). The sign that starts the form is ``RECORD_INDEX_SELECTOR_PREFIX``, which the
+# Web writes its record selectors and their help text with (``js/utils/selector-syntax.js``).
+RECORD_INDEX_SELECTOR_PREFIX = "#"
+RECORD_INDEX_SELECTOR_PATTERN = rf"\s*{RECORD_INDEX_SELECTOR_PREFIX}\s*\+?([0-9]+)\s*"
 _RECORD_INDEX_SELECTOR = re.compile(RECORD_INDEX_SELECTOR_PATTERN)
 
 
@@ -62,7 +64,7 @@ class RecordSelector:
 
     def label(self) -> str:
         if self.record_index is not None:
-            return f"#{self.record_index + 1}"
+            return f"{RECORD_INDEX_SELECTOR_PREFIX}{self.record_index + 1}"
         if self.record_id:
             return self.record_id
         return "(unspecified)"
@@ -78,7 +80,7 @@ def parse_record_selector(text: str | None) -> RecordSelector | None:
     raw = str(text).strip()
     if not raw or raw.lower() in NULL_RECORD_SELECTOR_WORDS:
         return None
-    if raw.startswith("#"):
+    if raw.startswith(RECORD_INDEX_SELECTOR_PREFIX):
         number = record_index_number(raw)
         if number is None:
             raise ValueError(f"Invalid record selector '{raw}'. Use #<number> or record_id.")

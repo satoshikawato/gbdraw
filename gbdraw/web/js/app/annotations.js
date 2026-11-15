@@ -31,6 +31,7 @@ import { normalizeCaughtError, normalizeUserFacingError } from '../utils/error-n
 import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { joinSentences, t, tn } from '../utils/i18n.js';
+import { hashSelector, recordIndexSelector } from '../utils/selector-syntax.js';
 
 /**
  * The text of an annotation TSV. A failed read rejects as the panel notice tells it: a refusal the diagnostic model
@@ -69,7 +70,7 @@ const tableExportNotice = (placed, skipped) => (placed > 0 || skipped > 0 ? () =
   placed > 0 ? tn(placed,
     '{count} annotation of a selected feature was written as {recordSelector} and {featureSelector}. It names the same feature only while the record order stays as drawn.',
     '{count} annotations of selected features were written as {recordSelector} and {featureSelector}. They name the same features only while the record order stays as drawn.',
-    { recordSelector: 'record=#<position>', featureSelector: 'feature_selector=hash=<feature hash>' }) : '',
+    { recordSelector: `record=${recordIndexSelector('<position>')}`, featureSelector: `feature_selector=${hashSelector('<feature hash>')}` }) : '',
   skipped > 0 ? tn(skipped,
     '{count} annotation of a selected feature that the current diagram does not draw was not exported.',
     '{count} annotations of selected features that the current diagram does not draw were not exported.') : ''

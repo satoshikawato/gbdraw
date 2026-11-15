@@ -38,7 +38,15 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .read_text(encoding="utf-8")
         .replace("../mode-profiles.generated.js", "./mode-profiles.generated.mjs")
         .replace("../contracts/schema.generated.js", "./schema.generated.mjs")
-        .replace("./i18n.js", "./i18n.mjs"),
+        .replace("./i18n.js", "./i18n.mjs")
+        .replace("./selector-syntax.js", "./selector-syntax.mjs"),
+        encoding="utf-8",
+    )
+    # error-normalization.js writes its selector forms with the selector syntax owner.
+    (tmp_path / "selector-syntax.mjs").write_text(
+        (WEB_ROOT / "js" / "utils" / "selector-syntax.js")
+        .read_text(encoding="utf-8")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs"),
         encoding="utf-8",
     )
     # error-normalization.js reads Python's figure length units from the generated mode profiles.

@@ -3328,7 +3328,7 @@
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
                                     <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ seq.windows.length > 1 ? t('Windows') : t('Region') }}</span>
-                                    <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or {selector}. A region that reaches past the record end is drawn to the record end.', { selector: CODE_TEXT.recordNumber })"></help-tip>
+                                    <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or {selector}. A region that reaches past the record end is drawn to the record end.', { selector: SELECTOR_TEXT.recordNumber })"></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div class="grid grid-cols-1 gap-1">
@@ -4098,7 +4098,7 @@
                                     </div>
                                 </div>
                                 <div class="min-w-0 space-y-1.5 border-t border-slate-200 pt-2" data-feature-anchor>
-                                    <span class="linear-primary-label mb-1"><label for="linear-anchor-feature-selector">{{ t('Align at feature') }}</label> <help-tip id="help-linear-anchor-feature" :text="t('Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as {example} or {selector}. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.', { example: CODE_TEXT.featureSelectorExample, selector: CODE_TEXT.featureSelectorForm })"></help-tip></span>
+                                    <span class="linear-primary-label mb-1"><label for="linear-anchor-feature-selector">{{ t('Align at feature') }}</label> <help-tip id="help-linear-anchor-feature" :text="t('Rotate each complete circular record so that the named feature starts at its left end, and move the other records sideways so that the feature starts below it. Type a KEY=VALUE selector, such as {example} or {selector}. Records without the feature keep their start and place. Apply writes the starts and positions once; later changes do not align again.', { example: SELECTOR_TEXT.featureSelectorExample, selector: SELECTOR_TEXT.featureSelectorForm })"></help-tip></span>
                                     <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-1">
                                         <input type="text" id="linear-anchor-feature-selector" v-model.trim="featureAnchorSelector" data-history-ignore aria-describedby="help-linear-anchor-feature" class="form-input min-w-0 px-2 py-1.5 text-xs" placeholder="gene=COX1" :disabled="!semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-selector">
                                         <button type="button" data-history-managed class="btn btn-secondary px-2 py-1 text-xs" @click="resolveFeatureAnchor" :disabled="!svgContent || !featureAnchorSelector || !semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-resolve">{{ t('Align at feature…') }}</button>
@@ -5808,7 +5808,7 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="group-heading" :aria-label="t('PRESET SCHEMES')">{{ t('PRESET SCHEMES') }} <help-tip id="help-colors-preset-schemes" :text="t('Replaces the specific rules with the preset\'s rules. The palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.')"></help-tip></h4>
+                                    <h4 class="group-heading" :aria-label="t('PRESET SCHEMES')">{{ t('PRESET SCHEMES') }} <help-tip id="help-colors-preset-schemes" :text="t('Replaces the specific rules with the preset\'s rules. The palette is unchanged. Bakta also sets the CDS default color to {color} and the Legend box size and font size to 12.', { color: '#cccccc' })"></help-tip></h4>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <select v-model="selectedSpecificPreset" :aria-label="t('Preset scheme')" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow min-w-0 bg-white" :disabled="!semanticMutationAvailable">
@@ -5821,7 +5821,7 @@
                                         <span v-else>{{ t('Apply preset') }}</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules') }}<span v-if="selectedSpecificPreset === 'cog'" class="block">{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</span></p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules') }}<span v-if="selectedSpecificPreset === 'cog'" class="block">{{ t('Bakta also sets the CDS default color to {color} and the Legend box size and font size to 12.', { color: '#cccccc' }) }}</span></p>
                             </div>
 
                             <div>

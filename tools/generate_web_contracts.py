@@ -121,6 +121,9 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # A "This feature only" color rule names a feature instance; the Source
     # recipe names the CLI record of its record key.
     ("FEATURE_INSTANCE_SEPARATOR", "gbdraw.features.ids", "FEATURE_INSTANCE_SEPARATOR"),
+    # The sign of a `#N` record selector and the key of a `hash=` feature selector, as the Web writes them.
+    ("RECORD_INDEX_SELECTOR_PREFIX", "gbdraw.io.record_select", "RECORD_INDEX_SELECTOR_PREFIX"),
+    ("FEATURE_HASH_SELECTOR_KEY", "gbdraw.features.selector_values", "FEATURE_HASH_SELECTOR_KEY"),
     ("CLI_RECORD_KEY_PREFIX", "gbdraw.api.record_planning", "CLI_RECORD_KEY_PREFIX"),
     ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.requests", "EXPANDED_RECORD_KEY_SEPARATOR"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.core.numeric", "UNSET_NUMBER_SPELLINGS"),

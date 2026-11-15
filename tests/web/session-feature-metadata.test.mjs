@@ -67,6 +67,7 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/diagram-worker-protocol.js', 'services/diagram-worker-protocol.js');
 await copyModule('gbdraw/web/js/utils/error-normalization.js', 'utils/error-normalization.js');
+await copyModule('gbdraw/web/js/utils/selector-syntax.js', 'utils/selector-syntax.js');
 // error-normalization.js reads Python's figure length units from the generated mode profiles.
 await copyModule('gbdraw/web/js/mode-profiles.generated.js', 'mode-profiles.generated.js');
 await copyModule('gbdraw/web/js/services/byte-utils.js', 'services/byte-utils.js');

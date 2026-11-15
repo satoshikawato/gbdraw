@@ -7,6 +7,7 @@
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from '../../services/annotation-state.js';
 import { validateAnnotationCoordinates } from './validation.js';
 import { t } from '../../utils/i18n.js';
+import { featureSelector, hashSelector } from '../../utils/selector-syntax.js';
 import {
   annotationRecordSelectorValue,
   coordinateTarget,
@@ -247,12 +248,12 @@ export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => n
       }
       placedFeatureIdentityCount += 1;
       target = featureTarget({
-        selector: `hash=${placement.hash}`, recordIndex: placement.recordIndex,
+        selector: hashSelector(placement.hash), recordIndex: placement.recordIndex,
         extent: target.envelope, circularPath: target.circularPath
       });
     }
     const coordinate = target.kind === 'coordinateSpan';
-    const selectors = Array.isArray(target.selectors) ? target.selectors.map((item) => item.key ? `${item.key}=${item.value}` : item.value).join(';') : '';
+    const selectors = Array.isArray(target.selectors) ? target.selectors.map((item) => item.key ? featureSelector(item.key, item.value) : item.value).join(';') : '';
     const style = /** @type {Partial<AnnotationStyle>} */ (annotation.style || set.defaultStyle || {});
     const hatch = style.hatch || /** @type {Partial<AnnotationHatch>} */ ({});
     /** @type {Record<string, unknown>} */

@@ -3,7 +3,8 @@
 import { canonicalFeaturePlacements, featureIdentityKey } from './feature-placement.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 /** @import { Wording } from '../utils/i18n.js' */
-import { CODE_TEXT, tn } from '../utils/i18n.js';
+import { tn } from '../utils/i18n.js';
+import { SELECTOR_TEXT } from '../utils/selector-syntax.js';
 
 // Session 44 and older kept per-feature edits in four maps keyed by rendered
 // SVG ID (`RENDERED_ID_FEATURE_EDIT_FIELDS`). Python alone converts them, once
@@ -44,7 +45,7 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
  */
 export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => () => tn(count,
   '{count} annotation from an older Session named a feature by {selector}. It now names that feature by its source, so it stays on the feature when the crop or orientation changes.',
-  '{count} annotations from an older Session named a feature by {selector}. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.', { selector: CODE_TEXT.hashSelector });
+  '{count} annotations from an older Session named a feature by {selector}. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.', { selector: SELECTOR_TEXT.hashSelector });
 
 const LANE_MODES = new Map([['outward', 'circular'], ['inward', 'circular'], ['above', 'linear'], ['below', 'linear']]);
 
