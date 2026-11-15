@@ -24,6 +24,7 @@ import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/we
 import { COLLINEARITY_COLOR_MODES } from '../../tools/i18n/collinearity-words.generated.mjs';
 import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-display-model.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
+import { classSourcePaths } from '../../tools/generate_web_tailwind_css.mjs';
 import {
   PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, compiledLines, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
 } from '../../tools/i18n/source-keys.mjs';
@@ -721,6 +722,32 @@ test('the UI languages are the eighteen of the Language menu, Latin script first
   for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'ur-PK', 'xx', null, undefined, 3, '../x']) {
     assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
   }
+});
+
+// OV-3669: a text style's floor is one custom property, --ui-text-floor, and
+// every font size under 13px in the page's own CSS (index.html, the component
+// rules and the utilities of css/tailwind.input.css, and each small text
+// utility the sources use) reads it, so the floor reaches every text and never
+// lowers a larger size.
+test('OV-3669: every small font size of the page reads the text style floor', () => {
+  const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
+  const input = readFileSync(join(webRoot, 'css', 'tailwind.input.css'), 'utf8');
+  assert.match(html, /:root\[data-ui-text-style="tall-marks"\] \{ --ui-text-floor: 12px; \}/);
+  assert.match(html, /:root\[data-ui-text-style="nastaliq"\] \{ --ui-text-floor: 13px; \}/);
+  const css = [['index.html', html.slice(html.indexOf('<style>'), html.indexOf('</style>'))], ['tailwind.input.css', input]];
+  const px = (value, unit) => Number(value) * (unit === 'rem' ? 16 : 1);
+  const unfloored = css.flatMap(([file, text]) => [...text.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/font-size:\s*([^;}]+)/g)]
+    .map((match) => match[1].trim())
+    .filter((value) => /^([\d.]+)(px|rem)\b/.test(value) && !value.startsWith('max('))
+    .filter((value) => { const [, n, unit] = /^([\d.]+)(px|rem)/.exec(value); return px(n, unit) > 0 && px(n, unit) < 13; })
+    .map((value) => `${file}: font-size: ${value}`));
+  assert.deepEqual(unfloored, []);
+  const floored = new Set([...input.matchAll(/\.text-(xs|\\\[[\d.]+px\\\]) \{ font-size: max\(/g)].map((match) => match[1].replace(/\\/g, '')));
+  // text-[9px] and text-[10px] are 11px in every locale, by one rule of index.html that takes the floor.
+  assert.match(html, /\[class~="text-\[9px\]"\],\s*\[class~="text-\[10px\]"\] \{\s*font-size: max\(0\.6875rem, var\(--ui-text-floor, 0px\)\) !important;/);
+  ['[9px]', '[10px]'].forEach((size) => floored.add(size));
+  const used = new Set(classSourcePaths().flatMap((file) => [...readFileSync(join(webRoot, '..', '..', file), 'utf8').matchAll(/\btext-(xs|\[[\d.]+px\])(?![\w-])/g)].map((match) => match[1])));
+  assert.deepEqual([...used].filter((size) => (size === 'xs' ? 12 : parseFloat(size.slice(1))) < 13 && !floored.has(size)).sort(), []);
 });
 
 test('a locale outside the UI languages is refused', async () => {

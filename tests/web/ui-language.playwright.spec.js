@@ -27,7 +27,10 @@
 //   controls of a fixed height, the empty Preview's two actions, the
 //   feature search bar, and, with a Session, the compact fields, track stack
 //   sizes, menu buttons and Auto values that hold their text line at 13 px, and
-//   the Urdu hint of a code field in Nastaliq (OV-2794, OV-3656, OV-3658);
+//   the Urdu hint of a code field in Nastaliq (OV-2794, OV-3656, OV-3658); no
+//   visible text under 13 px at the start, with every section and the custom
+//   track stack open, in the History list, the Drawing menu, the feature popup
+//   and the rail (OV-3669);
 // - at 1024x768, 1280x800 and 1440x900, in all 18 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
@@ -432,6 +435,22 @@ test('every text style keeps the figure in English type, and a truncated text is
   expect(errors).toEqual([]);
 });
 
+// The visible texts under a size: each element outside the figure that shows a
+// text of its own (a text node, a field's value or hint, a select's choice), as
+// "tag.class size", once each.
+const textsUnder = (page, floor) => page.evaluate((floor) => {
+  const field = 'input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], [type=hidden]), textarea';
+  const ownText = (element) => [...element.childNodes].some((node) => node.nodeType === 3 && node.data.trim())
+    || (element.matches(field) && Boolean(element.value || element.placeholder)) || element.matches('select');
+  const shown = (element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden' && !element.closest('.sr-only');
+  const under = [...document.querySelectorAll('body *')]
+    .filter((element) => !element.closest('svg, script, style, template') && ownText(element) && shown(element))
+    .map((element) => [element, parseFloat(getComputedStyle(element).fontSize)])
+    .filter(([, size]) => size > 0 && size < floor)
+    .map(([element, size]) => `${element.tagName.toLowerCase()}${[...element.classList].map((name) => `.${name}`).join('')} ${size}px`);
+  return [...new Set(under)].sort();
+}, floor);
+
 // Urdu takes the vendored Nastaliq font first, and the nastaliq text style:
 // every UI line is 2.5em, small text is 13 px (14 px text keeps its size), with
 // no upper-casing or tracking; a control of a fixed .h-* height grows to hold
@@ -489,6 +508,8 @@ test('Urdu takes the Noto Nastaliq Urdu font, 2.5em lines, a 13 px floor and con
       searchBar
     };
   })).toEqual({ controls: true, overflowing: [], card: 2, short: [], searchBar: ['Noto Nastaliq Urdu', '13px', true] });
+  // No visible text under the 13 px floor, at the start and in every state below (OV-3669).
+  expect(await textsUnder(page, 13)).toEqual([]);
   // With a Session, every section and the Circular custom track stack open: a code field (font-mono) keeps its typed
   // text monospace and shows its Urdu hint in Nastaliq (OV-3656); each field, menu button and Auto value whose own rule
   // gives it a fixed height and a small size in the other languages is 13 px and holds its line (OV-3658).
@@ -518,8 +539,26 @@ test('Urdu takes the Noto Nastaliq Urdu font, 2.5em lines, a 13 px floor and con
     fixed: [['.form-input-compact', true, []], ['.circular-measure-controls .form-input', true, []], ['.action-menu-toggle', true, []],
       ['.auto-value-placeholder', true, []]]
   });
-  await page.getByRole('button', { name: (await catalogOf('ur'))['Collapse settings to icons'], exact: true }).click();
+  expect(await textsUnder(page, 13)).toEqual([]);
+  // The History list, the Drawing menu and the feature popup.
+  const ur = await catalogOf('ur');
+  await page.locator('[data-history-list-toggle]:visible').click();
+  await expect(page.locator('.history-list-row').first()).toBeVisible();
+  expect(await textsUnder(page, 13)).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.history-list')).toHaveCount(0);
+  await page.locator('.drawing-bar-menu .action-menu-toggle').click();
+  await expect(page.locator('.drawing-bar-menu .action-menu-item').first()).toBeVisible();
+  expect(await textsUnder(page, 13)).toEqual([]);
+  await page.locator('.drawing-bar-menu .action-menu-toggle').click();
+  await page.locator('.drawer-toggle').click();
+  await page.locator('.right-drawer').getByRole('button', { name: ur.Edit, exact: true }).first().click();
+  await expect(page.locator('.feature-popup')).toBeVisible();
+  expect(await textsUnder(page, 13)).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: ur['Collapse settings to icons'], exact: true }).click();
   expect(await text('.settings-index nav > button[data-settings-entry="font"] > span')).toEqual(['13px', '32.5px', 'none', 'normal']);
+  expect(await textsUnder(page, 13)).toEqual([]);
   expect(errors).toEqual([]);
 });
 

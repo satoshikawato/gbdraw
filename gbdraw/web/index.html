@@ -265,32 +265,27 @@
         /* The page's data-ui-text-style is the shown locale's textStyle (UI_LOCALES, js/utils/i18n.js); the figure is exempt.
            no-caps, tall-marks and nastaliq: no upper-casing or tracking in the UI (no letter case, stacked diacritics, or joined letters). */
         :root:is([data-ui-text-style="no-caps"], [data-ui-text-style="tall-marks"], [data-ui-text-style="nastaliq"]) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
-        /* tall-marks: the marks above and below the letters need room: no UI text under 12px, and tight line heights widened to 1.5.
-           The floor is !important to win over the 11px !important rule for text-[9px] and text-[10px] below. */
-        :root[data-ui-text-style="tall-marks"] :is(.text-\[9px\], .text-\[10px\], .text-\[11px\]):not(svg, svg *) { font-size: 12px !important; }
+        /* The smallest UI text of a text style, --ui-text-floor: 12px for tall-marks, 13px for nastaliq, none for the other
+           styles and for the figure. It is the one floor: every rule of the page's own CSS that sets a font size under 13px
+           (here, css/tailwind.input.css, and the small text utilities there) writes it as max(<size>, var(--ui-text-floor, 0px)),
+           so a text style raises each size under its floor and leaves every larger size as it is (OV-3669). A text style
+           that needs a floor sets the property here; a new rule with a small size writes the max() form. */
+        :root[data-ui-text-style="tall-marks"] { --ui-text-floor: 12px; }
+        :root[data-ui-text-style="nastaliq"] { --ui-text-floor: 13px; }
+        :root svg { --ui-text-floor: 0px; }
+        /* tall-marks: the marks above and below the letters need room: tight line heights widened to 1.5. A rail name may
+           take two lines; its entry grows to hold them, and the rail column scrolls when the entries do not fit. */
         :root[data-ui-text-style="tall-marks"] :is(.leading-none, .leading-tight, .leading-snug):not(svg, svg *) { line-height: 1.5; }
-        /* The same floor for the small text styles whose size their own rule sets (css/tailwind.input.css): hints, group
-           headings, the apply note, the header buttons, the rail and its tooltip, and the choice-group labels. A rail name may take two lines; its entry grows to
-           hold them, and the rail column scrolls when the entries do not fit. */
-        :root[data-ui-text-style="tall-marks"] :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span) { font-size: 12px; }
-        :root[data-ui-text-style="tall-marks"] .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { font-size: 12px; }
         /* A wrapped Vietnamese rail name, or one with tall marks, needs taller lines (the wrap itself is every locale's, css/tailwind.input.css). */
         :root:lang(vi) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.3; }
         :root[data-ui-text-style="tall-marks"] [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.5; }
         /* nastaliq (Urdu): a Nastaliq word is tall and slopes down to its end. Every UI line is 2.5em with the font's own
-           metrics (its ascent and descent fill the line; the tallest letters rise above it), the icons aside. No small UI
-           text under 13px; 14px text keeps its size. As for tall-marks, the floor of the text styles whose size their own
-           rule sets is not !important, so a header button that shows its icon alone keeps its words at 0px; the fields and
-           menu buttons whose own rule sets a small size take the floor at the text style's own weight (:where), so a larger
-           size of their own (the drawing picker's 14px at phone width) stays. A control of a fixed height grows with its
-           text: one of a fixed .h-* height, and the fields, menu buttons and header button whose own rule fixes it (OV-3656,
-           OV-3658). A one-line text cut with an ellipsis keeps 0.6em of room at its sides,
-           where the first and last letters reach past the line's ends (the clip is at the sides only,
+           metrics (its ascent and descent fill the line; the tallest letters rise above it), the icons aside. Its floor is
+           above. A control of a fixed height grows with its text: one of a fixed .h-* height, and the fields, menu buttons
+           and header button whose own rule fixes it (OV-3656, OV-3658). A one-line text cut with an ellipsis keeps 0.6em of
+           room at its sides, where the first and last letters reach past the line's ends (the clip is at the sides only,
            css/tailwind.input.css). */
         :root[data-ui-text-style="nastaliq"] :not(svg, svg *, .ph) { line-height: 2.5 !important; }
-        :root[data-ui-text-style="nastaliq"] :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-xs):not(svg, svg *) { font-size: 13px !important; }
-        :root[data-ui-text-style="nastaliq"] :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span, .preview-feature-search) { font-size: 13px; }
-        :root[data-ui-text-style="nastaliq"] :where(.form-input-compact, .auto-value-placeholder, .track-slot-auto-placeholder, .match-action, .action-menu-toggle) { font-size: 13px; }
         :root[data-ui-text-style="nastaliq"] :is(:is(button, select, input, a, summary, label):is(.h-5, .h-6, .h-7, .h-8, .h-9, .h-10, .h-11, .h-12),
             .form-input-compact, .track-slot-geometry-input, .circular-measure-controls .form-input, .match-action, .action-menu-toggle,
             [data-definition-line-color-state], .app-header[data-header-wrapped] .app-session-button) { height: auto !important; }
@@ -361,7 +356,7 @@
         }
         #app-boot-splash .boot-status {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 0.75rem;
+            font-size: max(0.75rem, var(--ui-text-floor, 0px));
             color: #64748b;
         }
         #app:not([v-cloak]) + #app-boot-splash {
@@ -450,7 +445,7 @@
         }
         .circular-measure-note {
             margin-top: 0.125rem;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             line-height: 1.45;
             overflow-wrap: anywhere;
         }
@@ -462,7 +457,7 @@
             align-items: center;
             gap: 0.125rem;
             margin-bottom: 0.125rem;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             line-height: 1.2;
             font-weight: 700;
             color: var(--ui-muted);
@@ -492,7 +487,7 @@
         }
         .auto-value-placeholder {
             padding: 0.2rem 0.5rem;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
         }
         .track-slot-pixel-field .track-slot-geometry-input::placeholder {
             color: transparent;
@@ -506,7 +501,7 @@
         }
         .track-slot-auto-placeholder {
             padding: 0.25rem 0.45rem;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .track-slot-unit-suffix {
             position: absolute;
@@ -514,14 +509,14 @@
             right: 0.45rem;
             transform: translateY(-50%);
             color: var(--ui-muted);
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             font-weight: 700;
             line-height: 1;
             pointer-events: none;
             z-index: 2;
         }
-        .basic-settings .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
-        .basic-settings .form-input.text-xs { font-size: 10px; }
+        .basic-settings .form-input { font-size: max(10px, var(--ui-text-floor, 0px)); padding: 0.25rem 0.5rem; line-height: 1.2; }
+        .basic-settings .form-input.text-xs { font-size: max(10px, var(--ui-text-floor, 0px)); }
         .feature-popup {
             width: min(720px, calc(100vw - 24px));
             min-width: min(360px, calc(100vw - 24px));
@@ -556,7 +551,7 @@
             background: #f8fafc;
             border-bottom: 1px solid #e2e8f0;
             color: #475569;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             font-weight: 700;
             letter-spacing: 0.04em;
             padding: 0.45rem 0.65rem;
@@ -575,7 +570,7 @@
         }
         .pairwise-match-popup-key {
             color: #64748b;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             font-weight: 700;
             text-transform: uppercase;
         }
@@ -583,7 +578,7 @@
             min-width: 0;
             color: #1e293b;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             overflow-wrap: anywhere;
             white-space: pre-wrap;
         }
@@ -612,7 +607,7 @@
             width: 100%;
             min-width: 46rem;
             border-collapse: collapse;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .pairwise-match-feature-table th,
         .pairwise-match-feature-table td {
@@ -627,7 +622,7 @@
             z-index: 1;
             background: #ffffff;
             color: var(--ui-muted);
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             font-weight: 700;
             text-transform: uppercase;
         }
@@ -654,7 +649,7 @@
             /* The row's mono-cell color: --ui-muted is only 4.37:1 on the row's hover ground. */
             color: #475569;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             overflow-wrap: anywhere;
         }
         .pairwise-match-feature-mono {
@@ -673,7 +668,7 @@
         .match-lead-note,
         .match-muted {
             color: #475569;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .match-lead-facts {
             margin-top: 0.25rem;
@@ -698,7 +693,7 @@
             border-radius: 0.375rem;
             background: #ffffff;
             color: #334155;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             font-weight: 600;
             cursor: pointer;
             white-space: nowrap;
@@ -761,7 +756,7 @@
             padding: 0.25rem 0.5rem;
             border-radius: 0.25rem;
             color: #334155;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             text-align: left;
             white-space: nowrap;
         }
@@ -784,7 +779,7 @@
             gap: 0.25rem;
             padding: 0.25rem 0.5rem 0.125rem;
             color: #64748b;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             font-weight: 700;
             text-transform: uppercase;
         }
@@ -799,7 +794,7 @@
             background: #f1f5f9;
             color: #334155;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             font-weight: 600;
             line-height: 1.6;
             white-space: nowrap;
@@ -812,7 +807,7 @@
         .match-disclosure > summary {
             padding: 0.4rem 0.65rem;
             color: #334155;
-            font-size: 12px;
+            font-size: max(12px, var(--ui-text-floor, 0px));
             font-weight: 600;
             cursor: pointer;
         }
@@ -822,7 +817,7 @@
         .match-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .match-table th,
         .match-table td {
@@ -837,7 +832,7 @@
             z-index: 1;
             background: #ffffff;
             color: #475569;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             font-weight: 700;
         }
         .match-table tr[aria-current="true"] td {
@@ -880,14 +875,14 @@
         .match-mono {
             color: #475569;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             overflow-wrap: anywhere;
         }
         .match-detail-rows {
             display: grid;
             grid-template-columns: max-content minmax(0, 1fr);
             gap: 0.2rem 0.75rem;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .match-detail-rows dt {
             color: #475569;
@@ -899,7 +894,7 @@
         }
         .match-link {
             color: #1d4ed8;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             text-decoration: underline;
             text-underline-offset: 2px;
         }
@@ -918,7 +913,7 @@
             border-radius: 0.5rem;
             box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
             color: #334155;
-            font-size: 12px;
+            font-size: max(12px, var(--ui-text-floor, 0px));
             line-height: 1.35;
             padding: 0.625rem 0.75rem;
         }
@@ -953,7 +948,7 @@
             margin-top: 0.1rem;
             color: #64748b;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
         }
         .feature-hover-summary-row {
             display: grid;
@@ -964,7 +959,7 @@
         }
         .feature-hover-summary-label {
             color: #64748b;
-            font-size: 10px;
+            font-size: max(10px, var(--ui-text-floor, 0px));
             font-weight: 700;
             text-transform: uppercase;
         }
@@ -1015,7 +1010,7 @@
         }
         .feature-popup-heading {
             margin-bottom: 0.5rem;
-            font-size: 0.75rem;
+            font-size: max(0.75rem, var(--ui-text-floor, 0px));
             font-weight: 700;
             color: #475569;
             text-transform: uppercase;
@@ -1031,7 +1026,7 @@
         /* A one-line note under a popup control. */
         .feature-popup-note {
             margin-top: 0.25rem;
-            font-size: 0.75rem;
+            font-size: max(0.75rem, var(--ui-text-floor, 0px));
             line-height: 1rem;
             color: #b45309;
         }
@@ -1071,7 +1066,7 @@
             color: #334155;
             box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .preview-feature-search * {
             box-sizing: border-box;
@@ -1180,7 +1175,7 @@
             align-items: baseline;
             min-width: 0;
             margin-top: 6px;
-            font-size: 12px;
+            font-size: max(12px, var(--ui-text-floor, 0px));
             line-height: 1.3;
         }
         /* Empty, the line takes no space; its status stays a live region. */
@@ -1275,7 +1270,7 @@
             border-radius: 0.5rem;
             box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
             color: #334155;
-            font-size: 12px;
+            font-size: max(12px, var(--ui-text-floor, 0px));
             line-height: 1.35;
             padding: 0.5rem 0.625rem;
         }
@@ -1340,7 +1335,7 @@
             height: 18px;
             padding: 0 6px;
             border-radius: 9px;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             font-weight: 600;
             line-height: 16px;
             box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 1px 3px rgba(15, 23, 42, 0.25);
@@ -1468,7 +1463,7 @@
             border-radius: 0.375rem;
             background: #1e3a8a;
             color: #fff;
-            font-size: 0.75rem;
+            font-size: max(0.75rem, var(--ui-text-floor, 0px));
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
         }
@@ -1515,7 +1510,7 @@
         .feature-selection-toolbar input,
         .feature-selection-toolbar select,
         .feature-selection-toolbar button {
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .feature-selection-status {
             position: absolute;
@@ -1529,7 +1524,7 @@
             color: #1e40af;
             box-shadow: 0 8px 20px rgba(30, 64, 175, 0.12);
             padding: 0.45rem 0.65rem;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             font-weight: 700;
         }
         .hosted-build-label {
@@ -1776,7 +1771,7 @@
         }
         .history-list-title {
             padding: 0.4rem 0.75rem; border-bottom: 1px solid #e2e8f0;
-            font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #64748b;
+            font-size: max(0.6875rem, var(--ui-text-floor, 0px)); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #64748b;
         }
         .history-list-rows { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
         .history-list-row {
@@ -1800,11 +1795,11 @@
         .history-list-row:not([aria-disabled="true"]):hover, .history-list-row:focus-visible { background-color: #bfdbfe; outline: none; }
         .history-list-tag {
             flex: none; padding: 0 0.3rem; border-radius: 0.25rem; background-color: #dbeafe;
-            font-size: 0.625rem; font-weight: 700; line-height: 1rem; color: #1d4ed8;
+            font-size: max(0.625rem, var(--ui-text-floor, 0px)); font-weight: 700; line-height: 1rem; color: #1d4ed8;
         }
         .history-list-hint {
             min-height: 1.75rem; margin: 0; padding: 0.35rem 0.75rem; border-top: 1px solid #e2e8f0;
-            background-color: #f8fafc; font-size: 0.75rem; color: #475569;
+            background-color: #f8fafc; font-size: max(0.75rem, var(--ui-text-floor, 0px)); color: #475569;
         }
         @media (max-width: 768px) {
             .history-list-row { min-height: 2.5rem; }
@@ -1819,7 +1814,7 @@
         .tutorial-card > .btn, .tutorial-card > .app-gallery-link { justify-content: center; min-height: 2.25rem; padding: 0.25rem 0.875rem; font-size: 0.8125rem; }
         .example-tutorial-link {
             display: inline-flex; flex: none; align-items: center; gap: 0.25rem; padding: 0.5rem 0.75rem;
-            font-size: 0.75rem; font-weight: 600; color: #1d4ed8; white-space: nowrap;
+            font-size: max(0.75rem, var(--ui-text-floor, 0px)); font-weight: 600; color: #1d4ed8; white-space: nowrap;
         }
         .example-tutorial-link:hover { text-decoration: underline; }
         @media (max-width: 1439px) {
@@ -2051,7 +2046,7 @@
                 flex-wrap: wrap !important;
                 justify-content: flex-start !important;
                 gap: 0.25rem 0.75rem !important;
-                font-size: 0.75rem !important;
+                font-size: max(0.75rem, var(--ui-text-floor, 0px)) !important;
                 line-height: 1.35 !important;
             }
         }
@@ -2070,7 +2065,7 @@
             border-top: 1px solid #e2e8f0;
             background: #fff;
             color: #334155;
-            font-size: 12px;
+            font-size: max(12px, var(--ui-text-floor, 0px));
             line-height: 1.35;
         }
         .preview-workspace:has(> .alignment-review-panel) {
@@ -2114,7 +2109,7 @@
             background: #f1f5f9;
             color: #475569;
             font-family: ui-monospace, monospace;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .alignment-review-lead { margin: 4px 0 0; color: #475569; overflow-wrap: anywhere; }
         .alignment-review-lead b { color: #1d4ed8; }
@@ -2127,7 +2122,7 @@
             gap: 2px 8px;
             margin-bottom: 2px;
             color: #64748b;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
         }
         .alignment-review-caption > span:first-child { color: #475569; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
         .alignment-review-key { display: flex; align-items: center; gap: 4px; }
@@ -2142,7 +2137,7 @@
             gap: 6px;
             margin: 9px 0 0;
             color: #64748b;
-            font-size: 11px;
+            font-size: max(11px, var(--ui-text-floor, 0px));
             font-weight: 700;
             letter-spacing: 0.03em;
             text-transform: uppercase;
@@ -2155,14 +2150,14 @@
         .alignment-review-card.is-need { margin: 4px -8px 3px; padding: 4px 7px 7px; border: 1px solid #f59e0b; border-radius: 6px; background: #fffdf5; }
         .alignment-review-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
         .alignment-review-record { min-width: 0; color: #1e293b; font-weight: 600; overflow-wrap: anywhere; }
-        .alignment-review-detail { color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-detail { color: #64748b; font-size: max(11px, var(--ui-text-floor, 0px)); overflow-wrap: anywhere; }
         .alignment-review-card.is-skipped .alignment-review-record,
         .alignment-review-card.is-skipped .alignment-review-gene b { color: #64748b; }
         .alignment-review-direction { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-left: auto; }
         .alignment-review-arrow { color: #64748b; font-size: 13px; line-height: 1; }
-        .alignment-review-chip { flex: none; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .alignment-review-chip { flex: none; padding: 0 5px; border-radius: 4px; font-size: max(11px, var(--ui-text-floor, 0px)); font-weight: 600; white-space: nowrap; }
         .alignment-review-chip.is-reference { background: #2563eb; color: #fff; font-weight: 700; }
-        .alignment-review-chip.is-apply { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 10px; }
+        .alignment-review-chip.is-apply { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: max(10px, var(--ui-text-floor, 0px)); }
         .alignment-review-chip.is-reversed { background: #fef3c7; color: #92400e; }
         .alignment-review-chip.is-recommended { background: #d1fae5; color: #065f46; }
         .alignment-review-chip.is-evidence { background: #f1f5f9; color: #475569; font-weight: 500; white-space: normal; }
@@ -2182,15 +2177,15 @@
         .alignment-review-gene { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px 4px; margin: 1px 0 0; border-radius: 4px; }
         .alignment-review-gene b { color: #1e293b; overflow-wrap: anywhere; }
         .alignment-review-gene code,
-        .alignment-review-facts code { color: #64748b; font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-facts code { color: #64748b; font-family: ui-monospace, monospace; font-size: max(11px, var(--ui-text-floor, 0px)); overflow-wrap: anywhere; }
         .alignment-review-gene.is-hover { box-shadow: 0 0 0 2px #bfdbfe; }
-        .alignment-review-place { color: #64748b; font-size: 11px; white-space: nowrap; }
+        .alignment-review-place { color: #64748b; font-size: max(11px, var(--ui-text-floor, 0px)); white-space: nowrap; }
         /* The second line of a one-candidate card: evidence at the left, Skip at the right. */
         .alignment-review-evidence { display: flex; flex: 0 0 100%; align-items: center; gap: 4px; min-width: 0; }
         .alignment-review-evidence .alignment-review-chip { flex: 0 1 auto; }
-        .alignment-review-skip { display: flex; flex: none; align-items: center; gap: 4px; margin-left: auto; color: #64748b; font-size: 11px; cursor: pointer; }
+        .alignment-review-skip { display: flex; flex: none; align-items: center; gap: 4px; margin-left: auto; color: #64748b; font-size: max(11px, var(--ui-text-floor, 0px)); cursor: pointer; }
         .alignment-review-skip input { width: 12px; height: 12px; margin: 0; }
-        .alignment-review-note { margin: 2px 0 0; color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-note { margin: 2px 0 0; color: #64748b; font-size: max(11px, var(--ui-text-floor, 0px)); overflow-wrap: anywhere; }
         .alignment-review-note b { color: #92400e; font-weight: 600; }
         .alignment-review-candidates { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin-top: 4px; }
         .alignment-review-candidate {
@@ -2210,12 +2205,12 @@
         .alignment-review-candidate.is-hover { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
         .alignment-review-candidate:focus-within { outline: 2px solid #2563eb; outline-offset: 1px; }
         .alignment-review-candidate.is-busy { cursor: wait; opacity: 0.6; }
-        .alignment-review-candidate.is-skip { align-items: center; padding: 2px 8px; border-style: dashed; color: #64748b; font-size: 11px; }
+        .alignment-review-candidate.is-skip { align-items: center; padding: 2px 8px; border-style: dashed; color: #64748b; font-size: max(11px, var(--ui-text-floor, 0px)); }
         .alignment-review-candidate.is-skip > input { margin: 0; }
         .alignment-review-candidate.is-skip.is-chosen { border-color: #94a3b8; background: #f8fafc; }
         .alignment-review-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
-        .alignment-review-name b { color: #1e293b; font-size: 12.5px; overflow-wrap: anywhere; }
-        .alignment-review-facts { display: block; color: #64748b; font-size: 11px; overflow-wrap: anywhere; }
+        .alignment-review-name b { color: #1e293b; font-size: max(12.5px, var(--ui-text-floor, 0px)); overflow-wrap: anywhere; }
+        .alignment-review-facts { display: block; color: #64748b; font-size: max(11px, var(--ui-text-floor, 0px)); overflow-wrap: anywhere; }
         .alignment-review-directions { min-width: 0; margin-top: 10px; padding-top: 9px; border-top: 1px solid #e2e8f0; }
         .alignment-review-panel > footer {
             display: flex;
@@ -2227,7 +2222,7 @@
             border-top: 1px solid #e2e8f0;
             background: #f8fafc;
         }
-        .alignment-review-panel > footer p { flex: 1 1 0; min-width: 8rem; margin: 0; color: #64748b; font-size: 11.5px; }
+        .alignment-review-panel > footer p { flex: 1 1 0; min-width: 8rem; margin: 0; color: #64748b; font-size: max(11.5px, var(--ui-text-floor, 0px)); }
         .alignment-review-panel > footer p.is-need { color: #92400e; font-weight: 600; }
 
         /* The same canvas and Editor dock below the search on compact cards. */
@@ -2373,13 +2368,13 @@
         }
         .linear-secondary-summary {
             color: #475569;
-            font-size: 0.75rem;
+            font-size: max(0.75rem, var(--ui-text-floor, 0px));
             font-weight: 600;
             line-height: 1rem;
         }
         [class~="text-[9px]"],
         [class~="text-[10px]"] {
-            font-size: 0.6875rem !important;
+            font-size: max(0.6875rem, var(--ui-text-floor, 0px)) !important;
         }
         .linear-comparison-actions {
             display: grid;
@@ -2411,7 +2406,7 @@
             cursor: pointer;
             padding: 0.25rem 0.25rem;
             text-align: center;
-            font-size: 0.6875rem;
+            font-size: max(0.6875rem, var(--ui-text-floor, 0px));
             font-weight: 600;
             line-height: 1.1;
             color: #334155;
@@ -2548,7 +2543,7 @@
         /* Beside the rail alone, Generate is a 60 px button: the icon over the first word, and the loader alone
            while it runs. */
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar { padding: 0 0 calc(1rem + 1px); border: 0; background: none; backdrop-filter: none; }
-        .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { height: 60px; padding: 0; border-radius: 10px; font-size: 10px; line-height: 1.1; }
+        .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { height: 60px; padding: 0; border-radius: 10px; font-size: max(10px, var(--ui-text-floor, 0px)); line-height: 1.1; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn > span { flex-direction: column; gap: 2px; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-long { display: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-short { display: inline; }
