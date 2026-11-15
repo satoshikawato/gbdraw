@@ -10791,8 +10791,9 @@ Decision date: 2026-10-11
   card's file that another drawing also uses, Q-C-1 and Q-S4-1
   (Revision 99 entry); for the History list, Q1 to Q4 of the History step
   list (Revision 109 entry). The receipt names the record's outcome only.
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its JSON representation below.
+- Normative outcome: exactly the complete approved scenario revision `11`
+  `PRODUCT_DECISION` receipt and its JSON representation below. The scenario
+  revision `10` receipt and JSON are kept as they were approved.
 - Decision source: the Owner replies quoted verbatim in the Revision 37 entry
   above, for scenario revision `2` those quoted in the Revision 62 entry
   above, for scenario revision `3` those quoted in the Revision 63 entry
@@ -10810,6 +10811,8 @@ Decision date: 2026-10-11
   record supplies no runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `10`; UTF-8, excluding the final newline):
   `c48be004aaad3c8bd775d89563faa1d7921d37cf9cd1f635bb3172357b1b823d`.
+- Receipt SHA-256 (scenario revision `11`; UTF-8, excluding the final newline):
+  `d09f505fae49174263fd90e142b86ccf746bec468cea335dfadb3f40f206a72a`.
 - Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-013`,
   `OIC-027`, `OIC-030`. These obligations and the complete selected outcome
   are jointly required; their citation does not claim completed
@@ -10844,18 +10847,6 @@ Decision date: 2026-11-02
 }
 ```
 
-#### Revision #2047
-
-- On `2026-11-14`, about 22:47 JST, the Product Decision Owner `satoshikawato` answered
-  「PD-OI-090 r11=承認 PD-OI-115 r2=承認」 to the full receipt texts of `PD-OI-090`
-  scenario revision `11` and `PD-OI-115` scenario revision `2` (campaign
-  `region-crop-20261027`, `DECISIONS.md` `D-16`). Scenario revision `11` supersedes
-  scenario revision `10`; the receipt below is serialized byte for byte as approved.
-- Receipt SHA-256 of the new scenario revision (UTF-8, excluding the final newline):
-  `d09f505fae49174263fd90e142b86ccf746bec468cea335dfadb3f40f206a72a`.
-- No other record is amended or retired. The runtime that implements it merges with it (static Product Contract
-  co-change); this entry supplies no runtime acceptance evidence.
-
 ```text
 PRODUCT_DECISION
 Concern: session.project-drawings
@@ -10884,6 +10875,18 @@ Decision date: 2026-11-14
   "decisionDate": "2026-11-14"
 }
 ```
+
+#### Revision #2047
+
+- On `2026-11-14`, about 22:47 JST, the Product Decision Owner `satoshikawato` answered
+  「PD-OI-090 r11=承認 PD-OI-115 r2=承認」 to the full receipt texts of `PD-OI-090`
+  scenario revision `11` and `PD-OI-115` scenario revision `2` (campaign
+  `region-crop-20261027`, `DECISIONS.md` `D-16`). Scenario revision `11` supersedes
+  scenario revision `10`; its receipt above is serialized byte for byte as approved.
+- Receipt SHA-256 of the new scenario revision (UTF-8, excluding the final newline):
+  `d09f505fae49174263fd90e142b86ccf746bec468cea335dfadb3f40f206a72a`.
+- No other record is amended or retired. The runtime that implements it merges with it (static Product Contract
+  co-change); this entry supplies no runtime acceptance evidence.
 
 ### PD-OI-091: Per-record draw ON/OFF
 
@@ -13665,8 +13668,9 @@ Decision date: 2026-11-07
   `PD-OI-105` fixes that one Result popup is open at a time. All three stay.
 - Status: `ACCEPTED`
 - Selected outcome: `A`, the Select region toggle
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its JSON representation below.
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its JSON representation below. The scenario
+  revision `1` receipt and JSON are kept as they were approved.
 - Decision source: the Owner replies of `2026-11-04` quoted in the Revision 117
   entry above, and for scenario revision `2` the approval quoted in the
   `PD-OI-090` Revision #2047 entry (its entry below points to it). The receipt and JSON below reproduce the approved fields
@@ -13675,6 +13679,8 @@ Decision date: 2026-11-07
   runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `2889b395fe127535582b65f77696afbf380861dd6beb6c94ca19f7d843c82ab4`.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `17dd4b66ad4c39cb8196610c1e46fda59e7fede013a9521f8602e5d28499f5f0`.
 
 ```text
 PRODUCT_DECISION
@@ -13715,17 +13721,6 @@ Decision date: 2026-11-04
   "decisionDate": "2026-11-04"
 }
 ```
-
-#### Revision #2047
-
-- This entry belongs to the same revision as the `PD-OI-090` Revision #2047 entry, which
-  quotes the approval 「PD-OI-090 r11=承認 PD-OI-115 r2=承認」 (`2026-11-14`, `D-16`).
-  Scenario revision `2` supersedes scenario revision `1`; the receipt below is serialized
-  byte for byte as approved.
-- Receipt SHA-256 of the new scenario revision (UTF-8, excluding the final newline):
-  `17dd4b66ad4c39cb8196610c1e46fda59e7fede013a9521f8602e5d28499f5f0`.
-- No other record is amended or retired. The runtime that implements it merges with it (static Product Contract
-  co-change); this entry supplies no runtime acceptance evidence.
 
 ```text
 PRODUCT_DECISION
@@ -13768,6 +13763,17 @@ Decision date: 2026-11-14
   "decisionDate": "2026-11-14"
 }
 ```
+
+#### Revision #2047
+
+- This entry belongs to the same revision as the `PD-OI-090` Revision #2047 entry, which
+  quotes the approval 「PD-OI-090 r11=承認 PD-OI-115 r2=承認」 (`2026-11-14`, `D-16`).
+  Scenario revision `2` supersedes scenario revision `1`; its receipt above is serialized
+  byte for byte as approved.
+- Receipt SHA-256 of the new scenario revision (UTF-8, excluding the final newline):
+  `17dd4b66ad4c39cb8196610c1e46fda59e7fede013a9521f8602e5d28499f5f0`.
+- No other record is amended or retired. The runtime that implements it merges with it (static Product Contract
+  co-change); this entry supplies no runtime acceptance evidence.
 
 ### PD-OI-116: gzip input expansion cap
 
