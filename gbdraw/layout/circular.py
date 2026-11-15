@@ -265,7 +265,8 @@ def content_outer_radius_px(
 
 
 def slots_feature_layout(slots: Sequence[CircularResolvedSlot]) -> CircularFeatureLayout | None:
-    """The lanes of the first features slot among ``slots``: the lanes the record's labels read."""
+    """The lanes of the first features slot among ``slots``. Labels read ``slots_label_lanes`` instead; this one
+    serves the record-level feature band (``CircularRadialLayout.features``), which still follows the first slot."""
 
     for slot in slots:
         if slot.renderer == "features" and slot.feature_layout is not None:

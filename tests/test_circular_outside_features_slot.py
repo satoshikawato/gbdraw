@@ -142,13 +142,20 @@ def _outline(d: str) -> list[tuple[float, float]]:
     return points
 
 
-def _gap_to_ink(point: tuple[float, float], polygon: list[tuple[float, float]]) -> float:
-    """0 inside the polygon, else the distance from ``point`` to its outline."""
+def _inside(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+    """Whether ``point`` lies inside the polygon (even-odd rule)."""
+
+    x, y = point
+    edges = zip(polygon, polygon[1:] + polygon[:1])
+    return sum(1 for (x1, y1), (x2, y2) in edges if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1)) % 2 == 1
+
+
+def _gap_to_outline(point: tuple[float, float], polygon: list[tuple[float, float]]) -> float:
+    """The distance from ``point`` to the polygon's outline, inside or outside it: a point in the middle of a feature
+    is as far from its outline as one in the white space beside it."""
 
     x, y = point
     edges = list(zip(polygon, polygon[1:] + polygon[:1]))
-    if sum(1 for (x1, y1), (x2, y2) in edges if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1)) % 2:
-        return 0.0
     gaps = []
     for (x1, y1), (x2, y2) in edges:
         dx, dy = x2 - x1, y2 - y1
@@ -172,11 +179,15 @@ def _gap_to_ink(point: tuple[float, float], polygon: list[tuple[float, float]]) 
 def test_every_leader_starts_on_its_feature(tmp_path: Path, slots: tuple[str, ...], options: tuple[str, ...]) -> None:
     """A leader that starts at its lane's edge ended in the white space beside an arrowhead, where the head narrows
     toward its tip: it seemed to name nothing (OV-3641, and with the lane-clearance rule of an outward lane). Every
-    leader starts on the outline its feature is drawn with at the label's angle."""
+    leader starts on the outline its feature is drawn with at the label's angle: not short of it, not inside the
+    feature, and on the copy the label names (the outermost features slot here; with two slots both copies share
+    their feature ids, so only the named slot's paths count)."""
 
     root = _draw(tmp_path, *slots, options=options)
+    named_slot = (slots[-1] if slots else "features:features").split(":", 1)[0]
+    group = next(g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-slot-id") == named_slot)
     outlines: dict[str, list[list[tuple[float, float]]]] = {}
-    for path in root.iter(f"{SVG}path"):
+    for path in group.iter(f"{SVG}path"):
         if path.get("data-gbdraw-feature-id"):
             outlines.setdefault(path.get("data-gbdraw-feature-id", ""), []).append(_outline(path.get("d", "")))
     ends: dict[str, list[tuple[float, float]]] = {}
@@ -186,11 +197,11 @@ def test_every_leader_starts_on_its_feature(tmp_path: Path, slots: tuple[str, ..
     ends.pop("", None)
 
     gaps = {
-        feature_id: round(min(_gap_to_ink(point, polygon) for point in points for polygon in outlines[feature_id]), 1)
+        feature_id: round(min(_gap_to_outline(point, polygon) for point in points for polygon in outlines[feature_id]), 2)
         for feature_id, points in ends.items()
     }
     assert len(gaps) > 40
-    assert {feature_id: gap for feature_id, gap in gaps.items() if gap > 1.0} == {}
+    assert {feature_id: gap for feature_id, gap in gaps.items() if gap > 0.5} == {}
 
 
 @pytest.mark.parametrize(
@@ -274,7 +285,8 @@ def test_outer_label_text_stays_off_the_features(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, slots: tuple[str, ...], options: tuple[str, ...]
 ) -> None:
     """With the outer labels' lanes outside the axis circle, some outer label text sat on features near the bottom
-    of the map (OV-3627). The painted letters of every outer label meet no feature of the lanes the labels name."""
+    of the map (OV-3627). The painted letters of every outer label meet no feature of the lanes the labels name: no
+    feature outline crosses a label's box, and no box lies inside a feature."""
 
     import gbdraw.diagrams.circular.assemble as assemble_module
     from gbdraw.labels.circular_leaders import label_ink_box
@@ -307,6 +319,11 @@ def test_outer_label_text_stays_off_the_features(
             _segment_meets_box(start, end, box)
             for polygon in outlines
             for start, end in zip(polygon, polygon[1:] + polygon[:1])
+        )
+        or any(
+            _inside(corner, polygon)
+            for polygon in outlines
+            for corner in ((box.min_x, box.min_y), (box.min_x, box.max_y), (box.max_x, box.min_y), (box.max_x, box.max_y))
         )
     )
     assert on_features == []
