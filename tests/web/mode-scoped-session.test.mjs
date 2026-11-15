@@ -782,6 +782,18 @@ test('a Session 51 without its drawings or its resources is refused as no Sessio
   }
 });
 
+// A drawing the file holds as another value is read by the band's reader alone: Load's step before its readers
+// (the stored BLAST tables, OV-3573) reads no set of it.
+test('a Session 51 with a drawing that is no object loads its other drawings', async () => {
+  for (const value of [null, 'drawing', 1]) {
+    const session = v49Session('drawings-circular-only');
+    session.drawings.push(value);
+    resetDrawings();
+    const outcome = await load(session);
+    assert.equal(outcome.status, 'ok', `${JSON.stringify(value)}: ${JSON.stringify(outcome.error)}`);
+  }
+});
+
 // B2d-3a-2: each drawing of a Session 51 takes its own files, bindings, LOSAT
 // entries and comparison intent by its drawing ID, opened or not.
 // A Circular drawing and two Linear ones, each with files of its own; the

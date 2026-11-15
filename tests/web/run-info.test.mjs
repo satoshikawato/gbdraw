@@ -1020,6 +1020,19 @@ const linearCanonical = canonical({
   assert.equal(new Set(allNames.map((name) => name.toLowerCase())).size, allNames.length);
 }
 
+// The name a nucleotide comparison stores (`sourceName`, the user's file name or null for a LOSAT result) names the
+// table in Run info; it draws nothing, and the recipe's `-b` file is the resource: the recipe stays available.
+for (const sourceName of ['alpha_vs_beta.tsv', null]) {
+  const named = structuredClone(linearCanonical);
+  named.renderRequest.comparisons[0].sourceName = sourceName;
+  const sourceRecipe = await buildSourceRecipe(named);
+
+  assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
+  assert.ok(sourceRecipe.semanticCoverage.metadataPaths.includes('comparisons[0].sourceName'), String(sourceName));
+  const blast = sourceRecipe.args[sourceRecipe.args.indexOf('-b') + 1];
+  assert.equal(sourceRecipe.fileMetadata.get(blast)?.name, 'alpha_vs_beta.tsv', String(sourceName));
+}
+
 {
   const cardinalityAll = structuredClone(linearCanonical);
   cardinalityAll.renderRequest.records = [cardinalityAll.renderRequest.records[0]];
