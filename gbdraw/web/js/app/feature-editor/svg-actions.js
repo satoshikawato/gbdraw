@@ -1441,7 +1441,7 @@ export const createFeatureSvgActions = ({
         const flag = document.createElement('span');
         flag.className = 'gbdraw-alignment-flag truncate';
         const flagName = Object.assign(document.createElement('span'), { className: 'truncate', textContent: reference.name });
-        flag.append(flagName, ' · reference');
+        flag.append(flagName, ` · ${t('reference')}`);
         const tag = document.createElement('span');
         tag.className = 'gbdraw-alignment-tag truncate';
         [referenceRing, flag, tag].forEach((part) => part.setAttribute('aria-hidden', 'true'));

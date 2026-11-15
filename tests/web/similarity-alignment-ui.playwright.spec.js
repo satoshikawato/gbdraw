@@ -164,6 +164,28 @@ const loadAmbiguousSession = async (page, testInfo) => {
   await importSession(page, session, 'similarity-alignment-inparalog.gbdraw');
 };
 
+test('the reference flag of the alignment overlay is translated', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadAmbiguousSession(page, testInfo);
+  await page.evaluate(async () => {
+    const { setUiLocale } = await import('./js/utils/i18n.js');
+    await setUiLocale('ja', async () => ({ default: { reference: '基準' } }));
+  });
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
+    await page.locator('.drawer-toggle').click();
+  }
+  const drawer = page.locator('.right-drawer');
+  await drawer.getByRole('button', { name: 'Similarity groups' }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
+  const referenceKey = await page.evaluate(() => (
+    window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+      .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || ''
+  ));
+  await drawer.getByLabel('Exact reference record and feature').selectOption(referenceKey);
+  await drawer.getByRole('button', { name: 'Align…', exact: true }).click();
+  await expect(page.locator('[data-similarity-alignment-canvas] .gbdraw-alignment-flag')).toHaveText('b0 · 基準', { timeout: 180000 });
+});
+
 test('alignment rings and the reference line stay transient and share the panel choices', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await loadAmbiguousSession(page, testInfo);
