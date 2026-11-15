@@ -19,7 +19,7 @@ The `gbdraw.api` namespace exposes explicit input, planning, rendering, output, 
 
 ## Input sources and cardinality
 
-`GenBankInputSource` holds one GenBank path. `GffFastaInputSource` holds a matched GFF3 and FASTA pair. `InMemoryRecordSource` holds one or more Biopython `SeqRecord` values.
+`GenBankInputSource` holds one GenBank path. `GffFastaInputSource` holds a matched GFF3 and FASTA pair. `FastaInputSource` holds one FASTA file given without GFF3, with each entry drawn as a record without features. `InMemoryRecordSource` holds one or more Biopython `SeqRecord` values.
 
 Every `RecordInput` declares a `RecordCardinality`:
 

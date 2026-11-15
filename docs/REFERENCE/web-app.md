@@ -73,8 +73,8 @@ local environment or to prepared command-line runs.
 
 | Mode | Primary browser input | Result |
 |---|---|---|
-| Circular | One GenBank/GBFF container or one matched GFF3 + FASTA pair | One Circular result, separate results, or one multi-record canvas |
-| Linear | Ordered GenBank rows or matched GFF3 + FASTA rows | One Linear result with an independent comparison plan |
+| Circular | One GenBank/GBFF container, one matched GFF3 + FASTA pair, or a FASTA file alone | One Circular result, separate results, or one multi-record canvas |
+| Linear | Ordered GenBank rows, matched GFF3 + FASTA rows, or FASTA rows alone | One Linear result with an independent comparison plan |
 
 Circular and Linear each keep their own settings and edits: the form and
 advanced settings, palette and color rules, filters, Legend edits, feature and
@@ -753,7 +753,7 @@ reverses. A Session saved by `gbdraw circular` with several `--gbk` files
 loads as one card per file.
 
 The browser inspects a Circular source as soon as you choose a **GenBank/DDBJ
-File**, or both the **GFF3 File** and **FASTA File**; no separate load action is
+File**, both the **GFF3 File** and **FASTA File**, or the **FASTA File** of the **FASTA** input type; no separate load action is
 needed. **Source records** shows **Inspecting source records…** and then the
 count, such as **1 source record inspected**. Each record's rotation row
 appears at the same time, before **Generate Diagram**. A GFF3 file alone shows
