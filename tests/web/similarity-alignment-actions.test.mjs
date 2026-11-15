@@ -689,14 +689,19 @@ test('a paste into the drawing of an open review ends the review and keeps the p
       tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
       show: () => ({ status: 'ok' }), runUndoable: async (_label, run) => run(), prepare: async () => ({}),
       install: () => structuredClone(installed),
-      writeArtifactValues: (_drawingId, values) => Object.entries(values).forEach(([key, value]) => {
-        fixture.state[key].value = value;
+      // Only the review's drawing (linear-1) is this fixture's state; a write for another drawing goes elsewhere.
+      writeArtifactValues: (writtenId, values) => Object.entries(values).forEach(([key, value]) => {
+        if (writtenId === 'linear-1') fixture.state[key].value = value;
       }),
       endAlignmentWorkOf: fixture.actions.endWorkOf
     }).pasteInto(drawingId, {});
     const notice = fixture.actions.notice.value;
     assert.equal((await pasteInto('linear-2')).status, 'ok');
     assert.equal(fixture.actions.status.value, 'reviewing', 'a paste into another drawing keeps this review');
+    if (aligned) {
+      assert.notDeepEqual(fixture.state.similarityAlignmentPlan.value, installed.similarityAlignmentPlan,
+        'a paste into another drawing writes nothing here');
+    }
     assert.equal((await pasteInto('linear-1')).status, 'ok');
     assert.equal(fixture.actions.status.value, 'idle', 'the review of the pasted drawing ends');
     assert.equal(fixture.actions.draft.value, null);
