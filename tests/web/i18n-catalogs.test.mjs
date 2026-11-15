@@ -708,12 +708,14 @@ test('the UI languages are the eighteen of the Language menu, Latin script first
     ['pl', 'Polski'], ['pt', 'Português'], ['vi', 'Tiếng Việt'], ['tr', 'Türkçe'],
     ['ru', 'Русский'], ['uk', 'Українська'], ['ur', 'اردو'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
-  // Upper-casing and tracking stay only in the cased scripts; Urdu and Thai also gets the 12 px floor (index.html).
+  // Upper-casing and tracking stay only in the cased scripts; Thai also gets the 12 px floor, and Urdu its
+  // Nastaliq lines, 13 px floor and growing controls (index.html).
+  const styles = ['cased', 'no-caps', 'tall-marks', 'nastaliq'];
   const tagsOf = (style) => UI_LOCALES.filter(({ textStyle }) => textStyle === style).map(({ tag }) => tag);
-  assert.deepEqual(['cased', 'no-caps', 'tall-marks'].map(tagsOf), [
-    ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'tr', 'ru', 'uk'], ['vi', 'ja', 'zh-Hans', 'zh-Hant', 'ko'], ['ur', 'th']
+  assert.deepEqual(styles.map(tagsOf), [
+    ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'tr', 'ru', 'uk'], ['vi', 'ja', 'zh-Hans', 'zh-Hant', 'ko'], ['th'], ['ur']
   ]);
-  assert.equal(tagsOf('cased').length + tagsOf('no-caps').length + tagsOf('tall-marks').length, UI_LOCALES.length);
+  assert.equal(styles.reduce((count, style) => count + tagsOf(style).length, 0), UI_LOCALES.length);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
   for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'ur-PK', 'xx', null, undefined, 3, '../x']) {
@@ -786,7 +788,7 @@ test('the shown locale sets the page language, and only a switch that applies do
     await setUiLocale('th', async () => ({ default: {} }));
     assert.deepEqual([root.lang, root.textStyle], ['th', 'tall-marks']);
     await setUiLocale('ur', async () => ({ default: {} }));
-    assert.deepEqual([root.lang, root.textStyle], ['ur', 'tall-marks']);
+    assert.deepEqual([root.lang, root.textStyle], ['ur', 'nastaliq']);
     await setUiLocale('zh-Hant', async () => ({ default: {} }));
     await assert.rejects(setUiLocale('ja', async () => { throw new Error('offline'); }), /offline/);
     assert.deepEqual([root.lang, root.textStyle], ['zh-Hant', 'no-caps'], 'a catalog that fails to load changes nothing');

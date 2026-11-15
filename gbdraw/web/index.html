@@ -256,13 +256,14 @@
         :root:lang(ko) .input-label { overflow-wrap: anywhere; }
         /* Thai UI text: system Thai fonts (none vendored), listed before the generic fallback. */
         :root:lang(th) body { font-family: 'Inter', 'Leelawadee UI', 'Thonburi', 'Sukhumvit Set', 'Noto Sans Thai', 'Noto Sans Thai UI', 'Garuda', 'Laksaman', 'Loma', sans-serif; }
-        /* Urdu UI text: the vendored Noto Nastaliq Urdu first (@font-face above), then system fonts. */
-        :root:lang(ur) body { font-family: 'Noto Nastaliq Urdu', 'Inter', 'Segoe UI', 'Tahoma', sans-serif; }
+        /* Urdu UI text: the vendored Noto Nastaliq Urdu first (@font-face above), then system fonts; the Preview's feature search
+           bar too, which sets Arial for the other languages (OV-3656). */
+        :root:lang(ur) :is(body, .preview-feature-search) { font-family: 'Noto Nastaliq Urdu', 'Inter', 'Segoe UI', 'Tahoma', sans-serif; }
         /* The figure keeps the English stack in every UI language. */
         :root svg { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
         /* The page's data-ui-text-style is the shown locale's textStyle (UI_LOCALES, js/utils/i18n.js); the figure is exempt.
-           no-caps and tall-marks: no upper-casing or tracking in the UI (no letter case, or stacked diacritics). */
-        :root:is([data-ui-text-style="no-caps"], [data-ui-text-style="tall-marks"]) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
+           no-caps, tall-marks and nastaliq: no upper-casing or tracking in the UI (no letter case, stacked diacritics, or joined letters). */
+        :root:is([data-ui-text-style="no-caps"], [data-ui-text-style="tall-marks"], [data-ui-text-style="nastaliq"]) :not(svg, svg *) { text-transform: none !important; letter-spacing: normal !important; }
         /* tall-marks: the marks above and below the letters need room: no UI text under 12px, and tight line heights widened to 1.5.
            The floor is !important to win over the 11px !important rule for text-[9px] and text-[10px] below. */
         :root[data-ui-text-style="tall-marks"] :is(.text-\[9px\], .text-\[10px\], .text-\[11px\]):not(svg, svg *) { font-size: 12px !important; }
@@ -275,6 +276,22 @@
         /* A wrapped Vietnamese rail name, or one with tall marks, needs taller lines (the wrap itself is every locale's, css/tailwind.input.css). */
         :root:lang(vi) [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.3; }
         :root[data-ui-text-style="tall-marks"] [data-settings-display="rail"] > .settings-index > nav > button > span { line-height: 1.5; }
+        /* nastaliq (Urdu): a Nastaliq word is tall and slopes down to its end. Every UI line is 2.5em with the font's own
+           metrics (its ascent and descent fill the line; the tallest letters rise above it), the icons aside. No small UI
+           text under 13px; 14px text keeps its size. As for tall-marks, the floor of the text styles whose size their own
+           rule sets is not !important, so a header button that shows its icon alone keeps its words at 0px. A control of a
+           fixed .h-* height grows with its text. A one-line text cut with an ellipsis keeps 0.6em of room at its sides,
+           where the first and last letters reach past the line's ends (the clip is at the sides only,
+           css/tailwind.input.css). */
+        :root[data-ui-text-style="nastaliq"] :not(svg, svg *, .ph) { line-height: 2.5 !important; }
+        :root[data-ui-text-style="nastaliq"] :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-xs):not(svg, svg *) { font-size: 13px !important; }
+        :root[data-ui-text-style="nastaliq"] :is(.ui-hint, .group-heading, .markup-preview, .apply-note, .app-config-button, .settings-index-tip, .choice-group-label, [data-settings-display="rail"] > .settings-index > nav > button > span, .preview-feature-search) { font-size: 13px; }
+        :root[data-ui-text-style="nastaliq"] :is(button, select, input, a, summary, label):is(.h-5, .h-6, .h-7, .h-8, .h-9, .h-10, .h-11, .h-12) { height: auto !important; }
+        :root[data-ui-text-style="nastaliq"] .truncate { padding-inline: 0.6em; margin-inline: -0.6em; }
+        /* The Preview's feature search bar: its fields and buttons, 26px tall, grow with their text, and its buttons (Clear and
+           Open 48px and 44px wide for the English names) take their name's width and 0.5em of room at its sides. */
+        :root[data-ui-text-style="nastaliq"] .preview-feature-search :is(.gfs-input, .gfs-select, .gfs-button) { height: auto; min-height: 26px; }
+        :root[data-ui-text-style="nastaliq"] .preview-feature-search .gfs-button { flex-basis: auto; padding-inline: 0.5em; }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -1784,12 +1801,13 @@
             .history-list-row { min-height: 2.5rem; }
         }
         .app-notice-link { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem; margin-top: 0.375rem; font-weight: 500; }
-        /* The empty Preview's box: its two actions stacked at the width of the longer one. */
+        /* The empty Preview's box: its two actions stacked at the width of the longer one, each at least 2.25rem tall and
+           growing with a taller text (a Nastaliq line is 2.5em: its letters stay inside the border, OV-2794). */
         .tutorial-card {
             display: grid; gap: 0.5rem; width: max-content; max-width: 100%; margin-top: 0.5rem; padding: 0.875rem 1rem;
             border: 1px solid #bfdbfe; border-radius: 0.75rem; background-color: var(--ui-accent-soft);
         }
-        .tutorial-card > .btn, .tutorial-card > .app-gallery-link { justify-content: center; height: 2.25rem; padding: 0 0.875rem; font-size: 0.8125rem; }
+        .tutorial-card > .btn, .tutorial-card > .app-gallery-link { justify-content: center; min-height: 2.25rem; padding: 0.25rem 0.875rem; font-size: 0.8125rem; }
         .example-tutorial-link {
             display: inline-flex; flex: none; align-items: center; gap: 0.25rem; padding: 0.5rem 0.75rem;
             font-size: 0.75rem; font-weight: 600; color: #1d4ed8; white-space: nowrap;

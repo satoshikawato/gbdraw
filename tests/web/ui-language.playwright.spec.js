@@ -19,9 +19,13 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
-// - in every text style (en cased, ja no-caps, th tall-marks): the page's
-//   text style, the figure's English stack, and a truncated text cut at its
-//   sides only;
+// - in every text style (en cased, ja no-caps, th tall-marks, ur nastaliq): the
+//   page's text style, the figure's English stack, and a truncated text cut at
+//   its sides only;
+// - in ur: the Noto Nastaliq Urdu font, 2.5em lines, the 13 px floor of the
+//   small text (14 px text keeps its size), no upper-casing or tracking, and
+//   controls of a fixed height, the empty Preview's two actions and the
+//   feature search bar that hold their text line (OV-2794, OV-3656);
 // - at 1024x768, 1280x800 and 1440x900, in all 18 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
@@ -415,7 +419,7 @@ test('every text style keeps the figure in English type, and a truncated text is
     const style = getComputedStyle(element);
     return [style.overflowX, style.overflowY, style.textOverflow, style.minWidth];
   });
-  for (const [tag, textStyle] of [['en', 'cased'], ['ja', 'no-caps'], ['ur', 'tall-marks'], ['th', 'tall-marks'], ['en', 'cased']]) {
+  for (const [tag, textStyle] of [['en', 'cased'], ['ja', 'no-caps'], ['ur', 'nastaliq'], ['th', 'tall-marks'], ['en', 'cased']]) {
     await menu(page).selectOption(tag);
     await expect.poll(() => pageLanguage(page)).toBe(tag);
     expect(await page.evaluate(() => document.documentElement.dataset.uiTextStyle)).toBe(textStyle);
@@ -426,8 +430,14 @@ test('every text style keeps the figure in English type, and a truncated text is
   expect(errors).toEqual([]);
 });
 
-// Urdu takes the vendored Nastaliq font first.
-test('Urdu takes the Noto Nastaliq Urdu font', async ({ page }) => {
+// Urdu takes the vendored Nastaliq font first, and the nastaliq text style:
+// every UI line is 2.5em, small text is 13 px (14 px text keeps its size), with
+// no upper-casing or tracking; a control of a fixed .h-* height grows to hold
+// its line, and the empty Preview's two actions hold theirs with room above and
+// below it (OV-2794: the Gallery example button kept its height, and the
+// letters of its name crossed its top border); the Preview's feature search bar
+// takes the same font, floor and growing buttons (OV-3656: Arial at 11 px).
+test('Urdu takes the Noto Nastaliq Urdu font, 2.5em lines, a 13 px floor and controls that hold their text', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
   await openApp(page);
@@ -435,6 +445,50 @@ test('Urdu takes the Noto Nastaliq Urdu font', async ({ page }) => {
   await expect.poll(() => pageLanguage(page)).toBe('ur');
   const body = await page.locator('body').evaluate((element) => getComputedStyle(element).fontFamily);
   expect(body.split(',')[0].trim().replace(/["']/g, '')).toBe('Noto Nastaliq Urdu');
+  const text = (selector) => page.locator(selector).first().evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.fontSize, style.lineHeight, style.textTransform, style.letterSpacing];
+  });
+  // The Session caption is a small upper-cased, tracked text in English; the footer is 14 px.
+  expect(await text('header .app-session-label')).toEqual(['13px', '32.5px', 'none', 'normal']);
+  expect(await text('[data-app-footer]')).toEqual(['14px', '35px', 'none', 'normal']);
+  expect(await page.evaluate(() => {
+    const heights = [5, 6, 7, 8, 9, 10, 11, 12].map((n) => `.h-${n}`).join(', ');
+    const controls = [...document.querySelectorAll(`:is(button, a, summary, label):is(${heights})`)]
+      .filter((element) => element.getClientRects().length > 0 && element.textContent.trim());
+    const card = [...document.querySelectorAll('[data-tutorial-card] > *')];
+    const short = card.filter((element) => {
+      const style = getComputedStyle(element);
+      const room = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((sum, key) => sum + parseFloat(style[key]), 0);
+      return parseFloat(style.paddingTop) < 4 || element.getBoundingClientRect().height < parseFloat(style.lineHeight) + room - 0.5;
+    });
+    // The Preview's feature search bar (shown with a Result) sets its own font for the other languages (OV-3656).
+    const bar = document.createElement('div');
+    bar.className = 'preview-feature-search';
+    const row = bar.appendChild(document.createElement('div'));
+    row.className = 'gfs-row';
+    const [search, clear] = [['search', 'تلاش کریں'], ['clear', 'صاف کریں']].map(([kind, name]) => {
+      const button = row.appendChild(document.createElement('button'));
+      button.className = `gfs-button gfs-button--${kind}`;
+      button.textContent = name;
+      return button;
+    });
+    document.getElementById('app').appendChild(bar);
+    const searchStyle = getComputedStyle(search);
+    // Each button holds its line, and Clear (48 px wide for its English name) keeps its name on one line.
+    const searchBar = [searchStyle.fontFamily.split(',')[0].replace(/["']/g, '').trim(), searchStyle.fontSize,
+      [search, clear].every((button) => button.scrollHeight <= button.clientHeight + 0.5 && button.clientHeight < 2 * parseFloat(searchStyle.lineHeight))];
+    bar.remove();
+    return {
+      controls: controls.length > 0,
+      overflowing: controls.filter((element) => element.scrollHeight > element.clientHeight + 0.5).map((element) => element.textContent.trim()),
+      card: card.length,
+      short: short.map((element) => element.textContent.trim()),
+      searchBar
+    };
+  })).toEqual({ controls: true, overflowing: [], card: 2, short: [], searchBar: ['Noto Nastaliq Urdu', '13px', true] });
+  await page.getByRole('button', { name: (await catalogOf('ur'))['Collapse settings to icons'], exact: true }).click();
+  expect(await text('.settings-index nav > button[data-settings-entry="font"] > span')).toEqual(['13px', '32.5px', 'none', 'normal']);
   expect(errors).toEqual([]);
 });
 

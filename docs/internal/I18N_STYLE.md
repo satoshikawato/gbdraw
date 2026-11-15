@@ -162,8 +162,8 @@ nothing states that they are reviewed.
   headings. The same rules cover `th` (Thai has no letter case) and `vi`
   (capitals with stacked tone marks collide). Outside the figure,
   `gbdraw/web/index.html` turns off `uppercase` and `tracking-*` for every
-  locale whose `textStyle` in `UI_LOCALES` (`js/utils/i18n.js`) is `no-caps`
-  or `tall-marks`.
+  locale whose `textStyle` in `UI_LOCALES` (`js/utils/i18n.js`) is `no-caps`,
+  `tall-marks` or `nastaliq`.
 - A word that the source capitalizes as a name of a control (Generate,
   Apply, Save Session) is written as that control's translated label, so a
   reader can find it: 「生成」をクリック / 点击“生成” / 點選「產生」.
@@ -2829,7 +2829,7 @@ Urdu pages could not be read as text, so no rule below cites its section numbers
 (Urdu-medium textbooks and press write جین, جینوم, کروموسوم, پروٹین; ur.wikipedia's ڈی این اے article writes ترتیب for
 sequence and the coinages وراثہ, موراثہ, لونی جسیمات with the English word in brackets, which working software and
 teaching do not use). The Language menu shows **اردو**; its label is زبان. Text is set in the bundled Noto Nastaliq
-Urdu face, 13 px floor, line height 2.5em (D-20). The UI reads right to left; the figure, every export, command,
+Urdu face, 13 px floor, line height 2.5em (D-20; `textStyle` `nastaliq`). The UI reads right to left; the figure, every export, command,
 recipe and replay text, sequences, coordinates, colors and number fields keep their left-to-right order (PD-OI-106).
 No coined terms (D-02): where Urdu has no word in use, the English word stays, in Urdu letters when software writes it
 so, in Latin letters when the field keeps it Latin. These are drafts; nothing here claims review.

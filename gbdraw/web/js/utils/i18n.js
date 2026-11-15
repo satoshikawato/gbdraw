@@ -40,7 +40,10 @@
  * `no-caps`: no upper-casing or tracking (no letter case, or stacked diacritics).
  * `tall-marks`: no-caps, and no text under 12px and tight line heights widened
  * to 1.5, for the marks above and below the letters (Thai).
- * @typedef {'cased' | 'no-caps' | 'tall-marks'} UiTextStyle
+ * `nastaliq`: no-caps, every line 2.5em with the font's own metrics, no small
+ * text under 13px, and controls that grow with their text, for the tall,
+ * sloping words of Nastaliq (Urdu, set in Noto Nastaliq Urdu).
+ * @typedef {'cased' | 'no-caps' | 'tall-marks' | 'nastaliq'} UiTextStyle
  */
 /**
  * The translation of the `other` form of a `tn` pair in a language whose
@@ -94,7 +97,7 @@ export const UI_LOCALES = Object.freeze([
   Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ', textStyle: 'cased' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ', textStyle: 'cased' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ', textStyle: 'cased' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ur'), name: 'اردو', sentenceSeparator: ' ', textStyle: 'tall-marks' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ur'), name: 'اردو', sentenceSeparator: ' ', textStyle: 'nastaliq' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ', textStyle: 'tall-marks' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '', textStyle: 'no-caps' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '', textStyle: 'no-caps' }),
