@@ -162,9 +162,11 @@ writer and the CLI stored their LOSATP tables under other IDs
 writes again: such a table of the 12 BLAST columns alone, in any order,
 becomes the `nucleotideBlast` entry and `nucleotide-blast` resource the current
 writers store (rows in `COMPARISON_COLUMNS` order); a table bound to features
-has no BLAST form and gets `proteinMatches: false`, which the Load projection
-and the Web writer keep. Python's own reads of the file (the saved LOSAT rows)
-get the requests as stored. The shared vectors
+has no BLAST form and gets `proteinMatches: false` from Load's request
+reader, which promotes the request to schema 10; the Load projection and the
+Web writer keep it. The file Load hands Python (a Session 27-44's conversion,
+a Session 46-50's saved LOSAT rows) keeps every request valid at its own
+schema. The shared vectors
 `tests/fixtures/given-comparison-table-vectors.json` pin both surfaces; the
 schema-2 case there is synthetic, its evidence `_encode_comparisons` at
 `0266acb7b` on first-parent `main`. Positive fixtures: the

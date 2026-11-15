@@ -3387,9 +3387,29 @@ export const requestRunsProteinSearch = (request) => {
 };
 
 /**
- * Whether a Linear request's records may take more than one row, as the Load projection reads their rows: their grid
- * rows when a record has one, else the rows of `layout.multiRecordPositions`, else one row per record. A record entry
- * of cardinality `all` stands for every record of its file, whose rows only Python reads
+ * The rows a stored Linear request gives its records, the one reading of them (the Load projection's layout rows and
+ * `requestMayDrawSeveralRows`): each record's grid row when a record has one (`fromRecords`), else the row of each
+ * token of `layout.multiRecordPositions`; a missing or unreadable row is the entry's place. No rows: one row per record.
+ * @param {readonly unknown[]} records The request's records (unvalidated).
+ * @param {unknown} positions The request's `layout.multiRecordPositions` (unvalidated).
+ * @returns {{ rows: number[], fromRecords: boolean }}
+ */
+const storedLinearRecordRows = (records, positions) => {
+  const gridRows = records.map((record) => (
+    /** @type {UnvalidatedFields<'presentation', UnvalidatedFields<'gridRow'>>} */ (record)?.presentation?.gridRow));
+  const fromRecords = gridRows.some((row) => row != null);
+  const tokens = fromRecords || !Array.isArray(positions) ? [] : positions;
+  return {
+    rows: fromRecords ? gridRows.map((row, index) => Number(row) || index + 1)
+      : tokens.map((/** @type {unknown} */ token, /** @type {number} */ index) => (
+        Number(String(token).slice(String(token).lastIndexOf('@') + 1)) || index + 1)),
+    fromRecords
+  };
+};
+
+/**
+ * Whether a Linear request's records may take more than one row (`storedLinearRecordRows`). A record entry of
+ * cardinality `all` stands for every record of its file, whose rows only Python reads
  * (`resolve_record_row_positions`): such a request may.
  * @param {unknown} request A request as a file stores it or as it is committed (unvalidated).
  * @returns {boolean}
@@ -3400,14 +3420,9 @@ const requestMayDrawSeveralRows = (request) => {
   if (records.some((record) => /** @type {UnvalidatedFields<'cardinality'>} */ (record)?.cardinality === 'all')) {
     return true;
   }
-  const gridRows = records.map((record) => (
-    /** @type {UnvalidatedFields<'presentation', UnvalidatedFields<'gridRow'>>} */ (record)?.presentation?.gridRow));
-  const tokens = /** @type {UnvalidatedFields<'multiRecordPositions'>} */ (stored?.layout)?.multiRecordPositions;
-  const rows = gridRows.some((row) => row != null) ? gridRows
-    : Array.isArray(tokens) && tokens.length > 0
-      ? tokens.map((token) => String(token).slice(String(token).lastIndexOf('@') + 1))
-      : records.map((_record, index) => index + 1);
-  return new Set(rows.map(String)).size > 1;
+  const { rows } = storedLinearRecordRows(records,
+    /** @type {UnvalidatedFields<'multiRecordPositions'>} */ (stored?.layout)?.multiRecordPositions);
+  return rows.length > 0 ? new Set(rows).size > 1 : records.length > 1;
 };
 
 /**
@@ -7774,38 +7789,28 @@ export const projectCanonicalSessionRequest = ({
       return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: Number(String(token).slice(split + 1)) };
     })
   };
-  const presentationOwnsLinearRows = records.some(
-    (record) => record.presentation?.gridRow != null
-  );
-  const linearLayoutRows = presentationOwnsLinearRows
-    ? records.map((record, index) => {
-        const row = Number(record.presentation?.gridRow) || index + 1;
-        const sourceColumn = sourceRecords[
-          normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
-        ]?.presentation?.gridColumn;
-        return {
-          uid: files.linearSeqs[index]?.uid || '', row,
-          ...(initializeCliInputs && storedConfig == null
-            && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
-            ? { canonicalCardinality: 'exactly_one' } : {}),
-          // An integer is a number.
-          ...(initializeCliInputs && storedConfig == null
-            && Number.isInteger(sourceColumn) && /** @type {number} */ (sourceColumn) > 0
-            ? { canonicalRow: row, canonicalColumn: sourceColumn }
-            : {})
-        };
-      })
-    : (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token, /** @type {number} */ index) => {
-        const split = String(token).lastIndexOf('@');
-        return {
-          uid: files.linearSeqs[index]?.uid || '',
-          row: Number(String(token).slice(split + 1)) || index + 1
-        };
-      });
+  const storedRows = storedLinearRecordRows(records, renderRequest.layout?.multiRecordPositions);
+  const presentationOwnsLinearRows = storedRows.fromRecords;
+  const linearLayoutRows = storedRows.rows.map((row, index) => {
+    if (!presentationOwnsLinearRows) return { uid: files.linearSeqs[index]?.uid || '', row };
+    const sourceColumn = sourceRecords[
+      normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
+    ]?.presentation?.gridColumn;
+    return {
+      uid: files.linearSeqs[index]?.uid || '', row,
+      ...(initializeCliInputs && storedConfig == null
+        && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
+        ? { canonicalCardinality: 'exactly_one' } : {}),
+      // An integer is a number.
+      ...(initializeCliInputs && storedConfig == null
+        && Number.isInteger(sourceColumn) && /** @type {number} */ (sourceColumn) > 0
+        ? { canonicalRow: row, canonicalColumn: sourceColumn }
+        : {})
+    };
+  });
   const linearLayout = renderRequest.mode === 'linear'
     ? {
-        enabled: presentationOwnsLinearRows ||
-          (renderRequest.layout?.multiRecordPositions || []).length > 0,
+        enabled: storedRows.rows.length > 0,
         recordGap: renderRequest.layout?.recordGapPx ?? null,
         rows: linearLayoutRows,
         recordTranslations,
@@ -8135,44 +8140,47 @@ const storedGivenTable = (resource) => {
 };
 
 /**
- * OV-3573, OV-3574: a request of schema 2 or 5 to 9 (`LEGACY_GIVEN_COMPARISON_SCHEMAS`) stored a table that a CLI or
- * Python render was given as a `precomputedProteinComparison`, the kind of a protein table, under the resource ID
- * those writers gave such a table (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX` and a number). Such a table without the
- * protein column holds no protein matches, as Python's decoder reads it (`storedGivenTable`). Load reads each such
- * comparison, before any reader sees the file, as Python's encoder writes it again: a table of the BLAST columns
- * alone as the BLAST comparison it is, `nucleotideBlast`, its resource the same rows as a BLAST table
- * (`nucleotide-blast`, without the header line, the columns in `COMPARISON_COLUMNS` order); a table bound to
- * features, which has no BLAST form, with `proteinMatches: false` (read when Load promotes the request to the
- * current schema). A protein table and a request of any other schema are left as stored; nothing changes when no
- * table is read so.
+ * The table of a stored comparison that a request of schema 2 or 5 to 9 (`LEGACY_GIVEN_COMPARISON_SCHEMAS`) stored
+ * as a `precomputedProteinComparison` under the resource ID a CLI or Python render gave a table it was given
+ * (`storedGivenTable`), or null for any other comparison.
+ * @param {unknown} item A stored comparison (unvalidated).
+ * @param {unknown} schema The request's schema.
+ * @param {unknown} resources The Session's resources (unvalidated).
+ */
+const storedGivenComparisonTable = (item, schema, resources) => {
+  const comparison = /** @type {UnvalidatedFields<'kind' | 'encoding' | 'resourceId'>} */ (item);
+  if (!LEGACY_GIVEN_COMPARISON_SCHEMAS.includes(/** @type {number} */ (schema)) || !isPlainObject(resources)
+    || comparison?.kind !== 'precomputedProteinComparison' || comparison.encoding !== 'canonicalTsv'
+    || !isGivenComparisonResourceId(comparison.resourceId)) return null;
+  return storedGivenTable(ownEntry(resources, comparison.resourceId));
+};
+
+/**
+ * OV-3573: a request of schema 2 or 5 to 9 stored a table that a CLI or Python render was given as a
+ * `precomputedProteinComparison`, the kind of a protein table, under the resource ID those writers gave such a table
+ * (`LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX` and a number). Such a table without the protein column holds no protein
+ * matches, as Python's decoder reads it (`storedGivenTable`). Load reads each such table of the BLAST columns alone
+ * (in any order), before any reader sees the file, as Python's encoder writes it again: as the BLAST comparison it
+ * is, `nucleotideBlast`, its resource the same rows as a BLAST table (`nucleotide-blast`, without the header line,
+ * the columns in `COMPARISON_COLUMNS` order), a form those schemas hold. A table bound to features has no BLAST form:
+ * Load's request reader marks it (`withStoredTablesWithoutProteinMatches`). A protein table and a request of any
+ * other schema are left as stored; nothing changes when no table is read so.
  * @param {readonly unknown[]} requests The stored requests (unvalidated).
  * @param {unknown} resources The Session's resources (unvalidated).
  * @returns {{ requests: unknown[], resources: unknown }} The same values when nothing changed.
  */
 export const readStoredBlastTables = (requests, resources) => {
-  /** @type {Map<string, { blastRows: string | null } | null>} */
-  const tablesById = new Map();
-  const tableOf = (/** @type {unknown} */ resourceId) => {
-    if (!isGivenComparisonResourceId(resourceId) || !isPlainObject(resources)) return null;
-    if (!tablesById.has(resourceId)) tablesById.set(resourceId, storedGivenTable(ownEntry(resources, resourceId)));
-    return tablesById.get(resourceId) ?? null;
-  };
   /** @type {Map<string, string>} */
   const rowsById = new Map();
   const read = requests.map((request) => {
     const stored = /** @type {UnvalidatedFields<'schema' | 'comparisons'>} */ (request);
     const storedComparisons = stored?.comparisons;
-    if (!LEGACY_GIVEN_COMPARISON_SCHEMAS.includes(/** @type {number} */ (stored?.schema))
-      || !Array.isArray(storedComparisons)) return request;
+    if (!Array.isArray(storedComparisons)) return request;
     const comparisons = storedComparisons.map((/** @type {unknown} */ item) => {
-      const comparison = /** @type {UnvalidatedFields<'kind' | 'encoding' | 'resourceId'>} */ (item);
-      const resourceId = comparison?.kind === 'precomputedProteinComparison' && comparison.encoding === 'canonicalTsv'
-        ? comparison.resourceId : null;
-      const table = tableOf(resourceId);
-      if (table === null) return item;
-      if (table.blastRows === null) return { .../** @type {object} */ (item), proteinMatches: false };
-      rowsById.set(/** @type {string} */ (resourceId), table.blastRows);
+      const blastRows = storedGivenComparisonTable(item, stored?.schema, resources)?.blastRows ?? null;
+      if (blastRows === null) return item;
       const { encoding: _encoding, ...kept } = /** @type {Record<string, unknown>} */ (item);
+      rowsById.set(/** @type {string} */ (kept.resourceId), blastRows);
       return { ...kept, kind: 'nucleotideBlast' };
     });
     return comparisons.some((item, index) => item !== storedComparisons[index])
@@ -8187,6 +8195,28 @@ export const readStoredBlastTables = (requests, resources) => {
     rewritten[resourceId] = { ...entry, kind: 'nucleotide-blast', size: bytes.byteLength, data: bytesToBase64(bytes) };
   }
   return { requests: read, resources: rewritten };
+};
+
+/**
+ * OV-3574: a stored request as Load's request reader reads it (`readResultSetRequest` in services/config.js, which
+ * classifies it and promotes it to the current schema): each table under a given table's ID that holds no protein
+ * matches and has no BLAST form (bound to features, `storedGivenTable`) with `proteinMatches: false`, as Python's
+ * decoder reads it and its encoder writes it again. Request schemas 2 and 5 to 9 have no such field, so the file
+ * keeps the requests as stored for every reader that hands it to Python (a Session 27-50's conversion, its saved
+ * LOSAT rows).
+ * @param {unknown} request The stored request (unvalidated).
+ * @param {unknown} resources The Session's resources (unvalidated), after `readStoredBlastTables`.
+ * @returns {unknown} The same request when no table is marked.
+ */
+export const withStoredTablesWithoutProteinMatches = (request, resources) => {
+  const stored = /** @type {UnvalidatedFields<'schema' | 'comparisons'>} */ (request);
+  const storedComparisons = stored?.comparisons;
+  if (!Array.isArray(storedComparisons)) return request;
+  const comparisons = storedComparisons.map((/** @type {unknown} */ item) => (
+    storedGivenComparisonTable(item, stored?.schema, resources)?.blastRows === null
+      ? { .../** @type {object} */ (item), proteinMatches: false } : item));
+  return comparisons.some((item, index) => item !== storedComparisons[index])
+    ? { .../** @type {object} */ (request), comparisons } : request;
 };
 
 /**

@@ -12,8 +12,9 @@ import {
   COMPARISON_COLUMNS, LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX
 } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
-  readStoredBlastTables, requestRunsProteinSearch
+  readStoredBlastTables, requestRunsProteinSearch, withStoredTablesWithoutProteinMatches
 } from '../../gbdraw/web/js/services/session-request.js';
+import { pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, storedProteinResultMode
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
@@ -90,12 +91,16 @@ test('a schema 5-9 protein table of the BLAST columns alone under a given table\
   const schema2 = readStoredBlastTables([{ schema: 2, mode: 'linear', comparisons: [comparison('blast')] }], resources);
   assert.equal(schema2.requests[0].comparisons[0].kind, 'nucleotideBlast');
   assert.equal(schema2.resources[ids.blast].kind, 'nucleotide-blast');
-  // A table bound to features has no BLAST form: it says it holds no protein matches, and its resource stays.
+  // A table bound to features has no BLAST form: the pre-pass leaves the file as stored, and Load's request reader
+  // reads it with `proteinMatches: false`.
   const boundResources = { [given(1)]: table([...COMPARISON_COLUMNS, 'query_feature_index', 'subject_feature_index'].join('\t'),
     BLAST_ROWS.replace('\n', '\t1\t2\n')) };
-  const bound = readStoredBlastTables([{ schema: 9, mode: 'linear', comparisons: [comparison('blast')] }], boundResources);
+  const boundRequest = { schema: 9, mode: 'linear', comparisons: [comparison('blast')] };
+  const bound = readStoredBlastTables([boundRequest], boundResources);
   assert.equal(bound.resources, boundResources);
-  assert.deepEqual(bound.requests[0].comparisons, [{ ...comparison('blast'), proteinMatches: false }]);
+  assert.equal(bound.requests[0], boundRequest);
+  assert.deepEqual(withStoredTablesWithoutProteinMatches(boundRequest, boundResources).comparisons,
+    [{ ...comparison('blast'), proteinMatches: false }]);
 
   const protein = { schema: 9, mode: 'linear', comparisons: [comparison('protein')] };
   const unchanged = readStoredBlastTables([current, protein], resources);
@@ -116,11 +121,15 @@ for (const vector of GIVEN_TABLE_VECTORS) {
     const resources = { [vector.resourceId]: { ...table('', ''), data: base64(tsv) } };
     const request = { schema: vector.schema, mode: 'linear', comparisons: [stored] };
     const read = readStoredBlastTables([request], resources);
-    const [comparison] = read.requests[0].comparisons;
+    // The request Load's reader classifies and promotes.
+    const readRequest = withStoredTablesWithoutProteinMatches(read.requests[0], read.resources);
+    const [comparison] = readRequest.comparisons;
     if (vector.read === 'protein') {
-      assert.equal(read.requests[0], request);
+      assert.equal(readRequest, request);
       assert.equal(read.resources, resources);
     } else if (vector.read === 'table') {
+      // The file keeps the request as stored: its schema has no `proteinMatches`.
+      assert.equal(read.requests[0], request);
       assert.deepEqual(comparison, { ...stored, proteinMatches: false });
       assert.equal(read.resources, resources);
     } else {
@@ -232,4 +241,30 @@ test('a preserved BLAST table Session is named by its tables, a preserved protei
     } }]
   }, resources: {} });
   assert.equal(protein.message, 'The saved protein comparison is executable, but current controls cannot represent it losslessly.');
+});
+
+// Python converts a Session 27-44 from the file Load read (`upgradeLegacySession`), whose requests keep their schema:
+// the pre-pass writes no field that schema lacks. Session 40 (request schema 5, a Python LOSATP table under a given
+// table's ID, its protein column removed: a table bound to features without protein matches).
+test('a Session 27-44 with a table bound to features still converts after the pre-pass', async () => {
+  const fixture = new URL('../fixtures/performance/hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz',
+    import.meta.url);
+  const session = JSON.parse(gunzipSync(readFileSync(fixture)).toString('utf8'));
+  const stored = session.renderRequest.comparisons.find((item) => item.kind === 'precomputedProteinComparison');
+  const resource = session.resources[stored.resourceId];
+  delete session.resources[stored.resourceId];
+  const lines = text(resource.data).split('\n');
+  const proteinColumn = lines[0].split('\t').indexOf('query_protein_id');
+  const data = lines.map((line) => (line ? line.split('\t').filter((_cell, index) => index !== proteinColumn).join('\t') : line))
+    .join('\n');
+  const { checksum: _checksum, ...kept } = resource;
+  session.resources[given(1)] = { ...kept, data: base64(data), size: Buffer.byteLength(data) };
+  stored.resourceId = given(1);
+  const read = readStoredBlastTables([session.renderRequest], session.resources);
+  assert.equal(read.requests[0], session.renderRequest);
+  assert.equal(withStoredTablesWithoutProteinMatches(session.renderRequest, session.resources).comparisons
+    .find((item) => item.resourceId === given(1)).proteinMatches, false);
+  const document = { ...session, renderRequest: read.requests[0], resources: read.resources };
+  const { result } = await pythonLegacySessionUpgrader()('upgradeLegacySession', { document, storedRequestSchema: 5 });
+  assert.equal(result.error, undefined);
 });
