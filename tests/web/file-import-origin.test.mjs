@@ -76,6 +76,18 @@ test('a Blacklist file, and Remove on its card, cut at the Arabic comma as well'
   assert.equal(withoutImportedBlacklistWords('mine\r\nalpha\r\nbeta', imported), 'mine');
 });
 
+// A Session saved before OV-2792 stored a Blacklist file's words cut at ',' and line breaks only
+// and trimmed by trim(): 'a،b' was one word, and 'c\u0085' kept its U+0085. Remove on the card
+// reads those words as the Blacklist text is read now, so it takes them out of an edited text too.
+test('Remove on the Blacklist card takes out the words an older Session stored unsplit', () => {
+  const imported = { words: ['a،b', 'c\u0085'], before: 'mine' };
+  // The text as that release wrote it, unchanged: the text before comes back.
+  assert.equal(withoutImportedBlacklistWords('mine, a،b, c\u0085', imported), 'mine');
+  // Edited after the import: the file's words go, the words typed since stay.
+  assert.equal(withoutImportedBlacklistWords('mine, a،b, c\u0085, theirs', imported), 'mine, theirs');
+  assert.equal(withoutImportedBlacklistWords('a، b\nc, theirs', imported), 'theirs');
+});
+
 test('the Qualifier priority rows take back the user order the file replaced', () => {
   const rows = [{ feat: 'CDS', order: 'gene' }, { feat: 'tRNA', order: 'product' }];
   importPriorityRows(rows, [{ feat: 'CDS', order: 'product,gene' }, { feat: 'rRNA', order: 'note' }, { feat: 'CDS', order: 'locus_tag' }]);

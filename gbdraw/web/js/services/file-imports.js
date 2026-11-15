@@ -367,14 +367,16 @@ export const withImportedBlacklistWords = (text, words) => (words.length > 0
 /**
  * The Blacklist text without a file's words: the text before when it is
  * unchanged since, else the text with each of the words (its last occurrence
- * and the separator before it) taken out.
+ * and the separator before it) taken out. The words are read as the text is
+ * (`splitTypedList`), so a word an older Session stored under an earlier rule
+ * (OV-2792: 'a،b' was one word) is taken out item by item.
  * @param {string} text
  * @param {Readonly<ImportedBlacklist>} imported
  */
 export const withoutImportedBlacklistWords = (text, { words, before }) => {
   if (text === blacklistWithWords(before, words)) return before;
   const parts = splitTypedListKeepingSeparators(text);
-  [...words].reverse().forEach((word) => {
+  words.flatMap(splitTypedList).reverse().forEach((word) => {
     let at = -1;
     for (let index = parts.length - 1; index >= 0 && at < 0; index -= 2) {
       if (trimTypedListItem(parts[index]) === word) at = index;

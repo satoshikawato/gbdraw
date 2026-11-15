@@ -985,3 +985,32 @@ def test_the_web_cuts_and_trims_a_typed_list_as_python_owns_it() -> None:
     expected = ["hypothetical", "putative", "unknown"]
     assert web["fileWords"] == [expected]
     assert split_typed_list(notepad.decode("utf-8")) == expected
+
+
+_TRIM_SCRIPT = """
+const { readFileSync } = await import('node:fs');
+const codes = JSON.parse(readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(codes.filter((code) => String.fromCharCode(code).trim() === '')));
+"""
+
+
+@pytest.mark.browser
+def test_the_typed_list_trims_what_python_strip_or_the_web_trim_took_before() -> None:
+    """OV-2792: ``TYPED_LIST_TRIMMED`` is exactly the characters Python's ``str.strip()`` took from an item's ends
+    together with those JavaScript's ``trim()`` took, so no item keeps an end character it lost before on either
+    side (dropping, say, U+2028 fails here), and no other character is trimmed."""
+
+    from gbdraw.core.typed_list import TYPED_LIST_TRIMMED
+
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", _TRIM_SCRIPT],
+        input=json.dumps([ord(c) for c in _BMP]),
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+    )
+    web_trimmed = {chr(code) for code in json.loads(completed.stdout)}
+    python_stripped = {c for c in _BMP if c.isspace()}
+    # Both readers take spaces and line breaks; each takes some the other keeps (U+FEFF; U+0085, U+001C-U+001F).
+    assert {" ", "\t", "\n", "\u2028", "\u3000"} <= web_trimmed & python_stripped
+    assert "\ufeff" in web_trimmed - python_stripped and "\x85" in python_stripped - web_trimmed
+    assert len(TYPED_LIST_TRIMMED) == len(set(TYPED_LIST_TRIMMED))
+    assert set(TYPED_LIST_TRIMMED) == python_stripped | web_trimmed
