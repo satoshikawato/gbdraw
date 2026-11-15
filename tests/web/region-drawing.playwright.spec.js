@@ -12,7 +12,7 @@ const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { readSessionFile } = require('./helpers/session-file.cjs');
-const { expectSessionLoadedWithoutWarnings, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, openApp } = require('./helpers/app-lifecycle.cjs');
 const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -440,4 +440,77 @@ test('Copy to an existing Linear drawing appends the records as one Undo step of
   await loadSessionFile(page, saved);
   dialog = await openRegionDialog(page);
   await expect(dialog.locator('[data-region-drawing-target-new]')).toBeChecked();
+});
+
+/** The shown drawing's File cards, its records off, and the feature edits of its records. @param {import('@playwright/test').Page} page */
+const circularTarget = (page) => page.evaluate(async () => {
+  const drawing = (await import('./js/state.js')).state.activeDrawing();
+  return { cards: drawing.circularSources.map((card) => card.uid), off: [...drawing.recordsOff],
+    edits: Object.values(drawing.featureOverrides).map((row) => row.recordKey) };
+});
+
+// A paste into a Circular drawing of whole records of the same file (PD-OI-090 〔作成〕(4)): Copy stays off while the
+// drawing has every chosen record already (D-35); "Copy the records only" adds the record without the source's edit of
+// its feature; the target's own card stays; Generate draws the record on a row below; Undo takes the paste back.
+test('Copy into an existing Circular drawing of records of the same file: records only, one Undo step, drawn on a new row', async ({ page }, testInfo) => {
+  test.setTimeout(600_000);
+  const input = testInfo.outputPath('three-records.gbk');
+  writeFileSync(input, smallGenbank('RECA') + smallGenbank('RECB') + smallGenbank('RECD'));
+  await openWithGenBank(page, input, () => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await generateAndWaitForResult(page);
+  const source = (await shownDrawing(page)).id;
+  // The source hides a CDS of RECD: an edit "Copy the records only" leaves behind.
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.extractedFeatures.find((item) => item.type === 'CDS' && String(item.record_id).startsWith('RECD'));
+    await app.openFeatureEditorFromList(feature, null);
+    app.clickedFeature.featureVisibility = 'off';
+    await app.updateClickedFeatureVisibility('off');
+    if (app.featureVisibilityScopeDialog.show) await app.handleFeatureVisibilityScopeChoice('feature');
+    app.clickedFeature = null;
+  });
+  expect((await circularTarget(page)).edits, 'the source\'s edit').toHaveLength(1);
+
+  let dialog = await openRegionDialog(page);
+  await checkRecords(page, dialog, ['RECA', 'RECB']);
+  await dialog.locator('[data-region-drawing-create]').click();
+  await expect(dialog).toHaveCount(0);
+  const target = (await shownDrawing(page)).id;
+  expect(target).not.toBe(source);
+  const own = await circularTarget(page);
+  expect(own.cards, 'one File card').toHaveLength(1);
+
+  await drawingTab(page, source).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(source);
+  dialog = await openRegionDialog(page);
+  await expect(dialog.locator('[data-region-drawing-existing]'), 'the last target').toHaveValue(target);
+  await checkRecords(page, dialog, ['RECA']);
+  await expect(dialog.locator('[data-region-drawing-already]')).toContainText('RECA (whole record) is already in');
+  await expect(dialog.locator('[data-region-drawing-create]'), 'nothing to add (D-35)').toBeDisabled();
+  await checkRecords(page, dialog, ['RECD']);
+  await expect(dialog.locator('[data-region-drawing-create]')).toBeEnabled();
+  await dialog.locator('[data-region-drawing-edits] input[value="records"]').check();
+  await expect.poll(() => regionStatus(page), { timeout: 180_000 }).toBe('derived');
+  await dialog.locator('[data-region-drawing-create]').click();
+  await expect(dialog).toHaveCount(0);
+  expect(await shownDrawing(page)).toEqual({ id: target, kind: 'circular' });
+  expect((await undoLabels(page))[0], 'one step of the drawing').toBe('Copy to another drawing');
+  const pasted = await circularTarget(page);
+  expect(pasted.cards.slice(0, 1), 'the target\'s own card').toEqual(own.cards);
+  expect(pasted.cards, 'the pasted record\'s card after it').toHaveLength(2);
+  expect(pasted.off.filter((key) => key.startsWith(`${own.cards[0]}:`)), 'its records off').toEqual(own.off);
+  expect(pasted.edits, 'records only: no edit').toEqual([]);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(async () => (await circularTarget(page)).cards).toEqual(own.cards);
+  expect(await shownDrawing(page)).toEqual({ id: target, kind: 'circular' });
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(async () => (await circularTarget(page)).cards).toEqual(pasted.cards);
+
+  await generateAndWaitForResult(page);
+  expect(await drawnRecordIds(page)).toEqual(['RECA', 'RECB', 'RECD']);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await expect.poll(async () => (await recordNameBoxes(page)).map(({ id }) => id)).toEqual(['RECA', 'RECB', 'RECD']);
+  const tops = Object.fromEntries((await recordNameBoxes(page)).map(({ id, top }) => [id, Math.round(top)]));
+  expect(tops.RECA, 'RECA and RECB on one row').toBe(tops.RECB);
+  expect(tops.RECD, 'the pasted record on a row below').toBeGreaterThan(tops.RECA);
 });
