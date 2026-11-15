@@ -2,7 +2,8 @@
 // The existing drawings Copy to another drawing pastes into (PD-OI-090 〔作成〕(4)): their draft requests, and the
 // paste as one History step of the drawing it goes into. The dialog (app/region-drawing.js) reads them as its
 // `pasteTargets` port; the app passes the owners (the drawing store, the record read, the projection, the drawing
-// switch, History, and the paste's reader and install in services/config.js).
+// switch, History, the alignment owner's end of a drawing's work, and the paste's reader and install in
+// services/config.js).
 import { msg } from '../../utils/i18n.js';
 
 /** @import { DrawingTab, DrawingState } from '../../state.js' */
@@ -26,6 +27,9 @@ import { msg } from '../../utils/i18n.js';
  *   answers the drawing's alignment after the paste.
  * @property {(drawingId: DrawingId, values: DrawingAlignment) => void} writeArtifactValues Writes a drawing's own
  *   artifact values (History's writer: the page's while it is shown).
+ * @property {(drawingId: DrawingId) => void} endAlignmentWorkOf The alignment owner's `endWorkOf`: a paste edits the
+ *   records of its drawing as a record edit does, so that drawing's open alignment review (or its alignment work in
+ *   flight) ends; a review of another drawing stays. The plan and translations the paste installs are kept.
  */
 
 /**
@@ -40,11 +44,15 @@ const refusalOf = (answer) => (answer && typeof answer === 'object' && 'status' 
 /**
  * The dialog's port to the existing drawings. A paste is read first, then installed, with its drawing shown, as one
  * step of that drawing's History; its figure is drawn by the next Generate (the drawing keeps its Result until then).
+ * The step first ends the drawing's alignment work, as a record edit does: a review opened before the paste reads
+ * the records it had, and its Apply would draw them without the pasted ones.
  * A switch or a History step the app refuses (a Generate runs) pastes nothing and answers `busy` with its reason.
  * @param {PasteIntoOwners} owners
  * @returns {PasteTargetPorts}
  */
-export const createPasteTargets = ({ tabs, drawingOf, readRecords, project, show, runUndoable, prepare, install, writeArtifactValues }) => ({
+export const createPasteTargets = ({
+  tabs, drawingOf, readRecords, project, show, runUndoable, prepare, install, writeArtifactValues, endAlignmentWorkOf
+}) => ({
   tabs,
   drawingOf,
   projectDrawing: async (drawingId) => {
@@ -53,8 +61,10 @@ export const createPasteTargets = ({ tabs, drawingOf, readRecords, project, show
   },
   pasteInto: async (drawingId, paste) => {
     const prepared = await prepare(paste);
-    const refused = refusalOf(show(drawingId)) ?? refusalOf(await runUndoable(msg('Copy to another drawing'),
-      () => writeArtifactValues(drawingId, install(drawingOf(drawingId), prepared))));
+    const refused = refusalOf(show(drawingId)) ?? refusalOf(await runUndoable(msg('Copy to another drawing'), () => {
+      endAlignmentWorkOf(drawingId);
+      writeArtifactValues(drawingId, install(drawingOf(drawingId), prepared));
+    }));
     return refused ?? { status: 'ok', drawingId };
   }
 });

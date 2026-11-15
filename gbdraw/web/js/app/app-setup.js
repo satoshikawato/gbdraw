@@ -3411,7 +3411,8 @@ export const createAppSetup = () => {
     committedRecordKeyOf: previewItemPopup.committedRecordKeyOf,
     pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
       readRecords: readDrawingRecordIdentities, project: projectRequestOf, show: selectDrawing, runUndoable: history.runUndoable,
-      prepare: preparePastedRecords, install: installPastedRecords, writeArtifactValues: historySnapshots.writeArtifactValues })
+      prepare: preparePastedRecords, install: installPastedRecords, writeArtifactValues: historySnapshots.writeArtifactValues,
+      endAlignmentWorkOf: similarityAlignmentActions.endWorkOf })
   });
   const findInOtherFiles = createFindInOtherFiles({
     shownDrawingId: () => state.activeDrawingId.value, projectShownRequest: () => projectRequestOf(state.activeDrawing()),

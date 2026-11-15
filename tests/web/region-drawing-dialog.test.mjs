@@ -576,19 +576,41 @@ test('after a copy into a new drawing the dialog opens on the drawing that copy 
   assert.equal(owner.dialog.target, 'new');
 });
 
+// Delta review B1 of #2047: a paste edits the records of its drawing as a record edit does. Inside the drawing's
+// History step it first ends that drawing's alignment work (a review opened before the paste reads the records it
+// had; its Apply would draw them without the pasted ones), then installs the records and the alignment Python returns.
+test('a paste ends its drawing\'s alignment work in its History step, before the install', async () => {
+  const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-drawing/paste-into.js');
+  const events = [];
+  const EXTENDED = { similarityAlignmentPlan: { groupId: 'og-1' }, linearRecordTranslations: [{ recordKey: 'b', x: 0, y: 0 }] };
+  const ports = createPasteTargets({
+    tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
+    show: (drawingId) => { events.push(['show', drawingId]); return { status: 'ok' }; },
+    runUndoable: async (label, run) => { events.push(['step', label]); run(); events.push(['step end']); },
+    prepare: async () => ({}), install: (drawing) => { events.push(['install', drawing.id]); return EXTENDED; },
+    writeArtifactValues: (drawingId, values) => events.push(['write', drawingId, values]),
+    endAlignmentWorkOf: (drawingId) => events.push(['end alignment work', drawingId])
+  });
+  assert.deepEqual(await ports.pasteInto('linear-2', {}), { status: 'ok', drawingId: 'linear-2' });
+  assert.deepEqual(events, [['show', 'linear-2'], ['step', 'Copy to another drawing'], ['end alignment work', 'linear-2'],
+    ['install', 'linear-2'], ['write', 'linear-2', EXTENDED], ['step end']], 'the plan Python returns is written, not cleared');
+});
+
 // Review finding 4 of #2047: a paste whose History step the app refuses (a Session operation blocks edits) pastes
 // nothing and answers busy; the dialog stays open on its choices with the reason, and the last target stays.
 test('a paste History refuses answers busy; the dialog stays open with the reason and remembers no target', async () => {
   const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-drawing/paste-into.js');
   const installed = [];
   const written = [];
+  const ended = [];
   const NO_ALIGNMENT = { similarityAlignmentPlan: null, linearRecordTranslations: [] };
   const reason = 'Generating diagram. Retry after generation finishes.';
   const ports = createPasteTargets({
     tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
     show: () => ({ status: 'ok' }), runUndoable: async () => ({ status: 'busy', reason }),
     prepare: async () => ({}), install: (drawing) => { installed.push(drawing.id); return NO_ALIGNMENT; },
-    writeArtifactValues: (drawingId, values) => written.push([drawingId, values])
+    writeArtifactValues: (drawingId, values) => written.push([drawingId, values]),
+    endAlignmentWorkOf: (drawingId) => ended.push(drawingId)
   });
   assert.deepEqual(await ports.pasteInto('linear-2', {}), { status: 'busy', reason });
   assert.deepEqual(installed, []);
@@ -596,16 +618,19 @@ test('a paste History refuses answers busy; the dialog stays open with the reaso
     tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
     show: () => ({ status: 'busy', reason }), runUndoable: async (_label, run) => run(),
     prepare: async () => ({}), install: (drawing) => { installed.push(drawing.id); return NO_ALIGNMENT; },
-    writeArtifactValues: (drawingId, values) => written.push([drawingId, values])
+    writeArtifactValues: (drawingId, values) => written.push([drawingId, values]),
+    endAlignmentWorkOf: (drawingId) => ended.push(drawingId)
   });
   assert.deepEqual(await refusedSwitch.pasteInto('linear-2', {}), { status: 'busy', reason });
   assert.deepEqual(installed, []);
   assert.deepEqual(written, [], 'a refused paste writes nothing');
+  assert.deepEqual(ended, [], 'a refused paste ends no alignment work');
   const ran = createPasteTargets({
     tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
     show: () => ({ status: 'ok' }), runUndoable: async (_label, run) => run(),
     prepare: async () => ({}), install: (drawing) => { installed.push(drawing.id); return NO_ALIGNMENT; },
-    writeArtifactValues: (drawingId, values) => written.push([drawingId, values])
+    writeArtifactValues: (drawingId, values) => written.push([drawingId, values]),
+    endAlignmentWorkOf: (drawingId) => ended.push(drawingId)
   });
   assert.deepEqual(await ran.pasteInto('linear-2', {}), { status: 'ok', drawingId: 'linear-2' });
   assert.deepEqual(installed, ['linear-2']);

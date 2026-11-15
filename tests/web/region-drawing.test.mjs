@@ -1167,7 +1167,8 @@ test('Copy into an existing drawing: one History step of that drawing, shown; it
     committedRecordKeyOf: () => null,
     pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
       readRecords: async () => undefined, project: projectOf, show: app.selectDrawing, runUndoable: history.runUndoable,
-      prepare: preparePastedRecords, install: installPastedRecords, writeArtifactValues: writeShownArtifact })
+      prepare: preparePastedRecords, install: installPastedRecords, writeArtifactValues: writeShownArtifact,
+      endAlignmentWorkOf: () => {} })
   });
   await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'coordinates', start: '301', end: '800' } });
   await owner.setChoice({ target: target.id });
@@ -1214,6 +1215,8 @@ test('a paste into an aligned Linear drawing installs the alignment Python exten
       : drawingId === target.id ? readKept(keptTarget) : undefined) });
   /** @type {[string, Record<string, unknown>][]} */
   const written = [];
+  /** @type {string[]} */
+  const ended = [];
   const owner = createRegionDrawing({
     shownDrawingId: () => state.activeDrawingId.value,
     projectShownRequest: () => projectOf(state.activeDrawing()),
@@ -1229,7 +1232,8 @@ test('a paste into an aligned Linear drawing installs the alignment Python exten
       writeArtifactValues: (drawingId, values) => {
         written.push([drawingId, values]);
         writeShownArtifact(drawingId, values);
-      } })
+      },
+      endAlignmentWorkOf: (drawingId) => ended.push(drawingId) })
   });
   await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'coordinates', start: '301', end: '800' } });
   await owner.setChoice({ target: target.id });
@@ -1238,6 +1242,7 @@ test('a paste into an aligned Linear drawing installs the alignment Python exten
   assert.equal(state.activeDrawingId.value, target.id);
   const pastedKey = target.linearSeqs[1].uid;
   assert.deepEqual(written.map(([drawingId]) => drawingId), [target.id], 'one write, of the target');
+  assert.deepEqual(ended, [target.id], 'the target\'s alignment work ends; its plan stays (delta review B1)');
   assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-own', 'the target keeps its group');
   assert.deepEqual(state.similarityAlignmentPlan.value.records.map(({ recordKey, status }) => [recordKey, status]),
     [[ownKey, 'reference'], [pastedKey, 'skipped']], 'the plan names the pasted record, drawn where it is');
