@@ -41,6 +41,7 @@ const { annotationSourceKey, buildAnnotationRecordCatalog } = await import(
   '../../gbdraw/web/js/app/annotations/record-catalog.js'
 );
 const { discoverSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
 
 /** A GenBank record of `length` bp with one CDS per `[start, end, tag]`. */
@@ -115,7 +116,9 @@ const noWorker = () => { throw new Error('the records are read by the fast path'
  * without the Worker), selected by the card's record selector.
  */
 const factsOf = async (drawing) => {
-  if (drawing.mode !== 'linear') return { linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: [] };
+  // A page without a kept artifact: the request reads the state of the drawing it projects (`requestStateOfDrawing`).
+  const { readOfDrawing } = createArtifactSlotStore();
+  if (drawing.mode !== 'linear') return { linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: [], readOfDrawing };
   const inputType = drawing.inputType.value;
   const recordsOff = new Set(drawing.recordsOff);
   const linearSources = await Promise.all(drawing.linearSeqs.map(async (seq) => ({
@@ -128,7 +131,7 @@ const factsOf = async (drawing) => {
   const catalog = buildAnnotationRecordCatalog({ mode: 'linear', linearSources });
   assert.equal(catalog.status, 'ready', JSON.stringify(catalog.issues));
   return {
-    linearRecordCatalog: catalog, recordDisplayRows: [], omittedAnnotationRecordKeys: catalog.omittedRecordKeys || []
+    linearRecordCatalog: catalog, recordDisplayRows: [], omittedAnnotationRecordKeys: catalog.omittedRecordKeys || [], readOfDrawing
   };
 };
 /** The draft request of `drawing`, shown or not (the request's mode is the drawing's own). */
@@ -512,6 +515,50 @@ result = json.dumps(plan_linear_units(payload['records'], payload['pairs']))
     { queryRecordIndex: 0, subjectRecordIndex: 2 }, { queryRecordIndex: 1, subjectRecordIndex: 2 }
   ]);
 });
+// OV-3532: the draft request of a drawing that is not shown (the target of a paste, a source of Find in other files)
+// reads that drawing's own Similarity alignment plan and record translations, the ones its artifact slot keeps, never
+// those of the drawing shown.
+test('a hidden drawing\'s draft request carries its own alignment, and a hidden drawing without one carries none', async () => {
+  const linearOf = (id) => {
+    const drawing = withNewDrawingDefaults(state, createDrawingState(id, 'linear'));
+    drawing.inputType.value = 'gb';
+    drawing.linearSeqs.splice(0, Infinity,
+      createLinearSeq({ uid: id, gb: state.inputFiles.registerFile(genbankFile(`${id}.gb`, [recordA])) }));
+    Object.assign(drawing.form, { labels_mode: 'none' });
+    return drawing;
+  };
+  /** A plan whose one record is its reference. */
+  const planOf = (recordKey, groupId) => {
+    const anchor = { recordKey, biologicalFeatureId: `${groupId}-f1`, sourceFeatureIndex: 0, stableFeatureSvgId: null };
+    return { schema: 2, groupId, reference: anchor, records: [{ recordKey, status: 'reference', rationale: 'reference', anchor }] };
+  };
+  const aligned = linearOf('hidden-aligned');
+  const unaligned = linearOf('hidden-unaligned');
+  assert.notEqual(state.activeDrawingId.value, aligned.id);
+  const alignedKey = (await projectOf(aligned)).envelope.renderRequest.records[0].recordKey;
+  const slots = createArtifactSlotStore();
+  slots.writeValues(aligned, {
+    similarityAlignmentPlan: planOf(alignedKey, 'og-hidden'), linearRecordTranslations: [{ recordKey: alignedKey, x: 25, y: 0 }]
+  });
+  /** @param {ReturnType<typeof linearOf>} drawing */
+  const layoutOf = async (drawing) => (await projectDraftRequest(state, drawing,
+    { ...(await factsOf(drawing)), readOfDrawing: slots.readOfDrawing })).envelope.renderRequest.layout;
+  // The shown drawing is aligned on a record neither hidden drawing draws.
+  state.similarityAlignmentPlan.value = planOf('shown-record', 'og-shown');
+  state.linearRecordTranslations.value = [{ recordKey: 'shown-record', x: 99, y: 0 }];
+  try {
+    const own = await layoutOf(aligned);
+    assert.equal(own.similarityAlignment?.groupId, 'og-hidden', 'the hidden drawing\'s own plan');
+    assert.deepEqual(own.recordTranslations, [{ recordKey: alignedKey, x: 25, y: 0 }]);
+    const none = await layoutOf(unaligned);
+    assert.equal(none.similarityAlignment ?? null, null, 'no plan of the shown drawing');
+    assert.deepEqual(none.recordTranslations ?? [], []);
+  } finally {
+    state.similarityAlignmentPlan.value = null;
+    state.linearRecordTranslations.value = [];
+  }
+});
+
 test('OV-3001: the drawing Find in other files creates runs its LOSAT window pairs at Generate, without a Result', async () => {
   // PD-OI-123: "The figure is drawn by Generate." The created drawing's LOSAT pairs join drawn units (one per window),
   // which the Comparison controls cannot hold, so its comparison is preserved; Create chose to run it (Inherit), and
@@ -647,6 +694,34 @@ test('(a) regions of two records of one file are one Linear drawing bound to tha
   // each record on a row of its own.
   assert.deepEqual(installed.derived.renderRequest.records.map((record) => record.presentation.gridRow), [null, null]);
   await assertRoundTrip(installed);
+});
+
+// OV-3532: the install of a derived drawing (New drawing from a region, Copy to a new drawing) writes none of its
+// draft's alignment into the page: the plan and translations shown are the shown drawing's, which keeps them.
+test('installing a Linear region drawing leaves the shown drawing\'s alignment plan and translations', async () => {
+  const source = withNewDrawingDefaults(state, createDrawingState('aligned-source', 'linear'));
+  source.inputType.value = 'gb';
+  source.linearSeqs.splice(0, Infinity,
+    createLinearSeq({ uid: 'one', gb: state.inputFiles.registerFile(genbankFile('one.gb', [recordB])) }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  const sent = await projectOf(source);
+  const { renderRequest, resources } = sent.envelope;
+  const regions = [{ recordKey: renderRequest.records[0].recordKey, start: 51, end: 600 }];
+  const { result: derived } = await deriveInPython({ canonicalRequest: renderRequest, resources, regions, adaptSizes: true, copy: NEW_DRAWING });
+  const prepared = await prepareRegionDrawing({ derived, sent });
+  const anchor = { recordKey: 'shown-record', biologicalFeatureId: 'f1', sourceFeatureIndex: 0, stableFeatureSvgId: null };
+  const plan = { schema: 2, groupId: 'og-shown', reference: anchor,
+    records: [{ recordKey: 'shown-record', status: 'reference', rationale: 'reference', anchor }] };
+  state.similarityAlignmentPlan.value = plan;
+  state.linearRecordTranslations.value = [{ recordKey: 'shown-record', x: 12, y: 0 }];
+  try {
+    installPreparedDrawing(createDrawingState('region-of-aligned', 'linear'), prepared);
+    assert.strictEqual(state.similarityAlignmentPlan.value, plan);
+    assert.deepEqual(state.linearRecordTranslations.value, [{ recordKey: 'shown-record', x: 12, y: 0 }]);
+  } finally {
+    state.similarityAlignmentPlan.value = null;
+    state.linearRecordTranslations.value = [];
+  }
 });
 
 // (e) A Linear record of 3 kb with a hand-set tick interval: Auto is 1 kb at

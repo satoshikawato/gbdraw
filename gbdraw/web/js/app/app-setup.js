@@ -4,7 +4,7 @@
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { LinearUnitPlanPayload } from '../services/linear-units.js' */
-/** @import { PlanGenomeScales } from './run-analysis.js' */
+/** @import { GenomeScaleRequest } from './run-analysis.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
@@ -421,7 +421,8 @@ const planLinearUnits = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OP
 /**
  * The E-value scales of a drawing's LOSAT searches: Python plans the drawing's draft request, as Save writes it, staged
  * as Generate stages its request (PD-OI-018 revision 6).
- * @type {PlanGenomeScales}
+ * @param {DrawingState} drawing
+ * @param {GenomeScaleRequest & { readOfDrawing: ArtifactSlotStore['readOfDrawing'] }} request
  */
 const planDraftGenomeScales = async (drawing, { program, ...facts }) => {
   const { envelope: { renderRequest, resources } } = await projectDraftRequest(state, drawing, { ...facts, planLinearUnits });
@@ -624,11 +625,11 @@ export const createAppSetup = () => {
   // R13 port: the drawer, the preview binder, the result watchers, and the
   // drawing switch read the alignment owner through these ports; the root
   // assigns them once the alignment owner exists.
-  /** @type {{ refreshCanvas: () => void, editorDisabledReason: () => string, leaveDrawing: () => void }} */
+  /** @type {{ refreshCanvas: () => void, editorDisabledReason: () => string, arriveAtDrawing: () => void }} */
   const similarityAlignmentPorts = {
     refreshCanvas: () => {},
     editorDisabledReason: () => '',
-    leaveDrawing: () => {}
+    arriveAtDrawing: () => {}
   };
   /**
    * The shown drawing when it is of `drawingMode`, else null: a mode panel's
@@ -1803,7 +1804,8 @@ export const createAppSetup = () => {
         hiddenDepth: true
       })
     ),
-    prepareLinearRecordCatalog, planGenomeScales: planDraftGenomeScales,
+    prepareLinearRecordCatalog,
+    planGenomeScales: (drawing, request) => planDraftGenomeScales(drawing, { ...request, readOfDrawing: artifactSlots.readOfDrawing }),
     readRecordIdentitySources,
     linearCardRecord,
     readLinearCardRecords: linearRecordSelector.refresh,
@@ -2935,7 +2937,7 @@ export const createAppSetup = () => {
   Object.assign(similarityAlignmentPorts, {
     refreshCanvas: refreshSimilarityAlignmentCanvas,
     editorDisabledReason: () => similarityAlignmentEditorDisabledReason.value,
-    leaveDrawing: similarityAlignmentActions.leaveDrawing
+    arriveAtDrawing: similarityAlignmentActions.arriveAtDrawing
   });
   const {
     canUseClickedOrthogroupActions, clickedOrthogroupDetail, alignByClickedOrthogroup, highlightClickedOrthogroup,
@@ -3026,6 +3028,7 @@ export const createAppSetup = () => {
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the kept artifacts of the drawings not shown go beside the shown one (E1).
     readKeptArtifacts: () => artifactSlots.kept().filter((slot) => slot.drawingId !== state.activeDrawingId.value),
+    readOfDrawing: artifactSlots.readOfDrawing,
     resolveTitle: async () => {
       let title = normalizeSessionTitle(sessionTitle.value);
       if (!title) {
@@ -3299,8 +3302,10 @@ export const createAppSetup = () => {
       rebindAnnotationRecords();
       if (listMode !== 'linear') return;
       const drawing = shownDrawingOfMode('linear');
-      if (drawing) invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
-      similarityAlignmentActions?.clearForMutation?.(msg('records to draw changed.'));
+      if (drawing) {
+        invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
+        similarityAlignmentActions?.clearForMutation(msg('records to draw changed.'), drawing.id);
+      }
     },
     removeSource: removeRecordSource,
     askRemoveSource: askRecordFileRemoval,
@@ -3338,7 +3343,7 @@ export const createAppSetup = () => {
       : { catalog: null, error: '' };
     if (error) throw error;
     return projectDraftRequest(state, drawing, {
-      linearRecordCatalog: catalog, planLinearUnits,
+      linearRecordCatalog: catalog, planLinearUnits, readOfDrawing: artifactSlots.readOfDrawing,
       recordDisplayRows: recordDisplayControls.allRows.value,
       omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
     });

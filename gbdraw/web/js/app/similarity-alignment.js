@@ -1269,15 +1269,28 @@ const planChoices = (plan, staleRecordKeys = new Set()) => (
 );
 
 /**
- * The plan clear of an edit to drawing `drawingId`, the shown one unless given (OV-3532): the shown drawing's goes
+ * OV-381: the drawer selects the group of `plan` (none for no plan or an unknown group); it writes only a change.
+ * @param {Pick<WebState, 'selectedOrthogroupId'>} state
+ * @param {(groupId: string) => OrthogroupGroup | null} getOrthogroupById
+ * @param {{ groupId?: unknown } | null | undefined} plan
+ */
+const selectPlanGroup = (state, getOrthogroupById, plan) => {
+  const groupId = String(plan?.groupId || '');
+  if (groupId && groupId !== state.selectedOrthogroupId.value && getOrthogroupById(groupId)) {
+    state.selectedOrthogroupId.value = groupId;
+  }
+};
+
+/**
+ * The plan clear of an edit to drawing `drawingId` (OV-3532): the shown drawing's goes
  * through `clearShownPlan`, which also ends its review and says why; a drawing not shown loses its plan and Reset
  * receipt in its artifact slot, and the other drawings keep theirs.
  * @param {Pick<WebState, 'activeDrawingId'>} state
  * @param {SimilarityAlignmentActionsOptions['writeArtifactValues']} writeArtifactValues
  * @param {(reason: string) => boolean} clearShownPlan
- * @returns {(reason: string, drawingId?: DrawingId) => boolean}
+ * @returns {(reason: string, drawingId: DrawingId) => boolean}
  */
-const planClearOfDrawing = (state, writeArtifactValues, clearShownPlan) => (reason, drawingId = state.activeDrawingId.value) => {
+const planClearOfDrawing = (state, writeArtifactValues, clearShownPlan) => (reason, drawingId) => {
   if (drawingId === state.activeDrawingId.value) return clearShownPlan(reason);
   writeArtifactValues(drawingId, { similarityAlignmentPlan: null, similarityAlignmentResetReceipt: null });
   return false;
@@ -1773,12 +1786,15 @@ export const createSimilarityAlignmentActions = ({
     activeBaseline = null;
     return { status: 'canceled' };
   };
-  // A drawing switch: the review, the summary, the notice and the repair were
-  // the departing drawing's work (OV-3532); the arriving drawing's plan is in
-  // `state`, installed with its artifact slot.
-  const leaveDrawing = () => {
+  // A drawing switch, after the departing drawing's transient UI was reset:
+  // the review, the summary, the notice and the repair were the departing
+  // drawing's work (OV-3532). The arriving drawing's plan, installed with its
+  // artifact slot, selects its group here: no watcher writes state on a
+  // switch, and a Duplicate's plan is its source's object.
+  const arriveAtDrawing = () => {
     cancel();
     replaceSummary('');
+    selectPlanGroup(state, getOrthogroupById, state.similarityAlignmentPlan.value);
   };
 
   // Record and feature names of the committed request, shared by the drawer
@@ -1855,11 +1871,10 @@ export const createSimilarityAlignmentActions = ({
 
   // OV-381: a new plan (Apply, Session load, Undo) selects its own group in the
   // drawer, whichever group was selected or saved before, so the drawer can
-  // offer the plan's reference below.
-  watch(() => state.similarityAlignmentPlan.value, (/** @type {{ groupId?: unknown } | null | undefined} */ plan) => {
-    const groupId = String(plan?.groupId || '');
-    if (groupId && getOrthogroupById(groupId)) state.selectedOrthogroupId.value = groupId;
-  });
+  // offer the plan's reference below; a drawing switch selects it too
+  // (`arriveAtDrawing`), so the watcher finds it selected.
+  watch(() => state.similarityAlignmentPlan.value, (/** @type {{ groupId?: unknown } | null | undefined} */ plan) => (
+    selectPlanGroup(state, getOrthogroupById, plan)));
 
   // OV-381: until the user picks, the drawer offers the committed plan's exact
   // reference (from a popup Align or a loaded Session), never a stale one.
@@ -2255,7 +2270,7 @@ export const createSimilarityAlignmentActions = ({
     skipRecord: (recordKey) => editRow(recordKey, { kind: 'skip' }),
     applyDraft,
     cancel,
-    leaveDrawing,
+    arriveAtDrawing,
     /** @param {AliasSource} anchor */
     previewCandidate: (anchor) => {
       if (typeof previewCandidate === 'function') previewCandidate(anchor);

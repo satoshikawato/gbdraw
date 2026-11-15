@@ -7,3 +7,6 @@
   copy moved in the drawing it was copied from. Duplicate copies the alignment;
   New drawing, New drawing with this style, and a Circular-only Session start
   without one.
+- Changed: In the Web app, switching drawings ends an open Similarity alignment
+  review, whose unsaved choices are dropped, and clears the "Similarity
+  alignment applied" summary; each drawing keeps its applied alignment.

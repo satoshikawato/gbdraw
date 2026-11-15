@@ -42,6 +42,7 @@ const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/
 setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { SESSION_VERSION, assertDrawingInputs, installShownDrawing, getCommittedCanonicalSession } = sessionConfig;
 // A Session 51 drawing's saved unmanaged overrides are checked as Load checks them (PD-OI-009).
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
@@ -1277,7 +1278,8 @@ const draftRequest = async (drawing) => {
   globalThis.DOMParser = class { parseFromString() { return { documentElement: { localName: 'none' } }; } };
   try {
     return (await sessionConfig.projectDraftRequest(state, drawing, {
-      linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
+      linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: [],
+      readOfDrawing: createArtifactSlotStore().readOfDrawing
     })).envelope.renderRequest;
   } finally {
     globalThis.DOMParser = parser;

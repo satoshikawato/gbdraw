@@ -50,8 +50,8 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
- * @property {{ leaveDrawing: () => void }} alignment The Similarity alignment owner's port: its review, summary and
- *   notice were the departing drawing's.
+ * @property {{ arriveAtDrawing: () => void }} alignment The Similarity alignment owner's port: its review, summary and
+ *   notice were the departing drawing's, and the arriving drawing's plan selects its group.
  * @property {(id: DrawingId) => DrawingState} installShownDrawing The one writer of the shown drawing.
  * @property {() => void} dismissNotice
  * @property {(departing: DrawingId, arriving: DrawingId) => void} switchDrawingSearch
@@ -116,7 +116,8 @@ export const createDrawingSwitch = ({
   //      that changed while it was not shown.
   //   4. Reset the departing drawing's transient UI; the Preview search is
   //      kept per drawing. The feature panel tab it resets is no Session
-  //      change (D-15-53).
+  //      change (D-15-53). The arriving Similarity alignment plan selects
+  //      its group (`arriveAtDrawing`).
   //   5. Show the arriving Result as a selection.
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own drawing's slot (OIPC-C07), and for a History
@@ -157,7 +158,7 @@ export const createDrawingSwitch = ({
     // 4. Transient UI. "Showing the last successful result" named the
     // departing drawing's Result, and the notice the departing drawing's work.
     adoptSessionReset(resetModeTransientUi);
-    alignment.leaveDrawing();
+    alignment.arriveAtDrawing();
     dismissNotice();
     switchDrawingSearch(departing.id, arriving.id);
     failedGeneratePreservedResult.value = false;

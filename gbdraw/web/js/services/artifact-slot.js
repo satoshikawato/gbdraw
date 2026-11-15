@@ -261,3 +261,27 @@ export const createArtifactSlotStore = () => {
     writeValues: (drawing, values) => keep(withArtifactSlotValues(slots.get(drawing.id) ?? null, drawing, values))
   };
 };
+
+/**
+ * The values of a kept artifact that the request of its drawing reads (`buildLayout` in session-request.js: the
+ * Similarity alignment plan and record translations, OV-3532), in the refs the shown state holds them in; the empty
+ * slot's for a drawing without a slot.
+ * @param {Readonly<ArtifactSlot> | undefined} slot
+ */
+export const keptRequestArtifact = (slot) => ({
+  similarityAlignmentPlan: { value: slot ? slot.values.similarityAlignmentPlan : ARTIFACT_SLOT_EMPTY.similarityAlignmentPlan() },
+  linearRecordTranslations: { value: slot ? slot.values.linearRecordTranslations : ARTIFACT_SLOT_EMPTY.linearRecordTranslations() }
+});
+
+/**
+ * The state the request of drawing `drawingId` reads (R15: a projection reads the drawing it projects): `state` while
+ * that drawing is shown, else `state` with the drawing's own kept artifact values (`keptRequestArtifact`).
+ * @template {{ activeDrawingId: { readonly value: DrawingId } }} S
+ * @param {S} state
+ * @param {DrawingId} drawingId
+ * @param {ArtifactSlotStore['readOfDrawing']} readOfDrawing
+ * @returns {S}
+ */
+export const requestStateOfDrawing = (state, drawingId, readOfDrawing) => readOfDrawing(drawingId,
+  state.activeDrawingId.value, () => state, (slot) => ({ ...state, ...keptRequestArtifact(slot) }))
+  ?? { ...state, ...keptRequestArtifact(undefined) };

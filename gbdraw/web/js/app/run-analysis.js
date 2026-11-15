@@ -1722,8 +1722,9 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
 })));
 /**
  * What `planGenomeScales` reads besides the drawing: the LOSAT program of its searches and the facts of its draft
- * request that Generate holds (`DraftRequestFacts` of services/config.js, without the unit planner the app adds).
- * @typedef {Omit<DraftRequestFacts, 'planLinearUnits'> & { program: 'losatn' | 'losatp' | 'tlosatx' }} GenomeScaleRequest
+ * request that Generate holds (`DraftRequestFacts` of services/config.js, without the unit planner and the artifact
+ * reader the app adds).
+ * @typedef {Omit<DraftRequestFacts, 'planLinearUnits' | 'readOfDrawing'> & { program: 'losatn' | 'losatp' | 'tlosatx' }} GenomeScaleRequest
  */
 /** @typedef {(drawing: DrawingState, request: GenomeScaleRequest) => Promise<unknown>} PlanGenomeScales */
 /**

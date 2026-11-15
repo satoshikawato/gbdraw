@@ -149,8 +149,10 @@ test('the record identities read a Circular list still deferred after a Load', a
 // Reload Records, which apply the read.
 test('the region dialog reads a deferred Circular list without writing Record Order', async () => {
   const { projectDraftRequest } = await import('../../gbdraw/web/js/services/config.js');
+  const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
   const requestPositions = async () => (await projectDraftRequest(state, circular, {
-    linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
+    linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: [],
+    readOfDrawing: createArtifactSlotStore().readOfDrawing
   })).envelope.renderRequest.layout.multiRecordPositions;
   app.selectDrawing('circular');
   setCircularGenbank(genbank('p.gb', ['P1', 70]));

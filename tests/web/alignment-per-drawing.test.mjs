@@ -47,6 +47,7 @@ const show = (app, id) => {
 /** The Align of a Similarity group: a Generate step that commits the plan and translations with its Result. */
 const align = (history, groupId, x) => history.runUndoableArtifactReplacement('Align', () => {
   state.results.value = [resultOf(`${groupId}.svg`)];
+  state.orthogroups.value = [{ id: groupId }];
   state.similarityAlignmentPlan.value = planOf(groupId);
   state.linearRecordTranslations.value = translationsOf(x);
   return true;
@@ -173,4 +174,42 @@ test('Reset clears the plan of each drawing it resets and its Undo restores each
   assert.equal(shownAlignment().plan, 'og-6', 'one Undo restores the hidden drawing\'s');
   show(app, first);
   assert.equal(shownAlignment().plan, 'og-5', 'and the shown one\'s');
+});
+
+// OV-381 on a switch: the arriving drawing's plan selects its group in the
+// Orthogroups drawer, by the switch's own step (no watcher writes state on a
+// switch), also between a drawing and its Duplicate, whose plan is the same object.
+test('a switch selects the arriving plan\'s group, also between a drawing and its Duplicate', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('linear');
+  await align(history, 'og-7', 5);
+  const { drawingId: copy } = app.drawingList.duplicateDrawing(source);
+  assert.equal(state.selectedOrthogroupId.value, 'og-7', 'the Duplicate shows its plan\'s group');
+  show(app, source);
+  assert.equal(state.selectedOrthogroupId.value, 'og-7', 'and so does its source');
+  app.drawingList.newDrawing('linear');
+  assert.equal(state.selectedOrthogroupId.value, '', 'a drawing without a plan selects none');
+  show(app, copy);
+  assert.equal(state.selectedOrthogroupId.value, 'og-7');
+});
+
+// D-31: an open Similarity alignment review and the summary were the departing
+// drawing's; a switch ends the review (its choices are dropped) and the summary.
+test('a switch ends an open Similarity alignment review and drops its summary', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: aligned } = app.drawingList.newDrawing('linear');
+  await align(history, 'og-8', 6);
+  const { drawingId: other } = app.drawingList.newDrawing('linear');
+  show(app, aligned);
+  app.similarityAlignmentStatus.value = 'reviewing';
+  app.similarityAlignmentDraft.value = { groupId: 'og-8', choices: [] };
+  app.similarityAlignmentSummary.value = { text: 'Similarity alignment applied' };
+  show(app, other);
+  assert.equal(app.similarityAlignmentStatus.value, 'idle');
+  assert.equal(app.similarityAlignmentDraft.value, null, 'the review\'s choices are dropped');
+  assert.equal(app.similarityAlignmentSummary.value, null);
+  show(app, aligned);
+  assert.deepEqual(shownAlignment(), { plan: 'og-8', translations: [6] }, 'the committed plan stays the drawing\'s');
 });

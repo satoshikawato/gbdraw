@@ -4393,6 +4393,8 @@ const buildComparisons = ({
 };
 
 /**
+ * The request's layout. A Linear drawing's Similarity alignment plan and record translations are its own artifact's
+ * (OV-3532): `state` is the state of the drawing the request projects (`requestStateOfDrawing` in artifact-slot.js).
  * @param {RequestState & { similarityAlignmentPlan?: ExportRef<unknown>, linearRecordTranslations?: ExportRef<unknown> }} state
  * @param {RequestDrawing} drawing
  * @param {{ recordKey: string, presentation: { gridRow?: number | null } }[]} [records]

@@ -52,9 +52,8 @@ const { computed, nextTick } = window.Vue;
 /** @typedef {() => SessionBusy | null} SessionOperationAvailability The session's busy answer, or null when an edit may run. */
 /** @typedef {(label: string, fn: () => unknown) => Promise<unknown>} RunUndoable History's undoable step. */
 /**
- * The alignment owner clears the plan of the drawing an edit changes (`drawingId`, the shown one unless given); `reason`
- * is a `msg` clause.
- * @typedef {(reason: string, drawingId?: DrawingId) => unknown} ClearAlignmentForMutation
+ * The alignment owner clears the plan of the drawing an edit changes (`drawingId`); `reason` is a `msg` clause.
+ * @typedef {(reason: string, drawingId: DrawingId) => unknown} ClearAlignmentForMutation
  */
 /** @typedef {(drawing: DrawingState) => unknown} DiscoverDrawingRecords Reads the records of the drawing's inputs. */
 /**
@@ -466,6 +465,17 @@ export const createLinearSourceMoves = ({
 };
 
 /**
+ * The plan clear of an edit to a record card: the card is the shown Linear drawing's, whose plan it clears (OV-3532).
+ * @param {ShownDrawingOfMode} shownDrawingOfMode
+ * @param {ClearAlignmentForMutation} clearAlignmentForMutation
+ * @param {string} reason A `msg` clause.
+ */
+const clearShownLinearPlan = (shownDrawingOfMode, clearAlignmentForMutation, reason) => {
+  const drawing = shownDrawingOfMode('linear');
+  if (drawing !== null) clearAlignmentForMutation(reason, drawing.id);
+};
+
+/**
  * @typedef {object} LinearRecordEditsPorts
  * @property {SessionOperationAvailability} sessionOperationAvailability
  * @property {ShownDrawingOfMode} shownDrawingOfMode
@@ -495,7 +505,7 @@ export const createLinearRecordEdits = ({
     if (!sequence) return false;
     const next = String(value || '');
     if (String(sequence.region_record_id || '') === next) return false;
-    clearAlignmentForMutation(msg('record selector changed.'));
+    clearShownLinearPlan(shownDrawingOfMode, clearAlignmentForMutation, msg('record selector changed.'));
     sequence.region_record_id = next;
     // The inferred definition follows the record the row now selects (D-12);
     // the row is a card of the shown Linear drawing.
@@ -523,7 +533,7 @@ export const createLinearRecordEdits = ({
     const edit = { [field]: next };
     const kind = cardWindowEditKind(sequence, index, edit);
     if (!kind) return false;
-    if (kind === 'crop') clearAlignmentForMutation(msg('record crop changed.'));
+    if (kind === 'crop') clearShownLinearPlan(shownDrawingOfMode, clearAlignmentForMutation, msg('record crop changed.'));
     editCardWindow(sequence, index, edit);
     return true;
   };

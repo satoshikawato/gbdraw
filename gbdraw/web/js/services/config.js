@@ -129,7 +129,7 @@ import { windowLosatFilenamesOf } from './linear-comparison-retained.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionDrawingResources } from './session-resources.js';
 import { savedDrawingsOf } from './session-drawings.js';
-import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend } from './artifact-slot.js';
+import { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore, installShownSetLegend, requestStateOfDrawing } from './artifact-slot.js';
 import {
   base64ToBytes,
   contentFactsOfStream,
@@ -373,7 +373,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceDrawing, SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
-/** @import { ArtifactSlot, LoadedArtifactSlots, ShownSetLegend } from './artifact-slot.js' */
+/** @import { ArtifactSlot, ArtifactSlotStore, LoadedArtifactSlots, ShownSetLegend } from './artifact-slot.js' */
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
@@ -6653,6 +6653,7 @@ const artifactUiState = (view) => ({
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
  *   planLinearUnits: DraftRequestFacts['planLinearUnits'],
+ *   readOfDrawing?: DraftRequestFacts['readOfDrawing'],
  *   recordDisplayRows?: { value: readonly RequestRecordDisplayRow[] } | null,
  *   written: readonly SavedSessionDrawing[],
  *   activeDrawingId: DrawingId,
@@ -6777,7 +6778,7 @@ const exportSessionDocument = async (
   {
     askChoice = async () => 'cancel',
     drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, written, planLinearUnits,
-    activeDrawingId, projectUi, isCurrent
+    readOfDrawing = createArtifactSlotStore().readOfDrawing, activeDrawingId, projectUi, isCurrent
   }
 ) => {
   const resolvedTitle =
@@ -6844,7 +6845,8 @@ const exportSessionDocument = async (
     // request (`exportSession` decides it once).
     if (!committed && draftRequest) {
       committed = (await projectDraftRequest(state, saved, {
-        linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [], omittedAnnotationRecordKeys, planLinearUnits
+        linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [], omittedAnnotationRecordKeys, planLinearUnits,
+        readOfDrawing
       })).envelope;
     }
     // The pairs belong to the committed request; a draft request names none (D-15-124).
@@ -7346,13 +7348,16 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
 /**
  * The facts of a drawing's draft request that the app holds: the Linear
  * record catalog, the record display rows, and the annotation records left
- * out; and the runner of the Worker helper that plans a Linear drawing's drawn
- * units, which the request asks when a card draws several windows.
+ * out; the runner of the Worker helper that plans a Linear drawing's drawn
+ * units, which the request asks when a card draws several windows; and the
+ * reader of each drawing's artifact (the artifact slot store's), through
+ * which the request reads the drawing's own alignment (`requestStateOfDrawing`).
  * @typedef {object} DraftRequestFacts
  * @property {unknown} linearRecordCatalog
  * @property {readonly RequestRecordDisplayRow[]} recordDisplayRows
  * @property {string[]} omittedAnnotationRecordKeys
  * @property {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} planLinearUnits
+ * @property {ArtifactSlotStore['readOfDrawing']} readOfDrawing
  */
 /**
  * Projects a drawing's inputs and settings to its draft request, as Save
@@ -7363,7 +7368,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
  * @returns {Promise<ProjectedDraftRequest>}
  */
 export const projectDraftRequest = async (sourceState, drawing, {
-  linearRecordCatalog, recordDisplayRows, omittedAnnotationRecordKeys, planLinearUnits
+  linearRecordCatalog, recordDisplayRows, omittedAnnotationRecordKeys, planLinearUnits, readOfDrawing
 }) => {
   const cardPlan = drawing.mode === 'linear'
     ? resolveLinearComparisonPlan({
@@ -7397,7 +7402,7 @@ export const projectDraftRequest = async (sourceState, drawing, {
       planLinearUnits)).resolution
     : cardPlan;
   const envelope = buildCanonicalRenderRequest({
-    state: sourceState, drawing, filesData: activeFiles, recordDisplayRows, comparisonPlanSnapshot,
+    state: requestStateOfDrawing(sourceState, drawing.id, readOfDrawing), drawing, filesData: activeFiles, recordDisplayRows, comparisonPlanSnapshot,
     omittedAnnotationRecordKeys, omitUnsourcedDepth: true
   });
   /** @type {Map<string, InputFileRef>} */
@@ -9034,6 +9039,8 @@ export const disposeSessionOperations = () => {
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value: readonly RequestRecordDisplayRow[] }} [recordDisplayRows]
  * @property {() => readonly Readonly<ArtifactSlot>[]} [readKeptArtifacts]
+ * @property {DraftRequestFacts['readOfDrawing']} [readOfDrawing] The reader of each drawing's artifact (without
+ *   it, as without `readKeptArtifacts`, the page keeps no artifact of a drawing not shown).
  * @property {() => Promise<string | null>} [resolveTitle] Null when the person canceled the title dialog.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]

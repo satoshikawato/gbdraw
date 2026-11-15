@@ -240,16 +240,26 @@ test('a Session 51 Load gives each Linear drawing its own alignment plan and tra
   assert.deepEqual(shownAlignmentAfterLoad(), { plan: null, translations: [] }, 'a Circular Load leaves no previous plan');
 });
 
+// The page shows one aligned Linear drawing (a page every version loads aligned); a Load of the same Session with the
+// record moved fails after its commit.
 test('a Load that fails after its commit gives the page back its alignment plan and translations', async () => {
-  await loadKeepingSlots(twoLinearSession('linear'));
-  const before = { plan: state.similarityAlignmentPlan.value, translations: state.linearRecordTranslations.value };
-  const failing = twoLinearSession('linear');
-  failing.drawings.find((entry) => entry.id === 'linear').renderRequest.layout.recordTranslations = [{ recordKey: 'record-1', x: 5, y: 0 }];
-  const loaded = await importSession(await sessionLoadEvent(failing), {
+  /** The Session with its one Linear drawing aligned, its record at `x`, and shown. @param {number} x */
+  const alignedLinearSession = (x) => {
+    const session = v49Session('drawings-circular-linear');
+    session.drawings.find((entry) => entry.id === 'linear').renderRequest.layout = {
+      recordGapPx: 0, multiRecordPositions: null, similarityAlignment: ALIGNMENT_PLAN,
+      recordTranslations: [{ recordKey: 'record-1', x, y: 0 }]
+    };
+    session.ui.activeDrawingId = 'linear';
+    return session;
+  };
+  await loadKeepingSlots(alignedLinearSession(0));
+  const before = structuredClone({ plan: state.similarityAlignmentPlan.value, translations: state.linearRecordTranslations.value });
+  assert.equal(before.plan?.groupId, 'og-loaded', 'the page shows the aligned drawing');
+  const loaded = await importSession(await sessionLoadEvent(alignedLinearSession(5)), {
     confirmLoadRepairs: async () => true,
     afterImport: async () => { throw new Error('a failure after the commit'); }
   });
   assert.equal(loaded.status, 'error');
-  assert.strictEqual(state.similarityAlignmentPlan.value, before.plan);
-  assert.strictEqual(state.linearRecordTranslations.value, before.translations);
+  assert.deepEqual({ plan: state.similarityAlignmentPlan.value, translations: state.linearRecordTranslations.value }, before);
 });

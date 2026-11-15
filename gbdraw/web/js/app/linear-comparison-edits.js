@@ -48,7 +48,7 @@ import { effectiveLinearComparisonLayout } from './linear-comparison-panel.js';
  */
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
 /** @typedef {(label: string, fn: () => unknown) => Promise<unknown>} RunUndoable History's undoable step. */
-/** @typedef {(reason: string) => unknown} ClearAlignmentForMutation The alignment owner clears its plan; `reason` is a `msg` clause. */
+/** @import { ClearAlignmentForMutation } from './linear-source-edits.js' */
 /**
  * The invalidation of a drawing's generated comparisons; `preserveLosatCacheInfo` keeps its LOSAT cache rows,
  * reindexed to the drawn records.
@@ -216,7 +216,7 @@ export const createLinearComparisonPlanWriter = ({
         !sameLinearComparisonEdge(edge, drawing.linearComparisonPlan.edges[index])
       ));
     if (invalidate && changed && !onlyPendingSourcesChanged(drawing, normalized)) {
-      clearAlignmentForMutation(msg('comparison configuration changed.'));
+      clearAlignmentForMutation(msg('comparison configuration changed.'), drawing.id);
     }
     SETTINGS_SLICE.install(drawing.slices.settings, { linearComparisonPlan: normalized });
     if (invalidate) invalidateLinearComparisonArtifacts(drawing);
@@ -360,7 +360,7 @@ export const createLinearComparisonModes = ({
     if (!selection.selectable || !selection.patch) return false;
     const nextProgram = selection.patch.losatProgram;
     if (drawing.losatProgram.value === nextProgram) return true;
-    clearAlignmentForMutation(msg('comparison program changed.'));
+    clearAlignmentForMutation(msg('comparison program changed.'), drawing.id);
     drawing.losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts(drawing);
     return true;
@@ -375,7 +375,7 @@ export const createLinearComparisonModes = ({
     if (!selection.selectable || !selection.patch) return false;
     const nextBlastpMode = selection.patch.blastpMode;
     if (drawing.losat.blastp?.mode === nextBlastpMode) return true;
-    clearAlignmentForMutation(msg('comparison mode changed.'));
+    clearAlignmentForMutation(msg('comparison mode changed.'), drawing.id);
     const hitLimits = drawing.losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
     hitLimits[drawing.losat.blastp.mode] = {
       candidateLimit: drawing.losat.blastp.candidateLimit,

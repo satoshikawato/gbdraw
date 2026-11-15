@@ -1036,7 +1036,7 @@ test('manual Reverse keeps the plan while invalidating edits clear it with a not
   assert.equal(fixture.actions.notice.value, '');
   await startReview(fixture);
   await fixture.actions.applyDraft();
-  assert.equal(fixture.actions.clearForMutation('record crop changed.'), true);
+  assert.equal(fixture.actions.clearForMutation('record crop changed.', fixture.state.activeDrawingId.value), true);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   assert.match(fixture.actions.notice.value, /record crop changed/);
   // OV-382: an Undo that restores the plan retires the notice.
@@ -1315,7 +1315,7 @@ test('stable reorder retains receipt, invalidation consumes it through the exist
   const receipt=structuredClone(f.state.similarityAlignmentResetReceipt.value);
   f.actions.retainForStableReorder(['c','b','a']);
   assert.deepEqual(f.state.similarityAlignmentResetReceipt.value,receipt);
-  f.actions.clearForMutation('Source changed.');
+  f.actions.clearForMutation('Source changed.', f.state.activeDrawingId.value);
   assert.equal(f.state.similarityAlignmentPlan.value,null);
   assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
 });
