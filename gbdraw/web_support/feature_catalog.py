@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence, Set as AbstractSet
 import copy
 from dataclasses import dataclass, fields as dataclass_fields, replace
 import json
@@ -3216,6 +3216,15 @@ _REQUIRED_ITEM_ARRAYS = (
 )
 
 
+def _json_value_in(value: object, members: AbstractSet[object]) -> bool:
+    """Whether a JSON value is one of ``members``: an array or object has no hash, so it is in no set."""
+
+    try:
+        return value in members
+    except TypeError:
+        return False
+
+
 @dataclass(frozen=True)
 class _CatalogItemArrays:
     """The arrays a catalog item must hold, once each is known to be one (``annotations`` is only required)."""
@@ -3258,7 +3267,7 @@ def _catalog_item_of_result(
     )
     if (
         not isinstance(catalog, Mapping)
-        or catalog_schema not in allowed_schemas
+        or not _json_value_in(catalog_schema, allowed_schemas)
     ):
         required = (
             str(expected_schema)
@@ -3317,7 +3326,7 @@ def _catalog_records(item: Mapping[str, object], raw_record_keys: Sequence[objec
 def _require_anchor_profile(profile: object) -> None:
     if isinstance(profile, Mapping) and set(profile) == _ANCHOR_PROFILE_FIELDS:
         for field, values in _ANCHOR_PROFILE_VALUES:
-            if profile.get(field) not in values:
+            if not _json_value_in(profile.get(field), values):
                 break
         else:
             return
