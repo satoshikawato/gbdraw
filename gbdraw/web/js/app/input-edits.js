@@ -20,7 +20,7 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
  */
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
 /** @typedef {() => SessionBusy | null} SessionOperationAvailability The session's busy answer, or null when an edit may run. */
-/** @typedef {(reason: string) => unknown} ClearAlignmentForMutation The alignment owner clears its plan; `reason` is a `msg` clause. */
+/** @import { ClearAlignmentForMutation } from './linear-source-edits.js' */
 /** @typedef {(drawing: DrawingState) => unknown} DiscoverDrawingRecords Reads the records of the drawing's inputs. */
 
 /**
@@ -118,7 +118,7 @@ export const createInputTypeEdits = ({
     if (!drawing) return false;
     const next = normalizeInputType(value);
     if (drawing.inputType.value === next) return false;
-    clearAlignmentForMutation(msg('source type changed.'));
+    clearAlignmentForMutation(msg('source type changed.'), drawing.id);
     changeRecordSources(drawing, () => { drawing.inputType.value = next; });
     void discoverDrawingRecords(drawing);
     return true;

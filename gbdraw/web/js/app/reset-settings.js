@@ -76,14 +76,11 @@ export const createDrawingReset = ({
   });
   // One drawing returns to a new drawing's settings of its mode; the
   // one-per-Session values stay (R17-5). OV-1168, OV-1195: its artifact takes
-  // the default palette applied, and a drawing not shown loses its alignment
-  // Reset receipt (the shown one's plan is cleared by its follow-up).
+  // the default palette applied; a Linear drawing's follow-up clears its
+  // alignment plan and Reset receipt, in its slot when it is not shown (OV-3532).
   /** @param {DrawingState} drawing */
   const resetDrawing = (drawing) => {
-    const artifact = resetDrawingSettings(state, drawing);
-    writeArtifactValues(drawing.id, drawing.id === state.activeDrawingId.value
-      ? artifact
-      : { ...artifact, similarityAlignmentResetReceipt: null });
+    writeArtifactValues(drawing.id, resetDrawingSettings(state, drawing));
     RESET_FOLLOW_UPS[drawing.mode](drawing);
     // The reset Depth series fit the kept Depth files (OV-1164), and each
     // kept file names its series (OV-2822).

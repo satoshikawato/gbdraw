@@ -31,6 +31,9 @@ const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js
 const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { projectDraftRequest } = await import('../../gbdraw/web/js/services/config.js');
+const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+// A page without a kept artifact (`requestStateOfDrawing`).
+const { readOfDrawing } = createArtifactSlotStore();
 const { annotationSourceKey, buildAnnotationRecordCatalog } = await import('../../gbdraw/web/js/app/annotations/record-catalog.js');
 const { createDrawingRecordCatalog } = await import('../../gbdraw/web/js/app/drawing-record-catalog.js');
 const { discoverSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
@@ -126,7 +129,7 @@ result = json.dumps([[record.record_key, record.presentation.grid_row, record.pr
  */
 const requestOf = async (drawing, catalog = undefined) => {
   const linearRecordCatalog = catalog === undefined ? await fullCatalog(drawing) : catalog;
-  const { envelope } = await projectDraftRequest(state, drawing, { linearRecordCatalog, recordDisplayRows: [], omittedAnnotationRecordKeys: [] });
+  const { envelope } = await projectDraftRequest(state, drawing, { linearRecordCatalog, recordDisplayRows: [], omittedAnnotationRecordKeys: [], readOfDrawing });
   return {
     records: envelope.renderRequest.records.map(({ recordKey, cardinality, presentation, windows }) => [
       recordKey, cardinality, presentation.gridRow, presentation.gridColumn, windows.map(({ start, end, column }) => [start, end, column])
@@ -232,7 +235,7 @@ test('Add window beside a card that draws a file of three records whole keeps a 
   assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
     ['m', 'all', 1, 1, []], ['w', 'exactly_one', 1, null, [[1, 100, 2], [301, 400, 3]]]] });
   const planned = async () => pythonPlaces((await projectDraftRequest(state, drawing, {
-    linearRecordCatalog: await fullCatalog(drawing), recordDisplayRows: [], omittedAnnotationRecordKeys: []
+    linearRecordCatalog: await fullCatalog(drawing), recordDisplayRows: [], omittedAnnotationRecordKeys: [], readOfDrawing
   })).envelope);
   assert.deepEqual(await planned(), [['m:1', 1, 1], ['m:2', 1, 2], ['m:3', 1, 3], ['w~w1', 1, 4], ['w~w2', 1, 5]]);
   // Down on m keeps a request Python draws: the file between w's windows, the cards swapped as Down swaps them.

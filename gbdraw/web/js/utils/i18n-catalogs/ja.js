@@ -2129,6 +2129,7 @@ export default Object.freeze({
   "Show this feature on the forward strand": "このフィーチャーを+鎖に表示",
   "Show this feature on the forward strand needs a feature on the + or − strand.": "「このフィーチャーを+鎖に表示」には、+鎖または−鎖にあるフィーチャーが必要です。",
   "Show this label": "このラベルを表示",
+  "Show {name} to apply this alignment.": "この整列を適用するには、{name}の図を表示してください。",
   "Showing and hiding apply at once; leaving a feature out of protein search applies on Generate.": "表示と非表示はすぐに適用されます。タンパク質検索からフィーチャーを除外する設定は生成時に適用されます。",
   "Showing the last successful Result again; your changes were not applied. Correct the cause and retry.": "最後に成功した結果を再表示しています。変更は適用されませんでした。原因を修正して再試行してください。",
   "Showing the last successful Result; your changes were not applied.": "最後に成功した結果を表示しています。変更は適用されませんでした。",

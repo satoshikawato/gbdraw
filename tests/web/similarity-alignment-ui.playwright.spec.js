@@ -683,11 +683,25 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
-  const staleOutcome = await page.evaluate(async () => {
+  // D-38: the drawer's selected group is no fact of the review (a drawing switch moves it to the
+  // arriving plan's group), so a change of it keeps the review; a change of the review's group's
+  // contents makes it stale, and Apply then changes nothing.
+  expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.selectedOrthogroupId.value = 'another-group';
-    const outcome = await window.__GBDRAW_APP__.applySimilarityAlignmentDraft();
+    await window.Vue.nextTick();
+    const kept = window.__GBDRAW_APP__.similarityAlignmentStatus;
     state.selectedOrthogroupId.value = 'og_1';
+    return kept;
+  })).toBe('reviewing');
+  await expect(dialog).toBeVisible();
+  const staleOutcome = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const groups = state.orthogroups.value;
+    state.orthogroups.value = groups.map((group) => (group.id === 'og_1'
+      ? { ...group, members: group.members.slice(0, -1) } : group));
+    const outcome = await window.__GBDRAW_APP__.applySimilarityAlignmentDraft();
+    state.orthogroups.value = groups;
     return outcome;
   });
   expect(staleOutcome.status).toBe('stale');
