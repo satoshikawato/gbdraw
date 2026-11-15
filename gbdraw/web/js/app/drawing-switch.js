@@ -50,8 +50,9 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
- * @property {{ arriveAtDrawing: () => void }} alignment The Similarity alignment owner's port: its review, summary and
- *   notice were the departing drawing's, and the arriving drawing's plan selects its group.
+ * @property {{ arriveAtDrawing: () => void }} alignment The Similarity alignment owner's port: its summary and notice
+ *   were the departing drawing's, an open review stays with its own drawing, and the arriving drawing's plan selects its
+ *   group.
  * @property {(id: DrawingId) => DrawingState} installShownDrawing The one writer of the shown drawing.
  * @property {() => void} dismissNotice
  * @property {(departing: DrawingId, arriving: DrawingId) => void} switchDrawingSearch

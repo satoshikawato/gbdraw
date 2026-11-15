@@ -1237,17 +1237,19 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  */
 
 /**
- * What `captureArtifact` records to tell whether the sources of a draft changed: the records,
- * the Similarity Group, the committed resources, the translations. Not the Result or the feature
+ * What `captureArtifact` records to tell whether the sources of a draft changed: the drawing the
+ * review belongs to (D-38: it shows and applies only there), the records, the Similarity Group,
+ * the committed resources, the translations. Not the drawer's selected group, which a switch
+ * moves to the arriving plan's (OV-381). Not the Result or the feature
  * catalog: a live setting change draws a new Result, and the automatic rerender a new catalog,
  * from the same sources (PD-OI-102, OV-1120). The resources object is the identity of those
  * sources: the rerender keeps it (`commitLiveSettingValues`), and a Generate, a Session load or
  * an Undo across one installs another, also from the same files (PD-OI-039). Every path that
  * changes the catalog's features is one of these.
  * @typedef {object} AlignmentArtifactStamp
+ * @property {DrawingId} drawingId
  * @property {string} records
  * @property {string} group
- * @property {string} selectedGroup
  * @property {unknown} resources
  * @property {string} translations
  */
@@ -1283,15 +1285,18 @@ const selectPlanGroup = (state, getOrthogroupById, plan) => {
 
 /**
  * The plan clear of an edit to drawing `drawingId` (OV-3532): the shown drawing's goes
- * through `clearShownPlan`, which also ends its review and says why; a drawing not shown loses its plan and Reset
- * receipt in its artifact slot, and the other drawings keep theirs.
+ * through `clearShownPlan`, which says why; a drawing not shown loses its plan and Reset
+ * receipt in its artifact slot, and the other drawings keep theirs. Either ends the alignment work of that drawing
+ * (`endWorkOf`): an open review of another drawing stays (D-38).
  * @param {Pick<WebState, 'activeDrawingId'>} state
  * @param {SimilarityAlignmentActionsOptions['writeArtifactValues']} writeArtifactValues
+ * @param {(drawingId: DrawingId) => void} endWorkOf
  * @param {(reason: string) => boolean} clearShownPlan
  * @returns {(reason: string, drawingId: DrawingId) => boolean}
  */
-const planClearOfDrawing = (state, writeArtifactValues, clearShownPlan) => (reason, drawingId) => {
+const planClearOfDrawing = (state, writeArtifactValues, endWorkOf, clearShownPlan) => (reason, drawingId) => {
   if (drawingId === state.activeDrawingId.value) return clearShownPlan(reason);
+  endWorkOf(drawingId);
   writeArtifactValues(drawingId, { similarityAlignmentPlan: null, similarityAlignmentResetReceipt: null });
   return false;
 };
@@ -1401,18 +1406,18 @@ export const createSimilarityAlignmentActions = ({
   const currentRequest = () => getCommittedRequest();
   /** @param {string} groupId */
   const captureArtifact = (groupId) => ({
+    drawingId: state.activeDrawingId.value,
     records: JSON.stringify(currentRequest()?.records || []),
     group: JSON.stringify(getOrthogroupById(groupId)),
-    selectedGroup: state.selectedOrthogroupId.value,
     resources: getCommittedSession()?.resources,
     translations: JSON.stringify(state.linearRecordTranslations.value)
   });
   const artifactIsCurrent = () => {
     if (!artifactStamp || !activeRequest) return false;
     const current = captureArtifact(activeRequest.groupId);
-    return current.records === artifactStamp.records
+    return current.drawingId === artifactStamp.drawingId
+      && current.records === artifactStamp.records
       && current.group === artifactStamp.group
-      && current.selectedGroup === artifactStamp.selectedGroup
       && current.resources === artifactStamp.resources
       && current.translations === artifactStamp.translations;
   };
@@ -1501,14 +1506,27 @@ export const createSimilarityAlignmentActions = ({
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
   const announceClearedPlan = (reason) => replaceSummary(t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
 
-  /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
-  const clearCommittedPlan = (reason) => {
-    const hadPlan = Boolean(state.similarityAlignmentPlan.value);
+  // The drawing the alignment work belongs to: an open review's (or a starting one's) drawing, which it shows and
+  // applies on only (D-38); without one, an operation in flight runs on the shown drawing.
+  /** @returns {DrawingId} */
+  const workDrawingId = () => artifactStamp?.drawingId ?? state.activeDrawingId.value;
+  // The review and the operation in flight end; a late completion is stale.
+  const endWork = () => {
     if (activeApply && typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
     actionId += 1;
     clearDraft();
     status.value = 'idle';
     activeBaseline = null;
+  };
+  /** @param {DrawingId} drawingId An edit of this drawing ends its alignment work, and only its. */
+  const endWorkOf = (drawingId) => {
+    if (workDrawingId() === drawingId) endWork();
+  };
+
+  /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
+  const clearCommittedPlan = (reason) => {
+    const hadPlan = Boolean(state.similarityAlignmentPlan.value);
+    endWorkOf(state.activeDrawingId.value);
     state.similarityAlignmentResetReceipt.value = null;
     resetDialogOpen.value = false;
     if (!hadPlan) return false;
@@ -1777,22 +1795,19 @@ export const createSimilarityAlignmentActions = ({
     }
   };
 
+  // Cancel, the close button and Escape, wherever the review is shown: it changes no drawing.
   const cancel = () => {
-    actionId += 1;
-    if (activeApply && typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
-    clearDraft();
+    endWork();
     error.value = null;
-    status.value = 'idle';
-    activeBaseline = null;
     return { status: 'canceled' };
   };
   // A drawing switch, after the departing drawing's transient UI was reset:
-  // the review, the summary, the notice and the repair were the departing
-  // drawing's work (OV-3532). The arriving drawing's plan, installed with its
-  // artifact slot, selects its group here: no watcher writes state on a
-  // switch, and a Duplicate's plan is its source's object.
+  // the summary, the notice and the repair were the departing drawing's
+  // (OV-3532). An open review stays with its own drawing (D-38, PD-OI-039): it
+  // shows and applies only there (`artifactIsCurrent`). The arriving drawing's
+  // plan, installed with its artifact slot, selects its group here: no watcher
+  // writes state on a switch, and a Duplicate's plan is its source's object.
   const arriveAtDrawing = () => {
-    cancel();
     replaceSummary('');
     selectPlanGroup(state, getOrthogroupById, state.similarityAlignmentPlan.value);
   };
@@ -2211,12 +2226,13 @@ export const createSimilarityAlignmentActions = ({
     activePlanInspector,
     dialogOpen: computed(() => !automaticApply.value && Boolean(draft.value && status.value !== 'idle')),
     isDraftArtifactCurrent: artifactIsCurrent,
+    reviewDrawingId: workDrawingId,
     unresolvedCount,
     applyDisabledReason,
     canApply: computed(() => status.value === 'reviewing' && unresolvedCount.value === 0),
     validateBeforeGenerate,
     resetAlignment,
-    clearForMutation: planClearOfDrawing(state, writeArtifactValues, clearCommittedPlan),
+    clearForMutation: planClearOfDrawing(state, writeArtifactValues, endWorkOf, clearCommittedPlan),
     notePlanReplaced,
     /**
      * The committed Session with the active plan materialized into the record

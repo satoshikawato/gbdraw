@@ -79,3 +79,66 @@ test('a Linear drawing and its copy each generate, save and load their own Simil
   await generate(page);
   expect(await recordOffsets(page), 'a Generate of the loaded source draws it aligned').toEqual(aligned);
 });
+
+// D-38 (PD-OI-039): a Similarity alignment review belongs to the drawing it was
+// opened in. Over a copy of that drawing (the same records and plan) it stays
+// open with its choices, and Apply there changes neither drawing, as over the
+// Circular drawing; back on its own drawing, Apply aligns that drawing only.
+const openReview = async (page, proteinId) => {
+  await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
+  const featureId = await page.evaluate((id) => window.__GBDRAW_APP__.extractedFeatures
+    .find((item) => item.protein_id === id || item.sourceProteinId === id)?.svg_id, proteinId);
+  expect(featureId).toBeTruthy();
+  await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first().dispatchEvent('click', { clientX: -100, clientY: -100 });
+  await page.locator('.feature-popup[role="dialog"]').getByRole('button', { name: 'Review alignment options…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+  for (const key of await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.rows
+    .filter((row) => !row.choice).map((row) => row.recordKey))) {
+    await dialog.locator(`[data-alignment-record-key="${key}"]`).getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  }
+  return dialog;
+};
+const shownAlignmentState = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  return JSON.stringify([state.similarityAlignmentPlan.value, state.linearRecordTranslations.value]);
+});
+const applyOutcome = async (page, dialog) => {
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+  await expect(dialog).toBeHidden({ timeout: 180000 });
+  return page.evaluate(() => ({ summary: Boolean(window.__GBDRAW_APP__.similarityAlignmentSummary),
+    error: window.__GBDRAW_APP__.errorLog?.code ?? null }));
+};
+
+test('an open alignment review stays with its drawing and applies only there', async ({ page }) => {
+  test.setTimeout(900000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(GALLERY_SESSION), 'BGC0000708-BGC0000713.gbdraw');
+  const source = await shownDrawingId(page);
+  const copy = await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(id).drawingId, source);
+  await expect.poll(() => shownDrawingId(page)).toBe(copy);
+  const copyBefore = { figure: await recordOffsets(page), alignment: await shownAlignmentState(page) };
+  await show(page, source);
+  const sourceBefore = { figure: await recordOffsets(page), alignment: await shownAlignmentState(page) };
+
+  let dialog = await openReview(page, 'CAG38712.1');
+  await show(page, copy);
+  await expect(dialog, 'the review stays open over the copy').toBeVisible();
+  expect(await applyOutcome(page, dialog), 'Apply over the copy applies nothing').toMatchObject({ summary: false });
+  expect({ figure: await recordOffsets(page), alignment: await shownAlignmentState(page) }).toEqual(copyBefore);
+  await show(page, source);
+  expect({ figure: await recordOffsets(page), alignment: await shownAlignmentState(page) }).toEqual(sourceBefore);
+
+  dialog = await openReview(page, 'CAG38712.1');
+  await show(page, copy);
+  await show(page, source);
+  await expect(dialog).toBeVisible();
+  expect(await applyOutcome(page, dialog), 'Apply on the review\'s own drawing').toMatchObject({ summary: true });
+  await show(page, copy);
+  expect({ figure: await recordOffsets(page), alignment: await shownAlignmentState(page) }, 'the copy is unchanged')
+    .toEqual(copyBefore);
+});

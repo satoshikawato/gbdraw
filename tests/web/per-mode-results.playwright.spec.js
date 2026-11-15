@@ -620,7 +620,7 @@ test('Save names the hidden mode whose older Result needs Generate, and Generate
 });
 
 // REVIEW-1 M3: Load admits both Result sets through one function. The Linear
-// draft's similarity alignment plan and record translations come from the
+// drawing's similarity alignment plan and record translations come from the
 // Linear set's committed request wherever the set sits, so a Linear Generate
 // after a Load that opened on Circular keeps the alignment.
 test('an aligned Linear Result saved while Circular is shown keeps its alignment after Load', async ({ page, browser }, info) => {
@@ -654,7 +654,8 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
   try {
     await load(fresh, info.outputPath('aligned.gbdraw'));
     expect(await shown(fresh)).toMatchObject({ mode: 'circular', count: 1, mounted: true });
-    expect(await alignment(fresh)).toMatchObject({ plan: aligned.plan, translations: aligned.translations });
+    // OV-3532: the plan and translations are the Linear drawing's own; the Circular drawing shown has none.
+    expect(await alignment(fresh)).toMatchObject({ plan: 'null', translations: '[]' });
     await showMode(fresh, 'linear');
     expect(await alignment(fresh)).toEqual(aligned);
     await generate(fresh);

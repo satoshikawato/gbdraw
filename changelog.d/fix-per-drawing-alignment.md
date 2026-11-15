@@ -7,6 +7,10 @@
   copy moved in the drawing it was copied from. Duplicate copies the alignment;
   New drawing, New drawing with this style, and a Circular-only Session start
   without one.
-- Changed: In the Web app, switching drawings ends an open Similarity alignment
-  review, whose unsaved choices are dropped, and clears the "Similarity
-  alignment applied" summary; each drawing keeps its applied alignment.
+- Fixed: In the Web app, an open Similarity alignment review stays with the
+  drawing it was opened in. While another drawing is shown, the review stays
+  open with its choices but no longer marks them on that drawing's figure, and
+  Apply there changes neither drawing; showing the review's drawing again lets
+  you Apply.
+- Changed: In the Web app, switching drawings clears the "Similarity alignment
+  applied" summary, which described the drawing shown before.

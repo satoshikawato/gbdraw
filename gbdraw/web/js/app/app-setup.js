@@ -2926,6 +2926,7 @@ export const createAppSetup = () => {
     alignmentDialogOpen: similarityAlignmentActions.dialogOpen, alignmentDraft: similarityAlignmentActions.draft,
     alignmentStatus: similarityAlignmentActions.status,
     isDraftArtifactCurrent: similarityAlignmentActions.isDraftArtifactCurrent,
+    alignmentReviewDrawingId: similarityAlignmentActions.reviewDrawingId,
     selectAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     alignmentDirectionPreview: similarityAlignmentActions.directionPreview,
     alignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,

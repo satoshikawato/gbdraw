@@ -196,6 +196,7 @@ export const createSimilarityAlignmentTakeover = ({
  * @property {{ readonly value: AlignmentDraft | null }} alignmentDraft
  * @property {{ readonly value: string }} alignmentStatus
  * @property {() => boolean} isDraftArtifactCurrent Whether the figure still shows the draft's sources.
+ * @property {() => DrawingId} alignmentReviewDrawingId The drawing the review belongs to (the alignment owner's, D-38).
  * @property {(recordKey: string, anchor: AliasSource) => unknown} selectAlignmentCandidate
  * @property {{ readonly value: { records: readonly DirectionPreviewRecord[] } | null }} alignmentDirectionPreview
  * @property {{ readonly value: boolean }} alignmentResetDialogOpen
@@ -224,7 +225,7 @@ export const createSimilarityAlignmentTakeover = ({
 export const createSimilarityAlignmentReview = ({
   state, resultEditRevision, similarityAlignmentTakeover, holdPreviewViewport, clearAlignmentOverlay,
   showAlignmentOverlay, closeRightDrawer, closeSettingsPopup, alignmentDialogOpen, alignmentDraft, alignmentStatus,
-  isDraftArtifactCurrent, selectAlignmentCandidate, alignmentDirectionPreview, alignmentResetDialogOpen,
+  isDraftArtifactCurrent, alignmentReviewDrawingId, selectAlignmentCandidate, alignmentDirectionPreview, alignmentResetDialogOpen,
   openAlignmentReset, alignmentError, startAlignmentFromDrawer, cancelAlignment, reviewDrawingFigure,
   dropSimilarityAlignmentView, fitPreviewForSimilarityAlignment, endSimilarityAlignmentTakeover,
   rememberSimilarityAlignmentInvoker, restoreSimilarityAlignmentFocus, focusSimilarityAlignmentDialog
@@ -294,7 +295,7 @@ export const createSimilarityAlignmentReview = ({
       return;
     }
     // A review shown again while an Apply is pending keeps what the first one took.
-    const reviewDrawingId = state.activeDrawingId.value;
+    const reviewDrawingId = alignmentReviewDrawingId();
     similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, drawerTab: rightDrawerTab.value, popup: clickedFeature.value,
       drawingId: reviewDrawingId, figure: reviewDrawingFigure(reviewDrawingId) };
     // The figure is fitted again only while it shows the draft.

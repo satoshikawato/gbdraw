@@ -152,7 +152,7 @@ const create = ({
     result: responseFor(request)
   }), generation = async () => ({ status: 'ok' }), onError = null,
   previewCandidate = null, clearCandidatePreview = null, mutateProjection = null,
-  getCommittedRequest = null
+  getCommittedRequest = null, writeArtifactValues = () => {}
 } = {}) => {
   const controllerState = state();
   controllerState.featureCatalog.value.items[0].biologicalFeatures=members;
@@ -198,7 +198,7 @@ const create = ({
   });
   const actions = createSimilarityAlignmentActions({
     state: controllerState,
-    writeArtifactValues: () => {},
+    writeArtifactValues,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
     getEnrichedOrthogroupMembers: () => { enrichCalls += 1; return currentGroup.members; },
     // The orthogroup owner's drawn IDs of an anchor's feature; this Result names its records by key.
@@ -1436,4 +1436,62 @@ test('the Custom direction select reads its record by own key (OV-572)', async (
   assert.doesNotMatch(html, /byRecordKey\s*\[/);
   const appSetup = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
   assert.match(appSetup, /similarityAlignmentCustomDirection: similarityAlignmentActions\.customDirection,/);
+});
+
+// D-38 (PD-OI-039, PD-OI-090): a review belongs to the drawing it was opened in, by its drawing ID.
+// Another drawing here shows the same committed facts, as a Duplicate does: the review stays open
+// over it, draws nothing on it and applies nothing to it; Apply there changes no drawing, as over
+// the Circular drawing (the draft does not match the shown figure). Shown again, the review's own
+// drawing takes the Apply.
+const showDrawing = (fixture, drawingId) => {
+  fixture.state.activeDrawingId.value = drawingId;
+  fixture.actions.arriveAtDrawing();
+};
+test('a review stays with its own drawing across a switch and applies only there (D-38)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  fixture.actions.summary.value = { text: 'departing summary' };
+  showDrawing(fixture, 'linear-2');
+  assert.equal(fixture.actions.status.value, 'reviewing', 'the switch keeps the review open');
+  assert.notEqual(fixture.actions.draft.value, null, 'and its choices');
+  assert.equal(fixture.actions.summary.value, null, 'the summary was the departing drawing\'s');
+  assert.equal(fixture.actions.reviewDrawingId(), 'linear-1');
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), false, 'the draft does not show on another drawing');
+  showDrawing(fixture, 'linear-1');
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), true, 'it shows again on its own drawing');
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.generationCalls.length, 1);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.groupId, 'og-1');
+
+  await startReview(fixture);
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  showDrawing(fixture, 'linear-2');
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' }, 'Apply over another drawing changes none');
+  assert.equal(fixture.generationCalls.length, 1);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  assert.equal(fixture.actions.draft.value, null);
+});
+
+test('an edit ends a review only when it edits the review\'s drawing (D-38)', async () => {
+  const writes = [];
+  const fixture = create({ writeArtifactValues: (drawingId, values) => writes.push([drawingId, values]) });
+  await startReview(fixture);
+  showDrawing(fixture, 'linear-2');
+  fixture.actions.clearForMutation('record crop changed.', 'linear-2');
+  assert.equal(fixture.actions.status.value, 'reviewing', 'an edit of the shown drawing leaves another drawing\'s review');
+  fixture.actions.clearForMutation('record crop changed.', 'linear-3');
+  assert.equal(fixture.actions.status.value, 'reviewing', 'and so does an edit of a third drawing');
+  fixture.actions.clearForMutation('record crop changed.', 'linear-1');
+  assert.equal(fixture.actions.status.value, 'idle', 'an edit of the review\'s drawing ends it');
+  assert.equal(fixture.actions.draft.value, null);
+  assert.deepEqual(writes.map(([drawingId]) => drawingId), ['linear-3', 'linear-1'], 'each hidden drawing\'s plan clears in its slot');
+
+  // Cancel over another drawing ends the review and changes no drawing.
+  showDrawing(fixture, 'linear-1');
+  await startReview(fixture);
+  showDrawing(fixture, 'linear-2');
+  assert.deepEqual(fixture.actions.cancel(), { status: 'canceled' });
+  assert.equal(fixture.actions.draft.value, null);
+  assert.equal(fixture.generationCalls.length, 0);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
 });

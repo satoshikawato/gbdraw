@@ -194,22 +194,26 @@ test('a switch selects the arriving plan\'s group, also between a drawing and it
   assert.equal(state.selectedOrthogroupId.value, 'og-7');
 });
 
-// D-31: an open Similarity alignment review and the summary were the departing
-// drawing's; a switch ends the review (its choices are dropped) and the summary.
-test('a switch ends an open Similarity alignment review and drops its summary', async () => {
+// D-38 (PD-OI-039): an open Similarity alignment review belongs to the drawing
+// it was opened in and stays open across a switch with its choices; the
+// "Similarity alignment applied" summary was the departing drawing's.
+test('a switch keeps an open Similarity alignment review and drops the summary', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
   const { drawingId: aligned } = app.drawingList.newDrawing('linear');
   await align(history, 'og-8', 6);
   const { drawingId: other } = app.drawingList.newDrawing('linear');
   show(app, aligned);
+  const draft = { groupId: 'og-8', choices: [] };
   app.similarityAlignmentStatus.value = 'reviewing';
-  app.similarityAlignmentDraft.value = { groupId: 'og-8', choices: [] };
+  app.similarityAlignmentDraft.value = draft;
   app.similarityAlignmentSummary.value = { text: 'Similarity alignment applied' };
   show(app, other);
-  assert.equal(app.similarityAlignmentStatus.value, 'idle');
-  assert.equal(app.similarityAlignmentDraft.value, null, 'the review\'s choices are dropped');
+  assert.equal(app.similarityAlignmentStatus.value, 'reviewing');
+  assert.equal(app.similarityAlignmentDraft.value, draft, 'the review keeps its choices');
   assert.equal(app.similarityAlignmentSummary.value, null);
+  assert.deepEqual(shownAlignment(), { plan: null, translations: [] }, 'the shown drawing keeps its own (none)');
   show(app, aligned);
+  assert.equal(app.similarityAlignmentDraft.value, draft);
   assert.deepEqual(shownAlignment(), { plan: 'og-8', translations: [6] }, 'the committed plan stays the drawing\'s');
 });
