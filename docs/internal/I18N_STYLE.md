@@ -2895,9 +2895,10 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
 - **Controls named in a sentence**: class noun + curly quotes (22.3): بٹن “بنائیں”, آپشن “خودکار”, ٹیب “لیجنڈ”, سیکشن
   “لے آؤٹ”, فیلڈ “آغاز”; a click is بٹن “بنائیں” پر کلک کریں۔. Generate as an event: بناتے وقت, بنانے سے پہلے, بنانے کے
   بعد; Generate again: دوبارہ بنائیں.
-- **Drawing mode** attaches to the diagram with کا: دائروی خاکے کا ریکارڈ, لکیری خاکے کا موازنہ; دائروی ریکارڈ is the topology.
+- **Drawing mode**: before a part of the drawing (ریکارڈ, ٹریک, لیبل, محور, تیر, فائل) it attaches to the diagram with کا: دائروی خاکے کا ریکارڈ, لکیری خاکے کے ٹریک کی اونچائی; دائروی ریکارڈ is the topology. Before the drawing itself, its layout or mode, and before the names fixed per mode (موازنہ, پیمانہ, رولر), the adjective stands alone: لکیری ڈرائنگ, دائروی لے آؤٹ, لکیری موازنہ, لکیری پیمانہ.
 - **Word order**: the verb last; a postposition (کا کی کے, میں, پر, سے, کو, تک) is its own word after the noun or
   placeholder; the adjective before its noun (طے شدہ رنگ).
+- **Scope tag in an aria name**: an aria name that tags a Collinear control with its scope is the visible label plus (collinear): یونٹ موڈ (collinear), ریکارڈوں کے درمیان تلاش (collinear).
 
 ### 22.3 Punctuation and spacing
 
