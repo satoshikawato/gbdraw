@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, MutableMapping, Sequence, Set as AbstractSet
+from collections.abc import Container, Mapping, MutableMapping, Sequence, Set as AbstractSet
 import copy
 from dataclasses import dataclass, fields as dataclass_fields, replace
 import json
@@ -137,9 +137,29 @@ _ORTHOGROUP_COLLECTION_COUNTS = (
     ("relatedEdges", "relatedEdgeCount"),
 )
 _SEQUENCE_WHITESPACE_RE = re.compile(r"\s")
-# The origins of a sequence source that holds a record's own sequence, which a biological feature's nucleotide
-# sequence is read from (``match_sequence_sources`` writes one of them per record).
-_RECORD_SEQUENCE_ORIGINS = frozenset({"linear-record", "circular-reference"})
+# The origins of a sequence source: a drawn record's own sequence (Linear or Circular), or a comparison FASTA record.
+# ``match_sequence_sources`` writes them, and a reader compares with these names.
+_LINEAR_RECORD_ORIGIN = "linear-record"
+_CIRCULAR_REFERENCE_ORIGIN = "circular-reference"
+_HOMOLOGY_COMPARISON_ORIGIN = "homology-comparison"
+# The origins of a source that holds a record's own sequence, which a biological feature's nucleotide sequence is
+# read from.
+_RECORD_SEQUENCE_ORIGINS = frozenset({_LINEAR_RECORD_ORIGIN, _CIRCULAR_REFERENCE_ORIGIN})
+# The values of a source anchor profile. ``promote_legacy_feature_catalog`` writes these names, and
+# ``_ANCHOR_PROFILE_VALUES`` (the values each field may take) is built from them.
+_PRECISION_EXACT, _PRECISION_UNAVAILABLE = "exact", "unavailable"
+_OPERATOR_SINGLE, _OPERATOR_UNKNOWN = "single", "unknown"
+_PART_ORDER_BIOLOGICAL, _PART_ORDER_SOURCE_FORWARD, _PART_ORDER_AMBIGUOUS = "biological", "source-forward", "ambiguous"
+_STRAND_FORWARD, _STRAND_REVERSE, _STRAND_UNSTRANDED, _STRAND_MIXED = "+", "-", "unstranded", "mixed"
+_ANCHOR_PROFILE_VALUES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("precision", frozenset({_PRECISION_EXACT, "fuzzy", _PRECISION_UNAVAILABLE})),
+    ("operator", frozenset({_OPERATOR_SINGLE, "join", "order", _OPERATOR_UNKNOWN})),
+    ("partOrder", frozenset({_PART_ORDER_BIOLOGICAL, _PART_ORDER_SOURCE_FORWARD, _PART_ORDER_AMBIGUOUS})),
+    ("strand", frozenset({_STRAND_FORWARD, _STRAND_REVERSE, _STRAND_UNSTRANDED, _STRAND_MIXED})),
+)
+_ANCHOR_PROFILE_FIELDS = frozenset(field for field, _values in _ANCHOR_PROFILE_VALUES)
+# The keys an orthogroup may name its ID by.
+_ORTHOGROUP_ID_KEYS = ("id", "orthogroupId", "orthogroup_id")
 _PRESENTATION_KIND_BY_SCOPE = {
     "adjacent_local": "collinear_gene_group",
     "global_collinear": "orthogroup",
@@ -182,14 +202,14 @@ def _legacy_feature_strand(
     for part in parts or (feature,):
         value = part.get("strand")
         if value in (1, "1", "+"):
-            strands.add("+")
+            strands.add(_STRAND_FORWARD)
         elif value in (-1, "-1", "-"):
-            strands.add("-")
+            strands.add(_STRAND_REVERSE)
     if len(strands) > 1:
-        return "mixed"
+        return _STRAND_MIXED
     if strands:
         return next(iter(strands))
-    return "unstranded"
+    return _STRAND_UNSTRANDED
 
 
 def _legacy_exact_coordinate(value: Any) -> int | None:
@@ -345,18 +365,18 @@ def promote_legacy_feature_catalog(
             strand = _legacy_feature_strand(feature, mapping_parts)
             feature["anchorProfile"] = (
                 {
-                    "precision": "exact",
-                    "operator": "single",
+                    "precision": _PRECISION_EXACT,
+                    "operator": _OPERATOR_SINGLE,
                     "partOrder": (
-                        "source-forward" if strand == "unstranded" else "biological"
+                        _PART_ORDER_SOURCE_FORWARD if strand == _STRAND_UNSTRANDED else _PART_ORDER_BIOLOGICAL
                     ),
                     "strand": strand,
                 }
                 if exact_single
                 else {
-                    "precision": "unavailable",
-                    "operator": "unknown",
-                    "partOrder": "ambiguous",
+                    "precision": _PRECISION_UNAVAILABLE,
+                    "operator": _OPERATOR_UNKNOWN,
+                    "partOrder": _PART_ORDER_AMBIGUOUS,
                     "strand": strand,
                 }
             )
@@ -842,19 +862,19 @@ def _sequence_sources_for_matches(
         origin = _text(source.get("origin"))
         try:
             if (
-                origin == "linear-record"
+                origin == _LINEAR_RECORD_ORIGIN
                 and int(str(source.get("recordIndex"))) in linear_indexes
             ):
                 selected.append(source)
             elif (
-                origin == "homology-comparison"
+                origin == _HOMOLOGY_COMPARISON_ORIGIN
                 and int(str(source.get("sourceIndex")))
                 in comparison_source_indexes
             ):
                 selected.append(source)
         except (TypeError, ValueError):
             continue
-        if origin == "circular-reference":
+        if origin == _CIRCULAR_REFERENCE_ORIGIN:
             aliases = {
                 _text(source.get("recordId")),
                 *_normalize_string_array(source.get("aliases")),
@@ -879,6 +899,18 @@ def _text_alias_status(
             return "", False
         resolved = value
     return resolved, True
+
+
+def _orthogroup_id(group: Mapping[str, object], known_ids: Container[str]) -> str:
+    """The orthogroup's ID, read the same way by the catalog builder and its reader; refuses a missing, conflicting
+    or repeated one."""
+
+    group_id, group_id_valid = _text_alias_status(group, _ORTHOGROUP_ID_KEYS)
+    if not group_id_valid or not group_id or group_id in known_ids:
+        raise GbdrawError(
+            "Feature catalog orthogroups require one consistent, unique ID."
+        )
+    return group_id
 
 
 def _group_presentation(
@@ -1633,17 +1665,10 @@ def _normalized_orthogroups(
     for group in orthogroups:
         if not isinstance(group, Mapping):
             continue
-        group_id, group_id_valid = _text_alias_status(
-            group,
-            ("id", "orthogroupId", "orthogroup_id"),
-        )
-        if not group_id_valid or not group_id or group_id in known_group_ids:
-            raise GbdrawError(
-                "Feature catalog orthogroups require one consistent, unique ID."
-            )
+        group_id = _orthogroup_id(group, known_group_ids)
         known_group_ids.add(group_id)
         payload = dict(group)
-        for key in ("id", "orthogroupId", "orthogroup_id"):
+        for key in _ORTHOGROUP_ID_KEYS:
             payload.pop(key, None)
         payload["id"] = group_id
         explicit_presentation = _group_presentation(payload)
@@ -2334,7 +2359,7 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
             "recordId": str(record.id),
             "aliases": sorted(value for value in aliases if value),
             "sequence": _source_record_sequence(record),
-            "origin": "linear-record" if records.mode == "linear" else "circular-reference",
+            "origin": _LINEAR_RECORD_ORIGIN if records.mode == "linear" else _CIRCULAR_REFERENCE_ORIGIN,
             "recordIndex": record_index,
         })
     for source_index, source_records in enumerate(records.comparison_records):
@@ -2344,7 +2369,7 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
                 "recordId": str(record.id),
                 "aliases": [str(record.id), str(record.name)],
                 "sequence": _source_record_sequence(record),
-                "origin": "homology-comparison",
+                "origin": _HOMOLOGY_COMPARISON_ORIGIN,
                 "sourceIndex": source_index,
             })
     return sources
@@ -3078,10 +3103,7 @@ def _feature_catalog_item(
     known_group_ids: set[str] = set()
     for group in orthogroups:
         if isinstance(group, Mapping):
-            group_id, _ = _text_alias_status(
-                group,
-                ("id", "orthogroupId", "orthogroup_id"),
-            )
+            group_id, _ = _text_alias_status(group, _ORTHOGROUP_ID_KEYS)
             known_group_ids.add(group_id)
     for match in raw_matches:
         if (
@@ -3173,7 +3195,7 @@ def _keyed_sequence_sources(value: object) -> Sequence[object]:
     return sequence_sources
 
 
-def _require_catalog_sequence_fields(item: Mapping[str, object], catalog_schema: object) -> None:
+def _require_catalog_sequence_fields(item: Mapping[str, object], catalog_schema: int) -> None:
     """The item's sequence fields as its schema allows them: ``sequenceSources`` is an array where there is one, and
     the stored schema holds no sequence at all (Python reads them on demand), nor what an export's match spans read
     (``matchSpanReads``)."""
@@ -3198,14 +3220,6 @@ def _require_catalog_sequence_fields(item: Mapping[str, object], catalog_schema:
         )
 
 
-# The values each field of a source anchor profile may take; ``promote_legacy_feature_catalog`` writes only these.
-_ANCHOR_PROFILE_VALUES: tuple[tuple[str, frozenset[str]], ...] = (
-    ("precision", frozenset({"exact", "fuzzy", "unavailable"})),
-    ("operator", frozenset({"single", "join", "order", "unknown"})),
-    ("partOrder", frozenset({"biological", "source-forward", "ambiguous"})),
-    ("strand", frozenset({"+", "-", "unstranded", "mixed"})),
-)
-_ANCHOR_PROFILE_FIELDS = frozenset(field for field, _values in _ANCHOR_PROFILE_VALUES)
 _REQUIRED_ITEM_ARRAYS = (
     "recordKeys",
     "features",
@@ -3250,8 +3264,8 @@ def _catalog_item_of_result(
     result_index: int,
     result_name: str,
     expected_schema: int | None,
-) -> tuple[float, Mapping[str, object]]:
-    """The catalog's schema (a number equal to an allowed one; JSON may write it as 4.0) and its one item for the
+) -> tuple[int, Mapping[str, object]]:
+    """The catalog's schema, as the allowed schema it equals (JSON may write it as 4.0), and its one item for the
     Result."""
 
     catalog_schema = catalog.get("schema") if isinstance(catalog, Mapping) else None
@@ -3292,7 +3306,7 @@ def _catalog_item_of_result(
             "Feature catalog must contain exactly one item for "
             f"Result {result_index} ({result_name})."
         )
-    return cast(float, catalog_schema), matches[0]
+    return next(schema for schema in allowed_schemas if schema == catalog_schema), matches[0]
 
 
 def _required_item_arrays(item: Mapping[str, object]) -> _CatalogItemArrays:
@@ -3396,7 +3410,7 @@ def _require_nucleotide_source(
 def _known_biological_features(
     item: Mapping[str, object],
     features: Sequence[object],
-    catalog_schema: float,
+    catalog_schema: int,
     record_units: Mapping[str, tuple[int, ...]],
 ) -> set[tuple[str, str]]:
     """The references of the item's valid biological features, each read once; refuses the first invalid one."""
@@ -3473,7 +3487,7 @@ def _require_unique_source_feature_indexes(
 
 def _require_rendered_features(
     features: Sequence[object],
-    catalog_schema: float,
+    catalog_schema: int,
     records: _CatalogRecords,
     known_features: set[tuple[str, str]],
 ) -> None:
@@ -3519,14 +3533,7 @@ def _orthogroup_presentations(
     for group in orthogroups:
         if not isinstance(group, Mapping):
             raise GbdrawError("Feature catalog orthogroups must contain objects.")
-        group_id, group_id_valid = _text_alias_status(
-            group,
-            ("id", "orthogroupId", "orthogroup_id"),
-        )
-        if not group_id_valid or not group_id or group_id in presentation_by_group_id:
-            raise GbdrawError(
-                "Feature catalog orthogroups require one consistent, unique ID."
-            )
+        group_id = _orthogroup_id(group, presentation_by_group_id)
         presentation_by_group_id[group_id] = _group_presentation(group)
         _require_orthogroup_members(group_id, group.get("members"), known_features)
     return presentation_by_group_id

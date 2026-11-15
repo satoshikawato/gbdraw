@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -2100,3 +2101,68 @@ def test_an_array_or_object_anchor_profile_value_is_refused_as_a_wrong_value(fie
     broken["items"][0]["biologicalFeatures"][0]["anchorProfile"][field] = value
 
     assert _refusal(broken) == _refusal(wrong_string) == "Feature catalog contains an invalid source anchor profile."
+
+
+def test_every_anchor_profile_the_promotion_writes_is_one_the_reader_accepts() -> None:
+    """Each anchor profile a schema 3 promotion can write (exact single parts of each strand, and unavailable
+    profiles of each strand, mixed included) passes the reader's vocabulary check."""
+
+    exact = [{"start": 2, "end": 7, "strand": strand} for strand in (1, -1, None)]
+    unavailable = [
+        {"location_parts": [{"start": 1, "end": 2, "strand": strand}, {"start": 4, "end": 5, "strand": strand}]}
+        for strand in (1, -1, None)
+    ] + [{"location_parts": [{"start": 1, "end": 2, "strand": 1}, {"start": 4, "end": 5, "strand": -1}]}]
+    promoted = promote_legacy_feature_catalog({"schema": 3, "items": [{"biologicalFeatures": exact + unavailable}]})
+    profiles = [feature["anchorProfile"] for feature in promoted["items"][0]["biologicalFeatures"]]
+
+    assert [(profile["precision"], profile["strand"]) for profile in profiles] == [
+        ("exact", "+"), ("exact", "-"), ("exact", "unstranded"),
+        ("unavailable", "+"), ("unavailable", "-"), ("unavailable", "unstranded"), ("unavailable", "mixed"),
+    ]
+    for profile in profiles:
+        feature_catalog_module._require_anchor_profile(profile)
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_the_sequence_source_origins_written_are_the_ones_the_readers_compare(mode: str) -> None:
+    record = SeqRecord(Seq("ATGAAATAAGGG"), id="record-a", name="record-a")
+    comparison = SeqRecord(Seq("ATGAAA"), id="hit-a", name="hit-a")
+    sources = feature_catalog_module.match_sequence_sources(
+        CatalogSequenceRecords(mode=mode, records=(record,), comparison_records=((comparison,),))
+    )
+    record_source, comparison_source = sources
+
+    assert record_source["origin"] in feature_catalog_module._RECORD_SEQUENCE_ORIGINS
+    assert comparison_source["origin"] not in feature_catalog_module._RECORD_SEQUENCE_ORIGINS
+    record_match = (
+        {"query_record_index": 0, "subject_record_index": 0}
+        if mode == "linear"
+        else {"match_kind": "homology", "reference_side": "query", "query_record_id": "record-a", "source_index": 1}
+    )
+    comparison_match = {"match_kind": "homology", "reference_side": "query", "query_record_id": "-", "source_index": 0}
+    select = feature_catalog_module._sequence_sources_for_matches
+    assert select([record_match], sources) == [record_source]
+    assert select([comparison_match], sources) == [comparison_source]
+
+
+@pytest.mark.parametrize(
+    "orthogroups",
+    [
+        [{"members": []}],
+        [{"id": " ", "members": []}],
+        [{"id": "og-a", "orthogroupId": "og-b", "members": []}],
+        [{"id": "og-a", "members": []}, {"orthogroup_id": "og-a", "members": []}],
+    ],
+    ids=["missing", "blank", "conflicting", "repeated"],
+)
+def test_the_catalog_builder_and_reader_refuse_the_same_orthogroup_ids(orthogroups: list[dict]) -> None:
+    context, svg = _sequence_ownership_case()
+    with pytest.raises(GbdrawError) as built:
+        build_feature_catalog_item(
+            svg, replace(context, orthogroups=tuple(orthogroups)), result_index=0, result_name="r.svg"
+        )
+    item = {**_stored_ownership_item(), "orthogroups": orthogroups}
+
+    assert _refusal({"schema": 6, "items": [item]}) == str(built.value) == (
+        "Feature catalog orthogroups require one consistent, unique ID."
+    )
