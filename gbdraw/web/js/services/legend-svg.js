@@ -791,9 +791,10 @@ const followsOrder = (positioned, rank) => {
 
 /**
  * Put one Legend group's entries in the requested order of row keys (a
- * renamed row ranks by its key, as two rows may show one name). Entries keep
- * the group's current slots (row-major anchor order) and receive them in the
- * new order; keys missing from the order follow in their current order.
+ * renamed row ranks by its key, as two rows may show one name). The shown
+ * entries keep the group's shown slots (row-major anchor order) and receive
+ * them in the new order; a hidden entry takes no slot and stays where it is
+ * (OV-3607). Keys missing from the order follow in their current order.
  * Live Sort and Move and the Generate replay of the order (D-08) share this.
  * With `keepFollowed`, a group whose listed entries already follow the order
  * keeps its order, so the entries the order does not list keep their places:
@@ -824,9 +825,10 @@ export const orderLegendEntries = (targetGroup, captionOrder, { keepFollowed = f
       const rightRank = rank.has(caption(right.entryGroup)) ? /** @type {number} */ (rank.get(caption(right.entryGroup))) : Infinity;
       return leftRank === rightRank ? left.slot - right.slot : leftRank - rightRank;
     });
+  const slots = positioned.filter(({ entryGroup }) => legendRowShown(entryGroup)).map(({ anchor }) => anchor);
   let changed = false;
-  ordered.forEach(({ entryGroup }, slot) => {
-    const { x, y } = positioned[slot].anchor;
+  ordered.filter(({ entryGroup }) => legendRowShown(entryGroup)).forEach(({ entryGroup }, slot) => {
+    const { x, y } = slots[slot];
     changed = moveLegendEntryToAnchor(entryGroup, x, y) || changed;
   });
   ordered.forEach(({ entryGroup }, index) => {

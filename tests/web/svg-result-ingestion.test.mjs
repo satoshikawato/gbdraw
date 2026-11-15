@@ -36,7 +36,7 @@ import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 import { sessionSourceFactsOf } from '../../gbdraw/web/js/services/session-drawings-upgrade.js';
 import { LEGEND_ORDER_RECORD, stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
 import {
-  getLegendEntrySwatch as legendSwatch, legendRowKeys, legendRowTakesPlace, shownPythonLegendRow
+  getLegendEntrySwatch as legendSwatch, legendEntryAnchor, legendRowKeys, legendRowTakesPlace, shownPythonLegendRow
 } from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
@@ -2310,6 +2310,40 @@ test('a reconcile without an order returns Python\'s order', () => {
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['Genes', 'tRNA', 'rRNA']);
   reconcileMountedResult(svg, legendOperations(), { domains: LEGEND_STRUCTURE });
   assert.equal(serializeNode(svg), drawn);
+});
+
+// OV-3607: a hidden row takes no place in the Legend, so the order replay
+// leaves it where Python drew it and gives the shown rows the shown rows'
+// places. The place an editor row is added at (its saved anchor, from an
+// older Result) then never reaches the hidden row, and Generate after a
+// reopen draws what the saved Result holds.
+const anchorOf = (svg, key) => legendEntryAnchor(svg.querySelectorAll('g[data-legend-key]')
+  .find((row) => row.getAttribute('data-legend-key') === key));
+const hiddenPythonRow = (caption, y) => legendRow(caption, y, { display: 'none', 'data-gbdraw-base-display': '' });
+
+test('the order replay leaves a hidden row where Python drew it, wherever an editor row was added (OV-3607)', () => {
+  // Python draws the hidden row at the place of the last shown row (tRNA).
+  const replay = (addedAt) => {
+    const svg = legendSvg([legendRow('CDS', 7), legendRow('tRNA', 31), hiddenPythonRow('cov_c', 31)]);
+    reconcileMountedResult(svg, legendOperations({
+      legendAdds: [{ caption: 'MANUAL_ROW', color: '#445566', xPos: 22, yPos: addedAt }],
+      legendOrder: [{ captions: ['CDS', 'MANUAL_ROW', 'tRNA'] }]
+    }), { domains: LEGEND_STRUCTURE });
+    return svg;
+  };
+  const current = replay(31);
+  const stale = replay(38);
+  assert.deepEqual(anchorOf(current, 'cov_c'), { x: 22, y: 31 });
+  assert.deepEqual(anchorOf(stale, 'cov_c'), { x: 22, y: 31 }, 'the stale anchor of the added row does not move the hidden row');
+  assert.deepEqual(legendRows(stale).map(([key]) => key), ['CDS', 'MANUAL_ROW', 'tRNA', 'cov_c']);
+});
+
+test('the order replay gives the shown rows the shown rows\' places, one row each (OV-3607)', () => {
+  // The hidden row shares the place of the next shown row (Beta), as Python draws it.
+  const svg = legendSvg([legendRow('Alpha', 7), hiddenPythonRow('Hidden', 31), legendRow('Beta', 31), legendRow('Gamma', 55)]);
+  reconcileMountedResult(svg, legendOperations({ legendOrder: [{ captions: ['Gamma', 'Beta', 'Alpha'] }] }), { domains: LEGEND_STRUCTURE });
+  assert.deepEqual(legendRows(svg).map(([key]) => key), ['Gamma', 'Beta', 'Alpha', 'Hidden']);
+  assert.deepEqual(['Gamma', 'Beta', 'Alpha', 'Hidden'].map((key) => anchorOf(svg, key).y), [7, 31, 55, 31]);
 });
 
 test('the visibility domain does not un-hide a deleted row', () => {
