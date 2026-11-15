@@ -1221,7 +1221,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(runs[0].referencedDeclaredBytes).toBeGreaterThan(0);
   expect(runs[0].stagedResourceCount).toBe(runs[0].referencedResourceCount);
   expect(runs[0].stagedResourceBytes).toBe(runs[0].referencedDeclaredBytes);
-  expect(runs[0].transferredBytes).toBe(runs[0].stagedResourceBytes);
+  expect(runs[0].transferredBytes).toBe(0);
   // The first run stages the Session's resources, its stored collinear result
   // among them; the second stages only the result it computed again.
   // OV-279: the staged count of 1 and newlyStagedResourceBytes below pin the
@@ -1232,7 +1232,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     hasBase64ResourceTable: false
   });
   expect(runs[1].stagedResourceBytes).toBeGreaterThan(0);
-  expect(runs[1].transferredBytes).toBe(runs[1].stagedResourceBytes);
+  expect(runs[1].transferredBytes).toBe(0);
   expect(secondPhaseAttribution).toMatchObject({
     workerInitializationMs: 0,
     workerInitializationReused: true,
