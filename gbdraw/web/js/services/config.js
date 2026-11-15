@@ -131,7 +131,7 @@ import { windowLosatFilenamesOf } from './linear-comparison-retained.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionDrawingResources } from './session-resources.js';
 import { savedDrawingsOf } from './session-drawings.js';
-import { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore, installShownSetLegend, requestStateOfDrawing } from './artifact-slot.js';
+import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend, requestStateOfDrawing } from './artifact-slot.js';
 import {
   base64ToBytes,
   contentFactsOfStream,
@@ -6663,7 +6663,7 @@ const artifactUiState = (view) => ({
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
  *   planLinearUnits: DraftRequestFacts['planLinearUnits'],
- *   readOfDrawing?: DraftRequestFacts['readOfDrawing'],
+ *   readOfDrawing: DraftRequestFacts['readOfDrawing'],
  *   recordDisplayRows?: { value: readonly RequestRecordDisplayRow[] } | null,
  *   written: readonly SavedSessionDrawing[],
  *   activeDrawingId: DrawingId,
@@ -6788,7 +6788,7 @@ const exportSessionDocument = async (
   {
     askChoice = async () => 'cancel',
     drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, written, planLinearUnits,
-    readOfDrawing = createArtifactSlotStore().readOfDrawing, activeDrawingId, projectUi, isCurrent
+    readOfDrawing, activeDrawingId, projectUi, isCurrent
   }
 ) => {
   const resolvedTitle =
@@ -9272,8 +9272,8 @@ export const disposeSessionOperations = () => {
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value: readonly RequestRecordDisplayRow[] }} [recordDisplayRows]
  * @property {() => readonly Readonly<ArtifactSlot>[]} [readKeptArtifacts]
- * @property {DraftRequestFacts['readOfDrawing']} [readOfDrawing] The reader of each drawing's artifact (without
- *   it, as without `readKeptArtifacts`, the page keeps no artifact of a drawing not shown).
+ * @property {DraftRequestFacts['readOfDrawing']} readOfDrawing The reader of each drawing's artifact (the artifact
+ *   slot store's, which `readKeptArtifacts` lists), through which a draft request reads its drawing's own values.
  * @property {() => Promise<string | null>} [resolveTitle] Null when the person canceled the title dialog.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]

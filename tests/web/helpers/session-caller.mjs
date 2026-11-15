@@ -16,8 +16,16 @@
  */
 export const callerSession = (config, state, rollbackState) => ({
   ...config,
+  // The reader of each drawing's artifact reads the slots the test keeps (`readKeptArtifacts`), as the app's slot
+  // store reads the slots it lists (`artifactSlots.readOfDrawing`).
   exportSession: (title = null, options = {}) => config.exportSession(title, {
-    shownDrawing: state.activeDrawing, ...options
+    shownDrawing: state.activeDrawing,
+    readOfDrawing: (drawingId, shownDrawingId, readShown, readKept) => {
+      if (drawingId === shownDrawingId) return readShown();
+      const slot = (options.readKeptArtifacts?.() ?? []).find((kept) => kept.drawingId === drawingId);
+      return slot ? readKept(slot) : undefined;
+    },
+    ...options
   }),
   importSession: (event, options) => config.importSession(event, {
     shownDrawing: state.activeDrawing, rollbackState, ...options

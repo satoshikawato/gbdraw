@@ -416,7 +416,8 @@ await test('a Session 51 that holds a kept flat #N keeps its cards as loaded', a
   const drawing = modeDrawing(state, 'circular');
   assert.deepEqual([...drawing.recordsOff], ['#2']);
   assert.ok(drawing.files.c_legacy_record_cards);
-  const result = await sessionConfig.exportSession('flat-selectors', { shownDrawing: state.activeDrawing, askChoice: async () => 'download' });
+  const result = await sessionConfig.exportSession('flat-selectors', { shownDrawing: state.activeDrawing,
+    readOfDrawing: (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore().readOfDrawing, askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result));
   const { document: saved } = await readSessionFile(result.blob);
   assert.deepEqual(saved.drawings.find(({ id }) => id === 'circular').config.recordsOff, ['#2']);
