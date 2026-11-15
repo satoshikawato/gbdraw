@@ -120,8 +120,15 @@ const recordChoices = (list) => ({
   }
 });
 
-/** The drawn name of a record: its definition group (Linear: the row label group of the record's first row). */
-const DRAWN_RECORD_NAME_SELECTOR = '[data-gbdraw-role="record-definition"][data-gbdraw-record-index][data-gbdraw-record-id]';
+/**
+ * The drawn name of a record: its definition group (Linear: the row label group of the record's first row), or in a
+ * Linear row of windows, which draws no name above them, the list line of each window. An empty group draws nothing
+ * and has no screen box, so a box never selects a record by it.
+ */
+const DRAWN_RECORD_NAME_SELECTOR = [
+  '[data-gbdraw-role="record-definition"][data-gbdraw-record-index][data-gbdraw-record-id]',
+  '[data-definition-line-kind="window"][data-gbdraw-record-index][data-gbdraw-record-id]'
+].join(', ');
 
 /**
  * The records whose drawn name the box covers, in drawn order, each once.

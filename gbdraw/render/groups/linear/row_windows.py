@@ -167,6 +167,10 @@ class RowWindowHeadingGroup(DefinitionGroup):
             )
             text.attribs["data-definition-line-kind"] = "window"
             text.attribs[WINDOW_NUMBER_ATTRIBUTE] = str(window_line.number)
+            # The row draws its records' names only here: each line names the drawn record of its window, as a
+            # record's own heading does, so a selection over the line finds that record.
+            text.attribs["data-gbdraw-record-id"] = window_line.record_id
+            text.attribs["data-gbdraw-record-index"] = str(window_line.record_index)
             for part in line.parts or []:
                 part_text = part.get("text")
                 if part_text:

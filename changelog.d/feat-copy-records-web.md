@@ -30,3 +30,8 @@
   `paste_region_drawing()` into a Circular canvas that names no places keeps
   its records where they are drawn and adds the pasted records on a new row
   below them.
+- Fixed: in a Linear row of region windows, Shift+drag over the row's list
+  of windows in the Web app selected no record; it now selects the records of
+  those windows. Each list line of the SVG names its record
+  (`data-gbdraw-record-index`, `data-gbdraw-record-id`); the figure looks the
+  same.

@@ -553,3 +553,57 @@ test('Linear Wrap Rows: Shift+drag over the record name selects the record, and 
     await page.context().close();
   }
 });
+
+// OV-3584 (PD-OI-115 r2): a Linear row of windows draws no name above them, only its list, one line per window, each
+// line naming the drawn record of its window. Shift+drag over a row's list selects those records and no other.
+test('Linear row of windows: Shift+drag over the row\'s list selects the records of its windows', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  // Two windows of each of two records, one row per record (the windows of a record share its row).
+  const sessionPath = testInfo.outputPath('linear-windows.gbdraw');
+  execFileSync('python', ['-c', [
+    'import sys',
+    'from gbdraw.api import save_session_document',
+    'from gbdraw.api.options import LinearMultiRecordOptions',
+    'from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RecordPresentation',
+    'from gbdraw.io.regions import RecordWindow',
+    'windows = (RecordWindow(1, 4000, column=1), RecordWindow(8001, 12000, column=2))',
+    'sources = (("mito", "tests/test_inputs/HmmtDNA.gbk"), ("sars", "tests/test_inputs/SARS-CoV-2.gbk"))',
+    'request = LinearDiagramRequest(records=tuple(RecordInput(GenBankInputSource(path), windows=windows, record_key=key,',
+    '  presentation=RecordPresentation(grid_row=row)) for row, (key, path) in enumerate(sources, 1)),',
+    '  layout=LinearMultiRecordOptions())',
+    'save_session_document(sys.argv[1], request, title="linear-windows", overwrite=True)'
+  ].join('\n'), sessionPath], { cwd: process.cwd(), stdio: 'inherit' });
+  await openApp(page);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
+  await expectSessionLoadedWithoutWarnings(page);
+  await generate(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  const listLines = () => page.evaluate(() => [...document.querySelectorAll(
+    '.gbdraw-preview-surface [data-gbdraw-role="record-definition-row"]'
+  )].map((heading) => [...heading.querySelectorAll('text[data-definition-line-kind="window"]')].map((line) => {
+    const { left, top, right, bottom } = line.getBoundingClientRect();
+    return { id: line.getAttribute('data-gbdraw-record-id'), index: line.getAttribute('data-gbdraw-record-index'),
+      left, top, right, bottom };
+  })));
+  let last = '';
+  await expect.poll(async () => {
+    const now = JSON.stringify(await listLines(page));
+    const settled = now === last;
+    last = now;
+    return settled;
+  }, { intervals: [250] }).toBe(true);
+  const rows = JSON.parse(last);
+  expect(rows.length, 'two rows of windows').toBe(2);
+  const [first] = rows;
+  expect(first.length, 'one line per window').toBeGreaterThan(1);
+  expect(first.every((line) => line.id && line.index), 'each line names its record').toBe(true);
+  await page.keyboard.down('Shift');
+  await page.mouse.move(Math.min(...first.map((line) => line.left)) - 6, Math.min(...first.map((line) => line.top)) - 4);
+  await page.mouse.down();
+  await page.mouse.move(Math.max(...first.map((line) => line.right)) + 6, Math.max(...first.map((line) => line.bottom)) + 4,
+    { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  await expect(page.locator('[data-selected-records]'))
+    .toContainText(`${first.length} records: ${first.map((line) => line.id).join(', ')}`);
+});
