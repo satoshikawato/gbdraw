@@ -2818,3 +2818,176 @@ and science have a word, it is used even when the Russian cognate is shorter
 - Russian calques (17.1): `uk-calque-session`, `uk-calque-undo`, `uk-calque-default` (warn variant
   `uk-default-variant`), `uk-calque-enable`, `uk-calque-participle`, `uk-calque-settings`, `uk-calque-pry` (warn),
   `uk-calque-column`, `uk-track-trek-fich`, `uk-calque-words` (warn).
+
+## 22. Urdu (`ur`)
+
+Standard Urdu (اردو) as Mozilla's Firefox and the Microsoft and Google products write software text, with no region in
+the tag. Evidence: the Firefox Urdu localization (mozilla-l10n/firefox-l10n, `ur`; cited "Firefox ur") for verb forms,
+commands, status texts, `۔` and quotes; Windows and Office Urdu strings for software nouns (cited "Microsoft", from the
+terminology as written in the products; the Microsoft Urdu style guide PDF `urd-pak-StyleGuide.pdf` was found but its
+Urdu pages could not be read as text, so no rule below cites its section numbers); field usage for biology words
+(Urdu-medium textbooks and press write جین, جینوم, کروموسوم, پروٹین; ur.wikipedia's ڈی این اے article writes ترتیب for
+sequence and the coinages وراثہ, موراثہ, لونی جسیمات with the English word in brackets, which working software and
+teaching do not use). The Language menu shows **اردو**; its label is زبان. Text is set in the bundled Noto Nastaliq
+Urdu face, 13 px floor, line height 2.5em (D-20). The UI reads right to left; the figure, every export, command,
+recipe and replay text, sequences, coordinates, colors and number fields keep their left-to-right order (PD-OI-106).
+No coined terms (D-02): where Urdu has no word in use, the English word stays, in Urdu letters when software writes it
+so, in Latin letters when the field keeps it Latin. These are drafts; nothing here claims review.
+
+### 22.1 Vocabulary
+
+- **Biology**: جینوم, جین, کروموسوم, پلازمڈ, عضیہ (Organelle), جاندار (Organism), نوع (Species; قسم is Type), اسٹرین,
+  آئسولیٹ, پروٹین, امینو ایسڈ, نیوکلیوٹائیڈ, ڈائی نیوکلیوٹائیڈ, کوڈون, جینیاتی کوڈ, سیکوئنس (Sequence; ترتیب is Order and
+  تسلسل is not used), اسٹرینڈ (Strand: فارورڈ اسٹرینڈ, ریورس اسٹرینڈ; ریورس کمپلیمنٹ), ریکارڈ (Record), ایکسیشن نمبر
+  (Accession), فیچر (Feature; خصوصیت means a property), تشریح (Annotation), خطہ (Region), مقام (Location), پوزیشن
+  (Position), جگہ (Placement), محددات (Coordinates), GC کی مقدار (GC content; مواد means material), گہرائی (Depth), ریڈ گہرائی,
+  کوریج, ونڈو (sliding window), قدم (its step; مرحلہ is a History or progress step), الائنمنٹ (sequence Alignment), سیدھ
+  (the drawing alignment of Similarity groups), یکسانیت (identity %), مماثلت (Similarity), مماثلت کا گروپ, مطابقت (Match),
+  بلاک, اینکر (لنگر is a ship's), امیدوار (Candidate), جوڑی وار (Pairwise), موازنہ (Comparison).
+- **Kept in Latin** (lower case in running text; no Urdu ending touches them): qualifier, locus tag, query, subject,
+  E-value, Bitscore, seed, hit, ortholog, paralog, orthogroup, coortholog, inparalog, collinear, collinearity,
+  syntenic, singleton, replicon, contig, flat file, lookbehind, upstream, downstream, GC skew, AT skew, skew, and the
+  names of §1.1. The class noun stays Urdu: collinear بلاک, ٹول LOSAT, فائل GenBank.
+- **Figure**: خاکہ (Diagram), نقشہ (the drawn map), شکل (Figure), گراف (plot), دائروی / لکیری (Circular / Linear, as the
+  prototype the Owner saw; خطی is the older textbook form), ٹریک, ٹریک سلاٹ, ٹریک قطار (Track row), لین (Lane), حلقہ (Ring;
+  رنگ is Color), بینڈ, ربن, منحنی, تیر, لیبل, عنوان, ذیلی عنوان, لیجنڈ, ٹک مارک (Tick; ٹک alone reads "until"), محور, پیمانہ,
+  رولر, پیلیٹ, رنگ کا نمونہ (Swatch), بھرنا (Fill), آؤٹ لائن (Stroke; لکیر is Line), فونٹ, لے آؤٹ, کینوس, پیڈنگ, فاصلہ (Gap and
+  Spacing; alignment gaps are گیپ), وقفہ (Interval), رینج, رداس, آفسیٹ, گھماؤ (Rotation), اوور لے, انڈر لے, پیش زمینہ
+  (Foreground), پس منظر, اوور فلو, کلپ, سکیڑنا, اسٹیک, قاعدہ (pl. قواعد), پیٹرن, فلٹر, ہالہ (Halo), باکس, لیڈر لائن.
+- **Commands** (polite imperative, 22.2): شامل کریں, ہٹائیں (Remove), حذف کریں (Delete), صاف کریں (Clear), کاپی کریں,
+  چسپاں کریں, ترمیم کریں, محفوظ کریں, لوڈ کریں, اپ لوڈ کریں, ڈاؤن لوڈ کریں, کھولیں, بند کریں, درآمد کریں, برآمد کریں,
+  کالعدم کریں / دوبارہ کریں (Undo / Redo), ری سیٹ کریں, بحال کریں (Restore), واپس لائیں (Revert), دوبارہ کوشش کریں, نام تبدیل
+  کریں, بدلیں (Replace), نقل بنائیں (Duplicate), ضم کریں, منتقل کریں, منتخب کریں (Select), چنیں (Choose), دکھائیں /
+  چھپائیں, بنائیں (Generate; تیار is Ready), چلائیں (Run), لاگو کریں, منسوخ کریں, برخاست کریں (Dismiss), فعال کریں /
+  غیر فعال کریں, حل کریں (overlaps) / متعین کریں (determine automatically), خارج کریں (Omit), چھوڑ دیں (Skip), برقرار رکھیں
+  (Keep), سمیٹیں / پھیلائیں, کھینچیں, کلک کریں, ٹیپ کریں, براؤز کریں, سیدھ میں لائیں (Align), زوم ان / زوم آؤٹ.
+- **UI nouns**: فائل, سیشن, ترتیبات (the Settings pane; one setting is سیٹنگ), پری سیٹ, پیش منظر (Preview), گیلری, مثال, ٹیوٹوریل,
+  ان پٹ / آؤٹ پٹ, اندراج / آئٹم (Entry / item), سابقات (History, as Firefox ur), براؤزر, کیش, پاپ اپ, ٹیب, ڈائیلاگ, بٹن,
+  فیلڈ, کالم, قطار (Row), جدول, کارڈ, سیکشن (a card of the settings pane; حصہ is a part), پینل, آپشن, چیک باکس, قدر (Value),
+  موڈ (Mode; حالت is State), قسم, انداز (Style), خرابی, انتباہ, اطلاع (Notice), تفصیلات, تشخیصی معلومات, نتیجہ, مدد, تعارف,
+  لائسنس; values: ضروری, اختیاری, تجویز کردہ, نامعتبر, غیر معاون, نامعلوم, مبہم, خودکار, طے شدہ, حسب ضرورت, کوئی نہیں, آن / آف.
+- **Loanwords**: an Urdu word where one is in use (جدول, مدد, نتیجہ, خرابی, قاعدہ, محور); a transliteration where software
+  writes it so (فائل, ڈیٹا, فونٹ, براؤزر, ٹیب, پینل, ڈاؤن لوڈ). Spell each loanword one way (22.4). A masculine loanword
+  keeps its form in the direct plural (5 ریکارڈ, 3 فیچر, ٹریک) and takes -وں in the oblique (ریکارڈوں میں, فیچروں کے لیے);
+  the English plural -ز (ریکارڈز, فیچرز, ٹریکس) is not written. A feminine one takes the Urdu plural (فائل: فائلیں, فائلوں میں;
+  قطار: قطاریں). Arabic nouns take their Arabic plural where writing uses it (قواعد, مراحل, ترامیم, تشریحات, ترتیبات).
+- **Never**: موراثہ, وراثہ, لونی جسیمات (coinages), افسانہ and داستان for Legend (fiction), جلسہ for Session (a meeting),
+  خصوصیت for Feature, تسلسل for Sequence, بیج for seed, سرگزشت for History, پیش نظارہ for Preview, تیار کریں for Generate,
+  حلقوی / خطی / دائری for Circular / Linear, ڈائیگرام for Diagram, مواد for content, لڑی / زنجیر for Strand.
+
+### 22.2 Buttons and sentences
+
+- **Buttons, menu commands, toggles, History step labels, tabs**: the polite plural imperative -یں, as Firefox ur writes
+  every command (محفوظ کریں, ہٹائیں, منسوخ کریں, دوبارہ کوشش کریں, صاف کریں); it has no gender, so no gendered verb ever
+  addresses the user. Headings, column and field labels: nouns or verbal nouns (ترتیبات, سیشن, لے آؤٹ ترمیم, بھرنا). A
+  command that opens a further step keeps `…` (چنیں…). A short and a long label are given in the glossary as "long /
+  short".
+- **Instructions and help**: complete sentences ending in `۔`. Prefer the impersonal passive (… کیا جا سکتا ہے۔, … ہو
+  جاتا ہے۔) or the same polite imperative (… منتخب کریں۔). When آپ is needed, the verb is the plural masculine form that
+  Firefox ur uses for آپ (آپ … سکتے ہیں); never the feminine, never آپ with a singular form, never تم, تو, کرو.
+- **Status "…ing"**: the verbal noun with ہو رہا ہے or کیا جا رہا ہے, then `…` attached (سیشن لوڈ ہو رہا ہے…, خاکہ بنایا جا رہا ہے…).
+  **Done**: the past with the class noun agreeing (فائل لوڈ ہو گئی۔, سیشن محفوظ ہو گیا۔). **Could not**: نہیں … سکا / سکی / سکتا
+  with the class noun (فائل {file} لوڈ نہیں ہو سکی۔; Firefox ur: … نہیں کیا جا سکتا کیونکہ …); **failed**: ناکام. A rule: …
+  خالی نہیں ہو سکتا۔. The app is never "I" or "we".
+- **Values**: ضروری, اختیاری ("(اختیاری)" after the field name), تجویز کردہ, نامعتبر, غیر معاون, نامعلوم, دستیاب نہیں, آن /
+  آف for toggles, فعال / غیر فعال for enabled and disabled.
+- **Questions**: a confirmation is a passive subjunctive with `؟` (کیا ٹریک {name} ہٹا دیا جائے؟); never کیا آپ … چاہتے ہیں.
+- **Controls named in a sentence**: class noun + curly quotes (22.3): بٹن “بنائیں”, آپشن “خودکار”, ٹیب “لیجنڈ”, سیکشن
+  “لے آؤٹ”, فیلڈ “آغاز”; a click is بٹن “بنائیں” پر کلک کریں۔. Generate as an event: بناتے وقت, بنانے سے پہلے, بنانے کے
+  بعد; Generate again: دوبارہ بنائیں.
+- **Drawing mode** attaches to the diagram with کا: دائروی خاکے کا ریکارڈ, لکیری خاکے کا موازنہ; دائروی ریکارڈ is the topology.
+- **Word order**: the verb last; a postposition (کا کی کے, میں, پر, سے, کو, تک) is its own word after the noun or
+  placeholder; the adjective before its noun (طے شدہ رنگ).
+
+### 22.3 Punctuation and spacing
+
+- **Sentence ends**: `۔` (U+06D4) attached to the last word; `؟` (U+061F) for a question; `!` only where the source has one;
+  an ASCII `.` after Urdu text is an error. `.` stays inside numbers, versions, file names and code (0.65, v1.2, .gb).
+  Keys shown together join with one space.
+- **Comma, semicolon**: `،` (U+060C) and `؛` (U+061B), also between Latin items in an Urdu sentence (CDS، tRNA); the ASCII
+  `,` stays only in digit grouping (1,234) and code. No space before `، ؛ ؟ ۔` or the colon; one space after.
+- **Label colon**: ASCII `:` attached to the word, one space after (حالت: {state}).
+- **Quotes**: curly double quotes “…” (U+201C, U+201D) around a cited name, label or value, as CLDR ur writes quotation
+  marks (recalled, not re-fetched); inner quotes ‘…’. Never straight quotes (Firefox ur has them only around a placeholder)
+  or « ». No space inside the quotes. Code such as `/key="value"` keeps its straight quotes.
+- **Parentheses**: write the logical ( ); the bidirectional algorithm mirrors them. One space outside, none inside.
+- **Ellipsis**: one `…` attached (Firefox ur has three dots; the product rule of §1.2 wins). **Dash**: a spaced hyphen is
+  never a dash; write ، or : or parentheses.
+- **Digits**: 0-9 only, English decimal point and grouping, 1,234,567.5, never ۱۲۳٫۵ or ١٢٣ (PD-OI-106, D-15). Units keep
+  the source spacing (100 bp, 20px, 0.65 ×R, 8 pt); % follows its number (50%). Time: {value} ملی سیکنڈ, {value} سیکنڈ,
+  {minutes} منٹ {seconds} سیکنڈ.
+- **Ranges**: two numbers or placeholders are written in words, {start} سے {end} تک (قطاریں {upper} سے {lower} تک), because
+  a dash, slash or x between two isolated values shows them reversed right to left; ≤ and ≥ are words (زیادہ سے زیادہ
+  {value}, کم از کم {value}) except inside code text.
+- **Arrow**: → meaning "then", "becomes" or "to" points against the reading order inside Urdu: write ← (U+2190) in logical
+  order (موجودہ ← بحال شدہ; {setting}: {explicit} ← {auto}) or words (سے … تک, پھر). → stays only as a picture of a
+  physical direction (دائیں →) and inside code. "Right →" is دائیں →, "Left ←" is بائیں ←.
+- **Left and right**: Move left / Move right of the drawing menu are earlier / later in the drawing order: پہلے منتقل
+  کریں / بعد میں منتقل کریں. Every other left or right is a side of the figure or window: بائیں / دائیں.
+- **Capitals**: Urdu has no case; Title Case and ALL CAPS become ordinary text, and a capitalized control name is quoted.
+
+### 22.4 Script and spelling
+
+- **Letters**: ی (U+06CC) and ے (U+06D2, bari ye at a word end where Urdu writes it: کے, لیے, ہوئے, گئے, نے, ہے), ک (U+06A9),
+  ہ (U+06C1, heh goal), ھ (U+06BE) only inside an aspirate (بھ پھ تھ ٹھ جھ چھ دھ ڈھ ڑھ کھ گھ لھ مھ نھ: بھی, کھولیں, ٹھیک), never the
+  Arabic ي, ى, ك, ه. Retroflex ٹ ڈ ڑ, noon ghunna ں, hamza ئ (ہوئے, دائروی), ؤ, آ, and ۂ for the izafat after a final ہ when it
+  is needed; the writing avoids the izafat (فائل کا نام, not نامِ فائل). Old spellings لئے, کیلئے are written کے لیے.
+- **Diacritics**: none (no zer, zabar, pesh, shadda); the one exception is tanween fath on a final alef (فوراً, تقریباً,
+  عملاً). **Tatweel** (U+0640): never. **ZWNJ, ZWJ**: none; a compound is written with a space (ری سیٹ, ان پٹ, آؤٹ پٹ, اوور لے) and
+  the Nastaliq face joins the letters itself. NFC only: composed letters, never a base letter plus U+0654 or U+0653.
+- **Loanword spellings** (one each): فائل, ڈیٹا, ریکارڈ, ٹریک, لیجنڈ, جینوم, فیچر, اسٹرینڈ, اسٹرین, اسٹیک, اسکیما, اسکور, اسکیم, اسپیس,
+  ایڈیٹر, ایڈوانسڈ, ونڈو, سیشن, پیلیٹ, لے آؤٹ, کینوس, پیڈنگ, آف سیٹ is آفسیٹ, ری فلو, ڈائیلاگ. A vowel after a leading س ٹ cluster is
+  written with the alef: اسٹ, اسک, اسپ.
+- **Latin inside a sentence**: one space between Latin or a digit and Urdu letters (GenBank فائل, 5 ریکارڈ); no Urdu letter
+  glued to Latin (CDSکا is an error); no Urdu ending on a Latin word. Put the Urdu class noun first, so no value begins with
+  a Latin word that an element taking its direction from its text (`dir="auto"`) would read left to right (فائل GenBank, ٹول
+  LOSAT, فیچر CDS); do not end a sentence on a Latin word when another order is natural, as `۔` after Latin attaches to
+  the wrong side. No direction marks (LRM, RLM, ALM, isolates): the catalog check refuses them, and the app isolates each
+  inserted value itself (D-05).
+
+### 22.5 Placeholders and counts
+
+- `{name}` is copied verbatim with a space on each side, except next to `( ) : “ ” ۔ ،` or the edge of the value. No
+  Urdu letter is glued to it and nothing that depends on its value follows it: no verb, no adjective, no کا / کی / کے that
+  would agree with it, because the value may be Latin, a number or any gender. Give it a class noun that carries the
+  agreement (فائل {file} لوڈ نہیں ہو سکی۔, ٹریک “{name}”, ریکارڈ {record} کا نام) or use a colon (قطاریں: {count}).
+- **Plural shape** (D-09): `Intl.PluralRules('ur')` gives `one` for exactly 1 and `other` for 0, 2, 3 and fractions. The `one` key is
+  the text for exactly 1; the `other` key is a plain string that reads right at 0 and at 2 ("0 فائلیں"). For a pair whose
+  `one` has no `{count}`, the `one` text is the exactly-1 sentence and carries no number.
+- **Agreement**: the number takes the plural of a feminine noun (فائلیں) and an unchanged masculine loanword (ریکارڈ); a
+  masculine noun in -ہ takes the Arabic or -ے plural. Prefer a noun phrase with the count first so no verb must agree.
+- Examples (exactly 1 / at 0 / at 2):
+  1. `{count} record`: one "{count} ریکارڈ"; other "{count} ریکارڈ": 1 ریکارڈ / 0 ریکارڈ / 2 ریکارڈ.
+  2. `{count} selected pair`: one "{count} منتخب جوڑی"; other "{count} منتخب جوڑیاں": 1 منتخب جوڑی / 0 منتخب جوڑیاں / 2 منتخب جوڑیاں.
+  3. `{count} color rule`: one "{count} رنگ کا قاعدہ"; other "{count} رنگ کے قواعد": 1 رنگ کا قاعدہ / 0 رنگ کے قواعد / 2 رنگ کے قواعد.
+  4. `Undo {count} step` (button, no `۔`): one "{count} مرحلہ کالعدم کریں"; other "{count} مراحل کالعدم کریں": … 1 مرحلہ / 0 مراحل / 2 مراحل.
+  5. `Importing it removes the annotation set.` / `… the {count} annotation sets.` (no `{count}` in `one`): one "اسے درآمد
+     کرنے سے تشریحات کا سیٹ ہٹ جاتا ہے۔"; other "اسے درآمد کرنے سے {count} تشریحات کے سیٹ ہٹ جاتے ہیں۔": 2 تشریحات کے سیٹ ہٹ جاتے ہیں۔
+
+### 22.6 Length
+
+- Nastaliq words are taller and often wider than Naskh; at 13 px with a 2.5em line a rail name that wraps takes two
+  lines, only between words. Prefer one short common word; a name wider than the ~58 px column may run into its padding,
+  and the glossary gives a short form where one is needed.
+- **Rail** (~50 px): Input ان پٹ, Compare موازنہ, Advanced ایڈوانسڈ, Regions خطے, Search تلاش, Layout لے آؤٹ, Font فونٹ,
+  Titles عنوانات, Legend لیجنڈ, Colors رنگ, Features فیچر, Labels لیبل, Axis محور, GC / skew (Latin), About تعارف.
+- **Long / short** (glossary cells; titles and help use the long form): تعارف اور حوالہ / تعارف, ایڈوانسڈ موازنہ اور لے آؤٹ /
+  ایڈوانسڈ, خطوں کی تشریحات / خطے, عنوانات اور ریکارڈ لیبل / عنوانات, محور اور پیمانہ / محور, جوڑی وار موازنے / موازنہ, ترتیبات
+  ری سیٹ کریں / ری سیٹ, خاکہ بنائیں / بنائیں.
+- **Header**: کالعدم کریں, دوبارہ کریں, سابقات, ترتیبات ری سیٹ کریں, سیشن محفوظ کریں, سیشن لوڈ کریں, مثال لوڈ کریں, گیلری, زبان; a
+  label wider than the English one at 1,024 px takes its short form (کالعدم, دوبارہ, ری سیٹ, محفوظ کریں, لوڈ کریں), never a broken word.
+
+### 22.7 Machine checks (`tests/web/i18n-lint/ur.tsv`)
+
+Rules run on every value with placeholders masked as `{X}`; `error` fails, `warn` prints.
+
+- `ur-arabic-letter` (error): ي ى ك ه. `ur-letter-forms` (warn): ة ۀ ۓ ە and the old لئے, کیلئے. `ur-heh-doachashmi` (warn): ھ outside an aspirate.
+- `ur-ascii-period` (error): an ASCII `.` ending a sentence in an Urdu value. `ur-ascii-punct` (error): ASCII , ; ? after Urdu text or a
+  placeholder. `ur-latin-comma` (warn): an ASCII comma after Latin or a number in an Urdu sentence. `ur-three-dots` (error): ... or …….
+- `ur-non-ascii-digit` (error): ۰-۹, ٠-٩, ٪ ٫ ٬. `ur-space-before-punct` (error): a space before ، ؛ ؟ ۔ or the colon.
+- `ur-quotes` (warn): straight quotes or « ». `ur-quote-space` (warn): a space inside “…”.
+- `ur-arrow` (warn): → except after دائیں. `ur-range-dash` (warn): a dash, slash or x between two numbers or placeholders. `ur-hyphen-dash` (error): a spaced hyphen or dash.
+- `ur-diacritics` (warn): any mark except tanween fath on an alef. `ur-tatweel` (warn): U+0640. `ur-zwnj` (warn): ZWNJ or ZWJ.
+- `ur-placeholder-glued` (error): an Urdu letter touching a placeholder. `ur-latin-glued` (warn): Latin or a digit touching an Urdu letter. `ur-latin-start` (warn): a value starting with Latin.
+- `ur-banned-term` (error): the coinages and wrong senses of 22.1. `ur-term-variant` (warn): a word that is not the glossary rendering. `ur-loan-spelling` (warn): سٹ- spellings and English -ز plurals.
+- `ur-register` (warn): کرو, تم, کیجیے and the like. `ur-whitespace` (warn): a leading, trailing or doubled space, NBSP, ZWSP, WJ or BOM.
