@@ -4,9 +4,15 @@
 // gbdraw/render/drawers/annotation_marks.py (the annotation attributes) and
 // gbdraw/render/drawers/circular/conservation.py (the similarity-ring attributes) and
 // gbdraw/render/interactive_svg.py (the attributes of a match fragment and the slots of the standalone
-// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS, BASE_COMPLEMENTS); do not edit
-// manually.
+// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS, BASE_COMPLEMENTS) and
+// gbdraw/svg/ids.py (the record attributes) and gbdraw/render/groups/linear/definition.py and row_windows.py
+// (the definition line kind); do not edit manually.
 
+/** A drawn group of a record names the record: its record ID and its index in the request. */
+export const RECORD_ATTRIBUTES = Object.freeze({ id: 'data-gbdraw-record-id', index: 'data-gbdraw-record-index' });
+/** A drawn definition line names its kind; the list line of a window in a Linear row of windows is a WINDOW_LINE_KIND line. */
+export const DEFINITION_LINE_KIND_ATTRIBUTE = 'data-definition-line-kind';
+export const WINDOW_LINE_KIND = 'window';
 /** A drawn region annotation's group names its annotation and its set, in both modes. */
 export const ANNOTATION_ID_ATTRIBUTE = 'data-gbdraw-annotation-id';
 export const ANNOTATION_SET_ID_ATTRIBUTE = 'data-gbdraw-annotation-set-id';

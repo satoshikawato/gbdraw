@@ -1,4 +1,5 @@
 // @ts-check
+import { DEFINITION_LINE_KIND_ATTRIBUTE, RECORD_ATTRIBUTES, WINDOW_LINE_KIND } from '../services/drawn-attributes.generated.js';
 import { setClassToken } from '../services/preview-affordances.js';
 import { featureParts, onTheWay, partsMidpoint } from '../services/region-axis.js';
 import { numberText, t, tn } from '../utils/i18n.js';
@@ -123,12 +124,11 @@ const recordChoices = (list) => ({
 /**
  * The drawn name of a record: its definition group (Linear: the row label group of the record's first row), or in a
  * Linear row of windows, which draws no name above them, the list line of each window. An empty group draws nothing
- * and has no screen box, so a box never selects a record by it.
+ * and has no screen box, so a box never selects a record by it. Python names the attributes and the line kind.
  */
 const DRAWN_RECORD_NAME_SELECTOR = [
-  '[data-gbdraw-role="record-definition"][data-gbdraw-record-index][data-gbdraw-record-id]',
-  '[data-definition-line-kind="window"][data-gbdraw-record-index][data-gbdraw-record-id]'
-].join(', ');
+  '[data-gbdraw-role="record-definition"]', `[${DEFINITION_LINE_KIND_ATTRIBUTE}="${WINDOW_LINE_KIND}"]`
+].map((drawnName) => `${drawnName}[${RECORD_ATTRIBUTES.index}][${RECORD_ATTRIBUTES.id}]`).join(', ');
 
 /**
  * The records whose drawn name the box covers, in drawn order, each once.
@@ -140,8 +140,8 @@ const recordsInBox = (svg, marqueeRect) => {
   const found = new Map();
   svg.querySelectorAll(DRAWN_RECORD_NAME_SELECTOR).forEach((group) => {
     const rect = getElementScreenRect(group);
-    const recordIndex = Number(group.getAttribute('data-gbdraw-record-index'));
-    const recordId = String(group.getAttribute('data-gbdraw-record-id'));
+    const recordIndex = Number(group.getAttribute(RECORD_ATTRIBUTES.index));
+    const recordId = String(group.getAttribute(RECORD_ATTRIBUTES.id));
     if (!rect || !Number.isSafeInteger(recordIndex) || !rectsIntersect(rect, marqueeRect)) return;
     found.set(`${recordIndex}\u0000${recordId}`, { recordIndex, recordId });
   });

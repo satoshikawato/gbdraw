@@ -8,6 +8,11 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+# The attributes that name the record a drawn group belongs to: its record ID and its index in the request. The Web
+# reads them in a Result (generated into ``services/drawn-attributes.generated.js``).
+RECORD_ID_ATTRIBUTE = "data-gbdraw-record-id"
+RECORD_INDEX_ATTRIBUTE = "data-gbdraw-record-index"
+
 _SAFE_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 _VALID_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 
@@ -140,6 +145,8 @@ def record_group_svg_id(
 
 
 __all__ = [
+    "RECORD_ID_ATTRIBUTE",
+    "RECORD_INDEX_ATTRIBUTE",
     "definition_group_svg_id",
     "instance_svg_id",
     "record_group_svg_id",

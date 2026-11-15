@@ -28,13 +28,15 @@ from ....core.text import (
 from ....layout.record_labels import record_length_label, record_map_span
 from ....layout.spatial import Aabb, union_aabbs
 from ...group_content import DefinitionMeasurement
-from ....svg.ids import definition_group_svg_id
+from ....svg.ids import RECORD_ID_ATTRIBUTE, RECORD_INDEX_ATTRIBUTE, definition_group_svg_id
 
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
 
 _REGION_APPLIED_KEY = "gbdraw_region_applied"
+# Each drawn definition line names its kind (``DefinitionLine.kind``); the Web reads it in a Result.
+DEFINITION_LINE_KIND_ATTRIBUTE = "data-definition-line-kind"
 
 
 @dataclass(frozen=True)
@@ -140,8 +142,8 @@ class DefinitionGroup:
             else "record-definition-row"
         )
         self.definition_group.attribs["data-gbdraw-definition-part"] = self.definition_part
-        self.definition_group.attribs["data-gbdraw-record-id"] = str(self.record.id)
-        self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
+        self.definition_group.attribs[RECORD_ID_ATTRIBUTE] = str(self.record.id)
+        self.definition_group.attribs[RECORD_INDEX_ATTRIBUTE] = str(self.record_index)
         self.add_elements_to_group()
 
     @property
@@ -395,7 +397,7 @@ class DefinitionGroup:
                         dominant_baseline=self.linear_dominant_baseline,
                         stroke=style.stroke,
                         fill=style.fill,
-                        extra_attrs={"data-definition-line-kind": line.kind},
+                        extra_attrs={DEFINITION_LINE_KIND_ATTRIBUTE: line.kind},
                     )
                 )
 
@@ -412,7 +414,7 @@ class DefinitionGroup:
             text_anchor=self.linear_text_anchor,
             dominant_baseline=self.linear_dominant_baseline,
         )
-        text_el.attribs["data-definition-line-kind"] = line.kind
+        text_el.attribs[DEFINITION_LINE_KIND_ATTRIBUTE] = line.kind
         for part in line.parts or []:
             part_text = part.get("text")
             if part_text is None:
@@ -427,4 +429,4 @@ class DefinitionGroup:
         return self.definition_group
 
 
-__all__ = ["DefinitionGroup", "DefinitionLine", "LinearDefinitionStyle"]
+__all__ = ["DEFINITION_LINE_KIND_ATTRIBUTE", "DefinitionGroup", "DefinitionLine", "LinearDefinitionStyle"]
