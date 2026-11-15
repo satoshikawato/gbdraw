@@ -22,6 +22,7 @@ import { resultRenderedFeatures } from './feature-catalog.js';
 import { storedProteinResultMode } from './imported-comparison-intent.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
+import { splitTypedList } from '../utils/typed-list.js';
 import {
   EDITOR_TABLE_OPTIONS,
   editorTableRef,
@@ -760,8 +761,7 @@ const labelScopeOverride = (form, circular) => (circular
 
 /** @param {RequestDrawing} drawing */
 const labelBlacklistOverride = (drawing) => (drawing.filterMode.value === 'Blacklist'
-  ? String(drawing.manualBlacklist.value || '').split(/[,\n]/)
-    .map((keyword) => keyword.trim()).filter(Boolean)
+  ? splitTypedList(drawing.manualBlacklist.value)
   : []);
 
 const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(

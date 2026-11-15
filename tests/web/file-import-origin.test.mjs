@@ -7,6 +7,7 @@ const {
   isCardRow,
   importPriorityRows,
   markedRows,
+  parseBlacklistWords,
   removeImportedPriorityRows,
   withImportedBlacklistWords,
   importedDefaultColors,
@@ -58,6 +59,21 @@ test('the Blacklist text takes back the text before, or the file words from an e
   assert.equal(withoutImportedBlacklistWords('alpha, beta\nmine', imported), 'mine');
   // A file without words changes nothing and records nothing.
   assert.deepEqual(withImportedBlacklistWords('a', []), { text: 'a', imported: null });
+});
+
+// OV-2792: a Blacklist file and the Blacklist text are cut at the Arabic comma
+// too, and Remove on the card cuts the text at the same separators.
+test('a Blacklist file, and Remove on its card, cut at the Arabic comma as well', () => {
+  assert.deepEqual(parseBlacklistWords('alpha،beta\ngamma, delta'), { words: ['alpha', 'beta', 'gamma', 'delta'], count: 4 });
+  assert.deepEqual(parseBlacklistWords('a\r\nb,c'), { words: ['a', 'b', 'c'], count: 3 });
+  const { text, imported } = withImportedBlacklistWords('فرضی، ناشناخته', ['alpha', 'beta']);
+  assert.equal(text, 'فرضی، ناشناخته, alpha, beta');
+  assert.equal(withoutImportedBlacklistWords(`${text}، mine`, imported), 'فرضی، ناشناخته، mine');
+  assert.equal(withoutImportedBlacklistWords('alpha،beta،mine', imported), 'mine');
+  // A text that ends with the Arabic comma takes no second separator.
+  assert.equal(withImportedBlacklistWords('putative،', ['alpha']).text, 'putative،alpha');
+  // CRLF is one line break: Remove leaves no lone CR.
+  assert.equal(withoutImportedBlacklistWords('mine\r\nalpha\r\nbeta', imported), 'mine');
 });
 
 test('the Qualifier priority rows take back the user order the file replaced', () => {

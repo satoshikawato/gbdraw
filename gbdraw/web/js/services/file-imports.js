@@ -2,6 +2,7 @@
 import { normalizeDefaultColor, normalizeSpecificRuleColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
+import { endsWithTypedListSeparator, splitTypedList, splitTypedListKeepingSeparators } from '../utils/typed-list.js';
 import { CARD_ROW_MARKS } from './card-row-marks.js';
 /** @import { CardRowMarks } from './card-row-marks.js' */
 
@@ -255,13 +256,12 @@ export const parseWhitelistRules = (text, { legacyRows = false } = {}) => {
   return { rules, count: rules.length, repairs: repairs || [] };
 };
 
-/** @param {string} text */
+/**
+ * The words of a Blacklist file, read as the Blacklist text is (a typed list, `splitTypedList`).
+ * @param {string} text
+ */
 export const parseBlacklistWords = (text) => {
-  const words = text
-    .split(/[\r\n,]+/)
-    .map((word) => word.trim())
-    .filter((word) => word);
-
+  const words = splitTypedList(text);
   return { words, count: words.length };
 };
 
@@ -349,7 +349,7 @@ export const withoutImportedDefaultColors = (current, imported, paletteColors) =
  */
 const blacklistWithWords = (before, words) => {
   const existing = before ? before.trim() : '';
-  const separator = existing && !existing.endsWith(',') ? ', ' : '';
+  const separator = existing && !endsWithTypedListSeparator(existing) ? ', ' : '';
   return existing + separator + words.join(', ');
 };
 
@@ -371,7 +371,7 @@ export const withImportedBlacklistWords = (text, words) => (words.length > 0
  */
 export const withoutImportedBlacklistWords = (text, { words, before }) => {
   if (text === blacklistWithWords(before, words)) return before;
-  const parts = text.split(/([,\n])/);
+  const parts = splitTypedListKeepingSeparators(text);
   [...words].reverse().forEach((word) => {
     let at = -1;
     for (let index = parts.length - 1; index >= 0 && at < 0; index -= 2) {

@@ -13,6 +13,7 @@ const {
   effectiveRingColor,
   moveConservationSeriesEntry,
   orderedConservationSources,
+  parseConservationLabelText,
   reassignDrawnRingColors,
   reassignRingColorsOnReorder,
   reconcileConservationSeries,
@@ -366,4 +367,11 @@ test('the rings of a drawing differ when rings of files of one name, size and da
   assert.deepEqual(changed.circularConservation.series.map((entry) => entry.sourceKey), searched.circularConservation.series.map((entry) => entry.sourceKey));
   assert.notEqual(ringsOfDrawing(changed), ringsOfDrawing(searched));
   assert.equal(ringsOfDrawing(drawingOf(['a', 'b', 'c'])), ringsOfDrawing(searched));
+});
+
+// OV-2792: ring names typed in an fa or ar UI are cut at the Arabic comma too.
+test('ring names are cut at the comma, the Arabic comma and a line break', () => {
+  assert.deepEqual(parseConservationLabelText('Ring A، Ring B'), ['Ring A', 'Ring B']);
+  assert.deepEqual(parseConservationLabelText('Ring A\nRing B, Ring C'), ['Ring A', 'Ring B', 'Ring C']);
+  assert.deepEqual(parseConservationLabelText(''), []);
 });

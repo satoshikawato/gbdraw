@@ -15,6 +15,12 @@ await writeFile(
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'tsv-cell.js'), 'utf8'),
   'utf8'
 );
+// file-imports.js cuts the Blacklist text and file at the typed list separators.
+await writeFile(
+  join(tempRoot, 'utils', 'typed-list.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'typed-list.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 // specific-color-rules.js reads rule rows with the shared shape checker.
 await writeFile(

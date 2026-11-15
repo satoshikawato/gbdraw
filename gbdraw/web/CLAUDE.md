@@ -165,6 +165,7 @@ in the same change.
 | Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
 | The text a key or a paste puts into a number field: Persian, Arabic-Indic, Bengali and Devanagari digits as 0-9 and the Arabic decimal separator as `.`, in every UI language | `js/utils/number-field-digits.js` (`asciiNumberText`, `readOtherDigitsInNumberFields`, installed once on the page by `js/app.js`) |
+| The separators of a list typed into one text field (ring names in Series names, the Label filtering Blacklist text and the words of a Blacklist file): the comma, the Arabic comma ، and a line break | `js/utils/typed-list.js` (`splitTypedList`, `splitTypedListKeepingSeparators`, `endsWithTypedListSeparator`) |
 | A control's name and the value it now holds (a History step's detail, the Feature placement layout dialog's question) | `js/utils/control-description.js` (`describeControl`, `controlValueText`) |
 | GenBank header reading | `js/services/genbank-header.js` |
 | Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |

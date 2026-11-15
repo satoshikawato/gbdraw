@@ -3,6 +3,7 @@ import {
   CONSERVATION_COLOR_SCHEMES, CONSERVATION_DEFAULT_COLOR_SCHEME, CONSERVATION_MAX_COLOR_PATH, CONSERVATION_SAME_COLOR
 } from '../utils/conservation-colors.generated.js';
 import { normalizeOptionalHexColor } from '../utils/color-utils.js';
+import { splitTypedList } from '../utils/typed-list.js';
 import { ringGenomeFileLists } from './drawing/inputs.js';
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { ConservationColorScheme } from '../utils/conservation-colors.generated.js' */
@@ -330,14 +331,11 @@ export const defaultConservationSeriesLabel = (file, index) => {
 };
 
 /**
+ * The ring names typed in Series names, one per source (a typed list, `splitTypedList`).
  * @param {unknown} value
  * @returns {string[]}
  */
-export const parseConservationLabelText = (value) =>
-  String(value || '')
-    .split(/[\n,]+/)
-    .map((label) => label.trim())
-    .filter(Boolean);
+export const parseConservationLabelText = (value) => splitTypedList(value);
 
 /**
  * @param {unknown} value

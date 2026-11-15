@@ -756,6 +756,26 @@ assert.equal(projectCanonicalSessionRequest(canonical).config.form.show_scale, t
 assert.equal(circularConfigOverrides['labels.circular.scope'], 'none');
 assert.equal(circularConfigOverrides['labels.circular.placement'], 'horizontal');
 assert.deepEqual(circularConfigOverrides['labels.filtering.blacklist_keywords'], []);
+// OV-2792: the Blacklist text typed in an fa or ar UI is cut at the Arabic
+// comma too. The request carries the words; a Session's draft keeps the text as
+// typed and Load reads it back unchanged; a request without a draft gives the
+// same words back.
+{
+  const typed = 'فرضی، ناشناخته,putative\nunknown';
+  state.filterMode.value = 'Blacklist';
+  state.manualBlacklist.value = typed;
+  // Built raw: the characterized requests below stay the ones recorded before.
+  const blacklisted = buildCanonicalRenderRequestRaw({ state, filesData });
+  assert.deepEqual(
+    blacklisted.renderRequest.diagramOptions.configOverrides['labels.filtering.blacklist_keywords'],
+    ['فرضی', 'ناشناخته', 'putative', 'unknown']
+  );
+  assert.equal(projectCanonicalSessionRequest(blacklisted).config.blacklistText, 'فرضی, ناشناخته, putative, unknown');
+  const { readBlacklistText } = await import(pathToFileURL(join(tempRoot, 'js', 'services', 'config-field-readers.js')));
+  assert.deepEqual(readBlacklistText(typed), { value: typed, lost: false });
+  state.filterMode.value = 'None';
+  state.manualBlacklist.value = '';
+}
 assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.scale.show'));
 assert.ok(
   managedConfigOverridePathsForMode('circular').includes(
