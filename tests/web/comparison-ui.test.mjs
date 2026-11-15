@@ -41,6 +41,11 @@ await Promise.all([
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'),
     join(tempRoot, 'js', 'utils', 'error-normalization.js')
   ),
+  // error-normalization.js writes selector text through this leaf.
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'selector-syntax.js'),
+    join(tempRoot, 'js', 'utils', 'selector-syntax.js')
+  ),
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'optional-positive-number.js'),
     join(tempRoot, 'js', 'utils', 'optional-positive-number.js')

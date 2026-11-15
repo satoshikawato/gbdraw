@@ -27,6 +27,12 @@ await writeFile(
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
   'utf8'
 );
+// error-normalization.js writes selector text through this leaf.
+await writeFile(
+  join(tempRoot, 'utils', 'selector-syntax.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'selector-syntax.js'), 'utf8'),
+  'utf8'
+);
 // error-normalization.js reads Python's figure length units from the generated mode profiles.
 await writeFile(
   join(tempRoot, 'mode-profiles.generated.js'),

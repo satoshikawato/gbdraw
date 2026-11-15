@@ -1,10 +1,11 @@
 // @ts-check
-// The one Web writer of selector text: a record selector (`#N`) and a feature
+// The Web owner of selector text: a record selector (`#N`) and a feature
 // selector (`KEY=VALUE`, `hash=<hash>`), as the CLI, the tables and the Session
 // read them, and the forms the help and error texts show. Python owns the
 // syntax (gbdraw/io/record_select.py, gbdraw/features/selector_values.py) and
-// the generated contracts carry it here. A leaf that imports only the
-// contracts, so the error wording owner can read it.
+// the generated contracts carry it here. Some older writers still write `#`
+// or `hash` by hand; they move here when they are next changed. A leaf that
+// imports only the contracts, so the error wording owner can read it.
 import { FEATURE_HASH_SELECTOR_KEY, RECORD_INDEX_SELECTOR_PREFIX } from '../contracts/schema.generated.js';
 
 /**

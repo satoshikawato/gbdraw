@@ -13,7 +13,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'history-inputs.js'), await readFile(sourcePath, 'utf8'), 'utf8');
 await mkdir(join(tempDir, 'utils'), { recursive: true });
-for (const name of ['control-description.js', 'i18n.js', 'error-normalization.js']) {
+for (const name of ['control-description.js', 'i18n.js', 'error-normalization.js', 'selector-syntax.js']) {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'));
 }
 // error-normalization.js reads Python's figure length units from the generated mode profiles,
