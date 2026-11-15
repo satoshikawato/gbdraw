@@ -33,6 +33,7 @@ from gbdraw.api import (
     RegionAnnotation,
     RegionAnnotationStyle,
 )
+from gbdraw.annotations.resolve import annotation_midpoint
 from gbdraw.layout.record_coordinates import CirclePlace, DisplayFragment, RecordDisplayTransform, SourceInterval
 from gbdraw.render.drawers.annotation_marks import gradient_steps
 
@@ -199,12 +200,57 @@ def test_label_of_a_region_the_display_cut_cuts_stands_on_its_longest_part() -> 
 
 def test_a_circle_joins_a_region_at_its_display_cut() -> None:
     # The circle goes on at the display cut (display bp 0, bp 9500): the region is one part from display bp 9500
-    # over the cut to 11500, capped at its own ends, and its label stands halfway along it, at bp 0 of the record,
-    # display bp 500 (OV-2654).
+    # over the cut to 11500, capped at its own ends, and its label stands halfway along it, at bp 0 of the record:
+    # display bp 500, given on the part as 10500, a turn on (OV-2654).
     annotation = _origin_annotation(_fragments(9501))
 
-    assert mark_parts(annotation, join_origin=True) == (MarkPart(9500, 11500, True, True, 9000),)
-    assert annotation.label_midpoint_bp(join_origin=True) == 500.0
+    joined = MarkPart(9500, 11500, True, True, 9000)
+    assert mark_parts(annotation, join_origin=True) == (joined,)
+    assert annotation.label_place(join_origin=True) == (10_500.0, joined)
+
+
+def test_the_centred_label_of_a_span_across_the_origin_stands_on_its_joined_part_in_its_frame() -> None:
+    # Without a display start the circle joins 9600-10000 to 0-1400 as one part from 9600 to 11400; halfway along
+    # the run (9600-10000, 0-1400, then 9000-9400) is bp 700 of the record, 10700 on that part, inside the stretch
+    # the label may cover (9000-11400).
+    segments = ((0, 1400), (9000, 9400), (9600, 10000))
+    annotation = ResolvedRegionAnnotation(
+        id="a", set_id="s", record_index=0, segments=segments,
+        midpoint_bp=annotation_midpoint(segments, _LENGTH, crosses_origin=True), span_bp=2200, label="A",
+        mark="band", lane=None, style=RegionAnnotationStyle(), crosses_origin=True,
+    )
+
+    place, stretch = annotation.label_stretch("center", join_origin=True)
+    assert (place.bp, place.part, stretch) == (10_700.0, MarkPart(9600, 11400, True, True, 9600), (9000, 11400))
+
+
+@pytest.mark.parametrize("start", (None, 5001, 5201))
+def test_a_centred_label_the_display_cut_moves_packs_its_lane_as_without_a_display_start(start: int | None) -> None:
+    # A spans 4000-4600 and 4800-6000; halfway along it is bp 5100, after the display cut from start 5001 (bp 5000)
+    # and before it from 5201 (bp 5200). Its 900 bp of letters (150 letters of 6 px at 1 bp per px) run from bp
+    # 4650 to 5550, over its own gap and over Q at 4660-4740 in that gap, but inside A's stretch: they do not leave
+    # A's mark, so Q keeps A's lane, as without a display start (OV-2654 review).
+    from gbdraw.annotations import LabelSizing, layout_annotation_track
+
+    a_segments, q_segments = ((4000, 4600), (4800, 6000)), ((4660, 4740),)
+    annotations = (
+        ResolvedRegionAnnotation(
+            id="a", set_id="s", record_index=0, segments=a_segments, midpoint_bp=5100.0, span_bp=1800,
+            label="X" * 150, mark="band", lane=None, style=RegionAnnotationStyle(),
+            display_parts=None if start is None else _fragments(start, None, a_segments),
+        ),
+        ResolvedRegionAnnotation(
+            id="q", set_id="s", record_index=0, segments=q_segments, midpoint_bp=4700.0, span_bp=80, label="",
+            mark="band", lane=None, style=RegionAnnotationStyle(),
+            display_parts=None if start is None else _fragments(start, None, q_segments),
+        ),
+    )
+    track = layout_annotation_track(
+        "regions", "s", annotations, record_lengths={0: _LENGTH},
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=_letters_6px_each), join_origin=True,
+    )
+
+    assert {placement.annotation.id: placement.lane for placement in track.placements} == {"a": 0, "q": 0}
 
 
 def _on_a_shared_circle(start: int | None, segments: tuple[tuple[int, int], ...]) -> ResolvedRegionAnnotation:

@@ -684,8 +684,10 @@ class ResolvedRegionAnnotation:
 
         When its mark draws every part whole (``mark_parts``: each part capped at both ends, so no display cut,
         row boundary or unjoined origin cuts it), the label stands halfway along the region (``midpoint_bp``)
-        as the display shows it. Else it stands on the centre of its longest part (PD-OI-119): where only the
-        origin cuts it (no display seam), two equal parts go to the one where the region starts.
+        as the display shows it, on the part that holds that place and in that part's frame (``_place_on_parts``:
+        past the record's end on a part joined across the origin or a circle's display cut). Else it stands on the
+        centre of its longest part (PD-OI-119): where only the origin cuts it (no display seam), two equal parts go
+        to the one where the region starts.
         """
         parts = mark_parts(self, join_origin=join_origin)
         if not all(part.capped_start and part.capped_end for part in parts):
@@ -696,21 +698,10 @@ class ResolvedRegionAnnotation:
                 parts, prefer=self.label_anchor("start", join_origin=join_origin).part if seamless else None
             )
             return LabelPlace((longest.start + longest.end) / 2.0, longest)
-        longest = _longest_part(parts)
-        midpoint = self.midpoint_bp
-        if self.display_parts is None:
-            return LabelPlace(midpoint, next((part for part in parts if part.start <= midpoint <= part.end), longest))
-        fragment = next(
-            part for part in self.display_parts.fragments if part.local_start <= midpoint <= part.local_end
-        )
-        # A display fragment runs the same way as its record-local span.
-        bp = fragment.display_start + (midpoint - fragment.local_start)
-        return LabelPlace(
-            bp, next((part for part in parts if part.row == fragment.row and part.start <= bp <= part.end), longest)
-        )
+        return self._place_on_parts(self.midpoint_bp, parts, ends=True, what="midpoint")
 
     def label_midpoint_bp(self, *, join_origin: bool) -> float:
-        """Where the region's centred label stands (``label_place``)."""
+        """Where the region's centred label stands (``label_place``), in the frame of the part it stands on."""
         return self.label_place(join_origin=join_origin).bp
 
     def label_anchor(self, position: LabelPosition, *, join_origin: bool) -> LabelPlace:
@@ -723,16 +714,23 @@ class ResolvedRegionAnnotation:
             return self.label_place(join_origin=join_origin)
         run = region_run(self.segments, crosses_origin=self.crosses_origin)
         # The label stands before the first base or after the last: find the part that draws that base.
-        after = 0 if position == "start" else 1
         base = run[0][0] if position == "start" else run[-1][1] - 1
-        # A part runs on from its record-local start; one joined over the origin runs on past the record's end.
+        place = self._place_on_parts(base, mark_parts(self, join_origin=join_origin), ends=False, what=f"{position} base")
+        return place if position == "start" else LabelPlace(place.bp + 1, place.part)
+
+    def _place_on_parts(self, local_bp: float, parts: Sequence[MarkPart], *, ends: bool, what: str) -> LabelPlace:
+        """The drawn part (``mark_parts``) that holds record-local ``local_bp`` (a base, or with ``ends`` also a part's
+        end), and where it stands on that part's display: the part's start plus ``local_bp``'s offset from where the
+        part starts on its record. A part runs on from its record-local start, past the record's end where it is
+        joined across the origin or a circle's display cut, so the place lies within its part, in its part's frame."""
+
         record_end = max(end for _start, end in self.segments) if self.crosses_origin else 0
-        for part in mark_parts(self, join_origin=join_origin):
-            offset = base - part.local_start
+        for part in parts:
+            offset = local_bp - part.local_start
             offset += record_end if offset < 0 else 0
-            if 0 <= offset < part.end - part.start:
-                return LabelPlace(float(part.start + offset + after), part)
-        raise AssertionError(f"Annotation {self.id!r}: no drawn part holds its {position} base {base}.")
+            if 0 <= offset < part.end - part.start or (ends and offset == part.end - part.start):
+                return LabelPlace(float(part.start + offset), part)
+        raise AssertionError(f"Annotation {self.id!r}: no drawn part holds its {what} {local_bp}.")
 
     def label_stretch(self, position: LabelPosition, *, join_origin: bool) -> tuple[LabelPlace, tuple[int, int]]:
         """Where a label at ``position`` stands (``label_anchor``) and the stretch of its row it may cover without
