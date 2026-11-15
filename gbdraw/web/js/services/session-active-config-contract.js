@@ -741,14 +741,13 @@ const reboundReceipt = async (receipt, canonical, selectorOf) => {
  * and rebound to `canonical`. A receipt that binds neither is refused (`validateSimilarityAlignmentResetReceipt`).
  * @param {unknown} receipt The stored receipt, unvalidated.
  * @param {AlignmentResetCanonical | null | undefined} canonical
- * @param {{ records: unknown[] } | null | undefined} committedRequest The committed request, or none.
+ * @param {{ records: readonly AlignmentResetRecord[] } | null | undefined} committedRequest The committed request, or none.
  * @returns {Promise<AlignmentResetReceipt | null>}
  */
 export const validateGeneratedSimilarityAlignmentResetReceipt = async (receipt, canonical, committedRequest) => {
   const read = await readSimilarityAlignmentResetReceipt(receipt, canonical);
   if (!read.stale) return read.value;
-  // The committed request is a current request: its records are request records.
-  const committed = new Map(/** @type {AlignmentResetRecord[]} */ (committedRequest?.records ?? [])
+  const committed = new Map((committedRequest ? committedRequest.records : [])
     .map((record) => [record.recordKey, record]));
   const value = await reboundReceipt(receipt, canonical, (record) => {
     const before = committed.get(record.recordKey);
