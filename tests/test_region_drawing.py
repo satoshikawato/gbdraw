@@ -1811,6 +1811,46 @@ def test_the_web_helper_pastes_the_records_of_one_file_as_one_resource_of_their_
         assert set(reply["resourceSources"]) | set(reply["targetResourceSources"]) == set(records.values())
 
 
+def test_a_paste_keeps_the_target_records_on_the_resources_the_target_names(tmp_path: Path) -> None:
+    from gbdraw.api import CircularMultiRecordOptions
+    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+
+    # A paste keeps the target's own records on the resources the target's request names (its one File card of the
+    # six-record file stays one card), and gives the pasted records of one file one resource of their own: two groups
+    # of the one-resource-per-file rule (review finding 1 of #2047).
+    six = _six_record_file(tmp_path)
+    source = CircularDiagramRequest(
+        records=[RecordInput(GenBankInputSource(six), record_key="six", cardinality=RecordCardinality.ALL)],
+        layout=CircularMultiRecordOptions(),
+    )
+    source_payload, source_paths = _web_source(source)
+
+    def derive(regions: list[dict[str, Any]], copy: dict[str, Any], out: str) -> dict[str, Any]:
+        return json.loads(derive_web_region_drawing_json(
+            json.dumps(source_payload), json.dumps(source_paths), str(tmp_path / out), json.dumps(regions),
+            json.dumps(True), json.dumps(copy),
+        ))
+
+    whole = [{"recordKey": f"six:{number}", "start": 1, "end": 4000} for number in range(1, 7)]
+    new = derive(whole[:2], {"into": "new", "settings": "keep", "mode": None}, "new")
+    target_payload = new["renderRequest"]
+    assert len({record["source"]["resourceId"] for record in target_payload["records"]}) == 1
+    target_paths = {rid: source_paths[sid] for rid, sid in new["resourceSources"].items()}
+    copy = {"into": "existing", "target": {"renderRequest": target_payload, "resourcePaths": target_paths},
+            "edits": "edits", "duplicates": "skip"}
+    reply = derive(whole[2:4], copy, "paste")
+    assert reply["status"] == "pasted"
+    records = reply["renderRequest"]["records"]
+    own = {record["recordKey"]: record["source"] for record in target_payload["records"]}
+    assert {record["recordKey"]: record["source"] for record in records if record["recordKey"] in own} == own
+    pasted = {record["source"]["resourceId"] for record in records if record["recordKey"] in reply["pastedRecordKeys"]}
+    assert len(reply["pastedRecordKeys"]) == 2 and len(pasted) == 1
+    assert not pasted & {source["resourceId"] for source in own.values()}
+    assert set(reply["resourceSources"]) | set(reply["targetResourceSources"]) == {
+        record["source"]["resourceId"] for record in records
+    }
+
+
 def test_the_web_helper_returns_the_color_table_with_the_pasted_colors(tmp_path: Path) -> None:
     from gbdraw.features.ids import exact_value_pattern, feature_instance
     from gbdraw.session_request_codec import decode_canonical_request

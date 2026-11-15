@@ -311,7 +311,9 @@ def _pasted_reply(
         pasted = paste_region_request(
             source, selections, target, edits=choice["edits"], duplicates=choice["duplicates"]
         )
-    payload, named, added = _encoded(pasted.request, target_paths, pasted.pasted_record_keys)
+    payload, named, added = _encoded(
+        pasted.request, target_paths, pasted.pasted_record_keys, kept=choice["target"]["renderRequest"]
+    )
     target_sources, source_sources = _resource_sources(named, target_paths, resource_paths)
     return {
         "status": "pasted",
@@ -337,12 +339,18 @@ def _pasted_reply(
 
 
 def _encoded(
-    request: DiagramRequest, held: Mapping[str, str], records: Collection[str] | None = None
+    request: DiagramRequest,
+    held: Mapping[str, str],
+    records: Collection[str] | None = None,
+    *,
+    kept: Mapping[str, object] | None = None,
 ) -> tuple[dict[str, object], dict[str, str], list[AddedResource]]:
     """``request`` encoded with the staged files ``held`` under their own IDs, the file of each resource it names,
     and the resources it names that no file holds (a table built for it): the encoder takes a held resource with
     equal bytes, and adds one for a second input of a file. The ``records`` (by record key; every record when
-    ``None``) that read one file then name the first of their resources of it (:func:`_one_resource_per_file`)."""
+    ``None``) that read one file then name the first of their resources of it (:func:`_one_resource_per_file`);
+    each other record that ``kept`` (a paste's target request, as the page sent it) has keeps the resources it names
+    there (:func:`_kept_sources`), so the target's own File cards stay as they are."""
 
     table = SessionResourceTable()
     for resource_id, path in held.items():
@@ -350,6 +358,8 @@ def _encoded(
     encoded = encode_canonical_request(request, table=table)
     paths = {resource.resource_id: str(resource.source_path) for resource in encoded.resources if resource.source_path}
     _one_resource_per_file(encoded.payload, {**paths, **held}, records)
+    if kept is not None:
+        _kept_sources(encoded.payload, kept, held, records or ())
     by_id = {resource.resource_id: resource for resource in encoded.resources}
     named: dict[str, str] = {}
     built: list[AddedResource] = []
@@ -381,6 +391,30 @@ def _one_resource_per_file(
         for field, resource_id in source.items():
             if isinstance(resource_id, str) and canonical_resource_ids({field: resource_id}) and resource_id in paths:
                 source[field] = first.setdefault((field, paths[resource_id]), resource_id)
+
+
+def _kept_sources(
+    payload: dict[str, object], kept: Mapping[str, object], held: Mapping[str, str], pasted: Collection[str]
+) -> None:
+    """Make each record of ``payload`` that is not ``pasted`` name the resources its record of the same key in
+    ``kept`` names, where ``held`` stages them: the encoder gives each input a resource of its own, which would split
+    the records of one File card of the target onto several resources, and the Web would read several cards."""
+
+    listed = kept.get("records")
+    sources = {
+        record.get("recordKey"): record.get("source")
+        for record in (listed if isinstance(listed, list) else ())
+        if isinstance(record, dict) and isinstance(record.get("source"), dict)
+    }
+    records = payload.get("records")
+    for record in records if isinstance(records, list) else ():
+        source = record.get("source") if isinstance(record, dict) else None
+        named = sources.get(record.get("recordKey")) if isinstance(record, dict) else None
+        if not isinstance(source, dict) or not isinstance(named, dict) or record.get("recordKey") in pasted:
+            continue
+        for field, resource_id in named.items():
+            if field in source and isinstance(resource_id, str) and resource_id in held:
+                source[field] = resource_id
 
 
 def _resource_sources(named: Mapping[str, str], *drawings: Mapping[str, str]) -> tuple[dict[str, str], ...]:

@@ -1051,6 +1051,34 @@ test('a paste of whole records into a Circular drawing draws them after its own 
   app.selectDrawing(source.id);
 });
 
+// Review finding 1 of #2047: a paste keeps the target's own records of one file on the one resource its request names,
+// so its File card, the records it leaves off and their places stay as they are; the pasted records of that file are
+// a card of their own after it.
+test('a paste into a Circular copy of records of a file keeps the target\'s card, its records off and its places', async () => {
+  const sixRecords = [1, 2, 3, 4, 5, 6].map((number) => genbankRecord(`six${number}`, 800 + number * 100, [[101, 400, `S${number}`]]));
+  const source = circularSource(sixRecords, { multi_record_canvas: true });
+  const { made: target } = await deriveAndInstall(source, [1, 2].map((number) => (
+    { recordKey: `record-1:${number}`, start: 1, end: 800 + number * 100 })), true, 'circular-46');
+  state.addDrawing(target, 'paste six'); history.addMember(target.id);
+  assert.deepEqual(await drawnCircularRecordIds(target), ['six1.1', 'six2.1']);
+  const own = {
+    cards: target.circularSources.map((card) => ({ ...card })), off: [...target.recordsOff],
+    places: target.adv.multi_record_positions.map((place) => ({ ...place }))
+  };
+  assert.equal(own.cards.length, 1);
+  app.selectDrawing(source.id);
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1:3', start: 1, end: 1100 }]);
+  assert.deepEqual(target.circularSources.slice(0, 1).map((card) => ({ ...card })), own.cards, 'the target\'s own card');
+  assert.equal(target.circularSources.length, 2, 'the pasted record\'s card after it');
+  assert.deepEqual(target.recordsOff.filter((key) => key.startsWith(`${own.cards[0].uid}:`)), own.off, 'its records off');
+  const ownSelectors = new Set(own.places.map(({ selector }) => selector));
+  assert.deepEqual(target.adv.multi_record_positions.filter(({ selector }) => ownSelectors.has(selector)), own.places, 'its places');
+  assert.deepEqual(await drawnCircularRecordIds(target), ['six1.1', 'six2.1', 'six3.1']);
+  assert.deepEqual(await drawnCircularRows(target), [1, 1, 2]);
+  await assertPastedRequest(target, paste, [], { sameRecords: true });
+  app.selectDrawing(source.id);
+});
+
 test('a paste with the records\' edits brings the colors of the pasted features into the target\'s color rules', async () => {
   const source = await circularSourceWithLook();
   const ids = await featureIdsInPython((await projectOf(source)).envelope);

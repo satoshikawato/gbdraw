@@ -7581,6 +7581,22 @@ const pastedKeyOf = (key, uids) => {
   return null;
 };
 /**
+ * A Circular target's places after a paste: the read request's (`read`, by the read cards' uids), under the target's
+ * card uids (`cards`), then each place of `own` the request names no record of (a record the target leaves off).
+ * @param {readonly MultiRecordPosition[]} own
+ * @param {readonly MultiRecordPosition[]} read
+ * @param {ReadonlyMap<string, string>} cards The target's uid of each read card.
+ * @returns {MultiRecordPosition[]}
+ */
+const pastedPlaces = (own, read, cards) => {
+  const placed = read.flatMap((entry) => {
+    const selector = pastedKeyOf(entry.selector, cards);
+    return selector === null ? [] : [{ ...entry, selector }];
+  });
+  const named = new Set(placed.map(({ selector }) => selector));
+  return [...placed, ...own.filter(({ selector }) => !named.has(selector)).map((entry) => ({ ...entry }))];
+};
+/**
  * The color rules after a paste: the read table, where each rule the target has is the target's own row (its
  * identity), and each other rule is one the paste adds (the colors of the pasted features, which Python puts in the
  * table where they apply). Unchanged when the paste adds none.
@@ -7659,11 +7675,9 @@ export const installPastedRecords = (target, paste) => {
       return sourceUid === null ? [] : [{ ...draft, sourceUid }];
     })],
     form: { ...target.form, multi_record_canvas: read.form.multi_record_canvas },
-    // The places of a Multi-Record Canvas are the request's, which names the target's records and the pasted ones.
-    adv: { ...target.adv, multi_record_positions: read.adv.multi_record_positions.flatMap((/** @type {{ selector: string, row: number }} */ entry) => {
-      const selector = pastedKeyOf(entry.selector, cards);
-      return selector === null ? [] : [{ ...entry, selector }];
-    }) }
+    // The places of a Multi-Record Canvas are the request's, which names the target's drawn records and the pasted
+    // ones; the target keeps the places of its records the request does not draw (those it leaves off).
+    adv: { ...target.adv, multi_record_positions: pastedPlaces(target.adv.multi_record_positions, read.adv.multi_record_positions, cards) }
   });
   FEATURE_EDITS_SLICE.install(target.slices.featureEdits, { featureOverrides: {
     ...FEATURE_EDITS_SLICE.capture(target.slices.featureEdits).featureOverrides,
