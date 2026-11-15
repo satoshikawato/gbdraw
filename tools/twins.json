@@ -1503,8 +1503,7 @@
       "vector": "tests/fixtures/given-comparison-table-vectors.json",
       "reason": "Python's decoder reads such a table for `gbdraw render --session` and the Worker; the Web Load reads it before any reader, the comparison classifier's included, without the Worker (a saved preview loads without Python). Both read the generated resource-ID prefix, schema list, protein column and BLAST columns (contracts/schema.generated.js, request.generated.js); the 14 cases pin which tables hold no protein matches, the BLAST rows of each one that has a BLAST form, and the feature-bound tables that keep their columns. The Web's reordering of the BLAST columns is a second mapping onto COMPARISON_COLUMNS beside gbdraw.io.comparisons, recorded here.",
       "retireWhen": "the Web Load asks Python (Worker) for the requests of a Session that stores such a table, as it does for a Session 46-50's saved LOSATP rows (withSavedProteinResults), or the app stops reading request schemas 2 and 5 to 9",
-      "source": "#2051 (OV-3573, OV-3574)",
-      "pending": true
+      "source": "#2051 (OV-3573, OV-3574)"
     }
   ]
 }
