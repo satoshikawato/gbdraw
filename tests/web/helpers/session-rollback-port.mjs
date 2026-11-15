@@ -28,6 +28,8 @@ export const sessionRollbackPort = async (state, history = null) => {
     installDisplayedArtifact: (slot) => artifactPort.installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId) }),
     featureListScrollTop: { value: 0 },
     featureListScrollRef: { value: null },
-    selectedPairwiseBlockOrthogroupId: { value: '' }
+    selectedPairwiseBlockOrthogroupId: { value: '' },
+    // No Similarity alignment review is open in these callers.
+    alignment: { endReviewOutside: () => {} }
   });
 };

@@ -1,7 +1,8 @@
 // @ts-check
 // The drawing switch (R15): the one switch between the drawings
 // (`selectDrawing`), its work without the gate (`showDrawingNow`, which the
-// drawing list's steps call), why a switch waits (`drawingSwitchBusy`), the
+// drawing list's steps call), why a switch waits (`drawingSwitchBusy`, and
+// `switchWorkBusy`, the part outside History that a list step's Undo waits for), the
 // drawing an operation error names, and the swap of the artifact slots with
 // the install of the arriving slot, which Session Load also uses for the slot
 // it opens on (`installArrivingSlot`). The composition root passes the state, its
@@ -127,11 +128,14 @@ export const createDrawingSwitch = ({
   // OIC-030: also while a color rule table edit is matched, so that edit is
   // one step of its drawing. D-40: also while Similarity alignment work runs
   // (a review resolving, Apply, Reset), which ends on the drawing it began on.
+  // Those two are the work outside History (`switchWorkBusy`): an Undo or Redo
+  // of a drawing list step, which switches the shown drawing inside History's
+  // traversal, waits for them too (D-41).
+  const switchWorkBusy = () => (ruleWritePending() ? RULE_WRITE_BUSY : null) || alignment.busy();
   const drawingSwitchBusy = () => sessionOperationAvailability('history')
     || historyAvailability()
     || (historyRestoring() || traversalPending() ? HISTORY_RESTORE_BUSY : null)
-    || (ruleWritePending() ? RULE_WRITE_BUSY : null)
-    || alignment.busy();
+    || switchWorkBusy();
   const drawingSwitchAvailable = computed(() => !drawingSwitchBusy());
   // The drawing an operation error names (PD-OI-079 `context.drawingId`), if
   // any: read by the switch, the drawing removal, and E1's Generate. Its
@@ -192,5 +196,7 @@ export const createDrawingSwitch = ({
     return { status: 'ok' };
   };
 
-  return { installArrivingSlot, drawingSwitchBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing };
+  return {
+    installArrivingSlot, drawingSwitchBusy, switchWorkBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
+  };
 };

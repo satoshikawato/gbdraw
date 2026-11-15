@@ -26,6 +26,8 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {() => DrawingId} ReadShownDrawingId
  * @typedef {{ readonly reason: string }} SwitchBusy What a busy drawing switch says; its owners add the fields the app uses.
  * @typedef {() => (SwitchBusy | null)} ReadSwitchBusy Why a drawing switch waits now, or null (R15).
+ * @typedef {() => ({ readonly status: string, readonly reason: string } | null)} ReadSwitchWorkBusy
+ *   Why a drawing switch waits for work outside History now, as History words a wait, or null.
  * @typedef {(drawingId: DrawingId, mode: ModeProfileName) => DrawingState} CreateDrawing A new drawing at its defaults.
  * @typedef {(drawingId: DrawingId) => DrawingState} ReadDrawing A drawing the store holds.
  * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
@@ -68,6 +70,8 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @property {ReadDrawingTabs} drawingTabs
  * @property {ReadShownDrawingId} shownDrawingId
  * @property {ReadSwitchBusy} switchBusy
+ * @property {ReadSwitchWorkBusy} switchWorkBusy Why a switch waits for work outside History (a color rule edit matched,
+ *   Similarity alignment work in flight): the Undo and Redo of a step that switches the shown drawing wait for it.
  * @property {ReadDrawing} drawingOf
  * @property {ReadDrawingHas} drawingHasResult
  * @property {ReadDrawingHas} drawingHasEdits
@@ -125,7 +129,7 @@ const newTabIndex = (tabs, after) => (after === null ? tabs.length : tabs.findIn
 
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
-  drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
+  drawingTabs, shownDrawingId, switchBusy, switchWorkBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
   regionDrawing, addDrawing, removeDrawing, putHeld, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
   removeDrawingHistory, runListStep, showDrawingNow
 }) => {
@@ -172,6 +176,7 @@ export const createDrawingList = ({
       showDrawingNow(drawingId);
     };
     runListStep(label, {
+      busy: switchWorkBusy,
       apply: () => add(true),
       redo: () => add(),
       undo: () => {
@@ -293,6 +298,7 @@ export const createDrawingList = ({
       const fileIds = [...boundFileIdsOf(drawingId)];
       // The switch settles the drawing's open step while its History is still a member.
       runListStep('Delete drawing', {
+        busy: switchWorkBusy,
         fileIds: () => fileIds,
         apply: () => {
           showDrawingNow(after);
@@ -620,10 +626,15 @@ export const createDrawingBar = ({
   };
 
   /**
-   * A drawing's name as its tab shows it, for a text that names the drawing.
+   * A drawing's name as its tab shows it, for a text that names the drawing; null for an ID without a tab (a drawing
+   * a Load is taking away), so that no text read throws in a render (OV-3618).
    * @param {DrawingId} drawingId
+   * @returns {string | null}
    */
-  const nameOf = (drawingId) => drawingTabOf('nameOf', drawingId).label;
+  const nameOf = (drawingId) => {
+    const tab = tabs().find((each) => each.kind === 'drawing' && each.id === drawingId);
+    return tab?.kind === 'drawing' ? tab.label : null;
+  };
 
   return { tabs, nameOf, newDrawing, duplicateDrawing, newDrawingWithStyle, renameDrawing, moveDrawing, deleteDrawing };
 };
