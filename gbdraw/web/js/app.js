@@ -44,6 +44,7 @@ import { titleCutHint } from './app/hint-title.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, numberText, sentenceSeparator, t, thenArrow, thenText, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
+import { readOtherDigitsInNumberFields } from './utils/number-field-digits.js';
 import { INTERACTIVE_GALLERY_URL } from './utils/gallery-routes.js';
 import { DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE } from './contracts/schema.generated.js';
 import { settingApplicationHelp, settingApplicationSentence } from './services/setting-application.js';
@@ -99,4 +100,7 @@ window.addEventListener('drop', refuseStrayFileDrop);
 // A field's hint cut with an ellipsis shows whole as its title (app/hint-title.js).
 window.addEventListener('pointerover', titleCutHint);
 window.addEventListener('focusin', titleCutHint);
+// A number field reads Persian, Arabic-Indic, Bengali and Devanagari digits typed or pasted
+// into it as 0-9 (utils/number-field-digits.js).
+window.addEventListener('beforeinput', readOtherDigitsInNumberFields, true);
 window.__GBDRAW_APP__ = mountedApp;

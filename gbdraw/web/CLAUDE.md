@@ -164,6 +164,7 @@ in the same change.
 | History transactions and availability: one History per drawing and the project stream behind one router, with a shared byte budget and file retention | `js/services/history.js` (`createHistoryRouter`), `js/app/history-inputs.js`, `js/services/history-snapshot.js`; the header's Undo and Redo controls and the History list (PD-OI-112) are `js/app/history-list.js` (`createHistoryControls`) |
 | Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
+| The text a key or a paste puts into a number field: Persian, Arabic-Indic, Bengali and Devanagari digits as 0-9 and the Arabic decimal separator as `.`, in every UI language | `js/utils/number-field-digits.js` (`asciiNumberText`, `readOtherDigitsInNumberFields`, installed once on the page by `js/app.js`) |
 | A control's name and the value it now holds (a History step's detail, the Feature placement layout dialog's question) | `js/utils/control-description.js` (`describeControl`, `controlValueText`) |
 | GenBank header reading | `js/services/genbank-header.js` |
 | Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
