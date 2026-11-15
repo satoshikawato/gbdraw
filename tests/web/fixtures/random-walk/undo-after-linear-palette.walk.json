@@ -1,0 +1,133 @@
+{
+ "seed": 43665668390,
+ "title": "random walk (seed 43665668390): Circular, one Result, walk 5 of 18, shrunk to step 26",
+ "fixture": "Circular, one Result",
+ "reflow": false,
+ "steps": [
+  {
+   "index": 1,
+   "kind": "reset",
+   "popup": true,
+   "reflow": true,
+   "drawing": "circular",
+   "popupFeature": "record 0, feature f970830ef~4",
+   "step": {
+    "kind": "reset"
+   },
+   "notes": [
+    "the settings that apply on Generate written back"
+   ]
+  },
+  {
+   "index": 2,
+   "kind": "drawingSwitch",
+   "popup": false,
+   "reflow": true,
+   "drawing": "circular",
+   "popupFeature": null,
+   "step": {
+    "kind": "drawingSwitch",
+    "mode": "linear"
+   },
+   "notes": []
+  },
+  {
+   "index": 3,
+   "kind": "colorRuleRemove",
+   "popup": false,
+   "reflow": false,
+   "drawing": "linear",
+   "popupFeature": null,
+   "step": {
+    "kind": "colorRuleRemove",
+    "prepare": {
+     "kind": "colorRuleAdd",
+     "fields": {
+      "feat": "CDS",
+      "qual": "locus_tag",
+      "val": "^FL1$",
+      "color": "#e63946",
+      "cap": "CDS"
+     }
+    },
+    "index": 0
+   },
+   "notes": [
+    "prepare colorRuleAdd"
+   ]
+  },
+  {
+   "index": 22,
+   "kind": "palette",
+   "popup": false,
+   "reflow": true,
+   "drawing": "linear",
+   "popupFeature": null,
+   "step": {
+    "kind": "palette",
+    "palette": "fugaku",
+    "picks": [
+     343,
+     380,
+     45
+    ]
+   },
+   "notes": []
+  },
+  {
+   "index": 23,
+   "kind": "palette",
+   "popup": false,
+   "reflow": false,
+   "drawing": "linear",
+   "popupFeature": null,
+   "step": {
+    "kind": "palette",
+    "palette": "soft_pastels",
+    "picks": [
+     225,
+     863,
+     815
+    ]
+   },
+   "notes": []
+  },
+  {
+   "index": 24,
+   "kind": "undoRedo",
+   "popup": true,
+   "reflow": true,
+   "drawing": "linear",
+   "popupFeature": "record 0, feature f970830ef~5",
+   "step": {
+    "kind": "undoRedo"
+   },
+   "notes": []
+  },
+  {
+   "index": 25,
+   "kind": "drawingSwitch",
+   "popup": true,
+   "reflow": false,
+   "drawing": "linear",
+   "popupFeature": "record 0, feature f841fb8a8",
+   "step": {
+    "kind": "drawingSwitch",
+    "mode": "circular"
+   },
+   "notes": []
+  },
+  {
+   "index": 26,
+   "kind": "undo",
+   "popup": false,
+   "reflow": true,
+   "drawing": "circular",
+   "popupFeature": null,
+   "step": {
+    "kind": "undo"
+   },
+   "notes": []
+  }
+ ]
+}

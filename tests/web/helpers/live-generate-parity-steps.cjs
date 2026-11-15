@@ -240,12 +240,12 @@ const editorLegendRows = async (page, rows) => {
   await settleLive(page);
 };
 
-// A palette change with instant preview (the palette menu).
+// A palette change with instant preview (the palette menu,
+// palette-menu-page.mjs).
 const switchPalette = async (page, name) => {
-  await page.evaluate((palette) => {
-    const app = window.__GBDRAW_APP__;
-    app.setPaletteInstantPreview(true);
-    return app.selectPalette(palette);
+  await page.evaluate(async (palette) => {
+    const { choosePaletteWithInstantPreview } = await import('/tests/web/helpers/palette-menu-page.mjs');
+    await choosePaletteWithInstantPreview(window.__GBDRAW_APP__, palette);
   }, name);
   await settleLive(page);
 };
