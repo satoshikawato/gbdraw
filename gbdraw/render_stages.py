@@ -90,6 +90,7 @@ RenderStageName = Literal[
     "circular_radial_labels",
     "axis_content",
     "ticks_layout",
+    "ticks_backed_numbers",
     "ticks_content",
     "conservation_sources",
     "conservation_tracks",
@@ -193,6 +194,8 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "circular_radial_labels": _CIRCULAR_LABEL_SECTIONS | {"objects.axis", "objects.scale", "objects.ticks"},
     "axis_content": frozenset({"objects.axis"}),
     "ticks_layout": _CIRCULAR_TRACK_SECTIONS | {"objects.scale", "objects.text", "objects.ticks"},
+    # The tick layout and the feature label leaders.
+    "ticks_backed_numbers": frozenset(),
     # The tick layout and the numbers the leaders back.
     "ticks_content": frozenset(),
     "conservation_sources": frozenset(),

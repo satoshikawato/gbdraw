@@ -368,6 +368,9 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
     # rebuilds the layout too, and only the layout reads the settings.
     if "ticks_content" in allowed:
         allowed |= {"ticks_layout"}
+    # The backed numbers read the tick layout and the leaders of the placed labels.
+    if allowed & ({"ticks_layout"} | _PLACED_LABELS):
+        allowed |= {"ticks_backed_numbers"}
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
     if allowed & _DEFINITION_COUNT_INPUTS:

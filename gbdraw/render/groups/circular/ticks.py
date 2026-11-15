@@ -77,17 +77,19 @@ class TickSlotLayout:
     numbers: tuple[TickNumber, ...]
     pad_px: float
 
-    def backed_numbers(self, feature_leaders: Sequence[LeaderSegment]) -> tuple[int, ...]:
-        """The numbers (their places in ``numbers``) a feature label's leader runs behind or within ``pad_px`` of."""
 
-        return tuple(
-            index
-            for index, number in enumerate(self.numbers)
-            if any(
-                stroke_meets_ink(leader.start, leader.end, leader.half_width + self.pad_px, number.letters)
-                for leader in feature_leaders
-            )
+def backed_tick_numbers(layout: TickSlotLayout, feature_leaders: Sequence[LeaderSegment]) -> tuple[int, ...]:
+    """The numbers (their places in ``layout.numbers``) a feature label's leader runs behind or within
+    ``layout.pad_px`` of (render stage ``ticks_backed_numbers``)."""
+
+    return tuple(
+        index
+        for index, number in enumerate(layout.numbers)
+        if any(
+            stroke_meets_ink(leader.start, leader.end, leader.half_width + layout.pad_px, number.letters)
+            for leader in feature_leaders
         )
+    )
 
 
 def backed_tick_content(layout: TickSlotLayout, backed: tuple[int, ...]) -> GroupContent:
@@ -368,4 +370,11 @@ class TickGroup:
         return self.tick_group
 
 
-__all__ = ["TickGroup", "TickNumber", "TickSlotLayout", "backed_tick_content", "build_tick_slot_layout"]
+__all__ = [
+    "TickGroup",
+    "TickNumber",
+    "TickSlotLayout",
+    "backed_tick_content",
+    "backed_tick_numbers",
+    "build_tick_slot_layout",
+]

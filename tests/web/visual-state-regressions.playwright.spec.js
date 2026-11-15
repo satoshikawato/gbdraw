@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { seeds, generate, popup, closeEditor, switchMode } = require('./helpers/mode-transition.cjs');
-const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load, agree, reveal, check, color, label } = require('./helpers/visual-state.cjs');
 
 for (const mode of ['circular', 'linear']) {
@@ -36,6 +36,8 @@ for (const mode of ['circular', 'linear']) {
       await check(page, 'Show Depth', true); await generate(page);
       for (const enabled of [false, true]) {
         await check(page, 'Show Depth', enabled);
+        // The toggle's automatic rerender runs after its History step: the capture reads the Result it drew.
+        await settleLive(page);
         await agree(page, info, `depth-${enabled}`);
         // PD-OI-104 rev 5: Show Depth redraws the Result without or with the
         // Depth track (no hidden group is left in it).
