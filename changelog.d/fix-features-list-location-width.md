@@ -1,0 +1,1 @@
+- Fixed: Long feature locations in the Features list now read whole, with their strand sign: a location of 18 or more characters, such as every feature past 100 kb, no longer ends in an ellipsis.

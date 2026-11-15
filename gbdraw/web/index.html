@@ -9133,7 +9133,7 @@
                                         <span v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)?.text" class="max-w-[5rem] truncate shrink-0 font-semibold text-slate-800">{{ getEditableLabelByFeatureId(featureListState(feat).renderedId).text }}</span>
                                         <span class="truncate">{{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}</span>
                                     </button>
-                                    <span class="max-w-[7rem] font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
+                                    <span class="max-w-[25ch] font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
                                     <label class="flex items-center gap-0.5 shrink-0 text-slate-500 cursor-pointer" :title="t('Show on the diagram')">
                                         <input type="checkbox"
                                                data-history-managed
