@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
-from ..analysis.orf_prediction import predicted_source_feature_indexes
+from ..analysis.orf_prediction import predicted_feature_lookup
 from ..core.record_metadata import (
     _feature_source_index_map,
 )
@@ -216,7 +216,7 @@ def _build_feature_layers(
     origin_length = genome_length if spans_may_cross_origin(
         gb_record, record_transform if record_transform is not None else unset_record_transform(gb_record)
     ) else None
-    predicted_indexes = predicted_source_feature_indexes(gb_record)
+    is_predicted = predicted_feature_lookup(gb_record)
     source_indexes = _feature_source_index_map(gb_record.features)
     shared_hashes = shared_source_feature_hashes(gb_record)
     instance_of = feature_instances(gb_record)
@@ -242,8 +242,9 @@ def _build_feature_layers(
             continue
 
         # Track which color rules are actually used
+        predicted = is_predicted(feature)
         color, caption = get_color_with_info(
-            feature, color_table, default_colors, record_id=gb_record.id, instance=instance
+            feature, color_table, default_colors, record_id=gb_record.id, instance=instance, predicted=predicted
         )
         if caption:
             used_color_rules.add((caption, color))
@@ -305,8 +306,10 @@ def _build_feature_layers(
                 instance=instance,
                 origin_length=origin_length,
             )
-        feature_object.source_feature_index = source_indexes[id(feature)]
-        feature_object.predicted = feature_object.source_feature_index in predicted_indexes
+        # The colour of the build's own rule match: a predicted ORF's comes from its mark (``get_color_with_info``).
+        feature_object.source_feature_index, feature_object.color, feature_object.predicted = (
+            source_indexes[id(feature)], color, predicted,
+        )
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
         if feature_object.feature_hash in shared_hashes:
             feature_object.rendered_instance_index = feature_object.source_feature_index

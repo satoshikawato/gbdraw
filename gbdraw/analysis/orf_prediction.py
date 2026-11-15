@@ -23,8 +23,9 @@ frame, is left out. Four changes are made to those rules:
 
 The defaults are the Owner's (D-126, 2026-11-14): proteins of at least 50 residues, methionine start codons, and the
 genetic code the record's CDS all state (``/transl_table``), else table 11 (``record_genetic_code``); orfind read
-table 1. Predicted ORFs are drawn as ``CDS`` (D-87) in their own Legend row, "Predicted ORF"
-(``predicted_orf_color_rule``), and carry no qualifier that gbdraw shows as a label.
+table 1. Predicted ORFs are drawn as ``CDS`` (D-87) in their own colour and Legend row, "Predicted ORF", both read
+from their typed mark (``PredictedFeatures``, ``predicted_feature_lookup``), and carry no qualifier that gbdraw shows
+as a label.
 
 Codon meanings are read once per table from Biopython's ``Seq.translate`` into lookup arrays, and each frame is then
 read with array operations, so a 13 Mb record takes seconds.
@@ -34,7 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from functools import cache
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import Literal, get_args
 
 import numpy as np
@@ -49,8 +50,8 @@ from Bio.SeqFeature import (
 )
 from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
-from pandas import DataFrame
 
+from gbdraw.core.record_metadata import _feature_source_index_map
 from gbdraw.exceptions import ValidationError
 from gbdraw.version import __version__
 
@@ -69,11 +70,10 @@ _CODONS = _CODES**3
 RECORD_FALLBACK_GENETIC_CODE = 11
 """The table of a record whose CDS do not all state one table, and of a record without CDS (a FASTA record)."""
 _INFERENCE_PREFIX = "ab initio prediction:gbdraw:"
+PREDICTED_ORF_FEATURE_TYPE = "CDS"
+"""The feature type of a predicted ORF (D-87): the Legend row of predicted ORFs follows the rules of this type."""
 PREDICTED_ORF_CAPTION = "Predicted ORF"
 PREDICTED_ORF_COLOR = "#e58fa6"
-# The Legend row of predicted ORFs, as the Legend names a color rule's row: its caption and color. It is gbdraw's
-# own row, not a user's rule: it does not rename the row of the annotated CDS (``legend.table.feature_type_rows``).
-PREDICTED_ORF_LEGEND_ROW = (PREDICTED_ORF_CAPTION, PREDICTED_ORF_COLOR)
 # The record annotation that names the features ORF prediction added to a record (``PredictedFeatures``).
 PREDICTED_FEATURES_ANNOTATION = "gbdraw_predicted_features"
 """A rose that no packaged palette gives another feature type (tRNA is #e8b441 in the default palette)."""
@@ -455,7 +455,7 @@ def predicted_orf_features(
     return [
         SeqFeature(
             _orf_location(orf, record_length),
-            type="CDS",
+            type=PREDICTED_ORF_FEATURE_TYPE,
             qualifiers={
                 "transl_table": [str(genetic_code)],
                 "translation": [orf.protein],
@@ -499,11 +499,13 @@ def predicted_source_feature_indexes(record: SeqRecord) -> frozenset[int]:
     return mark.source_feature_indexes if isinstance(mark, PredictedFeatures) else frozenset()
 
 
-def predicted_orf_color_rule() -> DataFrame:
-    """The color rule that gives predicted ORFs their own Legend row and color (D-126 Q8=B): it matches the
-    ``inference`` qualifier ``predicted_orf_features`` writes, in the columns of a color table."""
+def predicted_feature_lookup(record: SeqRecord) -> Callable[[SeqFeature], bool]:
+    """Whether a feature of ``record`` is predicted, by its source feature index against the record's typed mark
+    (``PredictedFeatures``): the one test the colour, the Legend row and the lanes of a predicted ORF read. A
+    ``CDS`` of the file's own whose ``inference`` names gbdraw is an annotated ``CDS``."""
 
-    return DataFrame(
-        [("CDS", "inference", f"^{_INFERENCE_PREFIX}", PREDICTED_ORF_COLOR, PREDICTED_ORF_CAPTION)],
-        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
-    )
+    indexes = predicted_source_feature_indexes(record)
+    if not indexes:
+        return lambda _feature: False
+    source_indexes = _feature_source_index_map(record.features)
+    return lambda feature: source_indexes.get(id(feature)) in indexes

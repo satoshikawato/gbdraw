@@ -377,7 +377,10 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
 
 
 def test_generated_legend_rows_take_no_input_the_web_pin_lacks():
-    """A new kind of generated row arrives as a new input; add it to the fixture and the Web reader."""
+    """A new kind of generated row arrives as a new input; add it to the fixture and the Web reader.
+    ``feature_rows`` carries the row of predicted ORFs (``FeatureLegendRows.predicted_orfs``), which the Web app
+    cannot draw yet: it has no ORF prediction, so neither this fixture nor the Web's ``featureLegendRows`` holds that
+    row until it has."""
     assert list(inspect.signature(_generated_legend_rows).parameters) == [
         "feature_rows", "default_colors", "gc", "skew", "depth", "show_gc", "show_skew", "show_depth",
         "block_stroke",

@@ -573,11 +573,11 @@ def _generate_legend(seqs: list[SeqFeature], table: list[dict]) -> list[str]:
         specific_color_rules=build_specific_color_rules(color_table), default_color_map={"default": "#d3d3d3"},
         record_features=())
     # No slot list: the default stack, which draws the features.
-    present, used, default_used = feature_legend_presence([record], source, None)
+    present, color_use = feature_legend_presence([record], source, None)
     numeric = SimpleNamespace(dinucleotide="GC", high_fill_color="#000000", low_fill_color="#000000",
                               stroke_color="none", stroke_width=0)
-    legend = prepare_legend_table(numeric, numeric, source, present, used_color_rules=used,
-                                  default_used_features=default_used, show_gc=False, show_skew=False, show_depth=False)
+    legend = prepare_legend_table(numeric, numeric, source, present, color_use=color_use,
+                                  show_gc=False, show_skew=False, show_depth=False)
     return [str(names.name) for names in legend.names().values()]
 
 

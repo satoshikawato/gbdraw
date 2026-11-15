@@ -88,7 +88,7 @@ def producible_legend_rows(
         )
     )
     features = sources.features
-    used_rules, default_used = precompute_used_color_rules(
+    color_use = precompute_used_color_rules(
         records,
         features.specific_color_rules,
         features.default_color_map,
@@ -102,8 +102,7 @@ def producible_legend_rows(
         sources.skew,
         features,
         feature_types,
-        used_color_rules=used_rules,
-        default_used_features=default_used,
+        color_use=color_use,
         show_gc=True,
         show_skew=True,
         show_depth=False,

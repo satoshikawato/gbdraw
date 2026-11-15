@@ -2,7 +2,8 @@
 # coding: utf-8
 
 import re
-from typing import Any, Iterable, Mapping, Optional, Tuple, cast
+from collections.abc import Set as AbstractSet
+from typing import Any, Iterable, Mapping, NamedTuple, Optional, Tuple, cast
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
@@ -10,6 +11,7 @@ from Bio.SeqFeature import SeqFeature
 from gbdraw.core.color import normalize_hex_color
 from gbdraw.exceptions import ValidationError
 
+from ..analysis.orf_prediction import PREDICTED_ORF_COLOR, predicted_feature_lookup
 from .ids import compute_feature_hash as compute_feature_hash
 from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
 
@@ -88,6 +90,7 @@ def get_color_with_info(
     record_id: Optional[str] = None,
     *,
     instance: Optional[str],
+    predicted: bool = False,
 ) -> Tuple[str, Optional[str]]:
     """
     Determines the color for a given feature based on its type and qualifiers.
@@ -102,13 +105,17 @@ def get_color_with_info(
         If record_id is provided, hash matching includes the record id.
         ``instance`` is the feature's instance (``ids.feature_instances``),
         which a `hash` rule may name; None for a feature without one.
+        ``predicted`` says that ORF prediction made the feature (its typed mark,
+        ``orf_prediction.predicted_feature_lookup``): without a matching rule it
+        takes gbdraw's colour of predicted ORFs, else its type's (D-126 Q8=B: a
+        rule the user gives a predicted CDS comes first).
     """
     matched_rule = find_specific_color_rule(feature, color_map, record_id=record_id, instance=instance)
     if matched_rule is not None:
         return matched_rule
 
     # Fallback to default color if no specific rule matched
-    return feature_type_color(default_color_map, feature.type), None
+    return (PREDICTED_ORF_COLOR if predicted else feature_type_color(default_color_map, feature.type)), None
 
 
 def get_color(
@@ -184,6 +191,19 @@ def legend_rule_use(
     return used, default_types
 
 
+class FeatureColorUse(NamedTuple):
+    """The colours the drawn features took, which the Legend names: ``rules``
+    and ``default_types`` as ``legend_rule_use`` reads them, and whether a
+    predicted ORF is drawn on gbdraw's colour of predicted ORFs, which gives
+    the row of its own (``legend.table.PREDICTED_ORF_LEGEND_KEY``). A predicted
+    ORF that a rule colors counts as that rule's feature; one on gbdraw's
+    colour counts neither as a rule's nor as its type's."""
+
+    rules: AbstractSet[TypeRuleUse]
+    default_types: AbstractSet[str]
+    predicted_orfs: bool = False
+
+
 def precompute_used_color_rules(
     records,
     color_map: Mapping[str, Any],
@@ -192,7 +212,7 @@ def precompute_used_color_rules(
     feature_visibility_rules: list[dict] | None = None,
     record_features=(),
     include_hidden: bool = False,
-) -> tuple[set[TypeRuleUse], set[str]]:
+) -> FeatureColorUse:
     """
     Pre-compute which color rules will be used for a set of records.
 
@@ -207,10 +227,10 @@ def precompute_used_color_rules(
             every rule row the records can produce (Legend row facts).
 
     Returns:
-        (used_rules, default_used_features)
-        used_rules: Set of (feature type, caption, color) tuples for the captioned
-            rules features of that type take (``legend_rule_use``)
-        default_used_features: Set of feature types that fell back to default color
+        The colours the features take (``FeatureColorUse``): the captioned rules
+        features of each type take, as (feature type, caption, color), the types
+        on their default color (``legend_rule_use``), and whether a predicted
+        ORF is on gbdraw's colour of predicted ORFs.
     """
     from Bio.SeqRecord import SeqRecord
     from .ids import feature_instances
@@ -220,11 +240,13 @@ def precompute_used_color_rules(
         records = [records]
 
     drawn: list[tuple[str, RuleUse | None]] = []
+    predicted_orfs = False
     for index, record in enumerate(records):
         override_of = feature_override_lookup(
             record, record_features[index].overrides if record_features else None
         )
         instance_of = feature_instances(record)
+        is_predicted = predicted_feature_lookup(record)
         for feature in record.features:
             instance = instance_of(feature)
             if not include_hidden and not should_render_feature(
@@ -237,14 +259,19 @@ def precompute_used_color_rules(
                 instance=instance,
             ):
                 continue
+            predicted = is_predicted(feature)
             color, caption = get_color_with_info(
-                feature, color_map, default_color_map, record_id=record.id, instance=instance
+                feature, color_map, default_color_map, record_id=record.id, instance=instance, predicted=predicted
             )
-            drawn.append((feature.type, None if caption is None else (caption, color)))
-    return legend_rule_use(drawn, default_color_map)
+            if caption is None and predicted:
+                predicted_orfs = True
+            else:
+                drawn.append((feature.type, None if caption is None else (caption, color)))
+    return FeatureColorUse(*legend_rule_use(drawn, default_color_map), predicted_orfs)
 
 
 __all__ = [
+    "FeatureColorUse",
     "RuleUse",
     "TypeRuleUse",
     "feature_matches_specific_color_rule",

@@ -18,7 +18,7 @@ from pandas import DataFrame
 
 from gbdraw.comparisons.identity_scale import IdentityColorDomain
 from gbdraw.core.sequence import check_feature_presence
-from gbdraw.features.colors import TypeRuleUse, precompute_used_color_rules
+from gbdraw.features.colors import FeatureColorUse, precompute_used_color_rules
 from gbdraw.layout.series_style import SeriesPaint
 from gbdraw.tracks.parsing import SlotView, slot_skew_fill_colors, slots_draw_features
 
@@ -68,15 +68,15 @@ def feature_legend_presence(
     records: Sequence[SeqRecord],
     features: FeatureLegendSource,
     slots: Iterable[SlotView] | None,
-) -> tuple[list[str], set[TypeRuleUse], set[str]]:
-    """The feature types drawn, the color rules features of each type took, and the types on default colors.
+) -> tuple[list[str], FeatureColorUse]:
+    """The feature types drawn and the colours the features took (``precompute_used_color_rules``).
 
     ``slots`` is the drawing's track stack; without a features slot
     (:func:`slots_draw_features`) no feature is drawn, so none is named.
     """
 
     if not slots_draw_features(slots):
-        return [], set(), set()
+        return [], FeatureColorUse(frozenset(), frozenset())
     records = list(records)
     features_present = check_feature_presence(
         records,
@@ -85,7 +85,7 @@ def feature_legend_presence(
         specific_color_rules=features.specific_color_rules,
         record_features=features.record_features,
     )
-    used_color_rules, default_used_features = precompute_used_color_rules(
+    color_use = precompute_used_color_rules(
         records,
         features.specific_color_rules,
         features.default_color_map,
@@ -93,7 +93,7 @@ def feature_legend_presence(
         feature_visibility_rules=features.feature_visibility_rules,
         record_features=features.record_features,
     )
-    return features_present, used_color_rules, default_used_features
+    return features_present, color_use
 
 
 @dataclass(frozen=True)

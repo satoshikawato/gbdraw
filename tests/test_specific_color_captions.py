@@ -31,7 +31,7 @@ from gbdraw.api.requests import (
     RecordInput,
     RenderOutputRequest,
 )
-from gbdraw.features.colors import get_color_with_info
+from gbdraw.features.colors import FeatureColorUse, get_color_with_info
 from gbdraw.io.colors import read_color_table
 from gbdraw.legend.table import (
     _legend_fill_identity,
@@ -296,8 +296,7 @@ def test_rule_caption_equal_to_a_default_type_with_the_same_color_shares_one_row
         numeric,
         feature_config,
         ["tRNA", "rRNA"],
-        used_color_rules={("tRNA", "rRNA", "#71ee7d")},
-        default_used_features={"rRNA"},
+        color_use=FeatureColorUse({("tRNA", "rRNA", "#71ee7d")}, {"rRNA"}),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -581,7 +580,7 @@ def test_rule_captioned_like_a_comparison_legend_row_keeps_its_own_row(caption: 
     table = prepare_legend_table(
         numeric, numeric, features, ["CDS"],
         comparison=ComparisonLegendSource.of(SimpleNamespace(min_color="#ffffff", max_color="#000000", identity_domain=identity_color_domain(0, None))),
-        used_color_rules={("CDS", caption, "#ff0000")},
+        color_use=FeatureColorUse({("CDS", caption, "#ff0000")}, set()),
         show_gc=False, show_skew=False, show_depth=False,
         pairwise_identity_legend=legend,
     )

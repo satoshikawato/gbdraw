@@ -6,16 +6,18 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Hashable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, List, NamedTuple, NewType, Optional, Sequence, Set, TypeVar
+from typing import TYPE_CHECKING, Iterable, List, NamedTuple, NewType, Optional, Sequence, TypeVar
 
 from pandas import DataFrame
 
+from gbdraw.analysis.orf_prediction import PREDICTED_ORF_CAPTION, PREDICTED_ORF_COLOR, PREDICTED_ORF_FEATURE_TYPE
 from gbdraw.core.color import (
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import (
+    FeatureColorUse,
     RuleUse,
     TypeRuleUse,
     build_default_color_map,
@@ -630,6 +632,11 @@ def _other_feature_legend_key(feature_type: str) -> LegendRowKey:
     return _key_of_name(other_feature_row_name(feature_type))
 
 
+# gbdraw's own row of predicted ORFs on their colour (``FeatureColorUse.predicted_orfs``): a renderer row, which a
+# color rule captioned like it never is (``rule_legend_keys`` reserves it), placed after the rules of their type.
+PREDICTED_ORF_LEGEND_KEY = _key_of_name(PREDICTED_ORF_CAPTION)
+
+
 def _solid_legend_entry(fill: object, stroke: object, width: object) -> dict[str, object]:
     return {"type": "solid", "fill": fill, "stroke": stroke, "width": width}
 
@@ -665,9 +672,15 @@ class FeatureLegendRows:
     ``palette`` holds the type colors (``feature_type_color``): a rule drawn as
     its type's "other" row draws its features in the type's own row while no
     other captioned rule is used for the type (``is_other_row_rule``, OV-3350).
+    ``predicted_orfs``: predicted ORFs are drawn on gbdraw's colour of them
+    (``FeatureColorUse.predicted_orfs``); they have their own row
+    (``PREDICTED_ORF_LEGEND_KEY``), after the rules of their type, and count
+    neither in ``used`` nor in ``default_types``, so the record's own features
+    keep the rows they have without prediction.
     The Web's twin is ``featureLegendRows``
     (gbdraw/web/js/services/specific-color-rules.js); both answer
-    tests/fixtures/legend_generated_rows.json (``feature_rows``).
+    tests/fixtures/legend_generated_rows.json (``feature_rows``). The twin has
+    no ``predicted_orfs`` yet: the Web app draws no predicted ORF.
     """
 
     rules: tuple[LegendRule, ...]
@@ -675,6 +688,7 @@ class FeatureLegendRows:
     used: frozenset[TypeRuleUse] | None
     default_types: frozenset[str]
     palette: Mapping[str, str]
+    predicted_orfs: bool = False
 
     @classmethod
     def of(
@@ -705,19 +719,32 @@ class FeatureLegendRows:
 
         return any(self._drawn(feature_type, rule) for rule in self.type_rules(feature_type))
 
+    def _on_type_color(self, feature_type: str) -> bool:
+        """Whether features of a drawn type that no captioned rule draws are on the type's color. Always, unless
+        predicted ORFs on their own colour are among the type's drawn features: then only when some of its features
+        are on the type's color (``default_types``)."""
+
+        return (
+            self.used is None
+            or not self.predicted_orfs
+            or feature_type != PREDICTED_ORF_FEATURE_TYPE
+            or feature_type in self.default_types
+        )
+
     def type_row(self, feature_type: str) -> LegendRowKey | None:
         """The renderer's own row of a drawn type, if it has one: the type itself
         without rules of its type; else "other ..." while some of its features
         keep the type's color (always without the used rules); and the type
-        again when none of its captioned rules is used."""
+        again when none of its captioned rules is used. A type whose drawn
+        features are all predicted ORFs on their own colour has none."""
 
         if not any(rule[0] in (feature_type, "*") for rule in self.rules):
-            return _key_of_name(feature_type)
+            return _key_of_name(feature_type) if self._on_type_color(feature_type) else None
         if self.used is None:
             return _other_feature_legend_key(feature_type)
         if self.rules_draw(feature_type):
             return _other_feature_legend_key(feature_type) if feature_type in self.default_types else None
-        return _key_of_name(feature_type)
+        return _key_of_name(feature_type) if self._on_type_color(feature_type) else None
 
     def row_of(self, feature_type: str, winner: RuleUse | None) -> LegendRowKey | RuleUse | None:
         """The row a feature of the type is in, by the rule it takes (None: no
@@ -738,16 +765,20 @@ class FeatureLegendRows:
     def rows(self) -> Iterator[LegendRule | LegendRowKey]:
         """THE order of the feature rows of a legend: for each drawn type, in
         ``present`` order, its captioned rules in table order (a rule the
-        features did not take has no row), then its renderer row. A rule row
-        comes as its rule; each renderer row comes once. The legend adds the
-        rows in this order; rows of one name and one swatch are one row, at the
-        first (``LegendTable``)."""
+        features did not take has no row), then the row of predicted ORFs
+        after the rules of their type, then its renderer row. A rule row comes
+        as its rule; each renderer row comes once. The legend adds the rows in
+        this order; rows of one name and one swatch are one row, at the first
+        (``LegendTable``)."""
 
         renderer_rows = {self.type_row(feature_type) for feature_type in self.present}
+        if self.predicted_orfs:
+            renderer_rows.add(PREDICTED_ORF_LEGEND_KEY)
         placed: set[str] = set()
         for feature_type in self.present:
             yield from (rule for rule in self.type_rules(feature_type) if self._drawn(feature_type, rule))
-            for key in (_key_of_name(feature_type), _other_feature_legend_key(feature_type)):
+            own = (PREDICTED_ORF_LEGEND_KEY,) if feature_type == PREDICTED_ORF_FEATURE_TYPE else ()
+            for key in (*own, _key_of_name(feature_type), _other_feature_legend_key(feature_type)):
                 if key in renderer_rows and key not in placed:
                     placed.add(key)
                     yield key
@@ -765,7 +796,8 @@ def _generated_legend_rows(
     show_depth: bool,
     block_stroke: tuple[object, object] = ("none", 0),
 ) -> dict[str, dict[str, object]]:
-    """The renderer's own legend rows by key, as drawn: feature types, "other ...", and numeric tracks."""
+    """The renderer's own legend rows by key, as drawn: feature types, "other ...", predicted ORFs, and numeric
+    tracks."""
 
     # A type's row shows the color its features are drawn in (one owner, OV-3114).
     type_colors = build_default_color_map(default_colors)
@@ -774,6 +806,8 @@ def _generated_legend_rows(
         key = feature_rows.type_row(feature_type)
         if key is not None:
             rows[key] = _solid_legend_entry(feature_type_color(type_colors, feature_type), *block_stroke)
+    if feature_rows.predicted_orfs:
+        rows[PREDICTED_ORF_LEGEND_KEY] = _solid_legend_entry(PREDICTED_ORF_COLOR, *block_stroke)
     if show_depth and depth is not None:
         rows.update(series_legend_rows("Depth", depth.paint))
     for show, source in ((show_gc, gc), (show_skew, skew)):
@@ -789,8 +823,7 @@ def prepare_legend_table(
     features_present: List[str],
     *,
     comparison: ComparisonLegendSource | None = None,
-    used_color_rules: Optional[Set[TypeRuleUse]] = None,
-    default_used_features: Optional[Set[str]] = None,
+    color_use: FeatureColorUse | None = None,
     depth: DepthLegendSource | None = None,
     show_gc: bool,
     show_skew: bool,
@@ -802,13 +835,12 @@ def prepare_legend_table(
 
     Args:
         comparison: The pairwise identity gradient; ``None`` without comparisons.
-        used_color_rules: Optional set of (feature type, caption, color) tuples
-            that features of that type actually took (``legend_rule_use``). If
-            provided, only these rules will be included in the legend. If None, all rules for present feature types
-            will be included (legacy behavior).
-        default_used_features: Optional set of feature types that fell back to
-            default colors. Used to decide whether to include "other X" entries
-            when specific rules exist.
+        color_use: The colours the drawn features took
+            (``precompute_used_color_rules``): only the rules features of each
+            type took have rows, the feature types on their own colour decide
+            the type and "other X" rows, and predicted ORFs on gbdraw's colour
+            have their own row. If None, all rules for present feature types
+            are included (legacy behavior).
     """
     legend_table = LegendTable()
     color_table: Optional[DataFrame] = features.color_table
@@ -819,10 +851,11 @@ def prepare_legend_table(
     feature_rows = FeatureLegendRows(
         tuple(rules),
         tuple(features_present),
-        None if used_color_rules is None else frozenset(used_color_rules),
-        frozenset(default_used_features or ()),
-        # The palette legend_rule_use read for ``used_color_rules`` (one source).
+        None if color_use is None else frozenset(color_use.rules),
+        frozenset(() if color_use is None else color_use.default_types),
+        # The palette legend_rule_use read for ``color_use`` (one source).
         features.default_color_map,
+        predicted_orfs=color_use is not None and color_use.predicted_orfs,
     )
     # The renderer's own rows (feature types, "other ..." and numeric tracks)
     # keep their keys; a rule row takes its key from the whole color table and

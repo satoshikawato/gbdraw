@@ -2185,7 +2185,7 @@ def build_linear_legend_table(
     request's Legend row edits are applied last.
     """
 
-    features_present, used_color_rules, default_used_features = feature_legend_presence(
+    features_present, color_use = feature_legend_presence(
         records, sources.features, slots
     )
     legend_table = prepare_legend_table(
@@ -2194,8 +2194,7 @@ def build_linear_legend_table(
         sources.features,
         features_present,
         comparison=comparison,
-        used_color_rules=used_color_rules,
-        default_used_features=default_used_features,
+        color_use=color_use,
         depth=depth,
         show_gc=show_gc,
         show_skew=show_skew,

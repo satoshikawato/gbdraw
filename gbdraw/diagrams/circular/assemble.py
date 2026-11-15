@@ -4718,7 +4718,7 @@ def build_circular_legend_table(
     legend-only arguments. The request's Legend row edits are applied last.
     """
 
-    features_present, used_color_rules, default_used_features = feature_legend_presence(
+    features_present, color_use = feature_legend_presence(
         records, sources.features, slots
     )
     singleton_depth = bool(
@@ -4731,8 +4731,7 @@ def build_circular_legend_table(
         sources.skew,
         sources.features,
         features_present,
-        used_color_rules=used_color_rules,
-        default_used_features=default_used_features,
+        color_use=color_use,
         depth=depth if singleton_depth else None,
         show_gc=show_gc,
         show_skew=show_skew,

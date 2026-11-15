@@ -29,7 +29,7 @@ from typing import (
 )
 
 from Bio.SeqRecord import SeqRecord
-from pandas import DataFrame, concat
+from pandas import DataFrame
 from svgwrite import Drawing
 
 from gbdraw.analysis.collinearity import (
@@ -41,7 +41,6 @@ from gbdraw.analysis.depth_tracks import (
     depth_track_count,
     normalize_depth_tracks,
 )
-from gbdraw.analysis.orf_prediction import predicted_orf_color_rule
 from gbdraw.analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
     DerivedLosatpPair,
@@ -1305,11 +1304,6 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         raise ValidationError("Unsupported diagram request type.")
     options = request.options
     color_table = _color_table(options)
-    if options.orf_prediction is not None:
-        # The request's own rules come first: a rule a user gives a predicted CDS wins (D-126 Q8=B).
-        color_table = concat(
-            [table for table in (color_table, predicted_orf_color_rule()) if table is not None], ignore_index=True,
-        ).fillna({"caption": ""})
     feature_visibility_table = _visibility_table(options)
     colors = options.colors
     default_colors = colors.default_colors if colors is not None else None

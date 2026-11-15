@@ -23,7 +23,13 @@ from gbdraw.api.record_planning import resolve_record_inputs
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
-from gbdraw.features.colors import build_default_color_map, compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
+from gbdraw.features.colors import (
+    FeatureColorUse,
+    build_default_color_map,
+    compute_feature_hash,
+    precompute_used_color_rules,
+    preprocess_color_tables,
+)
 from gbdraw.features.factory import create_feature_dict, create_feature_layers
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
@@ -448,7 +454,7 @@ def test_legend_presence_and_color_usage_follow_visibility_rules() -> None:
         ["CDS"],
         feature_visibility_rules=rules,
     )
-    used_rules, default_used_features = precompute_used_color_rules(
+    used_rules, default_used_features, _predicted = precompute_used_color_rules(
         record,
         color_map,
         default_color_map,
@@ -727,12 +733,12 @@ def test_legend_partition_tracks_actual_rule_membership(
 
     def regenerate(color_table: pd.DataFrame) -> dict[str, str]:
         color_map, default_map = preprocess_color_tables(color_table, defaults)
-        used, remainder = precompute_used_color_rules(
+        color_use = precompute_used_color_rules(
             record, color_map, default_map, {feature_type},
         )
         legend = prepare_legend_table(
             *_legend_config_stubs(defaults, color_table),
-            [feature_type], used_color_rules=used, default_used_features=remainder,
+            [feature_type], color_use=color_use,
             show_gc=False, show_skew=False, show_depth=False,
         )
         return {caption: entry["fill"] for caption, entry in legend.items()}
@@ -757,8 +763,7 @@ def test_prepare_legend_table_falls_back_to_default_color_for_gene_other_entry()
         skew_config,
         feature_config,
         ["gene"],
-        used_color_rules={("gene", "Gene A", "#b56576")},
-        default_used_features={"gene"},
+        color_use=FeatureColorUse({("gene", "Gene A", "#b56576")}, {"gene"}),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -781,8 +786,7 @@ def test_prepare_legend_table_skips_gene_other_entry_without_default_usage() -> 
         skew_config,
         feature_config,
         ["gene"],
-        used_color_rules={("gene", "Gene A", "#b56576")},
-        default_used_features=set(),
+        color_use=FeatureColorUse({("gene", "Gene A", "#b56576")}, set()),
         show_gc=False,
         show_skew=False,
         show_depth=False,
@@ -801,8 +805,7 @@ def test_prepare_legend_table_plain_gene_entry_uses_default_fallback_color() -> 
         skew_config,
         feature_config,
         ["gene"],
-        used_color_rules=set(),
-        default_used_features={"gene"},
+        color_use=FeatureColorUse(set(), {"gene"}),
         show_gc=False,
         show_skew=False,
         show_depth=False,

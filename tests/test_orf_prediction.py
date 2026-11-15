@@ -15,13 +15,14 @@ from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
 from gbdraw.analysis.orf_prediction import (
-    PREDICTED_ORF_CAPTION,
+    PREDICTED_FEATURES_ANNOTATION,
     PREDICTED_ORF_COLOR,
     OrfPredictionParameters,
+    PredictedFeatures,
     PredictedOrf,
     predict_orfs,
     predict_record_orf_features,
-    predicted_orf_color_rule,
+    predicted_feature_lookup,
     predicted_orf_features,
     record_genetic_code,
 )
@@ -402,18 +403,45 @@ def test_record_features_read_the_record_table(name: str, table: str, count: int
     assert {feature.qualifiers["transl_table"][0] for feature in chosen} == {"1"}
 
 
-def test_the_predicted_orf_color_rule_matches_predicted_cds_only() -> None:
-    (feature,) = predicted_orf_features(
+def test_the_typed_mark_alone_gives_a_predicted_orf_its_color_and_legend_row() -> None:
+    """The colour and the Legend row of predicted ORFs read the record's typed mark (``PredictedFeatures``), not the
+    ``inference`` qualifier: a CDS of the file's own with gbdraw's inference is an annotated CDS, and a rule the user
+    gives a predicted CDS comes first (D-126 Q8=B)."""
+    import pandas as pd
+
+    from gbdraw.features.colors import get_color_with_info, precompute_used_color_rules, preprocess_color_tables
+
+    (predicted,) = predicted_orf_features(
         predict_orfs(ORIGIN_SEQUENCE, topology="circular", parameters=SHORT),
         record_length=len(ORIGIN_SEQUENCE),
         genetic_code=1,
     )
-    rule = predicted_orf_color_rule()
-    assert list(rule.columns) == ["feature_type", "qualifier_key", "value", "color", "caption"]
-    ((feature_type, key, pattern, color, caption),) = rule.itertuples(index=False)
-    assert (feature_type, color, caption) == ("CDS", PREDICTED_ORF_COLOR, PREDICTED_ORF_CAPTION)
-    assert caption == "Predicted ORF"
-    import re
+    annotated = SeqFeature(
+        SimpleLocation(0, 9, strand=1), type="CDS", qualifiers={"inference": list(predicted.qualifiers["inference"])}
+    )
+    record = SeqRecord(Seq(ORIGIN_SEQUENCE), id="mark", features=[annotated, predicted])
+    record.annotations[PREDICTED_FEATURES_ANNOTATION] = PredictedFeatures(frozenset({1}))
+    is_predicted = predicted_feature_lookup(record)
+    assert (is_predicted(annotated), is_predicted(predicted)) == (False, True)
 
-    assert re.search(pattern, feature.qualifiers[key][0])
-    assert not re.search(pattern, "ab initio prediction:Prodigal:2.6")
+    no_rules, defaults = preprocess_color_tables(
+        pd.DataFrame(columns=["feature_type", "qualifier_key", "value", "color", "caption"]),
+        pd.DataFrame([("CDS", "#54bcf8")], columns=["feature_type", "color"]),
+    )
+    colors = [
+        get_color_with_info(feature, no_rules, defaults, record_id="mark", instance=None, predicted=is_predicted(feature))
+        for feature in record.features
+    ]
+    assert colors == [("#54bcf8", None), (PREDICTED_ORF_COLOR, None)]
+    assert precompute_used_color_rules(record, no_rules, defaults, {"CDS"}) == (set(), {"CDS"}, True)
+
+    user_rules, _ = preprocess_color_tables(
+        pd.DataFrame([("CDS", "translation", ".", "#123456", "Mine")], columns=[
+            "feature_type", "qualifier_key", "value", "color", "caption",
+        ]),
+        pd.DataFrame([("CDS", "#54bcf8")], columns=["feature_type", "color"]),
+    )
+    assert get_color_with_info(predicted, user_rules, defaults, record_id="mark", instance=None, predicted=True) == (
+        "#123456", "Mine",
+    )
+    assert precompute_used_color_rules(record, user_rules, defaults, {"CDS"}) == ({("CDS", "Mine", "#123456")}, {"CDS"}, False)

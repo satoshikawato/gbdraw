@@ -16,6 +16,7 @@ from Bio import SeqIO
 
 from gbdraw.analysis.orf_prediction import (
     PREDICTED_ORF_CAPTION,
+    PREDICTED_ORF_COLOR,
     OrfPredictionParameters,
     predict_record_orf_features,
 )
@@ -75,6 +76,7 @@ SLOTS = [
     ("linear", "overlay", True, False),
     ("linear", "overlay", False, True),
     ("linear", "below", False, False),
+    ("linear", "above", False, False),
 ]
 
 
@@ -98,7 +100,10 @@ def test_predicted_orfs_take_own_lanes_beside_the_annotated_features(
     assert not {f.feature_track_id for f in predicted} & {f.feature_track_id for f in annotated}
     # Outside the circle, below the line (a one-sided Linear slot keeps its side: the lanes follow the others).
     sides = {f.placement.side for f in predicted}
-    assert sides == ({"outward"} if mode == "circular" else {"below"})
+    assert sides == ({"outward"} if mode == "circular" else {"above"} if direction == "above" else {"below"})
+    if direction in ("outside", "above", "below"):
+        # A one-sided slot: the predicted lanes come after every lane of the annotated features.
+        assert min(f.placement.level for f in predicted) > max(f.placement.level for f in annotated)
     # Predicted ORFs that overlap each other take further lanes.
     length = len(_plan(GenBankInputSource(path), mode, None).records[0].seq)
     lanes: dict[int, list] = {}
@@ -193,6 +198,41 @@ def test_the_legend_keeps_the_annotated_cds_row_and_adds_the_predicted_row(tmp_p
     assert ">CDS<" not in fasta_only
 
 
+def test_a_record_whose_cds_are_all_predicted_has_no_cds_row_beside_an_unused_cds_rule(tmp_path: Path) -> None:
+    """OV-3830: a FASTA record draws every CDS as a predicted ORF on its own colour. A CDS rule that colors none of
+    them drew a "CDS" row (in the CDS colour, which no feature has); now only "Predicted ORF" names them."""
+
+    table = tmp_path / "colors.tsv"
+    table.write_text("CDS\tproduct\tno such product\t#123456\tNever\n", encoding="utf-8")
+    svg = _svg(tmp_path, "circular", "--fasta", str(_fasta(tmp_path, LAMBDA)), "--predict_orfs", "-t", str(table))
+    assert f'data-legend-key="{PREDICTED_ORF_CAPTION}"' in svg
+    assert 'data-legend-key="CDS"' not in svg and 'data-legend-key="Never"' not in svg
+
+
+def test_an_inside_stack_draws_outside_only_the_lanes_of_their_own() -> None:
+    """OV-3829: the lanes an inside stack draws outside the circle line are the placement's own lanes
+    (``FeaturePlacementAssignment.own_lane``), not every lane placed outward: with two features slots the features
+    carry the first slot's sides, and without prediction no lane moves outside."""
+
+    from gbdraw.diagrams.circular.radial_layout import measure_circular_feature_stack
+    from gbdraw.features.placement import FeaturePlacementAssignment
+
+    def measure(**assignment):
+        return measure_circular_feature_stack(
+            axis_radius_px=400.0, lane_width_px=10.0, lane_spacing_px=2.0, preset="tuckin", strandedness=False,
+            track_ids=(0, 1), placements_by_track_id={
+                0: FeaturePlacementAssignment("outward", "combined", 0),
+                1: FeaturePlacementAssignment("outward", "combined", 1, **assignment),
+            },
+        )
+
+    placed_outward, own = measure(), measure(own_lane=True)
+    assert placed_outward.outside_track_ids == frozenset()
+    assert max(placed_outward.lane_centers_by_track_id.values()) < 400.0
+    assert own.outside_track_ids == frozenset({1})
+    assert own.lane_centers_by_track_id[1] > 400.0 > own.lane_centers_by_track_id[0]
+
+
 def _predicted_letters(path: Path) -> int:
     from gbdraw.analysis.protein_colinearity import source_protein_letters
 
@@ -221,3 +261,47 @@ def test_a_fasta_pair_compares_through_its_predicted_proteins(tmp_path: Path) ->
     # A subject's database is the proteins of every ORF predicted on its whole genome (a search of a whole record
     # against a whole record passes none), never the annotated proteins a FASTA record lacks.
     assert set(_search_spaces(log, "-dbsize")) == {None, _predicted_letters(DE3), _predicted_letters(LAMBDA)}
+
+
+def _draw(tmp_path: Path, record, *args: str) -> str:
+    SeqIO.write(record, tmp_path / "record.gb", "genbank")
+    return _svg(tmp_path, "circular", "--gbk", str(tmp_path / "record.gb"), *args)
+
+
+def test_a_user_rule_captioned_like_the_predicted_row_is_an_ordinary_rule_without_prediction(tmp_path: Path) -> None:
+    """Prediction off: a user's CDS rule captioned "Predicted ORF" in #e58fa6 renames the default CDS row as any rule
+    does ("other proteins"), as on dev; the predicted row is not a caption and colour pair."""
+
+    table = tmp_path / "colors.tsv"
+    table.write_text(f"CDS\tproduct\tterminase\t#e58fa6\t{PREDICTED_ORF_CAPTION}\n", encoding="utf-8")
+    svg = _draw(tmp_path, SeqIO.read(LAMBDA, "genbank"), "-t", str(table))
+    assert f">{PREDICTED_ORF_CAPTION}<" in svg
+    assert ">other proteins<" in svg
+    assert ">CDS<" not in svg
+
+
+def test_an_annotated_cds_with_a_gbdraw_inference_stays_an_annotated_cds(tmp_path: Path) -> None:
+    """Prediction on: only the typed mark makes a predicted ORF. An annotated CDS whose /inference reads like
+    gbdraw's keeps the default colour, the annotated lanes inside the circle and the "CDS" row."""
+
+    import math
+    import re
+
+    from tests.test_circular_leaders_over_lanes import _path_points
+
+    record = SeqIO.read(LAMBDA, "genbank")[0:9000]
+    record.annotations = {"molecule_type": "DNA", "topology": "circular"}
+    record.features = [feature for feature in record.features if feature.type == "CDS"]
+    record.features[0].qualifiers["inference"] = ["ab initio prediction:gbdraw:0.14.5"]
+    svg = _draw(tmp_path, record, "--predict_orfs")
+
+    axis = float(re.search(r'<circle cx="0" cy="0" fill="none" r="([0-9.]+)"', svg).group(1))
+    paths = re.findall(r'<path d="([^"]+)"[^>]*data-gbdraw-source-feature-index="(\d+)" fill="([^"]+)"', svg)
+    marked = [(d, fill) for d, index, fill in paths if index == "0"]
+    assert marked
+    for d, fill in marked:
+        assert fill != PREDICTED_ORF_COLOR
+        radii = [math.hypot(float(x), float(y)) for x, y in _path_points(d)]
+        assert max(radii) <= axis
+    assert any(fill == PREDICTED_ORF_COLOR for _d, _index, fill in paths)
+    assert ">CDS<" in svg and f">{PREDICTED_ORF_CAPTION}<" in svg
