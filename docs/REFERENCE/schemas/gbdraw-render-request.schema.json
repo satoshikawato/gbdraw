@@ -580,8 +580,15 @@
       "type": "object",
       "properties": {
         "recordGapPx": {
-          "type": "number",
-          "default": 24.0
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "multiRecordPositions": {
           "anyOf": [

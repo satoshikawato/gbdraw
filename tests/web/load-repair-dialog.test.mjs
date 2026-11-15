@@ -1381,8 +1381,8 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
   // '' (a cleared input) reads as the field's default; null is copied as
   // stored and read by the field's reader, whose unset value is its default
   // (the GC tick interval's is null, auto), and 0 only where the default is 0.
-  // A blank Linear record gap is its default, 24 px (OV-828, BA-D30).
-  const READS = { '': [20, 0.10, 0.05, 1, 0, 24], null: [null, 0.10, 0.05, 1, 0, 24] };
+  // A blank Linear record gap is Auto, null (OV-828, BA-D30, OV-3572).
+  const READS = { '': [20, 0.10, 0.05, 1, 0, null], null: [null, 0.10, 0.05, 1, 0, null] };
   for (const blank of ['', null]) {
     edited();
     const file = {
@@ -1407,7 +1407,7 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
     const { adv, losat } = modeDrawing(state, mode);
     assert.deepEqual([adv.gc_content_tick_interval, adv.multi_record_column_gap_ratio, losat.blastp.collinearMaxConflictsInMergeGap], [20, 0.10, 1], mode);
   }
-  assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, 24);
+  assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, null);
 });
 
 // OV-3351: a configuration file installs over the shown drawing, so a number
@@ -1469,17 +1469,19 @@ test('a cleared Feature overlap tolerance saves and reads as its default (OV-826
   }
 });
 
-// OV-828 (BA-D30): a cleared (or null) Linear record gap is its default,
-// 24 px: Save writes 24 and the Session reads back with it and no dialog.
-test('a cleared Linear record gap saves and reads as its default, 24 px (OV-828)', async () => {
+// OV-828 (BA-D30), OV-3572: a cleared (or null) Linear record gap is Auto:
+// Save writes null and the Session reads back with it and no dialog.
+test('a cleared Linear record gap saves and reads as Auto (OV-828, OV-3572)', async () => {
   for (const blank of ['', null]) {
     await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+    // A released Session stored the gap it drew (24 by default) and keeps it as set.
+    assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, 24);
     modeDrawing(state, 'linear').linearRecordGap.value = blank;
     const saved = await savedSession(`record-gap-${JSON.stringify(blank)}`);
-    assert.equal(savedDrawingView(saved, 'linear').modes.linear.config.linearRecordLayout.recordGap, 24, JSON.stringify(blank));
+    assert.equal(savedDrawingView(saved, 'linear').modes.linear.config.linearRecordLayout.recordGap, null, JSON.stringify(blank));
     const { items } = await loadAnswering(saved);
     assert.deepEqual(items, []);
-    assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, 24, JSON.stringify(blank));
+    assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, null, JSON.stringify(blank));
   }
 });
 
@@ -1716,7 +1718,7 @@ test('a History restore reads a blank as the reader\'s default, other values as 
   assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode, sourceIndex }) => [color, losat_gencode, sourceIndex])],
     ['upload', [[null, 1, 0]]]);
   assert.deepEqual([drawing.linearRecordLayoutEnabled.value, drawing.linearRecordGap.value, [...drawing.linearRecordRows]],
-    [true, 24, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
+    [true, null, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
   assert.equal(drawing.importedComparisonIntent.action, null);
   assert.equal(drawing.losatProgram.value, 'blastn');
 });

@@ -224,6 +224,9 @@ FEATURE_OVERRIDE_SCHEMA = 9
 STORED_REGION_FIELDS: frozenset[str] = frozenset({"selector", "start", "end", "reverseComplement"})
 # Schema 10 writes a record's spans as ``windows`` (D-01); earlier schemas wrote one ``region``, read as one window.
 RECORD_WINDOWS_SCHEMA = 10
+# Schema 10 writes null for a Linear record gap left at the default (Auto); earlier schemas wrote the gap the figure
+# drew, which reads as set (OV-3572).
+RECORD_GAP_AUTO_SCHEMA = 10
 # Schema 10 writes the settings of a Circular Multi-Record request that draws its records on one circle; a request
 # without them, and every earlier schema, draws a grid.
 RECORD_LAYOUT_SCHEMA = 10
@@ -2119,7 +2122,7 @@ def _decode_linear_layout(
                 )
             )
         result = LinearMultiRecordOptions(
-            record_gap_px=layout["recordGapPx"],
+            record_gap_px=_stored_record_gap(layout["recordGapPx"], schema=schema),
             multi_record_positions=(
                 tuple(positions) if positions is not None else None
             ),
@@ -2149,11 +2152,22 @@ def _decode_linear_layout(
             "renderRequest.layout.multiRecordPositions must be a string array or null."
         )
     result = LinearMultiRecordOptions(
-        record_gap_px=layout["recordGapPx"],
+        record_gap_px=_stored_record_gap(layout["recordGapPx"], schema=schema),
         multi_record_positions=tuple(positions) if positions is not None else None,
     )
     _validate_dataclass_contract(result, path="layout", error="decode")
     return result, None
+
+
+def _stored_record_gap(value: object, *, schema: int) -> float | None:
+    """A stored Linear record gap: null (Auto) only from ``RECORD_GAP_AUTO_SCHEMA`` on; a number is checked by
+    ``LinearMultiRecordOptions``."""
+
+    if value is None and schema < RECORD_GAP_AUTO_SCHEMA:
+        raise CanonicalRequestDecodingError(
+            "renderRequest.layout.recordGapPx must be a finite non-negative number."
+        )
+    return cast("float | None", value)
 
 
 # The planner consumes it: a Session stores what the figure drew with

@@ -84,6 +84,12 @@ const EARLIER_DEFAULTS = [
   },
   {
     domain: 'config',
+    path: 'linearRecordLayout',
+    reason: 'Sessions up to 50 saved the default Linear record gap as 24 px; Auto is null since OV-3572.',
+    value: {"enabled": true, "recordGap": 24, "rows": []}
+  },
+  {
+    domain: 'config',
     path: 'circularConservation',
     reason: 'Sessions up to 50 saved the comparison rings without the Ring colors setting (colorScheme, reassignOnReorder).',
     value: {"enabled": false, "source": "losat", "losat_program": "blastn", "subject_gencode": 1, "reference": "auto", "labels": "", "series": [], "ring_width": null, "ring_gap": null}

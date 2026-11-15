@@ -2338,7 +2338,7 @@ def _linear_row_frame(canvas_config: LinearCanvasConfigurator, record_inputs: Li
         ],
         rows_by_record,
         available_width=float(canvas_config.alignment_width),
-        record_gap_px=(linear_layout.record_gap_px if linear_layout is not None else 24.0),
+        record_gap_px=(linear_layout.record_gap_px if linear_layout is not None else None),
         align_center=bool(canvas_config.align_center),
         normalize_length=bool(canvas_config.normalize_length),
         record_order=ordered_record_indices,

@@ -1,7 +1,6 @@
 // @ts-check
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { LABEL_STYLE_CHOICES, labelStyleForMode, readGcContentMode } from '../mode-profiles.js';
-import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { normalizeOptionalHexColor, readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { CONSERVATION_COLOR_SCHEMES, CONSERVATION_DEFAULT_COLOR_SCHEME } from '../utils/conservation-colors.generated.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
@@ -66,7 +65,6 @@ import { isCardRow, markedRows } from './file-imports.js';
 /** @import { CanonicalLinearRecordTranslation, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /** @import { CardMarkedRow, FileImports, PriorityRuleRow, WhitelistRuleRow } from './file-imports.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
-/** @import { ObjectShape } from '../utils/contract-shape.js' */
 /** @import { CircularRecordRange } from './record-options.js' */
 
 // The readers of the stored settings of a configuration (a drawing's draft, a
@@ -780,20 +778,22 @@ const CONSERVATION_ROWS = Object.freeze([
 /** Omitted: the fresh default in every Session version. @type {FieldReader<boolean>} */
 export const readLinearRecordLayoutEnabled = (value) => (typeof value === 'boolean' ? { value, lost: false }
   : { value: WEB_UX_PROFILE.linear.arrangeInRowsByDefault, lost: !isUnsetValue(value) });
-/** The Linear record gap's default, in px: Python's (`CanonicalLinearLayout.recordGapPx`). */
-export const DEFAULT_LINEAR_RECORD_GAP_PX = /** @type {number} */ (
-  /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalLinearLayout).defaults?.recordGapPx);
 /**
- * The Linear record gap a draft draws and saves with: a blank (the cleared
- * number input stores '') or an unset value is the default, as R7 reads a
- * blank (OV-828, BA-D30); any other value is the draft's own, which Generate
- * and Save convert as before.
+ * The Linear record gap a draft draws and saves with, in px: a blank (the
+ * cleared number input stores '') or an unset value is null, Auto, as R7 reads
+ * a blank (OV-828, BA-D30); Python then draws its default gap, narrowed in a
+ * long row (`solve_linear_horizontal_layout`). Any other value is the gap the
+ * user set, drawn as set (OV-3572), at least 0.
  * @param {unknown} value
- * @returns {unknown}
+ * @returns {number | null}
  */
-export const draftLinearRecordGap = (value) => (isUnsetValue(value) ? DEFAULT_LINEAR_RECORD_GAP_PX : value);
-/** A blank or absent gap reads as the default, as `draftLinearRecordGap` gives it. @type {FieldReader<number>} */
-export const readLinearRecordGap = numberOr(isNonNegative, DEFAULT_LINEAR_RECORD_GAP_PX);
+export const draftLinearRecordGap = (value) => (isUnsetValue(value) ? null : Math.max(0, Number(value) || 0));
+/**
+ * A stored gap: a number at least 0 is the gap the user set (every Session up
+ * to 50 stored one, and drew it as set); a blank or absent one is Auto.
+ * @type {FieldReader<number | null>}
+ */
+export const readLinearRecordGap = nonNegativeNumberOrNull;
 /**
  * A value read with `rule`, which throws for a value it refuses: an unset or
  * refused value is `fallback`, a refused one with a loss.

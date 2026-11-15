@@ -69,6 +69,11 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("CANONICAL_REQUEST_SCHEMA", "gbdraw.session_request_codec", "CANONICAL_REQUEST_SCHEMA"),
     ("DISPLAY_PLACEMENT_SCHEMA", "gbdraw.session_request_codec", "DISPLAY_PLACEMENT_SCHEMA"),
     ("FEATURE_OVERRIDE_SCHEMA", "gbdraw.session_request_codec", "FEATURE_OVERRIDE_SCHEMA"),
+    # The first request schema that stores the Auto Linear record gap as null; earlier ones stored a number.
+    ("RECORD_GAP_AUTO_SCHEMA", "gbdraw.session_request_codec", "RECORD_GAP_AUTO_SCHEMA"),
+    # The Auto Linear record gap and the share of a row its gaps keep to, which the Record gap help names.
+    ("DEFAULT_RECORD_GAP_PX", "gbdraw.layout.linear_multi_record", "DEFAULT_RECORD_GAP_PX"),
+    ("ROW_GAPS_MAX_SHARE", "gbdraw.layout.linear_multi_record", "ROW_GAPS_MAX_SHARE"),
     ("STORED_REGION_FIELDS", "gbdraw.session_request_codec", "STORED_REGION_FIELDS"),
     ("SUPPORTED_CANONICAL_REQUEST_SCHEMAS", "gbdraw.session_request_codec", "SUPPORTED_CANONICAL_REQUEST_SCHEMAS"),
     ("SIMILARITY_ALIGNMENT_PLAN_SCHEMA", "gbdraw.layout.similarity_alignment", "SIMILARITY_ALIGNMENT_PLAN_SCHEMA"),

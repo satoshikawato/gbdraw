@@ -156,7 +156,7 @@ import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './d
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { drawsOneCircle, oneCircleAdvOfLayout, oneCircleLeftOfRequest, oneCircleRequestLayout } from './one-circle-layout.js';
 import {
-  DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readCircularRecordRanges, readScalarAxisLabels
+  draftLinearRecordGap, readCircularRecordRanges, readLinearRecordGap, readScalarAxisLabels
 } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -181,6 +181,7 @@ import {
   EXPANDED_RECORD_KEY_SEPARATOR,
   INPUT_FILE_MEDIA_TYPE,
   LOSATP_NO_SEARCH_MODE,
+  RECORD_GAP_AUTO_SCHEMA,
   STORED_REGION_FIELDS,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
   WRITTEN_RESOURCE_MEDIA_TYPES
@@ -4426,7 +4427,7 @@ const buildLayout = (state, drawing, records = [], drawnIdentities = []) => {
         !records.some((record) => record.presentation.gridRow != null) &&
         plan === null && translations.length === 0) return {};
     return {
-      recordGapPx: Math.max(0, Number(draftLinearRecordGap(drawing.linearRecordGap?.value)) || 0),
+      recordGapPx: draftLinearRecordGap(drawing.linearRecordGap?.value),
       multiRecordPositions: null,
       recordTranslations: translations,
       similarityAlignment: plan
@@ -4536,7 +4537,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []),
     losatProgram: config.losatProgram || 'blastn',
     linearRecordLayoutEnabled: Boolean(layout.enabled),
-    linearRecordGap: layout.recordGap ?? DEFAULT_LINEAR_RECORD_GAP_PX
+    linearRecordGap: readLinearRecordGap(layout.recordGap).value
   };
   /** @param {Record<string, any>} values */
   const refsOf = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, publicationRef(value)]));
@@ -6734,8 +6735,8 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'linear') {
     const layout = renderRequest.layout || {};
     if (Object.keys(layout).length > 0) {
-      if (!Number.isFinite(layout.recordGapPx) || layout.recordGapPx < 0) {
-        throw new Error('renderRequest.layout.recordGapPx must be a finite non-negative number.');
+      if (layout.recordGapPx !== null && (!Number.isFinite(layout.recordGapPx) || layout.recordGapPx < 0)) {
+        throw new Error('renderRequest.layout.recordGapPx must be null or a finite non-negative number.');
       }
       if (layout.multiRecordPositions !== null && (
         !Array.isArray(layout.multiRecordPositions) ||
@@ -7664,7 +7665,7 @@ export const projectCanonicalSessionRequest = ({
     ? {
         enabled: presentationOwnsLinearRows ||
           (renderRequest.layout?.multiRecordPositions || []).length > 0,
-        recordGap: renderRequest.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX,
+        recordGap: renderRequest.layout?.recordGapPx ?? null,
         rows: linearLayoutRows,
         recordTranslations,
         similarityAlignment
@@ -7926,6 +7927,13 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   if (![5, 6, 7, 8, 9].includes(promoted.schema)) {
     throw new Error('Only canonical renderRequest schemas 5 to 9 can be promoted to the current schema.');
   }
+  // A stored Linear record gap is null (Auto) only from RECORD_GAP_AUTO_SCHEMA on, as Python's decoder reads it
+  // (`_stored_record_gap`): no earlier writer stored null, so such a request is a Session-format error, as Python
+  // refuses it (OV-3572). Any other value is kept for the repair, which reads it as at the current schema.
+  if (promoted.mode === 'linear' && promoted.schema < RECORD_GAP_AUTO_SCHEMA && isPlainObject(promoted.layout)
+    && Object.hasOwn(promoted.layout, 'recordGapPx') && promoted.layout.recordGapPx === null) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+  }
   if (promoted.schema < 8) promoteRenderRequestToSchema8(promoted, promotion);
   // Schema 9 adds per-feature edits by source identity (design Q4).
   if (promoted.schema < 9) promoted.diagramOptions = { ...promoted.diagramOptions, featureOverrides: [] };
@@ -8057,9 +8065,12 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
-      const recordGapPx = Number(storedLayout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX);
+      // The stored gap as stored, for the repair to read as at the current schema (a wrong one with a row); a
+      // request without a layout drew none of its own: Auto.
+      const storedGap = !hadLayout ? { recordGapPx: null }
+        : storedLayout && Object.hasOwn(storedLayout, 'recordGapPx') ? { recordGapPx: storedLayout.recordGapPx } : {};
       promoted.layout = {
-        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : DEFAULT_LINEAR_RECORD_GAP_PX,
+        ...storedGap,
         multiRecordPositions: null,
         recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),
@@ -8854,7 +8865,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
     }
     targets[0].display = { ...targets[0].display, startCoordinate };
   }
-  request.layout = { recordGapPx: DEFAULT_LINEAR_RECORD_GAP_PX, multiRecordPositions: null, ...request.layout,
+  request.layout = { recordGapPx: null, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };
   carryKeptTrackParts(committedRequest, request, []);

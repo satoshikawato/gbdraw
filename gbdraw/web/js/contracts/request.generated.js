@@ -120,7 +120,7 @@
  */
 /**
  * @typedef {object} CanonicalLinearLayout
- * @property {number} recordGapPx
+ * @property {number | null} recordGapPx
  * @property {string[] | null} multiRecordPositions
  * @property {CanonicalLinearRecordTranslation[]} recordTranslations
  * @property {CanonicalSimilarityAlignmentPlan | null} similarityAlignment

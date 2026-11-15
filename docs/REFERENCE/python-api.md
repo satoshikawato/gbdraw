@@ -74,7 +74,7 @@ In `config` and `config_overrides`, font sizes must be greater than zero, stroke
 
 `CircularLayout` defaults to `size="auto"`, `min_radius_ratio=0.55`, `column_gap_ratio=0.10`, `row_gap_ratio=0.05`, and automatic positions. `size` accepts `linear`, `auto`, or `equal`.
 
-`LinearLayout` defaults to `record_gap=24.0` and automatic positions. Position strings identify a displayed record and its grid row, for example `#1@1`.
+`LinearLayout` defaults to `record_gap=None` and automatic positions. `None` draws the Auto gap: 24 px, narrowed in a row whose gaps would take more than 25% of its width; a number you set is drawn as set, and a row that cannot hold it is refused. Position strings identify a displayed record and its grid row, for example `#1@1`.
 
 `CircularTrackOptions` and `LinearTrackOptions` accept an ordered `slots` sequence and a zero-based `axis_index`. Circular tracks also accept `center_reserved_radius`. An explicit slot sequence is used as given; the axis index must agree with the selected mode and slot types.
 

@@ -17,6 +17,8 @@ from gbdraw.io.cli_tables import (
     _CONSERVATION_COLUMNS,
     _RECORDS_COLUMNS,
 )
+from gbdraw.interface import LinearLayout
+from gbdraw.layout.linear_multi_record import DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE
 from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION, SUPPORTED_SESSION_VERSIONS
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
@@ -98,6 +100,31 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9, 10})
     assert "27–33, 39–42, 44, and 46–51" in source
     assert "1, 2, 5, 6, 7, 8, 9, and 10" in source
+
+
+def test_pages_state_the_auto_record_gap_of_the_layout_owner() -> None:
+    """OV-3572: the pages and the Python API state the Auto Linear record gap in the words the CLI help builds from
+    ``DEFAULT_RECORD_GAP_PX`` and ``ROW_GAPS_MAX_SHARE`` (the Web help fills the same values in), so a change of
+    either constant fails here until the pages say it."""
+
+    auto = (
+        f"{DEFAULT_RECORD_GAP_PX:g} px, narrowed in a row whose gaps would take more than "
+        f"{ROW_GAPS_MAX_SHARE:.0%} of its width"
+    )
+    pages = {
+        "docs/CLI_Reference.md": 2,
+        "docs/REFERENCE/command-line.md": 1,
+        "docs/REFERENCE/web-app.md": 1,
+        "docs/REFERENCE/python-api.md": 1,
+        "docs/REFERENCE/session-and-request-compatibility.md": 1,
+    }
+    for page, count in pages.items():
+        text = " ".join((REPO_ROOT / page).read_text(encoding="utf-8").split())
+        assert text.count(auto) == count, page
+    assert f"(default: {DEFAULT_RECORD_GAP_PX:g}, narrowed in a long row)" in (
+        REPO_ROOT / "docs" / "CLI_Reference.md"
+    ).read_text(encoding="utf-8")
+    assert auto in " ".join((LinearLayout.__doc__ or "").split())
 
 
 def test_reference_pages_name_the_current_session_version() -> None:

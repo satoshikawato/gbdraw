@@ -69,9 +69,11 @@ def _x_for_position(x: float, px_per_bp: float, position: float) -> float:
 # writes (``PATH_DECIMALS``), far above the float noise (about 1e-13 px) that two equal ribbon heights reached by
 # different sums of canvas ys carry. Rows that move without changing a ribbon then leave its key equal (OV-2089).
 COMPARISON_FRAME_DECIMALS = 9
-# The most of a Linear row's width its record gaps take: a row of many records (the contigs of a draft assembly)
-# shrinks its gaps to share this, so any number of records draws and they keep most of the row (OV-3456). The
-# committed figures use at most 0.12 of a row for gaps, so they keep the gap they ask for.
+# The record gap of a Linear row when none is set (Auto): ``DEFAULT_RECORD_GAP_PX``, narrowed so that the row's gaps
+# take at most ``ROW_GAPS_MAX_SHARE`` of its width. A row of many records (the contigs of a draft assembly) then
+# draws, and its records keep most of the row (OV-3456); the committed figures use at most 0.12 of a row for gaps.
+# A gap the user set is drawn as set (OV-3572).
+DEFAULT_RECORD_GAP_PX = 24.0
 ROW_GAPS_MAX_SHARE = 0.25
 
 
@@ -332,16 +334,19 @@ def place_record_vertically(
 
 
 def _row_gaps(
-    grouped: Sequence[Sequence[LinearRecordMeasurement]], gap: float, width: float
+    grouped: Sequence[Sequence[LinearRecordMeasurement]], gap: float | None, width: float
 ) -> tuple[list[float], list[list[float]]]:
     """Each row's record gap and the gaps between its records, in drawing order.
 
-    A row's record gap is ``gap``, or less when the row's gaps would take more than ``ROW_GAPS_MAX_SHARE`` of
-    ``width``. Two records keep at least the room their facing insets ask for (the marks of a windowed row) apart.
+    A row's record gap is ``gap`` when set. Unset (Auto), it is ``DEFAULT_RECORD_GAP_PX``, or less when the row's
+    gaps would take more than ``ROW_GAPS_MAX_SHARE`` of ``width``. Two records keep at least the room their facing
+    insets ask for (the marks of a windowed row) apart.
     """
 
     record_gaps = [
-        min(gap, ROW_GAPS_MAX_SHARE * width / (len(row_items) - 1)) if len(row_items) > 1 else gap
+        gap
+        if gap is not None
+        else min(DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE * width / max(1, len(row_items) - 1))
         for row_items in grouped
     ]
     return record_gaps, [
@@ -358,7 +363,7 @@ def solve_linear_horizontal_layout(
     rows_by_record: Sequence[int],
     *,
     available_width: float,
-    record_gap_px: float = 24.0,
+    record_gap_px: float | None = None,
     align_center: bool = True,
     normalize_length: bool = False,
     record_order: Sequence[int] | None = None,
@@ -381,10 +386,10 @@ def solve_linear_horizontal_layout(
     if len(rows_by_record) != len(items):
         raise ValidationError("rows_by_record must contain one row for every record.")
     width = float(available_width)
-    gap = float(record_gap_px)
+    gap = None if record_gap_px is None else float(record_gap_px)
     if not math.isfinite(width) or width <= 0:
         raise ValidationError("available_width must be a finite positive number.")
-    if not math.isfinite(gap) or gap < 0:
+    if gap is not None and (not math.isfinite(gap) or gap < 0):
         raise ValidationError("record_gap_px must be a finite non-negative number.")
     if any(not isinstance(row, int) or isinstance(row, bool) or row < 0 for row in rows_by_record):
         raise ValidationError("Linear rows must be non-negative integers.")
@@ -416,13 +421,20 @@ def solve_linear_horizontal_layout(
         # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
         gap_width = row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
         if width <= gap_width:
-            # Only the marks of a windowed row can take the whole width: the record gaps keep to their share.
+            # A set gap, or the marks of a windowed row, take the whole width. The Auto gap keeps to its share, so
+            # without a set gap only the marks can: the advice names the cause (OV-3572).
             raise ValidationError(
                 "Linear row cannot fit a positive bp scale: "
                 f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
                 f"gaps_with_window_marks_px={gap_width:g}, available_width={width:g}. "
-                "Move some windows or records to another row, or draw fewer windows in the row.",
-                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WIDTH"},
+                + (
+                    "The marks between the windows of the row need more width than the figure has: "
+                    "move some records to another row, or draw fewer windows in the row."
+                    if gap is None
+                    else "Set a smaller record gap or leave it unset (Auto), move some records to another row, "
+                    "or draw fewer windows in the row."
+                ),
+                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WINDOW_MARKS" if gap is None else "ROW_WIDTH"},
             )
         row_px.append(width - gap_width)
         row_bp.append(sum(item.sequence_length for item in row_items))
@@ -645,6 +657,7 @@ __all__ = [
     "RecordKey",
     "parse_record_row_position",
     "COMPARISON_FRAME_DECIMALS",
+    "DEFAULT_RECORD_GAP_PX",
     "ROW_GAPS_MAX_SHARE",
     "comparison_frame_px",
     "drawn_unit_rows",

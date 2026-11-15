@@ -345,15 +345,16 @@ test('a blank Feature overlap tolerance leaves the request override out', () => 
   }
 });
 
-// OV-828 (BA-D30): a cleared Linear record gap (the number input stores '')
-// or a null one is its default, 24 px, as R7 reads a blank; any other value
-// is projected as before (a negative or a non-number as 0, true as 1).
-test('a blank Linear record gap projects its default, 24 px, and other values as before (OV-828)', () => {
+// OV-828 (BA-D30), OV-3572: a cleared Linear record gap (the number input
+// stores '') or a null one is Auto, null in the request, as R7 reads a blank;
+// Python then draws its default gap, narrowed in a long row. Any other value
+// is the gap the user set (a negative or a non-number as 0, true as 1).
+test('a blank Linear record gap projects Auto (null), and other values as set (OV-828, OV-3572)', () => {
   const gapOf = (value) => requestAfter('linear', (state) => {
     state.linearRecordLayoutEnabled.value = true;
     state.linearRecordGap.value = value;
   }).layout.recordGapPx;
-  assert.deepEqual(['', null, 0, 40, -5, 'abc', true].map(gapOf), [24, 24, 0, 40, 0, 0, 1]);
+  assert.deepEqual(['', null, 0, 40, -5, 'abc', true].map(gapOf), [null, null, 0, 40, 0, 0, 1]);
 });
 
 // The two causes are different: the settings as edited have no such track, or
