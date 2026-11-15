@@ -5,6 +5,7 @@ from typing import Any, Dict, List, NoReturn, Optional, Tuple, cast
 
 from ..exceptions import ValidationError
 from ..layout.spatial import IntervalIndex, split_circular_interval
+from .coordinates import origin_envelope
 from .objects import FeatureObject
 
 
@@ -23,37 +24,16 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
         (start, end, strand) tuple. If start > end, feature spans the origin.
     """
     strand = feature.strand
-
-    if hasattr(feature, "coordinates") and feature.coordinates:
-        parts = list(feature.coordinates)
-    else:
-        parts = list(feature.location)
-
-    if not parts:
+    # The drawn blocks, in location order, with half-open, 0-based bounds: a part at the first base starts at 0.
+    blocks = [part for part in feature.location if part.kind == "block"]
+    if not blocks:
         return 0, 0, strand
 
-    # Half-open, 0-based bounds, as the parts are drawn: a part at the first base starts at 0.
-    starts = [int(part.start) for part in parts]
-    ends = [int(part.end) for part in parts]
-
-    # Origin-spanning features touch both the left and right genome boundaries.
-    # Avoid using part ordering for detection because negative-strand multipart features
-    # can be listed in descending genomic order without crossing the origin.
-    if len(parts) > 1 and genome_length:
-        genome_end = int(genome_length)
-        touches_left_boundary = min(starts) == 0
-        touches_right_boundary = max(ends) >= genome_end
-        if touches_left_boundary and touches_right_boundary:
-            # Represent origin-spanning features as start > end.
-            start = max(starts)
-            end = min(ends)
-            return start, end, strand
-
-    # Normal case: use min/max
-    start = min(starts)
-    end = max(ends)
-
-    return start, end, strand
+    is_trans_spliced = "trans_splicing" in feature.qualifiers
+    envelope = origin_envelope(blocks, int(genome_length), is_trans_spliced=is_trans_spliced) if genome_length else None
+    if envelope is not None and envelope[0] > envelope[1]:
+        return envelope[0], envelope[1], strand
+    return min(int(p.start) for p in blocks), max(int(p.end) for p in blocks), strand
 
 
 def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> Tuple[int, int]:

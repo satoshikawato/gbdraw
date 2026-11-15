@@ -5,7 +5,9 @@ GenBank ``1..1000`` is ``[0, 1000)``. The block of a part therefore starts at
 its Biopython start in both modes, whether the record is drawn from its
 location or from a display start, and lane placement reads the same bounds.
 The connector line between two parts spans the half-open gap between them,
-``[previous end, next start)``, as the display-start path draws it.
+``[previous end, next start)``, as the display-start path draws it; on a
+circular record two parts of one strand that cross the origin connect over it
+in every view. A block over the whole record is a full ring.
 """
 from __future__ import annotations
 
@@ -24,15 +26,19 @@ from gbdraw.features.coordinates import get_exon_and_intron_coordinates
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.features.tracks import arrange_feature_tracks, get_feature_ends
 from gbdraw.layout.spatial import Interval, split_circular_interval
+from gbdraw.svg.circular_features import (
+    generate_circular_arrow_path_with_radii,
+    generate_circular_narrow_arrow_path_with_radii,
+)
 
 _LENGTH = 10_000
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 
 
-def _record_file(tmp_path: Path, *locations: object) -> Path:
+def _record_file(tmp_path: Path, *locations: object, topology: str = "circular") -> Path:
     record = SeqRecord(
         Seq("ACGT" * (_LENGTH // 4)), id="r1", name="r1", description="first base",
-        annotations={"molecule_type": "DNA", "topology": "circular"},
+        annotations={"molecule_type": "DNA", "topology": topology},
     )
     record.features = [
         SeqFeature(location, type="CDS", qualifiers={"product": [f"p{index}"]})
@@ -43,11 +49,11 @@ def _record_file(tmp_path: Path, *locations: object) -> Path:
     return path
 
 
-def _block_paths(svg: str) -> list[str]:
-    """The path data of each feature block, in drawing order."""
+def _block_paths(svg: str, part: str = "block") -> list[str]:
+    """The path data of each feature block (or ``connector`` line), in drawing order."""
     return [
         match.group(1)
-        for match in re.finditer(r'<path d="([^"]+)"[^>]*data-gbdraw-feature-part="block"', svg)
+        for match in re.finditer(rf'<path d="([^"]+)"[^>]*data-gbdraw-feature-part="{part}"', svg)
     ]
 
 
@@ -120,10 +126,10 @@ def test_circular_location_path_and_display_start_path_draw_the_same_block(tmp_p
         assert _circular_extent_bp(drawn_shown) == (start + 6000, end + 6000)
 
 
-def _lines(location: list[SimpleLocation]) -> list[tuple[int, int]]:
+def _lines(location: list[SimpleLocation], origin_length: int | None = None) -> list[tuple[int, int]]:
     return [
         (part.start, part.end)
-        for part in get_exon_and_intron_coordinates(location)
+        for part in get_exon_and_intron_coordinates(location, origin_length=origin_length)
         if part.kind == "line"
     ]
 
@@ -137,8 +143,21 @@ def test_a_connector_line_spans_the_gap_between_two_parts() -> None:
 def test_a_connector_line_from_the_first_base_starts_where_the_part_ends() -> None:
     # join(1..1,3..10): the gap is base 2, [1, 2).
     assert _lines([SimpleLocation(0, 1, 1), SimpleLocation(2, 10, 1)]) == [(1, 2)]
-    # Parts over the origin of an unrotated record have no connection (as the display path draws them).
+    # Parts over the origin connect over it only on a record whose spans may cross its origin.
     assert _lines([SimpleLocation(9000, 9500, 1), SimpleLocation(0, 500, 1)]) == []
+    assert _lines([SimpleLocation(9000, 9500, 1), SimpleLocation(0, 500, 1)], _LENGTH) == [(9500, _LENGTH)]
+
+
+def test_parts_of_one_strand_over_the_origin_connect_over_it_on_a_circular_record() -> None:
+    # join(9501..9990,11..500): the gaps are 9991..10000 and 1..10.
+    plus = [SimpleLocation(9500, 9990, 1), SimpleLocation(10, 500, 1)]
+    assert _lines(plus, _LENGTH) == [(9990, _LENGTH), (0, 10)]
+    # complement(join(9501..9990,11..500)): Biopython lists the parts 11..500 first.
+    minus = [SimpleLocation(10, 500, -1), SimpleLocation(9500, 9990, -1)]
+    assert _lines(minus, _LENGTH) == [(0, 10), (9990, _LENGTH)]
+    # Parts that meet at the origin leave no gap; parts of two strands connect by the first part's strand only.
+    assert _lines([SimpleLocation(9500, _LENGTH, 1), SimpleLocation(0, 500, 1)], _LENGTH) == []
+    assert _lines([SimpleLocation(9500, 9990, 1), SimpleLocation(10, 500, -1)], _LENGTH) == []
 
 
 def _feature(feature_id: str, *parts: tuple[int, int]) -> FeatureObject:
@@ -156,7 +175,8 @@ def test_lane_placement_reads_a_part_at_the_first_base_from_that_base() -> None:
     assert get_feature_ends(_feature("a", (0, 1000)), _LENGTH) == (0, 1000, "positive")
     # Only a part at the first base touches the origin; one at base 2 does not.
     assert get_feature_ends(_feature("o", (9989, _LENGTH), (0, 20)), _LENGTH) == (9989, 20, "positive")
-    assert get_feature_ends(_feature("n", (9989, _LENGTH), (1, 20)), _LENGTH) == (1, _LENGTH, "positive")
+    # A part at base 2 after one that runs to the end still crosses the origin, by the order of the parts.
+    assert get_feature_ends(_feature("n", (9989, _LENGTH), (1, 20)), _LENGTH) == (9989, 20, "positive")
     assert split_circular_interval(9989, 20, _LENGTH) == [Interval(9989, _LENGTH), Interval(0, 20)]
 
 
@@ -166,3 +186,94 @@ def test_two_features_that_share_only_the_first_base_take_two_lanes(genome_lengt
     features = {"a": _feature("a", (0, 1)), "o": _feature("o", (9989, _LENGTH), (0, 1))}
     arranged = arrange_feature_tracks(features, False, True, genome_length=genome_length)
     assert arranged["a"].feature_track_id != arranged["o"].feature_track_id
+
+
+def test_a_join_over_the_origin_with_a_gap_at_the_first_base_keeps_its_lane() -> None:
+    # join(9901..10000,2..100) next to 1001..1500 and 1601..2200: nothing overlaps, so all take one lane.
+    features = {
+        "o": _feature("o", (9900, _LENGTH), (1, 100)),
+        "a": _feature("a", (1000, 1500)),
+        "b": _feature("b", (1600, 2200)),
+    }
+    arranged = arrange_feature_tracks(features, False, True, genome_length=_LENGTH)
+    assert {feature.feature_track_id for feature in arranged.values()} == {0}
+    # A join over the origin of three parts reserves all three.
+    three = _feature("t", (9000, 9500), (9600, _LENGTH), (0, 20))
+    assert get_feature_ends(three, _LENGTH) == (9000, 20, "positive")
+
+
+def test_the_part_order_of_a_trans_spliced_feature_does_not_cross_the_origin() -> None:
+    # A trans-spliced rps12: its 5' part lies after its 3' parts, which is not a path over the origin.
+    rps12 = _feature("r", (7000, 7100), (3000, 3200), (3500, 3600))
+    rps12.qualifiers = {"trans_splicing": [""]}
+    assert get_feature_ends(rps12, _LENGTH) == (3000, 7100, "positive")
+    # Its parts still cross the origin where they reach both ends of the record.
+    rps12_origin = _feature("o", (9900, _LENGTH), (0, 100))
+    rps12_origin.qualifiers = {"trans_splicing": [""]}
+    assert get_feature_ends(rps12_origin, _LENGTH) == (9900, 100, "positive")
+
+
+def _arc_sweeps(d: str) -> list[float]:
+    """The signed sweep in degrees of each arc command (positive clockwise on screen)."""
+    sweeps: list[float] = []
+    current = (0.0, 0.0)
+    for command in re.findall(r"[MLAz][^MLAz]*", d):
+        numbers = [float(n) for n in _NUMBER.findall(command)]
+        if command[0] == "A":
+            sweep_flag, end = int(numbers[4]), (numbers[5], numbers[6])
+            start_deg = math.degrees(math.atan2(current[1], current[0]))
+            end_deg = math.degrees(math.atan2(end[1], end[0]))
+            delta = (end_deg - start_deg) % 360.0
+            sweeps.append(delta if sweep_flag == 1 else delta - 360.0)
+            current = end
+        elif numbers:
+            current = (numbers[-2], numbers[-1])
+    return sweeps
+
+
+@pytest.mark.parametrize("strand", ["positive", "negative"])
+@pytest.mark.parametrize("narrow", [False, True], ids=["arrow", "narrow_arrow"])
+def test_a_circular_arrow_over_the_whole_record_is_a_full_ring(strand: str, narrow: bool) -> None:
+    # 1..10000 and complement(1..10000): [0, 10000). The shaft runs round the ring up to the head, which ends at
+    # the shaft's tail.
+    coord = {"coord_type": "block", "coord_strand": strand, "coord_start": 0, "coord_end": _LENGTH}
+    head_bp = 300
+    if narrow:
+        path = generate_circular_narrow_arrow_path_with_radii(coord, _LENGTH, head_bp, 90.0, 100.0, 110.0, 0.5)[1]
+    else:
+        path = generate_circular_arrow_path_with_radii(coord, _LENGTH, head_bp, 90.0, 100.0, 110.0)[1]
+    sweeps = _arc_sweeps(path)
+    shaft_deg = 360.0 * (_LENGTH - head_bp) / _LENGTH
+    direction = 1.0 if strand == "positive" else -1.0
+    assert sum(s for s in sweeps if s * direction > 0) == pytest.approx(direction * shaft_deg, abs=0.01)
+    assert sum(s for s in sweeps if s * direction < 0) == pytest.approx(-direction * shaft_deg, abs=0.01)
+
+
+def test_a_circular_feature_over_the_whole_record_is_drawn_round_the_ring(tmp_path: Path) -> None:
+    whole = SimpleLocation(0, _LENGTH, 1)
+    svg = draw_circular(read_genbank(_record_file(tmp_path, whole, SimpleLocation(0, _LENGTH, -1)))).to_svg()
+    for d in _block_paths(svg):
+        sweeps = _arc_sweeps(d)
+        assert sum(abs(s) for s in sweeps) > 2 * 0.9 * 360.0
+
+
+def test_a_circular_record_draws_its_connector_over_the_origin_in_every_view(tmp_path: Path) -> None:
+    # join(9701..9990,1..300): the gap 9991..10000 is drawn with and without a display start.
+    records = read_genbank(_record_file(tmp_path, SimpleLocation(9700, 9990, 1) + SimpleLocation(0, 300, 1)))
+    whole = [_circular_extent_bp(d) for d in _block_paths(draw_circular(records).to_svg(), "connector")]
+    shown_svg = draw_circular(records, record_displays=[RecordDisplayOptions(start_coordinate=1001)]).to_svg()
+    shown = [_circular_extent_bp(d) for d in _block_paths(shown_svg, "connector")]
+    # Its ends are base 9990 and the origin, which the extent reads as 0.
+    assert whole == [(0.0, 9990.0)]
+    # Base 1001 is drawn at position 0: the line moves back by 1,000 bp.
+    assert shown == [(8990.0, 9000.0)]
+    px_per_bp = 2000 / _LENGTH
+    linear = [_linear_extent_bp(d, px_per_bp) for d in _block_paths(draw_linear(records).to_svg(), "connector")]
+    assert linear == [(9990.0, 10000.0)]
+
+
+def test_a_linear_record_draws_no_connector_over_the_origin(tmp_path: Path) -> None:
+    records = read_genbank(
+        _record_file(tmp_path, SimpleLocation(9700, 9990, 1) + SimpleLocation(0, 300, 1), topology="linear")
+    )
+    assert _block_paths(draw_linear(records).to_svg(), "connector") == []

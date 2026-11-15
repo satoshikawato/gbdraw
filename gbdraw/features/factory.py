@@ -21,6 +21,7 @@ from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
 from .coordinates import get_exon_and_intron_coordinates, project_feature_parts
 from ..layout.record_coordinates import RecordDisplayTransform
+from ..layout.record_transform import spans_may_cross_origin, unset_record_transform
 from .shapes import (
     DEFAULT_DIRECTIONAL_FEATURE_TYPES,
     FeatureGlyph,
@@ -41,13 +42,13 @@ def create_repeat_object(
     color_table,
     default_colors,
     label_filtering,
-    is_directional: bool | None,
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
     *,
     instance: Optional[str],
+    origin_length: int | None,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -56,7 +57,7 @@ def create_repeat_object(
     rpt_family: str = feature.qualifiers.get("rpt_family", ["undefined"])[0]
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates)
+    location = get_exon_and_intron_coordinates(coordinates, origin_length=origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -67,7 +68,7 @@ def create_repeat_object(
     repeat_object = RepeatObject(
         repeat_id,
         location,
-        is_directional,
+        None,
         color,
         note,
         rpt_family,
@@ -89,20 +90,20 @@ def create_feature_object(
     color_table,
     default_colors,
     label_filtering,
-    is_directional: bool | None,
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
     *,
     instance: Optional[str],
+    origin_length: int | None,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
     """
     coordinates = feature.location.parts
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates)
+    location = get_exon_and_intron_coordinates(coordinates, origin_length=origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -113,7 +114,7 @@ def create_feature_object(
     feature_object = FeatureObject(
         feature_id,
         location,
-        is_directional,
+        None,
         color,
         note,
         label_text,
@@ -133,13 +134,13 @@ def create_gene_object(
     color_table,
     default_colors,
     label_filtering,
-    is_directional: bool | None,
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
     *,
     instance: Optional[str],
+    origin_length: int | None,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
@@ -150,7 +151,7 @@ def create_gene_object(
     gene: str = feature.qualifiers.get("gene", [""])[0]
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
-    location = get_exon_and_intron_coordinates(coordinates, is_trans_spliced)
+    location = get_exon_and_intron_coordinates(coordinates, is_trans_spliced, origin_length=origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     label_text = (
         get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
@@ -160,7 +161,7 @@ def create_gene_object(
     gene_object = GeneObject(
         feature_id,
         location,
-        is_directional,
+        None,
         color,
         note,
         product,
@@ -210,6 +211,10 @@ def _build_feature_layers(
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
+    # Connector lines over the origin are drawn only where a span may cross it, in every view.
+    origin_length = genome_length if spans_may_cross_origin(
+        gb_record, record_transform if record_transform is not None else unset_record_transform(gb_record)
+    ) else None
     source_indexes = _feature_source_index_map(gb_record.features)
     shared_hashes = shared_source_feature_hashes(gb_record)
     instance_of = feature_instances(gb_record)
@@ -257,12 +262,12 @@ def _build_feature_layers(
                 color_table,
                 default_colors,
                 label_filtering,
-                None,
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
+                origin_length=origin_length,
             )
             feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
@@ -274,12 +279,12 @@ def _build_feature_layers(
                 color_table,
                 default_colors,
                 label_filtering,
-                None,
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
+                origin_length=origin_length,
             )
             feature_id, feature_object = repeat_id, repeat_object
         else:
@@ -291,12 +296,12 @@ def _build_feature_layers(
                 color_table,
                 default_colors,
                 label_filtering,
-                None,
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
+                origin_length=origin_length,
             )
         feature_object.source_feature_index = source_indexes[id(feature)]
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
@@ -304,7 +309,7 @@ def _build_feature_layers(
             feature_object.rendered_instance_index = feature_object.source_feature_index
         if record_transform is not None and record_transform.projects:
             feature_object.display_parts = project_feature_parts(
-                feature.location.parts, record_transform,
+                feature.location.parts, record_transform, origin_length=origin_length,
                 is_trans_spliced="trans_splicing" in feature.qualifiers,
             )
         if rendering == "underlay":
