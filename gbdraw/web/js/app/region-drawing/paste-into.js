@@ -7,7 +7,7 @@ import { msg } from '../../utils/i18n.js';
 
 /** @import { DrawingTab, DrawingState } from '../../state.js' */
 /** @import { DrawingId } from '../../services/drawing-view.js' */
-/** @import { PasteDerivation, PreparedPaste, ProjectedDraftRequest } from '../../services/config.js' */
+/** @import { DrawingAlignment, PasteDerivation, PreparedPaste, ProjectedDraftRequest } from '../../services/config.js' */
 /** @import { PasteTargetPorts } from './paste.js' */
 /** @import { DrawingListOutcome } from '../drawing-list.js' */
 
@@ -22,7 +22,10 @@ import { msg } from '../../utils/i18n.js';
  * @property {(label: string, run: () => void) => unknown} runUndoable One History step of the shown drawing; while a
  *   Session operation blocks edits it runs nothing and answers `{ status: 'busy', reason }`.
  * @property {(paste: PasteDerivation) => Promise<PreparedPaste>} prepare `preparePastedRecords`
- * @property {(drawing: DrawingState, paste: PreparedPaste) => void} install `installPastedRecords`
+ * @property {(drawing: DrawingState, paste: PreparedPaste) => DrawingAlignment} install `installPastedRecords`: it
+ *   answers the drawing's alignment after the paste.
+ * @property {(drawingId: DrawingId, values: DrawingAlignment) => void} writeArtifactValues Writes a drawing's own
+ *   artifact values (History's writer: the page's while it is shown).
  */
 
 /**
@@ -41,7 +44,7 @@ const refusalOf = (answer) => (answer && typeof answer === 'object' && 'status' 
  * @param {PasteIntoOwners} owners
  * @returns {PasteTargetPorts}
  */
-export const createPasteTargets = ({ tabs, drawingOf, readRecords, project, show, runUndoable, prepare, install }) => ({
+export const createPasteTargets = ({ tabs, drawingOf, readRecords, project, show, runUndoable, prepare, install, writeArtifactValues }) => ({
   tabs,
   drawingOf,
   projectDrawing: async (drawingId) => {
@@ -51,7 +54,7 @@ export const createPasteTargets = ({ tabs, drawingOf, readRecords, project, show
   pasteInto: async (drawingId, paste) => {
     const prepared = await prepare(paste);
     const refused = refusalOf(show(drawingId)) ?? refusalOf(await runUndoable(msg('Copy to another drawing'),
-      () => install(drawingOf(drawingId), prepared)));
+      () => writeArtifactValues(drawingId, install(drawingOf(drawingId), prepared))));
     return refused ?? { status: 'ok', drawingId };
   }
 });

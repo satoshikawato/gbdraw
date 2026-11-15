@@ -7533,9 +7533,10 @@ export const preparePastedRecords = async ({ pasted, sent, targetSent }) => {
  * resource its source drawing's file backs binds that file.
  * @param {DrawingState} drawing A new drawing state of the prepared drawing's ID and mode.
  * @param {PreparedStoredDrawing} prepared
+ * @returns {DrawingAlignment} The alignment its request states, which the caller installs as the drawing's own.
  */
 export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }) => {
-  installStoredDrawing(drawing, install);
+  const alignment = installStoredDrawing(drawing, install);
   /** @type {Pick<InputFileStore, 'registerFile'>} */
   const store = {
     registerFile: (file) => {
@@ -7545,6 +7546,7 @@ export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }
     }
   };
   settleStoredDrawing(drawing, { ...settle, bound: bindLoadedInputs(store, settle.inputs) });
+  return alignment;
 };
 /**
  * The drawing list's region port: reads a derived region drawing now
@@ -7614,6 +7616,22 @@ const pastedColorRules = (own, read) => {
   return rules.length === own.length ? own : rules;
 };
 /**
+ * A read request's alignment with each pasted record's key under the uid its row takes in the target (`uids`); the
+ * target's own records keep theirs.
+ * @param {DrawingAlignment} alignment
+ * @param {ReadonlyMap<string, string>} uids
+ * @returns {DrawingAlignment}
+ */
+const pastedAlignment = ({ similarityAlignmentPlan: plan, linearRecordTranslations }, uids) => {
+  /** @template {{ recordKey: string }} T @param {T} entry @returns {T} */
+  const keyed = (entry) => ({ ...entry, recordKey: pastedKeyOf(entry.recordKey, uids) ?? entry.recordKey });
+  return {
+    similarityAlignmentPlan: plan && { ...plan, reference: keyed(plan.reference),
+      records: plan.records.map((decision) => ({ ...keyed(decision), anchor: decision.anchor && keyed(decision.anchor) })) },
+    linearRecordTranslations: linearRecordTranslations.map(keyed)
+  };
+};
+/**
  * The pasted cards of a read request (`read`) under uids of their own in `target`: the Linear rows of the pasted
  * records (a row's uid is its record key; one the target has takes a new one), or the Circular File cards the reader
  * made last, each under a new uid. `own` names the target's card of each other card the reader made (Circular: the
@@ -7650,10 +7668,13 @@ const pastedCardsOf = (read, target, { pastedRecordKeys, pastedCards }) => {
  * records, and reads its records again.
  * @param {DrawingState} target
  * @param {PreparedPaste} paste
+ * @returns {DrawingAlignment} The drawing's alignment after the paste: the request's, whose plan and translations name
+ *   the pasted records too (a Linear drawing's), under the keys they take here. The caller writes it as the drawing's
+ *   own artifact values, in the paste's History step (OV-3532).
  */
 export const installPastedRecords = (target, paste) => {
   const read = createDrawingState(target.id, paste.prepared.mode);
-  installPreparedDrawing(read, paste.prepared);
+  const alignment = installPreparedDrawing(read, paste.prepared);
   const { uids, own, linearSeqs, circularSources } = pastedCardsOf(read, target, paste);
   const cards = new Map([...own, ...uids]);
   /** @param {readonly string[]} keys */
@@ -7689,6 +7710,7 @@ export const installPastedRecords = (target, paste) => {
   COLOR_RULES_SLICE.install(target.slices.colorRules, {
     manualSpecificRules: pastedColorRules(target.manualSpecificRules, read.manualSpecificRules)
   });
+  return pastedAlignment(alignment, uids);
 };
 /**
  * Records the Use custom stack switch beside a committed Session Load installs

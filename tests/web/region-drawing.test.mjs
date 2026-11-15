@@ -1128,6 +1128,11 @@ result = json.dumps(exact_value_pattern(feature_instance(payload['id'], 'record-
 
 // The Worker's `deriveRegionDrawing`: it stages the payload's one resource table and gives Python the copy with the
 // target's staged paths (`pasteTargetPaths`); here the real Python owner runs it.
+/** History's writer of a drawing's artifact values (`writeArtifactValues`) for the drawing a paste shows: the page's. */
+const writeShownArtifact = (drawingId, values) => {
+  assert.equal(drawingId, state.activeDrawingId.value, 'the target is shown when the paste writes');
+  Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
+};
 const deriveAsWorker = async (payload) => {
   const references = stagedHelperReferences(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, payload);
   const staged = JSON.parse(await evaluatePython(`${STAGE}
@@ -1162,7 +1167,7 @@ test('Copy into an existing drawing: one History step of that drawing, shown; it
     committedRecordKeyOf: () => null,
     pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
       readRecords: async () => undefined, project: projectOf, show: app.selectDrawing, runUndoable: history.runUndoable,
-      prepare: preparePastedRecords, install: installPastedRecords })
+      prepare: preparePastedRecords, install: installPastedRecords, writeArtifactValues: writeShownArtifact })
   });
   await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'coordinates', start: '301', end: '800' } });
   await owner.setChoice({ target: target.id });
@@ -1176,5 +1181,72 @@ test('Copy into an existing drawing: one History step of that drawing, shown; it
   assert.equal(hashOf(source.id), sourceHash, 'the source drawing is unchanged');
   await history.undo();
   assert.equal(hashOf(target.id), targetHash, 'Undo restores the drawing as it was');
+  app.selectDrawing(source.id);
+});
+
+// Review finding 2 of #2047: a paste into a Linear drawing with a Similarity alignment installs the plan and record
+// translations Python returns for the drawing (they name the pasted records too), through the per-drawing writer, in
+// the drawing's History step; the shown drawing's own refs are never the target's before the switch (OV-3532).
+test('a paste into an aligned Linear drawing installs the alignment Python extends to the pasted records', async () => {
+  const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-47');
+  state.addDrawing(target, 'aligned target'); history.addMember(target.id);
+  app.selectDrawing(target.id);
+  const [{ uid: ownKey }] = target.linearSeqs;
+  const anchor = { recordKey: ownKey, biologicalFeatureId: 'og-own-f1', sourceFeatureIndex: 0, stableFeatureSvgId: null };
+  const own = {
+    similarityAlignmentPlan: { schema: 2, groupId: 'og-own', reference: anchor,
+      records: [{ recordKey: ownKey, status: 'reference', rationale: 'reference', anchor }] },
+    linearRecordTranslations: [{ recordKey: ownKey, x: 30, y: 0 }]
+  };
+  await history.runUndoableArtifactReplacement('Align', () => {
+    state.similarityAlignmentPlan.value = structuredClone(own.similarityAlignmentPlan);
+    state.linearRecordTranslations.value = structuredClone(own.linearRecordTranslations);
+    return true;
+  });
+  app.selectDrawing(source.id);
+  assert.equal(state.similarityAlignmentPlan.value, null, 'the source shows no alignment');
+  // The app keeps the target's alignment in its slot; the projection reads it there.
+  const keptTarget = createArtifactSlot({ drawing: target, values: structuredClone(own) });
+  const project = async (drawing) => projectDraftRequest(state, drawing, { ...(await factsOf(drawing)),
+    readOfDrawing: (drawingId, shownId, readShown, readKept) => (drawingId === shownId ? readShown()
+      : drawingId === target.id ? readKept(keptTarget) : undefined) });
+  /** @type {[string, Record<string, unknown>][]} */
+  const written = [];
+  const owner = createRegionDrawing({
+    shownDrawingId: () => state.activeDrawingId.value,
+    projectShownRequest: () => projectOf(state.activeDrawing()),
+    deriveRegion: deriveAsWorker,
+    newDrawingFromRegion: drawingList.newDrawingFromRegion,
+    readRecordSources: async () => ({ mode: 'circular', cards: new Map([['record-1', [
+      { sourceIndex: 0, selector: '#1', recordId: 'recA', recordLength: 1200 }]]]) }),
+    resultFeatures: () => null,
+    committedRecordKeyOf: () => null,
+    pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
+      readRecords: async () => undefined, project, show: app.selectDrawing, runUndoable: history.runUndoable,
+      prepare: preparePastedRecords, install: installPastedRecords,
+      writeArtifactValues: (drawingId, values) => {
+        written.push([drawingId, values]);
+        writeShownArtifact(drawingId, values);
+      } })
+  });
+  await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'coordinates', start: '301', end: '800' } });
+  await owner.setChoice({ target: target.id });
+  assert.equal(owner.dialog.status, 'derived', owner.dialog.message);
+  await owner.confirm();
+  assert.equal(state.activeDrawingId.value, target.id);
+  const pastedKey = target.linearSeqs[1].uid;
+  assert.deepEqual(written.map(([drawingId]) => drawingId), [target.id], 'one write, of the target');
+  assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-own', 'the target keeps its group');
+  assert.deepEqual(state.similarityAlignmentPlan.value.records.map(({ recordKey, status }) => [recordKey, status]),
+    [[ownKey, 'reference'], [pastedKey, 'skipped']], 'the plan names the pasted record, drawn where it is');
+  assert.deepEqual(state.linearRecordTranslations.value, [{ recordKey: ownKey, x: 30, y: 0 }, { recordKey: pastedKey, x: 0, y: 0 }]);
+  // Generate and Save project the target: the plan covers every record it draws.
+  const { layout } = (await projectOf(target)).envelope.renderRequest;
+  assert.deepEqual(layout.similarityAlignment.records.map(({ recordKey }) => recordKey), [ownKey, pastedKey]);
+  await history.undo();
+  assert.deepEqual(state.similarityAlignmentPlan.value, own.similarityAlignmentPlan, 'Undo gives the target its plan back');
+  assert.deepEqual(state.linearRecordTranslations.value, own.linearRecordTranslations);
   app.selectDrawing(source.id);
 });
