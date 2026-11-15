@@ -1,6 +1,6 @@
-# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th, de, it, pl, tr, ru, uk
+# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th, de, it, pl, tr, ru, uk, fa, ar
 
-Revision 11, 2026-10-31 (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5; ru and uk time abbreviations: §1.2, §16.3, §17.3; ru tab names: §16.2; uk Load / Download / Upload sources and plural worked pair 5: §17.1, §17.5; ru and uk in the separator and plural lists: §1.3). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
+Revision 12, 2026-11-15 (Persian and Arabic: §20, §21; their menu entries, menu label, plural objects and separator in §1.1 and §1.3; their arrows and ranges in a right-to-left line in §1.2). Revision 11 was the 2026-10-31 revision (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5; ru and uk time abbreviations: §1.2, §16.3, §17.3; ru tab names: §16.2; uk Load / Download / Upload sources and plural worked pair 5: §17.1, §17.5; ru and uk in the separator and plural lists: §1.3). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
 locale, rail names wrap only between words in every locale, ja/zh comparative-genomics terms with no established use stay English,
 ja Attach, zh Either and axis line, es/fr/pt counts and exact matches, fr stroke and Linear scale, id/vi/th record selector
 and feature wording: §1.5, §2, §3, §4, §5.1, §6, §7, §8, §9, §10, §11. Revision 9: counted sentences are `tn` pairs, and
@@ -58,11 +58,11 @@ nothing states that they are reviewed.
   Serif / Mono, and the Circular presets Tuckin, Middle, Spreadout.
 - **The Language menu entries** (English, Bahasa Indonesia, Deutsch, Español,
   Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский,
-  Українська, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu order) are
+  Українська, العربية, فارسی, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu order) are
   endonyms and are not translated; the menu's own label is (言語 / 语言 / 語言 /
   언어 / Idioma / Langue / Idioma / Bahasa / Ngôn ngữ / ภาษา / Sprache /
-  Lingua / Język / Dil / Язык / Мова for ja / zh-Hans / zh-Hant / ko / es /
-  fr / pt / id / vi / th / de / it / pl / tr / ru / uk). Gallery
+  Lingua / Język / Dil / Язык / Мова / زبان / اللغة for ja / zh-Hans / zh-Hant / ko / es /
+  fr / pt / id / vi / th / de / it / pl / tr / ru / uk / fa / ar). Gallery
   example titles from `tutorial-data/manifest.json` stay English too.
 - **Names fixed in English by PD-OI-093 and PD-OI-105** stay English in the
   English UI only. Other locales translate them with the glossary (D-11).
@@ -77,7 +77,9 @@ nothing states that they are reviewed.
   stay in every locale; `fr` writes byte units in French, §7.3).
   Time words are words, not units: 30 seconds is 30秒 in `ja`, `zh-Hans` and `zh-Hant`,
   and `ru` and `uk` write мс, с and мин / хв (§16.3, §17.3).
-- Keep `→ ← · × + − %` and the en dash of ranges (`Rows 3–4`) as written.
+- Keep `→ ← · × + − %` and the en dash of ranges (`Rows 3–4`) as written,
+  except in `fa` and `ar`, whose right-to-left lines write a "then" arrow and
+  a range of two values as §20.3 and §21.3 say.
 - Ellipsis is one `…` (U+2026) whether the source writes `...` or `…`, both
   for "more input follows" (Choose records…) and for progress (Saving
   session…).
@@ -103,13 +105,16 @@ nothing states that they are reviewed.
 - A `tn` key's translation is one string, except that in a language whose
   plural rule has `few` or `many` categories (Polish, Russian, Ukrainian)
   the `other` key holds an object of the CLDR categories the language uses
-  (`pl`: few, many, other; `ru` and `uk`: one, few, many, other),
+  (`pl`: few, many, other; `ru` and `uk`: one, few, many, other; `ar`: zero,
+  two, few, many, other, §21.5),
   with `other` required, for example
   `{"one": "…", "few": "…", "many": "…", "other": "…"}`. The `one` key is
   then the text for exactly 1 and stays a string; the object's `one` is the
   text of the other counts the rule calls `one` (21, 31, … in Russian and
   Ukrainian), so it must not read as "this one thing". A category the object
-  leaves out shows its `other` text.
+  leaves out shows its `other` text. Persian, whose rule calls 0 `one` too,
+  writes the object `{"one": …, "other": …}`: its `one` is the text for 0, so
+  0 never shows the exactly-one sentence (§20.5).
 - A sentence that counts things is a `tn` pair; no key writes a plural as "(s)".
   A track, mode, control or setting name is never a placeholder inside a
   sentence: each name has a whole-sentence key (Hide GC content?, No Circular
@@ -121,7 +126,7 @@ nothing states that they are reviewed.
   `<i18n-text>` component places the element at its `{name}` slot (D-04).
 - Two sentences shown together are two keys. The code joins them with a
   language-dependent separator: a space in English and in `ko`, `es`,
-  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl`, `tr`, `ru` and `uk`, none after 。 in
+  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl`, `tr`, `ru`, `uk`, `fa` and `ar`, none after 。 in
   `ja` and `zh-*` (D-18). Do
   not add a trailing space to a value.
 - `Undo {action}` and `Redo {action}` insert the label of a History step. Many
@@ -2819,3 +2824,383 @@ and science have a word, it is used even when the Russian cognate is shorter
 - Russian calques (17.1): `uk-calque-session`, `uk-calque-undo`, `uk-calque-default` (warn variant
   `uk-default-variant`), `uk-calque-enable`, `uk-calque-participle`, `uk-calque-settings`, `uk-calque-pry` (warn),
   `uk-calque-column`, `uk-track-trek-fich`, `uk-calque-words` (warn).
+
+## 20. Persian (`fa`)
+
+Standard Persian of Iran as Microsoft and Google write software text: the Microsoft Persian Style Guide
+(2023) for register, punctuation and the zero-width non-joiner; Chromium fa (13,284 values) and Firefox
+fa for software words; fa.wikipedia and Iranian biology teaching for field terms; the Academy's
+spelling rules (دستور خط فارسی) for spelling; English for the BLAST and comparative-genomics words
+Persian research writing keeps in English. The Language menu shows **فارسی**. The UI reads from right
+to left; the figure, exports, commands, recipes, sequences, coordinates, colors and number fields stay
+left to right, and the app isolates each inserted `{value}`. Text uses the system typeface.
+
+### 20.1 Vocabulary
+
+- **Biology**: ژنوم، ژن، توالی، نوکلئوتید، آمینواسید، پروتئین، اندامک (organelle), جاندار (organism),
+  گونه، سویه (strain), پلازمید، کدون، رمز ژنتیکی، جدول ترجمه، رشته (strand; رشتهٔ مستقیم / رشتهٔ
+  معکوس), مکمل معکوس، ویژگی (Feature), رکورد، شمارهٔ دسترسی (accession), جایگاه (locus), حاشیه‌نویسی
+  (annotation), ناحیه (region), مکان (location), موقعیت (position), محتوای GC، عمق (depth), پوشش
+  (coverage), همسانی (identity), گروه شباهت، همولوژی، هم‌خط / هم‌خطی (collinear), خوشه (cluster),
+  دوبه‌دو (pairwise), تطابق (hit, comparison match), امتیاز، آستانه، بالادست / پایین‌دست، پنجره، گام.
+- **Kept apart**: هم‌ترازی is a sequence alignment (BLAST, LOSAT), تراز کردن / ترازبندی putting records
+  in line (Align). نقشه is the drawn genome map (Diagram; نقشهٔ حلقوی / نقشهٔ خطی), نمودار a content,
+  skew or depth plot, ترسیم one drawing of a Session and the way labels are drawn (Rendering).
+  یافته is a match of Sequence search, تطابق a BLAST or LOSAT hit, تطبیق a table row matched to a label.
+  راهنما is the Legend, راهنمایی the Help tip («راهنمایی: …»). دامنه is a Scope, محدوده a numeric
+  range, بازه an interval or span of coordinates, گستره a block envelope. محیط اجرا is a Runtime (the
+  diagram, search or LOSAT runtime), مدت اجرا a run time. برش is Crop, بریدن the Clip overflow. پاک
+  کردن is Clear, برداشتن Remove, حذف Delete; رد شدن is Skip, رد کردن Dismiss.
+- **Figure words**: ترک (track), لاین (lane), اسلات (track slot), لایهٔ رویی (an overlay; the placement
+  Overlay anchor is روی لنگر as On axis is روی محور), رندرکننده (track renderer), حلقه (ring), نوار
+  (band), برچسب، عنوان، تیک (tick; تیک بزرگ / تیک کوچک), محور، مقیاس، پیکان (arrow), خط دور (stroke),
+  پرکننده (fill), زیرلایه، لایه، حاشیه (padding), فاصله‌گذاری، جابه‌جایی (offset), چرخش، بوم (canvas).
+- **Places**: بالا / پایین، داخل / خارج، چپ / راست (a physical side of the figure or window), مرکز. The
+  drawing menu's Move left / Move right are انتقال به قبل / انتقال به بعد in the drawing order.
+- **Software**: نشست (Session; Firefox), پیش‌تنظیم (preset), نمونه (example), طرح‌بندی (layout), قلم
+  (font), سابقه (History), زبانه (tab), پنجرهٔ بازشو (popup), کادر انتخاب (checkbox), ردیف (row), سطر
+  (a line of a file), اطلاعیه (Notice), درباره (About), استناد (citation), مجوز (license).
+- **Kept in English** (Latin letters, no Persian suffix): the §1.1 names, units, DNA, RNA, query,
+  subject, seed, E-value, Bitscore, qualifier, locus tag, orthogroup, coortholog, inparalog, syntenic,
+  singleton, GC skew, AT skew, skew, reciprocal best hit, RBH. Each follows its Persian class noun:
+  ترک GC skew، توالی query.
+- **Loanwords** as Chromium and Microsoft spell them (فایل، پیکسل، پالت، گالری، اسلات، کپی، فیلتر); a
+  Persian word where vendors use one (نشست، قلم، بارگیری). A loan noun takes the plural ‌ها (فایل‌ها،
+  اسلات‌ها), never ـات; a noun after a number stays singular (2 فایل, Microsoft 4.1.11).
+- **Never**: افسانه for Legend (a myth), آهنگ for Track, کرنش for Strain, خصیصه for Feature, شناسه‌گذاری
+  for Annotation (شناسه is the UI's ID), جلسه for Session, پرونده for File, دانلود / آپلود, فونت,
+  Persian letters for an acronym (جی‌سی، بلاست: write GC, BLAST).
+
+### 20.2 Buttons and sentences
+
+- **Register**: the user is شما, mostly implied; verbs in the polite plural -ید; possessives only where
+  they carry meaning (Microsoft 4.1.3); no colloquial forms (میشه، بزن).
+- **Buttons, menu commands, toggles, History step labels**: an infinitive or verbal noun with no personal
+  ending, as Chromium and the Microsoft shortcut table write them: ذخیره، لغو، بستن، باز کردن، افزودن،
+  ذخیرهٔ نشست، تولید نقشه، تغییر نام. A command that opens a further step keeps `…` (بارگذاری فایل
+  قلم…). **Headings, tabs, column and field labels**: noun phrases (صدور، ویرایش طرح‌بندی).
+- **Instructions and help**: full sentences with the imperative -ید (انتخاب کنید، بکشید) and a period.
+- **Status "…ing"**: در حال + verbal noun + `…` (Microsoft 4.1.18): در حال ذخیرهٔ نشست…، در حال اجرای
+  LOSAT…. **Completion**: simple past, passive for a transitive verb: نشست ذخیره شد.
+- **Cannot, failed, errors** (Microsoft 5.4.2): cannot … نمی‌شود / نمی‌توان …; could not … نشد (فایل
+  خوانده نشد.); failed … انجام نشد; not found یافت نشد; unavailable در دسترس نیست; invalid نامعتبر است;
+  unsupported پشتیبانی نمی‌شود (adjective پشتیبانی‌نشده). Error is خطا. Never the app as "I".
+- **Required, optional, recommended**: الزامی، اختیاری، توصیه‌شده; the field marker is (اختیاری).
+- **Questions**: آیا … ؟, or a passive subjunctive for a confirmation (این ترک پنهان شود؟). A checkbox
+  that states a behaviour is a passive subjunctive clause (Microsoft 4.1.16: دیگر نشان داده نشود); one
+  that names a thing is a noun phrase (نمایش برچسب‌ها).
+- **Controls named in a sentence**: class noun + «label»: دکمهٔ «تولید نقشه»، زبانهٔ «راهنما»، گزینهٔ
+  «خودکار»; click is روی «…» کلیک کنید (Microsoft 4.1.12). A checkbox is selected or cleared (کادر … را
+  انتخاب کنید / علامت آن را بردارید), never تیک زدن, which collides with تیک (tick).
+- **Generate** is تولید (تولید نقشه، تولید دوباره); Create ایجاد; Load and Upload both بارگذاری (files
+  are read in the browser); Download بارگیری; Import وارد کردن; Export صادر کردن (noun صدور).
+- **Drawing mode** attaches to the map: رکورد نقشهٔ خطی، مقایسهٔ نقشهٔ حلقوی; رکورد حلقوی is only the
+  topology of the molecule.
+
+### 20.3 Punctuation, spacing and right to left
+
+- **Sentence ends**: a full stop attached to the last word. **، ؛ ؟** (U+060C, U+061B, U+061F) attach
+  to the word before and take one space after; ASCII `, ; ?` after Persian text are errors. `:` is the
+  label colon (برچسب: {value}); `!` as in the source.
+- **Quotes**: « » with nothing inside the marks («{name}»); English and single quotes are not used
+  (Microsoft 4.1.14; Chromium fa « 1,475, “ 0). Straight quotes stay only inside code (/key="value").
+- **Digits**: 0-9 with the English decimal point and grouping (0.65, 1,234,567.5); never ۰-۹, ٠-٩, ٫, ٬
+  or ٪ (PD-OI-106). Units and % keep the source spacing (100 bp, 20px, 8 pt, 50%).
+- **Ellipsis**: one `…` (U+2026), attached. **Parentheses**: written logically as `( )`; the browser
+  mirrors them; no space inside. `&` is و.
+- **Ranges**: in a right-to-left line an en dash between two numbers, or any dash between two inserted
+  values, shows as end–start. A range in a sentence or label is written with words (Microsoft 4.1.14):
+  {start} تا {end}، از {start} تا {end}، بین {min} و {max} (ردیف‌های {upper} تا {lower}). A hyphen between
+  two digits (0-1) stays, since the bidi algorithm keeps it in the number; code-like ranges stay code
+  (record_id:start-end), and a quoted figure label stays as drawn ([0–80x]).
+- **The arrow**: where → means "then" or "becomes" ({explicit} → {auto}, current → restored, {before} →
+  {after}, the origin path {start} → … → {end}), the value writes ← (U+2190), which points along the
+  reading order: {setting}: {explicit} ← {auto}. Right → and Left ← name a direction on the figure,
+  which stays left to right, and keep their arrows (راست →، چپ ←).
+- **Dashes**: no hyphenated compounds (Microsoft 4.1.6); a dash in a sentence becomes a comma or
+  parentheses; never a hyphen between spaces. **Lists**: ، between items, و before the last, no comma
+  before و.
+- **Latin inside a sentence**: the class noun comes first, as Persian puts the modifier after its noun
+  (Microsoft 4.1.10: رمز عبور Windows): فایل GenBank، قالب FASTA، ترک GC skew. A value never starts with a
+  Latin word (اجرای LOSAT…, not LOSAT …): an element whose direction comes from its text (names and
+  History values use `dir="auto"`) would read left to right; a format option beside SVG and PNG (SVG
+  تعاملی) is the one expected warning. Punctuation between Latin and Persian takes the Persian
+  direction; between two Latin words it joins them into one left-to-right run (SVG، PNG), so write و
+  before the last Latin item. No direction mark is written.
+
+### 20.4 Script and spelling
+
+- **Letters**: ی (U+06CC) and ک (U+06A9), never ي ى ك; ئ أ ؤ آ as single letters; no ة ھ ە ۀ. Hamza
+  spellings of the Academy and Microsoft: تأیید، تأثیر، مسئول، مسئله، مؤلفه، جزء.
+- **ZWNJ** (U+200C, Microsoft 4.1.17, دستور خط فارسی): می‌ / نمی‌ before a verb (می‌شود، نمی‌توان); ‌ها /
+  ‌های after a letter that joins (فایل‌ها، ویژگی‌های); ‌ای، ‌اند after a silent ه (نسخه‌ای، شده‌اند);
+  ‌تر / ‌ترین (بزرگ‌تر; بیشتر and کمتر stay joined); compounds (پیش‌فرض، پیش‌نمایش، هم‌ترازی، جابه‌جایی،
+  نرم‌افزار، حاشیه‌نویسی، به‌صورت); adjectival participles (انتخاب‌شده; the verb phrase ذخیره شد keeps its
+  space). ZWNJ only between two Persian letters and never after a letter that does not join (ا د ذ ر ز ژ
+  و): رکوردها، فیلدهای، زیرلایه، رزروشده. Never ZWJ.
+- **Ezafe after a silent ه**: هٔ (ه + U+0654), as دستور خط فارسی writes it and Chromium fa does (48
+  against 0 for ه‌ی): نقشهٔ حلقوی، اندازهٔ قلم، ذخیرهٔ نشست. Never ه‌ی or the letter ۀ (U+06C0). Other
+  ezafes are not written.
+- **Diacritics**: none, except the tanwin on alef in the usual adverbs (لطفاً، دقیقاً، صریحاً), written
+  ا + U+064B. **No tatweel** (ـ).
+- **Spellings**: جستجو (Chromium 324, Microsoft), در حال, در دسترس, هیچ‌کدام, آمینواسید, نرم‌افزار.
+- **NFC**: ه + U+0654 stays two code points (NFC composes nothing there); ا + U+0654 is written أ. No
+  bidirectional control character (ALM, LRM, RLM, U+202A-U+202E, U+2066-U+2069).
+- **Latin and digits** stand apart from Persian letters with a space and take no Persian suffix: 5 فایل،
+  ویژگی‌های CDS (not CDS‌ها), فایل‌های TSV.
+
+### 20.5 Placeholders and counts
+
+- `{name}` is copied verbatim with a space or punctuation on each side; no ‌ها, ‌ی, ‌ای, را, letter or
+  ZWNJ touches it, since the value may end in any letter or be Latin. The class noun comes before it
+  (فایل {file}، رکورد {record}، ویژگی «{name}»); the object marker را follows the whole phrase as its own
+  word (فایل {file} را حذف کنید); a label may use a colon (ردیف‌ها: {count}).
+- **Counted nouns** stay singular after a number (Microsoft 4.1.11): {count} رکورد. An inanimate counted
+  subject takes a singular verb, as Chromium fa does (128 against 25): {count} فایل کپی شد.
+- **Plural shape**: `Intl.PluralRules('fa')` gives `one` for 0 and 1 and `other` for 2 and more. The
+  `one` key is the text for exactly 1; the `other` value is the object `{"one": <the text for 0, with
+  {count}>, "other": <the text for 2 and more>}`. Persian keeps the noun singular after every number, so
+  the two texts are usually equal; the object keeps 0 off the exactly-1 sentence. When the English `one`
+  has no `{count}`, the object's `one` is the counted sentence. Examples (exactly 1 / 0 / 2):
+  1. `{count} record`: 1 رکورد / 0 رکورد / 2 رکورد; both object forms are "{count} رکورد".
+  2. `Skipped {count} annotation row.`: 1 / 0 / 2 ردیف حاشیه‌نویسی نادیده گرفته شد. (one text).
+  3. `Undo {count} step` (a button): واگرد 1 مرحله / واگرد 0 مرحله / واگرد 2 مرحله.
+  4. `The "{name}" feature` / `All {count} "{name}" features`: `one` key ویژگی «{name}»; object {"one":
+     "همهٔ {count} ویژگی «{name}»", "other": "همهٔ {count} ویژگی «{name}»"}: ویژگی «…» / همهٔ 0 ویژگی «…» /
+     همهٔ 2 ویژگی «…».
+  5. `one more` / `{count} more`: `one` key یک مورد دیگر; object {"one": "{count} مورد دیگر", "other":
+     "{count} مورد دیگر"}: یک مورد دیگر / 0 مورد دیگر / 2 مورد دیگر.
+  A pair with no {count} in either text (`This row …` / `These rows …`) keeps the singular sentence for
+  exactly 1 and the plural one in both object forms (این ردیف … / این ردیف‌ها …).
+
+### 20.6 Length
+
+- Persian is about as wide as the English or narrower, but its marks need full line height. Shorten by
+  dropping a noun, then by the glossary's short form; a line breaks only between words.
+- **Rail** (~50 px), one word each: Input ورودی، Compare مقایسه، Advanced پیشرفته، Regions ناحیه‌ها،
+  Search جستجو، Density تراکم، Layout طرح‌بندی، Font قلم، Titles عنوان‌ها، Legend راهنما، Colors رنگ‌ها،
+  Features ویژگی‌ها، Labels برچسب‌ها، Axis محور، GC / skew GC / skew، About درباره; long titles
+  (جستجوی توالی، محور و مقیاس) shorten to the rail word.
+- **Header**: واگرد، ازنو، سابقه، بازنشانی تنظیمات / بازنشانی، ذخیرهٔ نشست، بارگذاری نشست، بارگذاری
+  نمونه، گالری و آموزش‌ها، زبان، ویرایشگر; the Generate bar تولید نقشه. Widths are not measured yet:
+  the first review round checks the header at 1,024 and 1,280 px and the rail in Segoe UI and Tahoma.
+- Options in 10 px rows use the short forms: خودکار، بالا / پایین، داخل / خارج، روشن / خاموش.
+
+### 20.7 Machine checks (`tests/web/i18n-lint/fa.tsv`)
+
+The rules run on every catalog value and plural form with placeholders masked as `{X}`; `error` fails
+the test, `warn` is printed.
+
+- `fa-arabic-letter` (error): Arabic ي ى ك. `fa-letter-variant` (warn): ة ھ ۀ ہ ە. `fa-non-ascii-digit`
+  (error): ۰-۹, ٠-٩, ٪, ٫ or ٬.
+- `fa-ascii-punct` (error): ASCII `, ; ?` after Persian text, or after a placeholder before Persian text.
+- `fa-mi-space` (warn): می or نمی followed by a space. `fa-mi-joined` (warn): می / نمی joined to a
+  common verb stem without ZWNJ.
+- `fa-plural-zwnj` (warn): ها / های joined to a connecting letter (تنها, انتها, نهایی excepted).
+- `fa-ezafe-heh-yeh` (warn): the ezafe written ه‌ی. `fa-hamza-above` (warn): U+0654 not after ه.
+- `fa-ascii-quote` (warn): straight or English quotes outside code. `fa-guillemet-space` (warn): a
+  space inside « ».
+- `fa-space-before-punct` (error): a space before ، ؛ ؟ : ! or a full stop. `fa-three-dots` (error):
+  three periods or a doubled …. `fa-hyphen-dash` (error): a hyphen between spaces.
+- `fa-range-dash` (warn): a dash between two placeholders or an en dash between two numbers.
+  `fa-arrow-order` (warn): → anywhere but in راست →.
+- `fa-placeholder-glued` (error): a Persian letter, ZWNJ or a detached ها touching a placeholder.
+- `fa-latin-glued` (warn): a Latin letter or digit touching a Persian letter, with or without ZWNJ.
+  `fa-latin-start` (warn): a Persian value that starts with a Latin letter.
+- `fa-harakat` (warn): a diacritic other than the tanwin on alef. `fa-tatweel` (warn): ـ.
+- `fa-banned-term` (error): the §20.1 Never words. `fa-term-variant` (warn): فونت، جست‌وجو، درحال،
+  دردسترس، تاریخچه، پیشفرض، پیشنمایش، بزرگنمایی، زوم، اسید آمینه، آمینو اسید، نرم افزار.
+- `fa-stray-space` (warn): a leading, trailing or doubled space, NBSP, ZWSP, ZWJ, WJ or BOM, or a ZWNJ
+  that is not between two Persian letters or follows a letter that does not join.
+- `fa-foreign-script` (error): Cyrillic, Hebrew, Indic, Thai, CJK or Hangul letters.
+
+## 21. Arabic (`ar`, Modern Standard Arabic)
+
+Modern Standard Arabic (الفصحى) as Microsoft and Google write software text, with no dialect; the tag is `ar` with
+no region. Register, gender, punctuation and error phrases follow the Microsoft Arabic Localization Style Guide (ar-SA,
+cited "Microsoft" with its section); software words follow Microsoft terminology and, where it has none, Google and
+Mozilla; biology words follow the article text of Arabic Wikipedia and school usage, not academy coinages in article
+titles. The Language menu shows **العربية**; its label is اللغة. Text uses the system typeface (Segoe UI or Tahoma on
+Windows). The UI reads right to left; the figure, every export, command, recipe and replay text, sequences,
+coordinates, colors and number fields keep their left-to-right order (PD-OI-106). No coined terms (D-02): where
+Arabic science or software has no word in use, the English word stays in Latin letters.
+
+### 21.1 Vocabulary
+
+- **Biology**: جينوم, جين, تسلسل (Sequence), نيوكليوتيد, حمض أميني, بروتين, كودون, الشفرة الوراثية, سلسلة (Strand:
+  السلسلة الأمامية / العكسية; the DNA article writes سلسلة 53 times, شريط once), المكمل العكسي, سجل (Record; the
+  GenBank article's سجل تسلسل), رقم الانضمام (Accession), عنصر (Feature, as fr élément and ru элемент; نوع العنصر),
+  تعليق توضيحي (Annotation, Microsoft), منطقة, الموقع (Location), الموضع (Position, and Placement too), الإحداثيات,
+  الكائن الحي, النوع (Species), السلالة, عضية, بلازميد, كروموسوم, الناتج (/product), محتوى GC, العمق, عمق القراءة,
+  التغطية, نافذة (sliding window), محاذاة (Alignment and Align in both senses, as the alignment article and
+  Microsoft), التطابق (identity), التشابه, مجموعة تشابه, التماثل, كتلة (Block), تطابق (Match), نتيجة مطابقة (Hit),
+  فجوة (Gap), مرساة (Anchor), مرشح (Candidate), مقارنة, زوجي (Pairwise), كتل Collinear (Collinear blocks).
+- **Kept in Latin** (lower case in running text as the source has it; never with the article or a glued letter):
+  qualifier, locus tag, query, subject, E-value, Bitscore, seed, Reciprocal best hit, RBH, ortholog, paralog,
+  orthogroup, coortholog, inparalog, Collinear, collinearity, syntenic, cluster, singleton, replicon, upstream /
+  downstream, GC skew, AT skew, skew, the §1.1 names and units.
+- **Figure**: مخطط (Diagram), الخريطة (the drawn map), الشكل (Figure), رسم بياني (a plot), دائري / خطي, مسار
+  (Track), خانة المسار, مسار فرعي (Lane), صف المسار (Track row), حلقة, نطاق (Band), شريط (Ribbon), منحنى, سهم, تسمية
+  (Label), عنوان, وسيلة الإيضاح (Legend, Microsoft Excel; إدخال وسيلة الإيضاح for an entry), علامة التجزئة (Tick,
+  Microsoft Excel), محور, مقياس, مسطرة, لوحة الألوان, عينة اللون, تعبئة, حد (Stroke), خط (Font; a drawn line is خط
+  too, الخط المرسوم beside Font), التخطيط, لوحة الرسم (Canvas), هامش (Padding), تباعد, الفاصل (Interval), المدى
+  (Range), إزاحة, تدوير, السماكة, طبقة سفلية (Underlay), المقدمة, تراكب, مكدس (Stack), الرؤية (Visibility), أداة
+  الرسم (Renderer; عرض is Display), سلسلة بيانات (a Depth or comparison series, Microsoft's data series).
+- **Commands** (verbal nouns, 21.2): إضافة, إزالة (Remove), حذف (Delete; Discard of History too, as fr), مسح (Clear),
+  نسخ, لصق, تحرير (Edit; a stored change is تعديل), حفظ, تحميل (Load and Upload, as Microsoft), تنزيل, فتح, استيراد,
+  تصدير, تراجع / إعادة (Undo / Redo), إعادة تعيين (Reset), استعادة (Restore), إرجاع (Revert), إعادة المحاولة, إعادة
+  تسمية, استبدال, تكرار (Duplicate), دمج, نقل, تحديد (Select), اختيار (Choose), إظهار / إخفاء, عرض, بحث, إنشاء
+  (Generate), تشغيل (Run), تطبيق, إلغاء, إغلاق (Close and Dismiss), تمكين / تعطيل, حل (Resolve), استبعاد (Omit),
+  إعادة التوزيع (Reflow), ضبط الاتجاه (Orient).
+- **UI nouns**: ملف, جلسة, الإعدادات, إعداد مسبق, معاينة, المعرض, مثال, درس تعليمي, المدخلات / المخرجات (Input /
+  Output), إدخال (Entry), المحفوظات (History, Microsoft; سجل is the record), المتصفح, ذاكرة التخزين المؤقت, نافذة
+  منبثقة, علامة تبويب, مربع حوار, زر, حقل, عمود, صف, جدول, بطاقة, قسم, لوحة, قائمة, خيار, خانة اختيار, قيمة, وضع,
+  قاعدة, نمط, الطراز (Style), تعبير عادي, المجال (Scope), عتبة, بنية (Schema; مخطط is Diagram), خطأ, تحذير, إشعار,
+  التفاصيل, الوصف, التشخيص, نتيجة, مهمة, تعليمات (Help), حول (About), الترخيص.
+- **Loanwords**: an Arabic word where vendors and textbooks use one (ملف, جلسة, محور); an established transliteration
+  where that is the usage (جينوم, بروتين, كودون, بلازميد, الطوبولوجيا); otherwise Latin. A Latin term takes an Arabic
+  class noun before it when the sentence needs an article or a case (ملف GenBank, تنسيق TSV, أداة LOSAT, عنصر CDS).
+- **Never**: أسطورة (a myth) for Legend, قراد (the animal) for Tick, تقصير (negligence) for Default, ميزة or خاصية
+  for Feature, مورثة, مجين or مجموع مورثي, جديلة or خيط for Strand, دورة for Session, مستعرض, and الـ before Latin.
+
+### 21.2 Buttons and sentences
+
+- **Gender**: no masculine or feminine verb addresses the user (Microsoft 3.1: verbal nouns in generic references,
+  يُرجى / يمكنك / يجب followed by a verbal noun, no imperative in instructions, verbal nouns in tooltips). Never انقر,
+  اختر, حدد, اضغط, اسحب or their feminine forms, and no second-person verb (تريد, تختار). The attached pronoun ـك
+  (لديك, يمكنك, ملفاتك) is used: unvocalized it is the same for both genders.
+- **Buttons, menu commands, toggles, History step labels, tabs**: a verbal noun, bare or with a definite object (حفظ,
+  حفظ الجلسة, إنشاء المخطط, تحميل مثال); a command that opens a further step keeps `…`. **Headings, column and field
+  labels**: nouns (التصدير, تحرير التخطيط); a dialog title of a choice is اختيار X.
+- **Instructions and help**: complete sentences in the simple present (Microsoft 4.1.16), each with a period: a
+  verbal-noun sentence (يؤدي النقر على "تطبيق" إلى …) or يمكنك / يُرجى / يجب + verbal noun (يُرجى اختيار ملف.),
+  never يمكنك أن تختار (a gendered verb after أن).
+- **Status "…ing"**: جارٍ + verbal noun + `…` (جارٍ حفظ الجلسة…). **Done**: تم + verbal noun (تم حفظ الجلسة.).
+  **Could not / cannot (do)**: تعذر + verbal noun (تعذر تحميل الملف {file}.; Microsoft 5.4.1); **failed**: فشل +
+  verbal noun; a rule: لا يمكن أن يكون X فارغاً.; not available: غير متوفر. The app is never "I".
+- **Values**: مطلوب, اختياري ("(اختياري)" after the field), موصى به, غير صالح, غير مدعوم, غير متوفر, غير معروف,
+  غامض (Ambiguous), تلقائي, افتراضي, مخصص, بلا (None), تشغيل / إيقاف (On / Off), ممكّن / معطل (Enabled / Disabled).
+- **Questions**: a confirmation is the verbal-noun phrase with ؟ (حذف المسار {name}؟, الاحتفاظ بالألوان المعدّلة؟);
+  هل + an impersonal form only when no verbal noun reads well (هل يجب استبدال الملف؟). Never هل تريد.
+- **Controls named in a sentence**: class noun + the label in straight quotes (Microsoft 4.1.4, 4.1.5): الزر "إنشاء
+  المخطط", علامة التبويب "وسيلة الإيضاح", الخيار "تلقائي", الإعداد "رؤية التسمية"; a click is النقر على "X".
+  Generate as an event: عند الإنشاء, قبل الإنشاء, بعد الإنشاء; Generate again: إعادة إنشاء المخطط.
+- **Drawing mode** attaches to the diagram: سجل المخطط الدائري, مقارنة المخطط الخطي; سجل دائري is the topology only.
+- **Word order**: adjective after its noun (Microsoft 4.1.3); a Latin name after the Arabic words of a genitive
+  (Microsoft 4.1.8); a conjoined genitive repeats the noun as a pronoun (إنشاء التقارير وإرسالها; Microsoft 4.1.8).
+
+### 21.3 Punctuation and spacing
+
+- **Sentence ends**: `.` attached to the last word; ؟ (U+061F) for a question; `!` only where the source has one.
+  Keys shown together join with one space.
+- **Comma, semicolon**: ، (U+060C) and ؛ (U+061B), also between Latin items in an Arabic sentence (CDS، tRNA; (X، Y));
+  the ASCII `,` stays only in digit grouping (1,234) and code. No space before ، ؛ ؟ : and one after (Microsoft
+  4.1.14). The label colon is ASCII `:` (الحالة: {state}).
+- **Quotes**: straight "…" around a cited name, label or value (Microsoft 4.1.14: straight quotation marks highlight UI
+  items); never “ ” ‘ ’ or « ». Straight quotes are direction-neutral, so they take the right sides of the quoted
+  text in a right-to-left line. No space inside the quotes.
+- **Parentheses**: write the logical ( ); the bidirectional algorithm mirrors them. One space outside, none inside:
+  الطول (bp), (اختياري) (Microsoft 4.1.14).
+- **Ellipsis**: one `…` attached. **Dash**: a spaced hyphen is never a dash; write ، or : or parentheses. No tatweel
+  as a dash (Microsoft 4.1.14 prefers the kashida; copying and search treat it as a letter).
+- **Digits**: 0-9 only, English decimal point and grouping: 1,234,567.5, never ١٬٢٣٤٬٥٦٧٫٥ (PD-OI-106, D-15;
+  Microsoft 4.1.12: Western Arabic numbers). Units keep the source spacing (100 bp, 20px, 0.65 ×R, 8 pt); % follows
+  its number as in the source (50%; Microsoft 4.1.15 puts it on the left, but numbers keep the English format here).
+  Time words, as CLDR ar spells them: {value} ملي ثانية, {value} ثانية, {minutes} دقيقة {seconds} ثانية.
+- **Ranges**: a range of two numbers or placeholders is written in words, من {start} إلى {end} (الصفوف من {upper} إلى
+  {lower}; النطاق المتاح: من {inner} إلى {outer} px), because a dash between two isolated values shows end–start in a
+  right-to-left line; a compact label too: {start} إلى {end} · {length} bp.
+- **Arrow**: → meaning "then" or "becomes" points against the reading order inside Arabic: write ← (U+2190) in
+  logical order (الحالي ← المستعاد; {setting}: {explicit} ← {auto}) or words (ثم, إلى): من {start} إلى {recordEnd}
+  ثم من 1 إلى {end}. → stays only as a picture of a physical direction on the left-to-right figure (يمين →, يسار ←)
+  and inside code.
+- **Left and right**: Move left / Move right of the drawing menu are earlier / later in the drawing order: نقل إلى
+  موضع سابق / نقل إلى موضع لاحق. Every other left / right in the keys is a side of the figure or of
+  a record: يسار / يمين.
+- **Capitals**: Arabic has no case; Title Case and ALL CAPS become ordinary text, and a capitalized control name is
+  quoted instead (Microsoft 4.1.5).
+
+### 21.4 Script and spelling
+
+- **Letters**: ي (U+064A) and ك (U+0643), never Persian ی ک or گ پ چ ژ. ى (U+0649) only for a final alef maqsura
+  (على, إلى, مستوى, أدنى, أقصى); ي in في, الذي. ة for the feminine ending (قيمة), ه for the pronoun (حذفه).
+- **Hamza and alef**: hamzat qat' is written (إضافة, إعادة, إلغاء, إظهار, إخفاء, إنشاء, إعدادات, أقصى, أدنى, أول,
+  إيقاف, إغلاق, إزالة, إدخال); hamzat wasl is not (استخدام, اختيار, استيراد, استبدال, اسم; Microsoft 4.1.9). Composed
+  letters only (NFC): أ إ آ ؤ ئ, never alef + U+0654.
+- **Diacritics**: none, except where the bare word misleads (Microsoft 4.1.7): tanween fath on a final alef, written on
+  the alef as Microsoft does (سجلاً, تلقائياً; not سجلًا), جارٍ, the damma of a passive prefix (يُرجى; Microsoft
+  4.1.16), and a shadda that separates homographs (ممكّن against ممكن, المعدّلة against المعدلة). Prefer تم / يتم +
+  verbal noun to a vocalized passive. **Tatweel** (U+0640): never. **ZWNJ, ZWJ**: none.
+- **Latin inside a sentence**: one space between Latin or a digit and Arabic letters (ملف GenBank, 5 ملفات); no letter
+  glued to Latin (بأداة BLAST, not بBLAST); و before a Latin word or a placeholder takes a space (و GenBank). Put the
+  Arabic class noun first, so no sentence begins with a Latin word that a `dir="auto"` element would read left to
+  right. No direction marks (LRM, RLM, ALM, isolates): the catalog check refuses them, and the app isolates each
+  inserted value itself (D-05).
+
+### 21.5 Placeholders and counts
+
+- `{name}` is copied verbatim with a space on each side, except next to `( ) : " /` or the edge of the value. No letter
+  is glued to it: no article (ال{file}), preposition (ب{name}, ل{record}) or pronoun ({file}ه), because the value may
+  be Latin, a number or Arabic. Give it a class noun that takes the article and the case (الملف {file}, السجل
+  {record}, التسمية "{label}", بالمسار {track}) or use a colon (الصفوف: {count}).
+- **Plural shape** (D-09): `Intl.PluralRules('ar')` gives zero (0), one (1), two (2), few (n % 100 in 3..10), many
+  (n % 100 in 11..99) and other (100-102, 200, fractions). The `one` key is the text for exactly 1, a string with the
+  English one's placeholders. The `other` key is the object {zero, two, few, many, other}; every form holds {count}.
+  Microsoft 4.1.12 writes 0, 1 and 2 without digits; the catalog must show the number, so one and two are {count} +
+  singular, as CLDR ar writes a unit whose number must show (two "{0} متر"), never {count} + dual (2 سجلان); few is
+  {count} + plural (genitive); many is {count} + singular accusative (tamyiz: سجلاً, ملفاً; a noun in ة is unchanged:
+  خطوة); zero and other are {count} + singular (genitive).
+- **Agreement**: avoid it (تم + verbal noun; a colon label; the count in parentheses: العناصر المختارة ({count})).
+  Where a word must agree, few takes the plural noun with feminine singular agreement for things (3 عناصر أخرى تحمل),
+  the other forms the singular (11 عنصراً آخر يحمل, 100 عنصر آخر يحمل).
+- Examples (0 / 1 / 2 / 3 / 11 / 100, count filled in):
+  1. `{count} record`: one "{count} سجل"; object zero, two, other "{count} سجل", few "{count} سجلات", many "{count}
+     سجلاً": 0 سجل / 1 سجل / 2 سجل / 3 سجلات / 11 سجلاً / 100 سجل.
+  2. `Loaded {count} row.`: one "تم تحميل {count} صف."; few "… {count} صفوف.", many "… {count} صفاً.", the rest
+     "… {count} صف.": تم تحميل 0 صف. / 1 صف. / 2 صف. / 3 صفوف. / 11 صفاً. / 100 صف.
+  3. `Undo {count} step` (button, no period): one "تراجع عن {count} خطوة"; few "تراجع عن {count} خطوات", every other
+     form "تراجع عن {count} خطوة": … 0 خطوة / 1 خطوة / 2 خطوة / 3 خطوات / 11 خطوة / 100 خطوة.
+  4. `There is {count} other feature with the legend name "{name}".`: one "يوجد {count} عنصر آخر يحمل اسم وسيلة
+     الإيضاح "{name}"."; few "يوجد {count} عناصر أخرى تحمل …", many "يوجد {count} عنصراً آخر يحمل …", zero, two,
+     other "يوجد {count} عنصر آخر يحمل …": 0 عنصر آخر يحمل / 1 عنصر آخر يحمل / 2 عنصر آخر يحمل / 3 عناصر أخرى تحمل
+     / 11 عنصراً آخر يحمل / 100 عنصر آخر يحمل.
+  5. `Importing it removes the annotation set.` (no {count}) / `… removes the {count} annotation sets.`: one key "يؤدي
+     استيراده إلى إزالة مجموعة التعليقات التوضيحية."; object few "يؤدي استيراده إلى إزالة {count} مجموعات تعليقات
+     توضيحية.", every other form "… إزالة {count} مجموعة تعليقات توضيحية.": 0 مجموعة / (1: the one key) / 2 مجموعة
+     / 3 مجموعات / 11 مجموعة / 100 مجموعة.
+
+### 21.6 Length
+
+- Arabic words are short but wide at 10-12 px, and the letters reach above and below the Latin line (أ, ط, ل; ي, ج,
+  ع): the clip allowance of D-03 must cover them; the first fit check measures Segoe UI and Tahoma.
+- **Rail** (~50 px; a name wraps only between words): Input المدخلات, Compare المقارنة, Advanced متقدم, Regions
+  المناطق, Search البحث, Density الكثافة, Layout التخطيط, Font الخط, Titles العناوين, Legend وسيلة الإيضاح (two
+  words, may take two lines), Colors الألوان, Features العناصر, Labels التسميات, Axis المحور, GC / skew GC / skew
+  (Latin, as ja, th and hi), About حول.
+- **Long / short** (glossary cells; titles and help use the long form): حول البرنامج والاستشهاد به / حول, الجينومات
+  المدخلة / المدخلات, خيارات متقدمة للمقارنة والتخطيط / متقدم, التعليقات التوضيحية للمناطق / المناطق, العناوين
+  وتسميات السجلات / العناوين, المحور والمقياس / المحور, المقارنات الزوجية / المقارنة, إعادة تعيين الإعدادات / إعادة
+  تعيين, إنشاء المخطط / إنشاء.
+- **Header**: تراجع, إعادة, المحفوظات, إعادة تعيين الإعدادات, حفظ الجلسة, تحميل جلسة, تحميل مثال, المعرض والدروس
+  التعليمية, اللغة; Generate bar إنشاء المخطط. A label too wide at 1,024 px takes its short form, never a broken word.
+
+### 21.7 Machine checks (`tests/web/i18n-lint/ar.tsv`)
+
+Rules run on every value with placeholders masked as `{X}`; `error` fails, `warn` prints.
+
+- `ar-persian-letter` (error): ی ک گ پ چ ژ. `ar-non-ascii-digit` (error): ٠-٩, ۰-۹, ٫, ٬. `ar-nfc` (error): a
+  decomposed hamza or madda. `ar-three-dots` (error): ... or …….
+- `ar-ascii-punct` (error): ASCII , ; ? after Arabic or a placeholder. `ar-latin-comma` (warn): ASCII comma after
+  Latin or a number. `ar-space-before-punct` (error): a space before ، ؛ ؟ : . !. `ar-paren-space` (warn): a space
+  inside parentheses or before %.
+- `ar-quotes` (warn): curly quotes or guillemets. `ar-quote-space` (warn): a space inside straight quotes.
+- `ar-diacritics` (warn): harakat outside the 21.4 cases. `ar-tanween-before-alef` (warn): ًا for اً.
+  `ar-tatweel` (warn): U+0640. `ar-bare-alef` (warn): a listed word without its hamza. `ar-alif-maqsura` (warn): فى,
+  الى, علي, إلي.
+- `ar-arrow` (warn): → in an Arabic value, except يمين →. `ar-range-dash` (warn): a dash between two numbers or
+  placeholders. `ar-hyphen-dash` (error): a spaced hyphen.
+- `ar-placeholder-glued` (error): a letter glued to a placeholder. `ar-article-latin` (error): ال glued to Latin, a
+  number or a quote. `ar-latin-glued` (warn): Latin glued to an Arabic letter.
+- `ar-imperative` (warn): an imperative or second-person verb of either gender. `ar-banned-term` (error): أسطورة,
+  قراد, تقصير. `ar-term-variant` (warn): ميزة, مورثة, مجين, مجموع مورثي, جديلة, خيط, مستعرض, دورة. `ar-whitespace`
+  (warn): a leading, trailing or doubled space, NBSP, ZWSP, WJ or BOM.
