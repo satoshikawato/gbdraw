@@ -333,22 +333,23 @@ def place_record_vertically(
     )
 
 
+def _auto_record_gap(record_count: int, width: float) -> float:
+    """The record gap of a row of ``record_count`` records when none is set (Auto): ``DEFAULT_RECORD_GAP_PX``, or less
+    when the row's gaps would take more than ``ROW_GAPS_MAX_SHARE`` of ``width``."""
+
+    return min(DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE * width / max(1, record_count - 1))
+
+
 def _row_gaps(
     grouped: Sequence[Sequence[LinearRecordMeasurement]], gap: float | None, width: float
 ) -> tuple[list[float], list[list[float]]]:
     """Each row's record gap and the gaps between its records, in drawing order.
 
-    A row's record gap is ``gap`` when set. Unset (Auto), it is ``DEFAULT_RECORD_GAP_PX``, or less when the row's
-    gaps would take more than ``ROW_GAPS_MAX_SHARE`` of ``width``. Two records keep at least the room their facing
+    A row's record gap is ``gap`` when set, else ``_auto_record_gap``. Two records keep at least the room their facing
     insets ask for (the marks of a windowed row) apart.
     """
 
-    record_gaps = [
-        gap
-        if gap is not None
-        else min(DEFAULT_RECORD_GAP_PX, ROW_GAPS_MAX_SHARE * width / max(1, len(row_items) - 1))
-        for row_items in grouped
-    ]
+    record_gaps = [gap if gap is not None else _auto_record_gap(len(row_items), width) for row_items in grouped]
     return record_gaps, [
         [
             max(row_gap, row_items[index].right_inset + row_items[index + 1].left_inset)
@@ -358,29 +359,62 @@ def _row_gaps(
     ]
 
 
-def _row_refusal(
-    row_items: Sequence[LinearRecordMeasurement], row_gap: float, gap_width: float, width: float
-) -> ValidationError:
-    """The refusal of a row whose gaps and window marks take its whole ``width``. What takes the row names the advice
-    (OV-3572): the marks of a windowed row when they alone fill it, as no gap, not even 0, helps then; otherwise the
-    gap, set or Auto, which a smaller set gap shrinks."""
+def _largest_fitting_gap(marks: Sequence[float], width: float) -> float:
+    """The set record gap below which a row draws: the ``g`` at which ``sum(max(g, mark))`` reaches ``width``, for the
+    room ``marks`` of the row's facing insets, which take less than ``width`` together. Rounded down to 0.01 px, so
+    that a gap below the number shown draws (float error can only lower it)."""
 
-    marks_fill_row = width <= compensated_sum(
-        left.right_inset + right.left_inset for left, right in zip(row_items, row_items[1:])
+    ordered = sorted(marks)
+    for taken in range(1, len(ordered) + 1):
+        gap = (width - compensated_sum(ordered[taken:])) / taken
+        if taken == len(ordered) or gap <= ordered[taken]:
+            return math.floor(gap * 100) / 100
+    raise AssertionError("a row has at least one gap")
+
+
+def _figure_gap_advice(marks_by_row: Sequence[Sequence[float]], width: float) -> tuple[float, bool]:
+    """The record gap is one value for the figure: the set gap below which every row draws, and whether every row
+    draws with the Auto gap (OV-3631, OV-3633). Rows of one record have no gap; no row's marks fill ``width``."""
+
+    limits = [(_largest_fitting_gap(marks, width), len(marks) + 1) for marks in marks_by_row if marks]
+    return min(limit for limit, _ in limits), all(_auto_record_gap(count, width) < limit for limit, count in limits)
+
+
+def _row_refusal(
+    grouped: Sequence[Sequence[LinearRecordMeasurement]],
+    record_gaps: Sequence[float],
+    gap_widths: Sequence[float],
+    width: float,
+    *,
+    auto_gap: bool,
+) -> ValidationError:
+    """The refusal of a figure with a row whose gaps and window marks take its whole ``width``. What takes the row
+    names the advice (OV-3572): a row whose window marks alone fill it comes first, as no gap, not even 0, helps then;
+    otherwise the first row the gap fills, Auto (ROW_AUTO_GAPS) or set (ROW_WIDTH), with the set gap below which every
+    row draws (OV-3631). A set gap is told to leave it unset (Auto) only when every row draws with Auto (OV-3633)."""
+
+    marks_by_row = [[left.right_inset + right.left_inset for left, right in zip(row, row[1:])] for row in grouped]
+    filled = [width <= compensated_sum(marks) for marks in marks_by_row]
+    row = filled.index(True) if any(filled) else next(i for i, used in enumerate(gap_widths) if width <= used)
+    measured = (
+        f"Linear row cannot fit a positive bp scale: record_count={len(grouped[row])}, "
+        f"record_gap_px={record_gaps[row]:g}, gaps_with_window_marks_px={gap_widths[row]:g}, available_width={width:g}. "
     )
-    return ValidationError(
-        "Linear row cannot fit a positive bp scale: "
-        f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
-        f"gaps_with_window_marks_px={gap_width:g}, available_width={width:g}. "
-        + (
-            "The marks between the windows of the row need more width than the figure has: "
-            "move some records to another row, or draw fewer windows in the row."
-            if marks_fill_row
-            else "Set a smaller record gap or leave it unset (Auto), move some records to another row, "
-            "or draw fewer windows in the row."
-        ),
-        diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WINDOW_MARKS" if marks_fill_row else "ROW_WIDTH"},
-    )
+    others = "move some records to another row, or draw fewer windows in the row."
+    if filled[row]:
+        reason = "ROW_WINDOW_MARKS"
+        advice = f"The marks between the windows of the row need more width than the figure has: {others}"
+    else:
+        limit, auto_fits = _figure_gap_advice(marks_by_row, width)
+        smaller = f"a record gap smaller than {limit:g} px" if limit > 0 else "the record gap to 0 px"
+        reason = "ROW_AUTO_GAPS" if auto_gap else "ROW_WIDTH"
+        advice = (
+            f"The Auto record gap of {record_gaps[row]:g} px, with the marks between the windows of the row, needs "
+            f"more width than the figure has: set {smaller}, {others}"
+            if auto_gap
+            else f"Set {smaller}" + (" or leave it unset (Auto)" if auto_fits else "") + f", {others}"
+        )
+    return ValidationError(measured + advice, diagnostic={"code": "INPUT_INVALID", "reason": reason})
 
 
 def solve_linear_horizontal_layout(
@@ -440,15 +474,15 @@ def solve_linear_horizontal_layout(
             "normalize_length=True cannot be combined with multiple records in one Linear row."
         )
     record_gaps, row_gaps = _row_gaps(grouped, gap, width)
-    row_px: list[float] = []
-    row_bp: list[int] = []
-    for row_items, row_gap, effective_gaps in zip(grouped, record_gaps, row_gaps):
-        # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
-        gap_width = row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
-        if width <= gap_width:
-            raise _row_refusal(row_items, row_gap, gap_width, width)
-        row_px.append(width - gap_width)
-        row_bp.append(sum(item.sequence_length for item in row_items))
+    # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
+    gap_widths = [
+        row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
+        for row_items, row_gap, effective_gaps in zip(grouped, record_gaps, row_gaps)
+    ]
+    if any(width <= gap_width for gap_width in gap_widths):
+        raise _row_refusal(grouped, record_gaps, gap_widths, width, auto_gap=gap is None)
+    row_px = [width - gap_width for gap_width in gap_widths]
+    row_bp = [sum(item.sequence_length for item in row_items) for row_items in grouped]
     row_scales = [px / bp for px, bp in zip(row_px, row_bp)]
     narrowest_scale = min(row_scales)
     if not math.isfinite(narrowest_scale) or narrowest_scale <= 0:
