@@ -562,8 +562,10 @@ const createHeldPreviewView = ({ zoom, canvasPan, canvasContainerRef, fit, inFit
  * them and owns the whole-view setter.
  * @param {Pick<WebState, 'zoom' | 'layoutRepositionMode' | 'isPanning' | 'panStart' | 'canvasPan' | 'canvasContainerRef'
  *   | 'svgContainer' | 'previewHiddenUntilShown' | 'previewTransitionHeld'>} state
+ * @param {{ showCanvas?: () => void }} [ports] `showCanvas` brings the canvas back into view where the layout
+ *   scrolls it away (the phone pane's workspace); without it nothing scrolls.
  */
-export const createPanZoom = (state) => {
+export const createPanZoom = (state, { showCanvas = () => {} } = {}) => {
   const { zoom, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown, previewTransitionHeld } = state;
   const {
     isPreviewTransformActive, subscribePreviewTransformChanges, beginPreviewTransformInteraction,
@@ -624,6 +626,13 @@ export const createPanZoom = (state) => {
     hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce, setPreviewViewport
   });
 
+  // The Fit button: its result shows. On a phone its toolbar lies below an open Editor, so the canvas
+  // comes back into view first (OV-3673). Review alignment's refit and a Load's Fit scroll nothing.
+  const fitPreviewFromButton = () => {
+    showCanvas();
+    fitPreviewToViewport();
+  };
+
   const disposePanZoom = () => {
     disposeHeldPreviewView();
     disposeHiddenPreview();
@@ -638,6 +647,7 @@ export const createPanZoom = (state) => {
     endPan,
     resetPreviewViewport,
     fitPreviewToViewport,
+    fitPreviewFromButton,
     holdPreviewViewport,
     releasePreviewViewport,
     heldPreviewViewport,

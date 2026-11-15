@@ -91,6 +91,14 @@ const POPUP_EXPECTED_HEIGHT = 360;
  *   | 'settingsPaneDocked' | 'settingsPopup'>} SettingsPaneState
  */
 
+// Scrolls the Result pane so the Preview's workspace starts at its top.
+const scrollWorkspaceToPaneTop = () => {
+  const resultPane = document.getElementById('result-pane');
+  const top = resultPane?.querySelector('.preview-workspace')?.getBoundingClientRect().top;
+  if (!resultPane || top === undefined) return;
+  resultPane.scrollBy({ top: top - resultPane.getBoundingClientRect().top, behavior: 'instant' });
+};
+
 /** @param {{ state: SettingsPaneState }} options */
 export const createSettingsPaneController = ({ state }) => {
   // The phone layout is read from the layout itself (the settings do not
@@ -99,16 +107,17 @@ export const createSettingsPaneController = ({ state }) => {
   const phoneLayout = ref(false);
   /** @type {{ value: PhonePane }} */
   const phonePane = ref('settings');
+  // In the phone layout, the Preview's workspace (the canvas, and the Editor when open) comes to the top of
+  // the Result pane; elsewhere nothing moves. The Fit button calls it too: its toolbar lies below an open
+  // Editor, and the fitted figure shows only with the canvas back in view (OV-3673).
+  const showPhoneWorkspace = () => {
+    if (phoneLayout.value) scrollWorkspaceToPaneTop();
+  };
   /** @type {ShowPhonePane} */
   const showPhonePane = (pane, { workspace = true } = {}) => {
     phonePane.value = pane;
     if (pane !== 'preview' || !workspace) return;
-    void nextTick(() => {
-      const resultPane = document.getElementById('result-pane');
-      const top = resultPane?.querySelector('.preview-workspace')?.getBoundingClientRect().top;
-      if (!phoneLayout.value || !resultPane || top === undefined) return;
-      resultPane.scrollBy({ top: top - resultPane.getBoundingClientRect().top, behavior: 'instant' });
-    });
+    void nextTick(showPhoneWorkspace);
   };
   const settingsArea = () => document.querySelector('.settings-scroll');
   const popupElement = () => document.getElementById('settings-popup');
@@ -264,7 +273,7 @@ export const createSettingsPaneController = ({ state }) => {
   onUnmounted(() => window.removeEventListener('resize', readLayout));
 
   return {
-    settingsPane, showPhonePane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection,
+    settingsPane, showPhonePane, showPhoneWorkspace, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection,
     showSettingsBesideResult, closeSettingsPopup,
     // A drag of the popup by its heading.
     moveSettingsPopup: (/** @type {PopupPlacement} */ placement) => moveSettingsPopup(state, placement)

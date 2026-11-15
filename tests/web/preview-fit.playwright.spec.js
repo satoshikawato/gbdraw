@@ -223,6 +223,10 @@ const openEditor = async (page) => {
     drawer.getAnimations().map((animation) => animation.finished.catch(() => {}))
   ));
 };
+// Where the window and the Result pane are scrolled to.
+const scrollPositions = (page) => page.evaluate(() => ({
+  window: window.scrollY, pane: document.getElementById('result-pane').scrollTop
+}));
 for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
   test(`Fit keeps the Linear figure clear of the Editor toggle at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     test.setTimeout(180000);
@@ -231,12 +235,45 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768
     expect(closed.zoom).toBeLessThan(1);
     if (viewport.width < 1440) return;
     await openEditor(page);
+    // At a desktop width the Fit button scrolls nothing (OV-3673 concerns the phone pane only).
+    const scrolled = await scrollPositions(page);
     await fit(page);
+    expect(await scrollPositions(page)).toEqual(scrolled);
     const open = await fitGeometry(page, { leftOfToggle: true });
     expectFitted(open, `${viewport.width}x${viewport.height} with the Editor open`);
     expect(open.zoom).toBeLessThan(closed.zoom);
   });
 }
+// OV-3673: on a phone the toolbar lies below the open Editor, so reaching Fit scrolls the Result pane
+// and the canvas top out of view. The Fit button brings the workspace back to the pane's top, and
+// the fitted figure lies in the visible part of the pane.
+test('the Fit button below the open Editor on a phone shows the fitted figure', async ({ page }) => {
+  test.setTimeout(180000);
+  await fitCollinearAt(page, { width: 390, height: 844 });
+  await openEditor(page);
+  const opened = await scrollPositions(page);
+  // A user scrolls the pane down to the toolbar, then presses Fit.
+  await page.locator('#result-pane').evaluate((pane, button) => {
+    pane.scrollBy({ top: button.getBoundingClientRect().bottom - pane.getBoundingClientRect().bottom + 8, behavior: 'instant' });
+  }, await fitButton(page).elementHandle());
+  expect((await scrollPositions(page)).pane).toBeGreaterThan(opened.pane);
+  await fitButton(page).click();
+  await settle(page);
+  const shown = await page.evaluate(() => {
+    const pane = document.getElementById('result-pane');
+    const box = pane.getBoundingClientRect();
+    const top = box.top + pane.clientTop;
+    const visible = { top, bottom: top + pane.clientHeight };
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg').getBoundingClientRect();
+    const canvas = window.__GBDRAW_APP__.canvasContainerRef.getBoundingClientRect();
+    return { visible, svg: { top: svg.top, bottom: svg.bottom }, canvasTop: canvas.top };
+  });
+  const detail = JSON.stringify(shown);
+  expect(shown.canvasTop, detail).toBeGreaterThanOrEqual(shown.visible.top - 1);
+  expect(shown.svg.top, detail).toBeGreaterThanOrEqual(shown.visible.top - 1);
+  expect(shown.svg.bottom, detail).toBeLessThanOrEqual(shown.visible.bottom + 1);
+  expect(await scrollPositions(page)).toEqual(opened);
+});
 test('Fit of a figure clear of the Editor toggle fills the whole frame at 390x844', async ({ page }) => {
   test.setTimeout(180000);
   const phone = await fitCollinearAt(page, { width: 390, height: 844 });

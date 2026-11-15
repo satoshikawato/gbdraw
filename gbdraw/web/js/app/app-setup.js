@@ -1038,14 +1038,14 @@ export const createAppSetup = () => {
     doPan,
     endPan,
     resetPreviewViewport,
-    fitPreviewToViewport,
+    fitPreviewToViewport, fitPreviewFromButton,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     isPreviewTransformActive, subscribePreviewTransformChanges,
     holdPreviewViewport,
     releasePreviewViewport,
     heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, storedFigurePreview
-  } = createPanZoom(state);
+  } = createPanZoom(state, { showCanvas: settingsPaneActions.showPhoneWorkspace });
   const { startResizing } = createSidebarResize(state);
 
   const { ruleMatchingPending } = state;
@@ -3564,7 +3564,7 @@ export const createAppSetup = () => {
     layoutRepositionMode,
     isPanning,
     handleWheel,
-    fitPreviewToViewport,
+    fitPreviewFromButton,
     canvasPan,
     canvasContainerRef,
     startPan,
