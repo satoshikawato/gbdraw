@@ -358,6 +358,31 @@ def _row_gaps(
     ]
 
 
+def _row_refusal(
+    row_items: Sequence[LinearRecordMeasurement], row_gap: float, gap_width: float, width: float
+) -> ValidationError:
+    """The refusal of a row whose gaps and window marks take its whole ``width``. What takes the row names the advice
+    (OV-3572): the marks of a windowed row when they alone fill it, as no gap, not even 0, helps then; otherwise the
+    gap, set or Auto, which a smaller set gap shrinks."""
+
+    marks_fill_row = width <= compensated_sum(
+        left.right_inset + right.left_inset for left, right in zip(row_items, row_items[1:])
+    )
+    return ValidationError(
+        "Linear row cannot fit a positive bp scale: "
+        f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
+        f"gaps_with_window_marks_px={gap_width:g}, available_width={width:g}. "
+        + (
+            "The marks between the windows of the row need more width than the figure has: "
+            "move some records to another row, or draw fewer windows in the row."
+            if marks_fill_row
+            else "Set a smaller record gap or leave it unset (Auto), move some records to another row, "
+            "or draw fewer windows in the row."
+        ),
+        diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WINDOW_MARKS" if marks_fill_row else "ROW_WIDTH"},
+    )
+
+
 def solve_linear_horizontal_layout(
     measurements: Sequence[LinearRecordMeasurement],
     rows_by_record: Sequence[int],
@@ -421,21 +446,7 @@ def solve_linear_horizontal_layout(
         # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
         gap_width = row_gap * max(0, len(row_items) - 1) + compensated_sum(value - row_gap for value in effective_gaps)
         if width <= gap_width:
-            # A set gap, or the marks of a windowed row, take the whole width. The Auto gap keeps to its share, so
-            # without a set gap only the marks can: the advice names the cause (OV-3572).
-            raise ValidationError(
-                "Linear row cannot fit a positive bp scale: "
-                f"record_count={len(row_items)}, record_gap_px={row_gap:g}, "
-                f"gaps_with_window_marks_px={gap_width:g}, available_width={width:g}. "
-                + (
-                    "The marks between the windows of the row need more width than the figure has: "
-                    "move some records to another row, or draw fewer windows in the row."
-                    if gap is None
-                    else "Set a smaller record gap or leave it unset (Auto), move some records to another row, "
-                    "or draw fewer windows in the row."
-                ),
-                diagnostic={"code": "INPUT_INVALID", "reason": "ROW_WINDOW_MARKS" if gap is None else "ROW_WIDTH"},
-            )
+            raise _row_refusal(row_items, row_gap, gap_width, width)
         row_px.append(width - gap_width)
         row_bp.append(sum(item.sequence_length for item in row_items))
     row_scales = [px / bp for px, bp in zip(row_px, row_bp)]
