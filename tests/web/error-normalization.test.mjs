@@ -120,7 +120,9 @@ assert.match(pngFont.summary, /Choose another font/);
 // A Linear row whose set record gaps or window marks need its whole width (OV-3456, OV-3572): the Web says why,
 // not only the exception's class, and offers only what the Web can do (Record Layout moves records, not windows).
 const rowWidth = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'render', context: { reason: 'ROW_WIDTH' } });
-assert.match(rowWidth.summary, /record gaps of one Linear row, with the marks between its windows, need more width than the figure has\. Lower Record gap or leave it blank \(Auto\), move some records to another row in Record Layout/);
+assert.match(rowWidth.summary, /record gaps of one Linear row, with the marks between its windows, need more width than the figure has\. Type a smaller Record gap, such as 0, move some records to another row in Record Layout/);
+// The Web cannot tell whether the Auto gap would fit the row, so it never offers the blank (Auto) (OV-3633).
+assert.doesNotMatch(rowWidth.summary, /blank|Auto/);
 assert.doesNotMatch(rowWidth.summary, /Move some windows/);
 assert.doesNotMatch(rowWidth.summary, /Python exception/);
 // With the Auto gap only the window marks can take the row (OV-3572): the Web names them, and never asks the user
@@ -128,6 +130,11 @@ assert.doesNotMatch(rowWidth.summary, /Python exception/);
 const rowMarks = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'render', context: { reason: 'ROW_WINDOW_MARKS' } });
 assert.match(rowMarks.summary, /The marks between the windows of one Linear row need more width than the figure has\. Move some records to another row in Record Layout, or draw fewer windows in that row/);
 assert.doesNotMatch(rowMarks.summary, /Record gap|blank/);
+// With the Auto gap and marks that do not fill the row (OV-3631): the Auto gaps are the cause, so the Web asks for a
+// small typed Record gap, names 0, which always fits then, and never offers the blank (Auto) that was just refused.
+const rowAutoGaps = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'render', context: { reason: 'ROW_AUTO_GAPS' } });
+assert.match(rowAutoGaps.summary, /The Auto record gaps of one Linear row, with the marks between its windows, need more width than the figure has\. Type a small Record gap, such as 0, move some records to another row in Record Layout, or draw fewer windows in that row\./);
+assert.doesNotMatch(rowAutoGaps.summary, /blank|Lower Record gap/);
 assert.doesNotMatch(pngFont.summary, /Embed font/);
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);

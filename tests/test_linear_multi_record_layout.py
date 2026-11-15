@@ -363,25 +363,48 @@ def test_layout_refuses_a_row_by_what_takes_its_width(
     payload = serialize_web_error(refused.value, operation="generate", stage="render")
     assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": reason})
     message = str(refused.value)
-    assert ("smaller record gap" in message) is smaller_gap_advice, message
+    assert ("Set a record gap smaller than 40 px or leave it unset (Auto)" in message) is smaller_gap_advice, message
     assert "fewer windows" in message and "move some records to another row" in message
 
 
-def test_an_auto_gap_row_that_its_marks_do_not_fill_gets_the_smaller_gap_advice() -> None:
+@pytest.mark.parametrize(
+    ("insets", "width", "auto_gap", "limit"),
+    (
+        ((45.0, 0.0), 50.0, "6.25", 5.0),
+        ((34.0, 2.0, 0.0), 40.0, "3.33333", 3.0),
+    ),
+)
+def test_an_auto_gap_row_that_its_marks_do_not_fill_names_the_gap_that_fits(
+    insets: tuple[float, ...], width: float, auto_gap: str, limit: float
+) -> None:
     """The Auto gap is no proof that the marks fill the row (OV-3572): three records whose one window mark takes 45 of
-    50 px are refused with the Auto gap (6.25 px each), yet a set gap of 0 draws them, so the advice is a smaller gap."""
+    50 px are refused with the Auto gap (6.25 px each), yet a set gap of 0 draws them. The refusal names the Auto gap
+    and the set gap that fits (OV-3631): "a smaller gap" gave no value, "or leave it unset (Auto)" repeated the refused
+    state, and "smaller than the Auto gap" is not enough (6 px still takes 51 of 50 px)."""
 
-    measurements = (
-        LinearRecordMeasurement(0, RecordKey("a"), 10, right_inset=45),
-        LinearRecordMeasurement(1, RecordKey("b"), 10),
-        LinearRecordMeasurement(2, RecordKey("c"), 10),
+    measurements = tuple(
+        LinearRecordMeasurement(index, RecordKey(f"key-{index}"), 10, left_inset=0.0, right_inset=inset)
+        for index, inset in enumerate((*insets, 0.0))
     )
-    with pytest.raises(ValidationError, match="record_count=3") as refused:
-        solve_linear_horizontal_layout(measurements, (0, 0, 0), available_width=50, record_gap_px=None)
+    rows = (0,) * len(measurements)
+    with pytest.raises(ValidationError, match=f"record_count={len(measurements)}") as refused:
+        solve_linear_horizontal_layout(measurements, rows, available_width=width, record_gap_px=None)
     payload = serialize_web_error(refused.value, operation="generate", stage="render")
-    assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": "ROW_WIDTH"})
-    assert "smaller record gap" in str(refused.value)
-    solve_linear_horizontal_layout(measurements, (0, 0, 0), available_width=50, record_gap_px=0)
+    assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": "ROW_AUTO_GAPS"})
+    message = str(refused.value)
+    assert f"The Auto record gap of {auto_gap} px" in message, message
+    assert f"set a record gap smaller than {limit:g} px" in message, message
+    assert "unset (Auto)" not in message
+    solve_linear_horizontal_layout(measurements, rows, available_width=width, record_gap_px=limit - 0.01)
+    with pytest.raises(ValidationError, match="cannot fit a positive bp scale"):
+        solve_linear_horizontal_layout(measurements, rows, available_width=width, record_gap_px=limit)
+    # A set gap the row cannot hold is not told to leave it unset when the Auto gap is refused too (OV-3633).
+    with pytest.raises(ValidationError) as set_refused:
+        solve_linear_horizontal_layout(measurements, rows, available_width=width, record_gap_px=limit + 1)
+    assert serialize_web_error(set_refused.value, operation="generate", stage="render")["context"] == {
+        "reason": "ROW_WIDTH"
+    }
+    assert f"Set a record gap smaller than {limit:g} px, move some records" in str(set_refused.value)
 
 
 def _row_gaps_drawn(count: int, length: int, width: float, record_gap_px: float | None) -> list[float]:
@@ -438,6 +461,8 @@ def test_a_row_that_cannot_hold_the_record_gap_the_user_set_is_refused() -> None
         solve_linear_horizontal_layout(measurements, (0,) * 97, available_width=2000, record_gap_px=24)
     payload = serialize_web_error(refused.value, operation="generate", stage="render")
     assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"reason": "ROW_WIDTH"})
+    # 96 gaps below 2000/96 px fit; the number shown is rounded down, so every gap below it draws (OV-3631).
+    assert "Set a record gap smaller than 20.83 px or leave it unset (Auto)" in str(refused.value)
 
 
 def test_a_row_of_many_records_draws_with_the_default_gap_at_one_scale() -> None:

@@ -114,11 +114,14 @@ const REASONS = Object.freeze({
   CIRCULAR_GAPS: 'Use inner_gap_px and outer_gap_px for physical gaps.',
   OBSOLETE_TRACK_FIELD: 'Custom Track Slots no longer read this field. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.',
   SEPARATE_LINEAR_ROWS: 'Turn Normalize Record Lengths off or assign each record to a separate Linear row.',
-  // A Linear row whose record gaps, as the user set them, or window marks need its whole width
-  // (`solve_linear_horizontal_layout` in gbdraw/layout/linear_multi_record.py). Python sends ROW_WINDOW_MARKS when the
-  // window marks alone fill the row, as no gap, not even 0, helps then; otherwise ROW_WIDTH (OV-3456, OV-3572).
+  // A Linear row whose record gaps or window marks need its whole width (`solve_linear_horizontal_layout` in
+  // gbdraw/layout/linear_multi_record.py). Python sends ROW_WINDOW_MARKS when the window marks alone fill the row, as
+  // no gap, not even 0, helps then; otherwise ROW_AUTO_GAPS for the Auto gap and ROW_WIDTH for a typed gap. A typed
+  // gap of 0 always fits then; the blank (Auto) is never offered, as it was just refused or may be refused too
+  // (OV-3456, OV-3572, OV-3631, OV-3633).
   // Record Layout moves records; the windows of one record share its row.
-  ROW_WIDTH: 'The record gaps of one Linear row, with the marks between its windows, need more width than the figure has. Lower Record gap or leave it blank (Auto), move some records to another row in Record Layout, or draw fewer windows in that row.',
+  ROW_WIDTH: 'The record gaps of one Linear row, with the marks between its windows, need more width than the figure has. Type a smaller Record gap, such as 0, move some records to another row in Record Layout, or draw fewer windows in that row.',
+  ROW_AUTO_GAPS: 'The Auto record gaps of one Linear row, with the marks between its windows, need more width than the figure has. Type a small Record gap, such as 0, move some records to another row in Record Layout, or draw fewer windows in that row.',
   ROW_WINDOW_MARKS: 'The marks between the windows of one Linear row need more width than the figure has. Move some records to another row in Record Layout, or draw fewer windows in that row.',
   GFF_FASTA_MATCH: 'Ensure every GFF3 record has a matching FASTA entry.',
   UNTERMINATED_SET: 'Close the character set with ].',
