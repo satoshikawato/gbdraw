@@ -9,8 +9,13 @@
   without one.
 - Fixed: In the Web app, an open Similarity alignment review stays with the
   drawing it was opened in. While another drawing is shown, the review stays
-  open with its choices but no longer marks them on that drawing's figure, and
-  Apply there changes neither drawing; showing the review's drawing again lets
-  you Apply.
+  open with its choices but does not mark them on that drawing's figure, and
+  Apply waits with "Show <drawing> to apply this alignment."; before, Apply
+  there dropped the review and its choices with "The diagram, source, crop, or
+  Similarity Group changed." although nothing had changed. Showing the review's
+  drawing again lets you Apply. A Generate of another drawing leaves the review
+  open, and deleting the review's drawing ends the review as Cancel does.
+- Changed: In the Web app, switching drawings waits while a Similarity
+  alignment is resolved, applied, or reset.
 - Changed: In the Web app, switching drawings clears the "Similarity alignment
   applied" summary, which described the drawing shown before.

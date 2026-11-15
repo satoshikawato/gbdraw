@@ -7,7 +7,7 @@
 /** @import { GenomeScaleRequest } from './run-analysis.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
-/** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
+/** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { NoticeLink } from './app-messages.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
@@ -481,6 +481,31 @@ const provideSettingNoteReaders = () => {
   provide(SETTING_NOTE_ONE_CIRCLE_CHANGE, committedOneCircleChange);
 };
 
+/**
+ * The ports through which the drawer, the preview binder, the result watchers, the drawing switch and the drawing list
+ * reach the Similarity alignment owner and its review (R13).
+ * @typedef {object} SimilarityAlignmentPorts
+ * @property {() => void} refreshCanvas
+ * @property {() => string} editorDisabledReason
+ * @property {() => void} arriveAtDrawing
+ * @property {() => { status: 'busy', reason: string } | null} busy
+ * @property {() => DrawingId} reviewDrawingId
+ * @property {(drawingId: DrawingId) => void} endReviewOf
+ */
+/**
+ * The alignment ports until the root assigns the owner's: no review, no work in flight.
+ * @param {Pick<WebState, 'activeDrawingId'>} state
+ * @returns {SimilarityAlignmentPorts}
+ */
+const alignmentPortsBeforeOwner = (state) => ({
+  refreshCanvas: () => {},
+  editorDisabledReason: () => '',
+  arriveAtDrawing: () => {},
+  busy: () => null,
+  reviewDrawingId: () => state.activeDrawingId.value,
+  endReviewOf: () => {}
+});
+
 export const createAppSetup = () => {
   provideSettingNoteReaders();
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
@@ -625,12 +650,7 @@ export const createAppSetup = () => {
   // R13 port: the drawer, the preview binder, the result watchers, and the
   // drawing switch read the alignment owner through these ports; the root
   // assigns them once the alignment owner exists.
-  /** @type {{ refreshCanvas: () => void, editorDisabledReason: () => string, arriveAtDrawing: () => void }} */
-  const similarityAlignmentPorts = {
-    refreshCanvas: () => {},
-    editorDisabledReason: () => '',
-    arriveAtDrawing: () => {}
-  };
+  const similarityAlignmentPorts = alignmentPortsBeforeOwner(state);
   /**
    * The shown drawing when it is of `drawingMode`, else null: a mode panel's
    * handler does nothing for another mode's drawing. Resolved at each call,
@@ -1153,17 +1173,16 @@ export const createAppSetup = () => {
   // outside opens, retargets or closes a popup. The one predicate of that hold: the figure's
   // gestures read it, and the preview's `preview-reviewing` class (the hint and the hand cursor
   // of a drawn element) is bound to the same computed.
-  // `figure` is the identity of the Result of the review's drawing (`drawingId`) that the review last
-  // showed its draft on.
+  // `figure` is the identity of the Result of the review's drawing (the alignment owner's) that the
+  // review last showed its draft on.
   // `drawerTab` is the Editor tab the review closed: Apply's new Result can leave a tab
   // unavailable for a while, which moves the shown tab (OV-1255).
-  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, drawerTab: string, popup: unknown, drawingId: DrawingId, figure: string } | null} */ (null));
+  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, drawerTab: string, popup: unknown, figure: string } | null} */ (null));
   // The hold belongs to the review's drawing (OV-1089): while another drawing is shown, its figure
   // is not the held one, so the end of the review does not give it the held view and its
   // captures keep its own view.
   const similarityAlignmentHoldShown = () => {
-    const takeover = similarityAlignmentTakeover.value;
-    return !takeover || takeover.drawingId === state.activeDrawingId.value;
+    return !similarityAlignmentTakeover.value || similarityAlignmentPorts.reviewDrawingId() === state.activeDrawingId.value;
   };
   // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds for
   // the shown mode. The departing mode's slot is captured before a switch changes `mode`.
@@ -2595,6 +2614,7 @@ export const createAppSetup = () => {
     // and the Undo of New and Duplicate remove a drawing here, which hands over its slot and LOSAT rows (OV-3209).
     removeDrawing: (drawingId, left = []) => {
       if (errorDrawingId() === drawingId) errorLog.value = null;
+      similarityAlignmentPorts.endReviewOf(drawingId);
       return { slot: state.removeDrawing(drawingId, artifactSlots), losatRows: swapLosatResultRows(drawingId, left), losatClears: historySnapshots.losatClearCount() };
     },
     putHeld: (drawingId, { slot, losatRows, losatClears }) => {
@@ -2779,6 +2799,7 @@ export const createAppSetup = () => {
   similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
     writeArtifactValues: historySnapshots.writeArtifactValues,
+    drawingNameOf: drawingBar.nameOf,
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
     drawnFeatureIdsOf: orthogroupActions.drawnFeatureIdsOf,
@@ -2909,7 +2930,7 @@ export const createAppSetup = () => {
     applySimilarityAlignmentDialog
   } = createSimilarityAlignmentTakeover({
     state, similarityAlignmentTakeover, similarityAlignmentHoldShown, releasePreviewViewport, fitPreviewToViewport,
-    getResultIdentity: previewRuntime.getResultIdentity, readOfDrawing: artifactSlots.readOfDrawing,
+    alignmentReviewDrawingId: similarityAlignmentActions.reviewDrawingId, getResultIdentity: previewRuntime.getResultIdentity, readOfDrawing: artifactSlots.readOfDrawing,
     openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
     showFeaturePopupAtFeature: featureActions.showFeaturePopupAtFeature,
     alignmentDialogOpen: similarityAlignmentActions.dialogOpen, applyAlignmentReset: similarityAlignmentActions.applyReset,
@@ -2938,7 +2959,10 @@ export const createAppSetup = () => {
   Object.assign(similarityAlignmentPorts, {
     refreshCanvas: refreshSimilarityAlignmentCanvas,
     editorDisabledReason: () => similarityAlignmentEditorDisabledReason.value,
-    arriveAtDrawing: similarityAlignmentActions.arriveAtDrawing
+    arriveAtDrawing: similarityAlignmentActions.arriveAtDrawing,
+    busy: similarityAlignmentActions.switchBusy,
+    reviewDrawingId: similarityAlignmentActions.reviewDrawingId,
+    endReviewOf: similarityAlignmentActions.endReviewOf
   });
   const {
     canUseClickedOrthogroupActions, clickedOrthogroupDetail, alignByClickedOrthogroup, highlightClickedOrthogroup,

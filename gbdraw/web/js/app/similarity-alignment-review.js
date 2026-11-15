@@ -35,8 +35,9 @@ const { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } = w
 /** @typedef {Record<string, unknown>} AlignmentOutcome What the alignment owner's Apply and Reset return; the review reads its `status`. */
 /**
  * What the review took when it opened: the Editor drawer and its tab, the feature popup, and the Result of the
- * review's drawing it last showed its draft on.
- * @typedef {{ drawerOpen: boolean, drawerTab: string, popup: unknown, drawingId: DrawingId, figure: string }} AlignmentTakeover
+ * review's drawing it last showed its draft on. The review's drawing is the alignment owner's
+ * (`alignmentReviewDrawingId`); the takeover keeps no copy of it.
+ * @typedef {{ drawerOpen: boolean, drawerTab: string, popup: unknown, figure: string }} AlignmentTakeover
  */
 /** @typedef {{ value: AlignmentTakeover | null }} AlignmentTakeoverRef The root's takeover ref; the preview's gestures read it. */
 /**
@@ -52,6 +53,7 @@ const { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } = w
  * @property {WebState} state
  * @property {AlignmentTakeoverRef} similarityAlignmentTakeover
  * @property {() => boolean} similarityAlignmentHoldShown Whether the shown drawing is the review's.
+ * @property {() => DrawingId} alignmentReviewDrawingId The drawing the review belongs to (the alignment owner's, D-38).
  * @property {(options: { restore: boolean }) => void} releasePreviewViewport The pan/zoom owner's release of its hold.
  * @property {() => void} fitPreviewToViewport
  * @property {(result: SvgResultEntry | null | undefined) => string} getResultIdentity The preview runtime's identity of
@@ -83,8 +85,8 @@ const { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } = w
  * @returns {SimilarityAlignmentTakeover}
  */
 export const createSimilarityAlignmentTakeover = ({
-  state, similarityAlignmentTakeover, similarityAlignmentHoldShown, releasePreviewViewport, fitPreviewToViewport,
-  getResultIdentity, readOfDrawing, openRightDrawerTab, showFeaturePopupAtFeature, alignmentDialogOpen,
+  state, similarityAlignmentTakeover, similarityAlignmentHoldShown, alignmentReviewDrawingId, releasePreviewViewport,
+  fitPreviewToViewport, getResultIdentity, readOfDrawing, openRightDrawerTab, showFeaturePopupAtFeature, alignmentDialogOpen,
   applyAlignmentReset, applyAlignmentDraft
 }) => {
   const { results, selectedResultIndex, clickedFeature, showRightDrawer } = state;
@@ -104,7 +106,7 @@ export const createSimilarityAlignmentTakeover = ({
   // own Result, kept in its slot or shown again, leaves the hold, so the end gives the view back.
   const dropSimilarityAlignmentView = () => {
     const takeover = similarityAlignmentTakeover.value;
-    if (!takeover || similarityAlignmentApplying || reviewDrawingFigure(takeover.drawingId) === takeover.figure) return;
+    if (!takeover || similarityAlignmentApplying || reviewDrawingFigure(alignmentReviewDrawingId()) === takeover.figure) return;
     takeover.drawerOpen = false;
     releasePreviewViewport({ restore: false });
   };
@@ -254,7 +256,7 @@ export const createSimilarityAlignmentReview = ({
       return;
     }
     // A live rerender of the draft's records draws a new Result of the same figure (PD-OI-102).
-    if (similarityAlignmentTakeover.value) similarityAlignmentTakeover.value.figure = reviewDrawingFigure(similarityAlignmentTakeover.value.drawingId);
+    if (similarityAlignmentTakeover.value) similarityAlignmentTakeover.value.figure = reviewDrawingFigure(alignmentReviewDrawingId());
     // Without a mounted preview (the Run info tab) nothing is measured: the strips keep the
     // geometry of the same Result.
     similarityAlignmentGeometry.value = showAlignmentOverlay({
@@ -295,9 +297,8 @@ export const createSimilarityAlignmentReview = ({
       return;
     }
     // A review shown again while an Apply is pending keeps what the first one took.
-    const reviewDrawingId = alignmentReviewDrawingId();
     similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, drawerTab: rightDrawerTab.value, popup: clickedFeature.value,
-      drawingId: reviewDrawingId, figure: reviewDrawingFigure(reviewDrawingId) };
+      figure: reviewDrawingFigure(alignmentReviewDrawingId()) };
     // The figure is fitted again only while it shows the draft.
     holdPreviewViewport(isDraftArtifactCurrent);
     closeRightDrawer();

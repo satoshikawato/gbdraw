@@ -485,7 +485,7 @@ const legendSwitch = () => {
     settlePendingIntent: async () => {}, refreshCurrentIntent: async () => {}, adoptSessionReset: (reset) => reset(),
     ruleWritePending: () => false, suspendSpecificRulePatternDrafts: () => {}, clearFeatureSelection: () => {},
     rememberDepartingResultProjection: () => {}, auxiliaryImportFailureOnArrival: () => null,
-    resetModeTransientUi: () => {}, alignment: { arriveAtDrawing: () => {} }, installShownDrawing, dismissNotice: () => {},
+    resetModeTransientUi: () => {}, alignment: { arriveAtDrawing: () => {}, refreshCanvas: () => {}, busy: () => null }, installShownDrawing, dismissNotice: () => {},
     switchDrawingSearch: () => {},
     rebindAnnotationRecords: () => {}, clearActiveRuntime: () => {}, getResultIdentity: (result) => result.name,
     presentSelectedResult: () => {}, rememberResultInventory: (identity, inventory) => remembered.set(identity, inventory),

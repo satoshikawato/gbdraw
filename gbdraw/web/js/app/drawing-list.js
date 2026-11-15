@@ -619,5 +619,11 @@ export const createDrawingBar = ({
     return deleteStep(drawingId);
   };
 
-  return { tabs, newDrawing, duplicateDrawing, newDrawingWithStyle, renameDrawing, moveDrawing, deleteDrawing };
+  /**
+   * A drawing's name as its tab shows it, for a text that names the drawing.
+   * @param {DrawingId} drawingId
+   */
+  const nameOf = (drawingId) => drawingTabOf('nameOf', drawingId).label;
+
+  return { tabs, nameOf, newDrawing, duplicateDrawing, newDrawingWithStyle, renameDrawing, moveDrawing, deleteDrawing };
 };

@@ -217,3 +217,18 @@ test('a switch keeps an open Similarity alignment review and drops the summary',
   assert.equal(app.similarityAlignmentDraft.value, draft);
   assert.deepEqual(shownAlignment(), { plan: 'og-8', translations: [6] }, 'the committed plan stays the drawing\'s');
 });
+
+// D-40: a switch, and a step of the drawing list, wait for the Similarity alignment work in flight, through the
+// one switch-wait owner, with the reason the Apply line gives.
+test('a switch waits while a Similarity alignment resolves or applies', async () => {
+  const app = createAppSetup();
+  const { drawingId: first } = app.drawingList.newDrawing('linear');
+  app.drawingList.newDrawing('linear');
+  app.similarityAlignmentStatus.value = 'resolving';
+  assert.deepEqual(app.selectDrawing(first), { status: 'busy', reason: 'Resolving the current alignment.' });
+  app.similarityAlignmentStatus.value = 'applying';
+  assert.deepEqual(app.selectDrawing(first), { status: 'busy', reason: 'Applying the alignment plan.' });
+  assert.equal(app.drawingList.newDrawing('linear').status, 'busy');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.deepEqual(app.selectDrawing(first), { status: 'ok' });
+});

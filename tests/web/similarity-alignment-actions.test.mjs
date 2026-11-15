@@ -152,7 +152,7 @@ const create = ({
     result: responseFor(request)
   }), generation = async () => ({ status: 'ok' }), onError = null,
   previewCandidate = null, clearCandidatePreview = null, mutateProjection = null,
-  getCommittedRequest = null, writeArtifactValues = () => {}
+  getCommittedRequest = null, writeArtifactValues = () => {}, drawingNameOf = (drawingId) => `Drawing ${drawingId}`
 } = {}) => {
   const controllerState = state();
   controllerState.featureCatalog.value.items[0].biologicalFeatures=members;
@@ -199,6 +199,7 @@ const create = ({
   const actions = createSimilarityAlignmentActions({
     state: controllerState,
     writeArtifactValues,
+    drawingNameOf,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
     getEnrichedOrthogroupMembers: () => { enrichCalls += 1; return currentGroup.members; },
     // The orthogroup owner's drawn IDs of an anchor's feature; this Result names its records by key.
@@ -1440,9 +1441,9 @@ test('the Custom direction select reads its record by own key (OV-572)', async (
 
 // D-38 (PD-OI-039, PD-OI-090): a review belongs to the drawing it was opened in, by its drawing ID.
 // Another drawing here shows the same committed facts, as a Duplicate does: the review stays open
-// over it, draws nothing on it and applies nothing to it; Apply there changes no drawing, as over
-// the Circular drawing (the draft does not match the shown figure). Shown again, the review's own
-// drawing takes the Apply.
+// over it, draws nothing on it and applies nothing to it. D-39 (OV-3585): there Apply is disabled
+// with a reason that names the drawing to show, and keeps the review and its choices. Shown again,
+// the review's own drawing takes the Apply.
 const showDrawing = (fixture, drawingId) => {
   fixture.state.activeDrawingId.value = drawingId;
   fixture.actions.arriveAtDrawing();
@@ -1466,10 +1467,19 @@ test('a review stays with its own drawing across a switch and applies only there
   await startReview(fixture);
   const plan = fixture.state.similarityAlignmentPlan.value;
   showDrawing(fixture, 'linear-2');
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' }, 'Apply over another drawing changes none');
+  const choices = fixture.actions.draft.value;
+  assert.equal(fixture.actions.canApply.value, false, 'Apply is disabled over another drawing');
+  assert.equal(fixture.actions.applyDisabledReason.value, 'Show Drawing linear-1 to apply this alignment.');
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'rejected' }, 'Apply over another drawing changes none');
   assert.equal(fixture.generationCalls.length, 1);
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
-  assert.equal(fixture.actions.draft.value, null);
+  assert.equal(fixture.actions.draft.value, choices, 'the review keeps its choices');
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  assert.equal(fixture.actions.error.value, null, 'and says nothing changed');
+  showDrawing(fixture, 'linear-1');
+  assert.equal(fixture.actions.canApply.value, true);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.generationCalls.length, 2);
 });
 
 test('an edit ends a review only when it edits the review\'s drawing (D-38)', async () => {
@@ -1494,4 +1504,82 @@ test('an edit ends a review only when it edits the review\'s drawing (D-38)', as
   assert.equal(fixture.actions.draft.value, null);
   assert.equal(fixture.generationCalls.length, 0);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+});
+
+// D-40 (S1): work on the shown drawing never ends, replaces or rewrites another drawing's open review. A Generate of
+// another drawing whose plan needs repair draws nothing and says why with the repair note; the open review stays.
+test('a Generate of another drawing whose plan needs repair keeps the open review (D-40)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  await startReview(fixture);
+  const review = fixture.actions.draft.value;
+  showDrawing(fixture, 'linear-2');
+  fixture.currentGroup.members.splice(1, 1, targetB);
+  const helpers = fixture.helperCalls.length;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'blocked', reason: 'stale-target' });
+  assert.equal(fixture.actions.draft.value, review, 'the other drawing\'s review keeps its draft');
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  assert.equal(fixture.actions.reviewDrawingId(), 'linear-1');
+  assert.equal(fixture.helperCalls.length, helpers, 'no repair review is resolved for the shown drawing');
+  assert.equal(fixture.actions.repair.value.kind, 'targets');
+  assert.match(fixture.actions.notice.value, /^Alignment needs repair: One or more saved target anchors/);
+
+  fixture.currentGroup.members.splice(0, 1);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.actions.draft.value, review, 'a stale reference of the shown drawing keeps it too');
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  assert.equal(fixture.actions.repair.value.kind, 'reference');
+});
+
+// D-40 (S2, N1): a switch waits for the alignment work in flight, with the reason the Apply line gives.
+test('the alignment owner names the work a drawing switch waits for (D-40)', async () => {
+  let release;
+  const fixture = create({ helper: async (_operation, { request }) => {
+    await new Promise((resolve) => { release = resolve; });
+    return { result: responseFor(request) };
+  } });
+  assert.equal(fixture.actions.switchBusy(), null);
+  const started = startReview(fixture);
+  assert.deepEqual(fixture.actions.switchBusy(), { status: 'busy', reason: 'Resolving the current alignment.' });
+  release();
+  await started;
+  assert.equal(fixture.actions.switchBusy(), null, 'an open review does not hold a switch');
+  const applied = fixture.actions.applyDraft();
+  assert.deepEqual(fixture.actions.switchBusy(), { status: 'busy', reason: 'Applying the alignment plan.' });
+  release();
+  await applied;
+  assert.equal(fixture.actions.switchBusy(), null);
+});
+
+// D-40 (S3): a removed drawing takes its review with it, as Cancel ends it; another drawing's removal leaves it.
+test('removing the review\'s drawing ends its review, another removal leaves it (D-40)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  showDrawing(fixture, 'linear-2');
+  fixture.actions.endReviewOf('linear-3');
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  fixture.actions.endReviewOf('linear-1');
+  assert.equal(fixture.actions.status.value, 'idle');
+  assert.equal(fixture.actions.draft.value, null);
+  assert.equal(fixture.generationCalls.length, 0);
+});
+
+// D-40 (N2): a repair review's note is its drawing's. A switch hides it; back on that drawing it shows again, and a
+// Cancel there leaves it, as without a switch.
+test('a repair review\'s note shows again with its drawing and stays after Cancel (D-40)', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.currentGroup.members.splice(1, 1, targetB);
+  assert.equal((await fixture.actions.validateBeforeGenerate()).reason, 'stale-target');
+  assert.equal(fixture.actions.repair.value.kind, 'targets');
+  showDrawing(fixture, 'linear-2');
+  assert.equal(fixture.actions.repair.value, null, 'the note was the departing drawing\'s');
+  assert.equal(fixture.actions.notice.value, '');
+  showDrawing(fixture, 'linear-1');
+  assert.equal(fixture.actions.repair.value.kind, 'targets');
+  assert.match(fixture.actions.notice.value, /^Alignment needs repair:/);
+  fixture.actions.cancel();
+  assert.equal(fixture.actions.repair.value.kind, 'targets', 'Cancel leaves the note');
 });

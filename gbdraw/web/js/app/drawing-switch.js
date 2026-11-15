@@ -50,9 +50,10 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
- * @property {{ arriveAtDrawing: () => void }} alignment The Similarity alignment owner's port: its summary and notice
- *   were the departing drawing's, an open review stays with its own drawing, and the arriving drawing's plan selects its
- *   group.
+ * @property {{ arriveAtDrawing: () => void, refreshCanvas: () => void, busy: () => HistoryBusy | null }} alignment The
+ *   Similarity alignment owner's ports: on arrival, its summary and notice were the departing drawing's, an open review
+ *   stays with its own drawing, and the arriving drawing's plan selects its group; the review's marks are measured
+ *   again on the arriving figure; `busy`, why a switch waits for its work in flight.
  * @property {(id: DrawingId) => DrawingState} installShownDrawing The one writer of the shown drawing.
  * @property {() => void} dismissNotice
  * @property {(departing: DrawingId, arriving: DrawingId) => void} switchDrawingSearch
@@ -124,11 +125,13 @@ export const createDrawingSwitch = ({
   // Result lands in its own drawing's slot (OIPC-C07), and for a History
   // restore or an open History transaction.
   // OIC-030: also while a color rule table edit is matched, so that edit is
-  // one step of its drawing.
+  // one step of its drawing. D-40: also while Similarity alignment work runs
+  // (a review resolving, Apply, Reset), which ends on the drawing it began on.
   const drawingSwitchBusy = () => sessionOperationAvailability('history')
     || historyAvailability()
     || (historyRestoring() || traversalPending() ? HISTORY_RESTORE_BUSY : null)
-    || (ruleWritePending() ? RULE_WRITE_BUSY : null);
+    || (ruleWritePending() ? RULE_WRITE_BUSY : null)
+    || alignment.busy();
   const drawingSwitchAvailable = computed(() => !drawingSwitchBusy());
   // The drawing an operation error names (PD-OI-079 `context.drawingId`), if
   // any: read by the switch, the drawing removal, and E1's Generate. Its
@@ -160,6 +163,10 @@ export const createDrawingSwitch = ({
     // departing drawing's Result, and the notice the departing drawing's work.
     adoptSessionReset(resetModeTransientUi);
     alignment.arriveAtDrawing();
+    // A Duplicate shows its source's Result object, which no Result watcher
+    // sees change: the review's marks are measured again here, so they show
+    // only on the review's own drawing (D-38, OV-3586).
+    alignment.refreshCanvas();
     dismissNotice();
     switchDrawingSearch(departing.id, arriving.id);
     failedGeneratePreservedResult.value = false;

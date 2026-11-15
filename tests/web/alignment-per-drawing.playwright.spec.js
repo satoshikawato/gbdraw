@@ -82,8 +82,11 @@ test('a Linear drawing and its copy each generate, save and load their own Simil
 
 // D-38 (PD-OI-039): a Similarity alignment review belongs to the drawing it was
 // opened in. Over a copy of that drawing (the same records and plan) it stays
-// open with its choices, and Apply there changes neither drawing, as over the
-// Circular drawing; back on its own drawing, Apply aligns that drawing only.
+// open with its choices and marks nothing on the copy's figure; D-39: Apply
+// there is disabled, and its reason names the drawing to show. Back on its own
+// drawing, Apply aligns that drawing only. D-40: removing the review's drawing
+// ends the review as Cancel does, and the Undo of the removal does not bring it
+// back.
 const openReview = async (page, proteinId) => {
   await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
   const featureId = await page.evaluate((id) => window.__GBDRAW_APP__.extractedFeatures
@@ -125,20 +128,33 @@ test('an open alignment review stays with its drawing and applies only there', a
   await show(page, source);
   const sourceBefore = { figure: await recordOffsets(page), alignment: await shownAlignmentState(page) };
 
-  let dialog = await openReview(page, 'CAG38712.1');
+  const sourceName = await page.evaluate((id) => window.__GBDRAW_APP__.drawingBar.nameOf(id), source);
+  const dialog = await openReview(page, 'CAG38712.1');
+  const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
   await show(page, copy);
   await expect(dialog, 'the review stays open over the copy').toBeVisible();
-  expect(await applyOutcome(page, dialog), 'Apply over the copy applies nothing').toMatchObject({ summary: false });
+  await expect(page.locator('[data-similarity-alignment-canvas]'), 'and marks nothing on its figure').toHaveCount(0);
+  await expect(apply, 'Apply waits for the review\'s drawing').toBeDisabled();
+  await expect(page.locator('#similarity-alignment-apply-reason')).toHaveText(`Show ${sourceName} to apply this alignment.`);
   expect({ figure: await recordOffsets(page), alignment: await shownAlignmentState(page) }).toEqual(copyBefore);
   await show(page, source);
-  expect({ figure: await recordOffsets(page), alignment: await shownAlignmentState(page) }).toEqual(sourceBefore);
-
-  dialog = await openReview(page, 'CAG38712.1');
-  await show(page, copy);
-  await show(page, source);
   await expect(dialog).toBeVisible();
+  await expect(apply).toBeEnabled();
   expect(await applyOutcome(page, dialog), 'Apply on the review\'s own drawing').toMatchObject({ summary: true });
   await show(page, copy);
   expect({ figure: await recordOffsets(page), alignment: await shownAlignmentState(page) }, 'the copy is unchanged')
     .toEqual(copyBefore);
+
+  // D-40: the review's drawing is deleted while the copy is shown.
+  await show(page, source);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  await openReview(page, 'CAG38712.1');
+  await show(page, copy);
+  expect((await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.deleteDrawing(id), source)).status).toBe('ok');
+  await expect(dialog, 'the review leaves with its drawing').toBeHidden();
+  expect(await page.evaluate(() => ({ open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab })),
+    'the Editor is given back on its tab').toEqual({ open: true, tab: 'orthogroups' });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.undoHistory())).toBe(true);
+  await show(page, source);
+  await expect(dialog, 'the Undo of the Delete brings the drawing back without the review').toBeHidden();
 });
