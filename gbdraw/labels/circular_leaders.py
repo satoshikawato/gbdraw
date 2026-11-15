@@ -195,6 +195,76 @@ def leader_crossing_count(labels: Sequence[CircularLabel]) -> int:
     return polyline_crossing_count([leader_polyline(label) for label in labels])
 
 
+def _position_of(point: Point, total_length: int) -> float:
+    """The sequence position at the angle of ``point`` (the inverse of ``position_angle``)."""
+
+    return ((math.degrees(math.atan2(point[1], point[0])) + 90.0) % 360.0) / 360.0 * total_length
+
+
+def _spans_meet(start: float, end: float, low: float, high: float, total_length: int) -> bool:
+    """Whether the feature block ``start``-``end`` meets the positions ``low``-``high`` (either may pass the origin)."""
+
+    return any(start <= high + turn and end >= low + turn for turn in (-total_length, 0, total_length))
+
+
+def leaders_over_lanes(
+    labels: Sequence[CircularLabel],
+    feature_intervals: Sequence[tuple[float, float, float, float]],
+    total_length: int,
+) -> list[CircularLabel]:
+    """Copies of ``labels``; an external one whose leader crosses a feature of another lane between its elbow and its
+    own feature gets ``leader_over_to_px``, the radius of its feature's edge facing the label (OV-3625).
+
+    The leader is drawn over the features from its elbow to that radius and under them past it, so it reads as one
+    line to its own feature and still ends under it. ``feature_intervals`` are the drawn feature blocks as
+    ``layout.circular.feature_radius_intervals`` gives them: (start, end, inner radius, outer radius). A feature
+    of the label's own lane, or one away from the leader, leaves the label as it is.
+    """
+
+    marked: list[CircularLabel] = []
+    for label in labels:
+        copy = label.copy()
+        marked.append(copy)
+        if label.get("is_embedded"):
+            continue
+        feature, elbow, _contact = leader_polyline(label)
+        elbow_radius = math.hypot(*elbow)
+        inner = bool(label.get("is_inner", False))
+        edge = float(label["feature_inner_radius_px"] if inner else label["feature_outer_radius_px"])
+        start = _position_of(feature, total_length)
+        turn = (_position_of(elbow, total_length) - start + 0.5 * total_length) % total_length - 0.5 * total_length
+        low, high = start + min(0.0, turn), start + max(0.0, turn)
+        # A block between the elbow and the feature's edge (so in another lane), across the leader.
+        if any(
+            ((elbow_radius < outer <= edge + 1e-6) if inner else (edge - 1e-6 <= lane_inner < elbow_radius))
+            and _spans_meet(block_start, block_end, low, high, total_length)
+            for block_start, block_end, lane_inner, outer in feature_intervals
+        ):
+            copy["leader_over_to_px"] = edge
+    return marked
+
+
+def leader_over_point(label: CircularLabel) -> Point | None:
+    """Where a leader with ``leader_over_to_px`` meets its feature's edge: its elbow-to-feature part is drawn over the
+    features up to this point and under them past it. ``None`` for a leader drawn whole under the features."""
+
+    radius = label.get("leader_over_to_px")
+    if radius is None:
+        return None
+    feature, elbow, _contact = leader_polyline(label)
+    dx, dy = feature[0] - elbow[0], feature[1] - elbow[1]
+    a = dx * dx + dy * dy
+    b = 2.0 * (elbow[0] * dx + elbow[1] * dy)
+    c = elbow[0] ** 2 + elbow[1] ** 2 - float(radius) ** 2
+    root = b * b - 4.0 * a * c
+    if a <= 0.0 or root < 0.0:
+        return None
+    meets = [t for t in ((-b - math.sqrt(root)) / (2.0 * a), (-b + math.sqrt(root)) / (2.0 * a)) if 0.0 <= t <= 1.0]
+    if not meets:
+        return None
+    return elbow[0] + meets[0] * dx, elbow[1] + meets[0] * dy
+
+
 def rim_text_placement(label: CircularLabel, record_length: int) -> tuple[Point, str, str, float]:
     """Where an outer or inner label's text is drawn: its point, anchor, baseline and turn (radial labels only)."""
 
@@ -224,7 +294,9 @@ __all__ = [
     "horizontal_label_alignment",
     "label_ink_box",
     "leader_crossing_count",
+    "leader_over_point",
     "leader_polyline",
     "leader_segments",
+    "leaders_over_lanes",
     "rim_text_placement",
 ]

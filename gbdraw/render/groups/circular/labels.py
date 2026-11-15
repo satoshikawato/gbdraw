@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Literal, Sequence
 from gbdraw.svg.elements import Group, Line
 
 from ....canvas import CircularCanvasGeometry
+from ....labels.circular_leaders import leader_over_point
 from ....labels.circular_types import CircularLabel
 from ....labels.label_ink import FeatureLabelInk, circular_label_ink
 from ....labels.label_style import label_leader_width_px
@@ -30,6 +31,12 @@ class LabelsGroup:
     The text layer is in front of every leader: per ``FeatureLabelStyle``, the
     boxes, the halos and the underlines go in it before all of its letters,
     never between a text and the leaders of ``label_leaders``.
+
+    ``label_leaders`` is painted before the feature slots, so a leader ends under
+    its own feature. A leader that crosses features of other lanes on the way
+    (``leader_over_point``) is split there: the text layer, painted after the
+    slots, begins with its part from the elbow to its feature's edge, and
+    ``label_leaders`` keeps the rest, which still ends at the feature anchor.
     """
 
     def __init__(
@@ -87,9 +94,12 @@ class LabelsGroup:
                     label.get("feature_anchor_x", label["feature_middle_x"]),
                     label.get("feature_anchor_y", label["feature_middle_y"]),
                 )
-                group.add(self._part(bend, feature, label))
+                group.add(self._part(leader_over_point(label) or bend, feature, label))
             return group
 
+        for label, _ink, _contact, _line in drawn:
+            if (over := leader_over_point(label)) is not None:
+                group.add(self._part((label["middle_x"], label["middle_y"]), over, label))
         for label, ink, _contact, _line in drawn:
             if ink is not None and ink.draws_box(style):
                 group.add(feature_label_box(ink, label["feature_id"]))

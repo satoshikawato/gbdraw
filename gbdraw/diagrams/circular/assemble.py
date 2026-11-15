@@ -84,6 +84,7 @@ from ...labels.circular import (
     x_overlap,
     y_overlap,
 )
+from ...labels.circular_leaders import leaders_over_lanes
 from ...labels.circular_repair import make_way_for_region_labels
 from ...labels.circular_capacity import CircularLabelCapacity, CircularLabelCapacityExceeded
 from ...labels.circular_fit import CircularDefinitionFitProbe, CircularLabelFitProbe, CircularLabelLayout
@@ -4009,6 +4010,25 @@ def _circle_slot_plan(
     return _CircleSlotPlan([*plan.slots, *band], plan.preferred_anchor_slot_ids, show_depth_track)
 
 
+def _placed_labels(
+    labels: Sequence[CircularLabel],
+    feature_layers: FeatureBuildResult,
+    radial_layout: CircularRadialLayout,
+    display_length: int,
+) -> Sequence[CircularLabel]:
+    """The drawn labels as one keyed copy for both label phases, each leader marked where it crosses features of
+    other lanes on the way to its own feature: it is drawn over them there (``leaders_over_lanes``, OV-3625). The
+    blocks are those every features slot draws, each at its own lanes (``CircularResolvedSlot.feature_layout``)."""
+
+    intervals = [
+        interval
+        for slot in radial_layout.slots
+        if slot.renderer == "features" and slot.feature_layout is not None
+        for interval in feature_radius_intervals(feature_layers.foreground_features, display_length, slot.feature_layout)
+    ]
+    return _pre_keyed(leaders_over_lanes(labels, intervals, display_length))
+
+
 def add_record_on_circular_canvas(
     canvas: Drawing,
     canvas_config: CircularCanvasConfigurator,
@@ -4412,7 +4432,8 @@ def add_record_on_circular_canvas(
 
     # The labels do not change after this: both label phases take one keyed copy.
     placed_labels: Sequence[CircularLabel] = (
-        _pre_keyed(label.copy() for label in precalculated_labels or ()) if show_external_labels else ()
+        _placed_labels(precalculated_labels or (), feature_layers, radial_layout, display_length)
+        if show_external_labels else ()
     )
     render_context = CircularRecordRenderContext(
         profile=profile,

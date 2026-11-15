@@ -111,7 +111,9 @@ class CircularLabel(_CircularLabelRequired, total=False):
     - placement stage only: ``_spacing_px``, ``_enforce_spacing_px``,
       ``_opt_original_idx``;
     - leader: ``leader_start_x``, ``leader_start_y``, ``leader_contact`` (a
-      contact as fractions of the ink box);
+      contact as fractions of the ink box), ``leader_over_to_px`` (the radius
+      of its feature's edge facing the label, to which the leader runs over
+      the features of other lanes it crosses: ``leaders_over_lanes``);
     - radial placement: ``placement``, ``placed_angle_deg``, ``text_x``,
       ``text_y``, ``rotation_deg``, ``text_anchor``, ``dominant_baseline``,
       ``oriented_corners``, ``aabb_local``;
@@ -134,6 +136,7 @@ class CircularLabel(_CircularLabelRequired, total=False):
     leader_start_x: float
     leader_start_y: float
     leader_contact: tuple[float, float]
+    leader_over_to_px: float
     placement: Literal["radial"]
     placed_angle_deg: float
     text_x: float
