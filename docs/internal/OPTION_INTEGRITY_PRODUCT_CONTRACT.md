@@ -12612,111 +12612,201 @@ Decision date: 2026-10-13
 ### PD-OI-106: Web UI language
 
 - Concern key: `product.web-ui-language`
-- Scenario revision: `7`
-- Supersedes: `PD-OI-106`, scenario revision `6`. Scenario revision `7` keeps
-  every outcome of scenario revision `6` and adds two languages to the header
-  Language menu (हिन्दी and বাংলা), which ship together in 0.15.0; it states
-  that numbers keep the digits 0-9; it states that Devanagari and Bengali text
-  is shown in the typeface of the user's system for its script and that every
-  script is shown at the sizes it needs, with no mark cut off; and it names the
-  two new languages in the Accepted residual risk (no native reviewer; English
-  digit grouping, and the digits 0-9 for bn), together with the es, fr, it and
-  pt plural sentence for counts that are exact multiples of a million. The
-  Revision 150 entry quotes the replies. As scenario revisions `1` to `6`, it
-  narrows `PD-OI-093`: that record's limit of browser storage to one display
-  choice no longer holds (see the receipt's May retire); `PD-OI-093` keeps its
-  text and its stored display choice.
+- Scenario revision: `8`
+- Supersedes: `PD-OI-106`, scenario revision `7`. Scenario revision `8` keeps
+  every outcome of scenario revision `7`, adds three languages to the header
+  Language menu (اردو, العربية and فارسی), and states how a number field reads
+  other digit sets, how the Web UI reads from right to left in ar, fa and ur,
+  and which typefaces show their text; its Revision #2056 entry below says what
+  changes. As scenario revisions `1` to `7`, it narrows `PD-OI-093`: that
+  record's limit of browser storage to one display choice no longer holds (see
+  the receipt's May retire); `PD-OI-093` keeps its text and its stored display
+  choice.
 - Status: `ACCEPTED`
 - Selected outcome: `WEB-UI-LANGUAGE-MANUAL`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner replies of `2026-11-08` in the Claude Code
-  session, quoted in the Revision 150 entry above; scenario revision `6` came
-  from the Owner replies of `2026-10-31` (Revision 108 entry), scenario
-  revision `5` from those of `2026-10-22` (Revision 79 entry), scenario
-  revision `4` from those of the same day (Revision 78 entry), scenario
-  revision `3` from those of `2026-10-21` (Revision 76 entry), scenario
-  revision `2` from those of the same day (Revision 75 entry), and scenario
-  revision `1` from the Owner answers of `2026-10-19` (Revision 70 entry). The
-  receipt text below is the session's wording, which the Owner approved in
-  full. The receipt reproduces its fields without translation or additional
-  terms. Dependent runtime requires this authority merged into its base, or
-  merged together with it through the reviewed static Product Contract
-  co-change route; this record supplies no runtime acceptance evidence. The
-  JSON `concern` holds the concern key without the receipt's parenthetical
-  description.
+- Decision source: the Owner replies of `2026-11-08` and `2026-11-15` in the
+  Claude Code sessions of the campaign `i18n-rtl-indic-20261108`, quoted in its
+  Revision #2056 entry below; scenario revision `7` came from the Owner replies
+  of `2026-11-08` (Revision 150 entry), scenario revision `6` from those of
+  `2026-10-31` (Revision 108 entry), scenario revision `5` from those of
+  `2026-10-22` (Revision 79 entry), scenario revision `4` from those of the
+  same day (Revision 78 entry), scenario revision `3` from those of
+  `2026-10-21` (Revision 76 entry), scenario revision `2` from those of the
+  same day (Revision 75 entry), and scenario revision `1` from the Owner
+  answers of `2026-10-19` (Revision 70 entry). The receipt text below is the
+  session's wording, which the Owner approved in full; its last line, shown as
+  a placeholder for the date of the approval, holds that date. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence. The JSON `concern` holds the
+  concern key without the receipt's parenthetical description.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `655ddf9a343e7c4e4150f9ff24f9a54a90702c0feef4b8562c87e6fdf437cda0`.
+  `7b1c31582adbb89f3e7ba324ee0c56e80714470bbaeb8b3dc16a93bf98752b9e`.
 
 ```text
 PRODUCT_DECISION
 Concern: product.web-ui-language (language of the Web UI text)
-Scenario revision: 7
+Scenario revision: 8
 Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu (English,
   Bahasa Indonesia, Deutsch, Español, Français, Italiano, Polski,
-  Português, Tiếng Việt, Türkçe, Русский, Українська, हिन्दी,
-  বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at
-  once, without reload, and without changing the Result, the
-  settings or the History; switching is not a History step. hi and
-  bn ship together in 0.15.0. English is shown on a first visit;
-  the browser language never chooses. The chosen language is
-  remembered per browser and is not part of the Session, History
-  or any export. Names fixed in English by PD-OI-093 and PD-OI-105
-  keep that English in the English UI and are translated in the
-  other languages. pt follows the Brazilian norm; one Portuguese
-  catalog. A language with singular and plural forms shows the
-  form its own plural rule selects for the count, including the
-  few and many forms of pl, ru and uk. Numbers keep the digits
-  0-9, the English decimal point and the English digit grouping in
-  every language. Thai, Devanagari and Bengali text is shown in
-  the typeface of the user's system for its script; Vietnamese,
-  Polish and Turkish letters and Cyrillic text are shown in the
-  bundled Latin typeface; every script is shown at the sizes it
-  needs, with no mark cut off; the figure is unchanged. No text
-  states that the translations are reviewed. Beside the Language
-  menu, in every language, a link named "Suggest a translation
-  fix" opens the GitHub translation feedback issue form in a new
-  tab with the shown language and the gbdraw version filled in; no
-  file, setting, Result or Session content is put in the link.
+  Português, Tiếng Việt, Türkçe, Русский, Українська, اردو,
+  العربية, فارسی, हिन्दी, বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어)
+  switches the Web UI text at once, without reload, and without
+  changing the Result, the settings or the History; switching is
+  not a History step. ar and fa ship together in 0.15.0; ur ships
+  in 0.15.0 with its bundled typeface. English is shown on a first
+  visit; the browser language never chooses. The chosen language
+  is remembered per browser and is not part of the Session,
+  History or any export. Names fixed in English by PD-OI-093 and
+  PD-OI-105 keep that English in the English UI and are translated
+  in the other languages. pt follows the Brazilian norm; one
+  Portuguese catalog. A language with singular and plural forms
+  shows the form its own plural rule selects for the count,
+  including the few and many forms of pl, ru and uk and the zero,
+  two, few and many forms of ar. Numbers keep the digits 0-9, the
+  English decimal point and the English digit grouping in every
+  language; a number field reads Persian, Arabic-Indic, Bengali
+  and Devanagari digits and the Arabic decimal separator, typed on
+  a keyboard or pasted into it, as 0-9 and the English decimal
+  point. In ar, fa and ur the Web UI reads from right to left:
+  panes, menus, lists, dialogs and controls are mirrored, and
+  arrows that mean back, forward, open or move point the other
+  way; the figure, the Preview and every view drawn in the
+  figure's shape, every export, the command, recipe and replay
+  text, sequences, coordinates, colors and number fields keep
+  their left-to-right order, and a file, record or feature name
+  keeps the direction of its own letters. Thai, Devanagari and
+  Bengali text, and the Arabic-script text of ar and fa, is shown
+  in the typeface of the user's system for its script; Urdu text
+  is shown in the bundled Nastaliq typeface, and in a Naskh
+  typeface of the user's system while that typeface loads;
+  Vietnamese, Polish and Turkish letters and Cyrillic text are
+  shown in the bundled Latin typeface; every script is shown at
+  the sizes and line heights it needs, with no mark cut off; the
+  figure is unchanged. No text states that the translations are
+  reviewed. Beside the Language menu, in every language, a link
+  named "Suggest a translation fix" opens the GitHub translation
+  feedback issue form in a new tab with the shown language and the
+  gbdraw version filled in; no file, setting, Result or Session
+  content is put in the link.
 Rationale: Let users work in their own language while every
   scientific output stays identical in all languages.
 Must preserve: the English UI text and accessible names; the
   figure, every export, the Session, CLI / Source recipe / Exact
-  replay text and diagnostics are identical in every language;
-  the stored settings-pane display choice of PD-OI-093.
+  replay text and diagnostics are identical in every language; the
+  stored settings-pane display choice of PD-OI-093.
 May retire: PD-OI-093's limit of browser storage to one display
   choice; storage now holds that choice and the UI language.
 Accepted residual risk: Python-produced warnings, Gallery
   tutorials and the docs stay English inside a translated UI;
   translated wording may contain errors until corrected; the es,
-  fr, pt, ko, id, vi, th, de, it, pl, tr, ru, uk, hi and bn
-  wording is drafted and checked without a native reviewer until
-  one corrects it; id, vi, de, it, pl, tr, ru and uk readers see
-  the English number format (1,000.5) where their convention
+  fr, pt, ko, id, vi, th, de, it, pl, tr, ru, uk, hi, bn, ar, fa
+  and ur wording is drafted and checked without a native reviewer
+  until one corrects it; id, vi, de, it, pl, tr, ru and uk readers
+  see the English number format (1,000.5) where their convention
   writes 1.000,5 or 1 000,5; hi and bn readers see 1,234,567 where
-  their convention writes 12,34,567, and bn readers see the digits
-  0-9 where their convention writes ০-৯; es, fr, it and pt readers
-  see their usual plural sentence for counts that are exact
-  multiples of a million, where their grammar adds de or di before
-  the noun; a translation report needs a GitHub account and is
-  public.
+  their convention writes 12,34,567; bn and fa readers see the
+  digits 0-9 where their convention writes ০-৯ or ۰-۹, ar readers
+  see them where their regional convention writes ٠-٩, and fa
+  readers see 1,234.5 where their convention writes ۱٬۲۳۴٫۵;
+  digits that an input method composes reach a number field as the
+  browser reads them: Chromium leaves them out, and Firefox leaves
+  out the Arabic decimal separator unless the UI is Persian; in
+  Chromium, Undo after a paste that a number field reads this way
+  also removes the digits typed just before it; the number-field
+  reading, the right-to-left layout and the Urdu typeface are not
+  checked in Safari or on macOS, iOS or Android; es, fr, it and pt
+  readers see their usual plural sentence for counts that are
+  exact multiples of a million, where their grammar adds de or di
+  before the noun; Urdu rows and buttons are taller than in the
+  other languages; a translation report needs a GitHub account and
+  is public.
 Owner: satoshikawato
-Decision date: 2026-11-08
+Decision date: 2026-11-15
 ```
 
 ```json
 {
   "concern": "product.web-ui-language",
-  "scenarioRevision": 7,
-  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Bahasa Indonesia, Deutsch, Español, Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский, Українська, हिन्दी, বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. hi and bn ship together in 0.15.0. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count, including the few and many forms of pl, ru and uk. Numbers keep the digits 0-9, the English decimal point and the English digit grouping in every language. Thai, Devanagari and Bengali text is shown in the typeface of the user's system for its script; Vietnamese, Polish and Turkish letters and Cyrillic text are shown in the bundled Latin typeface; every script is shown at the sizes it needs, with no mark cut off; the figure is unchanged. No text states that the translations are reviewed. Beside the Language menu, in every language, a link named \"Suggest a translation fix\" opens the GitHub translation feedback issue form in a new tab with the shown language and the gbdraw version filled in; no file, setting, Result or Session content is put in the link.",
+  "scenarioRevision": 8,
+  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Bahasa Indonesia, Deutsch, Español, Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский, Українська, اردو, العربية, فارسی, हिन्दी, বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. ar and fa ship together in 0.15.0; ur ships in 0.15.0 with its bundled typeface. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count, including the few and many forms of pl, ru and uk and the zero, two, few and many forms of ar. Numbers keep the digits 0-9, the English decimal point and the English digit grouping in every language; a number field reads Persian, Arabic-Indic, Bengali and Devanagari digits and the Arabic decimal separator, typed on a keyboard or pasted into it, as 0-9 and the English decimal point. In ar, fa and ur the Web UI reads from right to left: panes, menus, lists, dialogs and controls are mirrored, and arrows that mean back, forward, open or move point the other way; the figure, the Preview and every view drawn in the figure's shape, every export, the command, recipe and replay text, sequences, coordinates, colors and number fields keep their left-to-right order, and a file, record or feature name keeps the direction of its own letters. Thai, Devanagari and Bengali text, and the Arabic-script text of ar and fa, is shown in the typeface of the user's system for its script; Urdu text is shown in the bundled Nastaliq typeface, and in a Naskh typeface of the user's system while that typeface loads; Vietnamese, Polish and Turkish letters and Cyrillic text are shown in the bundled Latin typeface; every script is shown at the sizes and line heights it needs, with no mark cut off; the figure is unchanged. No text states that the translations are reviewed. Beside the Language menu, in every language, a link named \"Suggest a translation fix\" opens the GitHub translation feedback issue form in a new tab with the shown language and the gbdraw version filled in; no file, setting, Result or Session content is put in the link.",
   "rationale": "Let users work in their own language while every scientific output stays identical in all languages.",
   "mustPreserve": "the English UI text and accessible names; the figure, every export, the Session, CLI / Source recipe / Exact replay text and diagnostics are identical in every language; the stored settings-pane display choice of PD-OI-093.",
   "mayRetire": "PD-OI-093's limit of browser storage to one display choice; storage now holds that choice and the UI language.",
-  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt, ko, id, vi, th, de, it, pl, tr, ru, uk, hi and bn wording is drafted and checked without a native reviewer until one corrects it; id, vi, de, it, pl, tr, ru and uk readers see the English number format (1,000.5) where their convention writes 1.000,5 or 1 000,5; hi and bn readers see 1,234,567 where their convention writes 12,34,567, and bn readers see the digits 0-9 where their convention writes ০-৯; es, fr, it and pt readers see their usual plural sentence for counts that are exact multiples of a million, where their grammar adds de or di before the noun; a translation report needs a GitHub account and is public.",
+  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt, ko, id, vi, th, de, it, pl, tr, ru, uk, hi, bn, ar, fa and ur wording is drafted and checked without a native reviewer until one corrects it; id, vi, de, it, pl, tr, ru and uk readers see the English number format (1,000.5) where their convention writes 1.000,5 or 1 000,5; hi and bn readers see 1,234,567 where their convention writes 12,34,567; bn and fa readers see the digits 0-9 where their convention writes ০-৯ or ۰-۹, ar readers see them where their regional convention writes ٠-٩, and fa readers see 1,234.5 where their convention writes ۱٬۲۳۴٫۵; digits that an input method composes reach a number field as the browser reads them: Chromium leaves them out, and Firefox leaves out the Arabic decimal separator unless the UI is Persian; in Chromium, Undo after a paste that a number field reads this way also removes the digits typed just before it; the number-field reading, the right-to-left layout and the Urdu typeface are not checked in Safari or on macOS, iOS or Android; es, fr, it and pt readers see their usual plural sentence for counts that are exact multiples of a million, where their grammar adds de or di before the noun; Urdu rows and buttons are taller than in the other languages; a translation report needs a GitHub account and is public.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-11-08"
+  "decisionDate": "2026-11-15"
 }
 ```
+
+#### Revision #2056
+
+`PD-OI-106` is replaced for scenario revision `8` (concern
+`product.web-ui-language`). The receipt keeps every product outcome of
+scenario revision `7` and changes this text: the header Language menu gains
+اردو, العربية and فارسی (tags ur, ar, fa); ar and fa ship together in 0.15.0,
+and ur ships in 0.15.0 with its bundled typeface; the plural sentence names
+the zero, two, few and many forms of ar; a number field reads Persian,
+Arabic-Indic, Bengali and Devanagari digits and the Arabic decimal separator,
+typed on a keyboard or pasted into it, as 0-9 and the English decimal point;
+in ar, fa and ur the Web UI reads from right to left, while the figure, the
+Preview, every export, the command, recipe and replay text, sequences,
+coordinates, colors and number fields keep their left-to-right order and a
+name keeps the direction of its own letters; the Arabic-script text of ar and
+fa is shown in the typeface of the user's system, and Urdu text in the bundled
+Nastaliq typeface (in a Naskh typeface of the user's system while it loads);
+every script is shown at the line heights it needs as well as the sizes; and
+the Accepted residual risk names ar, fa and ur (no native reviewer; the digits
+0-9 where fa writes ۰-۹ and ar's regional convention writes ٠-٩; 1,234.5 where
+fa writes ۱٬۲۳۴٫۵), digits that an input method composes, Undo in Chromium
+after a paste that a number field reads this way, the number-field reading,
+right-to-left layout and Urdu typeface not checked in Safari or on macOS, iOS
+or Android, and the taller Urdu rows and buttons. It comes from the Product
+Decision Owner `satoshikawato`'s replies to the campaign
+`i18n-rtl-indic-20261108` (`DECISIONS.md` `D-11` to `D-17`, `D-20` and
+`D-21`).
+
+- D-11 to D-17 (`2026-11-08`). The replies to seven questions, quoted in the
+  Revision 150 entry above, chose the release order (hi and bn, then ar and
+  fa, then ur), no native-speaker review as a release condition, the place of
+  اردو, العربية and فارسی in the Language menu, the digits 0-9 with number
+  fields that read Persian, Arabic-Indic, Bengali and Devanagari digits, and
+  the bundled Urdu typeface.
+- D-20 (`2026-11-15`). The Claude Code session `bee79662` asked three
+  questions about Urdu text, 「Q1 ウルドゥー語の行の高さ」, 「Q2 語と語の間」 and
+  「Q3 文字の大きさの下限」, with a comparison page titled
+  「ウルドゥー語 UI の行の高さ」 and the recommended options
+  「B 2.5em（推奨）」, 「A Nastaliq 本来の幅（推奨）」 and
+  「A 13 px（推奨、計画どおり）」. The Owner answered 「推奨通り」 (session board
+  message `171dce62-d23b-4371-9111-138f33e8d1a3`) and
+  「i18n-rtl-indic-20261108/lane-D-ur: Q1=B Q2=A Q3=A」 (relayed by the session
+  `c4074512`). The receipt states the outcome as "the sizes and line heights
+  it needs" and "Urdu rows and buttons are taller than in the other
+  languages".
+- D-21 (`2026-11-15`). The Claude Code session `6ae9b99b` showed the complete
+  text of the receipt on a page headed
+  「Web UI 言語の受領書 rev 8（アラビア語・ペルシア語・ウルドゥー語）」, after the
+  number-field gaps that its Accepted residual risk names, and asked
+  「Q1：受領書 rev 8 の全文を承認していただけますか。この会話に直接ご回答ください。」
+  with the answer 「rev8 承認」. The Owner answered 「推奨通り」 to that session
+  (session board message `4c625342-4f28-4dc2-8634-681bfc040961`). The shown
+  text's last line was the placeholder
+  `Decision date: <date of the Owner's approval of this text>`. The serialized
+  receipt fills it with the date of the approval, `2026-11-15`, and
+  changes nothing else (shown text SHA-256
+  `f921843d3d5b8b01ba70f3d62517fb1180096fa6c6b2663a696ff2b9c8bc56ca`).
+- New receipt SHA-256: `PD-OI-106` scenario revision `8`
+  `7b1c31582adbb89f3e7ba324ee0c56e80714470bbaeb8b3dc16a93bf98752b9e`.
+- `PD-OI-106` scenario revision `8` supersedes scenario revision `7`, whose
+  receipt stays quoted in the Revision 150 entry above. No other record is
+  amended or retired; `PD-OI-093` and `PD-OI-105` keep their text.
+- This change is authority for the later runtime changes that add ar, fa and
+  ur, the right-to-left layout and the number-field reading: it changes no
+  runtime by itself and supplies no runtime acceptance evidence. The Review is
+  `REQUIRED`.
 
 ### PD-OI-107: Organism name lines from record metadata
 
