@@ -11,6 +11,8 @@ const SOURCE = new URL('../../../gbdraw/web/js/utils/error-normalization.js', im
 const PROBE = `
 export const errorTextKeyTables = {
   DEFINITIONS: Object.values(DEFINITIONS).flatMap(([message, , guidance]) => (guidance ? [message, guidance] : [message])),
+  OPERATION_DEFINITIONS: Object.values(OPERATION_DEFINITIONS).flatMap((codes) => Object.values(codes))
+    .flatMap(([message, , guidance]) => (guidance ? [message, guidance] : [message])),
   REASONS: Object.values(REASONS),
   FIELD_LABELS: Object.values(FIELD_LABELS),
   ORDINAL_LABELS: Object.values(ORDINAL_LABELS),

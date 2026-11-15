@@ -112,6 +112,7 @@ import {
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
   readEditorTableTexts,
+  readFileRecordCount,
   readStoredBlastTables,
   withStoredTablesWithoutProteinMatches,
   readStoredRenderRequest,
@@ -392,7 +393,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { CircularSourceInput } from './input-types.js' */
-/** @import { NamedCardRecords } from './record-draw-selection.js' */
+/** @import { NamedCardRecord, NamedCardRecords } from './record-draw-selection.js' */
 /** @import { CircularListRecord } from './record-discovery.js' */
 /** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedFileValue, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
@@ -7514,9 +7515,29 @@ const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) =>
   return prepared;
 };
 /**
+ * Whether a File card names every record of its file, so its placement leaves no record OFF and needs no read: its
+ * named records use one kind of selector, as many distinct ones as the file holds records, each place within them.
+ * The count is the one that reads no Python (`readFileRecordCount`): a GenBank or FASTA file. A GFF3 + FASTA card
+ * draws the records its GFF3 names, which that counter does not read, so it is read; so is a card whose count fails.
+ * @template F
+ * @param {readonly NamedCardRecord[]} named
+ * @param {CircularSourceInput<F>} input
+ * @param {(file: F | null) => FileLike | null | undefined} fileOf
+ * @returns {Promise<boolean>}
+ */
+const namesWholeFile = async (named, { spec: { sourceKind }, primaryFile }, fileOf) => {
+  const file = fileOf(primaryFile);
+  if (sourceKind === 'gffFasta' || !file || new Set(named.map(({ selector }) => selector.kind)).size !== 1) return false;
+  const count = await readFileRecordCount(file, sourceKind).catch(() => -1);
+  const places = new Set(named.map(({ selector }) => (selector.kind === 'recordIndex' ? selector.index : selector.value)));
+  return places.size === count && named.every(({ selector }) => selector.kind !== 'recordIndex' || selector.index < count);
+};
+/**
  * Places the records File cards name of their files (`named`, OV-3530, OV-3531) in a draft config
  * (`placeNamedRecordsInDraft`), from the drawing's read records (`records`) and a read of each named card they do not
- * hold. `error` is the first failed read's.
+ * hold. A card that names every record of its file (`namesWholeFile`: Python's expansion of a whole file, a CLI
+ * Session's default) leaves none OFF and is not read, so it needs no diagram Worker. `error` is the first failed
+ * read's.
  * @template F
  * @param {{ recordsOff?: unknown, adv?: unknown }} config The draft config, changed in place.
  * @param {{ named: readonly NamedCardRecords[], records: readonly CircularListRecord[],
@@ -7526,8 +7547,16 @@ const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) =>
  */
 const readAndPlaceNamedRecords = async (config, { named, records, inputs }, fileOf) => {
   const held = new Set(records.map(({ uid }) => uid));
-  const reads = await readCircularSourceRecords(inputs.filter(({ uid }) => !held.has(uid) && named.some((card) => card.uid === uid)), fileOf);
-  const left = placeNamedRecordsInDraft(config, named, circularRecordEntries([...records, ...reads.flatMap((read) => read.records)]));
+  const unread = inputs.flatMap((input) => {
+    const card = held.has(input.uid) ? undefined : named.find(({ uid }) => uid === input.uid);
+    return card ? [{ input, card }] : [];
+  });
+  const whole = new Set((await Promise.all(unread.map(async ({ input, card }) => (
+    await namesWholeFile(card.named, input, fileOf) ? [card.uid] : []
+  )))).flat());
+  const reads = await readCircularSourceRecords(unread.flatMap(({ input }) => (whole.has(input.uid) ? [] : [input])), fileOf);
+  const left = placeNamedRecordsInDraft(config, named.filter(({ uid }) => !whole.has(uid)),
+    circularRecordEntries([...records, ...reads.flatMap((read) => read.records)]));
   return { left, error: reads.find((read) => read.error !== null)?.error ?? null };
 };
 /**

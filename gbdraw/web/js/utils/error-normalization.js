@@ -352,9 +352,13 @@ const DEFINITIONS = Object.freeze({
   CLEANUP_FAILED: ['Temporary resource cleanup failed. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']]
 });
 
-// The sequence reads of a shown Result (D5) give their own meaning to a code that names another operation's failure.
+// An operation's own meaning of a code that names another operation's failure: the sequence reads of a shown Result
+// (D5); a Save, whose runtime failure cannot be recovered by saving (R6).
 /** @type {Readonly<Record<string, Readonly<Record<string, readonly [string, readonly string[], string?]>>>>} */
 const OPERATION_DEFINITIONS = Object.freeze({
+  'session-save': Object.freeze(/** @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>} */ ({
+    WORKER_INIT: ['The diagram runtime could not start, so the Session was not saved. Retry; if it fails again, reload the page.', ['retry', 'reload']]
+  })),
   readFeatureSequences: Object.freeze(/** @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>} */ ({
     FEATURE_IDENTITY: ['The request of the shown Result does not draw this feature, so its sequence cannot be read. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']]
   }))
@@ -1261,9 +1265,11 @@ export const normalizeUserFacingError = (value, {
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
-  result.actions = sessionTable !== undefined || sessionLimit ? ['select-input']
+  const offered = sessionTable !== undefined || sessionLimit ? ['select-input']
     : comparisonCauseRepeats(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
+  // Save Session is no way out of a failed Save (R6): the Save itself is what failed. The one rule for every surface.
+  result.actions = result.operation === 'session-save' ? offered.filter((action) => action !== 'save-session') : offered;
   return result;
 };
 

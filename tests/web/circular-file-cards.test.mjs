@@ -390,6 +390,50 @@ for (const result of [true, false]) {
   });
 }
 
+// The CLI expands a FASTA file into one record per entry, each named by its ID, so its plain Session names every
+// record of three.fa. A Save before any read writes them as dev does, no record OFF and no read: the counter that
+// reads no Python (`readFileRecordCount`) says the card names its whole file, so a Save needs no diagram Worker.
+await test('a Save of a plain CLI Session of a multi-record FASTA canvas, with no edit and no Generate, reads no card', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-fasta-all-'));
+  try {
+    await writeFile(path.join(directory, 'three.fa'), '>fa1\nACGTACGTAC\n>fa2\nACGTACGTAC\n>fa3\nACGTACGTAC\n');
+    await writeFile(path.join(directory, 'one.fa'), '>solo\nACGTACGTACGT\n');
+    const { bytes } = await cliSession(directory, ['--fasta', 'three.fa', 'one.fa', '--multi_record_canvas']);
+    assert.equal((await load(bytes)).status, 'ok');
+    const drawing = modeDrawing(state, 'circular');
+    assert.deepEqual(drawing.recordsNamed.map(({ named }) => named.length), [3], 'the CLI names fa1, fa2 and fa3');
+    const result = await saveShown('fasta-all');
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    assert.equal(Object.hasOwn(await savedConfigOf(result.blob, drawing.id), 'recordsOff'), false, 'no record OFF');
+    assert.equal((await load(result.blob)).status, 'ok');
+    const reloaded = modeDrawing(state, 'circular');
+    assert.deepEqual([reloaded.recordsNamed, reloaded.recordsOff], [[], []]);
+    // Before its read each card is its whole file (`circularRecordPlan`), as the saved draft draws it.
+    const filesData = await serializeActiveRenderFiles(state, reloaded);
+    assert.deepEqual(buildCanonicalRenderRequest({ state, drawing: reloaded, filesData }).renderRequest.records
+      .map(({ cardinality, selector }) => [cardinality, selector ?? null]), [['all', null], ['all', null]]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// A Save that fails because the diagram runtime cannot start does not offer Save as the way out (R6): the action it
+// offers must be one that can work.
+await test('a Save that fails because the diagram runtime cannot start offers no Save Session', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-save-init-'));
+  try {
+    assert.equal((await load(await fastaCliSession(directory))).status, 'ok');
+    let model = null;
+    const result = await saveShown('init', { onError: (error) => { model = error; } });
+    assert.equal(result?.status, 'error');
+    assert.equal(model.code, 'WORKER_INIT');
+    assert.equal(model.actions.includes('save-session'), false, JSON.stringify(model.actions));
+    assert.doesNotMatch(model.summary, /Save a Session/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // The same Save of a card the drawing can read writes every record OFF, a one-record card OFF included: the next
 // Load draws what the drawing drew.
 await test('a Save without a Result of a card that names some records writes them OFF beside a one-record card OFF', async () => {

@@ -6286,6 +6286,25 @@ const readCanonicalResourceFileBytes = async (resources, resourceId) => {
   return readFile ? expandInputBytes(String(/** @type {{ name?: unknown }} */ (descriptor).name ?? ''), await readFile()) : null;
 };
 
+/** @param {string} text @returns {{ genbank: number, fasta: number }} */
+const recordCountsOf = (text) => ({ genbank: countGenBankRecords(text), fasta: (text.match(/^>/gm) || []).length });
+/**
+ * The record count of a File or a Session resource view read as a GenBank or a FASTA file, without the Python
+ * loader: the one counter of a source's records (the Source recipe, Run Info, a Save's named card records).
+ * @param {FileLike} file
+ * @param {'genbank' | 'fasta'} kind
+ * @returns {Promise<number>}
+ */
+export const readFileRecordCount = async (file, kind) => {
+  let counts = sourceRecordCounts.get(file);
+  if (!counts) {
+    counts = recordCountsOf(await readFileText(file));
+    // Immutable File/view identity outlives transferred bytes. Retain only counts;
+    // a replacement source gets its own entry.
+    sourceRecordCounts.set(file, counts);
+  }
+  return counts[kind];
+};
 /**
  * The bytes a File holds for a committed Session resource as they are stored (`readStoredBytes`: a gzip input as
  * chosen, which Generate sends and Python expands under its cap), or the bytes the reader of its file-backed descriptor
@@ -6310,18 +6329,9 @@ export const readCanonicalResourceStoredBytes = async (resources, resourceId) =>
  */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
   const fileOwner = resourceFileOwner(resources?.[resourceId]);
-  let counts = fileOwner ? sourceRecordCounts.get(fileOwner) : undefined;
-  if (!counts) {
-    const text = await readCanonicalResourceText(resources, resourceId);
-    counts = {
-      genbank: countGenBankRecords(text),
-      fasta: (text.match(/^>/gm) || []).length
-    };
-    // Immutable File/view identity outlives transferred bytes. Retain only counts;
-    // a replacement source gets its own entry, and ownerless descriptors stay uncached.
-    if (fileOwner) sourceRecordCounts.set(fileOwner, counts);
-  }
-  return counts[kind];
+  // An ownerless descriptor stays uncached.
+  if (fileOwner) return readFileRecordCount(/** @type {FileLike} */ (fileOwner), kind);
+  return recordCountsOf(await readCanonicalResourceText(resources, resourceId))[kind];
 };
 
 /**

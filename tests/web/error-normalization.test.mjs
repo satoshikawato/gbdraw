@@ -482,10 +482,18 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   assert.equal(hiddenMode.context.diagramMode, 'linear');
   assert.match(hiddenMode.summary, / Diagram: Linear\.$/);
   assert.deepEqual(hiddenMode.actions, ['generate']);
-  assert.match(indexHtml, /errorDisplay\.actions\.includes\('save-session'\) && errorDisplay\.operation !== 'session-save'/);
   const saveFailure = normalizeUserFacingError(new Error('PRIVATE'), { operation: 'session-save' });
   assert.equal(saveFailure.code, 'UNKNOWN');
   assert.equal(saveFailure.operation, 'session-save');
+  // The normalizer leaves Save Session out of a failed Save's actions (R6), so the panel shows the button by its
+  // actions alone; a model normalized again (`errorDisplay`) keeps that.
+  assert.deepEqual(saveFailure.actions, ['retry']);
+  assert.deepEqual(normalizeUserFacingError(saveFailure).actions, ['retry']);
+  assert.match(indexHtml, /<button v-if="errorDisplay\.actions\.includes\('save-session'\) \|\| generationFailureRecovery === 'restore-failed'"/);
+  const saveInit = normalizeUserFacingError({ code: 'WORKER_INIT', operation: 'listSequenceRecords' }, { operation: 'session-save' });
+  assert.deepEqual(saveInit.actions, ['retry', 'reload']);
+  assert.doesNotMatch(saveInit.summary, /Save a Session/);
+  assert.deepEqual(normalizeUserFacingError({ code: 'WORKER_INIT' }, { operation: 'generate' }).actions, ['save-session', 'reload', 'retry']);
 });
 
 // #941 residual: every action of an operation error panel is the same small
