@@ -8959,6 +8959,7 @@
                 <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="toggleRightDrawer"
                         data-history-ignore
+                        data-preview-edge-control
                         class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-40 transition-all"
                         :aria-expanded="showRightDrawer"
                         :disabled="Boolean(similarityAlignmentEditorDisabledReason)"

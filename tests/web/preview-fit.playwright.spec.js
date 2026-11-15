@@ -9,6 +9,7 @@ const { openApp, generateAndWaitForResult, waitForSessionLoadAtRest } = require(
 const repoRoot = process.cwd();
 const hmmt = readFileSync(join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk'), 'utf8');
 const linearSession = join(repoRoot, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
+const collinearSession = join(repoRoot, 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw');
 
 const fitButton = (page) => page.getByRole('button', { name: 'Fit to preview', exact: true });
 
@@ -43,10 +44,15 @@ const settle = async (page) => {
 };
 
 // Margins of the rendered SVG inside the visible preview frame: the canvas
-// client area left of an open Editor drawer that lies over it.
-const fitGeometry = (page) => page.evaluate(() => {
+// client area left of an open Editor drawer that lies over it. With
+// `leftOfToggle`, the frame ends at the Editor toggle instead (OV-3588), and
+// the toggle's box is measured once its transition has ended.
+const fitGeometry = (page, { leftOfToggle = false } = {}) => page.evaluate(async (leftOfToggle) => {
   const app = window.__GBDRAW_APP__;
   const container = app.canvasContainerRef;
+  const toggleElement = document.querySelector('.drawer-toggle');
+  await Promise.all((toggleElement?.getAnimations() || []).map((animation) => animation.finished.catch(() => {})));
+  const toggleBox = toggleElement?.getBoundingClientRect();
   const frame = container.getBoundingClientRect();
   const box = app.svgContainer.querySelector('svg').getBoundingClientRect();
   const left = frame.left + container.clientLeft;
@@ -57,18 +63,24 @@ const fitGeometry = (page) => page.evaluate(() => {
   const covered = drawer && drawer.top < bottom && drawer.bottom > top && drawer.left < right
     ? right - drawer.left : 0;
   right -= covered;
+  if (leftOfToggle) right = toggleBox.left;
+  const toggle = toggleBox && { left: toggleBox.left, top: toggleBox.top, right: toggleBox.right, bottom: toggleBox.bottom };
   return {
     zoom: app.zoom,
     pan: { ...app.canvasPan },
     covered,
+    toggle,
+    meetsToggle: Boolean(toggle && toggleBox.width && box.left < toggle.right && box.right > toggle.left
+      && box.top < toggle.bottom && box.bottom > toggle.top),
     frame: { width: right - left, height: container.clientHeight },
     unscaled: { width: box.width / app.zoom, height: box.height / app.zoom },
     margins: { left: box.left - left, right: right - box.right, top: box.top - top, bottom: bottom - box.bottom }
   };
-});
+}, leftOfToggle);
 
 const expectFitted = (geometry, label) => {
   const detail = `${label}: ${JSON.stringify(geometry)}`;
+  expect(geometry.meetsToggle, detail).toBe(false);
   for (const margin of Object.values(geometry.margins)) expect(margin, detail).toBeGreaterThanOrEqual(-1);
   expect(Math.abs(geometry.margins.left - geometry.margins.right), detail).toBeLessThanOrEqual(2);
   expect(Math.abs(geometry.margins.top - geometry.margins.bottom), detail).toBeLessThanOrEqual(2);
@@ -168,10 +180,13 @@ const openLinearSession = async (page) => {
   await settle(page);
 };
 
+// The wide comparison fitted to the whole frame would lie under the Editor toggle, closed or
+// open (OV-3588): it is fitted left of the toggle.
 test('Fit shows the whole Linear comparison centred, left of an open Editor', async ({ page }) => {
   test.setTimeout(180000);
   await openLinearSession(page);
-  const plain = await fit(page);
+  await fit(page);
+  const plain = await fitGeometry(page, { leftOfToggle: true });
   expectFitted(plain, 'Linear 1280x800');
   expect(plain.covered).toBe(0);
 
@@ -181,10 +196,53 @@ test('Fit shows the whole Linear comparison centred, left of an open Editor', as
   await page.locator('.right-drawer').evaluate((drawer) => Promise.all(
     drawer.getAnimations().map((animation) => animation.finished.catch(() => {}))
   ));
-  const beside = await fit(page);
+  await fit(page);
+  const beside = await fitGeometry(page, { leftOfToggle: true });
   expect(beside.covered).toBeGreaterThan(300);
   expectFitted(beside, 'Linear 1280x800 with the Editor open');
   expect(beside.zoom).toBeLessThanOrEqual(plain.zoom);
+});
+
+// OV-3588: the Editor toggle lies over the right edge of the canvas (in the
+// middle of it, or beside the open drawer). A fitted figure that would lie
+// under it is fitted to the frame left of the toggle instead, with the same
+// margins; a figure clear of the toggle keeps the Fit of the whole frame.
+const fitCollinearAt = async (page, viewport) => {
+  await page.setViewportSize(viewport);
+  await openApp(page);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await page.locator('input[type=file][accept*=".gbdraw"]').setInputFiles(collinearSession);
+  await waitForSessionLoadAtRest(page, { timeout: 60_000 });
+  await settle(page);
+  return fit(page);
+};
+const openEditor = async (page) => {
+  await page.getByRole('button', { name: 'Editor', exact: true }).click();
+  await expect(page.locator('.right-drawer')).toHaveAttribute('aria-hidden', 'false');
+  await page.locator('.right-drawer').evaluate((drawer) => Promise.all(
+    drawer.getAnimations().map((animation) => animation.finished.catch(() => {}))
+  ));
+};
+for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
+  test(`Fit keeps the Linear figure clear of the Editor toggle at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test.setTimeout(180000);
+    const closed = await fitCollinearAt(page, viewport);
+    expectFitted(await fitGeometry(page, { leftOfToggle: true }), `${viewport.width}x${viewport.height} closed`);
+    expect(closed.zoom).toBeLessThan(1);
+    if (viewport.width < 1440) return;
+    await openEditor(page);
+    await fit(page);
+    const open = await fitGeometry(page, { leftOfToggle: true });
+    expectFitted(open, `${viewport.width}x${viewport.height} with the Editor open`);
+    expect(open.zoom).toBeLessThan(closed.zoom);
+  });
+}
+test('Fit of a figure clear of the Editor toggle fills the whole frame at 390x844', async ({ page }) => {
+  test.setTimeout(180000);
+  const phone = await fitCollinearAt(page, { width: 390, height: 844 });
+  // The Fit of the whole frame: no room is kept for the toggle.
+  expectFitted(phone, 'collinear 390x844');
+  expect(phone.toggle.right - phone.toggle.left).toBeGreaterThan(0);
 });
 
 // OV-2702: a file Session Load shows its figure fitted from the first frame, with no
