@@ -198,11 +198,9 @@ class CircularRecordContext:
 
     definition_profile: CircularDefinitionProfile = "full"
     layout_definition_profile: CircularDefinitionProfile | None = None
-    precomputed_depth_df: DataFrame | None = None
     precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None
     precomputed_depth_tracks: Sequence[DepthTrackData] | None = None
     precomputed_depth_track_count: int | None = None
-    shared_depth_max: float | None = None
     # The record's feature density layers, on the scale of the canvas's shared legend; None: the record's own.
     feature_density: Mapping[str, FeatureDensityLayer] | None = None
     precomputed_conservation_tracks: Sequence[ConservationTrack] | None = None
