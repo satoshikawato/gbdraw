@@ -7,7 +7,7 @@ from typing import Literal
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.svg.elements import Path, Text, TextPath
-from gbdraw.svg.circular_arcs import circle_arc, circle_point, position_angle
+from gbdraw.svg.circular_arcs import circle_arc, circle_point, position_angle, position_turn_angle, span_angle
 from gbdraw.svg.path_data import path_point
 
 from ..auto_sizes import circular_tick_intervals, determine_length_parameter
@@ -400,7 +400,7 @@ def resolve_circular_tick_label_geometry(
 
     bbox_width_px, bbox_height_px = drawn_text_box(label_text, font_family, font_size)
     anchor_value, dominant_baseline = set_tick_label_anchor_value(total_len, tick)
-    angle = 360.0 * (tick / total_len)
+    angle = position_turn_angle(tick, total_len)
     reverse_path = 90 <= angle < 270
     path_radius = float(label_radius_base)
     label_inner_offset_px, label_outer_offset_px = _tick_label_radial_offsets(
@@ -540,7 +540,7 @@ def set_tick_label_anchor_value(
     Tick labels are centered on their tick; only the baseline changes by angle.
     """
     anchor_value: Literal["middle"] = "middle"
-    angle: float = 360.0 * (tick / total_len)
+    angle: float = position_turn_angle(tick, total_len)
     baseline_value: Literal["text-after-edge", "text-before-edge", "middle", "hanging"]
     if 0 <= angle < 90:
         baseline_value = "text-after-edge"
@@ -674,7 +674,7 @@ def generate_circular_tick_labels(
             length_threshold=length_threshold,
         )
     ):
-        angle = 360.0 * (tick / total_len)
+        angle = position_turn_angle(tick, total_len)
         path_radius = geometry.path_radius_px
         label_as_feature_length = _tick_label_path_length(label_text, geometry, total_len)
         reverse_path = 90 <= angle < 270
@@ -690,7 +690,7 @@ def generate_circular_tick_labels(
                 label_text,
                 path_radius,
                 position_angle(label_start, total_len),
-                360.0 * (label_end - label_start) / total_len,
+                span_angle(label_end - label_start, total_len),
                 id_parts=(group_identifier, record_identifier, size, label_index, tick, total_len),
                 startOffset=start_offset,
                 text_anchor=geometry.text_anchor,

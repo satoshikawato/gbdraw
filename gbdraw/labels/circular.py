@@ -61,7 +61,7 @@ from ..svg.arrows import (
     resolve_circular_arrow_head_length_bp,
 )
 from ..layout.text_geometry import annular_sector_parts
-from ..svg.circular_arcs import circle_point, position_angle
+from ..svg.circular_arcs import circle_point, circle_point_rad, position_angle, position_angle_rad, position_turn_angle
 from ..svg.ids import instance_svg_id
 
 # Keep dense large-font labels from being pushed excessively far from features.
@@ -536,7 +536,7 @@ def _label_y_offsets(
     the step loops of `_legacy_place_labels_on_arc_fc` and `_legacy_improved_label_placement_fc`
     apply them inline; change them with this rule.
     """
-    label_angle = (360.0 * (label_middle / total_len)) % 360.0
+    label_angle = position_turn_angle(label_middle, total_len) % 360.0
     margin_half = 0.5 * minimum_margin
     half = 0.5 * label_height
     full = 1.0 * label_height
@@ -2512,8 +2512,7 @@ def _enforce_outer_label_minimum_radius(labels: list[CircularLabel], total_lengt
         candidate_radius = max(current_radius, required_outer_radius)
 
         for _ in range(8):
-            new_x = candidate_radius * math.cos(angle_rad)
-            new_y = candidate_radius * math.sin(angle_rad)
+            new_x, new_y = circle_point_rad(candidate_radius, angle_rad)
             if current_half > 0 and new_x < 0:
                 new_x = abs(new_x)
             elif current_half < 0 and new_x > 0:
@@ -2548,8 +2547,7 @@ def _enforce_outer_label_minimum_middle_radius(labels: list[CircularLabel], tota
         else:
             middle_angle_rad = math.radians(angle_from_middle(float(label["middle"]), total_length))
 
-        label["middle_x"] = required_middle_radius * math.cos(middle_angle_rad)
-        label["middle_y"] = required_middle_radius * math.sin(middle_angle_rad)
+        label["middle_x"], label["middle_y"] = circle_point_rad(required_middle_radius, middle_angle_rad)
 
     return labels
 
@@ -2575,8 +2573,7 @@ def _enforce_inner_label_maximum_radius(labels: list[CircularLabel], total_lengt
         candidate_radius = min(current_radius, allowed_outer_radius)
 
         for _ in range(8):
-            new_x = candidate_radius * math.cos(angle_rad)
-            new_y = candidate_radius * math.sin(angle_rad)
+            new_x, new_y = circle_point_rad(candidate_radius, angle_rad)
             if current_half > 0 and new_x < 0:
                 new_x = abs(new_x)
             elif current_half < 0 and new_x > 0:
@@ -2612,8 +2609,7 @@ def _enforce_inner_label_maximum_middle_radius(labels: list[CircularLabel], tota
             middle_angle_rad = math.radians(angle_from_middle(float(label["middle"]), total_length))
 
         bounded_middle_radius = max(0.0, allowed_middle_radius)
-        label["middle_x"] = bounded_middle_radius * math.cos(middle_angle_rad)
-        label["middle_y"] = bounded_middle_radius * math.sin(middle_angle_rad)
+        label["middle_x"], label["middle_y"] = circle_point_rad(bounded_middle_radius, middle_angle_rad)
 
     return labels
 
@@ -3283,12 +3279,7 @@ def _legacy_place_labels_on_arc_fc(
 
 def _legacy_improved_label_placement_fc(
     labels: list[CircularLabel],
-    center_x: float,
-    center_y: float,
-    x_radius: float,
-    y_radius: float,
-    feature_radius: float,
-    total_length: int,
+    ellipse: _LabelEllipse,
     start_angle: float,
     end_angle: float,
     *,
@@ -3301,6 +3292,14 @@ def _legacy_improved_label_placement_fc(
     This solver is intentionally conservative and is used as a fallback to
     improve dense-label robustness.
     """
+    # Locals, for the step loop below.
+    center_x, center_y, x_radius, y_radius, total_length = (
+        ellipse.center_x,
+        ellipse.center_y,
+        ellipse.x_radius,
+        ellipse.y_radius,
+        ellipse.total_length,
+    )
 
     def feature_angle_scorer(label: CircularLabel) -> Callable[[float, float], float]:
         """Return the angle in degrees at the origin between the label's feature middle and a point."""
@@ -3381,16 +3380,10 @@ def _legacy_improved_label_placement_fc(
             elif overlaps_next:
                 direction = -1
             else:
-                test_angle_plus = current_angle + 1.0
-                test_x_plus, test_y_plus = calculate_coordinates(
-                    center_x, center_y, x_radius, y_radius, test_angle_plus, label["middle"], total_length
-                )
+                test_x_plus, test_y_plus = ellipse.start_at(current_angle + 1.0, label["middle"])
                 score_plus = feature_angle(test_x_plus, test_y_plus)
 
-                test_angle_minus = current_angle - 1.0
-                test_x_minus, test_y_minus = calculate_coordinates(
-                    center_x, center_y, x_radius, y_radius, test_angle_minus, label["middle"], total_length
-                )
+                test_x_minus, test_y_minus = ellipse.start_at(current_angle - 1.0, label["middle"])
                 score_minus = feature_angle(test_x_minus, test_y_minus)
                 direction = 1 if abs(score_plus) < abs(score_minus) else -1
 
@@ -3475,6 +3468,11 @@ class _LabelEllipse:
     center_y: float
     x_radius: float
     y_radius: float
+
+    @classmethod
+    def on_arc(cls, arc: LabelArc, total_length: int) -> _LabelEllipse:
+        """The ellipse of a side's label arc (``label_arc``), whose centre lies on the x axis."""
+        return cls(total_length, arc.center_x, 0, arc.x_radius, arc.y_radius)
 
     def start_at(self, angle_unwrapped: float, middle: float) -> tuple[float, float]:
         """The start point of a label at `angle_unwrapped` on the ellipse."""
@@ -4246,17 +4244,12 @@ def _resolve_arc_overlaps(field: _ArcLabelField, max_angle_shift_deg: float, max
 
 def improved_label_placement_fc(
     labels: list[CircularLabel],
-    center_x,
-    center_y,
-    x_radius,
-    y_radius,
-    feature_radius,
-    total_length,
-    start_angle,
-    end_angle,
-    y_margin=0.3,
-    max_angle_shift_deg=25.0,
-    max_iterations=60,
+    ellipse: _LabelEllipse,
+    start_angle: float,
+    end_angle: float,
+    y_margin: float = 0.3,
+    max_angle_shift_deg: float = 25.0,
+    max_iterations: int = 60,
     spacing_px: float | None = None,
 ):
     """Move labels placed on an arc toward their features and out of overlaps; returns them in sorted order."""
@@ -4269,8 +4262,7 @@ def improved_label_placement_fc(
         requested_spacing_px,
         legacy_spacing_px=1.5,
     )
-    labels = _order_labels_for_arc(labels, total_length, resolved_spacing_px)
-    ellipse = _LabelEllipse(total_length, center_x, center_y, x_radius, y_radius)
+    labels = _order_labels_for_arc(labels, ellipse.total_length, resolved_spacing_px)
     field = _ArcLabelField(
         labels,
         ellipse,
@@ -4278,16 +4270,16 @@ def improved_label_placement_fc(
     )
     for label in labels:
         current_angle_mod = calculate_angle_degrees(
-            center_x,
-            center_y,
+            ellipse.center_x,
+            ellipse.center_y,
             label["start_x"],
             label["start_y"],
             label["middle"],
             start_angle,
             end_angle,
-            total_length,
-            x_radius,
-            y_radius,
+            ellipse.total_length,
+            ellipse.x_radius,
+            ellipse.y_radius,
             normalize=False,
         )
         field.place_at(
@@ -4737,7 +4729,7 @@ def _labels_keep_strict_order(label_list: list[CircularLabel], total_length: int
     prev_unwrapped: float | None = None
     for label in ordered:
         angle = math.atan2(float(label["start_y"]), float(label["start_x"]))
-        target = (2.0 * math.pi * (float(label["middle"]) / float(total_length))) - (0.5 * math.pi)
+        target = position_angle_rad(label["middle"], total_length)
         angle_unwrapped = angle + (2.0 * math.pi) * round((target - angle) / (2.0 * math.pi))
         if prev_unwrapped is not None and angle_unwrapped <= prev_unwrapped:
             return False
@@ -5503,7 +5495,7 @@ def rearrange_labels_fc(
     candidates.
     """
     arc = label_arc(feature_radius, genome_len, cfg, strands, is_outer, arena_outer_radius, track_preset)
-    ellipse = _LabelEllipse(total_length, arc.center_x, 0, arc.x_radius, arc.y_radius)
+    ellipse = _LabelEllipse.on_arc(arc, total_length)
     center_x, center_y, x_radius, y_radius = ellipse.center_x, ellipse.center_y, ellipse.x_radius, ellipse.y_radius
     start_angle = 0
     end_angle = 360
@@ -5533,16 +5525,7 @@ def rearrange_labels_fc(
             spacing_px=legacy_row_gap_px,
         )
         candidate_legacy = _legacy_improved_label_placement_fc(
-            candidate_legacy,
-            center_x,
-            center_y,
-            x_radius,
-            y_radius,
-            feature_radius,
-            total_length,
-            start_angle,
-            end_angle,
-            y_margin=legacy_row_gap_px,
+            candidate_legacy, ellipse, start_angle, end_angle, y_margin=legacy_row_gap_px
         )
         candidate_legacy = sort_labels(candidate_legacy)
         return _refine_labels_to_preferred_hemisphere(candidate_legacy, ellipse)
@@ -5595,16 +5578,7 @@ def rearrange_labels_fc(
         spacing_px=label_spacing_px,
     )
     candidate_current = improved_label_placement_fc(
-        candidate_current,
-        center_x,
-        center_y,
-        x_radius,
-        y_radius,
-        feature_radius,
-        total_length,
-        start_angle,
-        end_angle,
-        spacing_px=label_spacing_px,
+        candidate_current, ellipse, start_angle, end_angle, spacing_px=label_spacing_px
     )
     candidate_current = _refine_labels_to_preferred_hemisphere(candidate_current, ellipse)
     best_labels = candidate_current
@@ -5921,7 +5895,7 @@ def prepare_label_list(
                 "stable_id": str(stable_id),
                 "input_order": int(input_order),
                 "preferred_middle": float(label_middle),
-                "preferred_angle_deg": (360.0 * (float(label_middle) / float(total_length))) % 360.0,
+                "preferred_angle_deg": position_turn_angle(label_middle, total_length) % 360.0,
                 "middle": label_middle,
                 "start": label_start,
                 "end": label_end,

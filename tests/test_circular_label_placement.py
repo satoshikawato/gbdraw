@@ -283,17 +283,12 @@ def test_circular_legacy_optimizer_equals_its_full_passes(seed: int, count: int)
     """Visiting only labels whose own or neighbours' positions changed gives the full passes' result."""
     module = circular_labels_module
     labels, total_length = _dense_arc_labels(seed, count)
-    arc = dict(center_x=0.0, center_y=0.0, x_radius=420.0, y_radius=430.0, feature_radius=300.0)
+    arc = dict(center_x=0.0, center_y=0.0, x_radius=420.0, y_radius=430.0)
 
     def optimize(label_list: list[dict], max_iterations: int) -> list[dict]:
         return module._legacy_improved_label_placement_fc(
             label_list,
-            arc["center_x"],
-            arc["center_y"],
-            arc["x_radius"],
-            arc["y_radius"],
-            arc["feature_radius"],
-            total_length,
+            module._LabelEllipse(total_length, arc["center_x"], arc["center_y"], arc["x_radius"], arc["y_radius"]),
             0,
             360,
             y_margin=0.1,
@@ -467,12 +462,7 @@ def _placement_runs(seed: int, make: Callable[[int], tuple[list[dict], int, floa
     placed = module.place_labels_on_arc_fc(copy.deepcopy(labels), *arc, spacing_px=rng.choice([None, 0.5, 2.0]))
     improved = module.improved_label_placement_fc(
         copy.deepcopy(placed),
-        0.0,
-        0.0,
-        x_radius,
-        y_radius,
-        radius * 0.8,
-        total_length,
+        module._LabelEllipse(total_length, 0.0, 0.0, x_radius, y_radius),
         0,
         360,
         max_iterations=rng.choice([3, 60]),
@@ -706,7 +696,11 @@ def test_circular_label_peer_pruning_keeps_every_count(
             min_order_gap_deg=module.LABEL_MIN_ORDER_GAP_DEG,
         )
         improved = improved_label_placement_fc(
-            copy.deepcopy(labels), 0.0, 0.0, radius, radius, radius * 0.8, total_length, 0, 360, spacing_px=spacing_px
+            copy.deepcopy(labels),
+            module._LabelEllipse(total_length, 0.0, 0.0, radius, radius),
+            0,
+            360,
+            spacing_px=spacing_px,
         )
         polish_input = copy.deepcopy(labels)
         for label in polish_input:
@@ -1734,12 +1728,7 @@ def test_improved_label_placement_limits_angle_drift_under_density() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
     )
@@ -1773,12 +1762,7 @@ def test_improved_label_placement_resolves_dense_cluster_overlaps() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
     )
@@ -1810,12 +1794,7 @@ def test_circular_label_spacing_override_increases_bbox_clearance() -> None:
     )
     improved_default = improved_label_placement_fc(
         placed_default,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
         spacing_px=3.0,
@@ -1834,12 +1813,7 @@ def test_circular_label_spacing_override_increases_bbox_clearance() -> None:
     )
     improved_wide = improved_label_placement_fc(
         placed_wide,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
         spacing_px=12.0,
@@ -1880,12 +1854,7 @@ def test_circular_inner_label_spacing_override_increases_bbox_clearance() -> Non
     )
     improved_default = improved_label_placement_fc(
         placed_default,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
         spacing_px=3.0,
@@ -1904,12 +1873,7 @@ def test_circular_inner_label_spacing_override_increases_bbox_clearance() -> Non
     )
     improved_wide = improved_label_placement_fc(
         placed_wide,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
         spacing_px=12.0,
@@ -1948,12 +1912,7 @@ def test_improved_label_placement_preserves_feature_order() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
     )
@@ -1991,12 +1950,7 @@ def test_improved_label_placement_prefers_same_half_plane_when_overlap_tied() ->
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
     )
@@ -2033,12 +1987,7 @@ def test_improved_label_placement_prefers_shorter_leaders_when_overlap_tied() ->
     before_sum = _sum_leader_length(labels)
     improved = improved_label_placement_fc(
         [label.copy() for label in labels],
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
     )
@@ -2119,12 +2068,7 @@ def test_dense_triplet_keeps_center_label_closest_to_feature() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
     )
@@ -2163,12 +2107,7 @@ def test_dense_mito_triplet_respects_minimum_bbox_gap() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
     )
@@ -2203,12 +2142,7 @@ def test_dense_wide_labels_expand_search_beyond_default_shift() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
         max_angle_shift_deg=25.0,
@@ -2252,12 +2186,7 @@ def test_dense_chain_cluster_moves_neighbor_labels_together() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
         max_angle_shift_deg=25.0,
@@ -2292,12 +2221,7 @@ def test_wraparound_dense_cluster_resolves_after_target_reset_retry() -> None:
     )
     improved = improved_label_placement_fc(
         placed,
-        center_x=0.0,
-        center_y=0.0,
-        x_radius=label_radius,
-        y_radius=label_radius,
-        feature_radius=feature_radius,
-        total_length=total_length,
+        circular_labels_module._LabelEllipse(total_length, 0.0, 0.0, label_radius, label_radius),
         start_angle=0.0,
         end_angle=360.0,
         max_angle_shift_deg=25.0,

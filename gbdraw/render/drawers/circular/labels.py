@@ -4,7 +4,7 @@
 from typing import Tuple
 
 from gbdraw.svg.elements import Path, Text, TextPath
-from gbdraw.svg.circular_arcs import circle_arc, position_angle
+from gbdraw.svg.circular_arcs import circle_arc, position_angle, position_turn_angle, span_angle
 
 from ....config.models import CircularRenderProfile
 from ....auto_sizes import determine_length_parameter
@@ -66,13 +66,13 @@ class LabelDrawer:
             label_radius = float(radius) * float(factors[1])
         else:
             label_radius = float(explicit_center_radius)
-        angle = 360.0 * (label["middle"] / record_length)
+        angle = position_turn_angle(label["middle"], record_length)
         # A quarter of the label's line box: the same offset for every label of one face and size (OV-1743).
         center_offset = float(label["height_px"]) / 4
 
         # The text path runs in reading order: clockwise from the label start, or anticlockwise from its end
         # in the lower half so the text stays upright.
-        span = 360.0 * (float(label["end"]) - float(label["start"])) / record_length
+        span = span_angle(float(label["end"]) - float(label["start"]), record_length)
         if 90 <= angle < 270:
             label_axis_path_desc = circle_arc(
                 label_radius + center_offset, position_angle(label["end"], record_length), -span

@@ -70,7 +70,15 @@ from gbdraw.render.drawers.label_backing import (
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
-from gbdraw.svg.circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
+from gbdraw.svg.circular_arcs import (
+    circle_arc,
+    circle_arc_to,
+    circle_point,
+    circle_point_rad,
+    position_angle,
+    position_angle_rad,
+    span_angle,
+)
 from gbdraw.svg.path_data import path_number, path_point
 from gbdraw.svg.text_path import write_text_runs
 
@@ -78,12 +86,11 @@ Polygon = tuple[Point, ...]
 
 
 def _point(position: float, total_length: int, radius: float) -> tuple[float, float]:
-    angle = 2.0 * math.pi * (float(position) / max(1, total_length)) - 0.5 * math.pi
-    return radius * math.cos(angle), radius * math.sin(angle)
+    return circle_point_rad(radius, position_angle_rad(position, max(1, total_length)))
 
 
 def _span_deg(start: float, end: float, total_length: int) -> float:
-    return 360.0 * max(0.0, end - start) / max(1, total_length)
+    return span_angle(max(0.0, end - start), max(1, total_length))
 
 
 def _arc_path(start: float, end: float, total_length: int, radius: float) -> str:
@@ -924,7 +931,7 @@ def _ink_parts(ink: CircularInk) -> tuple[Sequence[Point], ...]:
         return ()
     span = 1.0 if ink.end_turn - ink.start_turn >= 1.0 else (ink.end_turn - ink.start_turn) % 1.0
     return annular_sector_parts(
-        ink.band.inner_px, ink.band.outer_px, 360.0 * (ink.start_turn + 0.5 * span) - 90.0, 180.0 * span
+        ink.band.inner_px, ink.band.outer_px, position_angle(ink.start_turn + 0.5 * span, 1.0), 180.0 * span
     )
 
 

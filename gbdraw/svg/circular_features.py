@@ -19,7 +19,7 @@ from .arrows import (
     set_arrow_shoulder,
 )
 from ..layout.circular import calculate_feature_position_factors_circular
-from .circular_arcs import circle_arc_to, circle_point, position_angle
+from .circular_arcs import circle_arc_to, circle_point, position_angle, span_angle
 from .path_data import path_point
 
 
@@ -28,7 +28,7 @@ def _point(radius: float, position: float, total_length: int) -> str:
 
 
 def _arc_to(radius: float, from_position: float, span_bp: float, total_length: int) -> str:
-    return circle_arc_to(radius, position_angle(from_position, total_length), 360.0 * span_bp / total_length)
+    return circle_arc_to(radius, position_angle(from_position, total_length), span_angle(span_bp, total_length))
 
 
 def _coord_len_bp(start: int, end: int, total_length: int, *, strand: str = "positive") -> int:
