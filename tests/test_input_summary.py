@@ -294,6 +294,44 @@ def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -
     assert staged["metadata"]["inputSummaries"] == reply["metadata"]["inputSummaries"]
 
 
+@pytest.mark.parametrize(("resource_id", "name", "shown"), [
+    ("comparison-nucleotide-1", "blast_rows_below_identity.tsv", "blast_rows_below_identity.tsv"),
+    # The Web writes a resource's name after its ID.
+    ("comparison-nucleotide-1", "comparison-nucleotide-1-blast_rows_below_identity.tsv", "blast_rows_below_identity.tsv"),
+    # A LOSAT result of the CLI and of the Web, and a table given without its file, under another drawing's name.
+    ("comparison-losat-1", "comparison-losat-1.tsv", None),
+    ("comparison-resolved-1", "comparison-resolved-1-comparison-resolved-1.tsv", None),
+    ("comparison-table-1-2", "comparison-table-1.2.tsv", None),
+])
+def test_a_stored_comparison_is_named_by_the_users_file_only(
+    tmp_path: Path, resource_id: str, name: str, shown: str | None,
+) -> None:
+    """OV-3557: the input summary names a stored comparison by the file the user gave, never by the name a writer gave
+    a table it made, as the fresh render does."""
+
+    request = LinearDiagramRequest(
+        records=tuple(RecordInput(source=GenBankInputSource(path)) for path in (QUERY, SUBJECT)),
+        options=LinearDiagramOptions(blast_files=(str(ROWS_BELOW_IDENTITY),), identity=70.0),
+        output=RenderOutputRequest(output_prefix="summary", formats=("svg",), output_directory=tmp_path / "cli"),
+    )
+    document = _embedded(build_session_document(request))
+    payload = document["drawings"][0]["renderRequest"]
+    (comparison,) = payload["comparisons"]
+    resources = dict(document["resources"])
+    resources[resource_id] = {**resources.pop(comparison["resourceId"]), "name": name}
+    comparison["resourceId"] = resource_id
+    reply = render_embedded_canonical_web_request(payload, resources=resources, workspace=tmp_path / "web")
+
+    pair = "record #1 PROKKA01.1 and record #2 RAST0001.1"
+    label = f"Comparison table {shown} ({pair})" if shown else f"Comparison of {pair}"
+    (summary,) = reply["metadata"]["inputSummaries"]
+    assert [warning["message"] for warning in summary["warnings"]] == [
+        FILTERED_OUT_WARNING.removeprefix("WARNING: ").replace(
+            f"Comparison table blast_rows_below_identity.tsv ({pair})", label,
+        )
+    ]
+
+
 def test_web_reply_warns_about_a_record_with_no_feature(tmp_path: Path) -> None:
     from gbdraw.api import CircularDiagramRequest
 
@@ -468,6 +506,78 @@ def test_a_protein_comparison_counts_the_matches_drawn_and_no_threshold(
     assert lines and all(line.endswith(": drew 0 protein matches.") for line in lines), lines
     assert {item.code for item in input_warnings(summary)} == {"comparison_table_empty"}
     assert all(item.message.endswith("has no protein match to draw.") for item in input_warnings(summary))
+
+
+@pytest.mark.parametrize("mode", ["pairwise", "similarity_groups"])
+def test_web_reply_words_a_stored_protein_pair_without_a_match_as_the_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str,
+) -> None:
+    """OV-3512: after a Generate the Web sends each LOSATP pair as a stored
+    protein comparison table; a pair without a match is a protein comparison
+    with no protein match to draw, as the CLI's fresh render says."""
+
+    from dataclasses import replace
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.api.request_render import stored_protein_result_request
+    from tests.test_render_stage_protein_analysis import _no_hit_losatp, _no_search, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_hit_losatp)
+    request, _identities = _request(mode, tmp_path)
+    request = replace(request, output=RenderOutputRequest(
+        output_prefix="protein", formats=("svg",), output_directory=tmp_path / "out",
+    ))
+    rendered = render_request(request)
+    fresh = [item.message for item in input_warnings(rendered.input_summary)]
+    assert fresh and all(message.endswith("has no protein match to draw.") for message in fresh), fresh
+
+    stored = stored_protein_result_request(rendered.request, rendered.linear_metadata)
+    document = _embedded(build_session_document(stored))
+    comparisons = document["drawings"][0]["renderRequest"]["comparisons"]
+    assert "precomputedProteinComparison" in {comparison["kind"] for comparison in comparisons}
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    reply = render_embedded_canonical_web_request(
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+    )
+    (summary,) = reply["metadata"]["inputSummaries"]
+    assert [warning["message"] for warning in summary["warnings"]] == fresh
+    assert summary["lines"] == list(input_summary_lines(rendered.input_summary))
+
+
+def test_a_protein_comparison_of_listed_record_pairs_keeps_its_protein_wording(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """LOSATP Pairwise with listed pairs: the pair comparisons are protein comparisons, one with no match."""
+
+    from dataclasses import replace
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    def search(query_fasta: str, subject_fasta: str, **kwargs) -> object:
+        # Record #3 (rec2) shares no protein with record #2: that pair finds nothing.
+        if "rec2_" in subject_fasta:
+            kwargs["raw_output_callback"]("")
+            kwargs["runtime_callback"]({"kind": "losat", "version": "test", "program": "blastp"})
+            return protein_colinearity_module.parse_losatp_outfmt6("")
+        return _fake_losatp(query_fasta, subject_fasta, **kwargs)
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", search)
+    request, _identities = _request("pairwise", tmp_path)
+    options = replace(
+        request.options,
+        losat_search=replace(request.options.losat_search, pairs=((0, 1), (1, 2))),
+    )
+    request = replace(request, options=options, output=RenderOutputRequest(
+        output_prefix="pairs", formats=("svg",), output_directory=tmp_path / "out",
+    ))
+    summary = render_request(request).input_summary
+
+    lines = [line for line in input_summary_lines(summary) if "omparison of" in line]
+    assert "Protein comparison of record #1 rec0 and record #2 rec1: drew 3 protein matches." in lines, lines
+    assert "Protein comparison of record #2 rec1 and record #3 rec2: drew 0 protein matches." in lines, lines
+    warnings = [item.message for item in input_warnings(summary)]
+    assert len(warnings) == 1 and warnings[0].endswith("has no protein match to draw."), warnings
 
 
 def test_a_cropped_record_with_nothing_to_draw_names_its_region() -> None:

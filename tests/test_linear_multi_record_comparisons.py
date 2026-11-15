@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pandas as pd
@@ -571,9 +572,11 @@ def test_current_schema_preserves_record_keys_layout_and_explicit_endpoints(tmp_
 def test_adjacent_indices_keep_explicit_endpoints_in_multi_record_rows(tmp_path, kind) -> None:
     from gbdraw.api.request_render import render_request
 
+    # The encoder stores a BLAST table as nucleotideBlast and a LOSATP table as precomputedProteinComparison (OV-3512).
+    comparison = replace(_comparison(0, 1), protein_matches=kind == "precomputedProteinComparison")
     request = LinearDiagramRequest(
         records=tuple(RecordInput(source=InMemoryRecordSource(r)) for r in _records()[:3]),
-        options=LinearDiagramOptions(linear_comparisons=(_comparison(0, 1),)),
+        options=LinearDiagramOptions(linear_comparisons=(comparison,)),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@2", "#3@2"),
         ),
@@ -584,13 +587,7 @@ def test_adjacent_indices_keep_explicit_endpoints_in_multi_record_rows(tmp_path,
         target = tmp_path / resource.name
         target.write_bytes(resource.content)
         paths[resource.resource_id] = target
-    comparison = encoded.payload["comparisons"][0]
-    if kind == "nucleotideBlast":
-        comparison["kind"] = kind
-        comparison.pop("encoding")
-        _comparison(0, 1).matches.to_csv(
-            paths[comparison["resourceId"]], sep="\t", header=False, index=False
-        )
+    assert encoded.payload["comparisons"][0]["kind"] == kind
     decoded = decode_canonical_request(
         encoded.payload, resource_paths=paths, output_directory=tmp_path / "out"
     )
@@ -598,6 +595,7 @@ def test_adjacent_indices_keep_explicit_endpoints_in_multi_record_rows(tmp_path,
     assert decoded.options.protein_comparisons is None
     assert [(c.query_record_index, c.subject_record_index)
             for c in decoded.options.linear_comparisons] == [(0, 1)]
+    assert [c.protein_matches for c in decoded.options.linear_comparisons] == [kind == "precomputedProteinComparison"]
     rendered = render_request(decoded)
     svg = rendered.drawing.tostring()
     assert 'data-query-record-index="0"' in svg

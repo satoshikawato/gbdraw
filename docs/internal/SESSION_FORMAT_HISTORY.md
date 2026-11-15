@@ -130,6 +130,28 @@ Python writes them (`gbdraw/render/track_slot_metadata.py`); the Web app's Selec
 the version does not change. A saved Result without them loads as before, and Select region stays off until the next
 Generate; no reader adds them. Fixture: `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.*`.
 
+Request schema 10 stores only LOSATP protein tables as
+`precomputedProteinComparison` (OV-3512). Schemas 2 to 9 also stored there a
+BLAST table that the writer held without its file's text: a
+`--comparisons_table` row, or a Python `LinearComparison` (gbdraw 0.14.0 to
+0.14.5 wrote them so). The schema-10 writer (`_encode_comparisons` in
+`gbdraw/session_request_codec.py`) stores such a table as `nucleotideBlast`:
+its rows as BLAST outfmt 6 text, in a resource named after the table's file
+(`comparison-table-<n>.tsv` when it has none). It chooses the kind from
+`LinearComparison.protein_matches`, which the protein analysis sets; a table
+with columns beyond the 12 BLAST columns (rows bound to features) keeps
+`precomputedProteinComparison`, since BLAST text would lose them. The
+decoder reads a schema-10 `precomputedProteinComparison` as a protein
+comparison, so a LOSATP pair without a match is reported as "Protein
+comparison of ... has no protein match to draw." on replay and after a Web
+Generate, as the first render reported it. In a schema 2-9 request it reads
+one as a protein comparison only when the table has the protein columns
+(`query_protein_id`), which every protein table a release wrote has; a BLAST
+table without them stays a nucleotide table, and a re-save stores it as
+`nucleotideBlast`. Fixture:
+`tests/fixtures/sessions/BGC0000708-BGC0000709-comparisons-table.v50-cli0145.gbdraw-session.json.gz`.
+Request schema 10 has not reached `main`, so the schema does not change.
+
 A drawing's `runMetadata` is declared once, in `SessionRunMetadata` (`gbdraw/session_contract.py`): the geometry's
 header and the rows of `annotationWarnings`, `featureIdentityNotices` and `comparisonWarnings`. One function builds it
 (`gbdraw/api/run_metadata.py`), and every writer stores it as built: a Web Save, and the gbdraw command's run and

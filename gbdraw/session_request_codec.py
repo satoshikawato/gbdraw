@@ -112,7 +112,7 @@ from gbdraw.io.record_select import (
     reverse_records,
 )
 from gbdraw.io.regions import RecordWindow, RegionSpec, _wrapped_location, crop_record_to_region, region_text
-from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.comparisons import comparison_table_text, read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
     RecordOrigin,
@@ -227,6 +227,10 @@ RECORD_WINDOWS_SCHEMA = 10
 # Schema 10 writes the settings of a Circular Multi-Record request that draws its records on one circle; a request
 # without them, and every earlier schema, draws a grid.
 RECORD_LAYOUT_SCHEMA = 10
+# Schema 10 stores a Linear comparison table that is not a LOSATP protein comparison as ``nucleotideBlast``, so every
+# ``precomputedProteinComparison`` holds protein matches; schemas 2-9 also stored a BLAST table given without its file's
+# text (a ``--comparisons_table`` row, a Python ``LinearComparison``) there (OV-3512).
+PROTEIN_ONLY_PRECOMPUTED_SCHEMA = 10
 # The ``CircularMultiRecordOptions`` fields of those settings (the request writes them in camel case).
 ONE_CIRCLE_LAYOUT_OPTIONS = frozenset({"record_layout", "one_circle_gap_degrees", "one_circle_min_length", "one_circle_record_band"})
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
@@ -4490,6 +4494,24 @@ def _encode_comparisons(
                 "which moves it to the search frame (OV-1183)."
             )
         comparison = reverse_unbound_endpoint_rows(comparison, *endpoint_frames)
+        text = None if comparison.protein_matches else comparison_table_text(comparison.matches)
+        if text is not None:
+            # A BLAST table given without its file's text keeps its rows, under its file's name (OV-3512).
+            resource_id = resources.add_bytes(
+                _resource_id(f"comparison-table-{index}"),
+                kind="nucleotide-blast",
+                name=comparison.source_name or f"comparison-table-{index}.tsv",
+                content=text.encode("utf-8"),
+            )
+            result.append(
+                {
+                    "kind": "nucleotideBlast",
+                    "resourceId": resource_id,
+                    "queryRecordIndex": comparison.query_record_index,
+                    "subjectRecordIndex": comparison.subject_record_index,
+                }
+            )
+            continue
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources
         )
@@ -4648,6 +4670,24 @@ def _read_blast_edge(resource_path: Path, label: str) -> tuple[str, bytes | None
     return text, stored, read_comparison_table(StringIO(text), label=label)
 
 
+def _user_file_name(resource_id: str, file_name: str) -> str | None:
+    """The name of the user's file a comparison resource holds, or None for a table a writer made.
+
+    The input summary names a comparison by its file only when the user gave one (OV-3557). A writer that holds no
+    user file names the table after its resource ID: a LOSAT search result (``comparison-losat-<n>.tsv`` on the CLI,
+    ``comparison-resolved-<n>.tsv`` on the Web), a table given without its file (``comparison-table-<n>.tsv``), with
+    ``.<k>`` before the extension when another resource holds that name. The Web writes each resource's name after a
+    ``<resource ID>-`` prefix (``normalizeResourceName``), which is not part of the user's file name.
+    """
+
+    name = file_name.removeprefix(f"{resource_id}-") or file_name
+    stem, _dot, rest = name.partition(".")
+    ordinal = rest.partition(".")[0]
+    if resource_id in {stem, f"{stem}-{ordinal}"}:
+        return None
+    return name
+
+
 def _decode_comparisons(
     value: object,
     *,
@@ -4713,7 +4753,7 @@ def _decode_comparisons(
                         register_prepared_resource_value(table, resource_path),
                         search_frame_text=text,
                         search_frame_gzip=stored,
-                        source_name=resource_path.name,
+                        source_name=_user_file_name(item["resourceId"], resource_path.name),
                     )
                 )
             else:
@@ -4747,9 +4787,11 @@ def _decode_comparisons(
                 subject_index = _non_negative_index(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
-                explicit_comparisons.append(
-                    LinearComparison(query_index, subject_index, table)
-                )
+                # An older schema's BLAST table has none of a protein table's protein ID columns.
+                explicit_comparisons.append(LinearComparison(
+                    query_index, subject_index, table,
+                    protein_matches=schema >= PROTEIN_ONLY_PRECOMPUTED_SCHEMA or "query_protein_id" in table.columns,
+                ))
             else:
                 protein_tables.append(table)
         elif kind == "orthogroupResult":

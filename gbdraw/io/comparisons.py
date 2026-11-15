@@ -350,6 +350,19 @@ def read_comparison_table(
         ) from None
 
 
+def comparison_table_text(frame: DataFrame) -> str | None:
+    """``frame`` as a BLAST outfmt 6 table, which :func:`read_comparison_table` reads back as the same rows.
+
+    None when the text would lose part of it: a column other than the 12 typed comparison columns (rows bound to
+    features), or a missing one in a table with rows.
+    """
+
+    columns = set(frame.columns)
+    if not columns <= set(COMPARISON_COLUMNS) or (len(frame) and columns != set(COMPARISON_COLUMNS)):
+        return None
+    return frame.reindex(columns=list(COMPARISON_COLUMNS)).to_csv(sep="\t", header=False, index=False, lineterminator="\n")
+
+
 class ComparisonFilter(Protocol):
     """The thresholds a comparison table is filtered by."""
 
@@ -458,6 +471,7 @@ __all__ = [
     "ComparisonThresholdName",
     "ComparisonThresholdTally",
     "comparison_row_tally",
+    "comparison_table_text",
     "filter_comparison_dataframe",
     "normalize_comparison_dataframe",
     "read_comparison_resource",
