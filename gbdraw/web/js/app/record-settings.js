@@ -13,7 +13,6 @@
 import { annotationRecordKeysOf } from './annotations/record-catalog.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
 import { removeAnnotations } from '../services/drawing/annotation-sets.js';
-import { markNamedCardRecords } from '../services/drawing/inputs.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import { circularSourceInputs } from '../services/input-types.js';
 import { groupLinearSourceRecords, planLinearSourceRemoval } from '../services/linear-sources.js';
@@ -71,10 +70,11 @@ import { fileCardLine } from './file-card.js';
  * After a settled read of a Circular drawing's cards, the one place its
  * record choices are named by identity (OV-2869, OV-2903): each flat `#N`
  * an older Session kept goes to its record over the cards as loaded
- * (`placeFlatRecordSelectors`); the records a card Load or a copy installed
- * named draw alone, the other records of its file OFF, and the places that
- * named them by request key name their identities (`placeNamedCardRecords`,
- * OV-3530, OV-3531, OV-3534), once; and a Record select value or a Record
+ * (`placeFlatRecordSelectors`); the records a File card names of its file
+ * (`recordsNamed`, which a Load or a copy installed) are placed: the other
+ * records of its file OFF, and the places that named them by request key name
+ * their identities (`placeNamedCardRecords`, OV-3530, OV-3531, OV-3534), which
+ * changes no drawn record; and a Record select value or a Record
  * Order row that names one record otherwise (a record ID, as a CLI Session
  * of one-record files names its rows, OV-2906; a card's `#k`) becomes that
  * record's identity, which the Record select lists and the Record Order
@@ -89,9 +89,8 @@ const placeRecordChoices = (drawing, entries, identitySources) => {
   const positions = drawing.adv.multi_record_positions;
   const choices = { recordsOff: [...drawing.recordsOff], selector: drawing.form.circular_record_selector, positions };
   const flatPlaced = drawing.files.c_legacy_record_cards ? placeFlatRecordSelectors(choices, identitySources()) : choices;
-  const named = drawing.files.c_named_records;
-  const placed = named ? placeNamedCardRecords(flatPlaced, named, circularSourceInputs(drawing.inputType.value, drawing.circularSources), entries) : flatPlaced;
-  if (named) markNamedCardRecords(drawing.slices.inputs, null);
+  const { choices: placed, cards } = placeNamedCardRecords(flatPlaced, drawing.recordsNamed, entries);
+  if (cards.length !== drawing.recordsNamed.length) drawing.recordsNamed.splice(0, Infinity, ...cards);
   /** @param {string} key */
   const identityOf = (key) => circularRecordSelection(entries, key).record?.value ?? key;
   const selector = identityOf(placed.selector);

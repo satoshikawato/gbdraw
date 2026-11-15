@@ -55,7 +55,10 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, placeNamedCardRecords } from './record-draw-selection.js';
+import {
+  cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, namedCardRecordReading, placeNamedCardRecords,
+  readNamedCardRecords
+} from './record-draw-selection.js';
 import { circularRecordEntries } from './record-options.js';
 import { readCircularSourceRecords, readStoredRecordIdPlaces } from './record-discovery.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -387,7 +390,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs, NamedCardRecord, NamedCardRecordsMark } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -1049,6 +1052,17 @@ export const buildConfigData = (drawing) => ({
   ),
   unmanagedConfigOverrides: cloneJsonData(drawing.unmanagedConfigOverrides || {}),
   webEdits: buildGroupNamesData(drawing)
+});
+
+/**
+ * A drawing's settings as a History step captures them: its Session slice `config` (`buildConfigData`) and the
+ * records its File cards name of their files while their read has not placed them (`recordsNamed`), which no Session
+ * holds. `applyConfigData` reads both back, so an Undo returns `recordsOff` and the named records as one value (R11).
+ * @param {DrawingState} drawing
+ */
+export const captureConfigData = (drawing) => ({
+  ...buildConfigData(drawing),
+  ...(drawing.recordsNamed.length ? { recordsNamed: cloneJsonData(drawing.recordsNamed) } : {})
 });
 
 const defaultEditorStateData = () => ({
@@ -1735,6 +1749,9 @@ const applyModeSliceData = (drawing, mode, slice, {
   projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig ? { mode, config: projectedConfig } : null, slice.config);
+  // A draft Load read from a request holds the records its File cards name (`recordsNamed`), which no Session slice
+  // holds and the registry rows above leave out.
+  if (isPlainObject(slice.config) && Object.hasOwn(slice.config, 'recordsNamed')) config.recordsNamed = slice.config.recordsNamed;
   if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
   const features = isPlainObject(slice.features) ? slice.features : {};
   applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
@@ -3608,6 +3625,8 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, capture
     recordDisplayDrafts: readRecordDisplayDrafts(data.recordDisplayDrafts).value,
     // Omitted: every record is drawn.
     recordsOff: recordsOffReader(mode)(data.recordsOff).value,
+    // Omitted: no card names records of its file (a Session never holds them; a projection and a History step do).
+    recordsNamed: readNamedCardRecords(data.recordsNamed),
     // Omission takes the fresh default in every Session version.
     linearRecordLayoutEnabled: readLinearRecordLayoutEnabled(linearLayout.enabled).value,
     linearRecordGap: readLinearRecordGap(linearLayout.recordGap).value,
@@ -5316,12 +5335,7 @@ const withStoredComparisonPlan = (config, readFiles) => {
  *   circularRecordDiscovery: Record<string, unknown>, linearReorderNotice: { value: string }, cInputType: { value: string }
  * }} LoadCandidateInputs
  */
-/**
- * A Circular source card as Load reads it back: each file as stored, and the records a Circular request's projection
- * names of its file (`namedCardRecords` in services/session-request.js) when it names some.
- * @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null,
- *   named?: readonly NamedCardRecord[] }} RestoredCircularSource
- */
+/** A Circular source card as Load reads it back: each file as stored. @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null }} RestoredCircularSource */
 /**
  * Reads the saved inputs into the Load candidate (`targetState`).
  * `targetDrawing` holds the Linear record layout and comparison plan that the
@@ -5376,9 +5390,7 @@ const applyFiles = (filesData, {
       uid: String(source.uid),
       gb: slotFile(source.gb),
       gff: slotFile(source.gff),
-      fasta: slotFile(source.fasta),
-      // Only a Circular request's projection names the records of a card.
-      ...(circularRequest && Array.isArray(source.named) ? { named: /** @type {readonly NamedCardRecord[]} */ (source.named) } : {})
+      fasta: slotFile(source.fasta)
     }));
   // OV-2881: the cards a Circular request draws are read when Generate needs
   // their records (`readDrawingRecordIdentities`), not after Load, so the
@@ -5396,11 +5408,6 @@ const applyFiles = (filesData, {
     .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }))));
   targetState.files.c_legacy_record_cards = legacyRecordPositions && cardsTakeLegacyRecordPositions(circularSources)
     ? loadedCards : null;
-  // OV-3530, OV-3531: the cards whose request records name some records of their file; the drawing's first settled
-  // read draws those (`placeNamedCardRecords`), so Load reads no file for them.
-  const namedOf = new Map(circularSources.flatMap(({ uid, named }) => (named ? [[uid, named]] : [])));
-  const namedCards = loadedCards.flatMap((card) => (namedOf.has(card.uid) ? [{ ...card, named: namedOf.get(card.uid) ?? [] }] : []));
-  targetState.files.c_named_records = namedCards.length ? namedCards : null;
   // A Depth slot holds a list. The rows of a record-major matrix stand for the
   // records of the cards as loaded (OV-2868), however their read is deferred.
   targetState.files.c_depth = deserializeFile(read.c_depth);
@@ -6847,13 +6854,14 @@ const exportSessionDocument = async (
         const adoptedCommitted = isAdoptedCanonicalSession(committed);
         // Save writes the drawing's bindings itself; the request is checked without the ones it holds.
         const { bindings: _heldBindings, ...requestWebFiles } = committed.webFiles ?? {};
-        projectCanonicalSessionRequest({
+        const projected = projectCanonicalSessionRequest({
           ...committed,
           webFiles: requestWebFiles,
           sessionResourceTable: adoptedCommitted ? artifact.activeSessionResourceTable : null,
           deferResourceContent: adoptedCommitted,
           adoptCanonicalPayloads: adoptedCommitted
         });
+        if (savesEveryRecordOn(saved, projected.config)) config.recordsOff = [];
         validateCurrentWriterActiveConfig({ mode: saved.mode, storedConfig: config });
       } catch (error) {
         console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
@@ -7495,26 +7503,42 @@ const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) =>
   return prepared;
 };
 /**
- * A copy or a paste reads now the cards whose records its request names some of (`c_named_records`, OV-3530), as
- * the drawing's first settled read places them (`placeNamedCardRecords`): its draft draws those records alone before
- * any read, so a Save before Generate keeps them (the marks are not saved). Python derived the request, so the read
- * reuses the Worker that derived it; a Load leaves the marks to the drawing's own read.
+ * Whether Save writes a drawing's empty `recordsOff` (every record ON), which it otherwise omits: the drawing's
+ * cards name no records of their files (`recordsNamed`) but its committed request names some (OV-3531), so a Load
+ * that read no `recordsOff` would turn records OFF again that the drawing draws (a record turned ON after the read).
+ * A card whose records are not read is taken as such. Load reads a `recordsOff` the Session holds before the request.
+ * @param {DrawingState} drawing
+ * @param {{ recordsNamed?: unknown }} projectedConfig The draft its committed request projects to, without a Session draft.
+ */
+const savesEveryRecordOn = (drawing, projectedConfig) => {
+  const named = readNamedCardRecords(projectedConfig.recordsNamed);
+  if (drawing.mode !== 'circular' || drawing.recordsOff.length > 0 || drawing.recordsNamed.length > 0 || named.length === 0) return false;
+  const { off, read } = namedCardRecordReading(named, circularRecordEntries(drawing.circularRecordList.value));
+  return off.length > 0 || named.some(({ uid }) => !read.has(uid));
+};
+/**
+ * A copy or a paste reads now the cards whose records its request names some of (`recordsNamed`, OV-3530) and places
+ * them (`placeNamedCardRecords`), as the drawing's first settled read would: a paste into a drawing with a Result
+ * saves its records OFF, not the named records, which no Session holds. Python derived the request, so the read reuses
+ * the Worker that derived it; a Load leaves them to the drawing's own read. A card whose read fails keeps its named
+ * records, which its request records draw alone.
  * @param {PreparedStoredDrawing} prepared
  */
 const placeCopiedNamedRecords = async ({ install, settle }) => {
-  const marks = /** @type {readonly NamedCardRecordsMark[] | null} */ (settle.inputs.files.c_named_records);
-  if (!marks) return;
-  const marked = new Set(marks.map(({ uid }) => uid));
-  const inputs = circularSourceInputs(install.inputType, settle.inputs.circularSources).filter(({ uid }) => marked.has(uid));
-  const reads = await readCircularSourceRecords(inputs, (file) => /** @type {FileLike | null} */ (/** @type {unknown} */ (file)));
   const { config } = install.draft;
+  const named = readNamedCardRecords(config.recordsNamed);
+  if (named.length === 0) return;
+  const cards = new Set(named.map(({ uid }) => uid));
+  const inputs = circularSourceInputs(install.inputType, settle.inputs.circularSources).filter(({ uid }) => cards.has(uid));
+  const reads = await readCircularSourceRecords(inputs, (file) => /** @type {FileLike | null} */ (/** @type {unknown} */ (file)));
   const placed = placeNamedCardRecords({
     recordsOff: Array.isArray(config.recordsOff) ? config.recordsOff : [], selector: '',
     positions: Array.isArray(config.adv?.multi_record_positions) ? config.adv.multi_record_positions : []
-  }, marks, marks, circularRecordEntries(reads.flatMap(({ records }) => records)));
-  config.recordsOff = placed.recordsOff;
-  if (isPlainObject(config.adv)) config.adv.multi_record_positions = placed.positions;
-  settle.inputs = { ...settle.inputs, files: { ...settle.inputs.files, c_named_records: null } };
+  }, named, circularRecordEntries(reads.flatMap(({ records }) => records)));
+  config.recordsOff = placed.choices.recordsOff;
+  if (isPlainObject(config.adv)) config.adv.multi_record_positions = placed.choices.positions;
+  if (placed.cards.length) config.recordsNamed = placed.cards;
+  else delete config.recordsNamed;
 };
 /**
  * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a stored drawing (`prepareDerivedRequest`):
@@ -7720,6 +7744,11 @@ export const installPastedRecords = (target, paste) => {
     : { linearSeqs: [...inputs.linearSeqs, ...linearSeqs] });
   SETTINGS_SLICE.install(target.slices.settings, {
     recordsOff: [...target.recordsOff, ...pastedKeys(read.recordsOff)],
+    // The target's own cards keep the records they name; a pasted card whose read failed names its records too.
+    recordsNamed: [...target.recordsNamed, ...read.recordsNamed.flatMap(({ uid, named }) => {
+      const card = pastedKeyOf(uid, uids);
+      return card === null ? [] : [{ uid: card, named }];
+    })],
     linearRecordRows: [...target.linearRecordRows, ...read.linearRecordRows.flatMap((/** @type {LinearRecordRow} */ row) => {
       const uid = pastedKeyOf(row.uid, uids);
       return uid === null ? [] : [{ ...row, uid }];

@@ -261,7 +261,8 @@ const publicationConfig = (session, projection) => {
   const colors = session.renderRequest.diagramOptions?.colors;
   if (!colors?.defaultColors && !colors?.defaultColorsFile) Object.assign(config, { colors: {}, colorsAreOverrides: false });
   for (const key of ['webEdits', 'paletteInstantPreviewEnabled']) if (has(stored, key)) config[key] = clone(stored[key]);
-  delete config.blastSource; delete config.adv.losatProgram;
+  // The records a File card names of its file are the drawing's until its read places them; no Session holds them.
+  delete config.blastSource; delete config.adv.losatProgram; delete config.recordsNamed;
   return config;
 };
 // The layout preferences of the Session's drawing: a Session 46 slice's slot

@@ -91,7 +91,7 @@ import {
   applyRunStateData,
   applyUiStateData,
   applySessionUiData,
-  buildConfigData,
+  captureConfigData,
   buildEditorStateData,
   buildFeatureStateData,
   buildOrthogroupStateData,
@@ -866,7 +866,7 @@ export const createAppSetup = () => {
     nextTick,
     // The discovery owner exists once the runner does; a restore runs after setup.
     discoverDrawingRecords: (drawing) => discoverDrawingRecords(drawing),
-    buildConfigData,
+    buildConfigData: captureConfigData,
     applyConfigData: applyCapturedConfigData,
     buildUiStateData,
     applyUiStateData,

@@ -17,8 +17,8 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
-import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
-import { readSessionFile } from './helpers/written-resources.mjs';
+import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { readSessionFile, writeSessionFile } from './helpers/written-resources.mjs';
 
 globalThis.window = {
   Vue: {
@@ -182,6 +182,39 @@ for (const grouping of ['grid', 'batch']) {
     }
   });
 }
+
+// S2 (OV-3531): a stored grid that draws one record of a file of two (and a file of one), named by record ID over the
+// shared file; the read turns the other OFF, and the user turns it ON again. A Save before Generate keeps that choice:
+// the next Load draws both records, not the one the Result drew.
+await test('a record turned ON after the read of a stored canvas of some records stays ON over Save and Load', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-all-on-'));
+  try {
+    const { bytes } = await cliSession(directory, ['--gbk', twoRecords, mito, '--multi_record_canvas']);
+    const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+    const named = withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+      const [first, , mitoRecord] = view.renderRequest.records;
+      view.renderRequest.records = [{ ...first, selector: { kind: 'recordId', value: 'TESTA' } }, mitoRecord];
+    });
+    assert.equal((await load(await writeSessionFile(named, resourceBytes))).status, 'ok');
+    const recordIdsOf = (records) => records.map(({ selector }) => selector?.value ?? selector?.index ?? null);
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', null], 'the canvas draws TESTA alone of its file');
+    // The user turns TESTB ON again: every record ON, none named.
+    const drawing = modeDrawing(state, 'circular');
+    drawing.recordsOff.splice(0, Infinity);
+    drawing.recordsNamed?.splice(0, Infinity);
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', 'TESTB', null]);
+    const result = await sessionConfig.exportSession('all-on', { shownDrawing: state.activeDrawing,
+      readOfDrawing: (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore().readOfDrawing, askChoice: async () => 'download' });
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    // The Result's request names TESTA alone; the drawing's choice (every record ON) is saved beside it.
+    const { document: saved } = await readSessionFile(result.blob);
+    assert.deepEqual(saved.drawings.find(({ id }) => id === drawing.id).config.recordsOff, [], 'Save writes every record ON');
+    assert.equal((await load(result.blob)).status, 'ok');
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', 'TESTB', null], 'the Load draws both');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 // The Web side of the cards (DESIGN section 7, failing-first tests 2, 3, 6, 7,
 // 8 and 9): a record's identity is its card's uid with its place in that

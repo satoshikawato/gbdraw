@@ -279,10 +279,6 @@ export const createCircularSource = (overrides = {}) => ({
  * @property {readonly CircularCardMark[] | null} c_legacy_record_cards the cards a Session 50 or older
  *   moved its Circular input to, as Load installed them (`cardsTakeLegacyRecordPositions`; not saved);
  *   null: no record of the drawing has a flat position of then
- * @property {readonly NamedCardRecordsMark[] | null} c_named_records the cards a Load or a copy installed whose
- *   request records each name one record of the card's file (OV-3530, OV-3531), as installed (not saved): the
- *   drawing's first settled read turns the file's other records off and names the canvas places of the named records
- *   by identity (`placeNamedCardRecords`), then drops them; null: no such card
  */
 /**
  * A Circular File card as it was at one moment (a Load, the write of a Depth
@@ -290,16 +286,6 @@ export const createCircularSource = (overrides = {}) => ({
  * that was known.
  * @typedef {{ uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null,
  *   recordCount: number | null }} CircularCardMark
- */
-/**
- * A record a request names by its place or ID in its card's file: its request key, which the canvas places name it by
- * until the card is read, and its selector.
- * @typedef {{ recordKey: string, selector: { kind: string, index?: number, value?: string } }} NamedCardRecord
- */
-/**
- * A Circular File card whose request records each name one record of its file: the card as installed, with those
- * records (`c_named_records`).
- * @typedef {CircularCardMark & { named: readonly NamedCardRecord[] }} NamedCardRecordsMark
  */
 /**
  * The five card files' fields (Default colors, Specific rules, Blacklist,
@@ -383,7 +369,7 @@ const boundRingGenomeLists = (bound) => (isBoundFileList(bound) ? bound : []).ma
  */
 const isBoundFileList = (value) => Array.isArray(value);
 // The fields of `files` that hold card marks (`CircularCardMark`), whose files bind no input.
-const CARD_MARK_KEYS = Object.freeze(['c_depth_rows', 'c_legacy_record_cards', 'c_named_records']);
+const CARD_MARK_KEYS = Object.freeze(['c_depth_rows', 'c_legacy_record_cards']);
 
 /**
  * The kinds of file an uploader takes; a binding slot's kind is the kind of
@@ -735,7 +721,7 @@ const emptyDrawingInputFiles = () => ({
   c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: [],
   c_conservation_sequence_sources: [], linearCanonicalComparisons: [],
   d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null,
-  c_depth_rows: null, c_legacy_record_cards: null, c_named_records: null
+  c_depth_rows: null, c_legacy_record_cards: null
 });
 const DRAWING_FILE_KEYS = /** @type {(keyof DrawingInputFiles)[]} */ (Object.keys(emptyDrawingInputFiles()));
 
@@ -970,17 +956,6 @@ export const bindDrawingInputFileTree = (store, slice, slot, value) => {
  */
 export const markCircularDepthRows = (slice, marks) => {
   membersOf(slice).files.c_depth_rows = marks;
-};
-
-/**
- * Mark the cards whose request records name some records of their file (`c_named_records`); the drawing's first
- * settled read drops the marks (null) once it placed them. The one writer of the field besides Load and a History
- * restore.
- * @param {InputsSlice} slice
- * @param {readonly NamedCardRecordsMark[] | null} marks
- */
-export const markNamedCardRecords = (slice, marks) => {
-  membersOf(slice).files.c_named_records = marks;
 };
 
 /**
