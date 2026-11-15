@@ -574,3 +574,60 @@ test('after a copy into a new drawing the dialog opens on the drawing that copy 
   await owner.open();
   assert.equal(owner.dialog.target, 'new');
 });
+
+// Review finding 4 of #2047: a paste whose History step the app refuses (a Session operation blocks edits) pastes
+// nothing and answers busy; the dialog stays open on its choices with the reason, and the last target stays.
+test('a paste History refuses answers busy; the dialog stays open with the reason and remembers no target', async () => {
+  const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-drawing/paste-into.js');
+  const installed = [];
+  const reason = 'Generating diagram. Retry after generation finishes.';
+  const ports = createPasteTargets({
+    tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
+    show: () => ({ status: 'ok' }), runUndoable: async () => ({ status: 'busy', reason }),
+    prepare: async () => ({}), install: (drawing) => installed.push(drawing.id)
+  });
+  assert.deepEqual(await ports.pasteInto('linear-2', {}), { status: 'busy', reason });
+  assert.deepEqual(installed, []);
+  const refusedSwitch = createPasteTargets({
+    tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
+    show: () => ({ status: 'busy', reason }), runUndoable: async (_label, run) => run(),
+    prepare: async () => ({}), install: (drawing) => installed.push(drawing.id)
+  });
+  assert.deepEqual(await refusedSwitch.pasteInto('linear-2', {}), { status: 'busy', reason });
+  assert.deepEqual(installed, []);
+  const ran = createPasteTargets({
+    tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
+    show: () => ({ status: 'ok' }), runUndoable: async (_label, run) => run(),
+    prepare: async () => ({}), install: (drawing) => installed.push(drawing.id)
+  });
+  assert.deepEqual(await ran.pasteInto('linear-2', {}), { status: 'ok', drawingId: 'linear-2' });
+  assert.deepEqual(installed, ['linear-2']);
+
+  const pasteTargets = pasteTargetPorts();
+  let busy = true;
+  pasteTargets.pasteInto = async (drawingId, paste) => {
+    if (busy) return { status: 'busy', reason };
+    pasteTargets.pasted.push({ drawingId, paste });
+    return { status: 'ok', drawingId };
+  };
+  const { owner } = harness({ pasteTargets });
+  await owner.open({ keys: ['record-2'], edit: { checked: true, kind: 'whole' } });
+  await owner.setChoice({ target: 'linear-2' });
+  assert.deepEqual(await owner.confirm(), { status: 'busy', reason });
+  assert.deepEqual([owner.dialog.show, owner.dialog.status, owner.dialog.message, owner.dialog.target],
+    [true, 'derived', reason, 'linear-2'], 'open on its choices, with the reason');
+  assert.deepEqual(pasteTargets.pasted, []);
+  owner.close();
+  await owner.open();
+  assert.equal(owner.dialog.target, 'new', 'no target remembered');
+  owner.close();
+  // Copy again once the app allows it: the same derivation pastes.
+  await owner.open({ keys: ['record-2'], edit: { checked: true, kind: 'whole' } });
+  await owner.setChoice({ target: 'linear-2' });
+  await owner.confirm();
+  busy = false;
+  assert.equal(owner.dialog.show, true);
+  assert.deepEqual(await owner.confirm(), { status: 'ok', drawingId: 'linear-2' });
+  assert.equal(owner.dialog.show, false);
+  assert.equal(pasteTargets.pasted.length, 1);
+});

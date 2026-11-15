@@ -19,15 +19,25 @@ import { msg } from '../../utils/i18n.js';
  *   unread (a Circular drawing's projection names its records by them).
  * @property {(drawing: DrawingState) => Promise<ProjectedDraftRequest>} project A drawing's draft request, shown or not.
  * @property {(drawingId: DrawingId) => unknown} show Shows a drawing; a refused switch answers `{ status }` not `ok`.
- * @property {(label: string, run: () => void) => unknown} runUndoable One History step of the shown drawing.
+ * @property {(label: string, run: () => void) => unknown} runUndoable One History step of the shown drawing; while a
+ *   Session operation blocks edits it runs nothing and answers `{ status: 'busy', reason }`.
  * @property {(paste: PasteDerivation) => Promise<PreparedPaste>} prepare `preparePastedRecords`
  * @property {(drawing: DrawingState, paste: PreparedPaste) => void} install `installPastedRecords`
  */
 
 /**
+ * The refusal in an answer of the drawing switch or of History (`{ status }` other than `ok`), as the drawing list
+ * answers one; null for any other answer.
+ * @param {unknown} answer
+ * @returns {DrawingListOutcome | null}
+ */
+const refusalOf = (answer) => (answer && typeof answer === 'object' && 'status' in answer && answer.status !== 'ok'
+  ? { status: 'busy', reason: 'reason' in answer ? answer.reason : null } : null);
+
+/**
  * The dialog's port to the existing drawings. A paste is read first, then installed, with its drawing shown, as one
  * step of that drawing's History; its figure is drawn by the next Generate (the drawing keeps its Result until then).
- * A switch the app refuses (a Generate runs) pastes nothing and answers `busy` with its reason.
+ * A switch or a History step the app refuses (a Generate runs) pastes nothing and answers `busy` with its reason.
  * @param {PasteIntoOwners} owners
  * @returns {PasteTargetPorts}
  */
@@ -40,11 +50,8 @@ export const createPasteTargets = ({ tabs, drawingOf, readRecords, project, show
   },
   pasteInto: async (drawingId, paste) => {
     const prepared = await prepare(paste);
-    const shown = show(drawingId);
-    if (shown && typeof shown === 'object' && 'status' in shown && shown.status !== 'ok') {
-      return /** @type {DrawingListOutcome} */ ({ status: 'busy', reason: 'reason' in shown ? shown.reason : null });
-    }
-    await runUndoable(msg('Copy to another drawing'), () => install(drawingOf(drawingId), prepared));
-    return /** @type {DrawingListOutcome} */ ({ status: 'ok', drawingId });
+    const refused = refusalOf(show(drawingId)) ?? refusalOf(await runUndoable(msg('Copy to another drawing'),
+      () => install(drawingOf(drawingId), prepared)));
+    return refused ?? { status: 'ok', drawingId };
   }
 });

@@ -521,6 +521,12 @@ export const createRegionDrawing = (ports) => {
     dialog.status = 'creating';
     try {
       const outcome = await run();
+      if (outcome.status === 'busy') {
+        // Nothing was copied: the dialog stays open on its choices, says why, and Copy can run again.
+        Object.assign(dialog, { status: 'derived', message: typeof outcome.reason === 'string' ? tm(outcome.reason) : '' });
+        create = run;
+        return outcome;
+      }
       lastTarget.remember(outcome);
       close();
       return outcome;
