@@ -165,6 +165,7 @@ def vendor_assets() -> None:
             VENDOR_ROOT / "phosphor-icons" / "regular",
             VENDOR_ROOT / "fonts" / "inter",
             VENDOR_ROOT / "fonts" / "noto-sans-jp",
+            VENDOR_ROOT / "fonts" / "noto-nastaliq-urdu",
         ]:
             path.mkdir(parents=True, exist_ok=True)
 
@@ -222,6 +223,12 @@ def vendor_assets() -> None:
             "files",
             UI_FONT_ASSETS["noto-sans-jp"],
             VENDOR_ROOT / "fonts" / "noto-sans-jp",
+        )
+        _extract_tgz_files(
+            downloaded["noto_nastaliq_urdu"],
+            "files",
+            UI_FONT_ASSETS["noto-nastaliq-urdu"],
+            VENDOR_ROOT / "fonts" / "noto-nastaliq-urdu",
         )
     (REPO_ROOT / NPM_ADVISORY_MANIFEST).parent.mkdir(parents=True, exist_ok=True)
     (REPO_ROOT / NPM_ADVISORY_MANIFEST).write_text(npm_advisory_manifest_text(), encoding="utf-8", newline="\n")

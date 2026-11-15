@@ -89,6 +89,10 @@ ASSET_DOWNLOADS = {
         "https://registry.npmjs.org/@fontsource/noto-sans-jp/-/noto-sans-jp-5.2.9.tgz",
         "e4d4ba8825aebe6293e19400a07d45b8f111ff31532c8dfbdd77b986c0123652",
     ),
+    "noto_nastaliq_urdu": VendoredDownload(
+        "https://registry.npmjs.org/@fontsource-variable/noto-nastaliq-urdu/-/noto-nastaliq-urdu-5.3.0.tgz",
+        "8a25d9b16d9783bcf5cbbd0d3acf1e9304f7956b670e7f4c6c1dc2248a70b4db",
+    ),
 }
 
 # Pyodide 0.29 reads and writes a string at an address above 2 GiB of its heap
@@ -222,6 +226,7 @@ UI_FONT_ASSETS = {
         "noto-sans-jp-japanese-500-normal.woff2",
         "noto-sans-jp-japanese-700-normal.woff2",
     ),
+    "noto-nastaliq-urdu": ("noto-nastaliq-urdu-arabic-wght-normal.woff2",),
 }
 
 REQUIRED_UI_FONT_FILES = tuple(
@@ -339,6 +344,18 @@ WEB_ASSET_NOTICES = (
         source_url=ASSET_DOWNLOADS["noto_sans_jp"].url,
         bundled_path="vendor/fonts/noto-sans-jp/",
         notice="Font package metadata identifies Google Inc. as the author.",
+        license_text_anchors=("license-ofl-1.1",),
+    ),
+    WebAssetNotice(
+        display_name="Noto Nastaliq Urdu font package",
+        version="Fontsource package 5.3.0",
+        license_expression="OFL-1.1",
+        source_url=ASSET_DOWNLOADS["noto_nastaliq_urdu"].url,
+        bundled_path="vendor/fonts/noto-nastaliq-urdu/",
+        notice=(
+            "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/nastaliq). "
+            "Font package metadata identifies Google Inc. as the author."
+        ),
         license_text_anchors=("license-ofl-1.1",),
     ),
 )

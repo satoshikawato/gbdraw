@@ -4,6 +4,7 @@
   "description": "The npm packages vendored under gbdraw/web/vendor/, for advisories only; nothing installs them. Written by `python tools/verify_gui_offline.py vendor-assets` from gbdraw/_web_assets.py.",
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
+    "@fontsource-variable/noto-nastaliq-urdu": "5.3.0",
     "@fontsource/inter": "5.2.8",
     "@fontsource/noto-sans-jp": "5.2.9",
     "@phosphor-icons/web": "2.1.2",
