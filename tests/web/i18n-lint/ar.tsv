@@ -24,3 +24,4 @@ ar-nfc	\u0627[\u0653-\u0655]|[\u0648\u064A\u0649]\u0654	u	Decomposed hamza or ma
 ar-three-dots	\.{3}|\u2026{2}	u	Three periods or a doubled ellipsis: write one … (U+2026) attached to the last word (STYLE 1.2).	error
 ar-whitespace	^\s|\s$|\s{2,}|[\u00A0\u200B\u2060\uFEFF]	u	Leading, trailing or doubled space, or an invisible character (NBSP, ZWSP, WJ, BOM): use single ordinary spaces; units keep the source spacing (100 bp) (STYLE 1.2).	warn
 ar-paren-space	\(\s|\s\)|[0-9]\s%	u	Space inside parentheses, or between a number and %: write (اختياري) and 50% (Microsoft 4.1.14, 4.1.15; STYLE 21.3).	warn
+ar-map-mode-adjective	خريطة (?:ال)?(?:خطية|دائرية)	u	Mode adjective after خريطة: the mode attaches to the diagram, so write خريطة المخطط الخطي / الدائري, not خريطة خطية / دائرية (Linear map / Circular map row of the glossary).	error
