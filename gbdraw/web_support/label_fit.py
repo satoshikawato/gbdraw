@@ -1,12 +1,12 @@
 """The label fit report as the Web reads it, and the rows it computes later.
 
-Python owns every value of the report and the words of its titles, settings
-and counts: the Web dialog shows the rows' titles, the settings they change,
-the records' counts, and the canvas sizes as given, and nothing in JavaScript
-places labels or searches values (LP-D43, LP-D48). Why a row has no value and
-what a row that draws with the notice leaves are data the Web words in its
-language (OV-3109). Rows a bounded search did not reach arrive
-``not_computed`` (OD-F14 for a drawn figure, the font scan bound when nothing
+Python owns every value of the report and the words of its titles and
+settings: the Web dialog shows the rows' titles, the settings they change, and
+the canvas sizes as given, and nothing in JavaScript places labels or searches
+values (LP-D43, LP-D48). Why a row has no value, what a row that draws with the
+notice leaves (OV-3109), each record's counts and the counts the notice bar
+names (OV-3515) are data the Web words in its language. Rows a bounded search
+did not reach arrive ``not_computed`` (OD-F14 for a drawn figure, the font scan bound when nothing
 was drawn); :class:`LabelFitRowSearches` keeps the last such figure or failure
 of each mode so the Web can compute one row through :func:`label_fit_row`,
 searched for at most ``WEB_ROW_SEARCH_SECONDS`` (LP-D60).
@@ -53,15 +53,14 @@ from gbdraw.labels.fit import (
     LabelFitRowStatus,
     LabelFitValue,
     LabelKind,
+    NoticeField,
     LimitReason,
     LimitReasonKind,
     PlainReason,
     PlainReasonKind,
     UnfitReason,
     fit_count_items,
-    label_fit_notice,
-    label_fit_record_counts,
-    label_kind_title,
+    label_fit_notice_counts,
     row_remaining,
     shown_capacity_ratio,
     split_row_option_values,
@@ -133,6 +132,13 @@ class LabelFitCountPayload(TypedDict):
     count: int
 
 
+class LabelFitNoticeCountPayload(TypedDict):
+    """One count the notice bar over a drawn figure names, by its field name (``NOTICE_FIELDS``)."""
+
+    field: NoticeField
+    count: int
+
+
 class LabelFitLimitReasonPayload(TypedDict):
     """``LimitReason``: the lever's limit, or the seconds of the Web's row search."""
 
@@ -187,7 +193,6 @@ class LabelFitRecordPayload(TypedDict):
     # The record's drawn index (``data-gbdraw-record-index``); None for a Linear record.
     recordIndex: int | None
     labelKind: LabelKind
-    labelKindTitle: str
     labelCount: int
     fontSize: float
     overlapPairs: int
@@ -198,7 +203,9 @@ class LabelFitRecordPayload(TypedDict):
     # The room the labels need as a multiple of the room around the map, as shown (``shown_capacity_ratio``), when
     # they were not placed (CAPACITY-STOP); the Web words such a record from its values, not from ``counts``.
     capacityRatio: float | None
-    counts: str
+    # The counts that state the record's fit (``fit_count_items``), in order; the Web words them in its language. A
+    # refused record (OV-699) and one not placed (``capacityRatio``) are worded without them.
+    counts: list[LabelFitCountPayload]
 
 
 class LabelCapacityNoticePayload(TypedDict):
@@ -228,7 +235,8 @@ class _LabelFitReportFields(TypedDict):
     crossingPairs: int
     definitionOverlaps: int
     regionOverlaps: int
-    notice: list[str]
+    # The counts the notice bar over a drawn figure names, in its order (``label_fit_notice_counts``).
+    notice: list[LabelFitNoticeCountPayload]
     records: list[LabelFitRecordPayload]
     rows: list[LabelFitRowPayload]
     # The ways to make room for records that were not placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS,
@@ -333,7 +341,6 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
         "recordId": record.record_id,
         "recordIndex": record.record_index,
         "labelKind": record.label_kind,
-        "labelKindTitle": label_kind_title(record),
         "labelCount": record.label_count,
         "fontSize": float(record.font_size),
         "overlapPairs": record.fit.overlap_pairs,
@@ -342,13 +349,12 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
         "regionOverlaps": record.fit.region_overlaps,
         "refused": record.refused,
         "capacityRatio": shown_capacity_ratio(record.capacity) if record.capacity is not None else None,
-        # A refused radial record has no counts; the reason stands in (OV-699).
-        "counts": label_fit_record_counts(record),
+        "counts": _counts_payload(fit_count_items(record.fit)),
     }
 
 
 def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> LabelFitReportPayload:
-    """The bounded JSON form of a report: identifiers, counts, values, and Python's words."""
+    """The bounded JSON form of a report: identifiers, counts, values, and the rows' titles and settings."""
 
     remedies, larger = report.room_remedies, report.larger_figure
     payload: LabelFitReportPayload = {
@@ -358,7 +364,7 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
         "crossingPairs": report.crossing_pairs,
         "definitionOverlaps": report.definition_overlaps,
         "regionOverlaps": report.region_overlaps,
-        "notice": list(label_fit_notice(report)),
+        "notice": [{"field": name, "count": count} for name, count in label_fit_notice_counts(report)],
         "records": [_record_payload(record) for record in report.records],
         "rows": [label_fit_row_payload(row, mode) for row in report.rows],
         "remedies": list(remedies),

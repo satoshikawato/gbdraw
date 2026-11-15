@@ -981,7 +981,7 @@ def test_a_clipped_slot_of_set_size_draws_every_mark_and_leaves_out_the_labels_w
     # the labels it left out. At 40 px no label fits; at 60 px one does: A's above the outer Linear lane, C's outside
     # the outer Circular lane.
     from gbdraw.api.diagram import label_fit_report
-    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.labels.fit import label_fit_notice_counts
 
     linear = mode == "linear"
     side = "side=above,h" if linear else "side=outside,w"
@@ -1019,10 +1019,7 @@ def test_a_clipped_slot_of_set_size_draws_every_mark_and_leaves_out_the_labels_w
     ]
     report = label_fit_report(drawing)
     assert report is not None and report.drawn
-    assert (
-        "Region labels are left out: their clipped slots have no room for them, would cut their letters, "
-        f"or hide their marks ({left_out})."
-    ) in label_fit_notice(report)
+    assert ("region_rooms_clipped", left_out) in label_fit_notice_counts(report)
 
 
 def test_a_clipped_slot_leaves_out_a_label_its_edge_would_cut() -> None:
@@ -1251,14 +1248,9 @@ def _nested_inside(
     return _groups(drawing.tostring()), caught, drawing
 
 
-_PAST_CENTRE = (
-    "left out for want of room before the centre",
-    "Region labels are left out: there is no room for them before the centre ({}).",
-)
-_IN_CLIPPED_SLOTS = (
-    "left out in clipped slots",
-    "Region labels are left out: their clipped slots have no room for them, would cut their letters, or hide their marks ({}).",
-)
+# The warning's words and the count's field, which the notice bar names (OV-3515).
+_PAST_CENTRE = ("left out for want of room before the centre", "region_rooms_past_centre")
+_IN_CLIPPED_SLOTS = ("left out in clipped slots", "region_rooms_clipped")
 
 
 @pytest.mark.parametrize(
@@ -1281,7 +1273,7 @@ def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(
     # them. A clipped slot whose set width reaches past the centre stops there too: the centre is the nearer bound; its
     # warning counts the labels left out in clipped slots (LBL-ROOM-CLIP-FIT-OMIT).
     from gbdraw.api.diagram import label_fit_report
-    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.labels.fit import label_fit_notice_counts
     from gbdraw.web_support.label_fit import label_fit_report_payload
 
     items, caught, drawing = _nested_inside(count, slot=slot)
@@ -1294,16 +1286,16 @@ def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(
     assert all(_marked(items[f"r{index}"]) for index in range(count))
     assert sum(_labelled(items[f"r{index}"]) for index in range(count)) == count - without_room
     counted = "region label" if without_room == 1 else "region labels"
-    counts, sentence = f"{without_room} {counted} {warned[0]}", warned[1].format(without_room)
+    counts, field = f"{without_room} {counted} {warned[0]}", warned[1]
     assert any(counts in str(item.message) for item in caught), [str(item.message) for item in caught]
     report = label_fit_report(drawing)
     assert report is not None and report.drawn
-    assert sentence in label_fit_notice(report)
-    # The Web shows the same sentence over the figure, and the region labels get no row to choose.
+    assert (field, without_room) in label_fit_notice_counts(report)
+    # The Web names the same count over the figure, and the region labels get no row to choose.
     payload = label_fit_report_payload(report, "circular")
-    assert sentence in payload["notice"]
+    assert {"field": field, "count": without_room} in payload["notice"]
     (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
-    assert region["counts"] == counts
+    assert region["counts"] == [{"field": field, "count": without_room}]
     assert not [row for row in report.rows if row.kind not in {"smaller_definition_font", "narrow_tracks"}]
 
 
@@ -1335,7 +1327,7 @@ def test_inside_region_labels_over_each_other_are_drawn_and_warned() -> None:
     # is drawn as before, and the warning counts the overlap; the Web shows the Linear sentence over the figure,
     # with no row to choose for the region labels.
     from gbdraw.api.diagram import label_fit_report
-    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.labels.fit import label_fit_notice_counts
     from gbdraw.web_support.label_fit import label_fit_report_payload
 
     svg, caught, drawing = _explicit_lane_inside()
@@ -1344,10 +1336,9 @@ def test_inside_region_labels_over_each_other_are_drawn_and_warned() -> None:
     assert any("1 region label overlap" in str(item.message) for item in caught), [str(item.message) for item in caught]
     report = label_fit_report(drawing)
     assert report is not None and report.drawn and report.region_overlaps == 1
-    sentence = "Region labels overlap other labels or lines (1)."
-    assert sentence in label_fit_notice(report)
+    assert ("region_overlaps", 1) in label_fit_notice_counts(report)
     payload = label_fit_report_payload(report, "circular")
-    assert sentence in payload["notice"]
+    assert {"field": "region_overlaps", "count": 1} in payload["notice"]
     assert not [row for row in report.rows if row.kind not in {"smaller_definition_font", "narrow_tracks"}]
 
 
@@ -1367,7 +1358,7 @@ def test_an_inside_label_that_keeps_no_letter_is_left_out_and_counted() -> None:
     # The innermost band's label would be cut so far that no letter is left, only the ellipsis: it is not drawn,
     # and the warning counts it as a label left out, not as a cut one. Its mark is drawn.
     from gbdraw.api.diagram import label_fit_report
-    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.labels.fit import label_fit_notice_counts
     from gbdraw.web_support.label_fit import label_fit_report_payload
 
     items, caught, drawing = _nested_inside(10, orientation="auto")
@@ -1381,13 +1372,14 @@ def test_an_inside_label_that_keeps_no_letter_is_left_out_and_counted() -> None:
     report = label_fit_report(drawing)
     assert report is not None and report.drawn
     assert (report.region_cuts, report.region_cuts_left_out, report.region_rooms_past_centre) == (0, 1, 2)
-    sentence = "Region labels are left out: no letter of them fits their circle (1)."
-    assert sentence in label_fit_notice(report)
+    assert ("region_cuts_left_out", 1) in label_fit_notice_counts(report)
     payload = label_fit_report_payload(report, "circular")
-    assert sentence in payload["notice"]
+    assert {"field": "region_cuts_left_out", "count": 1} in payload["notice"]
     (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
     # Every region label of the record, drawn or left out, is counted.
-    assert region["counts"] == counts and region["labelCount"] == 10
+    assert region["counts"] == [
+        {"field": "region_rooms_past_centre", "count": 2}, {"field": "region_cuts_left_out", "count": 1}
+    ] and region["labelCount"] == 10
 
 
 class _LeftOut(NamedTuple):
@@ -1652,7 +1644,7 @@ def test_the_warning_reports_a_label_without_letters_at_its_own_size() -> None:
     assert any("10 region labels at 20 pt" in str(item.message) for item in caught), [str(item.message) for item in caught]
     payload = label_fit_report_payload(label_fit_report(drawing), "circular")
     (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
-    assert region["fontSize"] == 20.0 and "1 region label left out: no letter fits its circle" in region["counts"]
+    assert region["fontSize"] == 20.0 and {"field": "region_cuts_left_out", "count": 1} in region["counts"]
 
 
 def test_a_label_without_letters_puts_no_ink_on_the_definition() -> None:

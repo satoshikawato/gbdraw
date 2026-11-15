@@ -315,6 +315,18 @@ export const LABEL_FIT_LIMIT_REASON_KINDS = Object.freeze(['y_offset_limit', 'x_
 /** @type {readonly ['outer_labels_only', 'tracks_do_not_fit', 'labels_not_placed', 'stale']} */
 export const LABEL_FIT_PLAIN_REASON_KINDS = Object.freeze(['outer_labels_only', 'tracks_do_not_fit', 'labels_not_placed', 'stale']);
 
+// gbdraw/labels/fit.py: LABEL_KINDS
+/** @type {readonly ['circular_outer', 'circular_inner', 'circular_embedded', 'circular_region', 'circular_definition', 'linear', 'linear_region']} */
+export const LABEL_FIT_LABEL_KINDS = Object.freeze(['circular_outer', 'circular_inner', 'circular_embedded', 'circular_region', 'circular_definition', 'linear', 'linear_region']);
+
+// gbdraw/labels/fit.py: REFUSED_LABEL_KINDS
+/** @type {readonly ['circular_outer', 'circular_inner', 'circular_embedded']} */
+export const LABEL_FIT_REFUSED_LABEL_KINDS = Object.freeze(['circular_outer', 'circular_inner', 'circular_embedded']);
+
+// gbdraw/labels/fit.py: NOTICE_FIELDS
+/** @type {readonly ['crossing_pairs', 'definition_overlaps', 'region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out', 'definition_track_overlaps']} */
+export const LABEL_FIT_NOTICE_FIELDS = Object.freeze(['crossing_pairs', 'definition_overlaps', 'region_overlaps', 'region_cuts', 'region_track_overlaps', 'region_rooms_past_centre', 'region_rooms_clipped', 'region_cuts_left_out', 'definition_track_overlaps']);
+
 // gbdraw/tracks/linear.py: LINEAR_SLOT_UNREAD_PARAM_KEYS
 /** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features', readonly string[]>>} */
 export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({

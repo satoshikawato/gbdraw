@@ -396,7 +396,7 @@ test('Session Load clears the label fit notice of the Result shown before', asyn
   installShownDrawing('circular');
   const gallery = await gallerySessionDocument('HmmtDNA_basic_circular');
   state.labelFitReports.value = [{ resultIndex: 0, resultName: 'fit.svg', rowToken: 'circular:1:0',
-    report: { drawn: true, notice: ['Leader lines cross (5 pairs).'] } }];
+    report: { drawn: true, notice: [{ field: 'crossing_pairs', count: 5 }] } }];
   state.inputSummaries.value = [{ resultIndex: 0, resultName: 'fit.svg', lines: ['Record r (a.gb), record 1 of 1, 8 bp: drew 0 features.'],
     warnings: [{ code: 'no_drawable_features', message: 'Record r (a.gb) has no feature to draw: it has no features.' }] }];
   assert.equal((await load(gallery)).status, 'ok');

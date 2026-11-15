@@ -28,6 +28,8 @@ from gbdraw.layout.figure_size import LargerFigure
 from gbdraw.labels.fit import (
     DEFINITION_FONT_PATH,
     FONT_SIZE_PATHS,
+    LABEL_FIT_FIELDS,
+    NOTICE_FIELDS,
     PLACEMENT_PATH,
     SCOPE_PATH,
     SEPARATE_FEATURES_PATH,
@@ -84,10 +86,10 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["schema"] == 1 and payload["drawn"] is False
     assert (payload["overlapPairs"], payload["crossingPairs"]) == (20, 21)
     assert payload["records"] == [{
-        "recordId": "rec-1", "recordIndex": None, "labelKind": "circular_outer", "labelKindTitle": "outer labels",
+        "recordId": "rec-1", "recordIndex": None, "labelKind": "circular_outer",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
         "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False, "capacityRatio": None,
-        "counts": "20 label pairs overlap, 21 leader pairs cross",
+        "counts": [{"field": "overlap_pairs", "count": 20}, {"field": "crossing_pairs", "count": 21}],
     }]
     assert payload["remedies"] == []
     vertical, font, tighter, combination = payload["rows"]
@@ -315,9 +317,9 @@ def test_word_rows_show_the_web_option_and_a_refused_record_says_why() -> None:
     )
     payload = label_fit_report_payload(report, "circular")
     (record,) = payload["records"]
-    # OV-699: 0 overlaps and 0 crossings, and the reason instead of the counts.
-    assert record["refused"] is True and record["labelKindTitle"] == "radial inner labels"
-    assert record["counts"] == "they need more room than the circular tracks leave"
+    # OV-699: 0 overlaps and 0 crossings; the Web states the refusal instead of the counts (OV-3515).
+    assert record["refused"] is True and record["labelKind"] == "circular_inner"
+    assert record["counts"] == [{"field": "overlap_pairs", "count": 0}, {"field": "crossing_pairs", "count": 0}]
     outside, radial = payload["rows"]
     assert outside["values"] == {SCOPE_PATH: "outer"}
     assert outside["settings"] == [{"name": "Label Mode", "unit": "", "value": "Out"}]
@@ -588,8 +590,8 @@ def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_la
     assert entry["resultIndex"] == 0 and entry["resultName"] == "fit.svg"
     report = entry["report"]
     assert report["drawn"] is True and report["overlapPairs"] == 0 and report["crossingPairs"] > 0
-    # Python owns the notice bar's words (the Owner's Q8 wording).
-    assert report["notice"] == [f"Leader lines cross ({report['crossingPairs']} pairs)."]
+    # The notice bar names the crossing leaders by their count; the Web words it (the Owner's Q8 wording, OV-3515).
+    assert report["notice"] == [{"field": "crossing_pairs", "count": report["crossingPairs"]}]
     # OD-F14: Generate searched no row.
     assert [row["kind"] for row in report["rows"]] == list(ROW_KINDS[:6])
     assert {row["status"] for row in report["rows"]} == {"not_computed"}
@@ -953,14 +955,33 @@ def test_a_failed_render_keeps_the_shown_results_rows_computable() -> None:
     assert searches.failure_payload(failure, "circular")["rowToken"] is None
 
 
-def test_the_notice_bar_words_are_pythons_with_one_plural_rule() -> None:
-    def notice(crossing: int, covering: int) -> list[str]:
-        record = LabelFitRecord("NC_1", "circular_outer", 80, 14.0, LabelFit(0, crossing, covering))
-        return label_fit_report_payload(LabelFitReport((record,), (), drawn=True), "circular")["notice"]
+def test_record_counts_and_the_notice_reach_the_web_as_counts_by_field_not_english() -> None:
+    """OV-3515: the Web words the dialog's record lines and the notice bar in its language, so Python sends the
+    counts by field name, in the order they are stated, and no English."""
 
-    assert notice(1, 0) == ["Leader lines cross (1 pair)."]
-    assert notice(2, 3) == ["Leader lines cross (2 pairs).", "Labels cover the definition text (3)."]
-    assert notice(0, 1) == ["Labels cover the definition text (1)."]
+    records = (
+        LabelFitRecord("NC_1", "circular_outer", 80, 14.0, LabelFit(0, 2, 3)),
+        LabelFitRecord("NC_1", "circular_definition", 1, 18.0, LabelFit(0, 0, definition_track_overlaps=1)),
+    )
+    payload = label_fit_report_payload(LabelFitReport(records, (), drawn=True), "circular")
+    assert payload["notice"] == [
+        {"field": "crossing_pairs", "count": 2},
+        {"field": "definition_overlaps", "count": 3},
+        {"field": "definition_track_overlaps", "count": 1},
+    ]
+    outer, definition = payload["records"]
+    assert outer["counts"] == [
+        {"field": "overlap_pairs", "count": 0},
+        {"field": "crossing_pairs", "count": 2},
+        {"field": "definition_overlaps", "count": 3},
+    ]
+    assert definition["counts"] == [{"field": "definition_track_overlaps", "count": 1}]
+    assert "labelKindTitle" not in outer and "labelKindTitle" not in definition
+    # A fit that leaves nothing to warn of names nothing; the notice never names overlapping labels.
+    fits = LabelFitRecord("NC_1", "circular_outer", 80, 14.0, LabelFit(0, 0))
+    assert label_fit_report_payload(LabelFitReport((fits,), (), drawn=True), "circular")["notice"] == []
+    assert "overlap_pairs" not in NOTICE_FIELDS
+    assert set(NOTICE_FIELDS) == set(LABEL_FIT_FIELDS) - {"overlap_pairs"}
 
 
 def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
@@ -1088,9 +1109,9 @@ def test_a_linear_figure_with_region_labels_over_others_opens_the_notice_with_no
     (entry,) = response["metadata"]["labelFitReports"]
     report = entry["report"]
     assert report["drawn"] is True and report["regionOverlaps"] == 1
-    assert report["notice"] == ["Region labels overlap other labels or lines (1)."]
+    assert report["notice"] == [{"field": "region_overlaps", "count": 1}]
     (record_payload,) = report["records"]
-    assert (record_payload["labelKind"], record_payload["labelKindTitle"], record_payload["counts"]) == (
-        "linear_region", "region labels", "1 region label overlap"
+    assert (record_payload["labelKind"], record_payload["counts"]) == (
+        "linear_region", [{"field": "region_overlaps", "count": 1}]
     )
     assert report["rows"] == []
