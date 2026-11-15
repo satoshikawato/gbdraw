@@ -5,6 +5,7 @@ import {
 } from './target-actions.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../../services/record-options.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
+import { cardFileCount } from '../../services/linear-card-windows.js';
 
 /**
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
@@ -14,9 +15,11 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 /**
  * @typedef {{
  *   key: string, value: string, label: string, recordId: string, recordLength: number | null,
- *   index: number, localIndex: number, sourceIndex?: number, sourceKey: string,
+ *   index: number, localIndex: number, sourceIndex?: number, sourceRecordCount?: number, sourceKey: string,
  *   backendSelector: AnnotationRecordSelector
- * }} AnnotationCatalogRecord A record a target may name; `key` survives reorders, `value` is the record ID or `#<n>`.
+ * }} AnnotationCatalogRecord A record a target may name; `key` survives reorders, `value` is the record ID or `#<n>`;
+ *   a Linear record has its card's place among the drawn cards (`sourceIndex`) and the records of its card's file
+ *   (`sourceRecordCount`), which Generate's request reads (`catalogCardRecord`).
  * @typedef {{ code: string, context: Record<string, any> }} AnnotationCatalogIssue A producer diagnostic.
  * @typedef {{
  *   mode?: string, status: string, records: AnnotationCatalogRecord[],
@@ -181,7 +184,7 @@ export const withRecordSelectors = (records) => buildDisambiguatedRecordEntries(
 }));
 
 /**
- * @param {(SourceRecord & { sourceIndex?: number })[]} records
+ * @param {(SourceRecord & { sourceIndex?: number, sourceRecordCount?: number })[]} records
  * @returns {AnnotationCatalogRecord[]}
  */
 const finalizeRecords = (records) => withRecordSelectors(records.map((record, index) => ({ ...record, selector: `#${index + 1}` })))
@@ -209,7 +212,7 @@ const catalogStatus = (issues, sources) => {
  */
 const buildLinearCatalog = (sources) => {
   const normalizedSources = Array.isArray(sources) ? sources : [];
-  /** @type {(SourceRecord & { sourceIndex: number })[]} */
+  /** @type {(SourceRecord & { sourceIndex: number, sourceRecordCount: number })[]} */
   const records = [];
   /** @type {AnnotationCatalogIssue[]} */
   const issues = [];
@@ -244,7 +247,10 @@ const buildLinearCatalog = (sources) => {
       issues.push(catalogIssue('RECORD_SELECTION', { inputOrdinal, reason: selected.error }));
       return;
     }
-    records.push(...selected.records.map((record) => ({ ...record, sourceIndex })));
+    // Null only when nothing is selected, which adds no record.
+    const sourceRecordCount = cardFileCount(availableRecords, selected.records);
+    if (sourceRecordCount === null) return;
+    records.push(...selected.records.map((record) => ({ ...record, sourceIndex, sourceRecordCount })));
   });
   const finalized = finalizeRecords(records);
   return {

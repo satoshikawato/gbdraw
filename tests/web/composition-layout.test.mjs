@@ -997,6 +997,30 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
   assert.throws(() => duplicate(continuityCanonical(), { catalog: continuityCatalog(['a']) }),
     { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
 }
+// OV-3632: a moved decoration stays with its record when Generate names the record of a file of one record in the
+// CLI's form (an `exactly_one` record without a selector) where the committed request (a Session saved before) named
+// it; another record of the source still has another identity.
+{
+  const named = (value, windows = []) => {
+    const canonical = continuityCanonical();
+    Object.assign(canonical.renderRequest.records[0], { selector: { kind: 'recordId', value }, windows });
+    return canonical;
+  };
+  const cliForm = (windows = []) => {
+    const canonical = continuityCanonical();
+    Object.assign(canonical.renderRequest.records[0], { selector: null, windows });
+    return canonical;
+  };
+  const window = [{ start: 1, end: 2, reverseComplement: false, column: null }];
+  for (const windows of [[], window]) {
+    const transforms = captureFixture(decorationSvg(), named('recone.1', windows))(cliForm(windows), { catalog: continuityCatalog(['a']) });
+    const next = decorationSvg([0, 0]);
+    transforms[0](next.svg);
+    assert.deepEqual(compositionUserDeltas(next.svg).legend, [40, 20]);
+  }
+  assert.throws(() => captureFixture(decorationSvg(), named('recone.1'))(named('rectwo.1'), { catalog: continuityCatalog(['a']) }),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
+}
 
 {
   const diagnostic = normalizeUserFacingError({ code: 'DECORATION_CONTINUITY', stage: 'result-admission',

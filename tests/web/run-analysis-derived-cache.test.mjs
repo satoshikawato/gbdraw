@@ -230,6 +230,21 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   assert.equal(reuse(sessionWith(`${hideRule.trimEnd()}\n\n`), hideRule), true, 'rules compare after normalization');
   assert.equal(reuse({ ...sessionWith(hideRule), resources: {} }, hideRule), false, 'an unreadable committed table declines');
 
+  // OV-3632: a card that names the only record of its file is committed in the CLI's form, an `exactly_one` record
+  // without a selector; it still selects the record the stored results were made for. A record named by its place
+  // (`#k`) is the same record too.
+  const reuseRecord = (selector, regionRecordId, cardinality = 'exactly_one') => canReuseResolvedProteinArtifacts({
+    canonicalComparisons: comparisons,
+    committedSession: { ...sessionWith(null), renderRequest: { ...sessionWith(null).renderRequest,
+      records: [{ recordKey: 'a', cardinality, selector, windows: [] }] } },
+    sequences: [{ uid: 'a', region_record_id: regionRecordId, windows: [] }], gridRows: [null], active: active('')
+  });
+  assert.equal(reuseRecord({ kind: 'recordId', value: 'recone.1' }, 'recone.1'), true, 'the named record reuses');
+  assert.equal(reuseRecord(null, 'recone.1'), true, 'the CLI form of the record of a file of one record reuses');
+  assert.equal(reuseRecord({ kind: 'recordIndex', index: 1 }, '#2'), true, 'a record named by its place reuses');
+  assert.equal(reuseRecord({ kind: 'recordId', value: 'recone.1' }, 'rectwo.1'), false, 'another record declines');
+  assert.equal(reuseRecord(null, 'recone.1', 'all'), false, 'every record of the file is not the named record');
+
   // OV-1128 B: Similarity groups draws with the paralog links per group, so a changed value declines reuse.
   const reuseParalogs = (committed, current) => canReuseResolvedProteinArtifacts({
     canonicalComparisons: comparisons,

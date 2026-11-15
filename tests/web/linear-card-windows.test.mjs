@@ -19,8 +19,9 @@ globalThis.window = {
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
   addCardWindow, cardWindowList, editCardWindow, orientLinearCard, windowSpanOf,
-  removeCardWindow, UNKNOWN_CARD_RECORD, cardRecordFacts, catalogCardRecord
+  removeCardWindow, UNKNOWN_CARD_RECORD, cardRecordFacts, catalogCardRecord, cardFileRecordFacts
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
+const { buildAnnotationRecordCatalog } = await import('../../gbdraw/web/js/app/annotations/record-catalog.js');
 const {
   linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf, linearWindowsPayload
 } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -113,9 +114,11 @@ test('Add window appends an empty window; Remove leaves the last window; one win
 
 test('an empty window draws the whole record for every reader of the card\'s windows (B1)', () => {
   const card = createLinearSeq({ uid: 'a', windows: [span(1, 50), span(null, null)] });
-  const catalog = { records: [{ sourceIndex: 0, recordLength: 3000, recordId: 'NC_1' }, { sourceIndex: 1, recordLength: 'x' }] };
-  assert.deepEqual(catalogCardRecord(catalog, 0), { length: 3000, id: 'NC_1', count: 1 });
-  assert.deepEqual(catalogCardRecord(catalog, 1), { length: null, id: '', count: 1 });
+  const catalog = { records: [{ sourceIndex: 0, recordLength: 3000, recordId: 'NC_1', sourceRecordCount: 1 },
+    { sourceIndex: 1, recordLength: 'x', sourceRecordCount: 3 }] };
+  // `fileCount`: the records of the card's file, by which the request names the record (`cliRecordSelector`).
+  assert.deepEqual(catalogCardRecord(catalog, 0), { length: 3000, id: 'NC_1', count: 1, fileCount: 1 });
+  assert.deepEqual(catalogCardRecord(catalog, 1), { length: null, id: '', count: 1, fileCount: 3 });
   assert.deepEqual(catalogCardRecord(null, 0), UNKNOWN_CARD_RECORD);
   // The request, the drawn-unit plan, the LOSAT estimate and the extraction all read the windows here.
   const record = catalogCardRecord(catalog, 0);
@@ -155,7 +158,7 @@ const shownWindows = async (cards, { length, topology = 'linear', entries = null
   const readers = createLinearCardWindowReaders({
     state: { activeDrawing: () => drawing }, shownDrawingOfMode: () => drawing,
     linearSeqRecord: (_drawing, card) => (drawnRecords(_drawing, card).length === 1 ? drawnRecords(_drawing, card)[0] : null),
-    linearCardRecord: (_drawing, card) => cardRecordFacts(drawnRecords(_drawing, card)),
+    linearCardRecord: (_drawing, card) => cardRecordFacts(drawnRecords(_drawing, card), null),
     planCardWindows: (payload) => { asked = pythonCardWindowPlan(payload); return asked; },
     cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => []
   });
@@ -404,4 +407,20 @@ test('Up and Down on a window cell change only the places, so the unit indexes s
   moveLinearLayoutCell(cards, entries, { uid: 'a', window: 1 }, -1);
   assert.notDeepEqual(cards[0].windows.map(({ column }) => column), [null, null]);
   assert.deepEqual(unitsOf(), before);
+});
+
+// OV-3632 (F4 of the PR #2058 review): a request rebuilt outside the app (a Gallery publication) reads a card's file
+// count as Generate's catalog does: known once the card selects a record of its file. A card that names no record of
+// its file of one record keeps its name, so Python refuses it as Generate's catalog does, and never draws the only
+// record in the CLI's form.
+test('the file count of a card is the one Generate\'s catalog gives, for every selection', () => {
+  const one = [{ recordId: 'recone.1', recordLength: 10 }];
+  const two = [{ recordId: 'reca.1', recordLength: 10 }, { recordId: 'recb.1', recordLength: 20 }];
+  for (const [records, selector] of [[one, 'recone.1'], [one, ''], [one, 'stale.1'], [two, 'recb.1'], [two, '#2'],
+    [two, ''], [two, 'stale.1']]) {
+    const catalog = buildAnnotationRecordCatalog({ mode: 'linear', linearSources: [{ sourceKey: 'k', selector,
+      drawn: true, hasInput: true, status: 'ready', error: '', records }] });
+    assert.equal(cardFileRecordFacts(records, selector).fileCount, catalogCardRecord(catalog, 0).fileCount,
+      `${records.length} record(s), selector ${JSON.stringify(selector)}`);
+  }
 });

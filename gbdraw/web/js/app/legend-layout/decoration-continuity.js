@@ -80,8 +80,9 @@ const readDecorations = (svg) => {
  * @property {Element | null} [mountedSvg] The mounted root of the selected Result.
  * @property {number} [selectedResultIndex]
  * @property {typeof DOMParser} [parser]
- * @property {(source: Record<string, any> | null | undefined, recordKeys: any) => any} projectRecordIdentity
- *   The root's projection of a record's identity out of a canonical request or session.
+ * @property {(source: Record<string, any> | null | undefined, recordKeys: any, reference?: Record<string, unknown> | null) => any} projectRecordIdentity
+ *   The root's projection of a record's identity out of a canonical request or session; a candidate's reads with
+ *   the committed Session it follows (`reference`).
  * @property {Record<string, any> | null} [canvasPadding]
  */
 
@@ -123,7 +124,7 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
   }
   const oldIdentities = (catalog?.items || []).map(item => projectRecordIdentity(canonical, item.recordKeys));
   return /** @type {DecorationTransformPlan} */ ((candidate, admission) => {
-    const identities = admission.catalog.items.map(item => projectRecordIdentity(candidate, item.recordKeys));
+    const identities = admission.catalog.items.map(item => projectRecordIdentity(candidate, item.recordKeys, canonical));
     /** @type {Array<SvgResultTransform | null>} */
     const transforms = identities.map(() => null);
     for (const snapshot of snapshots) {

@@ -274,10 +274,13 @@ const findWholePlasmid = async (page, { reference, other, start, end }) => {
   const drawn = await page.evaluate(async () => {
     const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
     const { state } = await import('./js/state.js');
+    const { linearSeqs } = state.activeDrawing();
     return {
-      cards: state.activeDrawing().linearSeqs.map((card) => ({ id: card.region_record_id, reverse: card.region_reverse,
+      cards: linearSeqs.map((card) => ({ id: card.region_record_id, reverse: card.region_reverse,
         windows: (card.windows || []).map((window) => [window.start, window.end, window.reverseComplement]) })),
-      records: getCommittedCanonicalRenderRequest().records.map((record) => ({ id: record.selector.value,
+      // The record of a file of one record has no selector, as the CLI writes it (OV-3632): its card names it.
+      records: getCommittedCanonicalRenderRequest().records.map((record) => ({ id: record.selector === null
+        ? linearSeqs.find((card) => card.uid === record.recordKey)?.region_record_id ?? null : record.selector.value,
         reverse: record.presentation.reverseComplement,
         windows: record.windows.map((window) => [window.start, window.end, window.reverseComplement]) })),
       pending: window.__GBDRAW_APP__.recordDisplayControls.hasPendingChanges.value

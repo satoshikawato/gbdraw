@@ -13,10 +13,10 @@ import { readRegionAxisRecords } from '../services/region-axis.js';
 import { cardHoldsRecordKey } from '../services/record-draw-selection.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import {
-  circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, regionClampNote, resolveDisambiguatedRecordSelection
+  circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, regionClampNote
 } from '../services/record-options.js';
 import { createLinearCardWindowReaders } from './linear-card-window-readers.js';
-import { cardRecordFacts } from '../services/linear-card-windows.js';
+import { cardDrawnRecords, cardFileRecordFacts } from '../services/linear-card-windows.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
@@ -109,11 +109,7 @@ export const createShownDrawingReaders = ({
    * @param {DrawingState} drawing the drawing that holds the card
    * @param {LinearSeq} seq
    */
-  const linearSeqDrawnRecords = (drawing, seq) => {
-    const records = linearRecordsFor(drawing, seq);
-    const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
-    return selection.record ? [selection.record] : selection.status === 'unspecified' ? records : [];
-  };
+  const linearSeqDrawnRecords = (drawing, seq) => cardDrawnRecords(linearRecordsFor(drawing, seq), seq.region_record_id);
   /** The one record a Linear entry draws, once read. @param {DrawingState} drawing @param {LinearSeq} seq */
   const linearSeqRecord = (drawing, seq) => (linearSeqDrawnRecords(drawing, seq).length === 1
     ? linearSeqDrawnRecords(drawing, seq)[0] : null);
@@ -122,7 +118,7 @@ export const createShownDrawingReaders = ({
    * record ID and length while editing and in Generate, which reads the list after it awaits the read (OV-3227).
    * @param {DrawingState} drawing @param {LinearSeq} seq
    */
-  const linearCardRecord = (drawing, seq) => cardRecordFacts(linearSeqDrawnRecords(drawing, seq));
+  const linearCardRecord = (drawing, seq) => cardFileRecordFacts(linearRecordsFor(drawing, seq), seq.region_record_id);
   // The note beside a Linear entry's Region fields (`regionClampNote`). The
   // request draws the larger coordinate as the region's end (reverse when typed first).
   /** @param {LinearSeq} seq a card of the shown drawing */

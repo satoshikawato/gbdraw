@@ -25,7 +25,8 @@ import { CONSERVATION_DEFAULT_COLOR_SCHEME } from '../utils/conservation-colors.
 import { isUnsetValue } from '../utils/field-reading.js';
 import { depthTrackEditDefaults, ensureDepthTrackConfigCount } from './depth-track-state.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
-import { isRecordDrawKey } from './record-draw-selection.js';
+import { isRecordDrawKey, sameSelectedRecord } from './record-draw-selection.js';
+/** @import { CanonicalRecord } from '../contracts/request.generated.js' */
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION, SCALAR_AXIS_LABELS, SESSION_PNG_DPI_CHOICES } from '../contracts/schema.generated.js';
@@ -528,7 +529,7 @@ const sortedValue = (value) => Array.isArray(value)
  */
 /**
  * @typedef {{
- *   recordKey: string, source: Record<string, string>, selector?: unknown,
+ *   recordKey: string, source: Record<string, string>, cardinality?: string, selector?: CanonicalRecord['selector'],
  *   windows: { start: number, end: number, reverseComplement: boolean }[],
  *   presentation: { reverseComplement: boolean }, display?: unknown
  * }} AlignmentResetRecord
@@ -709,15 +710,52 @@ const storedRegionRecordSelectors = (request) => {
 export const readStoredSimilarityAlignmentResetReceipt = async (receipt, canonical, storedRequest) => {
   const read = await readSimilarityAlignmentResetReceipt(receipt, canonical);
   const storedSelectors = storedRegionRecordSelectors(storedRequest);
-  if (!read.stale || storedSelectors === null || !receipt
-    || !alignmentResetReceiptShapeHolds(receipt, canonical?.renderRequest)) return read;
+  if (!read.stale || storedSelectors === null) return read;
+  const value = await reboundReceipt(receipt, canonical, (record) => (
+    storedSelectors.has(record.recordKey) ? storedSelectors.get(record.recordKey) : record.selector));
+  return value ? { value, stale: false } : read;
+};
+
+/**
+ * A receipt that binds `canonical` read with another selector of some records (`selectorOf`), rebound to
+ * `canonical`; null when it binds that request neither.
+ * @param {unknown} receipt The stored receipt, unvalidated.
+ * @param {AlignmentResetCanonical | null | undefined} canonical
+ * @param {(record: AlignmentResetRecord) => unknown} selectorOf
+ * @returns {Promise<AlignmentResetReceipt | null>}
+ */
+const reboundReceipt = async (receipt, canonical, selectorOf) => {
+  if (!receipt || !alignmentResetReceiptShapeHolds(receipt, canonical?.renderRequest)) return null;
   // The shape check passed: a receipt of a Linear request with a plan, so `canonical` is set.
   const value = /** @type {AlignmentResetReceipt} */ (receipt);
   const current = /** @type {AlignmentResetCanonical} */ (canonical);
-  const asStored = await resetBinding(current, (record) => (
-    storedSelectors.has(record.recordKey) ? storedSelectors.get(record.recordKey) : record.selector));
-  if (value.binding !== asStored) return read;
-  return { value: { ...value, binding: await resetBinding(current) }, stale: false };
+  if (value.binding !== await resetBinding(current, selectorOf)) return null;
+  return { ...value, binding: await resetBinding(current) };
+};
+
+/**
+ * Generate: the drawing's receipt read against the request Generate built (`canonical`) after the committed one
+ * (`committedRequest`), which the receipt binds. Generate writes the record of a file of one record in the CLI's
+ * form, without a selector, where the committed request may name it (a Session saved before, OV-3632); the
+ * receipt is read with the committed selector of each record that selects the same record (`sameSelectedRecord`)
+ * and rebound to `canonical`. A receipt that binds neither is refused (`validateSimilarityAlignmentResetReceipt`).
+ * @param {unknown} receipt The stored receipt, unvalidated.
+ * @param {AlignmentResetCanonical | null | undefined} canonical
+ * @param {{ records: unknown[] } | null | undefined} committedRequest The committed request, or none.
+ * @returns {Promise<AlignmentResetReceipt | null>}
+ */
+export const validateGeneratedSimilarityAlignmentResetReceipt = async (receipt, canonical, committedRequest) => {
+  const read = await readSimilarityAlignmentResetReceipt(receipt, canonical);
+  if (!read.stale) return read.value;
+  // The committed request is a current request: its records are request records.
+  const committed = new Map(/** @type {AlignmentResetRecord[]} */ (committedRequest?.records ?? [])
+    .map((record) => [record.recordKey, record]));
+  const value = await reboundReceipt(receipt, canonical, (record) => {
+    const before = committed.get(record.recordKey);
+    return before && sameSelectedRecord(before, record) ? before.selector ?? null : record.selector;
+  });
+  if (!value) throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
+  return value;
 };
 
 /**
