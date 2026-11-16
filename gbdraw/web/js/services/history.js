@@ -2390,6 +2390,16 @@ const listenToShownSteps = (manager, drawingId, activeDrawingId, listener) => {
 // is recorded, and a part's files may change, so they are read each time
 // (OV-2761).
 /** @param {readonly ProjectPart[]} parts @param {Iterable<string>} heldFileIds */
+/**
+ * Why a project step waits now, or null: a drawing list step waits while work outside History runs (its `busy`).
+ * Undo and Redo, their enabled state and their titles read it of the step they would take (R11).
+ * @param {ProjectEntry | null | undefined} project
+ * @returns {HistoryBusy | null}
+ */
+const projectStepWait = (project) => project?.list?.busy?.() ?? null;
+/** @param {{ restoring: { readonly value: boolean }, historyAvailability: () => unknown }} manager */
+const managerIdle = (manager) => !manager.restoring.value && !manager.historyAvailability();
+
 const projectStepFileIds = (parts, heldFileIds) => {
   const fileIds = new Set(heldFileIds);
   parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
@@ -2700,7 +2710,7 @@ export const createHistoryRouter = ({
     const project = nextProjectStep(direction);
     if (expected !== null && (project?.sequence ?? shown.topSequence(direction)) !== expected) return false;
     if (!project) return direction === 'undo' ? shown.undo() : shown.redo();
-    return project.list?.busy?.() ?? traverseProject(project, direction);
+    return projectStepWait(project) ?? traverseProject(project, direction);
   };
   /** @param {'undo' | 'redo'} direction The project step that Undo or Redo takes next, if any. */
   const nextProjectStep = (direction) => {
@@ -2727,10 +2737,7 @@ export const createHistoryRouter = ({
     }
     return steps;
   };
-  const shownIdle = () => {
-    const shown = managerOf(activeDrawingId());
-    return !shown.restoring.value && !shown.historyAvailability();
-  };
+  const shownIdle = () => managerIdle(managerOf(activeDrawingId()));
   /** @param {string} drawingId */
   const projectPartsOf = (drawingId) => projectEntries()
     .flatMap((entry) => entry.parts.filter((part) => part.drawingId === drawingId).map((part) => part.entry));
@@ -2760,8 +2767,12 @@ export const createHistoryRouter = ({
     revision: { get value() { return projectRevision.value + managerOf(activeDrawingId()).revision.value; } },
     undo: () => (walks.value > 0 ? Promise.resolve(false) : traverse('undo')),
     redo: () => (walks.value > 0 ? Promise.resolve(false) : traverse('redo')),
-    canUndo: () => walks.value === 0 && (managerOf(activeDrawingId()).canUndo() || (projectUndo.length > 0 && shownIdle())),
-    canRedo: () => walks.value === 0 && (managerOf(activeDrawingId()).canRedo() || (projectRedo.length > 0 && shownIdle())),
+    canUndo: () => walks.value === 0 && !projectStepWait(nextProjectStep('undo'))
+      && (managerOf(activeDrawingId()).canUndo() || (projectUndo.length > 0 && shownIdle())),
+    canRedo: () => walks.value === 0 && !projectStepWait(nextProjectStep('redo'))
+      && (managerOf(activeDrawingId()).canRedo() || (projectRedo.length > 0 && shownIdle())),
+    /** Why the step Undo or Redo would take waits now, or null. @param {'undo' | 'redo'} direction */
+    stepWait: (direction) => projectStepWait(nextProjectStep(direction)),
     getUndoCount: () => managerOf(activeDrawingId()).getUndoCount() + projectUndo.length,
     getRedoCount: () => managerOf(activeDrawingId()).getRedoCount() + projectRedo.length,
     // A drawing that is not shown has no artifact installed, so its baseline

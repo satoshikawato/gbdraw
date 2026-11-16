@@ -230,3 +230,19 @@ test('a drawing switch shows the arriving figure inside the preview, with or wit
   await show(page, source);
   expect(await figureInRoom(page), 'the review\'s drawing shown again').toBe(true);
 });
+
+// D-44 (S-1, R11): the header's Undo is disabled, with the reason as its title, while the step it would take (a
+// drawing list step) waits for alignment work in flight; it is enabled again when the work ends. The work is held by
+// its status, which every writer of work in flight sets.
+test('the header Undo is disabled with the reason while the drawing list step it would take waits', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.drawingList.newDrawing('linear'))).status).toBe('ok');
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  await expect(undo).toBeEnabled();
+  await page.evaluate(() => { window.__GBDRAW_APP__.similarityAlignmentStatus = 'resolving'; });
+  await expect(undo).toBeDisabled();
+  await expect(undo).toHaveAttribute('title', 'Resolving the current alignment.');
+  await page.evaluate(() => { window.__GBDRAW_APP__.similarityAlignmentStatus = 'idle'; });
+  await expect(undo).toBeEnabled();
+});

@@ -1047,7 +1047,7 @@ export const createAppSetup = () => {
   const isCurrentResultFeature = (feature) => isCurrentFeature(feature, recordDisplayControls.sourceBinding());
   // Undo, Redo, and the History list (PD-OI-112).
   const { canUndoHistory, canRedoHistory, undoHistoryTitle, redoHistoryTitle, undoHistory, redoHistory, historyList } = createHistoryControls({
-    revision: () => history.revision.value, canUndo: history.canUndo, canRedo: history.canRedo, undo: history.undo, redo: history.redo,
+    revision: () => history.revision.value, canUndo: history.canUndo, canRedo: history.canRedo, stepWait: history.stepWait, undo: history.undo, redo: history.redo,
     timeline: history.timeline, travelTo: history.travelTo, computed, ref, nextTick
   });
   // D-03: the Rich Feature Popup preference records no Undo step, but a change

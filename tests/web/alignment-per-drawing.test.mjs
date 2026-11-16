@@ -258,6 +258,31 @@ test('an Undo or Redo of a drawing list step waits while a Similarity alignment 
   assert.equal(state.activeDrawingId.value, added);
 });
 
+// D-44 (S-1, R11): Undo and Redo and their enabled state read one check of the step they would take. The
+// reviewer's sequence: Duplicate, then a review resolving in the copy: the next Undo is the Duplicate, a drawing list
+// step that waits for the alignment work, so the header's Undo is disabled with the work's reason, and so are the
+// History list's rows that walk through it. Once the work ends, both are enabled again.
+test('Undo and Redo are disabled with the reason while the drawing list step they would take waits', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('linear');
+  app.drawingList.duplicateDrawing(source);
+  const undoRows = () => app.historyList.rows.value.filter((row) => row.direction === 'undo' && row.steps > 0);
+  app.similarityAlignmentStatus.value = 'resolving';
+  assert.equal(app.canUndoHistory.value, false, 'the Undo of the Duplicate waits');
+  assert.equal(app.undoHistoryTitle.value, 'Resolving the current alignment.');
+  assert.ok(undoRows().length > 0 && undoRows().every((row) => app.historyList.rowDisabled(row)), 'and so do the rows');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(app.canUndoHistory.value, true);
+  assert.match(app.undoHistoryTitle.value, /^Undo /);
+  assert.equal(await history.undo(), true);
+  app.similarityAlignmentStatus.value = 'applying';
+  assert.equal(app.canRedoHistory.value, false, 'the Redo of the Duplicate waits');
+  assert.equal(app.redoHistoryTitle.value, 'Applying the alignment plan.');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(app.canRedoHistory.value, true);
+});
+
 // D-41 (B1, OV-3618): a text that names a drawing reads its tab's name without throwing for an ID that has no tab.
 test('the drawing bar names a drawing by its tab and has no name for an ID without one', () => {
   const app = createAppSetup();

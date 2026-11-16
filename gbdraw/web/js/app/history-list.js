@@ -18,6 +18,9 @@ import { t, tm, tn } from '../utils/i18n.js';
  * @property {() => number} revision A reactive read that changes with every step, Undo, Redo, and baseline.
  * @property {() => boolean} canUndo
  * @property {() => boolean} canRedo
+ * @property {(direction: 'undo' | 'redo') => { reason: string } | null} stepWait Why the step Undo or Redo would
+ *   take waits now (a drawing list step while work outside History runs), or null; `canUndo` and `canRedo` read the
+ *   same check, and the titles say its reason.
  * @property {() => Promise<unknown>} undo
  * @property {() => Promise<unknown>} redo
  * @property {() => HistoryTimeline} timeline
@@ -52,7 +55,9 @@ const stepText = ({ label, detail }) => ({
 });
 
 /** @param {HistoryControlsOptions} options */
-export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, timeline: readTimeline, travelTo, computed, ref, nextTick }) => {
+export const createHistoryControls = ({
+  revision, canUndo, canRedo, stepWait, undo, redo, timeline: readTimeline, travelTo, computed, ref, nextTick
+}) => {
   const canUndoHistory = computed(() => {
     void revision();
     return canUndo();
@@ -67,11 +72,13 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
   });
   const undoHistoryTitle = computed(() => {
     const step = timeline.value.undo[0];
-    return canUndoHistory.value && step ? t('Undo {action}', { action: stepText(step).name }) : t('Undo');
+    return canUndoHistory.value && step ? t('Undo {action}', { action: stepText(step).name })
+      : tm(stepWait('undo')?.reason ?? '') || t('Undo');
   });
   const redoHistoryTitle = computed(() => {
     const step = timeline.value.redo[0];
-    return canRedoHistory.value && step ? t('Redo {action}', { action: stepText(step).name }) : t('Redo');
+    return canRedoHistory.value && step ? t('Redo {action}', { action: stepText(step).name })
+      : tm(stepWait('redo')?.reason ?? '') || t('Redo');
   });
 
   /**
