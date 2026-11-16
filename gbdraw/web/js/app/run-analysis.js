@@ -80,7 +80,7 @@ import {
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   readEditorTableTexts,
-  readCanonicalResourceFileBytes,
+  readCanonicalResourceStoredBytes,
   readCanonicalResourceText,
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot,
@@ -5252,7 +5252,7 @@ export const createRunAnalysis = ({
           ...canonical,
           generatedFileNameHints,
           readResourceRecordCount: (/** @type {string} */ id, /** @type {'genbank' | 'fasta'} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
-          readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
+          readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceStoredBytes(canonical.resources, id),
           readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id),
           drawnUnits: requestDrawnUnits,
           planRecordPlaces

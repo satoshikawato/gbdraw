@@ -258,6 +258,7 @@ import {
   getSessionResourceSource,
   readFileBytes,
   readFileText,
+  readStoredBytes,
   textToBytes
 } from './file-content-cache.js';
 import {
@@ -6216,13 +6217,30 @@ export const readCanonicalResourceText = async (resources, resourceId) => {
  * @param {string} resourceId
  * @returns {Promise<Uint8Array | null>}
  */
-export const readCanonicalResourceFileBytes = async (resources, resourceId) => {
+const readCanonicalResourceFileBytes = async (resources, resourceId) => {
   const descriptor = resources?.[resourceId];
   const fileOwner = resourceFileOwner(descriptor);
   if (fileOwner) return readFileBytes(/** @type {FileLike} */ (fileOwner));
   const readFile = fileBackedReaderOf(descriptor);
   // A file-backed descriptor's reader reads what it counts: an entry a Load copied holds a gzip input as stored.
   return readFile ? expandInputBytes(String(/** @type {{ name?: unknown }} */ (descriptor).name ?? ''), await readFile()) : null;
+};
+
+/**
+ * The bytes a File holds for a committed Session resource as they are stored (`readStoredBytes`: a gzip input as
+ * chosen, which Generate sends and Python expands under its cap), or the bytes the reader of its file-backed descriptor
+ * reads (a Load's entry, stored as it is); null when its descriptor holds them as text. A Source recipe carries these,
+ * so the page expands no input for it (PD-OI-116, OV-3590).
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {string} resourceId
+ * @returns {Promise<Uint8Array | null>}
+ */
+export const readCanonicalResourceStoredBytes = async (resources, resourceId) => {
+  const descriptor = resources?.[resourceId];
+  const fileOwner = resourceFileOwner(descriptor);
+  if (fileOwner) return readStoredBytes(fileOwner);
+  const readFile = fileBackedReaderOf(descriptor);
+  return readFile ? readFile() : null;
 };
 
 /**

@@ -4,6 +4,7 @@ import { File } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import { cp, readFile, stat, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { gzipSync } from 'node:zlib';
 import { delimiter, join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
@@ -37,7 +38,7 @@ const { holdReadBytes, readFileContentFacts, readFileText } = await import(
 const { setResourcePayloadOwner } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'resource-payload-owner.js'))
 );
-const { readCanonicalResourceFileBytes, readCanonicalResourceRecordCount } = await import(
+const { readCanonicalResourceRecordCount, readCanonicalResourceStoredBytes } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))
 );
 const { createDiagramResourceTransport } = await import(
@@ -642,7 +643,7 @@ test('allocated helper names propagate into comparisons.tsv and the executable r
   const fileBackedResources = { ...collision.resources,
     'comparison-nucleotide-1': fileBackedDescriptor(blastFields, async () => cachedBlastBytes) };
   const fileBacked = await buildSourceRecipe({ ...collision, resources: fileBackedResources,
-    readResourceFileBytes: (id) => readCanonicalResourceFileBytes(fileBackedResources, id) });
+    readResourceFileBytes: (id) => readCanonicalResourceStoredBytes(fileBackedResources, id) });
   structuredClone(cachedBlastBytes.buffer, { transfer: [cachedBlastBytes.buffer] });
   assert.equal(fileBacked.available, true, fileBacked.unavailableReason);
   const fileBackedBlast = fileBacked.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.comparison_blasts[0]');
@@ -650,6 +651,29 @@ test('allocated helper names propagate into comparisons.tsv and the executable r
   assert.equal(Object.hasOwn(fileBackedBlast, 'resourceId'), false);
   assert.equal((await buildSourceRecipe({ ...collision, resources: fileBackedResources })).available, false,
     'without a reader of its bytes the recipe is unavailable');
+  // A gzip table, a Load's entry or a File chosen as gzip, goes into the recipe as stored: the CLI expands it under
+  // Python's cap, as Generate does, and the page expands nothing (PD-OI-116, OV-3590).
+  const gzipBlast = gzipSync(Buffer.from(blastText));
+  // A chosen File was read, and its cap checked, when it was chosen.
+  const chosenGzip = new File([gzipBlast], 'hits.tsv.gz');
+  await readFileContentFacts(chosenGzip);
+  const metrics = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => metrics.push(metric.name) };
+  try {
+    for (const gzipResources of [
+      { ...collision.resources, 'comparison-nucleotide-1': fileBackedDescriptor(blastFields, async () => new Uint8Array(gzipBlast)) },
+      { ...collision.resources, 'comparison-nucleotide-1': setResourcePayloadOwner({ ...blastFields }, chosenGzip) }
+    ]) {
+      const gzipRecipe = await buildSourceRecipe({ ...collision, resources: gzipResources,
+        readResourceFileBytes: (id) => readCanonicalResourceStoredBytes(gzipResources, id) });
+      assert.equal(gzipRecipe.available, true, gzipRecipe.unavailableReason);
+      const gzipFile = gzipRecipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.comparison_blasts[0]');
+      assert.deepEqual(Buffer.from(gzipFile.data), gzipBlast);
+    }
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
+  assert.deepEqual(metrics.filter((name) => /^inputExpansion/.test(name)), [], 'the recipe expanded no input');
   const [header, row] = comparisonsTable.data.trim().split('\n').map((line) => line.split('\t'));
   assert.equal(row[header.indexOf('blast')], 'alpha-2.gbk');
   assert.doesNotMatch(comparisonsTable.data, /^alpha\.gbk\t/m);

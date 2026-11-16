@@ -55,7 +55,7 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
  * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
  * @typedef {(resourceId: string) => string | Promise<string>} ResourceTextReader
  * @typedef {(resourceId: string) => Promise<Uint8Array | null>} ResourceFileBytesReader The bytes a File holds for a
- *   resource whose descriptor holds none (a File Generate described), else null.
+ *   resource whose descriptor holds none (a File Generate described), as stored (a gzip input unexpanded), else null.
  * @typedef {{ source?: boolean, fallback?: string, slot?: string, nameHintSlot?: string }} RecipeResourcePathOptions
  * @typedef {object} RecipeFiles The files a recipe names, by visible name and resource.
  * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
