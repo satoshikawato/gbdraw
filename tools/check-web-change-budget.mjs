@@ -29,6 +29,7 @@ import {
 } from './web-product-impact-evaluation.mjs';
 import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
 import { detectWebOwnerGraph, summarizeWebOwnerGraph } from './web-owner-graph-detectors.mjs';
+import { checkTwinAdditions, readTwinExchangeBalance, TWIN_REGISTRY_PATH } from './web-twin-detectors.mjs';
 import {
   classifyWebChangeContext,
   isPullRequestEvent
@@ -965,10 +966,38 @@ const designRuleAllowlistExpansions = describeAllowlistExpansions(designRuleAllo
 // code. Web runtime files count for every kind; a Python baseline (`py-*`)
 // guards the Python package, so gbdraw/**/*.py outside gbdraw/web/ counts for
 // it as well.
-const pythonPackageChanged = [...changed.keys()].some((path) => /^gbdraw\/(?!web\/).*\.py$/.test(path));
+const isPythonPackagePath = (path) => /^gbdraw\/(?!web\/).*\.py$/.test(path);
+const pythonPackageChanged = [...changed.keys()].some(isPythonPackagePath);
 const designRuleCoChangeExpansions = describeAllowlistExpansions(designRuleAllowlistExpansionChanges.filter(
   ({ kind }) => productionPaths.length || (isPythonAllowlistKind(kind) && pythonPackageChanged)
 ));
+// A row added to the twin registry needs its admission fields, and rows that
+// changes to production code (Web runtime or the Python package) retired pay
+// for it unless it carries a waiver (WEB_CHANGE_POLICY.md "Design-rule
+// co-change"). A merged change (a push to dev) is not checked again: two pull
+// requests that spent one retired row leave the balance negative for the next
+// addition instead of failing dev.
+const parseJsonOrNull = (source) => {
+  try {
+    return source === null ? null : JSON.parse(source);
+  } catch (_error) {
+    return null;
+  }
+};
+const twinAdmissionErrors = changed.has(TWIN_REGISTRY_PATH) && !['push', 'workflow_dispatch'].includes(githubEventName)
+  ? checkTwinAdditions(
+    [changeFrom, base].map((revision) => parseJsonOrNull(readRevisionFile(revision, TWIN_REGISTRY_PATH))),
+    parseJsonOrNull(readHeadFile(TWIN_REGISTRY_PATH)),
+    {
+      now: new Date(),
+      balance: () => readTwinExchangeBalance(
+        (args, input) => runGit(repositoryRoot, args, { input, maxBuffer: 256 * 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'] }),
+        base,
+        (path) => isRuntimePath(path) || isPythonPackagePath(path)
+      )
+    }
+  )
+  : [];
 const designRuleAllowlistContractions = designRuleAllowlistChanges
   .filter(({ direction }) => direction === 'contraction')
   .map(({ subject }) => subject)
@@ -2813,6 +2842,7 @@ if (designRuleCoChangeExpansions.length) {
     + `(${designRuleCoChangeExpansions.join(', ')})`
   );
 }
+blockingViolations.push(...twinAdmissionErrors.map((error) => `twin.admission: ${error}`));
 if (designRuleCountScopeChanges.length) {
   blockingViolations.push(
     'design-rule.count-scope: the test or counting code of a registered count baseline changed '
