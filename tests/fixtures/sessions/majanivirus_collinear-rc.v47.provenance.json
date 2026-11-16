@@ -63,12 +63,12 @@
   "requestSchema": 9,
   "replay": {
     "svg": "majanivirus_collinear-rc.v47.replay.svg",
-    "code": "fix/feature-block-first-base (OV-3527, blocks and connector lines from a part's own bounds; on #2027 610fa9cc5)",
+    "code": "fix/feature-block-first-base (OV-3527, blocks and connector lines from a part's own bounds; on #2027 610fa9cc5; connector lines under their blocks, 7eba78a52)",
     "command": "python -c 'from gbdraw.cli import main; main()' linear --session majanivirus_collinear-rc.v47.gbdraw-session.json.gz -o majanivirus_collinear-rc.v47.replay -f svg",
-    "sha256": "4df920facb00143f3686b0ccca1039036c152f7e440aad12e0815bd2fe36ec7e",
+    "sha256": "c6bb3f132ac11f327af50e777d83e0cf4380bd972280a95fd986e9e3b36d846e",
     "mainReplaySha256": "b306e5b637a4e920ccd2eab4665c8879220130b10a0d114f3a62ea15f9e886c9",
     "mainReplayEqualsBaseReplay": false,
-    "differenceFromMainReplay": "the composition metadata gains the Linear scale bounds (lengthBar), which paint nothing, then the Legend laid out at the drawn text width (Owner V-D03, 2026-10-24): the Legend and the canvas 11.58 px narrower, then the labels, definition lines and canvas of OV-165 (the Linear label, definition and length-bar rows move) Then the 85 connector lines between feature parts span the whole gap between them, one base longer at each end (0.007 px; OV-3527)."
+    "differenceFromMainReplay": "the composition metadata gains the Linear scale bounds (lengthBar), which paint nothing, then the Legend laid out at the drawn text width (Owner V-D03, 2026-10-24): the Legend and the canvas 11.58 px narrower, then the labels, definition lines and canvas of OV-165 (the Linear label, definition and length-bar rows move) Then the 85 connector lines between feature parts span the whole gap between them, one base longer at each end (0.007 px; OV-3527), and each of those features lists its connector lines before its blocks (the same paths in another order)."
   },
   "reversedRecordItemsInV": {
     "counts": {
