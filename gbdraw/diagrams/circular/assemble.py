@@ -116,13 +116,14 @@ from ...layout.circular import (
     CircularAxisLayout,
     CircularFeatureLaneDirection,
     CircularFeatureLayout,
+    CircularLabelLanes,
     CircularRadialLayout,
     CircularRecordRenderContext,
     CircularResolvedSlot,
     CircularTickLayout,
     RadialBand,
     feature_radius_intervals,
-    slots_feature_layout,
+    slots_label_lanes,
 )
 from ...layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth
 from ...layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink, stroke_pad_px
@@ -2970,9 +2971,10 @@ def _draw_resolved_circular_slot(
             track_ratio=canvas_config.track_ratio,
             factors=cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)],
         )
-        resolved_feature_width = float(resolved_slot.draw_width_px)
-        if render_context.feature_layout is not None:
-            resolved_feature_width = float(render_context.feature_layout.width_px)
+        slot_lanes = resolved_slot.feature_layout
+        resolved_feature_width = (
+            float(slot_lanes.width_px) if slot_lanes is not None else float(resolved_slot.draw_width_px)
+        )
         ratio_override = None
         if base_width > 0 and resolved_feature_width > 0:
             ratio_override = resolved_feature_width / max(
@@ -2992,7 +2994,7 @@ def _draw_resolved_circular_slot(
             feature_config,
             group_key=GroupKey(record_key, GroupKind.FEATURES, str(resolved_slot.id)),
             feature_layers=feature_layers,
-            render_context=render_context,
+            render_context=render_context.slot_feature_context(resolved_slot),
             # The record group draws the embedded labels; the legend shift moves only external ones.
             precalculated_labels=tuple(
                 label for label in precalculated_labels or () if label.get("is_embedded")
@@ -3340,9 +3342,10 @@ class _CircularLabelState:
     resolved_feature_anchor_radius_px: float | None
     outer_arena_enabled: bool
     feature_track_ratio_factor_override: float | None
-    # What the labels read of the radial layout: the feature lanes and the room around them
-    # (``circular_label_radii``: radial labels' content radius and inner reserve, OV-2103; the outer floor, OV-3301).
-    feature_layout: CircularFeatureLayout | None
+    # What the labels read of the radial layout: the feature lanes of each side (``slots_label_lanes``) and the room
+    # around them (``circular_label_radii``: radial labels' content radius and inner reserve, OV-2103; the outer
+    # floor, OV-3301).
+    label_lanes: CircularLabelLanes
     label_radii: CircularLabelRadii
     feature_lane_direction: CircularFeatureLaneDirection
     record_transform: RecordDisplayTransform | None
@@ -3383,7 +3386,7 @@ def _place_circular_labels(
             else None
         ),
         feature_track_ratio_factor_override=state.feature_track_ratio_factor_override,
-        feature_layout=state.feature_layout,
+        label_lanes=state.label_lanes,
         room=state.label_radii,
         track_preset=state.track_preset,
         feature_lane_direction=state.feature_lane_direction,
@@ -3479,7 +3482,7 @@ def circular_labels(
             resolved_feature_anchor_radius_px=resolved_feature_anchor_radius_px,
             outer_arena_enabled=feature_width_override_requested,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-            feature_layout=slots_feature_layout(resolved_slots),
+            label_lanes=slots_label_lanes(resolved_slots, geometry.radius),
             label_radii=label_radii,
             feature_lane_direction=feature_lane_direction,
             record_transform=record_transform,

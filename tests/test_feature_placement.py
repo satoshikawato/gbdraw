@@ -1386,7 +1386,9 @@ def test_final_svg_isolated_secondary_lane_keeps_empty_main(monkeypatch, mode, s
     number = r"[-+0-9.eE]+"
     kwargs, result = captures[-1]
     if mode == "circular":
-        layout = kwargs["feature_layout"]
+        lanes = kwargs["label_lanes"]
+        assert lanes.outer is lanes.inner  # one features slot: both label sides name its lanes
+        layout = lanes.outer
         lane = layout.lanes_by_track_id[1 if side == "outward" else -1]
         # Width 20 and the existing axis-derived gap 3.9 give a 23.9 lane step.
         # An occupied inward lane must not displace the empty Main band.
@@ -1468,7 +1470,9 @@ def test_radial_preflight_replans_final_slot_without_stale_assignment(monkeypatc
     assert all(f.placement is final[key] for key, f in plans[-1][2].items())
     assert all(a.side == "outward" for a in final.values())
     assert all(a is not plans[0][1][key] for key, a in final.items())
-    layout = layouts[-1][0]["feature_layout"]
+    lanes = layouts[-1][0]["label_lanes"]
+    assert lanes.outer is lanes.inner  # one features slot: both label sides name its lanes
+    layout = lanes.outer
     assert all(label["feature_center_radius_px"] == pytest.approx(
         layout.lane_for_track_id(label["track_id"]).center_px
     ) for label in layouts[-1][1])

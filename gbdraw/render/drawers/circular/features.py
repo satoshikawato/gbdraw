@@ -14,6 +14,7 @@ from ....layout.circular import CircularFeatureLane, calculate_feature_position_
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import instance_svg_id
 from ....svg.circular_features import (
+    circular_feature_parts,
     generate_circular_arrow_path,
     generate_circular_arrow_path_with_radii,
     generate_circular_intron_path,
@@ -28,6 +29,7 @@ from ....svg.circular_features import (
 from ....svg.arrows import (
     ArrowHeadLengthRatio,
     calculate_circular_arrow_length,
+    linear_block_glyph,
     resolve_circular_arrow_head_length_bp,
 )
 
@@ -390,13 +392,13 @@ class FeaturePathGenerator:
         glyph_kind: str,
         lane,
     ) -> list[str]:
-        """The glyph of one block: the arrowhead only on the block that ends at a known 3' end;
-        another block of an arrow feature is its shaft; an undirected block is a rectangle."""
-        if str(coord_dict["coord_strand"]) not in {"positive", "negative"}:
-            return self._generate_rectangle(coord_dict, lane)
-        if is_last and glyph_kind == "arrow":
+        """The glyph of one block (``linear_block_glyph``, the rule both modes draw with): the arrowhead only on
+        the block that ends at a known 3' end; another block of an arrow feature is its shaft; an undirected block
+        is a rectangle."""
+        glyph = linear_block_glyph(glyph_kind, str(coord_dict["coord_strand"]), is_last, self.shaft_width_ratio)
+        if glyph == "arrow":
             return self._generate_terminal_block(coord_dict, glyph_kind, lane)
-        if glyph_kind == "arrow" and self.shaft_width_ratio < 1.0:
+        if glyph == "shaft":
             return self._generate_narrow_arrow_shaft(coord_dict, lane)
         return self._generate_rectangle(coord_dict, lane)
 
@@ -456,45 +458,6 @@ class FeaturePathGenerator:
             self.shaft_width_ratio,
         )
 
-    def _coalesce_origin_spanning_block(self, feature_object: FeatureObject) -> Optional[Dict[str, Union[str, int]]]:
-        """
-        Collapse two-block origin-spanning features into one block.
-
-        This avoids visual splitting at the start/end boundary in circular mode
-        (e.g. D-loop represented as join(end..genome,1..start)).
-        """
-        block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
-        if len(block_coords) != 2:
-            return None
-
-        starts = [int(coord.start) for coord in block_coords]
-        ends = [int(coord.end) for coord in block_coords]
-
-        if min(starts) > 1 or max(ends) < self.total_length:
-            return None
-
-        left_blocks = [coord for coord in block_coords if int(coord.start) <= 1]
-        right_blocks = [coord for coord in block_coords if int(coord.end) >= self.total_length]
-
-        if len(left_blocks) != 1 or len(right_blocks) != 1 or left_blocks[0] is right_blocks[0]:
-            return None
-
-        merged_start = max(starts)
-        merged_end = min(ends)
-        if merged_start <= merged_end:
-            return None
-
-        # The block that runs to the record end starts the merged block; the one from 1 ends it.
-        return {
-            "coord_type": "block",
-            "coord_strand": block_coords[0].strand,
-            "coord_start": merged_start,
-            "coord_end": merged_end,
-            "open_start": right_blocks[0].open_start,
-            "open_end": left_blocks[0].open_end,
-            "is_last": any(coord.is_last for coord in block_coords),
-        }
-
     def generate_circular_gene_path(self, feature_object: FeatureObject):
         """
         Generate SVG path data for a feature.
@@ -508,31 +471,14 @@ class FeaturePathGenerator:
         lane = None
         if self.feature_layout is not None:
             lane = self.feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
-        merged_coord = (self._coalesce_origin_spanning_block(feature_object)
-                        if feature_object.display_parts is None else None)
         glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
-        if merged_coord is not None:
-            return [self._generate_block(merged_coord, bool(merged_coord["is_last"]), glyph_kind, lane)]
-
         if feature_object.display_parts is not None and lane is None:
             inner, center, outer = self._feature_radii(feature_object.strand, None)
             lane = CircularFeatureLane(
                 self.track_id, feature_object.strand, inner, center, outer,
             )
-        coords = (feature_object.location if feature_object.display_parts is None
-                  else [part.location for part in feature_object.display_parts])
         coordinates_paths: List[List[str]] = []
-        for coord in coords:
-            coord_dict: Dict[str, Union[str, int]] = {
-                "coord_type": str(coord.kind),
-                "coord_strand": coord.strand,
-                "coord_start": coord.start,
-                "coord_end": coord.end,
-                "open_start": coord.open_start,
-                "open_end": coord.open_end,
-            }
-            if feature_object.display_parts is not None:
-                coord_dict["display_fragment"] = True
+        for coord_dict, is_last in circular_feature_parts(feature_object, self.total_length):
             coord_type: str = str(coord_dict["coord_type"])
             if coord_type == "line":
                 if lane is None:
@@ -554,7 +500,7 @@ class FeaturePathGenerator:
                         lane.center_px,
                     )
             elif coord_type == "block":
-                coord_path = self._generate_block(coord_dict, coord.is_last, glyph_kind, lane)
+                coord_path = self._generate_block(coord_dict, is_last, glyph_kind, lane)
             else:
                 coord_path = []
             coordinates_paths.append(coord_path)

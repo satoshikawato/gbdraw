@@ -41,8 +41,10 @@ from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import (
     CircularFeatureLayout,
+    CircularLabelLanes,
     CircularRadialLayout,
     CircularTickLayout,
+    NO_LABEL_LANES,
     calculate_feature_position_factors_circular,
     feature_radius_intervals,
 )
@@ -62,6 +64,7 @@ from ..svg.arrows import (
 )
 from ..layout.text_geometry import annular_sector_parts
 from ..svg.circular_arcs import circle_point, circle_point_rad, position_angle, position_angle_rad, position_turn_angle
+from ..svg.circular_features import circular_feature_edge_radii_at
 from ..svg.ids import instance_svg_id
 
 # Keep dense large-font labels from being pushed excessively far from features.
@@ -113,7 +116,8 @@ LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS = 2.0
 
 
 def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
-    """The radius inner radial labels keep outside: the centre definition's band and the inside tracks' bands.
+    """The radius inner radial labels keep outside: the centre definition's band and the bands of the tracks inside
+    the lanes the inner labels name (``CircularRadialLayout.label_lanes``, the innermost features slot).
 
     The labels read the centre band only through this value, which the labels stage takes instead of the band:
     beside a plot title the tracks keep the band of the untitled definition (OV-1710), and a band that stays
@@ -124,9 +128,8 @@ def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
     definition_band = radial_layout.definition_reserved_band_px
     if definition_band is not None:
         reserve = max(reserve, float(definition_band.outer_px))
-    feature_inner_radius = (
-        float(radial_layout.features.all_band_px.inner_px) if radial_layout.features is not None else float("inf")
-    )
+    inner_lanes = radial_layout.label_lanes.inner
+    feature_inner_radius = float(inner_lanes.all_band_px.inner_px) if inner_lanes is not None else float("inf")
     for resolved_slot in radial_layout.slots:
         if resolved_slot.renderer in {"features", "feature_labels"}:
             continue
@@ -140,10 +143,11 @@ def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
 
 def outer_label_scale_floor_px(radial_layout: CircularRadialLayout) -> float:
     """The radius outer horizontal labels and their leader elbows keep past: the outer edge of a scale that stands
-    outside the feature track, between the features and their labels (OV-3301). The band is the ticks slot's own
-    reserved band (its ticks and numbers, from the tick geometry owner); 0 when no scale stands there."""
+    outside the lanes the outer labels name (``CircularRadialLayout.label_lanes``, the outermost features slot),
+    between the features and their labels (OV-3301). The band is the ticks slot's own reserved band (its ticks and
+    numbers, from the tick geometry owner); 0 when no scale stands there."""
 
-    features = radial_layout.features
+    features = radial_layout.label_lanes.outer
     if features is None:
         return 0.0
     feature_outer = float(features.all_band_px.outer_px)
@@ -5626,17 +5630,6 @@ def rearrange_labels_fc(
     return _assign_leader_start_points(best_labels, total_length)
 
 
-def _segment_span_bp(
-    segment_start: int,
-    segment_end: int,
-    total_length: int,
-) -> float:
-    """Return segment span in bp, supporting origin-spanning segments."""
-    if segment_start <= segment_end or total_length <= 0:
-        return float(abs(int(segment_end - segment_start)))
-    return float((float(total_length) - float(segment_start)) + float(segment_end))
-
-
 def _is_label_embedded_in_segment(
     label_start: float,
     label_end: float,
@@ -5674,7 +5667,7 @@ def prepare_label_list(
     *,
     outer_arena: tuple[float, float] | None = None,
     feature_track_ratio_factor_override: float | None = None,
-    feature_layout: CircularFeatureLayout | None = None,
+    label_lanes: CircularLabelLanes = NO_LABEL_LANES,
     room: CircularLabelRadii | None = None,
     track_preset: str | None = None,
     feature_lane_direction: str | None = None,
@@ -5697,6 +5690,8 @@ def prepare_label_list(
     content radius and outside its inner reserve; horizontal outer labels and
     their leader elbows keep past its outer floor, a scale standing between the
     features and them (OV-3301).
+    ``label_lanes``: the lanes outer and inner labels name their features on (``slots_label_lanes``); without
+    them the labels read the configured preset's lane radii.
     ``label_filtering``: the compiled maps when the caller holds them.
     With ``record_id`` (a drawn placement, not a probe), horizontal outer and
     inner labels are first read against the room around the map
@@ -5728,6 +5723,10 @@ def prepare_label_list(
         for feature in feature_dict.values()
     )
     lane_clearance = (resolve_overlaps and not strandedness) or displaced_lanes
+    # Outer labels also keep clear of each feature's own lane when their lanes lie outside the axis circle, in the
+    # arena the labels would otherwise take (OV-3627): their leaders leave a feature at its outer edge and never run
+    # under its neighbours, and their text stays off the lanes.
+    outer_lane_clearance = lane_clearance or label_lanes.outer_past_axis
 
     strands = "separate" if strandedness else "single"
     inner_labels_enabled = profile.inner_labels_enabled
@@ -5806,7 +5805,14 @@ def prepare_label_list(
 
             # Get track_id for overlap resolution
             track_id = getattr(feature_object, 'feature_track_id', 0)
-            if feature_layout is None:
+            assignment = getattr(feature_object, "placement", None)
+            is_outer_label = (feature_object.strand == "positive") or (inner_labels_enabled is False)
+            if (
+                assignment is not None and assignment.level > 0
+                and lane_direction == "split" and inner_labels_enabled
+            ):
+                is_outer_label = assignment.side == "outward"
+            if (feature_layout := label_lanes.outer if is_outer_label else label_lanes.inner) is None:
                 factors: list[float] = calculate_feature_position_factors_circular(
                     total_length, coordinate_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
                 )
@@ -5830,18 +5836,6 @@ def prepare_label_list(
             feature_middle_x, feature_middle_y = circle_point(feature_center_radius, feature_angle_deg)
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
-            assignment = getattr(feature_object, "placement", None)
-            is_outer_label = (feature_object.strand == "positive") or (inner_labels_enabled is False)
-            if (
-                assignment is not None and assignment.level > 0
-                and lane_direction == "split" and inner_labels_enabled
-            ):
-                is_outer_label = assignment.side == "outward"
-            longest_segment_bp = _segment_span_bp(
-                longest_segment_start,
-                longest_segment_end,
-                total_length,
-            )
             circular_arrow_length_bp = resolve_circular_arrow_head_length_bp(
                 arrow_head_length_ratio,
                 abs(feature_outer_radius - feature_inner_radius),
@@ -5850,20 +5844,25 @@ def prepare_label_list(
                 feature_center_radius,
                 arrow_shaft_width_ratio,
             )
-            is_short_directional_feature = (
-                bool(getattr(feature_object, "is_directional", False))
-                and longest_segment_bp < circular_arrow_length_bp
+            # The feature's drawn outline at the label's angle: beside an arrowhead it lies inside the lane's edge.
+            ink_inner_radius, ink_outer_radius = circular_feature_edge_radii_at(
+                feature_object,
+                label_middle,
+                total_length,
+                circular_arrow_length_bp,
+                (feature_inner_radius, feature_center_radius, feature_outer_radius),
+                arrow_shaft_width_ratio,
             )
             if is_outer_label:
-                if lane_clearance and not is_short_directional_feature:
+                if outer_lane_clearance:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
-                    feature_anchor_x, feature_anchor_y = circle_point(feature_outer_radius, feature_angle_deg)
+                    feature_anchor_x, feature_anchor_y = circle_point(ink_outer_radius, feature_angle_deg)
                 # With an arena, its inner edge is the "anchor" radius for leader lines.
                 middle_radius = (
                     float(outer_arena[0]) if outer_arena is not None else radius_factor * radius
                 )
-                if lane_clearance:
+                if outer_lane_clearance:
                     middle_radius = max(
                         float(middle_radius),
                         float(
@@ -5874,10 +5873,10 @@ def prepare_label_list(
                     )
                 middle_x, middle_y = circle_point(middle_radius, feature_angle_deg)
             else:
-                if lane_clearance and not is_short_directional_feature:
+                if lane_clearance:
                     # For displaced inner features, anchor leaders on the inner edge so lines
                     # do not cross over raised feature bodies.
-                    feature_anchor_x, feature_anchor_y = circle_point(feature_inner_radius, feature_angle_deg)
+                    feature_anchor_x, feature_anchor_y = circle_point(ink_inner_radius, feature_angle_deg)
                 middle_x, middle_y = circle_point(inner_radius_factor * radius, feature_angle_deg)
             is_embedded = _is_label_embedded_in_segment(
                 label_start,
@@ -5925,7 +5924,7 @@ def prepare_label_list(
                 "font_style": candidate.font_style,
             }
             # Feature clearance of a displaced lane, for the external label stages.
-            if lane_clearance and is_outer_label:
+            if outer_lane_clearance and is_outer_label:
                 label_entry["min_outer_start_radius_px"] = float(
                     feature_outer_radius
                     + effective_text_clearance_px
@@ -6019,29 +6018,34 @@ def prepare_label_list(
             dense_outer_rows=dense_outer_rows,
             probe=probe,
         )
-        feature_outer_radius_intervals: list[tuple[float, float, float]] | None = None
-        feature_inner_radius_intervals: list[tuple[float, float, float]] | None = None
-        if lane_clearance:
-            feature_outer_radius_intervals = _build_outer_feature_radius_intervals(
+        feature_outer_radius_intervals: list[tuple[float, float, float]] | None = (
+            _build_outer_feature_radius_intervals(
                 feature_dict,
                 total_length,
                 radius,
                 track_ratio,
                 profile,
                 feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-                feature_layout=feature_layout,
+                feature_layout=label_lanes.outer,
                 track_preset=track_type,
             )
-            feature_inner_radius_intervals = _build_inner_feature_radius_intervals(
+            if outer_lane_clearance
+            else None
+        )
+        feature_inner_radius_intervals: list[tuple[float, float, float]] | None = (
+            _build_inner_feature_radius_intervals(
                 feature_dict,
                 total_length,
                 radius,
                 track_ratio,
                 profile,
                 feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-                feature_layout=feature_layout,
+                feature_layout=label_lanes.inner,
                 track_preset=track_type,
             )
+            if lane_clearance
+            else None
+        )
         # OV-3301: a scale between the features and the outer labels holds them off as a feature track would.
         if room is not None and room.outer_floor_px > 0.0:
             feature_outer_radius_intervals = [
