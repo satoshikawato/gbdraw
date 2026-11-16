@@ -241,7 +241,7 @@ def _without_resource_id_prefix(resource_id: str, name: str) -> str:
     """``name`` without each leading "<resource ID>-" while a name remains: the Web writer names a resource
     "<ID>-<file>". Web Load shows a resource that stores no name so: ``withoutResourceIdPrefix`` in
     ``services/session-request.js``, which also serves the Sessions 46-51 the Web reads without Python. The vector of
-    the tools/twins.json row ``vector:tests/fixtures/twins/resource-id-prefix.json`` pins both."""
+    the tools/twins.json row ``vector:tests/fixtures/resource-id-prefix-vectors.json`` pins both."""
 
     prefix = f"{resource_id}-"
     while name.startswith(prefix) and len(name) > len(prefix):

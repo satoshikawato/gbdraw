@@ -1248,7 +1248,7 @@ const normalizeOriginalResourceName = (name) => {
  * `name` without each leading "<resource ID>-" while a name remains: the Web writer names a resource "<ID>-<file>"
  * (`normalizeResourceName`), so Load shows a resource that stores no name of its own by what follows. Python's
  * `_without_resource_id_prefix` (gbdraw/session_migration.py) does the same for the CLI and for the Sessions it moves
- * to the current writer; the vector of tools/twins.json row `vector:tests/fixtures/twins/resource-id-prefix.json`
+ * to the current writer; the vector of tools/twins.json row `vector:tests/fixtures/resource-id-prefix-vectors.json`
  * pins both.
  * @param {string} resourceId
  * @param {string} name
