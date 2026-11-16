@@ -428,6 +428,19 @@ def test_t5_at_12pt_needs_more_room_than_its_ellipse_so_the_packer_is_not_tried(
 
 
 @pytest.mark.circular
+def test_a_record_the_packer_cannot_fit_keeps_todays_placement_and_stop(
+    tmp_path: Path, looks: list[tuple[PackerLook, bool]]
+) -> None:
+    """P1 15 pt on one strand: look 2 has no placement, and look 1's placement is rejected after the clearance chain
+    and the repair, so the record keeps today's placement and stops with today's counts."""
+
+    args = ["--gbk", str(TEST_INPUTS / "NC_005856.1.gb"), *DENSE[1:], "--label_font_size", "15"]
+    with pytest.raises(LabelsDoNotFitError, match=r"15 label pairs overlap, 12 leader pairs cross"):
+        _draw(tmp_path, args)
+    assert looks == [("half", False), ("pole", True)]
+
+
+@pytest.mark.circular
 def test_todays_label_placement_draws_a_record_the_packer_fits_as_today(
     tmp_path: Path, looks: list[tuple[PackerLook, bool]]
 ) -> None:
