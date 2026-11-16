@@ -6092,50 +6092,71 @@ assert.deepEqual(
 // OV-3557 through Load: Load makes every stored nucleotide table a file of the draft; a table the request says
 // gbdraw made (`sourceName: null`, a LOSAT result) or names no file for (an older writer: no `sourceName`) is written
 // as the request stored it, so a Generate or Save after Load names it as the search, as the CLI replay does.
+// OV-3592: what the request stored is the comparison's, not its table's: Load gives each draft row the stored name
+// (`loadedSourceName`), which the pair's edge keeps while it holds that file (as Save's `serializeActiveRenderFiles`
+// writes it), so two comparisons of one table keep their own names.
 {
   const { adoptCurrentSessionResources, sessionResourceSource } = await import(
     pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
   );
   const comparisons = mixedCanonical.renderRequest.comparisons;
   const { sourceName: _older, ...olderEntry } = comparisons[2];
-  const stored = {
-    ...mixedCanonical,
-    renderRequest: { ...mixedCanonical.renderRequest, comparisons: [comparisons[0], comparisons[1], olderEntry] }
+  const loadAndResave = (storedComparisons, resources = mixedCanonical.resources) => {
+    const stored = {
+      ...mixedCanonical,
+      resources,
+      renderRequest: { ...mixedCanonical.renderRequest, comparisons: storedComparisons }
+    };
+    const sessionResourceTable = adoptCurrentSessionResources(stored.resources);
+    const loaded = projectCanonicalSessionRequest({ ...stored, sessionResourceTable });
+    const uidAt = (uid) => comparisonContractSequences[loaded.files.linearSeqs.findIndex((sequence) => sequence.uid === uid)].uid;
+    const loadedPlan = {
+      mode: 'selected',
+      defaultSource: 'losat',
+      edges: loaded.files.linearComparisons.map((binding) => ({
+        id: binding.id, queryUid: uidAt(binding.queryUid), subjectUid: uidAt(binding.subjectUid), included: true,
+        fileActive: true, losatFilenameActive: false, source: 'upload', file: binding.file, losatFilename: ''
+      }))
+    };
+    // `rowOf` gives the row a Save writes for a loaded binding: its file, and the stored name while it keeps it.
+    const resaved = (rowOf) => buildCanonicalRenderRequestRaw({
+      state: comparisonContractState,
+      filesData: {
+        ...comparisonContractFiles,
+        linearComparisons: loaded.files.linearComparisons.map((binding) => ({ id: binding.id, ...rowOf(binding) })),
+        linearCanonicalComparisons: []
+      },
+      comparisonPlanSnapshot: resolveLinearComparisonPlan({
+        plan: loadedPlan, sequences: comparisonContractSequences, losatProgram: 'blastn', blastpMode: 'pairwise'
+      })
+    }).renderRequest.comparisons.map((comparison) => [
+      comparison.queryRecordIndex, Object.hasOwn(comparison, 'sourceName') ? comparison.sourceName : 'absent'
+    ]).sort(([left], [right]) => left - right);
+    return { loaded, uidAt, resaved };
   };
-  const sessionResourceTable = adoptCurrentSessionResources(stored.resources);
-  const loaded = projectCanonicalSessionRequest({ ...stored, sessionResourceTable });
-  const uidAt = (uid) => comparisonContractSequences[loaded.files.linearSeqs.findIndex((sequence) => sequence.uid === uid)].uid;
-  const loadedPlan = {
-    mode: 'selected',
-    defaultSource: 'losat',
-    edges: loaded.files.linearComparisons.map((binding) => ({
-      id: binding.id, queryUid: uidAt(binding.queryUid), subjectUid: uidAt(binding.subjectUid), included: true,
-      fileActive: true, losatFilenameActive: false, source: 'upload', file: binding.file, losatFilename: ''
-    }))
-  };
-  const resaved = (fileOf) => buildCanonicalRenderRequestRaw({
-    state: comparisonContractState,
-    filesData: {
-      ...comparisonContractFiles,
-      linearComparisons: loaded.files.linearComparisons.map((binding) => ({ id: binding.id, file: fileOf(binding.file) })),
-      linearCanonicalComparisons: []
-    },
-    comparisonPlanSnapshot: resolveLinearComparisonPlan({
-      plan: loadedPlan, sequences: comparisonContractSequences, losatProgram: 'blastn', blastpMode: 'pairwise'
-    })
-  }).renderRequest.comparisons.map((comparison) => [
-    comparison.queryRecordIndex, Object.hasOwn(comparison, 'sourceName') ? comparison.sourceName : 'absent'
-  ]).sort(([left], [right]) => left - right);
-  const expected = [[0, blastTable.name], [1, null], [2, 'absent']];
-  // The files of the draft, and the stored descriptors a Save or a Generate writes them from.
-  assert.deepEqual(resaved((file) => file), expected);
-  // A Save or a Generate writes a loaded file from its Session resource's descriptor (`serializeFile`), the same
-  // payload: the unnamed tables stay unnamed.
-  assert.deepEqual(resaved((file) => sessionResourceSource(file).descriptor).slice(1), expected.slice(1));
-  // A file the user chose for that pair afterwards is named by its name.
-  const losatResult = loaded.files.linearComparisons.find((binding) => uidAt(binding.queryUid) === 'b').file;
-  assert.deepEqual(resaved((file) => (file === losatResult ? { ...blastTableB } : file)),
-    [[0, blastTable.name], [1, blastTableB.name], [2, 'absent']]);
+  const kept = ({ file, loadedSourceName }) => ({ file, loadedSourceName });
+  {
+    const { loaded, uidAt, resaved } = loadAndResave([comparisons[0], comparisons[1], olderEntry]);
+    const expected = [[0, blastTable.name], [1, null], [2, 'absent']];
+    // The files of the draft, and the stored descriptors a Save or a Generate writes them from.
+    assert.deepEqual(resaved(kept), expected);
+    // A Save or a Generate writes a loaded file from its Session resource's descriptor (`serializeFile`), the same
+    // payload: each comparison keeps its stored name.
+    assert.deepEqual(resaved((binding) => ({ ...kept(binding), file: sessionResourceSource(binding.file).descriptor })), expected);
+    // A file the user chose for that pair afterwards is named by its name: the edge drops the stored name with the
+    // file it replaces (`setComparisonEdgeFile`, `swapComparisonEdgeFile`).
+    const losatResult = loaded.files.linearComparisons.find((binding) => uidAt(binding.queryUid) === 'b').file;
+    assert.deepEqual(resaved((binding) => (binding.file === losatResult ? { file: { ...blastTableB } } : kept(binding))),
+      [[0, blastTable.name], [1, blastTableB.name], [2, 'absent']]);
+  }
+  // OV-3592: two comparisons of one table (a Python Save shares equal bytes): one named, one gbdraw made.
+  {
+    const shared = comparisons[1].resourceId;
+    const { resaved } = loadAndResave([{ ...comparisons[0], resourceId: shared }, comparisons[1]]);
+    const expected = [[0, blastTable.name], [1, null]];
+    assert.deepEqual(resaved(kept), expected);
+    assert.deepEqual(resaved((binding) => ({ ...kept(binding), file: sessionResourceSource(binding.file).descriptor })), expected);
+  }
 }
 assert.equal(
   Buffer.from(

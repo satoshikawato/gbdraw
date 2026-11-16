@@ -300,7 +300,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { ContractShape } from '../utils/contract-shape.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { OrderedConservationSource, RingSlot } from './conservation-series.js' */
-/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge, LoadedSourceName } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
 /** @import { DefinitionLineStyle } from './definition-line-style-state.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
@@ -406,7 +406,7 @@ const requestDrawingMode = (drawing) => {
  * @property {string | null} [c_conservation_blasts_source]
  * @property {FileLike[][]} [c_conservation_fastas] Each LOSAT ring's comparison genome files.
  * @property {ResourceEntry[][]} [c_conservation_sequence_sources] Each table's comparison sequence files.
- * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
+ * @property {{ id?: unknown, file?: ResourceEntry | null, loadedSourceName?: LoadedSourceName }[]} [linearComparisons]
  * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
  * @property {HiddenDepthFiles} [hiddenDepth] The Depth slot values a draft that draws no Depth holds: a Generate
  *   that keeps the track parts reads them (F1); the request never does.
@@ -4321,10 +4321,10 @@ const buildComparisons = ({
   const comparisons = [];
   /** @type {RequestComparisonRef[]} */
   const metadataComparisons = [];
-  const uploadFilesByEdgeId = new Map(
+  const uploadsByEdgeId = new Map(
     (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
       .filter((binding) => binding?.file)
-      .map((binding) => [String(binding.id || ''), binding.file])
+      .map((binding) => [String(binding.id || ''), binding])
   );
   const resolvedByEdgeKey = new Map();
   (Array.isArray(resolvedComparisons) ? resolvedComparisons : []).forEach((comparison) => {
@@ -4483,8 +4483,9 @@ const buildComparisons = ({
       throw new Error('The resolved Linear comparison plan contains an invalid edge.');
     }
     if (edge.source === 'upload') {
-      const file = uploadFilesByEdgeId.get(String(edge.id || ''));
-      if (!file) {
+      const upload = uploadsByEdgeId.get(String(edge.id || ''));
+      const file = upload?.file;
+      if (!upload || !file) {
         throw diagnosticError('COMPARISON_INPUT', {
           reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: edge.queryIndex, subjectRecordIndex: edge.subjectIndex
         });
@@ -4495,8 +4496,9 @@ const buildComparisons = ({
         resourceId: resources.addFile(resourceId, 'nucleotide-blast', file),
         queryRecordIndex: edge.queryIndex,
         subjectRecordIndex: edge.subjectIndex,
-        // The name of the file the user chose, which the CLI replay and the Web show (OV-3557).
-        ...uploadedComparisonSourceName(file)
+        // The name of the file the user chose, which the CLI replay and the Web show (OV-3557), or what the loaded
+        // request stored for the comparison while its edge keeps that file (OV-3592).
+        ...(upload.loadedSourceName ?? { sourceName: normalizeOriginalResourceName(file.name) || null })
       });
       continue;
     }
@@ -5594,40 +5596,14 @@ const storedComparisonFileName = (comparison) => (
 );
 
 /**
- * The loaded tables a stored request names no file for, by their payload (`getResourcePayloadIdentity`, the Session
- * resource every view of it stands for): `null` for a table gbdraw made (a LOSAT result, OV-3557), `undefined` for
- * an entry an older writer stored without `sourceName`, whose name Python reads from the resource. Load makes every
- * stored nucleotide table a file of the draft; the writer stores such a file as the request stored it, so a Generate
- * or Save after Load names it as the CLI replay does. A file the user chooses later is another payload.
- * @type {WeakMap<object, null | undefined>}
- */
-const unnamedComparisonTables = new WeakMap();
-
-/**
- * Load: remember a loaded table the stored request names no file for (`unnamedComparisonTables`).
- * @template T
- * @param {T} file The file Load bound for the comparison.
+ * What a stored nucleotide comparison holds for its table's name (`LoadedSourceName`), which Load gives the
+ * comparison's draft row (OV-3592): a present field that is no name is `null`, as the reader reads it.
  * @param {{ sourceName?: unknown }} comparison The stored comparison (unvalidated).
- * @returns {T} `file`.
+ * @returns {LoadedSourceName}
  */
-const rememberUnnamedComparisonTable = (file, comparison) => {
-  if (typeof comparison.sourceName !== 'string' && file && typeof file === 'object') {
-    unnamedComparisonTables.set(getResourcePayloadIdentity(file), Object.hasOwn(comparison, 'sourceName') ? null : undefined);
-  }
-  return file;
-};
-
-/**
- * The `sourceName` a nucleotide comparison of an uploaded file stores: the name of the file the user chose, or what
- * the loaded request stored for a table it named no file for; none (the field left out) for an older writer's entry.
- * @param {{ name?: unknown }} file
- * @returns {{ sourceName?: string | null }}
- */
-const uploadedComparisonSourceName = (file) => {
-  const identity = getResourcePayloadIdentity(file);
-  if (!unnamedComparisonTables.has(identity)) return { sourceName: normalizeOriginalResourceName(file.name) || null };
-  const stored = unnamedComparisonTables.get(identity);
-  return stored === undefined ? {} : { sourceName: stored };
+const loadedComparisonSourceName = (comparison) => {
+  if (typeof comparison.sourceName === 'string') return { sourceName: comparison.sourceName };
+  return Object.hasOwn(comparison, 'sourceName') ? { sourceName: null } : {};
 };
 
 /**
@@ -7249,10 +7225,9 @@ export const projectCanonicalSessionRequest = ({
           .get(Number(comparison.queryRecordIndex));
         const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
           .get(Number(comparison.subjectRecordIndex));
-        const file = rememberUnnamedComparisonTable(resolveResourceFile
+        const file = resolveResourceFile
           ? resolveResourceFile(comparison.resourceId, storedComparisonFileName(comparison))
-          : { ...resourceAsLegacyFile(resources, comparison.resourceId), ...storedComparisonFileName(comparison) },
-        comparison);
+          : { ...resourceAsLegacyFile(resources, comparison.resourceId), ...storedComparisonFileName(comparison) };
         // An unmapped source index is undefined; it never named a sequence here.
         if (queryIndex === undefined || subjectIndex === undefined) return;
         if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
@@ -7264,7 +7239,8 @@ export const projectCanonicalSessionRequest = ({
           queryUid: files.linearSeqs[queryIndex].uid,
           subjectUid: files.linearSeqs[subjectIndex].uid,
           source: 'upload',
-          file
+          file,
+          loadedSourceName: loadedComparisonSourceName(comparison)
         });
       });
     (renderRequest.comparisons || []).forEach((/** @type {CanonicalComparison} */ comparison) => {

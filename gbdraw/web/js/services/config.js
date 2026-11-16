@@ -126,6 +126,7 @@ import {
 import {
   createDefaultLinearComparisonPlan,
   linearComparisonEdgeKey,
+  loadedSourceNameField,
   losatEdgeOfPair,
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
@@ -4694,7 +4695,9 @@ export const serializeActiveRenderFiles = async (
       .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'upload' && edge.fileActive && edge.file)
       .map(async (/** @type {LinearComparisonResolvedEdge} */ edge) => ({
       id: String(edge.id || ''),
-      file: await serializeFileValue(store, edge.file)
+      file: await serializeFileValue(store, edge.file),
+      // The name a loaded request stored for the file, which the request writes as stored (OV-3592).
+      ...loadedSourceNameField(edge.loadedSourceName)
     }))
   ) : [];
   const linearCanonicalComparisons = mode === 'linear'
@@ -5523,16 +5526,17 @@ const applyFiles = (filesData, {
       /** @type {[string, any][]} */ ((Array.isArray(read.linearComparisons) ? read.linearComparisons : [])
         .map((comparison) => [
           String(comparison?.id || ''),
-          deserializeFile(comparison?.file)
+          { file: deserializeFile(comparison?.file), loadedSourceName: comparison?.loadedSourceName }
         ]))
         .filter(([id]) => id)
     );
     const planWithFiles = normalizeLinearComparisonPlan(targetDrawing.linearComparisonPlan);
     planWithFiles.edges.forEach((edge) => {
-      const file = comparisonFiles.get(edge.id) || null;
+      const { file = null, loadedSourceName = undefined } = comparisonFiles.get(edge.id) || {};
       // A retained file stays inactive; an edge Load leaves with no file (its
-      // binding dropped) is as the pair card's Remove leaves it (OV-899).
-      if (file) edge.file = file;
+      // binding dropped) is as the pair card's Remove leaves it (OV-899). A
+      // file Load bound from the request keeps the name it stored (OV-3592).
+      if (file) Object.assign(edge, { file }, loadedSourceNameField(loadedSourceName));
       else setComparisonEdgeFile(edge, null);
     });
     installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, collapsed));

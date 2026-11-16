@@ -460,7 +460,9 @@ const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
     source: String(edge?.source || 'upload'),
     losatFilename: String(edge?.losatFilename || ''),
     // Only an edge with window-pair names holds the field (`WindowLosatFilenames`).
-    ...(edge?.windowLosatFilenames ? { windowLosatFilenames: { ...edge.windowLosatFilenames } } : {})
+    ...(edge?.windowLosatFilenames ? { windowLosatFilenames: { ...edge.windowLosatFilenames } } : {}),
+    // An edge that holds the file Load bound for it keeps the name its request stored (`LoadedSourceName`, OV-3592).
+    ...(edge?.loadedSourceName ? { loadedSourceName: { ...edge.loadedSourceName } } : {})
   }))
 });
 
