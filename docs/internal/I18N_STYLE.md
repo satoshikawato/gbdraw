@@ -697,8 +697,8 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 - Labels take the short forms: 적용 안 됨 (not 적용되지 않음), 자동(기본값),
   필수, 누락, 없음, 켬 / 끔; full sentences belong in help and notices, which
   may be as long as needed.
-- Korean wraps at word spaces: give `:lang(ko)` `word-break: keep-all` and
-  the CJK 12 px floor, so a word is never split between syllables.
+- Korean wraps at word spaces: `:lang(ko)` has `word-break: keep-all`, so a
+  word is never split between syllables.
 
 ## 6. Spanish (`es`, international usage)
 
