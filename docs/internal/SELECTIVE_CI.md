@@ -637,6 +637,18 @@ item names its own window:
   plan that measurements refreshed from that run would give;
 - pull request CI, from the pull requests merged into `dev` in the window and
   the pull request `Tests` runs created in it (below);
+- the watched dependencies (`WATCHED_DEPENDENCIES` in
+  `tools/ci-inventory.mjs`, now `bcbio-gff`): the pinned version, the latest
+  release on PyPI and its date, the whole months since it, and the date of
+  upstream's last commit under the package's folder. The report flags a
+  release newer than the pin, and a latest release more than 48 months old;
+- the result of the GFF3 tests on Biopython's development head, from the
+  workflow's `GFF3 tests on Biopython's development head` job. `Tests`
+  installs the newest Biopython release on every run, so a release is tested
+  all week; this job tests the head instead, to show a break before the next
+  release brings it. It runs only `tests/test_input_variants.py`,
+  `tests/test_gff_multipart.py`, and `tests/test_bcbio_gff_policy.py`, a few
+  runner-minutes a week. The report flags a failed run;
 - changes since the previous week in functional cases, functional
   test-minutes, runner-minutes, jobs in `test.yml`, and the four pull request
   CI numbers.
@@ -714,6 +726,28 @@ A report warns when either pull request feedback median is above its target.
 The warning never fails the workflow. A session that reads it names the jobs
 that set the wall time of the slow runs and asks the Owner whether to plan
 work that shortens them.
+
+A session that reads a dependency flag:
+
+- A newer `bcbio-gff` release: update `pyproject.toml`, `recipe/meta.yaml`,
+  and the Web wheel together (a new vendored path in `gbdraw/_web_assets.py`
+  and in `tools/immutable-web-assets.json`;
+  `tests/test_bcbio_gff_policy.py` checks that they agree), and run the GFF3
+  tests (`tests/test_input_variants.py`, `tests/test_gff_multipart.py`). When
+  the characterization test in `tests/test_bcbio_gff_policy.py` fails, the new
+  release splits mixed attribute separators itself and gbdraw's repair
+  (`_gff3_attributes` in `gbdraw/io/input_text.py`) can go.
+- No release for more than 48 months: tell the Owner, with upstream's last
+  commit date.
+- A failed head run: find out whether `bcbio-gff` or gbdraw breaks. Move the
+  part gbdraw uses (`BCBio.GFF.GFF.parse` and what it needs) into gbdraw, with
+  its Biopython License notice kept in the open-source notices, when one of
+  these holds: a released Biopython breaks `bcbio-gff` 0.7.1 and upstream has
+  not fixed it a month later; two GFF3 defects need an upstream fix that
+  gbdraw's repair cannot absorb; or Pyodide's Python or Biopython can no
+  longer import `bcbio-gff`. Tell the Owner which condition holds, then go
+  ahead without waiting. Writing gbdraw's own GFF3 reader instead needs the
+  Owner's decision.
 
 ## Trust and aggregate checks
 

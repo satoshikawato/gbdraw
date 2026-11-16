@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
-  PR_TARGETS, PR_WINDOW, RATE_RESERVE, SUPERSEDED_GAP_SECONDS, countWorkflowJobs, createClient, listJobs, listRuns, isoWeek, latestShardArtifacts, percentile, priorReports, readData,
-  renderReport, summarizeFunctional, summarizePullRequestCi, summarizePullRequests, summarizeRuns
+  PR_TARGETS, PR_WINDOW, RATE_RESERVE, SUPERSEDED_GAP_SECONDS, WATCHED_DEPENDENCIES, countWorkflowJobs, createClient, listJobs, listRuns, isoWeek, latestShardArtifacts, percentile, pinnedVersion, priorReports, readData,
+  readDependency, renderReport, summarizeDependency, summarizeFunctional, summarizePullRequestCi, summarizePullRequests, summarizeRuns
 } from '../../tools/ci-inventory.mjs';
 
 const noPullRequestCi = summarizePullRequestCi({ runs: [], earlierRuns: [], jobsByRun: new Map(), pulls: [] });
@@ -287,7 +287,11 @@ test('helpers count workflow jobs, ISO weeks, and nearest-rank percentiles', () 
 test('the CI inventory workflow is weekly, read-only except issues, and posts its report', () => {
   const workflow = readFileSync('.github/workflows/ci-inventory.yml', 'utf8');
   assert.match(workflow, /schedule:\n\s+- cron: '[^']+'\n\s+workflow_dispatch:/);
-  assert.match(workflow, /permissions:\n {2}contents: read\n {2}actions: read\n {2}issues: write\n/);
+  assert.match(workflow, /\npermissions:\n {2}contents: read\n\nconcurrency:/);
+  assert.match(workflow, /\n {2}inventory:[\s\S]*?\n {4}permissions:\n {6}contents: read\n {6}actions: read\n {6}issues: write\n/);
+  assert.match(workflow, /\n {2}gff3-biopython-head:[\s\S]*?\n {4}permissions:\n {6}contents: read\n/);
+  assert.match(workflow, /needs: gff3-biopython-head\n\s+if: \$\{\{ !cancelled\(\) \}\}/);
+  assert.match(workflow, /BIOPYTHON_HEAD_RESULT: \$\{\{ needs\.gff3-biopython-head\.result \}\}/);
   assert.doesNotMatch(workflow, /pull_request|push:|contents: write|pull-requests: write/);
   assert.match(workflow, /node tools\/ci-inventory\.mjs --post >> "\$GITHUB_STEP_SUMMARY"/);
   assert.match(workflow, /ref: dev\n\s+persist-credentials: false\n/);
@@ -524,4 +528,117 @@ test('a day with more than 1,000 runs is read in parts, since a filtered listing
   const { runs, partial } = await listRuns(client, new Date(Date.UTC(2026, 9, 14)), new Date(Date.UTC(2026, 9, 15)));
   assert.equal(partial, null);
   assert.equal(runs.length, 1500);
+});
+
+const GFF = WATCHED_DEPENDENCIES[0];
+const NOW = new Date('2026-11-16T00:17:00Z');
+const read = (extra = {}) => ({
+  latest: '0.7.1', released: '2024-01-29T12:00:00.000000Z', upstreamCommit: '2025-02-04T10:00:00Z', errors: [], ...extra
+});
+
+test('pinnedVersion reads the exact pin of a name from pyproject.toml', () => {
+  const pyproject = 'dependencies = [\n  "bcbio-gff==0.7.1",\n  "other-bcbio-gff>=1",\n]\n';
+  assert.equal(pinnedVersion(pyproject, 'bcbio-gff'), '0.7.1');
+  assert.equal(pinnedVersion('dependencies = ["bcbio-gff"]', 'bcbio-gff'), null);
+  assert.equal(pinnedVersion('dependencies = ["bcbio-gff>=0.7"]', 'bcbio-gff'), null);
+});
+
+test('a dependency is stale over its limit of months and newer when the latest release is not the pin', () => {
+  const healthy = summarizeDependency(GFF, '0.7.1', read({ released: '2024-01-29T12:00:00Z' }), new Date('2026-11-16T00:00:00Z'));
+  assert.equal(healthy.months, 33);
+  assert.equal(healthy.stale, false);
+  assert.equal(healthy.newer, false);
+  // 48 whole months is within the limit; the 49th makes it stale.
+  assert.equal(summarizeDependency(GFF, '0.7.1', read(), new Date('2028-01-29T12:00:00Z')).stale, false);
+  assert.equal(summarizeDependency(GFF, '0.7.1', read(), new Date('2028-02-29T12:00:00Z')).stale, true);
+  assert.equal(summarizeDependency(GFF, '0.7.1', read({ latest: '0.8.0' }), NOW).newer, true);
+  const unread = summarizeDependency(GFF, '0.7.1', read({ latest: null, released: null }), NOW);
+  assert.deepEqual([unread.months, unread.stale, unread.newer], [null, false, false]);
+});
+
+const pypiBody = JSON.stringify({
+  info: { version: '0.7.1' },
+  releases: { '0.7.1': [
+    { upload_time_iso_8601: '2024-01-29T12:00:05.000000Z' }, { upload_time_iso_8601: '2024-01-29T12:00:00.000000Z' }
+  ], '0.7.0': [{ upload_time_iso_8601: '2023-01-01T00:00:00.000000Z' }] }
+});
+
+test('the PyPI read sends no authorization header and takes the earliest upload of the latest release', async (t) => {
+  const apiUrl = 'https://api.github.com';
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url: String(url), options });
+    return new Response(JSON.stringify([{ commit: { committer: { date: '2025-02-04T10:00:00Z' } } }]), { status: 200 });
+  });
+  const pypi = [];
+  const fetchImpl = async (url, options) => {
+    pypi.push({ url, options });
+    return new Response(pypiBody, { status: 200 });
+  };
+  const client = createClient({ token: 'secret', apiUrl, repository: 'o/r', retryWaitMs: 0 });
+  const result = await readDependency(client, GFF, { apiUrl, fetchImpl });
+  assert.deepEqual(result, {
+    latest: '0.7.1', released: '2024-01-29T12:00:00.000000Z', upstreamCommit: '2025-02-04T10:00:00Z', errors: []
+  });
+  assert.equal(pypi[0].url, 'https://pypi.org/pypi/bcbio-gff/json');
+  assert.doesNotMatch(JSON.stringify(pypi[0].options), /authorization|secret/i);
+  assert.equal(calls[0].url, `${apiUrl}/repos/chapmanb/bcbb/commits?path=gff&per_page=1`);
+  assert.match(JSON.stringify(calls[0].options), /Bearer secret/);
+});
+
+test('a PyPI read is tried three times at most and a failed read becomes a "not read" row', async (t) => {
+  const apiUrl = 'https://api.github.com';
+  t.mock.method(globalThis, 'fetch', async () => new Response('{}', { status: 404 }));
+  let tries = 0;
+  const fetchImpl = async () => {
+    tries += 1;
+    return new Response('down', { status: 503 });
+  };
+  const client = createClient({ token: 't', apiUrl, repository: 'o/r', retryWaitMs: 0 });
+  const result = await readDependency(client, GFF, { apiUrl, fetchImpl });
+  assert.equal(tries, 3);
+  assert.equal(result.latest, null);
+  assert.equal(result.errors.length, 2);
+  const markdown = report({ dependencies: [summarizeDependency(GFF, '0.7.1', result, NOW)] });
+  assert.match(markdown, /\| bcbio-gff \| 0\.7\.1 \| not read \(PyPI: GET https:\/\/pypi\.org\/pypi\/bcbio-gff\/json: 503\) \|/);
+  assert.match(markdown, /not read \(chapmanb\/bcbb: /);
+  assert.doesNotMatch(markdown, /Newer release|No release of/);
+});
+
+function report(extra = {}) {
+  return renderReport({
+    week: '2026-W47', since: new Date('2026-11-09T00:17:00Z'), until: NOW,
+    runs: summarizeRuns({ runs: [], jobsByRun: new Map() }), pullRequests: summarizePullRequests([]),
+    functional: summarizeFunctional({
+      reports: [], measurements: { shardCount: 1, secondsPerCase: new Map() }, casesPerFile: new Map(), testDir: 'tests/web'
+    }),
+    pullRequestCi: noPullRequestCi, functionalRun: { id: 1, head_sha: '0e66fd7bbfe17adc' }, testJobs: 24, previous: null,
+    serverUrl: 'https://github.com', repository: 'satoshikawato/gbdraw', ...extra
+  });
+}
+
+test('the report lists watched dependencies and the Biopython head result, and flags what needs a session', () => {
+  const runUrl = 'https://github.com/satoshikawato/gbdraw/actions/runs/99';
+  const head = (result) => ({ result, version: '1.89.dev0', commit: 'abcdef0123456789', runUrl });
+  const row = (extra) => [summarizeDependency(GFF, '0.7.1', read(extra), NOW)];
+
+  const passed = report({ dependencies: row(), biopythonHead: head('success') });
+  assert.match(passed, /### Watched dependencies\n\n\| Package \| Pinned \| Latest release \| Released \| Months since release \| Upstream last commit \|/);
+  assert.match(passed, /\| bcbio-gff \| 0\.7\.1 \| 0\.7\.1 \| 2024-01-29 \| 33 \| 2025-02-04 \(under `gff\/` of `chapmanb\/bcbb`\) \|/);
+  assert.match(passed, /GFF3 tests on Biopython's development head \(1\.89\.dev0, abcdef01\): passed \(\[workflow run\]\(https:\/\/github\.com\/satoshikawato\/gbdraw\/actions\/runs\/99\)\)\./);
+  assert.doesNotMatch(passed, /\*\*(Newer release|No release|GFF3 tests failed)/);
+
+  const failed = report({ dependencies: row(), biopythonHead: head('failure') });
+  assert.match(failed, /: \*\*failed\*\* \(\[workflow run\]/);
+  assert.match(failed, /\*\*GFF3 tests failed on Biopython's development head\*\* \(1\.89\.dev0, abcdef01\)\. What to do: docs\/internal\/SELECTIVE_CI\.md, "Weekly CI inventory"\./);
+
+  const notRun = report({ dependencies: row(), biopythonHead: { result: 'skipped', version: '', commit: '', runUrl: '' } });
+  assert.match(notRun, /\(version unknown, commit unknown\): not run \(skipped\)\./);
+  assert.doesNotMatch(notRun, /GFF3 tests failed/);
+
+  const flagged = report({ dependencies: [summarizeDependency(GFF, '0.7.1', read({ latest: '0.8.0', released: '2022-01-01T00:00:00Z' }), NOW)] });
+  assert.match(flagged, /\*\*Newer release of bcbio-gff\*\*: 0\.8\.0 is out, the pin is 0\.7\.1\. What to do: docs\/internal\/SELECTIVE_CI\.md, "Weekly CI inventory"\./);
+  assert.match(flagged, /\*\*No release of bcbio-gff for 58 months\*\* \(limit 48\)\./);
+  // The data block carries no dependency fields.
+  assert.doesNotMatch(flagged.match(/<!-- ci-inventory-data (.*) -->/)[1], /bcbio|biopython/i);
 });

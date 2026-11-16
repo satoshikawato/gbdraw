@@ -944,6 +944,7 @@ test('every job that runs pytest caches the test inputs and gives each pytest st
     }
   }
   assert.deepEqual(users, [
+    'ci-inventory.yml:gff3-biopython-head',
     'deploy_web.yml:gallery-publication-browser',
     'test.yml:core',
     'test.yml:core-pr',
@@ -1001,6 +1002,7 @@ test('every job that installs gbdraw from the checkout installs the managed LOSA
     }
   }
   assert.deepEqual(users, [
+    'ci-inventory.yml:gff3-biopython-head',
     'deploy_web.yml:gallery-publication-browser',
     'gallery-publication.yml:browser',
     'gallery-publication.yml:performance',

@@ -24,7 +24,7 @@ requirements:
     - biopython
     - svgwrite
     - cairosvg
-    - bcbio-gff
+    - bcbio-gff ==0.7.1
     - tomli
     - losat ==0.1.0
 
