@@ -302,7 +302,9 @@ def test_the_center_definition_alone_reserves_no_band_for_the_tracks():
     [
         ("chr\t1\t4\nchr\t2\tPRIVATE\n", "DEPTH_INVALID", {"reason": "DEPTH_VALUES"}),
         ("chr\t1\t4\nchr\t2\t-5\n", "DEPTH_INVALID", {"reason": "NONNEGATIVE"}),
-        ("chr\t1\n", "TABLE_INVALID", {"reason": "THREE_COLUMNS"}),
+        ("chr\n", "TABLE_INVALID", {"reason": "DEPTH_COLUMNS"}),
+        ("chr\t5\t4\t3\n", "DEPTH_INVALID", {"reason": "INTERVAL"}),
+        ("chr\t1\t4\nchr\t2\tnan\n", "DEPTH_INVALID", {"reason": "FINITE"}),
         (None, "INPUT_UNREADABLE", {}),
     ],
 )

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import gbdraw
+from gbdraw.analysis import depth as depth_module
 from gbdraw.annotations.io import ANNOTATION_TABLE_COLUMNS
 from gbdraw.io.cli_tables import (
     _CIRCULAR_TRACK_COLUMNS,
@@ -153,7 +154,8 @@ def test_input_reference_lists_parser_owned_table_columns() -> None:
         ANNOTATION_TABLE_COLUMNS,
     ):
         assert set(columns) <= tokens
-    assert {"reference_name", "position", "depth"} <= tokens
+    # The columns of every depth file form the reader names (gbdraw/analysis/depth.py).
+    assert set(depth_module._COLUMN_DTYPES) <= tokens
 
 
 def test_command_reference_entry_points_exist_in_current_help() -> None:
