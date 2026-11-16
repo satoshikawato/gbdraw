@@ -490,8 +490,8 @@ const headOutcome = ({ result }) => (result === 'success' ? 'passed' : result ==
 
 // The weekly report as Markdown, ending with its data block.
 export const renderReport = ({
-  week, since, until, runs, partial = null, pullRequests, pullRequestCi, functional, functionalRun, testJobs, previous,
-  serverUrl, repository, dependencies = [], biopythonHead = { result: '' }
+  week, since, until, runs, partial = null, unreadableJobLists = [], pullRequests, pullRequestCi, functional,
+  functionalRun, testJobs, previous, serverUrl, repository, dependencies = [], biopythonHead = { result: '' }
 }) => {
   const data = {
     week,
@@ -526,6 +526,9 @@ export const renderReport = ({
     `Window: ${since.toISOString().slice(0, 16)}Z to ${until.toISOString().slice(0, 16)}Z.`
       + ` What to do with a flagged report: docs/internal/SELECTIVE_CI.md, "Weekly CI inventory".`,
     ...(partial ? ['', `**Partial report**: ${partial}`] : []),
+    ...(unreadableJobLists.length ? ['', `**Job lists not read**: GitHub gave no job list after three tries for ${
+      unreadableJobLists.map(({ id, reason }) => `[${id}](${serverUrl}/${repository}/actions/runs/${id}) (${reason})`)
+        .join(', ')}; these runs count by run duration.`] : []),
     '',
     functional.refresh
       ? `**Refresh the functional shard measurements**: ${reasons.join('; ')}.`
@@ -836,24 +839,43 @@ const jobListRank = (/** @type {WorkflowRun} */ run) => {
   return run.event === 'pull_request' && run.conclusion === 'cancelled' ? 0 : 1;
 };
 
+/**
+ * A run whose job list GitHub did not give after every try.
+ * @typedef {object} UnreadableJobList
+ * @property {number} id The run.
+ * @property {string} reason What the last try got, such as `HTTP 502`.
+ */
+
 // Job lists of every attempt of `Tests` and `Gallery publication` runs in that order,
-// while the request budget lasts.
+// while the request budget lasts. A job list that still fails with a server error or a
+// cut body after its tries is left out, so that run counts by its run duration, and
+// `unreadable` names it: on 2026-11-16 GitHub answered HTTP 502 to every read of one
+// run's job list, and that one run failed the whole report.
 export const listJobs = async (client, runs) => {
   const jobsByRun = new Map();
+  /** @type {UnreadableJobList[]} */
+  const unreadable = [];
   const ordered = runs.filter((run) => JOB_LIST_WORKFLOWS.has(run.path))
     .sort((a, b) => jobListRank(a) - jobListRank(b));
+  const read = (run) => client.pages(`/actions/runs/${run.id}/jobs?filter=all`, 'jobs').catch((error) => {
+    if (!error.transient) throw error;
+    unreadable.push({ id: run.id, reason: error.status ? `HTTP ${error.status}` : 'a body cut short' });
+    return null;
+  });
   for (let start = 0; start < ordered.length && client.remaining() > RATE_RESERVE; start += PARALLEL_REQUESTS) {
     const batch = ordered.slice(start, start + PARALLEL_REQUESTS);
     let lists;
     try {
-      lists = await Promise.all(batch.map((run) => client.pages(`/actions/runs/${run.id}/jobs?filter=all`, 'jobs')));
+      lists = await Promise.all(batch.map(read));
     } catch (error) {
       if (!refused(error)) throw error;
       break;
     }
-    batch.forEach((run, index) => jobsByRun.set(run.id, lists[index]));
+    batch.forEach((run, index) => {
+      if (lists[index]) jobsByRun.set(run.id, lists[index]);
+    });
   }
-  return jobsByRun;
+  return { jobsByRun, unreadable };
 };
 
 // The pull requests merged into dev, last merged first: every one merged since `since`,
@@ -968,7 +990,7 @@ const main = async (argv) => {
     && Date.parse(pull.merged_at) < until.getTime());
   const earlierRuns = await listEarlierRuns(client, windowPulls, since);
   const { runs, partial } = await listRuns(client, since, until);
-  const jobsByRun = await listJobs(client, runs);
+  const { jobsByRun, unreadable: unreadableJobLists } = await listJobs(client, runs);
   const summary = summarizeRuns({ runs, jobsByRun });
   const pullRequestCi = summarizePullRequestCi({ runs, earlierRuns, jobsByRun, pulls: windowPulls });
 
@@ -986,7 +1008,7 @@ const main = async (argv) => {
   );
 
   const markdown = renderReport({
-    week, since, until, runs: summary, partial, pullRequests, pullRequestCi, functional, functionalRun,
+    week, since, until, runs: summary, partial, unreadableJobLists, pullRequests, pullRequestCi, functional, functionalRun,
     testJobs: countWorkflowJobs(readFileSync(TESTS_WORKFLOW, 'utf8')),
     previous, serverUrl: process.env.GITHUB_SERVER_URL || 'https://github.com', repository,
     dependencies, biopythonHead: readBiopythonHead(process.env)

@@ -705,7 +705,10 @@ is partial. A filtered run listing returns at most 1,000 runs, so the tool
 reads the window a day at a time and a busier day in halves. Every read,
 the artifact downloads included, is tried up to three times when GitHub
 answers with a server error (HTTP 500 and up) or a body cut short; a write is
-never repeated.
+never repeated. A job list that still fails that way after the third try is
+left out: its run counts by its own duration, and the report names it under
+"Job lists not read" (on 2026-11-16 GitHub answered HTTP 502 to every read of
+one run's job list, which had failed the whole report).
 
 CI plans the shards from the recorded seconds per case and the current case
 counts, so new spec files and new cases never unbalance them. A report asks for

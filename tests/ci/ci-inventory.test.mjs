@@ -401,7 +401,7 @@ test('job lists stop while 500 requests of the shared hourly budget are left', a
   const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
   assert.equal(RATE_RESERVE, 500);
   // The first batch of 8 learns the budget; nothing after it is read.
-  const jobsByRun = await listJobs(client, Array.from({ length: 24 }, (_, index) => tests(index + 1, 'push', 'dev')));
+  const { jobsByRun } = await listJobs(client, Array.from({ length: 24 }, (_, index) => tests(index + 1, 'push', 'dev')));
   assert.equal(jobsByRun.size, 8);
   assert.equal(client.requests(), 8);
 });
@@ -414,9 +414,40 @@ test('job lists of cancelled pull request runs are read first, so a late one is 
   // Only the first batch of 8 is read. The cancelled pull request run is the last of 25.
   const early = Array.from({ length: 24 }, (_, index) => tests(index + 1, 'push', 'dev'));
   const late = { ...tests(99, 'pull_request', 'fix/q'), conclusion: 'cancelled' };
-  const jobsByRun = await listJobs(client, [...early, late]);
+  const { jobsByRun } = await listJobs(client, [...early, late]);
   assert.equal(jobsByRun.size, 8);
   assert.ok(jobsByRun.has(99));
+});
+
+test('a job list that fails with a server error on every try is left out and named, and the others are read', async (t) => {
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    // On 2026-11-16 GitHub answered 502 to every read of one run's `filter=all` job list.
+    return String(url).includes('/runs/2/jobs')
+      ? new Response('{"message":"Server Error"}', { status: 502, headers: { 'x-ratelimit-remaining': '900' } })
+      : new Response('{"jobs":[]}', { status: 200, headers: { 'x-ratelimit-remaining': '900' } });
+  });
+  const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
+  const { jobsByRun, unreadable } = await listJobs(client, [1, 2, 3].map((id) => tests(id, 'push', 'dev')));
+  assert.deepEqual([...jobsByRun.keys()].sort(), [1, 3]);
+  assert.deepEqual(unreadable, [{ id: 2, reason: 'HTTP 502' }]);
+  assert.equal(urls.filter((url) => url.includes('/runs/2/jobs')).length, 3);
+
+  const markdown = report({ unreadableJobLists: unreadable });
+  assert.match(markdown, /\*\*Job lists not read\*\*: GitHub gave no job list after three tries for \[2\]\(https:\/\/github\.com\/satoshikawato\/gbdraw\/actions\/runs\/2\) \(HTTP 502\); these runs count by run duration\./);
+  assert.doesNotMatch(report(), /Job lists not read/);
+});
+
+test('a refused job list still ends the job lists, and a client error still fails the report', async (t) => {
+  let status = 403;
+  t.mock.method(globalThis, 'fetch', async () => new Response('{}', { status, headers: { 'x-ratelimit-remaining': '900' } }));
+  const client = createClient({ token: 't', apiUrl: 'https://api.github.com', repository: 'o/r', retryWaitMs: 0 });
+  const refusedLists = await listJobs(client, [1, 2].map((id) => tests(id, 'push', 'dev')));
+  assert.equal(refusedLists.jobsByRun.size, 0);
+  assert.deepEqual(refusedLists.unreadable, []);
+  status = 401;
+  await assert.rejects(listJobs(client, [tests(1, 'push', 'dev')]), /401/);
 });
 
 test('an artifact download is tried again on a server error or a cut-off body', async (t) => {
