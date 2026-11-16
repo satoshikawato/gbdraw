@@ -172,7 +172,7 @@ in the same change.
 | The operations on the drawing list (New, New drawing with this style, Duplicate, Rename, Move, Delete; each one project step), the drawing bar, and the replacement of an input file that another drawing uses, for this drawing or for every drawing that uses it | `js/app/drawing-list.js` (`createDrawingList`, `createDrawingBar`, `createInputReplacement`); `js/app/input-replacement-ports.js` makes the ports (`applyInputReplacementToDrawings`, the scope question), which `js/app/app-setup.js` passes; the drawing store's list writers are `addDrawing`, `removeDrawing`, `moveDrawing`, and `renameDrawing` in `js/state.js`, and `app/drawing-list.js` is their only caller |
 | What a new drawing holds: New takes its mode's defaults (`withNewDrawingDefaults` in `js/services/reset.js`); Duplicate copies each slice through its capture and install (`duplicateDrawingState`); New drawing with this style installs the style's rows as Load installs a drawing's slice (`applyDrawingStyle`); a region drawing is read as Load reads a stored drawing (`makeRegionDrawing`) | `js/services/config.js`, reached from `js/app/drawing-list.js` through the ports of `js/app/app-setup.js` |
 | Reset Settings: the dialog (Reset this drawing, Reset all drawings, Cancel) and its steps | `js/app/reset-settings.js` (`requestResetSettings`, `resetShownDrawing`, `resetSettings`); a drawing's reset is `resetSettings` in `js/services/reset.js`, which resets each slice through its own `reset`, and the one-per-Session values are `resetProject` there |
-| New drawing from a region: the dialog, its source records, and the request to Python | `js/app/region-drawing.js` (`createRegionDrawing`); the Worker operation `deriveRegionDrawing` runs `derive_web_region_drawing_json` in `gbdraw/web_support/region_drawing.py` over `derive_region_request` in `gbdraw/api/region_drawing.py`, the derivation behind the Python API's `derive_region_drawing`; the Web derives no region itself |
+| Copy to another drawing: the dialog (opened from the tab menu, a record's popup, the Region popup, and the records a Shift+drag selects), its source records, its choices, and the request to Python | `js/app/region-drawing.js` (`createRegionDrawing`; copy refusal wording in `js/app/region-drawing/copy-text.js`); the records a Shift+drag selects in `js/app/feature-selection.js` (`selectedRecords`, transient); the Worker operation `deriveRegionDrawing` runs `derive_web_region_drawing_json` in `gbdraw/web_support/region_drawing.py` over `derive_region_request` (new drawing) and `paste_region_request` (existing drawing) in `gbdraw/api/region_drawing.py`; the Web derives and pastes no region itself |
 | Sequence search (PD-OI-117): the panel's transient queries and settings, the search, the History step of the set it adds, and the panel's reset at a Session Load | `js/app/sequence-search.js` (`createSequenceSearch`); its helpers in `js/app/sequence-search/`: the queries (`queries.js`), the hit table and its chips (`hit-table.js`), the outline over the shown Result (`hit-outline.js`) |
 | What a search sends to Python and reads back: the typed Worker payloads and replies, the searched spans and subjects, the new set's id, the LOSAT job plan | `js/services/sequence-search.js`; Python builds the hit set (`gbdraw/web_support/sequence_search.py` over `gbdraw/annotations/search_hits.py`); a row binds a record of the shown Result through `resultRecordBindings` (`js/app/annotations/record-selector.js`), and the live draw of a search's set is the `diagramOptions.annotations.sets` projector of `js/services/session-request.js` |
 | The default hit colours and the gradient colours of a search | `js/utils/sequence-search-colors.generated.js`, written by `tools/generate_web_contracts.py` from `gbdraw/annotations/search_hits.py` |
@@ -1245,11 +1245,16 @@ version-by-version history.
   target per item.
 - Linear renders one ordered multi-record layout. Record groups and explicit
   comparison pairs affect topology and must survive session round trips.
-- A region drawing, made with + New drawing from a feature, a whole record, or coordinates,
-  draws the region of the same record of the same file in source coordinates, 1-based and
-  inclusive; regions of several records make one Linear drawing with one region per record.
-  A region that crosses the origin of a circular record is refused with the reason. The
-  source drawing does not change (PD-OI-090).
+- Copy to another drawing copies records or regions (a feature, a whole record, or coordinates)
+  of the shown drawing, drawn from the same record of the same file in source coordinates,
+  1-based and inclusive. Into a new drawing, whole records keep the source mode (several whole
+  Circular records make one Multi-Record Canvas) and a range makes a Linear drawing unless one
+  range of one record is drawn Circular; the copy keeps the source's settings and edits or
+  starts from the mode's defaults. Into an existing drawing it appends the records after that
+  drawing's records and leaves its settings, palette, color rules, label rules and tables
+  unchanged. A coordinate range across the origin of a circular record is drawn as one window;
+  a feature that crosses the origin is refused with the reason. The source drawing does not
+  change (PD-OI-090 〔作成〕(4), PD-OI-115).
 
 The preview and download layers consume render results; they must not infer a
 different grouping from the number of uploaded files.
