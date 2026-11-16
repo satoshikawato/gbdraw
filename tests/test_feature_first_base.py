@@ -365,3 +365,20 @@ def test_a_trans_spliced_join_on_a_circular_record_leaves_the_origin_to_other_fe
     request = CircularDiagramRequest(records=(_ends_record("circular", trans_spliced=True),), options=options)
     svg = plan_request(request).build().tostring()
     assert len({round(min(math.hypot(x, y) for x, y in _points(d)), 1) for d in _block_paths(svg)}) == 1
+
+
+def _part_order(svg: str) -> list[str]:
+    """The feature parts (``block`` or ``connector``) of the drawing, in document order."""
+    return re.findall(r'data-gbdraw-feature-part="(block|connector)"', svg)
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize("display_start", [None, 4001])
+def test_a_feature_draws_its_connector_lines_under_its_blocks(tmp_path: Path, mode: str, display_start: int | None) -> None:
+    # join(101..200,301..400,501..600): the lines end on the blocks' edges; each block's outline must cover their caps.
+    location = SimpleLocation(100, 200, 1) + SimpleLocation(300, 400, 1) + SimpleLocation(500, 600, 1)
+    records = read_genbank(_record_file(tmp_path, location))
+    draw = draw_linear if mode == "linear" else draw_circular
+    displays = None if display_start is None else [RecordDisplayOptions(start_coordinate=display_start)]
+    order = _part_order(draw(records, record_displays=displays).to_svg())
+    assert order == ["connector", "connector", "block", "block", "block"]

@@ -130,7 +130,8 @@ def test_non_origin_spanning_multipart_keeps_line_segment() -> None:
 
     paths = _make_generator(total_length=1000).generate_circular_gene_path(feature)
 
-    assert [path[0] for path in paths] == ["block", "line", "block"]
+    # Lines come first so that the blocks are drawn over their ends.
+    assert [path[0] for path in paths] == ["line", "block", "block"]
 
 
 def _make_intron_path(strand: str, coord_start: int, coord_end: int, total_length: int = 1000) -> str:
@@ -629,8 +630,8 @@ def test_multipart_narrow_arrow_uses_shaft_width_before_terminal_head() -> None:
 
     paths = generator.generate_circular_gene_path(feature)
 
-    assert [path[0] for path in paths] == ["block", "line", "block"]
-    first_block_radii = [_radius(point) for point in _path_command_endpoints(paths[0][1])]
+    assert [path[0] for path in paths] == ["line", "block", "block"]
+    first_block_radii = [_radius(point) for point in _path_command_endpoints(paths[1][1])]
     terminal_radii = [_radius(point) for point in _path_command_endpoints(paths[2][1])]
     assert max(first_block_radii) - min(first_block_radii) == pytest.approx(10.0, abs=2 * PATH_ROUNDING)
     assert max(terminal_radii) - min(terminal_radii) == pytest.approx(20.0, abs=2 * PATH_ROUNDING)

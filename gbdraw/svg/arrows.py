@@ -3,10 +3,12 @@
 
 import math
 import re
-from typing import Literal, NamedTuple
+from collections.abc import Callable, Iterable
+from typing import Literal, NamedTuple, TypeVar
 
 
 ArrowHeadLengthRatio = Literal["auto"] | float
+_Part = TypeVar("_Part")
 
 
 def set_arrow_shoulder(feat_strand: str, arrow_end: float, cds_arrow_length: float) -> float:
@@ -224,6 +226,14 @@ def linear_block_outline(
     )
 
 
+def in_drawing_order(parts: Iterable[_Part], kind: Callable[[_Part], str]) -> list[_Part]:
+    """A feature's parts in the order both modes draw them: its connector lines first, then its blocks, each in
+    their own order. A line ends on a block's edge, so the block's outline is drawn over the line's cap."""
+
+    listed = list(parts)
+    return [part for part in listed if kind(part) == "line"] + [part for part in listed if kind(part) != "line"]
+
+
 __all__ = [
     "ArrowHeadLengthRatio",
     "LinearBlockGlyph",
@@ -236,6 +246,7 @@ __all__ = [
     "circular_head_length_px_to_bp",
     "get_arrow_strand_positions",
     "has_arrow_shaft",
+    "in_drawing_order",
     "is_legacy_arrow_short",
     "linear_block_glyph",
     "linear_block_outline",

@@ -18,6 +18,7 @@ from .arrows import (
     block_path_with_open_caps,
     cap_arrow_head_length,
     has_arrow_shaft,
+    in_drawing_order,
     is_legacy_arrow_short,
     linear_block_glyph,
     set_arrow_shoulder,
@@ -227,10 +228,10 @@ def generate_circular_narrow_arrow_shaft_path_with_radii(
 
 
 def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -> list[tuple[CircularCoordDict, bool]]:
-    """The parts a Circular feature is drawn with, each with its ``is_last``: the record's display fragments when
-    it is projected; one block across the origin for a two-block feature that wraps it, so it is drawn without a
-    split; else its location parts. The feature path and the leader anchor (``circular_feature_edge_radii_at``)
-    read these same parts."""
+    """The parts a Circular feature is drawn with, each with its ``is_last``, in drawing order
+    (``in_drawing_order``: lines under blocks): the record's display fragments when it is projected; one block
+    across the origin for a two-block feature that wraps it, so it is drawn without a split; else its location
+    parts. The feature path and the leader anchor (``circular_feature_edge_radii_at``) read these same parts."""
     if feature_object.display_parts is None:
         merged = _merged_origin_spanning_block(feature_object, total_length)
         if merged is not None:
@@ -248,7 +249,7 @@ def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -
             "open_end": coord.open_end,
         }
         parts.append((coord_dict, bool(coord.is_last)))
-    return parts
+    return in_drawing_order(parts, lambda part: str(part[0]["coord_type"]))
 
 
 def _merged_origin_spanning_block(
