@@ -24,6 +24,7 @@ from gbdraw.session_contract import (
     CanonicalRequestJson,
     GbdrawSession51,
     SessionContainerResource,
+    SessionProjectWebFiles,
     SessionResult,
     keys_of,
 )
@@ -1005,6 +1006,17 @@ def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
         raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
 
 
+def _resource_original_names(fields: Mapping[str, Any]) -> Mapping[str, object]:
+    """``webFiles.resourceOriginalNames`` of a Session or of a drawing's view (``SessionProjectWebFiles``): the file
+    the user chose for each resource, by resource ID; empty when the Session stores none."""
+
+    web_files = fields.get("webFiles")
+    if not isinstance(web_files, Mapping):
+        return {}
+    names = cast(SessionProjectWebFiles, web_files).get("resourceOriginalNames")
+    return names if isinstance(names, Mapping) else {}
+
+
 def _with_stored_file_names(
     result: RequestRenderResult | CircularBatchRenderResult,
     drawing: SessionDrawingParts,
@@ -1021,12 +1033,10 @@ def _with_stored_file_names(
     from gbdraw.api.input_summary import source_names_by_file, with_source_names
     from gbdraw.api.request_render import CircularBatchRenderResult
 
-    web_files = drawing.artifacts.fields.get("webFiles")
-    stored = web_files.get("resourceOriginalNames") if isinstance(web_files, Mapping) else None
     names = source_names_by_file(
         {
             resource_id: name
-            for resource_id, name in (stored.items() if isinstance(stored, Mapping) else ())
+            for resource_id, name in _resource_original_names(drawing.artifacts.fields).items()
             if resource_id in resource_paths and isinstance(name, str) and name
         },
         resource_paths,
@@ -1505,16 +1515,15 @@ def _drop_unreferenced_resources(
 def _keep_resources(data: dict[str, Any], kept: set[str]) -> None:
     """Keep only the resources ``kept`` names in ``data``, and their original names."""
 
-    web_files = data.get("webFiles")
     data["resources"] = {
         resource_id: descriptor
         for resource_id, descriptor in data["resources"].items()
         if resource_id in kept
     }
-    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, Mapping) else None
-    if isinstance(web_files, Mapping) and isinstance(original_names, Mapping):
+    original_names = _resource_original_names(data)
+    if original_names:
         data["webFiles"] = {
-            **web_files,
+            **data["webFiles"],
             "resourceOriginalNames": {
                 resource_id: name
                 for resource_id, name in original_names.items()

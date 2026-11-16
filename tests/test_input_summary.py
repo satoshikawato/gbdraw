@@ -503,9 +503,10 @@ def _record_names(texts: list[str]) -> list[str]:
 
 def test_a_web_saved_record_is_named_by_its_file_by_the_cli_replay_and_the_web(tmp_path: Path) -> None:
     """OV-3591: a Web Save names each record resource "<id>-<file>" and stores the file the user chose in
-    ``webFiles.resourceOriginalNames``. After a Load the page stages each record under that file name (its
-    Session resource view's name), and the CLI replay reads the same stored name: both name the record by the
-    user's file, as its fresh render did."""
+    ``webFiles.resourceOriginalNames``. The CLI replay names each record by that stored name, as its fresh render
+    did. The Web half supplies the manifest names itself (the stored names, as the page sends them after a Load), so
+    it checks only that the Worker names records by the manifest; the page side, which takes the manifest name
+    from the Session resource view, is pinned by tests/web/diagram-resource-staging.test.mjs (OV-3591 case)."""
 
     request = _blast_request(tmp_path / "build", [("hits.tsv", _ROWS)])
     document = _embedded(build_session_document(request))
