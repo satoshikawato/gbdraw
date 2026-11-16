@@ -43,8 +43,8 @@ from gbdraw.labels.circular import (
     circular_label_fits,
     todays_label_placement,
 )
-from gbdraw.labels.circular_capacity import LabelArc
-from gbdraw.labels.circular_packer import PackerLook, SideRules, pack_side
+from gbdraw.labels.circular_capacity import PACKABLE_RATIO, LabelArc, circular_label_capacity, sides_packable
+from gbdraw.labels.circular_packer import PACKER_LOOKS, PackerLook, SideRules, pack_side
 from gbdraw.labels.circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels, too_close_on_one_line
 from gbdraw.labels.circular_leaders import leader_crossing_count, leader_polyline
 from gbdraw.labels.circular_types import CircularLabel
@@ -189,7 +189,9 @@ def _clockwise(label: CircularLabel) -> float:
 @pytest.mark.circular
 @pytest.mark.parametrize("name", PACKINGS)
 def test_a_packed_side_keeps_genome_order_and_its_boxes_apart(name: str) -> None:
-    """Cyclic genome order kept; no overlap by the fit check (its box margins are the 0.1 px row and 1 px side gaps)."""
+    """Cyclic genome order kept; no overlap by the fit check (with its own box margins, ``LABEL_FIT_*_MARGIN_PX``).
+
+    The gaps the packer keeps are tested below: a row gap between rows and ``LINE_GAP_EM`` on one text line."""
 
     labels, total_length, _arc, _spacing = _packer_fixture(name)
     before = copy.deepcopy(labels)
@@ -314,6 +316,33 @@ def test_the_packers_point_on_the_ellipse_is_the_placements_and_the_packer_inver
         x, y = point(packer_module._item(label, arc, rules).target)
         feature_x, feature_y = float(label["feature_middle_x"]), float(label["feature_middle_y"])
         assert x * feature_y - y * feature_x == pytest.approx(0.0, abs=1e-6) and x * feature_x + y * feature_y > 0
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("name", PACKINGS)
+def test_a_side_over_the_packable_ratio_has_no_packing(name: str) -> None:
+    """``PACKABLE_RATIO`` is a lower bound: on the fixture's ellipse shrunk until its labels need just over the room,
+    no look packs, so skipping the packer there (``sides_packable``) loses no placement."""
+
+    labels, total_length, arc, spacing = _packer_fixture(name)
+    font_size = float(labels[0]["font_size"])
+
+    def shrunk(scale: float) -> tuple[LabelArc, float]:
+        smaller = LabelArc(arc.x_radius * scale, arc.y_radius * scale, arc.center_x)
+        (capacity,) = circular_label_capacity(
+            labels, (), outer_arc=smaller, inner_arc=smaller, outer_offsets=(1.0, 1.0), font_size=font_size
+        )
+        assert sides_packable([capacity]) == (capacity.record.ratio <= PACKABLE_RATIO)
+        return smaller, capacity.record.ratio
+
+    low, high = 0.3, 1.0  # the ratio falls as the ellipse grows
+    for _ in range(30):
+        middle = 0.5 * (low + high)
+        low, high = (middle, high) if shrunk(middle)[1] > PACKABLE_RATIO else (low, middle)
+    smaller, ratio = shrunk(low)
+    assert PACKABLE_RATIO < ratio < PACKABLE_RATIO + 1e-3
+    rules = _outer_rules(total_length, spacing)
+    assert [pack_side(labels, smaller, look, rules) for look in PACKER_LOOKS] == [None, None]
 
 
 def test_the_packer_is_deterministic() -> None:
@@ -572,7 +601,8 @@ def test_the_repair_takes_the_callers_defect_count() -> None:
 def test_the_web_render_draws_p1_at_13pt_packed_without_a_fit_report(
     tmp_path: Path, looks: list[tuple[PackerLook, bool]]
 ) -> None:
-    """Generate in the Web runs the same placement: P1 13 pt (one crossing today) is drawn with no label fit report."""
+    """Generate in the Web runs the same placement: P1 13 pt (one crossing today) is drawn with no label fit report, and
+    its SVG is the CLI's for the same settings."""
 
     record = SeqIO.read(str(TEST_INPUTS / "NC_005856.1.gb"), "genbank")
     overrides: dict[str, object] = {
@@ -603,3 +633,5 @@ def test_the_web_render_draws_p1_at_13pt_packed_without_a_fit_report(
         )
     assert response["results"] and not response["metadata"].get("labelFitReports")
     assert looks == [("half", False), ("pole", True)]
+    cli = _draw(tmp_path / "cli", ["--gbk", str(TEST_INPUTS / "NC_005856.1.gb"), *DENSE[:5], "--label_font_size", "13"])
+    assert (tmp_path / "out" / "p1.svg").read_bytes() == cli.read_bytes()
