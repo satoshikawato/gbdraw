@@ -660,6 +660,8 @@ for (const entry of importCases) {
       assert.match(notice, /not saved in Sessions or TSV re-export/);
     } else assert.equal(parsed.notice, null);
     assert.ok(!JSON.stringify(parsed).includes('PRIVATE-CELL'));
+    // The notice is a wording, which JSON drops: its words never repeat an ignored cell either.
+    assert.ok(!notice.includes('PRIVATE-CELL'));
     const encoded = encodeAnnotationTable(parsed.sets);
     for (const name of entry.ignored) assert.ok(!encoded.split('\n')[0].split('\t').includes(name));
   });
