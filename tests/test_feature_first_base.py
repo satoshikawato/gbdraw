@@ -71,6 +71,16 @@ def _points(d: str) -> list[tuple[float, float]]:
     return points
 
 
+def _in_one_lane(svg: str) -> bool:
+    """Every block's inner edge lies on one circle.
+
+    Path coordinates are rounded to 0.001 px, so a radius read back from them differs by a few thousandths;
+    rounding radii to 0.1 px would split one circle in two when it lies on a 0.05 px boundary.
+    """
+    inner = [min(math.hypot(x, y) for x, y in _points(d)) for d in _block_paths(svg)]
+    return max(inner) - min(inner) < 0.01
+
+
 def _linear_extent_bp(d: str, px_per_bp: float) -> tuple[float, float]:
     xs = [x for x, _ in _points(d)]
     return round(min(xs) / px_per_bp, 2), round(max(xs) / px_per_bp, 2)
@@ -325,8 +335,7 @@ def test_a_join_listed_low_to_high_on_the_minus_strand_does_not_cross_the_origin
     if start is not None:
         record = RecordInput(record.source, display=RecordDisplayOptions(start_coordinate=start))
     svg = plan_request(CircularDiagramRequest(records=(record,), options=options)).build().tostring()
-    # One lane: every block's inner edge lies on one circle.
-    assert len({round(min(math.hypot(x, y) for x, y in _points(d)), 1) for d in _block_paths(svg)}) == 1
+    assert _in_one_lane(svg)
     # The connector lines span the three gaps, 400 of 3,000 bp (48 degrees), and none runs round the ring.
     sweep = sum(abs(s) for d in _block_paths(svg, "connector") for s in _arc_sweeps(d))
     assert sweep == pytest.approx(48.0, abs=0.5)
@@ -364,7 +373,7 @@ def test_a_trans_spliced_join_on_a_circular_record_leaves_the_origin_to_other_fe
     options = CircularDiagramOptions(config=apply_config_overrides(None, {"canvas.resolve_overlaps": True}))
     request = CircularDiagramRequest(records=(_ends_record("circular", trans_spliced=True),), options=options)
     svg = plan_request(request).build().tostring()
-    assert len({round(min(math.hypot(x, y) for x, y in _points(d)), 1) for d in _block_paths(svg)}) == 1
+    assert _in_one_lane(svg)
 
 
 def _part_order(svg: str) -> list[str]:
