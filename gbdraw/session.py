@@ -1006,7 +1006,7 @@ def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
         raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
 
 
-def _resource_original_names(fields: Mapping[str, Any]) -> Mapping[str, object]:
+def _resource_original_names(fields: Mapping[str, object]) -> Mapping[str, object]:
     """``webFiles.resourceOriginalNames`` of a Session or of a drawing's view (``SessionProjectWebFiles``): the file
     the user chose for each resource, by resource ID; empty when the Session stores none."""
 
