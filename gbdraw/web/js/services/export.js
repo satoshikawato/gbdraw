@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Wording } from '../utils/i18n.js' */
 import { t } from '../utils/i18n.js';
 import { setDpiInPng } from '../utils/png.js';
 import {
@@ -146,7 +147,7 @@ const requireExportWithinLimit = async (checkExportLimit, request) => {
 /**
  * What a finished export reports: the file name, and one warning per font the
  * file does not carry as chosen (shown in the export notice).
- * @typedef {{ filename: string, fontWarnings: string[] }} ExportOutcome
+ * @typedef {{ filename: string, fontWarnings: Wording[] }} ExportOutcome
  */
 
 /** @type {FontEmbedding} */
@@ -189,9 +190,9 @@ const svgFontPort = ({ embedFonts, embedInSvg }) => (embedInSvg && embedFonts ? 
 
 /**
  * @param {readonly string[]} families
- * @returns {string[]}
+ * @returns {Wording[]}
  */
-const refusedFontWarnings = (families) => families.map((family) => (
+const refusedFontWarnings = (families) => families.map((family) => () => (
   t('Font {family} is not embedded: its license (OS/2 fsType) does not allow embedding. The SVG shows it only where {family} is installed.', { family })
 ));
 

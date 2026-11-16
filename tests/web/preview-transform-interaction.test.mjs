@@ -421,7 +421,32 @@ const visualBox = () => {
 };
 const fakeSvg = { getBoundingClientRect: visualBox };
 let probes = 0;
+// OV-3588: the control over the canvas edge (the Editor toggle) beside the canvas in its workspace,
+// measured through a copy of it placed beside it.
+/** @type {{ left: number, top: number, width: number, height: number } | null} */
+let edgeControl = null;
+const controlCopies = [];
+const control = {
+  style: { transition: 'transform 0.3s' },
+  cloneNode: (deep) => {
+    const copy = {
+      deep, placed: false, style: {},
+      getBoundingClientRect: () => {
+        assert.equal(copy.placed, true, 'the copy is measured in place');
+        return { ...edgeControl, right: edgeControl.left + edgeControl.width, bottom: edgeControl.top + edgeControl.height };
+      },
+      remove: () => { copy.placed = false; }
+    };
+    controlCopies.push(copy);
+    return copy;
+  },
+  after: (copy) => { copy.placed = true; }
+};
+const workspace = {
+  querySelector: (selector) => (selector === ':scope > [data-preview-edge-control]' ? control : null)
+};
 Object.assign(wrapper, { querySelector: (selector) => (selector === 'svg' ? fakeSvg : null), getBoundingClientRect: visualBox });
+Object.defineProperty(canvas, 'parentElement', { get: () => (edgeControl ? workspace : null), configurable: true });
 Object.assign(canvas, {
   clientLeft: 0, clientTop: 0, clientWidth: 896, clientHeight: 386,
   getBoundingClientRect: () => ({ left: 100, top: 50, width: 896, height: 386 }),
@@ -473,6 +498,31 @@ editorReserve = 0;
 Object.assign(layout, { width: 50, height: 40 });
 panZoom.fitPreviewToViewport();
 expectFitted(5);
+// A 40x40 control in the middle of the right edge, from x 956. The fitted 50x40 diagram (250x200 px,
+// centred at x 548) stays clear of it and keeps its Fit.
+edgeControl = { left: 956, top: 223, width: 40, height: 40 };
+panZoom.fitPreviewToViewport();
+expectFitted(5);
+// A wide diagram fitted to the whole frame, 0.88 of 997 px, would end at x 987 over the control: it is
+// fitted to the 856 px left of the control instead, (856 - 16) / 997 = 0.8425, with the same margins.
+Object.assign(layout, { width: 997, height: 300 });
+panZoom.fitPreviewToViewport();
+assert.equal(uiState.zoom.value, 0.84);
+const besideControl = visualBox();
+assert.equal(Math.abs((besideControl.left - 100) - (956 - besideControl.right)) < 1e-9, true);
+assert.equal(besideControl.left - 100 >= 8, true);
+assert.equal(Math.abs((besideControl.top - 50) - (436 - besideControl.bottom)) < 1e-9, true);
+// Only the copies were measured, each one removed, and the control keeps its transition.
+assert.equal(JSON.stringify(controlCopies.map(({ deep, placed }) => ({ deep, placed }))),
+  JSON.stringify([{ deep: true, placed: false }, { deep: true, placed: false }]));
+assert.equal(control.style.transition, 'transform 0.3s');
+edgeControl = { left: 0, top: 0, width: 0, height: 0 };
+panZoom.fitPreviewToViewport();
+expectFitted(0.88);
+edgeControl = null;
+Object.assign(layout, { width: 50, height: 40 });
+panZoom.fitPreviewToViewport();
+expectFitted(5);
 // The Fit measures the current transform with the transition held off, and the Fit shown at
 // once reads its fitted view with no transition before the transition comes back.
 const transitionsSeen = [];
@@ -501,7 +551,7 @@ wrapper.querySelector = () => null;
 panZoom.fitPreviewToViewport();
 assert.equal(uiState.zoom.value, 0.45);
 for (const key of ['querySelector', 'getBoundingClientRect']) delete wrapper[key];
-for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'ownerDocument']) delete canvas[key];
+for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'parentElement', 'ownerDocument']) delete canvas[key];
 completeCase('fit centres the whole diagram left of the Editor reserve at the largest whole percent and cancels the interaction');
 
 panZoom.handleWheel(wheelEvent);

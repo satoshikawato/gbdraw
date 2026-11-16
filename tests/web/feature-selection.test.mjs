@@ -240,4 +240,40 @@ assert.equal(interactivePairwise.getAttribute('role'), 'button');
     'Shift+Cmd adds the range from the anchor');
 }
 
+// OV-3677: the status of a Shift+click into another record is UI text, shown in the UI language.
+{
+  const { SOURCE_LOCALE, setUiLocale } = await import(pathToFileURL(join(tempDir, 'utils', 'i18n.js')));
+  Object.assign(globalThis.window, { setTimeout: () => 1, clearTimeout: () => {} });
+  const ref = (value) => ({ value });
+  const features = [
+    { svg_id: 'a1', fileIdx: 0, record_idx: 0, record_id: 'A' }, { svg_id: 'b1', fileIdx: 0, record_idx: 1, record_id: 'B' }
+  ];
+  const elements = features.map(({ svg_id }) => Object.assign(new FakeElement(), {
+    getBoundingClientRect: () => ({ left: 0, right: 10, top: 0, bottom: 10 })
+  }));
+  elements.forEach((element, index) => element.setAttribute('data-gbdraw-feature-id', features[index].svg_id));
+  const svg = {
+    querySelectorAll: (selector) => (selector.startsWith('.')
+      ? elements.filter((element) => element.classTokens().includes(selector.slice(1)))
+      : elements)
+  };
+  const state = {
+    selectedFeatureIds: ref(new Set()), selectedFeatureAnchorId: ref(''), featureSelectionStatus: ref(''),
+    featureSelectionSuppressNextClick: ref(false), featureSelectionDrag: { active: false, committed: false },
+    extractedFeatures: ref(features), featuresBySvgId: ref(new Map(features.map((feature) => [feature.svg_id, feature]))),
+    svgContainer: ref({ querySelector: () => svg }), clickedFeature: ref(null),
+    clickedPairwiseMatch: ref(null), mode: ref('linear')
+  };
+  const selection = createFeatureSelection({ state });
+  const modifiers = { ctrlKey: false, metaKey: false, shiftKey: false };
+  selection.selectFeatureByClick('a1', { ...modifiers, ctrlKey: true });
+  await setUiLocale('ja', async () => ({ default: { 'Range selection is limited to one record.': '範囲選択は1つのレコードの中だけです。' } }));
+  try {
+    assert.equal(selection.selectFeatureByClick('b1', { ...modifiers, shiftKey: true }), false);
+    assert.equal(state.featureSelectionStatus.value, '範囲選択は1つのレコードの中だけです。');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+}
+
 console.log('feature selection tests passed');

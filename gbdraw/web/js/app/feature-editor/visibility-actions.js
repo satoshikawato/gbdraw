@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { ShowNotice } from '../app-messages.js' */
+/** @import { NoticeRequest, ShowNotice } from '../app-messages.js' */
 import { visibilityTableError } from '../rule-matching.js';
 import {
   applyFeatureVisibilityOverrideChanges,
@@ -61,6 +61,9 @@ import { msg, t } from '../../utils/i18n.js';
 
 // The paint domain this owner shows through the port.
 const VISIBILITY_DOMAINS = Object.freeze(['featureVisibility']);
+
+/** @type {NoticeRequest} */
+const NO_VISIBILITY_RULES_NOTICE = Object.freeze({ text: () => t('There are no complete Feature visibility rules to export.') });
 
 /** @param {FeatureVisibilityActionsOptions} options */
 export const createFeatureVisibilityActions = ({
@@ -726,7 +729,7 @@ export const createFeatureVisibilityActions = ({
     const drawing = state.activeDrawing();
     const text = serializeFeatureVisibilityRules(visibilityRuleRows(drawing));
     if (!text.trim()) {
-      showNotice({ text: t('There are no complete Feature visibility rules to export.') });
+      showNotice(NO_VISIBILITY_RULES_NOTICE);
       return;
     }
     downloadTextFile('gbdraw_feature_visibility_table.tsv', text);

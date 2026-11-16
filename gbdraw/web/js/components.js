@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { InputFileRef } from './services/history-files.js' */
 /** @import { InputFileKind } from './services/drawing/inputs.js' */
+/** @import { Wording } from './utils/i18n.js' */
 import { state } from './state.js';
 import {
   colorSwatchView,
@@ -1199,10 +1200,12 @@ export const OperationError = {
       `${section.label}\n${section.text}`).join('\n\n'));
     const details = ref(null);
     const diagnosticText = ref(null);
-    const copyStatus = ref('');
+    // The Copy outcome stays shown while the UI language may change, so it is worded where it shows (OV-3676).
+    const copyOutcome = ref(/** @type {Wording | null} */ (null));
+    const copyStatus = computed(() => (copyOutcome.value ? copyOutcome.value() : ''));
     watch(() => props.error, () => {
       if (details.value) details.value.open = false;
-      copyStatus.value = '';
+      copyOutcome.value = null;
     }, { flush: 'sync' });
     const selectDiagnostics = () => {
       diagnosticText.value?.focus();
@@ -1215,10 +1218,10 @@ export const OperationError = {
       try {
         if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
         await navigator.clipboard.writeText(text);
-        if (props.error === displayed) copyStatus.value = t('Diagnostics copied.');
+        if (props.error === displayed) copyOutcome.value = () => t('Diagnostics copied.');
       } catch (_) {
         if (props.error !== displayed) return;
-        copyStatus.value = t('Clipboard unavailable. Select diagnostics and copy manually.');
+        copyOutcome.value = () => t('Clipboard unavailable. Select diagnostics and copy manually.');
       }
     };
     return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,

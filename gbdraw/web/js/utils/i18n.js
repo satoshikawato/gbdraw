@@ -9,7 +9,9 @@
 // `app.config.globalProperties` (app.js). A text kept until it is shown (a
 // table evaluated at import, a value in state, a value code compares) stays
 // English, marked with `msg('…')`, and is translated where it is shown with
-// `tm(value)`.
+// `tm(value)`. A text that stays shown while the UI language may change (a
+// notice) is kept as a `Wording`, a function that words it, and is worded
+// where it is shown.
 //
 // Never translated: the figure and every export, Session JSON, CLI / Source
 // recipe / Exact replay text, diagnostics text, console output, identifiers
@@ -67,6 +69,14 @@
  * A piece of a text shown with elements inside it (`I18nText` in
  * components.js): plain text, or the slot that a `{name}` placeholder names.
  * @typedef {{ text: string } | { slot: string }} TextPart
+ */
+/**
+ * How to word a text that stays shown while the UI language may change (a
+ * notice and its lines): a function that returns the shown text by calling
+ * `t`, `tn`, `tx`, `tm` or `joinSentences` with literal keys and the values
+ * it holds (file and font names, counts, Python's words). The place that shows
+ * the text calls it, so a UI language change rewords the shown text.
+ * @typedef {() => string} Wording
  */
 /**
  * Loads the catalog module of a locale.

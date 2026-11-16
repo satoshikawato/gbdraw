@@ -2,6 +2,7 @@
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 import { canonicalFeaturePlacements, featureIdentityKey } from './feature-placement.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+/** @import { Wording } from '../utils/i18n.js' */
 import { tn } from '../utils/i18n.js';
 
 // Session 44 and older kept per-feature edits in four maps keyed by rendered
@@ -36,8 +37,12 @@ export const RENDERED_ID_FEATURE_EDIT_FIELDS = Object.freeze([
  */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-/** @param {number} count */
-export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => tn(count,
+/**
+ * The Session Load notice line that names the hash= annotation targets Python moved.
+ * @param {number} count
+ * @returns {Wording}
+ */
+export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => () => tn(count,
   '{count} annotation from an older Session named a feature by hash=. It now names that feature by its source, so it stays on the feature when the crop or orientation changes.',
   '{count} annotations from an older Session named a feature by hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.');
 

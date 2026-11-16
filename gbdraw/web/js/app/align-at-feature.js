@@ -171,14 +171,14 @@ export const createFeatureAnchorAction = ({
   const preview = ref(null);
   /** @type {Ref<Record<string, unknown> | null>} */
   const error = ref(null);
-  /** @type {Ref<{ text: string, written: FeatureAnchorTranslation[], starts: readonly RecordPlacementStart[], session: number }>} */
-  const noticeState = ref({ text: '', written: [], starts: [], session: -1 });
+  /** @type {Ref<{ selector: string, written: FeatureAnchorTranslation[], starts: readonly RecordPlacementStart[], session: number }>} */
+  const noticeState = ref({ selector: '', written: [], starts: [], session: -1 });
   // Align at feature holds while the committed request draws the records where Apply put them, with the starts it
   // wrote, in the Session Apply wrote them to. Undo (also of an Apply that only rotated, whose positions may equal the
   // earlier ones), Reset record positions, a later placement, or a Session Load retires it; a drag with no plan
-  // edits the composition, not the translations, so it does not. Its notice shows while it holds. Wrap Rows does not
-  // read it: Align at feature counts there only through the records its Apply moved (PD-OI-113 scenario revisions
-  // 2 and 3).
+  // edits the composition, not the translations, so it does not. Its notice shows while it holds, worded where it
+  // shows, so a UI language change rewords it (OV-3676). Wrap Rows does not read it: Align at feature counts there only
+  // through the records its Apply moved (PD-OI-113 scenario revisions 2 and 3).
   const applied = computed(() => {
     const { written, starts, session } = noticeState.value;
     const request = committedRequest();
@@ -191,7 +191,7 @@ export const createFeatureAnchorAction = ({
       && starts.every(({ recordKey, startCoordinate }) => request.records.some((record) => record.recordKey === recordKey
         && record.display.startCoordinate === startCoordinate));
   });
-  const notice = computed(() => (applied.value ? noticeState.value.text : ''));
+  const notice = computed(() => (applied.value ? t('Records aligned at {selector}.', { selector: noticeState.value.selector }) : ''));
   let actionId = 0;
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const previewLines = computed(() => (preview.value ? preview.value.reply.records.map(previewLine) : []));
@@ -214,7 +214,7 @@ export const createFeatureAnchorAction = ({
     const expected = ++actionId;
     preview.value = null;
     error.value = null;
-    noticeState.value = { text: '', written: [], starts: [], session: -1 };
+    noticeState.value = { selector: '', written: [], starts: [], session: -1 };
     status.value = 'resolving';
     try {
       const canonical = requireRedrawable(materializedSession());
@@ -281,8 +281,8 @@ export const createFeatureAnchorAction = ({
     if (expected !== actionId) return { status: 'stale' };
     if (outcome?.status === 'ok') {
       if (clearsAlignment) notePlanReplaced(msg('records aligned at a feature.'));
-      noticeState.value = { text: t('Records aligned at {selector}.', { selector: current.reply.selector }),
-        written: current.reply.recordTranslations, starts, session: sessionReplacements() };
+      noticeState.value = { selector: current.reply.selector, written: current.reply.recordTranslations, starts,
+        session: sessionReplacements() };
       preview.value = null;
       status.value = 'idle';
       return { status: 'ok' };

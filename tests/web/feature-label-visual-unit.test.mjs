@@ -9,6 +9,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 import zhHans from '../../gbdraw/web/js/utils/i18n-catalogs/zh-Hans.js';
+import { wordedNotice } from './helpers/worded-notice.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -681,7 +682,7 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   const harness = buildHarness({
     svg: displayed,
     featureId: 'fa',
-    showNotice: (notice) => messages.push(notice),
+    showNotice: (notice) => messages.push(wordedNotice(notice)),
     snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
     async evaluateLabelRules({ features, rules }) {
       evaluated.push(features.map((feature) => feature.label));
@@ -742,7 +743,7 @@ test('a Label TSV load with a location row is declined for a label whose drawn v
   const harness = buildHarness({
     svg,
     featureId: 'fa',
-    showNotice: (notice) => messages.push(notice),
+    showNotice: (notice) => messages.push(wordedNotice(notice)),
     snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
     evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
   });
@@ -804,7 +805,7 @@ for (const [name, body, tsv, message] of [
     const harness = buildHarness({
       svg,
       featureId: 'fa',
-      showNotice: (notice) => messages.push(notice),
+      showNotice: (notice) => messages.push(wordedNotice(notice)),
       snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
       async evaluateLabelRules({ features, rules }) {
         return { winners: features.map((feature) => rules.findIndex((rule) => (
@@ -881,7 +882,7 @@ const heldLabelImport = ({ preparationFollowsRows = false } = {}) => {
   const harness = buildHarness({
     svg,
     featureId: 'fa',
-    showNotice: (notice) => messages.push(notice),
+    showNotice: (notice) => messages.push(wordedNotice(notice)),
     snapshotRuleInputs: snapshot, isRuleInputCurrent: (before) => before === snapshot(),
     evaluateLabelRules: ({ features }) => new Promise((resolve) => {
       evaluations.push(() => resolve({ winners: features.map(() => 0) }));

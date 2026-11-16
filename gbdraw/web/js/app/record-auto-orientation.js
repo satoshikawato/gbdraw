@@ -6,6 +6,7 @@
 // step. The next Generate draws it. The rule is not repeated here.
 /** @import { AutoOrientationHelperPayload, AutoOrientationReply, RecordOrientationDecision } from '../services/diagram-worker-protocol.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { Wording } from '../utils/i18n.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, t, tm } from '../utils/i18n.js';
 
@@ -91,7 +92,9 @@ export const createRecordAutoOrientation = ({
   errorMessage
 }) => {
   const pending = ref(false);
-  const status = ref('');
+  // The status line stays shown while the UI language may change, so it is worded where it shows (OV-3676).
+  const statusWording = ref(/** @type {Wording | null} */ (null));
+  const status = computed(() => (statusWording.value ? statusWording.value() : ''));
   const available = computed(() => {
     void readCommittedRevision();
     return hasNucleotideComparison(getCommittedSession());
@@ -102,10 +105,10 @@ export const createRecordAutoOrientation = ({
     const session = getCommittedSession();
     if (pending.value || !hasNucleotideComparison(session)) return;
     const blocked = busy();
-    if (blocked) { status.value = tm(blocked.reason); return; }
+    if (blocked) { statusWording.value = () => tm(blocked.reason); return; }
     const committed = /** @type {CommittedCanonicalSession} */ (session);
     pending.value = true;
-    status.value = t('Reading the comparisons of the last Generate...');
+    statusWording.value = () => t('Reading the comparisons of the last Generate...');
     try {
       const reply = readAutoOrientationReply(
         (await decideOrientation({
@@ -117,9 +120,9 @@ export const createRecordAutoOrientation = ({
       const written = getCommittedSession() === committed
         ? await writeDecidedOrientations(reply.records, msg('Orient records from comparisons'))
         : /** @type {RecordOrientationWrite} */ ({ status: 'stale' });
-      status.value = writeStatusText(written);
+      statusWording.value = () => writeStatusText(written);
     } catch (error) {
-      status.value = errorMessage(error);
+      statusWording.value = () => errorMessage(error);
     } finally {
       pending.value = false;
     }

@@ -256,7 +256,8 @@ dump.load = {
   error: errorSummary(loaded?.error),
   dialogs,
   repairs: Array.isArray(loaded?.repairs) ? loaded.repairs.map((repair) => canon(repair)) : null,
-  notices: canon(loaded?.notices ?? null),
+  // A notice is its English sentence: a Wording worded here, or, in a tree before OV-2796, the text Load worded.
+  notices: canon(loaded?.notices?.map((notice) => (typeof notice === 'function' ? notice() : notice)) ?? null),
   warnings: canon(loaded?.warnings ?? null),
   comparisonDisposition: loaded?.comparisonDisposition ?? null,
   validatorCalls

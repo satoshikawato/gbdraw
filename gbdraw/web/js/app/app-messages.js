@@ -1,10 +1,15 @@
 // @ts-check
-import { t } from '../utils/i18n.js';
+/** @import { Wording } from '../utils/i18n.js' */
+import { t, tm, tx } from '../utils/i18n.js';
 
-// The texts of a question and of a notice are shown as given: the caller words
-// them with `t` or `tn` where it asks (utils/i18n.js). The choice dialog is
-// modal, so the UI language cannot change while it shows; a notice keeps the
-// language it was shown in until it is replaced or dismissed.
+// The texts of a question are shown as given: the caller words them with `t`
+// or `tn` where it asks (utils/i18n.js); the choice dialog is modal, so the UI
+// language cannot change while it shows. A notice stays shown while the UI
+// language may change, so its caller gives how to word its text, its lines
+// and its link (`Wording`), and the banner words them where it shows them: a
+// language change rewords a shown notice. The status region speaks a notice
+// once, in the language it was shown in. The notices of Load Session and Save
+// Session, and the warnings kept as `msg` text, are worded here.
 
 /**
  * The style of a choice button: one primary choice, secondary choices, or a
@@ -55,16 +60,22 @@ import { t } from '../utils/i18n.js';
  * @typedef {'info' | 'warning'} NoticeTone
  *
  * @typedef {object} NoticeRequest
- * @property {string} text
- * @property {string[]} [items] Warnings listed under the text.
+ * @property {Wording} text
+ * @property {Wording[]} [items] Warnings listed under the text.
  * @property {NoticeTone} [tone]
  *
  * A line under the notice's text with a link that opens in a new tab: `text`
  * says what the link offers, `label` names it.
  * @typedef {object} NoticeLink
- * @property {string} text
- * @property {string} label
+ * @property {Wording} text
+ * @property {Wording} label
  * @property {string} href
+ *
+ * The wordings of the shown notice.
+ * @typedef {object} NoticeWordings
+ * @property {Wording} text
+ * @property {Wording[]} items
+ * @property {NoticeLink | null} link
  *
  * The notice one `ShowNotice` call showed: `dismiss` ends it while it still
  * shows, and leaves a later notice.
@@ -144,26 +155,36 @@ export const createChoicePrompt = ({ reactive }) => {
  * @param {{ reactive: <T extends object>(value: T) => T }} options Vue's `reactive`.
  */
 export const createNoticeBanner = ({ reactive }) => {
+  // `text`, `items` and `link` word the shown notice each time they are read,
+  // so the banner's render depends on the UI language.
   const notice = reactive({
-    text: '', items: /** @type {string[]} */ ([]), tone: /** @type {NoticeTone} */ ('info'), announcement: '',
-    link: /** @type {NoticeLink | null} */ (null)
+    wordings: /** @type {NoticeWordings | null} */ (null),
+    tone: /** @type {NoticeTone} */ ('info'),
+    announcement: '',
+    /** @returns {string} */
+    get text() { return this.wordings ? this.wordings.text() : ''; },
+    /** @returns {string[]} */
+    get items() { return this.wordings ? this.wordings.items.map((item) => item()) : []; },
+    /** @returns {{ text: string, label: string, href: string } | null} */
+    get link() {
+      const link = this.wordings ? this.wordings.link : null;
+      return link ? { text: link.text(), label: link.label(), href: link.href } : null;
+    }
   });
   let shownCount = 0;
-  const dismiss = () => { Object.assign(notice, { text: '', items: [], tone: 'info', announcement: '', link: null }); };
+  const dismiss = () => { Object.assign(notice, { wordings: null, tone: 'info', announcement: '' }); };
   /** @type {(request: NoticeRequest) => NoticeHandle} */
   const show = ({ text, items = [], tone }) => {
     shownCount += 1;
     const id = shownCount;
-    const shown = items.filter(Boolean);
-    const spoken = [text, ...shown].join(' ');
+    const shown = items.filter((item) => item() !== '');
+    const spoken = [text(), ...shown.map((item) => item())].join(' ');
     Object.assign(notice, {
-      text,
-      items: shown,
+      wordings: { text, items: shown, link: null },
       tone: tone || (shown.length ? 'warning' : 'info'),
       // The status region speaks a change of its text only: a notice that
       // repeats the shown one differs from it by a trailing no-break space.
-      announcement: notice.announcement === spoken ? `${spoken}\u00A0` : spoken,
-      link: null
+      announcement: notice.announcement === spoken ? `${spoken}\u00A0` : spoken
     });
     return { dismiss: () => { if (shownCount === id) dismiss(); } };
   };
@@ -171,8 +192,53 @@ export const createNoticeBanner = ({ reactive }) => {
   // tutorial. The link joins the notice that shows and goes with it.
   /** @param {NoticeLink} link */
   const addLink = (link) => {
-    if (!notice.text) return;
-    Object.assign(notice, { link, announcement: `${notice.announcement} ${link.text}` });
+    const wordings = notice.wordings;
+    if (!wordings) return;
+    Object.assign(notice, { wordings: { ...wordings, link }, announcement: `${notice.announcement} ${link.text()}` });
   };
   return { notice, show, dismiss, addLink };
 };
+
+/**
+ * The warning notice of a text kept until it is shown: English marked with
+ * `msg` (utils/i18n.js), worded with `tm` where the notice shows.
+ * @param {string} text
+ * @returns {NoticeRequest}
+ */
+export const keptTextWarning = (text) => ({ text: () => tm(text), tone: 'warning' });
+
+/**
+ * The notice of a loaded Session: what the load changed without a loss is
+ * listed under it.
+ * @param {string} file The loaded file's name; empty when the load had none.
+ * @param {Wording[]} items
+ * @returns {NoticeRequest}
+ */
+export const sessionLoadedNotice = (file, items) => ({
+  text: () => (file ? t('Session loaded: {file}.', { file }) : t('Session loaded.')), items
+});
+
+/** The notice of a loaded configuration file of an older gbdraw. @type {NoticeRequest} */
+export const LEGACY_CONFIGURATION_NOTICE = Object.freeze({
+  text: () => t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.')
+});
+
+/**
+ * The notice of a saved Session, with its warnings.
+ * @param {string} file The downloaded file's name.
+ * @param {Wording[]} items
+ * @returns {NoticeRequest}
+ */
+export const sessionSavedNotice = (file, items) => ({ text: () => t('Session saved: {file}.', { file }), items });
+
+/**
+ * #1383 (PD-OI-108): the line of a loaded Gallery example's notice that
+ * offers its tutorial.
+ * @param {string} href
+ * @returns {NoticeLink}
+ */
+export const galleryTutorialLink = (href) => ({
+  text: () => t('This diagram has a step-by-step tutorial.'),
+  label: () => tx('English-only Gallery tutorial', 'Open the tutorial'),
+  href
+});

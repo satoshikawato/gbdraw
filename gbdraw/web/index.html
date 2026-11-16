@@ -4312,7 +4312,7 @@
                             <button type="button" data-sequence-search-run class="btn btn-primary text-xs w-full" @click="sequenceSearch.search()" :disabled="Boolean(sequenceSearch.searchDisabledReason) || sequenceSearch.panel.running" :aria-describedby="sequenceSearch.searchDisabledReason ? 'sequence-search-reason' : null"><i class="ph ph-binoculars" aria-hidden="true"></i> {{ t('Search') }}</button>
                             <p v-if="sequenceSearch.searchDisabledReason" id="sequence-search-reason" class="ui-hint">{{ sequenceSearch.searchDisabledReason }}</p>
                             <p v-if="sequenceSearch.panel.searchError" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.searchError.summaryParts) }}</p>
-                            <p v-if="sequenceSearch.panel.busy" role="status" class="text-[10px] text-amber-700 break-words">{{ sequenceSearch.panel.busy }}</p>
+                            <p v-if="sequenceSearch.panel.busy" role="status" class="text-[10px] text-amber-700 break-words">{{ tm(sequenceSearch.panel.busy) }}</p>
                             <p v-if="sequenceSearch.noHitText" role="status" data-sequence-search-no-hits class="text-[10px] text-slate-700">{{ sequenceSearch.noHitText }}</p>
                             <div v-if="sequenceSearch.shownOutcome && sequenceSearch.shownOutcome.setId" data-sequence-search-hits class="space-y-1">
                                 <div class="flex flex-wrap gap-1" role="group" :aria-label="t('Show the hits of')">
@@ -8959,6 +8959,7 @@
                 <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="toggleRightDrawer"
                         data-history-ignore
+                        data-preview-edge-control
                         class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-40 transition-all"
                         :aria-expanded="showRightDrawer"
                         :disabled="Boolean(similarityAlignmentEditorDisabledReason)"
@@ -9252,7 +9253,7 @@
                                  role="alert"
                                  class="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
                                 <p class="font-semibold">{{ t('Saved alignment needs repair.') }}</p>
-                                <p class="mt-1">{{ similarityAlignmentRepair.reason }}</p>
+                                <p class="mt-1">{{ tm(similarityAlignmentRepair.reason) }}</p>
                                 <div v-if="similarityAlignmentRepair.kind === 'reference'" class="mt-2 flex gap-2">
                                     <button type="button"
                                             @click="reselectSimilarityAlignmentReference"
@@ -9509,7 +9510,7 @@
                             <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom in')"><i class="ph ph-plus" aria-hidden="true"></i></button>
                             <button @click="zoom = 1.0" data-zoom-reset class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" :aria-label="t('Reset zoom')"><preview-zoom-percent></preview-zoom-percent></button>
                             <button @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom out')"><i class="ph ph-minus" aria-hidden="true"></i></button>
-                            <button @click="fitPreviewToViewport" class="h-10 px-2 flex items-center justify-center gap-1 hover:bg-slate-100 text-slate-600 text-sm rounded" :aria-label="t('Fit to preview')" :title="t('Fit to preview')"><i class="ph ph-corners-in text-lg" aria-hidden="true"></i><span>{{ t('Fit') }}</span></button>
+                            <button @click="fitPreviewFromButton" class="h-10 px-2 flex items-center justify-center gap-1 hover:bg-slate-100 text-slate-600 text-sm rounded" :aria-label="t('Fit to preview')" :title="t('Fit to preview')"><i class="ph ph-corners-in text-lg" aria-hidden="true"></i><span>{{ t('Fit') }}</span></button>
                         </div>
                     </div>
 

@@ -6,6 +6,7 @@
  */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { Wording } from '../utils/i18n.js' */
 /** @import { DrawnFeatureIdsOf } from './legend-layout/composition-actions.js' */
 import { msg, numberText, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
@@ -1191,7 +1192,8 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
 
 /**
  * What the alignment owner says of a plan that needs repair (the drawer's note and the notice): its kind, the plan's
- * group, and why.
+ * group, and why (`reason`: an English sentence marked with `msg`, worded with `tm` where it shows, so a UI language
+ * change rewords it, OV-3676).
  * @typedef {{ kind: 'reference' | 'targets', groupId: string, reason: string }} AlignmentRepairNote
  */
 
@@ -1452,11 +1454,13 @@ export const createSimilarityAlignmentActions = ({
   const error = ref(null);
   const summary = ref(null);
   // A "cleared" notice holds only while no plan is active, so an Undo that
-  // restores the plan also retires it (OV-382).
-  const noticeState = ref({ text: '', whileNoPlan: false });
-  const notice = computed(() => (
-    noticeState.value.whileNoPlan && state.similarityAlignmentPlan.value ? '' : noticeState.value.text
-  ));
+  // restores the plan also retires it (OV-382). The notice is worded where it
+  // shows, so a UI language change rewords it (OV-3676).
+  const noticeState = ref({ text: /** @type {Wording | null} */ (null), whileNoPlan: false });
+  const notice = computed(() => {
+    const { text, whileNoPlan } = noticeState.value;
+    return !text || (whileNoPlan && state.similarityAlignmentPlan.value) ? '' : text();
+  });
   const repair = ref(/** @type {AlignmentRepairNote | null} */ (null));
   // The user's drawer reference pick and the committed plan it was made
   // against. A new plan (Apply, Session load, Undo) drops the pick (OV-381).
@@ -1589,16 +1593,16 @@ export const createSimilarityAlignmentActions = ({
   };
 
   /**
-   * @param {unknown} message
+   * @param {Wording | null} message None when null.
    * @param {boolean} [whileNoPlan]
    */
   const publishNotice = (message, whileNoPlan = false) => {
-    noticeState.value = { text: String(message || ''), whileNoPlan };
+    noticeState.value = { text: message, whileNoPlan };
   };
 
   /**
-   * The summary and the repair give way to `message` (none when empty).
-   * @param {string} message
+   * The summary and the repair give way to `message` (none when null).
+   * @param {Wording | null} message
    * @param {boolean} [whileNoPlan]
    */
   const replaceSummary = (message, whileNoPlan = false) => {
@@ -1607,7 +1611,7 @@ export const createSimilarityAlignmentActions = ({
     publishNotice(message, whileNoPlan);
   };
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
-  const announceClearedPlan = (reason) => replaceSummary(t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
+  const announceClearedPlan = (reason) => replaceSummary(() => t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
 
   // The drawing the alignment work belongs to: an open review's (or a starting one's) drawing, which it shows and
   // applies on only (D-38); without one, an operation in flight runs on the shown drawing.
@@ -1632,7 +1636,7 @@ export const createSimilarityAlignmentActions = ({
   /** @param {AlignmentRepairNote} note The shown drawing's plan needs repair: the drawer's note and the notice. */
   const showRepair = (note) => {
     repair.value = deepFreeze(note);
-    publishNotice(t('Alignment needs repair: {reason}', { reason: note.reason }));
+    publishNotice(() => t('Alignment needs repair: {reason}', { reason: tm(note.reason) }));
   };
 
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
@@ -1743,7 +1747,7 @@ export const createSimilarityAlignmentActions = ({
       // A resolved response always has its plan (`validateSimilarityAlignmentResolution`).
       summary.value = successfulSummary(/** @type {AlignmentPlan} */ (response.plan), projected.records.filter(record => (
         record.beforeReverseComplement !== record.afterReverseComplement)).length);
-      repair.value = null; publishNotice(''); activeBaseline = null;
+      repair.value = null; publishNotice(null); activeBaseline = null;
       clearDraft(); error.value = null; status.value = 'idle';
       return {status:'ok'};
     }
@@ -1936,7 +1940,7 @@ export const createSimilarityAlignmentActions = ({
   // A repair review's note is its drawing's: it shows again with that drawing, so a Cancel there leaves it, as without
   // a switch.
   const arriveAtDrawing = () => {
-    replaceSummary('');
+    replaceSummary(null);
     const reviewRepair = /** @type {ReviewDraft | null} */ (draft.value)?.repair;
     if (reviewRepair && workIsShown()) showRepair(reviewRepair);
     selectPlanGroup(state, getOrthogroupById, state.similarityAlignmentPlan.value);
@@ -2074,8 +2078,8 @@ export const createSimilarityAlignmentActions = ({
       if (outcome?.status === 'ok') {
         clearDraft(); resetDialogOpen.value = false;
         error.value = null;
-        replaceSummary(scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
-          : t('Alignment reset: record positions and directions restored to before the latest Align.'));
+        replaceSummary(() => (scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
+          : t('Alignment reset: record positions and directions restored to before the latest Align.')));
       } else if (!['busy', 'canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
       return outcome;
     } catch (cause) {
@@ -2107,7 +2111,7 @@ export const createSimilarityAlignmentActions = ({
       status.value = 'idle';
     }
     showRepair({ kind: 'reference', groupId: state.similarityAlignmentPlan.value?.groupId || '',
-      reason: String(reason || t('The exact reference is no longer available.')) });
+      reason: String(reason || msg('The exact reference is no longer available.')) });
     return { status: 'blocked', reason: 'stale-reference' };
   };
 
@@ -2130,12 +2134,12 @@ export const createSimilarityAlignmentActions = ({
   ) => {
     /** @type {AlignmentRepairNote} */
     const note = { kind: 'targets', groupId: plan.groupId,
-      reason: t('One or more saved target anchors are no longer usable. Select or Skip each target.') };
+      reason: msg('One or more saved target anchors are no longer usable. Select or Skip each target.') };
     if (!workIsShown()) {
       // The repair review opens after the open review ends: the notice says so, and names that review's drawing.
       repair.value = deepFreeze(note);
-      publishNotice(t('Finish or cancel the alignment review in {name}, then Generate this drawing again.',
-        { name: drawingNameOf(workDrawingId()) ?? '' }));
+      const name = drawingNameOf(workDrawingId()) ?? '';
+      publishNotice(() => t('Finish or cancel the alignment review in {name}, then Generate this drawing again.', { name }));
       return { status: 'blocked', reason: 'stale-target' };
     }
     setReviewNames(request, members, currentRequest());
@@ -2222,7 +2226,7 @@ export const createSimilarityAlignmentActions = ({
       if (alignedKeys.size > 0) {
         return prepareStaleTargetRepair(plan, request, members, alignedKeys, expectedActionId);
       }
-      return markStaleReference(t('The exact reference is no longer usable with current facts.'));
+      return markStaleReference(msg('The exact reference is no longer usable with current facts.'));
     }
     repair.value = null;
     return { status: 'ok' };

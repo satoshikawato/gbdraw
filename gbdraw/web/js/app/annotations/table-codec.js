@@ -2,6 +2,7 @@
 /**
  * @import { AnnotationHatch, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../../services/annotation-state.js'
  * @import { AnnotationSetRow } from '../../services/drawing/annotation-sets.js'
+ * @import { Wording } from '../../utils/i18n.js'
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from '../../services/annotation-state.js';
 import { validateAnnotationCoordinates } from './validation.js';
@@ -110,10 +111,15 @@ const styleFromRow = (row) => {
   return style;
 };
 
-/** @param {unknown} text */
+/**
+ * The sets of an annotation table, and the panel notice of the columns it ignored (null when none), worded where the
+ * panel shows it.
+ * @param {unknown} text
+ * @returns {{ sets: AnnotationSet[], notice: Wording | null }}
+ */
 export const parseAnnotationTableWithNotice = (text) => {
   const lines = String(text || '').split(/\r?\n/).filter((line) => line.trim() && !line.trimStart().startsWith('#'));
-  if (lines.length === 0) return { sets: [], notice: '' };
+  if (lines.length === 0) return { sets: [], notice: null };
   const header = splitTsv(lines[0]).map((name) => name.replace(/^\uFEFF/, '').trim());
   REQUIRED.forEach((name) => { if (!header.includes(name)) throw new Error(`Annotation table is missing required column: ${name}`); });
   if (new Set(header).size !== header.length) throw new Error('Annotation table has duplicate columns.');
@@ -177,7 +183,7 @@ export const parseAnnotationTableWithNotice = (text) => {
   });
   return {
     sets: normalizeAnnotationSets(Array.from(sets.values())),
-    notice: unknown.length ? t('Ignored annotation table columns: {columns}. These columns are not saved in Sessions or TSV re-export.', { columns: unknown.join(', ') }) : ''
+    notice: unknown.length ? () => t('Ignored annotation table columns: {columns}. These columns are not saved in Sessions or TSV re-export.', { columns: unknown.join(', ') }) : null
   };
 };
 

@@ -43,6 +43,7 @@ globalThis.document = {
 };
 
 const { createFontSettings } = await import('../../gbdraw/web/js/app/font-settings.js');
+const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { LEGEND_FONT_METRICS } = await import('../../gbdraw/web/js/utils/legend-font-metrics.generated.js');
 
 const SERIF_TABLE = LEGEND_FONT_METRICS.faces['LiberationSerif-Regular'];
@@ -121,6 +122,21 @@ test('a file the browser cannot read is a font-file error, not an uncaught failu
   assert.match(settings.loadError.value, /TrueType or OpenType font file/);
   assert.equal(settings.loading.value, false);
   assert.deepEqual(steps, []);
+});
+
+// OV-3676: the failure of Load font file stays shown, so it is worded where it shows: a UI language change rewords it.
+test('the font-file error rewords after a UI language change', async () => {
+  const { settings } = setup();
+  nextFiles = [{ name: 'gone.ttf', text: '', unreadable: true }];
+  await settings.loadFontFile();
+  assert.match(settings.loadError.value, /TrueType or OpenType font file/);
+  const reason = 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.';
+  await setUiLocale('ja', async () => ({ default: { [reason]: '読み取れるフォントファイルを選んでください。' } }));
+  try {
+    assert.match(settings.loadError.value, /読み取れるフォントファイルを選んでください。/);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 test('Load with <nearest> loads the Session and keeps the names; Cancel loads nothing', async () => {

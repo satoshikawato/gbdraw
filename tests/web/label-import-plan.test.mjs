@@ -9,6 +9,7 @@ import {
 } from '../../gbdraw/web/js/services/label-import-plan.js';
 import { parseLabelOverrideTsv } from '../../gbdraw/web/js/services/label-override-table.js';
 import { normalizeTsvCell } from '../../gbdraw/web/js/utils/tsv-cell.js';
+import { wordedNotice } from './helpers/worded-notice.mjs';
 
 // The pure middles of Load and Export Label TSV (app/feature-editor/label-table.js).
 const tracked = (featureId, sourceText) => ({
@@ -30,29 +31,31 @@ test('a global label row edits a label by its source text, any other row only a 
 });
 
 test('each outcome of a load names its row count and why it applied or not (OV-131, OV-447, OV-449)', () => {
+  // The notice keeps its wordings (OV-2796); these words are the English ones.
+  const notice = (rowCount, outcome) => wordedNotice(labelImportNotice(rowCount, outcome));
   const plan = (applicable, skippedNonTrackableCount = 0) => ({ plan: { applicable, skippedNonTrackableCount } });
   const edit = { entry: tracked('fa', 'alpha'), matchedRow: parseLabelOverrideTsv('*\t*\tlabel\t^alpha$\tA\n')[0], tracked: true };
-  assert.deepEqual(labelImportNotice(1, { declined: 'label-intent' }), {
+  assert.deepEqual(notice(1, { declined: 'label-intent' }), {
     text: 'Loaded 1 row. Not applied: label text, label visibility, or feature visibility changed while the table loaded. '
       + 'The changes were kept. Load the table again.',
     tone: 'warning'
   });
-  assert.deepEqual(labelImportNotice(2, { declined: 'diagram' }), {
+  assert.deepEqual(notice(2, { declined: 'diagram' }), {
     text: 'Loaded 2 rows. Not applied: the displayed diagram changed while the table loaded. Load the table again.', tone: 'warning'
   });
-  assert.match(labelImportNotice(1, { declined: 'rule-inputs' }).text, /^Loaded 1 row\. Not applied: colors, color rules, the Legend/);
-  assert.deepEqual(labelImportNotice(1, { declined: 'no-diagram' }), {
+  assert.match(notice(1, { declined: 'rule-inputs' }).text, /^Loaded 1 row\. Not applied: colors, color rules, the Legend/);
+  assert.deepEqual(notice(1, { declined: 'no-diagram' }), {
     text: 'Loaded 1 row. No diagram is shown, so nothing was applied.', tone: 'warning'
   });
-  const undecided = labelImportNotice(1, { undecided: 2 });
+  const undecided = notice(1, { undecided: 2 });
   assert.equal(undecided.text, 'Loaded 1 row. Not applied.');
   assert.match(undecided.items[0], /^location and record_location rows cannot be matched to 2 labels/);
-  assert.deepEqual(labelImportNotice(1, plan([])), {
+  assert.deepEqual(notice(1, plan([])), {
     text: 'Loaded 1 row. Not applied; the existing label edits were kept.', items: ['No row matched a label of the diagram.']
   });
-  assert.deepEqual(labelImportNotice(1, plan([], 1)).items, ['The 1 matched label lacked a feature key.']);
-  assert.deepEqual(labelImportNotice(1, plan([edit])), { text: 'Loaded 1 row. Applied to 1 label.', items: [] });
-  assert.deepEqual(labelImportNotice(3, plan([edit, edit], 1)), {
+  assert.deepEqual(notice(1, plan([], 1)).items, ['The 1 matched label lacked a feature key.']);
+  assert.deepEqual(notice(1, plan([edit])), { text: 'Loaded 1 row. Applied to 1 label.', items: [] });
+  assert.deepEqual(notice(3, plan([edit, edit], 1)), {
     text: 'Loaded 3 rows. Applied to 2 labels.', items: ['1 match lacked a feature key and was not applied.']
   });
 });

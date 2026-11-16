@@ -21,6 +21,7 @@ const { createSimilarityAlignmentActions } = await import(
 
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { writeCanonicalRecordReverseComplement } = await import('../../gbdraw/web/js/services/record-display-model.js');
 const { CompositionMetadataError } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 
@@ -1061,6 +1062,26 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
   // OV-342: nothing was clicked, so the notice names the missing reference.
   assert.equal(fixture.actions.notice.value,
     'Alignment needs repair: The alignment reference feature is no longer found in its record.');
+});
+
+// OV-3676: the notice is worded where it shows, and the repair note keeps its reason as an English sentence that the
+// drawer words where it shows, so a UI language change rewords both.
+test('the repair notice rewords after a UI language change, and the note keeps its English reason', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.currentGroup.members.splice(0, 1);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'blocked', reason: 'stale-reference' });
+  const reason = 'The alignment reference feature is no longer found in its record.';
+  await setUiLocale('ja', async () => ({ default: {
+    'Alignment needs repair: {reason}': '整列の修復が必要です：{reason}', [reason]: '参照フィーチャーが見つかりません。'
+  } }));
+  try {
+    assert.equal(fixture.actions.notice.value, '整列の修復が必要です：参照フィーチャーが見つかりません。');
+    assert.equal(fixture.actions.repair.value.reason, reason);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 // E1: the plan is Linear draft state; a Circular Generate does not draw it, so

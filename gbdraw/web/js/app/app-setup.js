@@ -9,6 +9,7 @@
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { NoticeLink } from './app-messages.js' */
+/** @import { Wording } from '../utils/i18n.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -165,7 +166,7 @@ import {
   setDiagramResourceRetainSource,
   setDiagramWorkerFontSource
 } from '../services/diagram-generation.js';
-import { createFontSettings } from './font-settings.js';
+import { createFontSettings, lostFontsNotice } from './font-settings.js';
 import { customFontSaveWarnings } from '../services/session-fonts.js';
 import { requestFontFamily, webFontFamilyNames } from '../services/font-store.js';
 import {
@@ -219,7 +220,9 @@ import { createResultsManager } from './results.js';
 import { createAuxiliaryFileImports, setupWatchers } from './watchers.js';
 import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
 import { createHistoryControls } from './history-list.js';
-import { createChoicePrompt, createNoticeBanner } from './app-messages.js';
+import {
+  LEGACY_CONFIGURATION_NOTICE, createChoicePrompt, createNoticeBanner, galleryTutorialLink, keptTextWarning, sessionLoadedNotice, sessionSavedNotice
+} from './app-messages.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
 import {
@@ -275,7 +278,7 @@ import { createRecordSelection } from './record-selection.js';
 import {
   comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd
 } from '../mode-profiles.js';
-import { joinSentences, msg, t, tm, tx } from '../utils/i18n.js';
+import { joinSentences, msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { importedComparisonExecution } from '../services/imported-comparison-intent.js';
 import {
@@ -927,7 +930,7 @@ export const createAppSetup = () => {
     activeDrawingId: () => state.activeDrawingId.value,
     sessionHistory: historySnapshots.sessionHistory(),
     // OV-1260: dropped older steps are told, not silent.
-    onHistoryLimit: (text) => showNotice({ text: tm(text), tone: 'warning' }),
+    onHistoryLimit: (text) => showNotice(keptTextWarning(text)),
     makeRef: ref,
     estimateFileBytes: (fileIds) => state.inputFiles.estimateBytes(fileIds, inputFilePayload),
     // A file stays stored while any History step or binding names it (R11).
@@ -981,10 +984,7 @@ export const createAppSetup = () => {
     readFonts: () => state.loadedFonts.value,
     onFontsLost: (lost) => {
       fontSettings.markFontsLost(lost.map((font) => font.identity));
-      showNotice({
-        text: t('Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.'),
-        items: lost.map((font) => font.label)
-      });
+      showNotice(lostFontsNotice(lost));
     }
   });
   /**
@@ -1038,14 +1038,14 @@ export const createAppSetup = () => {
     doPan,
     endPan,
     resetPreviewViewport,
-    fitPreviewToViewport,
+    fitPreviewToViewport, fitPreviewFromButton,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     isPreviewTransformActive, subscribePreviewTransformChanges,
     holdPreviewViewport,
     releasePreviewViewport,
     heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, storedFigurePreview
-  } = createPanZoom(state);
+  } = createPanZoom(state, { showCanvas: settingsPaneActions.showPhoneWorkspace });
   const { startResizing } = createSidebarResize(state);
 
   const { ruleMatchingPending } = state;
@@ -1453,10 +1453,11 @@ export const createAppSetup = () => {
     normalizeStack: (drawing) => (drawing.mode === 'circular'
       ? circularTrackSlotEditor.normalizeCircularTrackSlots(drawing) : linearTrackSlotEditor.normalizeLinearTrackSlots())
   });
-  const annotationImportNotice = ref('');
+  // The panel notice's wording; the panel shows `annotationImportNotice`, worded in the shown language (OV-3674).
+  const annotationNotice = ref(/** @type {Wording | null} */ (null));
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions: retireShownLegendStyles, askChoice,
-    onImportNotice: (notice) => { annotationImportNotice.value = notice; }
+    onImportNotice: (notice) => { annotationNotice.value = notice; }
   });
   // The Show Depth, and Linear Show GC Content and Show GC Skew, checkboxes:
   // the drawn tracks and their Legend rows leave and return together through
@@ -2164,9 +2165,9 @@ export const createAppSetup = () => {
       // Load the user canceled changed nothing, the notice included.
       if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
       if (result?.status === 'ok') {
-        showNotice({ text: name ? t('Session loaded: {file}.', { file: name }) : t('Session loaded.'), items: result.notices || [] });
+        showNotice(sessionLoadedNotice(name, result.notices || []));
       } else if (result?.status === 'legacy') {
-        showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
+        showNotice(LEGACY_CONFIGURATION_NOTICE);
       }
       if (noticeLink && (result?.status === 'ok' || result?.status === 'legacy')) noticeBanner.addLink(noticeLink);
       // The phone layout shows a loaded Result in the Preview, as Generate does; a Load without one, Settings.
@@ -2256,7 +2257,7 @@ export const createAppSetup = () => {
           throw new Error('Session loading canceled.');
         }
         featureActions.clearSpecificRulePatternDrafts();
-        annotationImportNotice.value = '';
+        annotationNotice.value = null;
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
         closeLegendStrokeOptions();
@@ -2288,11 +2289,7 @@ export const createAppSetup = () => {
         // The import resolves after the shown Result's preview is mounted. #1383 (PD-OI-108):
         // the notice of the loaded example offers its tutorial, found by the example's Gallery id.
         await importSession({ target: { files: [file], value: '' } }, {
-          noticeLink: example.tutorialUrl ? {
-            text: t('This diagram has a step-by-step tutorial.'),
-            label: tx('English-only Gallery tutorial', 'Open the tutorial'),
-            href: example.tutorialUrl
-          } : null
+          noticeLink: example.tutorialUrl ? galleryTutorialLink(example.tutorialUrl) : null
         });
       } catch (error) {
         errorLog.value = normalizeUserFacingError(error);
@@ -3116,18 +3113,15 @@ export const createAppSetup = () => {
     onSaved: (/** @type {{ filename: string }} */ { filename }) => {
       history.markSavePoint();
       // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
-      showNotice({
-        text: t('Session saved: {file}.', { file: filename }),
-        // Each drawing's font, and the font of the shown Result, whose committed
-        // request the Session saves too (OV-742).
-        items: customFontSaveWarnings(
-          [
-            ...state.drawingList().map((drawing) => drawing.adv.font_family),
-            requestFontFamily(getCommittedCanonicalRenderRequest())
-          ],
-          webFontFamilyNames(state.loadedFonts.value)
-        )
-      });
+      // Each drawing's font, and the font of the shown Result, whose committed
+      // request the Session saves too (OV-742).
+      showNotice(sessionSavedNotice(filename, customFontSaveWarnings(
+        [
+          ...state.drawingList().map((drawing) => drawing.adv.font_family),
+          requestFontFamily(getCommittedCanonicalRenderRequest())
+        ],
+        webFontFamilyNames(state.loadedFonts.value)
+      )));
     }
   });
 
@@ -3297,7 +3291,7 @@ export const createAppSetup = () => {
     askScope,
     // The busy outcome has no control to disable: the notice banner words the
     // drawing list's own busy reason, as the tabs' title does (R15).
-    onBusy: (busy) => showNotice({ text: tm(busy.reason), tone: 'warning' })
+    onBusy: (busy) => showNotice(keptTextWarning(busy.reason))
   });
   // The uploaders of the shown drawing's bound input files: each names the
   // file its control binds and its own write; `replaceFromShownDrawing`
@@ -3564,7 +3558,7 @@ export const createAppSetup = () => {
     layoutRepositionMode,
     isPanning,
     handleWheel,
-    fitPreviewToViewport,
+    fitPreviewFromButton,
     canvasPan,
     canvasContainerRef,
     startPan,
@@ -3602,7 +3596,7 @@ export const createAppSetup = () => {
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
     setAnnotationField: annotationEditor.setAnnotationField,
-    annotationImportNotice,
+    annotationImportNotice: computed(() => (annotationNotice.value ? annotationNotice.value() : '')),
     importAnnotationTableFile: undoableAction(msg('Import annotations'), annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,

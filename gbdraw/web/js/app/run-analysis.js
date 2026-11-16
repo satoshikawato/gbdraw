@@ -5,7 +5,7 @@
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
-/** @import { AskChoice, ShowNotice } from './app-messages.js' */
+/** @import { AskChoice, NoticeRequest, ShowNotice } from './app-messages.js' */
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
@@ -1847,6 +1847,9 @@ const losatResultRowsAccess = ({ losatCacheInfo, losatCache }) => {
   };
 };
 
+/** @type {NoticeRequest} */
+const NO_REPRODUCIBILITY_FILES_NOTICE = Object.freeze({ text: () => t('The latest run has no reproducibility files to download.') });
+
 /** @param {RunAnalysisOptions} options */
 export const createRunAnalysis = ({
   state,
@@ -2226,7 +2229,7 @@ export const createRunAnalysis = ({
 
   const downloadCliHelperFiles = async () => {
     if (!latestCliHelperFiles.length) {
-      showNotice({ text: t('The latest run has no reproducibility files to download.') });
+      showNotice(NO_REPRODUCIBILITY_FILES_NOTICE);
       return;
     }
     // A refused replay Session (or an input unreadable now) is shown where Save shows its errors.

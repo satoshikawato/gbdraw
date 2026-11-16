@@ -148,7 +148,7 @@ test('a Session 44 Load names the hash= annotation targets Python moved in its n
   const { ANNOTATION_TARGET_MIGRATION_NOTICE } = await import('../../gbdraw/web/js/services/feature-edit-migration.js');
   const loaded = await load(fixture('selected-feature-annotations.v44'));
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(loaded.notices, [ANNOTATION_TARGET_MIGRATION_NOTICE(1)]);
+  assert.deepEqual(loaded.notices.map((notice) => notice()), [ANNOTATION_TARGET_MIGRATION_NOTICE(1)()]);
 });
 
 // OV-2000: a Session 27-39's Results are read again (feature recovery); the

@@ -99,21 +99,21 @@ export const createFeatureEditTableActions = ({
     const records = committed?.renderRequest?.records || [];
     const rows = committed && records.length ? requestFeatureOverrides(drawing.featureOverrides, records) : [];
     if (!committed || rows.length === 0) {
-      showNotice({ text: t('There are no feature edits to export.') });
+      showNotice({ text: () => t('There are no feature edits to export.') });
       return false;
     }
     const { text, reason } = await buildFeatureOverrideTable({
       renderRequest: committed.renderRequest, resources: committed.resources, rows, readResourceRecordCount
     });
     if (reason) {
-      showNotice({ text: t('Cannot export feature edits: {reason}', { reason: errorText([reason]) }), tone: 'warning' });
+      showNotice({ text: () => t('Cannot export feature edits: {reason}', { reason: errorText([reason]) }), tone: 'warning' });
       return false;
     }
     downloadTextFile('gbdraw_feature_override_table.tsv', text, 'text/tab-separated-values');
     const elsewhere = Object.values(drawing.featureOverrides).filter(hasEdit).length - rows.length;
     if (elsewhere > 0) {
-      showNotice({ text: tn(rows.length, 'Exported {count} feature edit.', 'Exported {count} feature edits.'), items: [
-        tn(elsewhere, '{count} feature edit of a record outside the current diagram was not exported.', '{count} feature edits of records outside the current diagram were not exported.')
+      showNotice({ text: () => tn(rows.length, 'Exported {count} feature edit.', 'Exported {count} feature edits.'), items: [
+        () => tn(elsewhere, '{count} feature edit of a record outside the current diagram was not exported.', '{count} feature edits of records outside the current diagram were not exported.')
       ] });
     }
     return true;
@@ -141,7 +141,7 @@ export const createFeatureEditTableActions = ({
     const endRead = holdFileCopy(file);
     try {
       if (!committed || !records.length) {
-        showNotice({ text: t('No diagram is shown. Generate a diagram, then load the Feature Edits TSV.'), tone: 'warning' });
+        showNotice({ text: () => t('No diagram is shown. Generate a diagram, then load the Feature Edits TSV.'), tone: 'warning' });
         return false;
       }
       // app-setup wires the helper; a missing one throws here and is reported as a Feature edits TSV error.
@@ -159,9 +159,9 @@ export const createFeatureEditTableActions = ({
       failure.value = null;
       keepRetryCopy(null);
       showNotice({
-        text: joinSentences(tn(rows.length + unmatchedRows.length, 'Loaded {count} row.', 'Loaded {count} rows.'), tn(rows.length, 'Applied {count} feature edit.', 'Applied {count} feature edits.')),
+        text: () => joinSentences(tn(rows.length + unmatchedRows.length, 'Loaded {count} row.', 'Loaded {count} rows.'), tn(rows.length, 'Applied {count} feature edit.', 'Applied {count} feature edits.')),
         items: unmatchedRows.length > 0
-          ? [tn(unmatchedRows.length, '{count} row was not applied: no matching record, or no matching feature in that record.', '{count} rows were not applied: no matching record, or no matching feature in that record.')]
+          ? [() => tn(unmatchedRows.length, '{count} row was not applied: no matching record, or no matching feature in that record.', '{count} rows were not applied: no matching record, or no matching feature in that record.')]
           : []
       });
       return true;

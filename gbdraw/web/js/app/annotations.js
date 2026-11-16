@@ -1,5 +1,7 @@
 // @ts-check
 /** @import { AskChoice } from './app-messages.js' */
+/** @import { Wording } from '../utils/i18n.js' */
+/** @import { ErrorTextPart } from '../utils/error-normalization.js' */
 /** @import { WebState } from '../state.js' */
 /**
  * @import { AnnotationRecordCatalog } from './annotations/record-catalog.js'
@@ -25,39 +27,81 @@ import {
 } from '../services/drawing/annotation-sets.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { normalizeUserFacingError, renderErrorText } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { joinSentences, t, tn } from '../utils/i18n.js';
 
 /**
+ * A read of an annotation TSV that the diagnostic model refuses (a gzip file past the expanded cap, PD-OI-116; a file
+ * the browser refuses): its words, which name the file (OV-2948), kept as error text parts for the panel notice to word
+ * where it shows (OV-3674); `message` is their English text.
+ */
+class AnnotationReadRefusal extends Error {
+  /** @param {ErrorTextPart[]} parts */
+  constructor(parts) {
+    super(renderErrorText(parts));
+    this.parts = parts;
+  }
+}
+
+/**
  * The text of an annotation TSV. A failed read rejects as the panel notice tells it: a refusal the diagnostic model
- * knows (a gzip file past the expanded cap, PD-OI-116; a file the browser refuses) in its own words, which name the
- * file (OV-2948); any other error as it is, as the notice tells a table the import refuses (FL-14). A falsy rejection
- * has no words.
+ * knows as an `AnnotationReadRefusal`; any other error as it is, as the notice tells a table the import refuses
+ * (FL-14). A falsy rejection has no words.
  * @param {unknown} file
  * @returns {Promise<string>}
  */
 const readAnnotationTableText = (file) => readFileText(file).catch((error) => {
   const shown = normalizeUserFacingError(/** @type {Record<string, unknown> | null} */ (error || null), { stage: 'read' });
-  throw shown?.code === 'UNKNOWN' && error instanceof Error ? error : new Error(errorText(shown?.summaryParts ?? []));
+  throw shown?.code === 'UNKNOWN' && error instanceof Error ? error : new AnnotationReadRefusal(shown?.summaryParts ?? []);
 });
+
+/**
+ * The panel notice of a failed import: a read refusal in its own words, any other error as it is.
+ * @param {Error} error
+ * @returns {Wording}
+ */
+const importFailureNotice = (error) => () => t('Could not import annotations: {reason}', {
+  reason: error instanceof AnnotationReadRefusal ? errorText(error.parts) : error.message
+});
+
+/** The panel notice of Add selected features on a Result without feature identities. @type {Wording} */
+const REGENERATE_TO_ANNOTATE_NOTICE = () => t('Generate the diagram again to annotate the selected features.');
+
+/**
+ * The panel notice of Download TSV: how the selected-feature rows were written, and the ones it left out.
+ * @param {number} placed
+ * @param {number} skipped
+ * @returns {Wording | null}
+ */
+const tableExportNotice = (placed, skipped) => (placed > 0 || skipped > 0 ? () => joinSentences(...[
+  placed > 0 ? tn(placed,
+    '{count} annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. It names the same feature only while the record order stays as drawn.',
+    '{count} annotations of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.') : '',
+  skipped > 0 ? tn(skipped,
+    '{count} annotation of a selected feature that the current diagram does not draw was not exported.',
+    '{count} annotations of selected features that the current diagram does not draw were not exported.') : ''
+].filter(Boolean)) : null);
 
 // The editor keeps every id valid: an empty id takes the default and a used
 // one a numbered suffix. The panel notice names the id it stored (FL-14).
-/** @param {'set' | 'annotation'} kind @param {any} requested @param {string} stored */
+/**
+ * @param {'set' | 'annotation'} kind @param {any} requested @param {string} stored
+ * @returns {Wording | null} Null when the stored id is the requested one: the edit clears the notice.
+ */
 const idEditNotice = (kind, requested, stored) => {
   const text = String(requested ?? '').trim();
-  if (text === stored) return '';
+  if (text === stored) return null;
   const params = { text, stored };
   if (kind === 'set') {
     return text
-      ? t('Set id "{text}" is used by another set, so it was saved as "{stored}".', params)
-      : t('Set id cannot be empty, so it was saved as "{stored}".', params);
+      ? () => t('Set id "{text}" is used by another set, so it was saved as "{stored}".', params)
+      : () => t('Set id cannot be empty, so it was saved as "{stored}".', params);
   }
   return text
-    ? t('Annotation id "{text}" is used by another annotation of this set, so it was saved as "{stored}".', params)
-    : t('Annotation id cannot be empty, so it was saved as "{stored}".', params);
+    ? () => t('Annotation id "{text}" is used by another annotation of this set, so it was saved as "{stored}".', params)
+    : () => t('Annotation id cannot be empty, so it was saved as "{stored}".', params);
 };
 
 /**
@@ -85,8 +129,8 @@ const nextAnnotationId = (annotations, prefix) => {
  * @typedef {object} AnnotationEditorOptions
  * @property {AnnotationEditorState} state
  * @property {() => AnnotationRecordCatalog | null | undefined} getRecordCatalog
- * @property {(notice: string) => void} onImportNotice Shows or clears the panel notice: the outcome of
- *   the last import or id edit.
+ * @property {(notice: Wording | null) => void} onImportNotice Shows the panel notice, worded where it shows, or
+ *   clears it (null): the outcome of the last import, export or id edit.
  * @property {<T>(change: () => T) => T} [retireLegendStylesOfUnnamedCaptions] Runs a track data change and
  *   retires the Legend styles of the captions it no longer names (OV-65).
  * @property {AskChoice} [askChoice] The root's choice dialog: an import that removes every set asks first.
@@ -237,7 +281,7 @@ export const createAnnotationEditor = ({
     if (!set) return [];
     const targets = featureTargetsFromSelection(state.selectedFeatures.value);
     if (!targets) {
-      onImportNotice?.(t('Generate the diagram again to annotate the selected features.'));
+      onImportNotice?.(REGENERATE_TO_ANNOTATE_NOTICE);
       return [];
     }
     // Each new row's id counts the rows before it.
@@ -348,7 +392,7 @@ export const createAnnotationEditor = ({
   const importAnnotationTable = async (text) => {
     const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    onImportNotice?.('');
+    onImportNotice?.(null);
     const { sets, notice } = parseAnnotationTableWithNotice(text);
     const setCount = state.activeDrawing().annotationSets.length;
     if (sets.length === 0 && setCount > 0 && await askReplaceAll(setCount) !== 'remove') return;
@@ -364,15 +408,7 @@ export const createAnnotationEditor = ({
       encodeAnnotationTableWithNotice(drawing.annotationSets, { drawnPlacement })
     );
     downloadTextFile('annotations.tsv', text);
-    const notice = joinSentences(...[
-      placed > 0 ? tn(placed,
-        '{count} annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. It names the same feature only while the record order stays as drawn.',
-        '{count} annotations of selected features were written as record=#<position> and feature_selector=hash=<feature hash>. They name the same features only while the record order stays as drawn.') : '',
-      skipped > 0 ? tn(skipped,
-        '{count} annotation of a selected feature that the current diagram does not draw was not exported.',
-        '{count} annotations of selected features that the current diagram does not draw were not exported.') : ''
-    ].filter(Boolean));
-    onImportNotice?.(notice);
+    onImportNotice?.(tableExportNotice(placed, skipped));
   };
   /** @param {{ target?: HTMLInputElement | null } | null | undefined} event The change event of the file input. */
   const importAnnotationTableFile = async (event) => {
@@ -383,7 +419,7 @@ export const createAnnotationEditor = ({
     const file = input?.files?.[0];
     if (!file) return;
     const sequence = ++importSequence;
-    onImportNotice?.('');
+    onImportNotice?.(null);
     const setsBeforeRead = [...drawing.annotationSets];
     const draftBeforeRead = JSON.stringify(drawing.annotationSets);
     const resultsBeforeRead = [...state.results.value];
@@ -401,7 +437,7 @@ export const createAnnotationEditor = ({
       if (!isCurrent()) return;
       return await importAnnotationTable(text);
     } catch (error) {
-      if (isCurrent()) onImportNotice?.(t('Could not import annotations: {reason}', { reason: error.message }));
+      if (isCurrent()) onImportNotice?.(importFailureNotice(error));
     } finally {
       if (sequence === importSequence && input.files?.[0] === file) input.value = '';
     }

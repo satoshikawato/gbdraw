@@ -163,7 +163,7 @@ export const createLabelTableActions = ({
     const drawing = state.activeDrawing();
     const rows = labelTableExportLines(drawing.canonicalLabelOverrideRows.value, drawing.labelTextBulkOverrides);
     if (rows.length === 0) {
-      showNotice({ text: t('There are no label rules to export.') });
+      showNotice({ text: () => t('There are no label rules to export.') });
       return;
     }
     const selectedIdx = state.selectedResultIndex.value;

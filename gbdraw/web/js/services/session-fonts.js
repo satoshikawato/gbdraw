@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FontFamilyName } from './font-families.js' */
+/** @import { Wording } from '../utils/i18n.js' */
 import { joinSentences, listText, t, tn } from '../utils/i18n.js';
 import { customFontFamilies, isGenericFamily, parseFontFamilyList, resolveWebFontFamily } from './font-families.js';
 
@@ -26,12 +27,12 @@ const unique = (values) => [...new Set(values)];
  * fonts (`customFontFamilies`).
  * @param {readonly unknown[]} fontFamilies Each drawing's `adv.font_family`.
  * @param {Iterable<FontFamilyName>} registeredFamilies The families loaded in this page.
- * @returns {string[]}
+ * @returns {Wording[]}
  */
 export const customFontSaveWarnings = (fontFamilies, registeredFamilies) => {
   const registered = [...registeredFamilies];
   return unique(fontFamilies.flatMap((fontFamily) => customFontFamilies(fontFamily, registered)))
-    .map((family) => t('The Session keeps the font name {family}, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.', { family }));
+    .map((family) => () => t('The Session keeps the font name {family}, not the font file. To open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.', { family }));
 };
 
 /**

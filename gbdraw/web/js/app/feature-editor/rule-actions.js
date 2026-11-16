@@ -3,7 +3,7 @@
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @import { RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
-/** @import { AskChoice, ShowNotice } from '../app-messages.js' */
+/** @import { AskChoice, NoticeRequest, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
@@ -143,6 +143,11 @@ import {
  * @property {ShowNotice} [showNotice] The root's notice banner.
  * @property {RevealSetting} [revealSetting] Without a settings pane, the field takes the focus where it is.
  */
+
+/** @type {NoticeRequest} */
+const NO_COLOR_RULES_NOTICE = Object.freeze({ text: () => t('There are no color rules to export.') });
+/** @type {NoticeRequest} */
+const PRESET_UNAVAILABLE_NOTICE = Object.freeze({ text: () => t('That rule preset is not available.'), tone: 'warning' });
 
 /** @param {FeatureRuleActionsOptions} options */
 export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, isRuleInputCurrent, snapshotRuleInputs, isRulePrepared, prepareRuleCandidate, synthesizeGroupRules, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
@@ -711,7 +716,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const drawing = state.activeDrawing();
     const text = serializeSpecificRules(drawing.manualSpecificRules);
     if (!text.trim()) {
-      showNotice({ text: t('There are no color rules to export.') });
+      showNotice(NO_COLOR_RULES_NOTICE);
       return;
     }
     downloadTextFile('gbdraw_specific_rules.tsv', text);
@@ -948,7 +953,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     if (!presetId) return;
     const preset = specificRulePresets.find((/** @type {SpecificRulePreset} */ entry) => entry.id === presetId);
     if (!preset) {
-      showNotice({ text: t('That rule preset is not available.'), tone: 'warning' });
+      showNotice(PRESET_UNAVAILABLE_NOTICE);
       return;
     }
 

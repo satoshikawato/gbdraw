@@ -35,6 +35,33 @@ const editorReserveWidth = (container) => {
   return width;
 };
 
+// The control that lies over the right edge of the canvas, beside it in the canvas's workspace: the Editor
+// toggle, in the middle of that edge, beside the open drawer or the review panel, or in the phone's corner.
+const EDGE_CONTROL = '[data-preview-edge-control]';
+
+/**
+ * The box of the control over the canvas edge where it settles, or null when none is shown. A copy of it is
+ * measured in its place: an element just inserted starts no transition and the copy is removed before any
+ * paint, so a Fit made while the control slides (the Editor opening or closing) neither reads a frame of the
+ * slide nor cuts it short.
+ * @param {HTMLElement} container The preview canvas.
+ * @returns {DOMRect | null}
+ */
+const edgeControlBox = (container) => {
+  /** @type {HTMLElement | null} */
+  let control = null;
+  // Each ancestor in turn, not `closest(':has(...)')`: a browser without `:has` would throw here.
+  for (let node = container.parentElement; node && !control; node = node.parentElement) {
+    control = /** @type {HTMLElement | null} */ (node.querySelector(`:scope > ${EDGE_CONTROL}`));
+  }
+  if (!control) return null;
+  const probe = /** @type {HTMLElement} */ (control.cloneNode(true));
+  control.after(probe);
+  const box = probe.getBoundingClientRect();
+  probe.remove();
+  return box.width > 0 && box.height > 0 ? box : null;
+};
+
 // The room of the figure is the canvas box, which a zoomed figure's scrollbars do not change.
 /** @param {HTMLElement} container The preview canvas. */
 const previewRoom = (container) => `${container.offsetWidth}x${container.offsetHeight}`;
@@ -414,8 +441,10 @@ const createPanGesture = (state, { beginInteraction, endInteraction }) => {
 
 /**
  * Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in the visible preview frame (the
- * canvas left of an open Editor drawer), and the pan that centres it under the top-center origin. It keeps
- * the room it measured, which the held view reads.
+ * canvas left of an open Editor drawer), and the pan that centres it under the top-center origin. A diagram
+ * so fitted that would lie under the control over the canvas edge (the Editor toggle) is fitted to the frame
+ * left of that control instead (OV-3588); any other Fit stays as it is. It keeps the room it measured, which
+ * the held view reads.
  * @param {Pick<WebState, 'zoom' | 'canvasPan' | 'canvasContainerRef' | 'svgContainer' | 'previewTransitionHeld'>
  *   & { setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The view, the
  *   canvas and surface, and the whole-view setter.
@@ -436,7 +465,6 @@ const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, p
     const surfaceBox = surface.getBoundingClientRect();
     const svgBox = svg.getBoundingClientRect();
     const frameBox = container.getBoundingClientRect();
-    const frameWidth = container.clientWidth - editorReserveWidth(container);
     const width = svgBox.width / zoom.value;
     const height = svgBox.height / zoom.value;
     if (!(width > 0 && height > 0)) {
@@ -444,13 +472,25 @@ const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, p
       return;
     }
     fittedRoom = previewRoom(container);
-    const largest = Math.min(
+    const frameLeft = frameBox.left + container.clientLeft;
+    const frameMiddle = frameBox.top + container.clientTop + container.clientHeight / 2;
+    // Round down to a whole percent so the diagram fills a frame of this width without
+    // overflowing it; the wheel and buttons step by 0.1 from there.
+    /** @param {number} frameWidth */
+    const zoomToFill = (frameWidth) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(Math.min(
       (frameWidth - 2 * FIT_MARGIN_PX) / width,
       (container.clientHeight - 2 * FIT_MARGIN_PX) / height
-    );
-    // Round down to a whole percent so the diagram fills the frame without
-    // overflowing it; the wheel and buttons step by 0.1 from there.
-    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(largest * 100 + 1e-9) / 100));
+    ) * 100 + 1e-9) / 100));
+    let frameWidth = container.clientWidth - editorReserveWidth(container);
+    let nextZoom = zoomToFill(frameWidth);
+    // The fitted diagram, centred in the frame, meets the control's box: the frame ends at the control.
+    const control = edgeControlBox(container);
+    if (control
+      && Math.abs(frameLeft + frameWidth / 2 - (control.left + control.right) / 2) < (nextZoom * width + control.width) / 2
+      && Math.abs(frameMiddle - (control.top + control.bottom) / 2) < (nextZoom * height + control.height) / 2) {
+      frameWidth = control.left - frameLeft;
+      nextZoom = zoomToFill(frameWidth);
+    }
     // The transform origin without the current pan, and the diagram centre's
     // unscaled offset from it.
     const originX = surfaceBox.left + surfaceBox.width / 2 - canvasPan.x;
@@ -458,8 +498,8 @@ const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, p
     const centerX = (svgBox.left + svgBox.width / 2 - surfaceBox.left - surfaceBox.width / 2) / zoom.value;
     const centerY = (svgBox.top + svgBox.height / 2 - surfaceBox.top) / zoom.value;
     setPreviewViewport({
-      x: frameBox.left + container.clientLeft + frameWidth / 2 - originX - nextZoom * centerX,
-      y: frameBox.top + container.clientTop + container.clientHeight / 2 - originY - nextZoom * centerY
+      x: frameLeft + frameWidth / 2 - originX - nextZoom * centerX,
+      y: frameMiddle - originY - nextZoom * centerY
     }, nextZoom);
     previewTransitionHeld.value = false;
   };
@@ -525,8 +565,10 @@ const createHeldPreviewView = ({ zoom, canvasPan, canvasContainerRef, fit, inFit
  * them and owns the whole-view setter.
  * @param {Pick<WebState, 'zoom' | 'layoutRepositionMode' | 'isPanning' | 'panStart' | 'canvasPan' | 'canvasContainerRef'
  *   | 'svgContainer' | 'previewHiddenUntilShown' | 'previewTransitionHeld'>} state
+ * @param {{ showCanvas?: () => void }} [ports] `showCanvas` brings the canvas back into view where the layout
+ *   scrolls it away (the phone pane's workspace); without it nothing scrolls.
  */
-export const createPanZoom = (state) => {
+export const createPanZoom = (state, { showCanvas = () => {} } = {}) => {
   const { zoom, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown, previewTransitionHeld } = state;
   const {
     isPreviewTransformActive, subscribePreviewTransformChanges, beginPreviewTransformInteraction,
@@ -587,6 +629,13 @@ export const createPanZoom = (state) => {
     hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce, setPreviewViewport
   });
 
+  // The Fit button: its result shows. On a phone its toolbar lies below an open Editor, so the canvas
+  // comes back into view first (OV-3673). Review alignment's refit and a Load's Fit scroll nothing.
+  const fitPreviewFromButton = () => {
+    showCanvas();
+    fitPreviewToViewport();
+  };
+
   const disposePanZoom = () => {
     disposeHeldPreviewView();
     disposeHiddenPreview();
@@ -601,6 +650,7 @@ export const createPanZoom = (state) => {
     endPan,
     resetPreviewViewport,
     fitPreviewToViewport,
+    fitPreviewFromButton,
     holdPreviewViewport,
     releasePreviewViewport,
     heldPreviewViewport,

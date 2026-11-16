@@ -1,8 +1,10 @@
 // @ts-check
 /** @import { WebFontEntry, WebFontSource, RegisterFontsInWorker } from '../services/font-store.js' */
 /** @import { FontFamilyList, FontFamilyName } from '../services/font-families.js' */
-/** @import { AskChoice } from './app-messages.js' */
+/** @import { AskChoice, NoticeRequest } from './app-messages.js' */
+/** @import { LostWorkerFont } from '../services/diagram-generation.js' */
 /** @import { WebState } from '../state.js' */
+/** @import { Wording } from '../utils/i18n.js' */
 import { loadWebFonts, mergeWebFonts, standardInstalledFaces, webFontFamilies, webFontFamilyNames } from '../services/font-store.js';
 import {
   bundledFacePrefix,
@@ -67,9 +69,32 @@ const BUNDLED_CHOICES = Object.freeze([
  *   request (`requestFontFamily`), which its exports carry (OV-742).
  */
 
+/**
+ * The notice of fonts the diagram Worker could not register again (OV-686),
+ * which lists them by name.
+ * @param {readonly LostWorkerFont[]} lost
+ * @returns {NoticeRequest}
+ */
+export const lostFontsNotice = (lost) => ({
+  text: () => t('Fonts loaded in this page could not be prepared again for drawing. Load them again in Font, or choose another font.'),
+  items: lost.map(({ label }) => () => label)
+});
+
+/**
+ * The words of a failed font load, in the shown UI language.
+ * @param {unknown} error A caught failure: a diagnostic or a Worker error.
+ */
+const loadErrorSummary = (error) => {
+  const model = normalizeUserFacingError(/** @type {Record<string, unknown>} */ (error), { code: 'INPUT_INVALID', operation: 'registerFonts' });
+  return (model && errorText(model.summaryParts)) || t('The font could not be loaded.');
+};
+
 /** @param {FontSettingsOptions} options */
 export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, askChoice, committedFontFamily }) => {
-  const loadError = ref('');
+  // The failure of the last Load font file stays shown while the UI language may change, so it is worded where it
+  // shows (OV-3676).
+  const loadFailure = ref(/** @type {Wording | null} */ (null));
+  const loadError = computed(() => (loadFailure.value ? loadFailure.value() : ''));
   const loading = ref(false);
   /** @type {{ open: boolean, query: string, families: { family: string, faces: InstalledFontData[] }[], error: string }} */
   const installedPicker = reactive({ open: false, query: '', families: [], error: '' });
@@ -202,19 +227,13 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
     }
   };
 
-  /** @param {unknown} error A caught failure: a diagnostic or a Worker error. */
-  const loadErrorSummary = (error) => {
-    const model = normalizeUserFacingError(/** @type {Record<string, unknown>} */ (error), { code: 'INPUT_INVALID', operation: 'registerFonts' });
-    return (model && errorText(model.summaryParts)) || t('The font could not be loaded.');
-  };
-
   /**
    * Read and load fonts, then select the family of the first one as one
    * History step. `loading` holds from the read to the end.
    * @param {() => Promise<WebFontSource[]>} read
    */
   const loadAndSelect = async (read) => {
-    loadError.value = '';
+    loadFailure.value = null;
     loading.value = true;
     try {
       const sources = await readSources(read);
@@ -225,7 +244,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
         drawing.adv.font_family = first.fontFamily;
       });
     } catch (error) {
-      loadError.value = loadErrorSummary(error);
+      loadFailure.value = () => loadErrorSummary(error);
     } finally {
       loading.value = false;
     }

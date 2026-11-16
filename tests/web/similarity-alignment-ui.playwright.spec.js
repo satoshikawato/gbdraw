@@ -92,18 +92,30 @@ const editorDrawer = (page) => page.evaluate(() => ({
   open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
 }));
 // Whether the view is what Fit gives in the canvas as it is now: the largest whole-percent zoom
-// that leaves 8 px around the figure, with the figure centred. `room` is the canvas size.
+// that leaves 8 px around the figure, with the figure centred. A figure so fitted that would lie
+// under the Editor toggle is fitted to the frame left of the toggle instead (OV-3588). `room` is
+// the canvas size.
 const figureFit = (page) => page.evaluate(() => {
   const { zoom } = window.__GBDRAW_APP__;
   const canvas = document.querySelector('.preview-canvas');
   const frame = canvas.getBoundingClientRect();
   const figure = document.querySelector('.gbdraw-preview-surface svg').getBoundingClientRect();
-  const largest = Math.min((canvas.clientWidth - 16) / (figure.width / zoom), (canvas.clientHeight - 16) / (figure.height / zoom));
+  const unscaled = { width: figure.width / zoom, height: figure.height / zoom };
+  const fitIn = (width) => Math.floor(Math.min((width - 16) / unscaled.width,
+    (canvas.clientHeight - 16) / unscaled.height) * 100 + 1e-9) / 100;
+  let right = frame.right;
+  let largest = fitIn(canvas.clientWidth);
+  const toggle = document.querySelector('.drawer-toggle')?.getBoundingClientRect();
+  if (toggle?.width && Math.abs(frame.left + frame.right - toggle.left - toggle.right) < largest * unscaled.width + toggle.width
+    && Math.abs(frame.top + frame.bottom - toggle.top - toggle.bottom) < largest * unscaled.height + toggle.height) {
+    right = toggle.left;
+    largest = fitIn(toggle.left - frame.left);
+  }
   return {
     room: [canvas.offsetWidth, canvas.offsetHeight],
     zoom,
-    fitted: Math.abs(zoom - Math.floor(largest * 100 + 1e-9) / 100) < 1e-9
-      && Math.abs(figure.left + figure.right - frame.left - frame.right) <= 2
+    fitted: Math.abs(zoom - largest) < 1e-9
+      && Math.abs(figure.left + figure.right - frame.left - right) <= 2
       && Math.abs(figure.top + figure.bottom - frame.top - frame.bottom) <= 2,
     inFrame: figure.left >= frame.left && figure.right <= frame.right
       && figure.top >= frame.top && figure.bottom <= frame.bottom
