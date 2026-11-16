@@ -200,7 +200,7 @@ test('the reference flag of the alignment overlay is translated', async ({ page 
 
 // OV-3676: the review panel keeps the words of its candidate lines and its recommendation as English keys, so a
 // language chosen while it is open rewords them, as the rest of the page.
-test('the review panel\'s candidate lines and recommendation reword in a language chosen while it is open', async ({ page }, testInfo) => {
+test('the review panel\'s candidate lines, its recommendation and the figure\'s ring names reword in a language chosen while it is open', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   const { pathToFileURL } = require('node:url');
   const ja = (await import(pathToFileURL(join(process.cwd(), 'gbdraw/web/js/utils/i18n-catalogs/ja.js')).href)).default;
@@ -229,10 +229,16 @@ test('the review panel\'s candidate lines and recommendation reword in a languag
   const factsLead = (words) => (candidate.evidence.map((key) => words[key] ?? key).join(', ') || words['no direct hit']);
   await expect(facts).toContainText(factsLead({ 'no direct hit': 'no direct hit' }));
   await expect(facts).toContainText(`(${strand('unknown')})`);
+  // The figure overlay's ring of the same candidate, named when the review measured the figure (OV-3676).
+  const ring = page.locator(`[data-similarity-alignment-canvas] .gbdraw-alignment-ring[data-alignment-record-key="${row.recordKey}"]`).first();
+  await expect(ring).toHaveAttribute('aria-label', /^Select .+ for .+$/);
   await page.locator('header select[data-ui-language]').selectOption('ja');
   await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('ja');
   await expect(facts).toContainText(factsLead(ja));
   await expect(facts).toContainText(`(${strand(ja.unknown)})`);
+  // "{record}の{label}（{coordinates}）を選択" in the ja catalog.
+  expect(ja['Select {label}, {coordinates} for {record}']).toMatch(/を選択$/);
+  await expect(ring).toHaveAttribute('aria-label', /を選択$/);
   if (row.recommendationReasonLabel) {
     await expect(card.locator('[data-similarity-alignment-reason]')).toContainText(ja[row.recommendationReasonLabel]);
   }

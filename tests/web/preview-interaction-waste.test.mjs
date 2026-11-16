@@ -136,7 +136,9 @@ const flushFrames = () => {
 globalThis.window = {
   innerWidth: 1440,
   innerHeight: 1000,
-  Vue: { computed: (getter) => ({ get value() { return getter(); } }), reactive: (value) => value },
+  // No reactivity: a render effect (the alignment overlay's text) runs once.
+  Vue: { computed: (getter) => ({ get value() { return getter(); } }), reactive: (value) => value,
+    watchEffect: (effect) => { effect(); return () => {}; } },
   setTimeout(callback, delay) {
     const id = nextTimerId++;
     timers.set(id, { callback, delay });
@@ -181,6 +183,8 @@ class FakeText {
   }
 
   get textContent() { return this.data; }
+
+  set textContent(value) { this.data = String(value); }
 }
 
 const classListOf = (node) => ({
@@ -553,7 +557,7 @@ test('OV-935: the Review alignment finds each candidate through one identity ind
 test('OV-936: the alignment overlay is not measured while the preview pans', () => {
   const local = createPreview({ features: [featureRow(0)], bands: [] });
   local.actions.showAlignmentOverlay({
-    reference: { key: 'r', recordKey: 'REC', anchor: {}, name: 'Reference' },
+    reference: { key: 'r', recordKey: 'REC', anchor: {}, name: () => 'Reference' },
     records: [], onSelect() {}, onHover() {}
   });
   flushFrames();

@@ -23,7 +23,9 @@ import {
 } from '../services/feature-identity.js';
 import { CompositionMetadataError, materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId, locationPartBound } from '../services/feature-utils.js';
-import { describeDirectionPreview, recordsNeedingChoice, resetPreviewView, shortRecordName } from '../services/alignment-review-view.js';
+import {
+  alignmentFeatureName, alignmentRecordName, describeDirectionPreview, recordsNeedingChoice, resetPreviewView, shortRecordName
+} from '../services/alignment-review-view.js';
 import {
   anchorsAgree, classifyPlanAgainstCatalog, resetSourceMembers, restoredAxisTranslations, restoredPlacement
 } from '../services/alignment-plan-facts.js';
@@ -49,7 +51,8 @@ const { computed, ref, watch } = window.Vue;
  *   end?: unknown, strand?: unknown, type?: unknown, qualifiers?: Record<string, unknown> | null,
  *   sequenceFeature?: FeatureFacts | null
  * }} FeatureFacts
- * @typedef {{ label: string, name: string, detail: string }} RecordNameEntry A record's name for the Review panel and the Reset preview.
+ * @typedef {import('../services/alignment-review-view.js').RecordNameEntry} RecordNameEntry
+ * @typedef {import('../services/alignment-review-view.js').FeatureNameEntry} FeatureNameEntry
  * @typedef {import('../services/alignment-review-view.js').DisplayedStrand} DisplayedStrand
  * @typedef {{ groupId?: unknown, reference?: AliasSource | null, source?: string, mode?: string }} AlignmentStartOptions
  * @typedef {ReturnType<typeof reviewRows>[number]} ReviewRow One record of the Review panel.
@@ -306,11 +309,13 @@ const displayText = (...values) => values
 const sourceFeature = (facts) => facts.sequenceFeature || facts;
 
 // Human-readable names shared by Review, the direction and Reset previews, and
-// the active-plan inspector. Record keys and feature hashes stay binding-only.
+// the active-plan inspector, as data that `alignmentFeatureName` words where they show (OV-3676).
+// Record keys and feature hashes stay binding-only.
 /**
  * @param {{ biologicalFeatureId?: string }} anchor
  * @param {FeatureFacts} [facts]
  * @param {string} [fallback]
+ * @returns {FeatureNameEntry}
  */
 export const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const feature = sourceFeature(facts);
@@ -324,30 +329,29 @@ export const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const name = gene || product || locusTag || proteinId
     || (fallback === anchor.biologicalFeatureId ? '' : displayText(fallback));
   if (name) {
-    const ids = [locusTag, proteinId].filter((value) => value && value !== name);
-    return { name, ids, label: [name, ...ids].join(' · ') };
+    return { name, ids: [locusTag, proteinId].filter((value) => value && value !== name), type: '', coordinates: '' };
   }
   const start = locationPartBound(feature.start == null ? facts : feature, 'start');
   const end = locationPartBound(feature.end == null ? facts : feature, 'end');
   const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
     ? `${numberText(start + 1)}..${numberText(end)} bp` : '';
-  const typeName = [displayText(feature.type, facts.type) || t('Feature'), coordinates].filter(Boolean).join(' ');
-  return { name: typeName, ids: [], label: typeName };
+  return { name: '', ids: [], type: displayText(feature.type, facts.type), coordinates };
 };
 
-// The joined label names a feature in accessible names; the parts lay it out.
+// The name's parts, worded where they show; the ids are values, shown beside the name.
 /**
  * @param {{ biologicalFeatureId?: string }} anchor
  * @param {Map<string, FeatureFacts>} displayFacts
  * @param {string} [fallback]
  */
 const featureView = (anchor, displayFacts, fallback = '') => {
-  const parts = featureNameParts(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback);
-  return { label: parts.label, name: parts.name, ids: parts.ids.join(' · ') };
+  const feature = featureNameParts(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback);
+  return { feature, ids: feature.ids.join(' · ') };
 };
 
 // Presentation label or definition plus accession; the display position is
-// appended only to tell otherwise identical records apart.
+// appended only to tell otherwise identical records apart. The position stays a number,
+// worded by `alignmentRecordName` where the name shows (OV-3676).
 /**
  * @param {{
  *   recordKeys: string[],
@@ -355,6 +359,7 @@ const featureView = (anchor, displayFacts, fallback = '') => {
  *   linearSeqs?: readonly LinearSeq[],
  *   catalog?: FeatureCatalog | null
  * }} options
+ * @returns {Map<string, RecordNameEntry>}
  */
 const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = null }) => {
   const { rowsByRecord } = catalogNameIndex(catalog);
@@ -370,7 +375,7 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
   // A record without its own Definition takes its File's (OV-436). The accession and
   // the label stay this panel's own: the accession is always added and is the short name.
   const fileNames = linearRecordNames(Array.isArray(linearSeqs) ? linearSeqs : []);
-  const parts = recordKeys.map((recordKey, index) => {
+  const parts = recordKeys.map((recordKey) => {
     const record = request?.records?.find((/** @type {{ recordKey?: unknown, presentation?: { label?: unknown } | null } | null} */ entry) => entry?.recordKey === recordKey);
     const sequence = (Array.isArray(linearSeqs) ? linearSeqs : [])
       .find((entry) => String(entry?.uid || '') === recordKey);
@@ -380,24 +385,18 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const accession = displayText(sequence?.accession) || catalogAccession(recordKey);
     const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);
     const label = [...new Set([name, accession].filter(Boolean))].join(' · ')
-      || (fileName ? plainTextLinearRecordLabel(fileName) : '')
-      || t('Record {n}', { n: index + 1 });
+      || (fileName ? plainTextLinearRecordLabel(fileName) : '');
     return { label, name: name || accession || label, accession: name && accession !== name ? accession : '' };
   });
   /** @type {Map<string, number>} */
   const counts = new Map();
   parts.forEach(({ label }) => counts.set(label, (counts.get(label) || 0) + 1));
-  // Each entry keeps the joined label for accessible names and its parts for layout.
-  return new Map(recordKeys.map((recordKey, index) => {
-    const { label, name, accession } = parts[index];
+  // A record without a label is named by its position, so it shares no label.
+  return new Map(recordKeys.map((recordKey, index) => [recordKey, {
+    ...parts[index], ordinal: index + 1,
     // Every label was counted above.
-    const duplicate = /** @type {number} */ (counts.get(label)) > 1 ? t('Record {n}', { n: index + 1 }) : '';
-    return [recordKey, {
-      label: duplicate ? `${label} · ${duplicate}` : label,
-      name,
-      detail: [accession, duplicate].filter(Boolean).join(' · ')
-    }];
-  }));
+    duplicate: Boolean(parts[index].label) && /** @type {number} */ (counts.get(parts[index].label)) > 1
+  }]));
 };
 
 /**
@@ -410,13 +409,12 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
   const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
   if (!member) throw new Error('Alignment candidate has no current member facts.');
   const coordinates = `${numberText(candidate.sourceStart + 1)}..${numberText(candidate.sourceEnd)} bp`;
-  const feature = featureView(candidate.anchor, displayFacts, candidate.displayName);
+  const { feature, ids } = featureView(candidate.anchor, displayFacts, candidate.displayName);
   return {
     key,
     anchor: candidate.anchor,
-    label: feature.label,
-    name: feature.name,
-    ids: feature.ids,
+    feature,
+    ids,
     // The English keys of the evidence kinds, worded with `tm` where the panel shows them (OV-3676). A kind is helper
     // text: one the table does not hold is kept, and shown, as written (OV-573).
     evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? evidenceLabels[kind] : kind),
@@ -440,15 +438,11 @@ const referenceView = (response, request, displayFacts, recordLabels) => {
   if (!request.members.some(({ anchor }) => sameJson(anchor, response.reference))) {
     throw new Error('Alignment reference has no current member facts.');
   }
-  const feature = featureView(response.reference, displayFacts);
-  const record = recordLabels.get(response.reference.recordKey);
+  const { feature, ids } = featureView(response.reference, displayFacts);
   return {
-    label: feature.label,
-    name: feature.name,
-    ids: feature.ids,
-    recordLabel: record?.label,
-    recordName: record?.name,
-    recordDetail: record?.detail,
+    feature,
+    ids,
+    recordNames: recordLabels.get(response.reference.recordKey),
     recordKey: response.reference.recordKey,
     // Python's source coordinates of the reference, read from the committed request.
     coordinates: numberText(response.referenceSourceStart + 1) + '..'
@@ -474,12 +468,9 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       : record.status === 'skipped' ? record.rationale : record.reviewReason;
     const recommendedKey = selectedAnchor && REVIEW_REASONS.has(reason)
       ? anchorKey(selectedAnchor) : null;
-    const names = recordLabels.get(record.recordKey);
     return {
       recordKey: record.recordKey,
-      recordLabel: names?.label,
-      recordName: names?.name,
-      recordDetail: names?.detail,
+      recordNames: recordLabels.get(record.recordKey),
       candidates: record.candidates.filter(({ usable }) => usable)
         .map((candidate) => candidateView(candidate, request, displayFacts)),
       reason,
@@ -537,7 +528,7 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
       .map((record) => [record.uid, cropFormReverseComplement(linearCardCropForm(record))])
   );
   const factsOf = catalogNameIndex(catalog).featureOf;
-  const nameOf = (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => featureNameParts(anchor, factsOf(anchor) || {});
+  const nameOf = (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => alignmentFeatureName(featureNameParts(anchor, factsOf(anchor) || {}));
   const names = recordNames({ recordKeys: plan.records.map(({ recordKey }) => recordKey),
     request, linearSeqs, catalog });
   const reference = nameOf(plan.reference);
@@ -549,15 +540,15 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
     reference: {
       ...plan.reference,
       label: reference.label,
-      recordLabel: referenceRecord?.label
+      recordLabel: alignmentRecordName(referenceRecord).label
     },
     records: plan.records.map((decision) => {
-      const recordName = names.get(decision.recordKey);
+      const recordName = alignmentRecordName(names.get(decision.recordKey));
       return {
         recordKey: decision.recordKey,
-        recordLabel: recordName?.label,
-        recordName: recordName?.name,
-        recordDetail: recordName?.detail,
+        recordLabel: recordName.label,
+        recordName: recordName.name,
+        recordDetail: recordName.detail,
         anchorLabel: decision.anchor ? nameOf(decision.anchor).label : t('Skip'),
         status: decision.status,
         rationale: decision.rationale,
@@ -1384,7 +1375,7 @@ const referenceOptionsOf = ({ records, factsOf }, members) => {
         anchor,
         canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
         key: anchorKey(anchor),
-        label: `${record} · ${featureNameParts(anchor, facts).name}`,
+        label: `${record} · ${alignmentFeatureName(featureNameParts(anchor, facts)).name}`,
         location: sourceLocationText(facts)
       };
     } catch (_error) {
