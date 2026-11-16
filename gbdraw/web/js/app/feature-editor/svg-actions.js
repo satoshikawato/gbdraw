@@ -8,7 +8,8 @@
 /** @import { CommittedCanonicalSession } from '../../services/session-request.js' */
 /** @import { MatchFramePopup, PreviewItem, PreviewItemPopup } from '../../services/match-frame-popup.js' */
 /** @import { MatchPopupPayload, PopupRow } from '../../services/pairwise-match-popup.js' */
-/** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
+/** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, AlignmentOverlayRequest, FigureSpan } from '../../services/alignment-review-view.js' */
+/** @import { Wording } from '../../utils/i18n.js' */
 /** @import { PreviewTransformInteractionListener } from '../ui.js' */
 /** @import { RegionAxisRecord } from '../../services/region-axis.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
@@ -237,14 +238,6 @@ export {
  */
 
 /**
- * @typedef {object} AlignmentOverlayRequest
- * @property {{ key: string, recordKey: string, anchor: AliasSource, name: string }} reference
- * @property {AlignmentOverlayRecord[]} records
- * @property {(recordKey: string, anchor: AliasSource) => void} onSelect
- * @property {(recordKey: string, candidateKey: string) => void} onHover
- */
-
-/**
  * A candidate the Result draws, with its blocks and its ring button.
  * @typedef {AlignmentOverlayCandidate & { record: AlignmentOverlayRecord, svgId: string, blocks: Element[], button: HTMLButtonElement }} AlignmentOverlayRing
  */
@@ -262,6 +255,7 @@ export {
  * @property {() => void} schedule
  * @property {(ring: AlignmentOverlayRing | null) => void} setHover
  * @property {(recordKey: string, anchor: AliasSource) => void} onSelect
+ * @property {(() => void) | null} stopText Stops the render of the overlay's text; null until the overlay is shown.
  */
 
 /**
@@ -318,6 +312,28 @@ const placeRing = (ring, box) => {
   const width = Math.max(box.right - box.left, 8) + 6;
   Object.assign(ring.style, { left: (box.x - width / 2) + 'px', top: (box.top - 3) + 'px',
     width: width + 'px', height: (box.bottom - box.top + 6) + 'px' });
+};
+
+/**
+ * The overlay's text render: the reference flag and each ring's accessible name, worded in the shown language. Like a
+ * template, it runs again when what it words changes (a language change), and then places the overlay again, since
+ * the flag and the hovered tag change width (OV-3676). It writes the DOM from the overlay's request; it changes no state.
+ * @param {HTMLElement} flag
+ * @param {Wording} referenceName
+ * @param {readonly AlignmentOverlayRing[]} rings
+ * @param {() => void} place The overlay's next placement.
+ * @returns {() => void} Stops the render.
+ */
+const renderAlignmentOverlayText = (flag, referenceName, rings, place) => {
+  const name = Object.assign(document.createElement('span'), { className: 'truncate' });
+  const word = document.createTextNode('');
+  flag.append(name, word);
+  return window.Vue.watchEffect(() => {
+    name.textContent = referenceName();
+    word.textContent = ` · ${tx('similarity alignment', 'reference')}`;
+    rings.forEach((ring) => ring.button.setAttribute('aria-label', ring.accessibleName()));
+    place();
+  });
 };
 
 /**
@@ -1360,6 +1376,7 @@ export const createFeatureSvgActions = ({
         window.removeEventListener('resize', overlay.schedule);
         overlay.resizeObserver?.disconnect();
         overlay.transformObserver.disconnect();
+        overlay.stopText?.();
         overlay.element.remove();
         handlerState.alignmentOverlay = null;
         handlerState.alignmentCandidatesBySvgId.clear();
@@ -1440,8 +1457,6 @@ export const createFeatureSvgActions = ({
         referenceRing.className = 'gbdraw-alignment-ring is-reference is-chosen';
         const flag = document.createElement('span');
         flag.className = 'gbdraw-alignment-flag truncate';
-        const flagName = Object.assign(document.createElement('span'), { className: 'truncate', textContent: reference.name });
-        flag.append(flagName, ` · ${tx('similarity alignment', 'reference')}`);
         const tag = document.createElement('span');
         tag.className = 'gbdraw-alignment-tag truncate';
         [referenceRing, flag, tag].forEach((part) => part.setAttribute('aria-hidden', 'true'));
@@ -1464,7 +1479,8 @@ export const createFeatureSvgActions = ({
             onHover(ring?.record.recordKey || '', ring?.key || '');
             overlay.schedule();
           },
-          onSelect
+          onSelect,
+          stopText: null
         };
 
         /** @type {AlignmentOverlayRing[]} */
@@ -1486,7 +1502,6 @@ export const createFeatureSvgActions = ({
           button.classList.toggle('is-skipped', record.skipped);
           button.dataset.alignmentRecordKey = record.recordKey;
           button.dataset.alignmentCandidateKey = ring.key;
-          button.setAttribute('aria-label', ring.accessibleName);
           button.setAttribute('aria-pressed', String(chosen));
           button.addEventListener('click', (event) => {
             event.preventDefault();
@@ -1566,7 +1581,7 @@ export const createFeatureSvgActions = ({
             ring.button.classList.toggle('is-hover', hovered);
             if (!box) return;
             if (hovered) {
-              tag.textContent = ring.name;
+              tag.textContent = ring.name();
               placeLabel(tag, box.x, box.top - 25, frame.width);
             }
             // The chosen candidate's arrow gives way to the hovered candidate of its record.
@@ -1594,7 +1609,7 @@ export const createFeatureSvgActions = ({
         // Zoom and pan are the surface's transform.
         overlay.transformObserver.observe(svgContainer.value, { attributes: true, attributeFilter: ['style'] });
         handlerState.alignmentOverlay = overlay;
-        overlay.schedule();
+        overlay.stopText = renderAlignmentOverlayText(flag, reference.name, rings, overlay.schedule);
         if (focusedKeys) {
           rings.find(({ button }) => button.dataset.alignmentRecordKey === focusedKeys.alignmentRecordKey
             && button.dataset.alignmentCandidateKey === focusedKeys.alignmentCandidateKey)?.button.focus({ preventScroll: true });

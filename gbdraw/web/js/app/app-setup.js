@@ -182,6 +182,7 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions, featureNameParts } from './similarity-alignment.js';
+import { alignmentFeatureName, alignmentRecordName } from '../services/alignment-review-view.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createRecordPositionReset } from './record-position-reset.js';
@@ -480,7 +481,7 @@ const shownResultFeatures = (recordKey) => {
     const featureId = String(row.biologicalFeatureId ?? '');
     if (!featureId || seen.has(featureId)) return [];
     seen.add(featureId);
-    return [{ featureId, label: featureNameParts({ biologicalFeatureId: featureId }, row).label }];
+    return [{ featureId, label: alignmentFeatureName(featureNameParts({ biologicalFeatureId: featureId }, row)).label }];
   });
 };
 
@@ -3985,6 +3986,9 @@ export const createAppSetup = () => {
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,
     similarityAlignmentReview,
+    // The Review panel words the draft's record and feature names where it shows them (OV-3676).
+    alignmentRecordName,
+    alignmentFeatureName,
     similarityAlignmentEditorDisabledReason,
     similarityAlignmentCanvasHover,
     previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,

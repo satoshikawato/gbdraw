@@ -10,10 +10,10 @@
 /** @import { WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ArtifactSlotStore } from '../services/artifact-slot.js' */
-/** @import { AlignmentFigureGeometry, AlignmentOverlayRecord, DirectionPreviewRecord } from '../services/alignment-review-view.js' */
+/** @import { AlignmentFigureGeometry, AlignmentOverlayRequest, DirectionPreviewRecord, FeatureNameEntry, RecordNameEntry } from '../services/alignment-review-view.js' */
 /** @import { AliasSource } from '../services/feature-identity.js' */
 /** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
-import { ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView } from '../services/alignment-review-view.js';
+import { ALIGNMENT_REFERENCE_KEY, alignmentFeatureName, alignmentOverlayRecords, buildAlignmentReviewView } from '../services/alignment-review-view.js';
 import { t } from '../utils/i18n.js';
 
 const { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } = window.Vue;
@@ -21,14 +21,14 @@ const { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } = w
 /**
  * One record of the alignment draft, as the figure overlay and the Review panel read it.
  * @typedef {{
- *   recordKey: string, recordLabel: string, choice: { kind: string, candidateKey?: string | null } | null,
- *   candidates: readonly { key: string, anchor: Record<string, unknown>, name: string, label: string, coordinates: string }[]
+ *   recordKey: string, recordNames: RecordNameEntry | undefined, choice: { kind: string, candidateKey?: string | null } | null,
+ *   candidates: readonly { key: string, anchor: Record<string, unknown>, feature: FeatureNameEntry, coordinates: string }[]
  * }} AlignmentDraftRow
  */
 /**
  * The alignment owner's draft, as the review reads it.
  * @typedef {{
- *   rows: readonly AlignmentDraftRow[], reference: { recordKey: string, name: string },
+ *   rows: readonly AlignmentDraftRow[], reference: { recordKey: string, feature: FeatureNameEntry },
  *   response: { reference: AliasSource }, openedWithoutChoice: readonly string[]
  * }} AlignmentDraft
  */
@@ -40,13 +40,6 @@ const { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } = w
  * @typedef {{ drawerOpen: boolean, drawerTab: string, popup: unknown, figure: string }} AlignmentTakeover
  */
 /** @typedef {{ value: AlignmentTakeover | null }} AlignmentTakeoverRef The root's takeover ref; the preview's gestures read it. */
-/**
- * What the figure overlay draws: the reference and each record's candidates.
- * @typedef {{
- *   reference: { key: string, recordKey: string, anchor: AliasSource, name: string }, records: AlignmentOverlayRecord[],
- *   onSelect: (recordKey: string, anchor: AliasSource) => void, onHover: (recordKey: string, candidateKey: string) => void
- * }} AlignmentOverlayRequest
- */
 
 /**
  * @typedef {object} SimilarityAlignmentTakeoverPorts
@@ -262,7 +255,7 @@ export const createSimilarityAlignmentReview = ({
     // geometry of the same Result.
     similarityAlignmentGeometry.value = showAlignmentOverlay({
       reference: { key: ALIGNMENT_REFERENCE_KEY, recordKey: current.reference.recordKey,
-        anchor: current.response.reference, name: current.reference.name },
+        anchor: current.response.reference, name: () => alignmentFeatureName(current.reference.feature).name },
       records: alignmentOverlayRecords(current.rows),
       onSelect: selectAlignmentCandidate,
       onHover: (recordKey, candidateKey) => {
