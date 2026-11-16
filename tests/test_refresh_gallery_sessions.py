@@ -2577,10 +2577,16 @@ def test_refreshed_gallery_session_keeps_the_resources_only_a_kept_drawing_names
     refresh_gallery_sessions_module._keep_resources(finalized_view, drawing_resource_ids(finalized_view))
     finalized = write_session_drawings([finalized_view], ids=[shown["id"]], names=[shown["name"]])
     assert "record-9-genbank" not in finalized["resources"]
+    # A resource no drawing names, with its original name, in both documents.
+    for document in (source, finalized):
+        document["resources"]["unnamed-table"] = copy.deepcopy(source["resources"]["colors-color-table-file"])
+        document["webFiles"]["resourceOriginalNames"]["unnamed-table"] = "unnamed.tsv"
 
     refreshed = refresh_gallery_sessions_module._with_source_drawings(finalized, source)
 
     assert refreshed["webFiles"]["resourceOriginalNames"]["record-9-genbank"] == "reference-only.gbk"
+    assert "unnamed-table" not in refreshed["resources"]
+    assert "unnamed-table" not in refreshed["webFiles"]["resourceOriginalNames"]
     named = set().union(*(drawing_resource_ids(_drawing_view(refreshed, drawing)) for drawing in refreshed["drawings"]))
     assert set(refreshed["resources"]) == named
     assert set(refreshed["webFiles"]["resourceOriginalNames"]) <= named
