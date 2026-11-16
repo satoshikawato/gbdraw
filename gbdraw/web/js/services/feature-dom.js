@@ -86,8 +86,21 @@ export const drawnBlockStrokeElement = (elements) => {
   const all = Array.from(elements || []);
   const block = filterFeatureFillTargets(all).find((element) => !isAutoFeatureUnderlay(element));
   if (!block) return null;
-  const outlineId = `${elementDomId(block)}${OUTLINE_ID_SUFFIX}`;
-  return (elementDomId(block) && all.find((element) => elementDomId(element) === outlineId)) || block;
+  return blockOutlineOf(block, all) || block;
+};
+
+// The outline Python drew over this block (its id plus the outline suffix)
+// among these elements, found by id; null when the block has none.
+/**
+ * @param {Element | null | undefined} block
+ * @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements
+ * @returns {Element | null}
+ */
+export const blockOutlineOf = (block, elements) => {
+  const id = elementDomId(block);
+  if (!id) return null;
+  const outlineId = `${id}${OUTLINE_ID_SUFFIX}`;
+  return Array.from(elements || []).find((element) => elementDomId(element) === outlineId) || null;
 };
 
 /**
