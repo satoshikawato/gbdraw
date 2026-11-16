@@ -1071,7 +1071,7 @@ export const createAppSetup = () => {
     isPreviewTransformActive, subscribePreviewTransformChanges,
     holdPreviewViewport,
     releasePreviewViewport,
-    heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, storedFigurePreview
+    heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, showArrivingFigure, storedFigurePreview
   } = createPanZoom(state, { showCanvas: settingsPaneActions.showPhoneWorkspace });
   const { startResizing } = createSidebarResize(state);
 
@@ -2615,7 +2615,7 @@ export const createAppSetup = () => {
     installShownDrawing, dismissNotice: noticeBanner.dismiss,
     switchDrawingSearch: previewFeatureSearch.switchDrawingSearch, rebindAnnotationRecords,
     clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
-    presentSelectedResult: previewRuntime.presentSelectedResult,
+    presentSelectedResult: previewRuntime.presentSelectedResult, showArrivingFigure,
     rememberResultInventory: legendActions.rememberResultInventory, artifactSlotsSwap: artifactSlots.swap,
     captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot
   });

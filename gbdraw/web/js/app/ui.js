@@ -4,7 +4,7 @@
 /** @import { WebState } from '../state.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { isClickAtPress, primaryPressAfter } from '../utils/popup-bounds.js';
-import { watch } from '../utils/reactivity.js';
+import { nextTick, watch } from '../utils/reactivity.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
 // also absorbs browser delivery delay between nominally 80 ms wheel inputs.
@@ -107,7 +107,10 @@ const isSvgEditingTarget = (target) =>
  * Session 27-44 Load shows while Python converts the file is hidden and shown fitted in the same way, and a
  * Load that withdraws it shows the view from before it (OV-2703). A figure to show fitted while its canvas
  * has no room (a phone shows the Settings pane) stays hidden until the canvas gets one, and is then fitted
- * and shown; hiding a figure again, or showing it without the Fit, drops that wait.
+ * and shown; hiding a figure again, or showing it without the Fit, drops that wait. The figure a drawing
+ * switch shows in place of the shown one is hidden and shown fitted in the same way, once Vue mounts it
+ * (`showArrivingFigure`, OV-3620): whatever the view of the departing figure was, the arriving one shows whole
+ * in the room the preview has.
  * @param {{ hidden: { value: boolean }, canvas: { value: HTMLElement | null }, fitAtOnce: () => void,
  *   setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The pan and zoom
  *   owner's hold, canvas, Fit shown at once, and whole-view setter.
@@ -136,7 +139,14 @@ const createHiddenPreview = ({ hidden, canvas, fitAtOnce, setPreviewViewport }) 
     hide: hidePreviewUntilShown, show: showHiddenPreview,
     restore: (/** @type {PersistedPreviewViewport} */ view) => setPreviewViewport(view.canvasPan, view.zoom)
   });
-  return { hidePreviewUntilShown, showHiddenPreview, storedFigurePreview, disposeHiddenPreview: () => roomObserver?.disconnect() };
+  const showArrivingFigure = () => {
+    hidePreviewUntilShown();
+    void nextTick().then(() => showHiddenPreview({ fit: true }));
+  };
+  return {
+    hidePreviewUntilShown, showHiddenPreview, showArrivingFigure, storedFigurePreview,
+    disposeHiddenPreview: () => roomObserver?.disconnect()
+  };
 };
 
 /**
@@ -625,7 +635,7 @@ export const createPanZoom = (state, { showCanvas = () => {} } = {}) => {
     void getComputedStyle(svgContainer.value).transform;
     previewTransitionHeld.value = false;
   };
-  const { hidePreviewUntilShown, showHiddenPreview, storedFigurePreview, disposeHiddenPreview } = createHiddenPreview({
+  const { hidePreviewUntilShown, showHiddenPreview, showArrivingFigure, storedFigurePreview, disposeHiddenPreview } = createHiddenPreview({
     hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce, setPreviewViewport
   });
 
@@ -656,6 +666,7 @@ export const createPanZoom = (state, { showCanvas = () => {} } = {}) => {
     heldPreviewViewport,
     hidePreviewUntilShown,
     showHiddenPreview,
+    showArrivingFigure,
     storedFigurePreview,
     cancelPreviewTransformInteraction,
     disposePanZoom,

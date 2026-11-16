@@ -195,3 +195,38 @@ test('a Load that drops the drawing of an open review ends the review and the ap
   expect(await page.evaluate(() => document.getElementById('app')?.childElementCount ?? 0)).toBeGreaterThan(0);
   expect(pageErrors).toEqual([]);
 });
+
+// OV-3620, OV-3621: a drawing switch shows the arriving figure whole in the room the preview has, whether or not a
+// review is open: the copy a Duplicate shows, each drawing shown again, and, while the review of one drawing is open
+// (its docked panel narrows the room), its copy and the review's own drawing.
+// Measured once the view settled: two frames after the step, past any transition of the surface's transform.
+const figureInRoom = (page) => evaluateWithRetainedPromise(page, async () => {
+  const app = window.__GBDRAW_APP__;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await Promise.all((app.svgContainer?.getAnimations?.() ?? []).map((animation) => animation.finished));
+  const room = app.canvasContainerRef.getBoundingClientRect();
+  const figure = app.svgContainer?.querySelector('svg')?.getBoundingClientRect();
+  return Boolean(figure?.width) && figure.left >= room.left && figure.right <= room.right
+    && figure.top >= room.top && figure.bottom <= room.bottom;
+});
+test('a drawing switch shows the arriving figure inside the preview, with or without an open review', async ({ page }) => {
+  test.setTimeout(900000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(GALLERY_SESSION), 'BGC0000708-BGC0000713.gbdraw');
+  expect(await figureInRoom(page), 'the loaded figure').toBe(true);
+  const source = await shownDrawingId(page);
+  const copy = await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(id).drawingId, source);
+  await expect.poll(() => shownDrawingId(page)).toBe(copy);
+  expect(await figureInRoom(page), 'the copy its Duplicate shows').toBe(true);
+  await show(page, source);
+  expect(await figureInRoom(page), 'the source shown again').toBe(true);
+  const dialog = await openReview(page, 'CAG38712.1');
+  expect(await figureInRoom(page), 'the review fits its own drawing').toBe(true);
+  await show(page, copy);
+  await expect(dialog).toBeVisible();
+  expect(await figureInRoom(page), 'the copy shown while the review is open').toBe(true);
+  await show(page, source);
+  expect(await figureInRoom(page), 'the review\'s drawing shown again').toBe(true);
+});
