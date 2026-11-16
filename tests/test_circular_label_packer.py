@@ -13,6 +13,7 @@ from typing import cast
 import pytest
 from Bio import SeqIO
 
+import gbdraw.api.diagram as diagram_module
 import gbdraw.diagrams.circular.assemble as assemble_module
 import gbdraw.labels.circular_packer as packer_module
 import gbdraw.labels.fit as fit_module
@@ -25,6 +26,9 @@ from gbdraw.api import (
 )
 from gbdraw.circular import circular_main
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.toml import load_config_toml
+from gbdraw.layout.figure_size import BaseLengthFit
 from gbdraw.layout.spatial import Aabb
 from gbdraw.session import build_session_document
 from gbdraw.session_io import materialize_embedded_file
@@ -32,7 +36,12 @@ from tests.utils.session_drawing_view import drawing_view
 from tests.utils.session_files import embedded_session
 from gbdraw.web_support.request_render import render_canonical_web_request
 import gbdraw.labels.circular as circular_module
-from gbdraw.labels.circular import _count_label_overlaps, _packer_side_rules, circular_label_fits
+from gbdraw.labels.circular import (
+    _count_label_overlaps,
+    _packer_side_rules,
+    circular_label_fits,
+    todays_label_placement,
+)
 from gbdraw.labels.circular_capacity import LabelArc
 from gbdraw.labels.circular_packer import PackerLook, SideRules, pack_side
 from gbdraw.labels.circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels, too_close_on_one_line
@@ -416,6 +425,100 @@ def test_t5_at_12pt_needs_more_room_than_its_ellipse_so_the_packer_is_not_tried(
     with pytest.raises(LabelsDoNotFitError):
         _draw(tmp_path, [*T5, "--label_font_size", "12"])
     assert looks == []
+
+
+@pytest.mark.circular
+def test_todays_label_placement_draws_a_record_the_packer_fits_as_today(
+    tmp_path: Path, looks: list[tuple[PackerLook, bool]]
+) -> None:
+    """Inside ``todays_label_placement`` P1 13 pt is drawn as today, with its one crossing, and the switch notes that
+    a placement skipped the packer (what a figure-size search reads, CP-D11)."""
+
+    with todays_label_placement() as todays, pytest.warns(LabelLeadersCrossWarning, match=r"1 leader pairs? cross"):
+        circular_main([*P1, "--label_font_size", "13", "-o", str(tmp_path / "out"), "-f", "svg"])
+    assert todays.packer_skipped and looks == []
+
+
+# ---- a requested figure size searches with today's placement first (CP-D11) --------------------------------
+
+
+class _SearchedFigure:
+    """What one fake size search drew: its index and its labels' outcome."""
+
+    def __init__(self, index: int, outcome: str) -> None:
+        self.index = index
+        self.outcome = outcome
+
+
+@pytest.mark.parametrize(
+    ("searches", "skips_packer", "runs_today", "kept"),
+    [
+        pytest.param([(True, "fits")], True, [True], 0, id="labels_fit_today"),
+        pytest.param([(True, "warn"), (True, "fits")], True, [True, False], 1, id="packed_search_fits"),
+        pytest.param([(True, "stop"), (True, "warn")], True, [True, False], 0, id="packed_search_does_not_fit"),
+        pytest.param([(True, "stop"), (False, "fits")], True, [True, False], 0, id="packed_search_over_the_box"),
+        pytest.param([(False, "fits"), (True, "fits")], True, [True, False], 1, id="today_over_the_box"),
+        pytest.param([(True, "warn")], False, [True], 0, id="no_pass_skipped_the_packer"),
+    ],
+)
+def test_the_size_search_keeps_todays_figure_unless_the_packed_search_fits(
+    monkeypatch: pytest.MonkeyPatch,
+    searches: list[tuple[bool, str]],
+    skips_packer: bool,
+    runs_today: list[bool],
+    kept: int,
+) -> None:
+    """The search runs with today's placement first; a second search, with the packer, runs only when today's figure
+    does not fit (the box or the labels) and a pass skipped the packer, and is kept only when it fits both. Only the
+    kept search's warnings reach the caller."""
+
+    ran: list[bool] = []
+
+    def search(measure: object, *, first_base: int, slope: float) -> BaseLengthFit[object]:
+        index = len(ran)
+        todays = circular_module._TODAYS_PLACEMENT.get()
+        ran.append(todays is not None)
+        if todays is not None and skips_packer:
+            todays.packer_skipped = True
+        fits, outcome = searches[index]
+        warnings.warn(f"search {index}", UserWarning)
+        return BaseLengthFit(first_base, -1.0, diagram_module._CircularPass(cfg, _SearchedFigure(index, outcome)), fits)
+
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    monkeypatch.setattr(diagram_module, "fit_base_length", search)
+    monkeypatch.setattr(diagram_module, "_circular_label_layouts", lambda drawing: drawing)
+    monkeypatch.setattr(diagram_module, "circular_label_outcome", lambda drawn: drawn.outcome)
+    monkeypatch.setattr(diagram_module, "figure_size_refusal", lambda *args, **kwargs: AssertionError("refused"))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        drawn = diagram_module._fitted_circular_pass(
+            lambda *args: None, cfg, cfg.canvas.figure_size, map_item="map"  # type: ignore[arg-type, return-value]
+        )
+    assert ran == runs_today
+    assert drawn.drawing.index == kept  # type: ignore[attr-defined]
+    assert [str(warning.message) for warning in caught] == [f"search {kept}"]
+
+
+@pytest.mark.slow
+@pytest.mark.circular
+def test_a_figure_whose_size_search_fits_today_is_drawn_as_today(tmp_path: Path) -> None:
+    """P1 12 pt at 1500 px wide: today's search ends in a radius whose labels fit (no warning, 900.12 px tall). Its
+    passes at smaller radii do not fit; packing them changed the search and the figure (875.13 px tall)."""
+
+    args = [*P1, "--label_font_size", "12", "--figure_width", "1500px"]
+    drawn = _draw(tmp_path / "drawn", args).read_bytes()
+    with todays_label_placement():
+        today = _draw(tmp_path / "today", args).read_bytes()
+    assert drawn == today and b'height="900.1174px"' in drawn
+
+
+@pytest.mark.slow
+@pytest.mark.circular
+def test_a_packed_figure_keeps_the_requested_width(tmp_path: Path, looks: list[tuple[PackerLook, bool]]) -> None:
+    """P1 14 pt at 1700 px wide stops today (6 overlaps, 11 crossings); the packed search draws it 1700 px wide."""
+
+    svg = _draw(tmp_path, [*P1, "--label_font_size", "14", "--figure_width", "1700px"]).read_text()
+    assert ("pole", True) in looks and 'width="1700px"' in svg
 
 
 def test_the_repair_takes_the_callers_defect_count() -> None:

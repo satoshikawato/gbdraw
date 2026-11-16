@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeAlias, TypeVar, get_args
 
@@ -119,11 +119,17 @@ def _measured(
     return result, tuple(caught)
 
 
+def emit_caught_warnings(caught: Sequence[warnings.WarningMessage]) -> None:
+    """Emit the Python warnings caught from what is kept, once, in order (D-16)."""
+
+    for message in caught:
+        warnings.warn_explicit(message.message, message.category, message.filename, message.lineno, source=message.source)
+
+
 def _kept(kept: _Pass[Built]) -> BaseLengthFit[Built]:
     """The kept pass, with its warnings emitted once, in order (D-16)."""
 
-    for caught in kept.caught:
-        warnings.warn_explicit(caught.message, caught.category, caught.filename, caught.lineno, source=caught.source)
+    emit_caught_warnings(kept.caught)
     return kept.fit
 
 
@@ -558,6 +564,7 @@ __all__ = [
     "figure_size_refusal",
     "figure_too_narrow",
     "figure_too_short",
+    "emit_caught_warnings",
     "fit_base_length",
     "larger_figure",
 ]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import cache
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -260,13 +260,14 @@ def stub_typed_request_export(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def todays_label_placement_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Circular horizontal labels as placed before the order-preserving packer: its looks are off.
+def todays_label_placement_only() -> Iterator[None]:
+    """Circular horizontal labels as placed before the order-preserving packer (``todays_label_placement``).
 
     For tests of what a figure that does not fit carries (its report, rows and warning) on small records
     the packer now fits, as the repair is turned off for crossings it would clear.
     """
 
-    import gbdraw.labels.circular as circular_labels
+    from gbdraw.labels.circular import todays_label_placement
 
-    monkeypatch.setattr(circular_labels, "PACKER_LOOKS", ())
+    with todays_label_placement():
+        yield

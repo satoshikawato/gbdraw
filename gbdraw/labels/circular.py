@@ -8,6 +8,8 @@ from __future__ import annotations
 import heapq
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property, lru_cache, partial
 from typing import Any, Literal, NamedTuple, TypeAlias, get_args
@@ -85,6 +87,38 @@ LEGACY_MIN_ROW_GAP_PX = 0.1
 DenseOuterRows: TypeAlias = Literal["spaced", "legacy"]
 # The outer and the inner side as the order-preserving packer placed them (CP-D04).
 PackedSides: TypeAlias = tuple[list[CircularLabel], list[CircularLabel]]
+
+
+@dataclass
+class TodaysLabelPlacement:
+    """Drawn placements made with today's placement only (``todays_label_placement``): no packer look is tried.
+
+    ``packer_skipped`` records whether one of them would have tried the packer: if none would have, the same
+    placements with the packer on are the same.
+    """
+
+    packer_skipped: bool = False
+
+
+_TODAYS_PLACEMENT: ContextVar[TodaysLabelPlacement | None] = ContextVar(
+    "gbdraw_circular_todays_label_placement", default=None
+)
+
+
+@contextmanager
+def todays_label_placement() -> Iterator[TodaysLabelPlacement]:
+    """Draw every placement inside with today's placement (repaired, or as placed), as a probe does (CP-D11).
+
+    A figure-size search runs with it first, so a figure whose search ends in fitting labels today is drawn as
+    today; it yields what the placements skipped.
+    """
+
+    skipped = TodaysLabelPlacement()
+    token = _TODAYS_PLACEMENT.set(skipped)
+    try:
+        yield skipped
+    finally:
+        _TODAYS_PLACEMENT.reset(token)
 
 
 class CircularLabelProbeStopped(Exception):
@@ -6229,7 +6263,8 @@ def _drawn_placement(
     (`sides_packable`), each packer look in turn (CP-D05: "half" first) packs the sides (``pack``) and the
     placement places them (``place``); a look's placement is drawn only when the fit check then finds no
     defect, or the repair clears them; both count a packed pair on one text line closer than its line gap as a
-    defect (`defect_count`, OV-2037). Otherwise ``labels`` are drawn as placed, with their warning.
+    defect (`defect_count`, OV-2037). Otherwise ``labels`` are drawn as placed, with their warning. Inside
+    ``todays_label_placement`` no look is tried; the placement notes that it skipped the packer.
     """
     from .circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels
 
@@ -6237,6 +6272,10 @@ def _drawn_placement(
     repaired = repair_circular_labels(labels, total_length, definition_text=definition_text, defects=defects)
     if defects == 0 or repaired is not None or not sides_packable(capacities):
         return labels if repaired is None else repaired
+    todays = _TODAYS_PLACEMENT.get()
+    if todays is not None:
+        todays.packer_skipped = True
+        return labels
     for look in PACKER_LOOKS:
         packed_sides = pack(look, MAX_DEFECTS)
         if packed_sides is None:
@@ -6273,6 +6312,8 @@ __all__ = [
     "normalize_angle_near_reference",
     "euclidean_distance",
     "improved_label_placement_fc",
+    "TodaysLabelPlacement",
+    "todays_label_placement",
     "label_arc",
     "place_labels_on_arc_fc",
     "assign_leader_start_points",

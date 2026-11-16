@@ -14,6 +14,7 @@ import copy
 import logging
 import math
 import re
+import warnings
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
@@ -185,6 +186,7 @@ from gbdraw.io.colors import (
     read_color_table,
     resolve_color_to_hex,
 )
+from gbdraw.labels.circular import todays_label_placement
 from gbdraw.labels.circular_capacity import label_capacity_unchecked
 from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
@@ -227,7 +229,9 @@ from gbdraw.layout.figure_size import (
     FigurePrimaryItem,
     LargerFigure,
     MeasuredBase,
+    BaseLengthFit,
     check_figure_height,
+    emit_caught_warnings,
     figure_size_excess,
     figure_size_parts,
     figure_size_refusal,
@@ -4329,6 +4333,12 @@ def _fitted_circular_pass(
     (``TRACK_LAYOUT``) is too small; any other error, and any error at the configured radius, is raised. A box the
     smallest drawn map does not fit is refused with that map's parts (D-13). A radius whose labels were not placed
     for lack of room (CAPACITY-STOP) left them out, and so does every smaller radius.
+
+    The search runs with today's label placement first (``todays_label_placement``), as the probes do, so a figure
+    whose search ends in labels that fit today is drawn as today (CP-D11). Only when its kept pass does not fit
+    (the box or the labels) and a pass skipped the packer, the search runs again with the packer, and its figure is
+    kept when it fits the box and its labels fit; otherwise today's figure (or refusal) stands. Only the kept
+    search's warnings reach the caller.
     """
 
     radius = float(cfg.canvas.circular.radius)
@@ -4350,7 +4360,21 @@ def _fitted_circular_pass(
             left_out=labels_not_placed(_circular_label_layouts(built.drawing)),
         )
 
-    fit = fit_base_length(measure, first_base=first_base, slope=_CIRCULAR_PX_PER_RADIUS)
+    def search() -> tuple[BaseLengthFit[_CircularPass], tuple[warnings.WarningMessage, ...]]:
+        with warnings.catch_warnings(record=True) as caught:
+            fit = fit_base_length(measure, first_base=first_base, slope=_CIRCULAR_PX_PER_RADIUS)
+        return fit, tuple(caught)
+
+    def fits_with_labels(fit: BaseLengthFit[_CircularPass]) -> bool:
+        return fit.fits and circular_label_outcome(_circular_label_layouts(fit.built.drawing)) == "fits"
+
+    with todays_label_placement() as todays:
+        fit, caught = search()
+    if todays.packer_skipped and not fits_with_labels(fit):
+        packed, packed_caught = search()
+        if fits_with_labels(packed):
+            fit, caught = packed, packed_caught
+    emit_caught_warnings(caught)
     if not fit.fits:
         raise figure_size_refusal(applied_composition_plan(fit.built.drawing), size, primary=map_item)
     return fit.built
