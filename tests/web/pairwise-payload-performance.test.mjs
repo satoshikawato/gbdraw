@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { readSavedSession } from './helpers/session-documents.mjs';
+import { renderErrorText } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const repoRoot = new URL('../..', import.meta.url);
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-pairwise-payload-'));
@@ -150,7 +151,10 @@ const sha256 = (value) => createHash('sha256')
   .update(JSON.stringify(value))
   .digest('hex');
 
+// A payload as it shows in English: it keeps how its texts are worded (OV-3676), so each `Wording` gives its text
+// and a span's reason its English text.
 const sortedCanonical = (value, featureTokens = new WeakMap()) => {
+  if (typeof value === 'function') return value();
   if (value === null || typeof value !== 'object') return value;
   const token = featureTokens.get(value);
   if (token) return { __featureReference: token };
@@ -160,7 +164,7 @@ const sortedCanonical = (value, featureTokens = new WeakMap()) => {
   return Object.fromEntries(
     Object.keys(value)
       .sort()
-      .map((key) => [key, sortedCanonical(value[key], featureTokens)])
+      .map((key) => [key, key === 'unavailableReason' ? renderErrorText(value[key]) : sortedCanonical(value[key], featureTokens)])
   );
 };
 
@@ -429,7 +433,7 @@ test('compact pairwise payloads and hover rows match the accepted semantic basel
 
 const expectedHoverSummary = (payload) => ({
   id: payload.id,
-  title: payload.title,
+  title: payload.title(),
   subtitle: payload.subtitle,
   fill: payload.fill,
   rows: popupModule.buildPairwiseMatchHoverRows(payload)
@@ -647,7 +651,7 @@ test('a Circular comparison band reads its reference by the record ID its hit na
   delete attributes['data-subject-record-index'];
   const records = { unitKeys: ['unit-a', 'unit-b'], comparisonSupplied: () => true };
   const payload = popupModule.buildMatchPopupPayload(elementFrom(attributes), { matchSequenceRecords: records });
-  assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => [entry.read, entry.unavailableReason]), [
+  assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => [entry.read, renderErrorText(entry.unavailableReason)]), [
     [{ kind: 'reference', recordId: 'NC_000001', recordKey: null, start: 10, end: 18 }, ''],
     [{ kind: 'comparison', sourceIndex: 0, recordId: 'subject-record', start: 30, end: 38 }, '']
   ]);
@@ -661,7 +665,7 @@ test('a coordinate below 1 or not whole is read by Python after the record, in t
   }).sequenceBundle.entries[0];
   for (const [qstart, start] of [['0', 0], ['-5', -5], ['1.5', null], ['ten', null], ['1e21', 1e21]]) {
     const entry = spansOf(qstart);
-    assert.deepStrictEqual([entry.read, entry.unavailableReason], [{ kind: 'record', recordKey: 'query-unit', recordId: 'query-record', start, end: 18 }, ''], qstart);
+    assert.deepStrictEqual([entry.read, renderErrorText(entry.unavailableReason)], [{ kind: 'record', recordKey: 'query-unit', recordId: 'query-record', start, end: 18 }, ''], qstart);
     // The popup row shows no length for a span whose coordinates are not whole (index.html hides a 0 length).
     if (start === null) assert.equal(entry.sequenceLength, 0, qstart);
   }
@@ -671,7 +675,7 @@ test('a coordinate below 1 or not whole is read by Python after the record, in t
     ...commonAttributes, 'data-match-kind': 'homology', 'data-source-index': '4', 'data-reference-side': 'query',
     'data-sstart': '2.5'
   }), { matchSequenceRecords: syntheticSequenceRecords({ comparisonSupplied: false }) }).sequenceBundle.entries[1];
-  assert.deepStrictEqual([homology.read, homology.unavailableReason], [null, 'Comparison sequence was not supplied for this BLAST source.']);
+  assert.deepStrictEqual([homology.read, renderErrorText(homology.unavailableReason)], [null, 'Comparison sequence was not supplied for this BLAST source.']);
 });
 
 // D5 review r3: what the popup knows at open, as base c75daa1de showed it (r4fix/probe-base.out,
@@ -685,17 +689,17 @@ test('the popup finds a span\'s record and shows its row as before D5', () => {
     return popupModule.buildMatchPopupPayload(element, { matchSequenceRecords: records }).sequenceBundle.entries;
   };
   const [missingUnit] = entriesOf({ 'data-query-record-index': '7' });
-  assert.deepStrictEqual([missingUnit.read, missingUnit.unavailableReason], [null, 'The sequence source for this match is unavailable.']);
+  assert.deepStrictEqual([missingUnit.read, renderErrorText(missingUnit.unavailableReason)], [null, 'The sequence source for this match is unavailable.']);
   const homology = { 'data-match-kind': 'homology', 'data-reference-side': 'query', 'data-source-index': '0' };
   const [unitless] = entriesOf({ ...homology, 'data-query-record-index': '7' });
-  assert.deepStrictEqual([unitless.read, unitless.unavailableReason], [null, 'No sequence source matched record “query-record”.']);
+  assert.deepStrictEqual([unitless.read, renderErrorText(unitless.unavailableReason)], [null, 'No sequence source matched record “query-record”.']);
   const [reference] = entriesOf(homology);
   assert.deepStrictEqual(reference.read, { kind: 'reference', recordId: 'query-record', recordKey: 'query-unit', start: 10, end: 18 });
   const sourceless = { ...homology, 'data-source-index': undefined };
   assert.deepStrictEqual(entriesOf(sourceless)[1].read,
     { kind: 'comparison', sourceIndex: null, recordId: 'subject-record', start: 30, end: 38 });
   const [, unsupplied] = entriesOf(sourceless, syntheticSequenceRecords({ comparisonSupplied: false }));
-  assert.deepStrictEqual([unsupplied.read, unsupplied.unavailableReason], [null, 'Comparison sequence was not supplied for this BLAST source.']);
+  assert.deepStrictEqual([unsupplied.read, renderErrorText(unsupplied.unavailableReason)], [null, 'Comparison sequence was not supplied for this BLAST source.']);
   for (const [qstart, row] of [['abc', 'abc..18'], ['', '..18'], ['1e1', '1e1..18']]) {
     const [entry] = entriesOf({ 'data-qstart': qstart });
     assert.equal(`${entry.span.start}..${entry.span.end}`, row, qstart);
@@ -777,7 +781,7 @@ test('OV-911: popups on the same Result read its Features and source Features on
   });
   const first = instrumentedPopupModule.buildMatchPopupPayload(element, options);
   for (let index = 0; index < 5; index += 1) {
-    assert.deepStrictEqual(instrumentedPopupModule.buildMatchPopupPayload(element, options), first);
+    assert.deepStrictEqual(sortedCanonical(instrumentedPopupModule.buildMatchPopupPayload(element, options)), sortedCanonical(first));
   }
   assert.deepStrictEqual(traversalCounts, { rendered: 1, source: 1 });
   // A new Result (a new Feature map) is read again.
@@ -785,7 +789,7 @@ test('OV-911: popups on the same Result read its Features and source Features on
     ...options,
     featureLookup: new CountedFeatureMap(state.featureLookup)
   });
-  assert.deepStrictEqual(next, first);
+  assert.deepStrictEqual(sortedCanonical(next), sortedCanonical(first));
   assert.deepStrictEqual(traversalCounts, { rendered: 2, source: 2 });
 });
 

@@ -7,7 +7,7 @@
 /** @import { FeatureCatalogItem } from '../../services/feature-catalog.js' */
 /** @import { CommittedCanonicalSession } from '../../services/session-request.js' */
 /** @import { MatchFramePopup, PreviewItem, PreviewItemPopup } from '../../services/match-frame-popup.js' */
-/** @import { MatchPopupPayload, PopupRow } from '../../services/pairwise-match-popup.js' */
+/** @import { HoverRow, MatchPopupPayload } from '../../services/pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 /** @import { PreviewTransformInteractionListener } from '../ui.js' */
 /** @import { RegionAxisRecord } from '../../services/region-axis.js' */
@@ -92,7 +92,7 @@ export {
 
 /**
  * The hover summary of a pairwise match, as the match popup builds it.
- * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: PopupRow[] }} MatchHoverSummary
+ * @typedef {{ id: string, title: string, subtitle: string, fill: string, rows: HoverRow[] }} MatchHoverSummary
  */
 
 /**

@@ -12,6 +12,7 @@ import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/stan
 import { featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
 import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
 import { numberText } from '../../gbdraw/web/js/utils/i18n.js';
+import { renderErrorText } from '../../gbdraw/web/js/utils/error-normalization.js';
 import {
   FEATURE_CATALOG_SCHEMA,
   featureStateFromCatalog,
@@ -463,7 +464,7 @@ test('match popup feature sections show the shared split location', () => {
     }
   );
   const query = payload.sections.find((section) => section.title === 'Query');
-  assert.equal(query.rows.find((row) => row.label === 'Location').value, '3901..4000, 1..200 (+)');
+  assert.equal(query.rows.find((row) => row.id === 'Location').value(), '3901..4000, 1..200 (+)');
   assert.deepEqual(query.featureRows.map((row) => row.location), ['3901..4000, 1..200 (+)']);
   assert.equal(createEmbeddedSearch('rich').locationText(rendered), '3901..4000, 1..200 (+)');
 });
@@ -489,7 +490,7 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
     { ownerSVGElement: svg, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
     { matchSequenceRecords }
   );
-  const rows = Object.fromEntries(payload.sections.flatMap((section) => section.rows).map((row) => [row.label, row.value]));
+  const rows = Object.fromEntries(payload.sections.flatMap((section) => section.rows).map((row) => [row.id, row.value()]));
   const spans = payload.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`);
   assert.deepEqual(spans, [rows['Query interval'], rows['Subject interval']]);
   assert.deepEqual(spans, ['3000..3003', '11997..12000']);
@@ -519,9 +520,9 @@ test('the viewer words each embedded match span reason as the app does (OV-2755)
   for (const reason of Object.keys(texts)) {
     const viewer = read({ m1: { subject: { reason, sourceLength: 12000 } } }, [], texts, numberText);
     const shown = viewer({ id: 'm1', subject_record_id: 'absent' }, 'subject');
-    const app = matchSpanUnavailableReason({ span: { recordId: 'absent' } }, {
+    const app = renderErrorText(matchSpanUnavailableReason({ span: { recordId: 'absent' } }, {
       status: 'unavailable', reason, recordId: 'absent', orientation: '+', length: 0, sequence: '', sourceLength: 12000
-    });
+    }));
     assert.deepEqual(shown, { source: null, reason: app }, reason);
   }
 });

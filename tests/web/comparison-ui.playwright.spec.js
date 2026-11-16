@@ -1646,11 +1646,11 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   ).map((entry) => ({
     role: entry.span.role,
     available: entry.available,
-    reason: entry.unavailableReason || ''
+    reason: entry.unavailableReason
   })));
   expect(spans).toEqual([
-    { role: 'query', available: true, reason: '' },
-    { role: 'subject', available: true, reason: '' }
+    { role: 'query', available: true, reason: [] },
+    { role: 'subject', available: true, reason: [] }
   ]);
   // D5 review r1 (MEDIUM-3): Copy and FASTA of both spans are offered only when every span can be read, so a file or
   // the clipboard never holds one span under the name of both; the span that cannot be read says why in its row.
@@ -1661,7 +1661,7 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   const subjectUnavailable = 'The subject record was not supplied.';
   await page.evaluate((reason) => {
     const [, subject] = window.__GBDRAW_APP__.clickedPairwiseMatch.sequenceBundle.entries;
-    Object.assign(subject, { available: false, unavailableReason: reason });
+    Object.assign(subject, { available: false, unavailableReason: [{ text: reason, verbatim: true }] });
   }, subjectUnavailable);
   await expect(bothSpans.nth(0)).toBeDisabled();
   await expect(bothSpans.nth(1)).toBeDisabled();
@@ -1669,7 +1669,7 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   await matchDialog.screenshot({ path: testInfo.outputPath('medium3-both-spans-need-every-span.png') });
   await page.evaluate(() => {
     const [, subject] = window.__GBDRAW_APP__.clickedPairwiseMatch.sequenceBundle.entries;
-    Object.assign(subject, { available: true, unavailableReason: '' });
+    Object.assign(subject, { available: true, unavailableReason: [] });
   });
   await expect(bothSpans.nth(0)).toBeEnabled();
   // OV-1264: in a narrow popup a span line wraps between its parts, never
