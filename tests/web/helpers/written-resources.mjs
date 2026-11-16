@@ -23,7 +23,18 @@ export const writtenResourcesWith = ({ fileBackedReaderOf, storedResourceBytes }
 export const gallerySessionFile = async (id, edit = () => {}) => {
   const { readFileSync } = await import('node:fs');
   const sessions = new URL('../../../gbdraw/web/gallery/sessions/', import.meta.url);
-  const { document, bytes } = await readSessionFile(new Blob([readFileSync(new URL(`${id}.gbdraw`, sessions))]));
+  return editedSessionFile(new Blob([readFileSync(new URL(`${id}.gbdraw`, sessions))]), edit);
+};
+
+/**
+ * The Session file `blob` with its document changed by `edit`, its resource
+ * entries as they are.
+ * @param {Blob} blob
+ * @param {(document: Record<string, any>) => void} edit
+ * @returns {Promise<Blob>}
+ */
+export const editedSessionFile = async (blob, edit) => {
+  const { document, bytes } = await readSessionFile(blob);
   edit(document);
   return writeSessionFile(document, bytes);
 };

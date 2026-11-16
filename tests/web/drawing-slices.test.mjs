@@ -48,7 +48,8 @@ const {
   installShownDrawing,
   setUnmanagedConfigOverrideValidator
 } = sessionConfig;
-const { MEMBER_SAMPLES, sliceSample, refFree } = await import('./helpers/drawing-member-samples.mjs');
+const { sliceSample, refFree } = await import('./helpers/drawing-member-samples.mjs');
+const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -285,17 +286,25 @@ test('only the slices import slice-handle.js, and its member key is written ther
 // tests/web/drawing-member-paths.test.mjs runs member by member through every
 // state path), so a no-op install fails.
 const sampleContext = { registerFile: (file) => state.inputFiles.registerFile(file) };
-// What a Save stores of a slice: not the members a Load derives from the
-// others (the records a read of the drawing's File cards finds), which the
-// member test checks through the action that writes them.
-const stored = (capture) => Object.fromEntries(Object.entries(capture).filter(([member]) => !MEMBER_SAMPLES[member].byContext));
+// What a Load gives back of a slice: not the records a read of the drawing's
+// File cards finds (`circularRecordList`), which a Load of a drawing with a
+// request defers (OV-2881) and the member test checks through the read; the
+// read's state (`circularRecordDiscovery`) is compared.
+const stored = (capture) => Object.fromEntries(Object.entries(capture).filter(([member]) => member !== 'circularRecordList'));
 // A view member as plain data: a ref's value, a set's values.
 const plain = (value) => {
   if (value instanceof Set) return [...value];
   if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && 'value' in value) return plain(value.value);
   return value;
 };
-const captures = (mode) => refFree(SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
+// The slices of the drawing of `mode` as a Save writes them: the mark a Load
+// of a Session 46 sets on the cards its flat record positions count over
+// (`c_legacy_record_cards`, OV-2867) is read by that Load only, and a Save
+// writes none.
+const captures = (mode) => refFree(SLICES.map(([name, slice]) => {
+  const capture = slice.capture(modeDrawing(state, mode).slices[name]);
+  return name === 'inputs' ? { ...capture, files: { ...capture.files, c_legacy_record_cards: null } } : capture;
+}));
 // Each Save names its own file: Save asks before downloading a file name again.
 let saves = 0;
 const saveSession = async () => {
@@ -320,10 +329,18 @@ const undo = (name, slice, handle) => (name === 'inputs' ? slice.install(handle,
 test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', () => withBootPalettes(state, async () => {
   assert.equal((await load(fixtureNames[0]))?.status, 'ok');
   addPairDrawings();
-  // The cases start from the fixture as a Save and Load give it: a Load of a
-  // Session 46 marks the cards its flat record positions count over, which a
-  // Session 51 does not need (`c_legacy_record_cards`).
-  assert.equal((await reload(await saveSession()))?.status, 'ok');
+  // A Load reads the records of a Circular drawing with a request when
+  // Generate needs them, not after Load (OV-2881): the read waits, with the
+  // drawing's cards as its sources.
+  // The cards' files as the input type reads them (`circularSourceInputs`).
+  const deferred = ({ inputType, circularSources }) => ({ status: 'deferred', error: '', inputType,
+    sources: circularSourceInputs(inputType, circularSources).map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, error: '' })) });
+  const circular = DRAWING_SLICES.inputs.capture(modeDrawing(state, 'circular').slices.inputs);
+  assert.ok(circular.circularSources.length > 0, 'the fixture\'s Circular drawing has File cards');
+  assert.equal(refFree(circular.circularRecordDiscovery), refFree(deferred(circular)), 'Load defers the record read');
+  // So a Load of the Circular inputs sample defers the read of its cards.
+  const loadedForm = (name, mode, sample) => (name === 'inputs' && mode === 'circular'
+    ? { ...sample, circularRecordDiscovery: deferred(sample) } : sample);
   for (const mode of MODES) {
     const other = MODES.find((candidate) => candidate !== mode);
     for (const [name, slice] of SLICES) {
@@ -342,7 +359,8 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
       assert.notEqual(JSON.stringify(slice.capture(drawing.slices[name])), json, `${mode} ${name}: the sample is no default`);
       const reloaded = await reload(session);
       assert.equal(reloaded?.status, 'ok', `${mode} ${name}: ${reloaded?.error?.message ?? reloaded?.status}`);
-      assert.equal(refFree(stored(slice.capture(modeDrawing(state, mode).slices[name]))), refFree(stored(sample)), `${mode} ${name}: Save then Load`);
+      assert.equal(refFree(stored(slice.capture(modeDrawing(state, mode).slices[name]))), refFree(stored(loadedForm(name, mode, sample))),
+        `${mode} ${name}: Save then Load`);
       assert.equal(captures(other), untouched, `${mode} ${name}: Load leaves the ${other} drawing as saved`);
       // Back to the loaded fixture, which a Save and Load keep as it is (Load
       // resolves the defaults Reset gives, such as the track placements).

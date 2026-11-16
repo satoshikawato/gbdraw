@@ -40,14 +40,17 @@ installSessionImportWorker();
 
 const config = await import('../../gbdraw/web/js/services/config.js');
 const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
-const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
+const { withNewDrawingDefaults, resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
 const { createAppSetup, transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
-const { readSessionContainer, writeSessionContainer, openSessionContainerEntry } = await import('../../gbdraw/web/js/services/session-container.js');
+const { readSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
+const { editedSessionFile } = await import('./helpers/written-resources.mjs');
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
-const { DRAWING_SLICES, DRAWING_DRAFT_KEYS, DRAWING_EDITOR_KEYS } = await import('./helpers/drawing-state.mjs');
+const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
 const { callerSession } = await import('./helpers/session-caller.mjs');
-const { MEMBER_SAMPLES, captureMember, sliceOfMember, genbankFile, refFree } = await import('./helpers/drawing-member-samples.mjs');
+const { MEMBER_SAMPLES, LEAF_VARIED_MEMBERS, unvariedOf, captureMember, sliceOfMember, genbankFile, refFree, variedLeaves } = await import(
+  './helpers/drawing-member-samples.mjs');
+const { chooseRecordLayout } = await import('../../gbdraw/web/js/services/one-circle-layout.js');
 
 const MODES = /** @type {const} */ (['circular', 'linear']);
 const MEMBERS = Object.values(DRAWING_SLICES).flatMap((slice) => slice.members);
@@ -105,20 +108,6 @@ const savedDocument = async (blob) => /** @type {SessionDocument} */ ((await rea
 const savedConfigOf = (document, id) => {
   const entry = document.drawings.find((drawing) => drawing.id === id);
   return entry ? entry.config : null;
-};
-/**
- * The Session `blob` with its document changed by `change`, its resources as they are.
- * @param {Blob} blob @param {(document: SessionDocument) => void} change
- */
-const rewrittenSession = async (blob, change) => {
-  const container = await readSessionContainer(blob);
-  const document = /** @type {SessionDocument} */ (structuredClone(container.document));
-  change(document);
-  return writeSessionContainer({
-    document,
-    documentBytes: () => new Blob([JSON.stringify(document)]).stream(),
-    readResource: (resource) => openSessionContainerEntry(blob, container.resources[resource])
-  });
 };
 // The Reset dialog's answer, as the user clicks it.
 const answerReset = async (answer) => {
@@ -217,6 +206,25 @@ const startCase = async (mode, member, foreign) => {
  *   edit, after it, and what a Load of the Session gives back (the sample, or the default per `otherModeLoad`).
  * @typedef {(drawings: CaseDrawings, member: string, values: CaseValues) => Promise<PathCheck[]>} StatePath
  */
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const pick = (value, keys) => Object.fromEntries(keys.map((key) => [key, value?.[key]]));
+/**
+ * What Reset should leave of `sample` (a value of `member` in a drawing of
+ * `mode`) and what it left (`reset`): the member, or the fields of it, that
+ * the drawing reset gives a new drawing's value when it resets a new drawing
+ * holding `sample`, with that value; null when it keeps the whole member.
+ */
+const resetFields = (mode, member, sample, reset) => {
+  const fresh = captureMember(withNewDrawingDefaults(state, createDrawingState(`${mode}-fresh`, mode)), member);
+  const drawing = withNewDrawingDefaults(state, createDrawingState(`${mode}-reset`, mode));
+  installMember(drawing, member, sample);
+  resetSettings(state, drawing);
+  const image = captureMember(drawing, member);
+  if (same(member, image, fresh)) return { expected: fresh, actual: reset };
+  if (!isObject(image) || !isObject(sample)) return null;
+  const keys = Object.keys(image).filter((key) => same(key, image[key], fresh[key]) && !same(key, sample[key], fresh[key]));
+  return { expected: pick(fresh, keys), actual: isObject(reset) ? pick(reset, keys) : reset };
+};
 const same = (member, actual, expected) => refFree({ [member]: actual }) === refFree({ [member]: expected });
 const held = (id, member) => (state.drawingTabs.value.some((tab) => tab.id === id)
   ? captureMember(state.drawingOf(id), member) : `no drawing ${id}`);
@@ -240,11 +248,21 @@ const PATHS = {
     assert.deepEqual(app.selectDrawing(id), { status: 'ok' });
     return [{ where: 'other mode and back', expected: sample, actual: held(id, member) }];
   },
-  resetUndo: async ({ id }, member, { sample }) => {
+  // Reset this drawing gives a member, or each field of an object member,
+  // that the drawing reset (`resetSettings`, services/reset.js) resets the new
+  // drawing's value; what it keeps (the input bindings and the record layout,
+  // PD-OI-070) the mode's follow-ups may derive again (a ring search's rows
+  // go, a record row takes its place). Undo gives the sample back. The
+  // Reset's step is the newest of the drawing's History (by its sequence); a
+  // Reset that changes nothing records none.
+  resetUndo: async ({ id, mode }, member, { sample }) => {
+    const top = () => history.timeline().undo[0]?.sequence ?? null;
+    const before = top();
     await answerReset('reset-drawing');
-    // A Reset that changes nothing records no step (only members Reset keeps differ).
-    if (history.timeline().undo[0]?.label === 'Reset this drawing') await app.undoHistory();
-    return [{ where: 'Reset this drawing, Undo', expected: sample, actual: held(id, member) }];
+    const fields = resetFields(mode, member, sample, held(id, member));
+    if (top() !== before) await app.undoHistory();
+    return [...(fields ? [{ where: 'Reset this drawing', ...fields }] : []),
+      { where: 'Reset this drawing, Undo', expected: sample, actual: held(id, member) }];
   },
   duplicate: async ({ id }, member, { sample }) => {
     const { drawingId: copy } = app.drawingList.duplicateDrawing(id);
@@ -271,11 +289,16 @@ function saveThenLoad(rewrite) {
     assert.deepEqual(app.selectDrawing(peer), { status: 'ok' });
     const { blob: saved, refused } = await saveSession();
     if (refused) return [{ where: 'Save', expected: loaded, actual: `Save refused: ${refused}` }];
-    const blob = rewrite ? await rewrittenSession(saved, (document) => rewrite(document, id)) : saved;
+    const blob = rewrite ? await editedSessionFile(saved, (document) => rewrite(/** @type {SessionDocument} */ (document), id)) : saved;
     const { asked } = await loadSession(blob);
     if (asked) return [{ where: 'Save then Load', expected: loaded, actual: `Load asked: ${asked}` }];
     // A Load of a current Session reads no records (OV-2881): the list shows
-    // after a read, which the Record Order's refresh starts.
+    // after a read, which the Record Order's refresh starts. The drawings of
+    // these cases hold no request, so their discovery is idle after Load and
+    // their list empty until that read. Open question: record list after
+    // Load without a request (lane S, OV-3696 analysis); no assertion either
+    // way until it is answered. A drawing with a request is deferred after
+    // Load (tests/web/drawing-slices.test.mjs, test 6).
     if (MEMBER_SAMPLES[member].byContext && MEMBER_SAMPLES[member].needs.includes('records')) {
       assert.deepEqual(app.selectDrawing(id), { status: 'ok' });
       await app.refreshCircularRecordOrder();
@@ -339,15 +362,34 @@ const memberPathLosses = async (paths, mode, members = MEMBERS) => {
 const bootBases = async () => {
   if (!bases.plain) for (const name of ['plain', ...Object.keys(CONTEXTS)]) await buildBase(name);
 };
-const lossNames = (losses) => losses.map(({ member, mode, path, where, actual }) => `${mode} ${member} ${path}: ${where}${where === 'threw' ? ` ${actual}` : ''}`);
+// A loss by its member, mode, path and check; a check whose path did not run
+// (it threw, Save refused, Load asked) also says what happened instead.
+const lossNames = (losses) => losses.map(({ member, mode, path, where, actual }) => `${mode} ${member} ${path}: ${where}${
+  where === 'threw' || /"(?:Save refused|Load asked): /.test(actual) ? ` ${actual}` : ''}`);
 
 test('the member samples are the members of the drawing slices and the drawing key classes', () => {
   const sorted = (names) => [...names].sort();
+  // The slices' members are the drawing's draft and editor keys, which
+  // tests/web/drawing-context.test.mjs checks against the keys `createDrawingState` makes.
   assert.deepEqual(sorted(Object.keys(MEMBER_SAMPLES)), sorted(MEMBERS));
-  assert.deepEqual(sorted(MEMBERS), sorted([...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS]));
   for (const [member, sample] of Object.entries(MEMBER_SAMPLES)) {
     (sample.needs ?? []).forEach((need) => assert.ok(need === 'records' || CONTEXTS[need], `${member} needs ${need}`));
     (sample.modes ?? []).forEach((mode) => assert.ok(MODES.includes(mode), `${member}: ${mode}`));
+  }
+});
+
+// An object member's sample (`variedLeaves`) changes every leaf of the
+// member as a new drawing holds it, but the leaves `UNVARIED_LEAVES` names,
+// and the member's Load reader gives the whole sample back: a new leaf takes a
+// sample, or this test names it.
+test('an object member\'s sample changes every leaf but the ones it names, and its Load reader keeps the sample', () => {
+  for (const mode of MODES) {
+    for (const member of LEAF_VARIED_MEMBERS) {
+      const drawing = withNewDrawingDefaults(state, createDrawingState(`${mode}-leaves`, mode));
+      const { varied, unchanged, read } = variedLeaves(member, mode, captureMember(drawing, member));
+      assert.deepEqual([...unchanged].sort(), Object.keys(unvariedOf(member, mode)).sort(), `${mode} ${member}: the leaves the sample keeps`);
+      assert.equal(refFree(read), refFree(varied), `${mode} ${member}: the Load reader keeps the sample`);
+    }
   }
 });
 
@@ -382,6 +424,48 @@ test('the guard reports exactly the member that a broken Duplicate or a broken S
   const withoutAnnotationSets = saveThenLoad((document, id) => { delete savedConfigOf(document, id).annotationSets; });
   assert.deepEqual(lossNames(await memberPathLosses({ saveLoad: withoutAnnotationSets }, 'linear', ['annotationSets', 'canvasPadding'])),
     ['linear annotationSets saveLoad: Save then Load']);
+}));
+
+// Known defects: each case asserts today's outcome, and fails once the
+// defect is fixed; the fix removes the case and the workaround it names.
+// OV-3701: Save writes a drawing that has a file (R15), but not one whose
+// only change is a card file or the input type (`isUsed` in `exportSession`,
+// services/config.js).
+test('known defect OV-3701: Save drops a drawing whose only change is a card file or the input type', () => withBootPalettes(state, async () => {
+  await bootBases();
+  const changes = {
+    files: (drawing) => ({ ...captureMember(drawing, 'files'),
+      d_color: context.registerFile(new File(['CDS\t#123456\n'], 'ov-3701-colors.tsv', { lastModified: 1 })) }),
+    inputType: () => 'gff'
+  };
+  for (const mode of MODES) {
+    for (const [member, change] of Object.entries(changes)) {
+      assert.equal((await loadSession(bases.plain.blob)).asked, null);
+      const { drawingId: id } = app.drawingList.newDrawing(mode);
+      const sample = change(state.drawingOf(id));
+      await history.runUndoable(`Sample ${member}`, () => installMember(state.drawingOf(id), member, sample));
+      const [check] = await PATHS.saveLoad({ id, peer: bases.plain.peers[mode] }, member, { loaded: sample });
+      assert.equal(check.actual, `no drawing ${id}`, `${mode} ${member}: OV-3701 no longer reproduces. Remove this case and the two `
+        + '`needs: [\'records\']` marked OV-3701 in tests/web/helpers/drawing-member-samples.mjs.');
+    }
+  }
+}));
+
+// OV-TBD-1: the Undo of choosing one circle leaves what one circle left
+// (`adv.one_circle_left`): a History restore merges the step's null under the
+// object and keeps it (`mergeStoredSettings`, services/config-field-readers.js).
+test('known defect OV-TBD-1: Undo of choosing one circle keeps what one circle left', () => withBootPalettes(state, async () => {
+  await bootBases();
+  assert.equal((await loadSession(bases.plain.blob)).asked, null);
+  const { drawingId: id } = app.drawingList.newDrawing('circular');
+  assert.equal(captureMember(state.drawingOf(id), 'adv').one_circle_left, null);
+  await history.runUndoable('Change setting', () => chooseRecordLayout(state.drawingOf(id), 'one_circle'));
+  assert.equal(captureMember(state.drawingOf(id), 'adv').circular_record_layout, 'one_circle');
+  await app.undoHistory();
+  const adv = captureMember(state.drawingOf(id), 'adv');
+  assert.equal(adv.circular_record_layout, 'grid');
+  assert.notEqual(adv.one_circle_left, null, 'OV-TBD-1 no longer reproduces. Remove this case and the `one_circle_left` entry of '
+    + 'UNVARIED_LEAVES in tests/web/helpers/drawing-member-samples.mjs.');
 }));
 
 // The 25 Session config domains (`CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`) are
@@ -421,10 +505,10 @@ test('the Session config domains are the drawing config domains, the Instant Pre
   assert.equal(DRAWING_DOMAINS.length, 22);
 });
 
-// Each member's sample, in a drawing of its own, changes the config domains
-// that differ from a drawing with the same context and no sample; together
-// they change every drawing config domain, and Save -> Load -> Save gives
-// each domain of each drawing back. A sample that needs a fixture's Result
+// Each member's sample, in a drawing of its own, as a Save and Load give it,
+// changes the config domains that differ from a drawing with the same context
+// and no sample; together they change every drawing config domain, and Save
+// -> Load -> Save gives each domain of each drawing back. A sample that needs a fixture's Result
 // is compared with that drawing as the fixture base saved it.
 test('the member samples change every drawing config domain, and Save then Load then Save keeps each', () => withBootPalettes(state, async () => {
   await bootBases();
@@ -450,8 +534,13 @@ test('the member samples change every drawing config domain, and Save then Load 
       drawingOfMember.set(member, drawing.id);
     }
     app.selectDrawing(bases.plain.peers[mode]);
-    const { blob, refused } = await saveSession();
+    const { blob: installed, refused } = await saveSession();
     assert.equal(refused, null);
+    // The samples as a Save and Load give them: Load gives each ring table of
+    // the `files` sample its ring row (`reconcileLoadedCircularConservation`),
+    // as the upload of a table does.
+    assert.equal((await loadSession(installed)).asked, null);
+    const { blob } = await saveSession();
     const document = await savedDocument(blob);
     // Each drawing binds its own File card or record row, whose ID its record layout names.
     const configOf = (id) => ownInputsNamed(savedConfigOf(document, id), state.drawingOf(id));
@@ -504,7 +593,7 @@ test('Save keeps the Instant Preview flag in the app UI and a drawing\'s CLI opt
   assert.equal(state.paletteInstantPreviewEnabled.value, true);
   // CLI options a Session holds on a drawing entry (a CLI-written Session's).
   const cliOptions = { rawArgs: ['--gbk', 'peer.gb', '-o', 'peer'] };
-  const withCliOptions = await rewrittenSession(bases.plain.blob, (document) => {
+  const withCliOptions = await editedSessionFile(bases.plain.blob, (document) => {
     document.drawings.find((entry) => entry.id === bases.plain.peers.linear).cliOptions = cliOptions;
   });
   const cliAgain = await resaved(withCliOptions);
