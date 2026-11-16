@@ -75,8 +75,9 @@ CIRCULAR_AUTO_HEAD_MAX_THICKNESS_RATIO = 0.5
 """The longest automatic Circular head, as a multiple of the feature's thickness.
 
 The automatic head length grows with the record's length and has a 30 bp floor; on a record of a few
-hundred bases that floor spans tens of degrees, many times the feature's thickness. Above about 6 kb
-at default sizes the automatic head is already shorter than this cap and is drawn unchanged.
+hundred bases that floor spans tens of degrees, many times the feature's thickness. An automatic head
+already shorter than this cap is drawn unchanged; with the default track layout that is most records
+above about 6 kb.
 """
 
 
