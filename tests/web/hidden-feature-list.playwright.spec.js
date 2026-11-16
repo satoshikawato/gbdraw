@@ -4,7 +4,7 @@
 // drawn and sets its Feature visibility; the popup of a hidden feature says
 // so. Live equals Generate (R1, R3), and a toggle is one History step (R11).
 const { test, expect } = require('@playwright/test');
-const { openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
+const { loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
@@ -222,4 +222,30 @@ test('a Label On kept with Keep feature hidden is drawn when the checkbox shows 
   await generate(page);
   await settle(page);
   expect(await labels(page)).toEqual(['FL2_KEPT']);
+});
+
+// OV-3672: the location cell of a Features list row was capped at 7rem, so every location of 18 or more
+// characters (each feature past 100 kb) read "123456..123999 (…" without its strand.
+test('a one-part location in the Features list reads whole, strand sign included, past 100 kb', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openFresh(page);
+  await loadSessionFile(page, 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
+  await openDrawer(page);
+  const scroller = page.locator('.right-drawer [data-feature-list-row]').first()
+    .locator('xpath=ancestor::div[contains(@class, "overflow-y-auto")][1]');
+  const checked = [];
+  const cut = [];
+  for (const fraction of [0, 0.25, 0.5, 0.75, 1]) {
+    await scroller.evaluate((element, f) => { element.scrollTop = (element.scrollHeight - element.clientHeight) * f; }, fraction);
+    await settle(page);
+    const cells = await page.locator('.right-drawer [data-feature-list-row] .font-mono[title]').evaluateAll((nodes) => nodes
+      .filter((node) => node.getClientRects().length > 0 && !node.textContent.includes('join') && !node.textContent.includes(','))
+      .map((node) => ({ text: node.textContent.trim(), cut: node.scrollWidth > node.clientWidth })));
+    for (const cell of cells) {
+      checked.push(cell.text);
+      if (cell.cut) cut.push(cell.text);
+    }
+  }
+  expect(checked.some((text) => text.length >= 18)).toBe(true);
+  expect(cut).toEqual([]);
 });
