@@ -31,7 +31,8 @@
 //   visible text under 13 px at the start, with every section and the custom
 //   track stack open, in the History list, the Drawing menu, the feature popup
 //   and the rail (OV-3669); each location of the Features list reads whole,
-//   strand sign included (OV-3672);
+//   strand sign included (OV-3672); at 1024x768 with a Session, the Preview's
+//   zoom box lies inside the Result pane's view (OV-3657);
 // - at 1024x768, 1280x800 and 1440x900, in all 18 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
@@ -438,8 +439,10 @@ test('every text style keeps the figure in English type, and a truncated text is
 
 // The visible texts under a size: each element outside the figure that shows a
 // text of its own (a text node, a field's value or hint, a select's choice), as
-// "tag.class size", once each.
-const textsUnder = (page, floor) => page.evaluate((floor) => {
+// "tag.class size", once each. It reads the sizes once the running CSS transitions end: a field's size moves to the
+// floor over the 150 ms transition of .form-input after a language change, and a read inside it saw 12.76 px.
+const textsUnder = (page, floor) => page.evaluate(async (floor) => {
+  await Promise.all(document.getAnimations().filter((animation) => animation instanceof CSSTransition).map((animation) => animation.finished.catch(() => null)));
   const field = 'input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], [type=hidden]), textarea';
   const ownText = (element) => [...element.childNodes].some((node) => node.nodeType === 3 && node.data.trim())
     || (element.matches(field) && Boolean(element.value || element.placeholder)) || element.matches('select');
@@ -451,6 +454,27 @@ const textsUnder = (page, floor) => page.evaluate((floor) => {
     .map(([element, size]) => `${element.tagName.toLowerCase()}${[...element.classList].map((name) => `.${name}`).join('')} ${size}px`);
   return [...new Set(under)].sort();
 }, floor);
+
+// Whether the Preview's zoom box (the box of its Reset zoom button) lies inside the Result pane's view: its top at or
+// below the pane's top and its bottom at or above the pane's bottom (or the window's, if that is higher). It waits for
+// two animation frames with the same window width and boxes, since the pane follows a resize after it returns.
+const zoomBoxInView = (page, width) => page.evaluate((target) => new Promise((done) => {
+  const boxes = () => {
+    const pane = document.getElementById('result-pane').getBoundingClientRect();
+    const zoom = document.querySelector('.preview-controls [data-zoom-reset]').parentElement.getBoundingClientRect();
+    return { pane, zoom, key: `${innerWidth} ${pane.top} ${pane.bottom} ${zoom.top} ${zoom.bottom}` };
+  };
+  let last = '';
+  let frames = 0;
+  const step = () => {
+    const { pane, zoom, key } = boxes();
+    frames = key === last && innerWidth === target ? frames + 1 : 0;
+    last = key;
+    if (frames >= 2) done({ settled: true, inView: zoom.top >= pane.top && zoom.bottom <= Math.min(pane.bottom, innerHeight) });
+    else requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}), width);
 
 // Urdu takes the vendored Nastaliq font first, and the nastaliq text style:
 // every UI line is 2.5em, small text is 13 px (14 px text keeps its size), with
@@ -515,6 +539,11 @@ test('Urdu takes the Noto Nastaliq Urdu font, 2.5em lines, a 13 px floor and con
   // text monospace and shows its Urdu hint in Nastaliq (OV-3656); each field, menu button and Auto value whose own rule
   // gives it a fixed height and a small size in the other languages is 13 px and holds its line (OV-3658).
   await loadSession(page);
+  // At 1024x768 the Preview's zoom box (+, %, −, Fit) lies inside the Result pane's view (OV-3657: the Urdu tool row
+  // and search bar took two lines each and pushed it below the pane's bottom).
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect.poll(() => zoomBoxInView(page, 1024)).toEqual({ settled: true, inView: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.evaluate(() => document.querySelectorAll('details:not(.action-menu)').forEach((details) => { details.open = true; }));
   await page.locator('[aria-controls="circular-custom-track-slots-panel"]').click();
   await page.locator('[data-setting="track-slots"] label input[type="checkbox"]').first().check();
