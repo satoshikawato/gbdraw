@@ -2256,7 +2256,10 @@ ruler-label font also makes it unavailable while ruler labels are drawn,
 because CLI ruler labels follow `--scale_font_size`. Feature placements and
 per-feature edits become `--feature_placement_table` and
 `--feature_override_table` rows; one whose feature the source does not have
-makes the recipe unavailable.
+makes the recipe unavailable. A protein comparison (LOSATP) is written as
+`--losat losatp` with its `--losatp_mode` and each setting that differs from the
+CLI default, so the command runs the search again; selected record pairs become
+`source=losat` rows of the comparisons table.
 See [Replay boundaries](session-and-request-compatibility.md#replay-boundaries)
 for required files and the distinction from saving subsequent editor changes.
 Rotation may split one logical comparison match into several SVG paths. Popups

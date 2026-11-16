@@ -806,7 +806,7 @@ const proteinSearchArgs = (search) => {
       /** @type {{ parameters: Record<string, unknown> }} */ (held).parameters)[parameter];
     if (value === cliDefault) return;
     if (flag === null) {
-      throw recipeUnavailable(msg('the protein comparison setting "{setting}" has no current CLI option.'), { setting });
+      throw recipeUnavailable(msg('a protein comparison setting that has no CLI option differs from its default.'));
     }
     const words = /** @type {Readonly<Record<string, string>>} */ (PROTEIN_COMPARISON_FLAGS.words);
     args.push(flag, typeof value === 'boolean' || value === null ? words[String(value)] : String(value));

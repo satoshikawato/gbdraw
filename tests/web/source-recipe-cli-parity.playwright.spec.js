@@ -288,3 +288,75 @@ test('a CLI Session of one cropped records-table record opens on that record and
     expect.soft(replay.status, `${name}: ${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
   }
 });
+
+// OV-3590: two Linear records compared by LOSATP Pairwise with a changed setting have a Source recipe (`--losat losatp`
+// and the setting), and the CLI's run of it draws the Web Result.
+test('a LOSATP Pairwise Linear Result has a Source recipe that the CLI replays to it', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  // Two clusters whose proteins match, so the search draws protein links.
+  const inputs = ['BGC0000708', 'BGC0000709'].map((name) => path.resolve('tests', 'test_inputs', `${name}.gbk`));
+  await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await page.getByTestId('linear-genbank-1').setInputFiles(inputs[0]);
+  await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+  await page.getByTestId('linear-genbank-2').setInputFiles(inputs[1]);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name)))
+    .toEqual(['BGC0000708.gbk', 'BGC0000709.gbk']);
+  const previous = await generated(page, testInfo, 'linear without comparison');
+  await setApp(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('pairwise');
+    app.losat.blastp.maxHits = 3;
+    // Chromium here has no SharedArrayBuffer for threaded LOSAT.
+    app.losatExecution.executionMode = 'serial';
+  });
+  const current = await generated(page, testInfo, 'linear losatp pairwise');
+  expect(current.recipe.available, current.recipe.reason).toBe(true);
+  expect(current.recipe.command).toContain('--losat losatp --losatp_mode pairwise --losatp_max_hits 3');
+  const archive = await bundle(page, testInfo, 'linear losatp pairwise');
+  await page.getByText('CLI rerun', { exact: true }).first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('run-info-cli-rerun.png') });
+  const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+    path.resolve('tests/web/helpers/source-recipe-replay.py'), testInfo.outputPath('losatp-replay'),
+    current.recipe.command, current.file, previous.file, archive, ...inputs
+  ], { encoding: 'utf8', env: replayEnv });
+  expect.soft(replay.status, `${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
+});
+
+// OV-3590: a CLI Session of two Linear records and a -b table, loaded and Generated, has a Source recipe; its run draws
+// the Web Result and the CLI's own SVG.
+test('a Linear CLI -b Session draws the CLI SVG on Generate and its Source recipe replays to it', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const inputs = [TESTA, TESTB].map((text, index) => {
+    const file = testInfo.outputPath(`record-${index}.gb`);
+    writeFileSync(file, text);
+    return file;
+  });
+  const table = testInfo.outputPath('testa-testb.tsv');
+  writeFileSync(table, BLAST);
+  const prefix = testInfo.outputPath('blast-cli');
+  const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', ['-m', 'gbdraw.cli', 'linear', '--gbk', ...inputs,
+    '-b', table, '-o', prefix, '-f', 'svg', '--save_session'], { encoding: 'utf8', env: replayEnv });
+  expect(cli.status, cli.stderr).toBe(0);
+  await openFresh(page);
+  await loadSessionFile(page, `${prefix}.gbdraw`);
+  // A read-only imported comparison (-b) is reused through Inherit (D-04).
+  const resolution = page.locator('[data-imported-comparison-resolution]');
+  await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
+  await expect(resolution).toContainText('INHERIT');
+  const current = await generated(page, testInfo, 'cli blast session');
+  expect(current.recipe.available, current.recipe.reason).toBe(true);
+  const archive = await bundle(page, testInfo, 'cli blast session');
+  const nothing = testInfo.outputPath('nothing.svg');
+  writeFileSync(nothing, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  for (const [name, expected] of [['web', current.file], ['cli', `${prefix}.svg`]]) {
+    const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+      path.resolve('tests/web/helpers/source-recipe-replay.py'), testInfo.outputPath(`blast-replay-${name}`),
+      current.recipe.command, expected, nothing, archive, ...inputs, table
+    ], { encoding: 'utf8', env: replayEnv });
+    expect.soft(replay.status, `${name}: ${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
+  }
+});

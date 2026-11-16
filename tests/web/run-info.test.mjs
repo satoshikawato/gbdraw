@@ -2666,3 +2666,16 @@ test('the Source recipe lists a selected LOSATP pair and a BLAST table in one co
   assert.deepEqual(comparisonFields(cli, 'generatedProteinComparison', ['mode', 'pairs', 'settings']),
     [{ mode: 'pairwise', pairs: [{ queryRecordIndex: 1, subjectRecordIndex: 2 }], settings }]);
 });
+
+test('a protein result without its search stays without a Source recipe, with a reason in words', async () => {
+  const session = await proteinSession({
+    names: ['BGC0000708', 'BGC0000709'],
+    extraResources: { 'comparison-protein-1': resource('canonical-tsv', 'comparison-protein-1.tsv', 'query\n') },
+    comparisons: [{ kind: 'precomputedProteinComparison', resourceId: 'comparison-protein-1', encoding: 'canonicalTsv',
+      queryRecordIndex: 0, subjectRecordIndex: 1 }]
+  });
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, false);
+  assert.equal(recipe.unavailableReason,
+    'Source recipe unavailable: a saved protein comparison result without its search has no current CLI projection.');
+});
