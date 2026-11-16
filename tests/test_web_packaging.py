@@ -1373,28 +1373,44 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     ]
     assert missing_tutorial_assets == []
 
-    index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
-    assert "https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y" in index_html
-    assert "gtag('config', 'G-GG6JMKM02Y');" in index_html
-    assert "static.cloudflareinsights.com" not in index_html
-    assert "cloudflareinsights.com" not in index_html
-    # The bundle carries the flag; the About notice is the source template's,
-    # translated like the rest of the page, and shows only when it is set.
-    assert index_html.count(cloudflare_module.HOSTED_ANALYTICS_FLAG) == 1
-    assert "The hosted {site} deployment uses Google Analytics 4" in index_html
-    assert (
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;"
-        in index_html
+    # The app and the Gallery pages load the Google tag and the one same-origin
+    # script that configures it, and each page's CSP admits the tag's hosts.
+    bootstrap = (bundle_path / "hosted-analytics.js").read_text(encoding="utf-8")
+    assert "gtag('config', 'G-GG6JMKM02Y');" in bootstrap
+    gallery_csp = (
+        "default-src 'self'; connect-src 'self' https://*.google-analytics.com "
+        "https://*.analytics.google.com https://*.googletagmanager.com; "
+        "script-src 'self' https://*.googletagmanager.com;",
+        "img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com;",
     )
-    assert (
-        "img-src 'self' data: blob: https://*.google-analytics.com "
-        "https://*.googletagmanager.com;"
-    ) in index_html
-    assert (
-        "connect-src 'self' https://*.google-analytics.com "
-        "https://*.analytics.google.com https://*.googletagmanager.com;"
-    ) in index_html
-    assert "GOOGLE_ANALYTICS_SCRIPT" not in index_html
+    hosted_pages = {
+        "index.html": (
+            "hosted-analytics.js",
+            (
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;",
+                "img-src 'self' data: blob: https://*.google-analytics.com "
+                "https://*.googletagmanager.com;",
+                "connect-src 'self' https://*.google-analytics.com "
+                "https://*.analytics.google.com https://*.googletagmanager.com;",
+            ),
+        ),
+        "gallery/index.html": ("../hosted-analytics.js", gallery_csp),
+        "gallery/palettes/index.html": ("../../hosted-analytics.js", gallery_csp),
+    }
+    assert tuple(hosted_pages) == cloudflare_module.GOOGLE_ANALYTICS_PAGES
+    for page, (bootstrap_src, csp_directives) in hosted_pages.items():
+        page_html = (bundle_path / page).read_text(encoding="utf-8")
+        assert "https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y" in page_html
+        assert f'<script async src="{bootstrap_src}"></script>' in page_html
+        assert page_html.count(cloudflare_module.HOSTED_ANALYTICS_FLAG) == 1
+        assert "cloudflareinsights.com" not in page_html
+        assert "GOOGLE_ANALYTICS_SCRIPT" not in page_html
+        for directive in csp_directives:
+            assert directive in page_html, (page, directive)
+    index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
+    # The About notice is the source template's, translated like the rest of
+    # the page, and shows only when the flag is set.
+    assert "The hosted {site} deployment uses Google Analytics 4" in index_html
     assert "GOOGLE_ANALYTICS_NOTICE" not in index_html
     assert "GBDRAW_HOSTED_BUILD_LABEL" not in index_html
     assert f"Version: v{read_project_version()}+abcdef1" in index_html
@@ -1475,9 +1491,15 @@ def test_hosted_analytics_flag_is_set_only_by_the_cloudflare_bundle(
     )
     assert f"meta[name=\"{cloudflare_module.HOSTED_ANALYTICS_META_NAME}\"]" in reader
     assert f'name="{cloudflare_module.HOSTED_ANALYTICS_META_NAME}"' in flag
-    # A non-hosted build (the package's web assets, a stamped build) has no flag.
+    # A non-hosted build (the package's web assets, a stamped build) has no
+    # flag and no Google tag: the source pages hold only the marker.
+    for page in cloudflare_module.GOOGLE_ANALYTICS_PAGES:
+        source_page = (WEB_ROOT / page).read_text(encoding="utf-8")
+        assert source_page.count(cloudflare_module.SCRIPT_MARKER) == 1
+        assert cloudflare_module.HOSTED_ANALYTICS_META_NAME not in source_page
+        assert "googletagmanager" not in source_page
+    assert not (WEB_ROOT / cloudflare_module.GOOGLE_ANALYTICS_BOOTSTRAP).exists()
     source_index = (REPO_ROOT / "gbdraw" / "web" / "index.html").read_text(encoding="utf-8")
-    assert cloudflare_module.HOSTED_ANALYTICS_META_NAME not in source_index
     assert "GOOGLE_ANALYTICS_NOTICE" not in source_index
     stamped_root = tmp_path / "stamped"
     stamped_root.mkdir()
