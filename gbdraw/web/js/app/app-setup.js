@@ -997,7 +997,7 @@ export const createAppSetup = () => {
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor, linearWindowsOf: linearDrawingWindowsOf,
     linearRecordStatusFor: linearRecordSelector.statusFor,
-    linearRecordErrorFor: linearRecordSelector.errorFor,
+    linearRecordErrorModelFor: linearRecordSelector.errorModelFor,
     runUndoable: history.runUndoable,
     getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   // Every write of a record source (a Circular file, an input type, the Linear
@@ -2035,7 +2035,7 @@ export const createAppSetup = () => {
   const featureRecordRotationUnavailable = computed(() => {
     const { targetFailure, disabledReason } = featureRecordRotation.draft;
     return targetFailure && targetFailure !== RECORD_TARGET_NOT_DISCOVERED && !recordActionsExpanded.value
-      ? disabledReason : '';
+      ? errorText(disabledReason) : '';
   });
   // Cancel discards the draft and starts a fresh one for the open popup, as
   // opening the popup does, so a record found unusable stays explained.

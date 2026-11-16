@@ -5,12 +5,20 @@ import {
   createFeatureRecordRotationWorkflow
 } from '../../gbdraw/web/js/app/record-display/feature-record-rotation.js';
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
-import { RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
+import { RECORD_TARGET_NOT_DISCOVERED, recordTargetError } from '../../gbdraw/web/js/app/record-display-options.js';
+import { normalizeCaughtError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { errorText } from '../../gbdraw/web/js/utils/error-text.js';
 
 // The reason feature-record-rotation.js gives when the feature's input differs
 // from the Result's; the harness action stubs throw it for a stale feature.
 const INPUT_DIFFERS = "This feature's input file differs from the one the current Result was drawn from. "
   + 'Generate Diagram to use the current file.';
+const inputDiffers = () => recordTargetError('unavailable', [
+  { text: "This feature's input file differs from the one the current Result was drawn from." },
+  { text: 'Generate Diagram to use the current file.' }
+]);
+// A preview line as the popup shows it ('' when there is none).
+const shown = (wording) => (wording ? wording() : '');
 const feature = {
   record_key: 'record-1',
   biological_feature_id: 'feature-1',
@@ -42,14 +50,14 @@ const createHarness = ({
   const intents = [];
   const action = {
     currentFeature(candidate) {
-      if (!currentFeature) throw new Error(INPUT_DIFFERS);
+      if (!currentFeature) throw inputDiffers();
       assert.equal(candidate.record_key, currentFeature.record_key);
       return currentFeature;
     },
     resolve({ feature: explicitFeature, intent }) {
       seenFeatures.push(explicitFeature);
       intents.push(intent);
-      if (!currentFeature) throw new Error(INPUT_DIFFERS);
+      if (!currentFeature) throw inputDiffers();
       return {
         feature: currentFeature,
         row: { key: 'row-1' },
@@ -81,7 +89,7 @@ const createHarness = ({
       applyCount += 1;
       seenFeatures.push(explicitFeature);
       intents.push(intent);
-      if (!currentFeature) throw new Error(INPUT_DIFFERS);
+      if (!currentFeature) throw inputDiffers();
       if (blockApply) {
         await new Promise((resolve) => { releaseApply = resolve; });
       }
@@ -91,7 +99,7 @@ const createHarness = ({
     async stage({ feature: explicitFeature, intent }) {
       seenFeatures.push(explicitFeature);
       stagedIntents.push(intent);
-      if (!currentFeature) throw new Error(INPUT_DIFFERS);
+      if (!currentFeature) throw inputDiffers();
       return stageOutcome;
     }
   };
@@ -145,9 +153,9 @@ test('popup draft defaults to Start of the record for the explicitly opened feat
     placement: 'feature-start', anchor: null, offsetBp: 0, orientForward: false
   });
   assert.equal(draft.startCoordinate, 2000);
-  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
+  assert.equal(shown(draft.preview), 'NC_000001.1 will start at 2,000 · orientation unchanged');
   assert.equal(draft.canApply, true);
-  assert.equal(draft.disabledReason, '');
+  assert.equal(errorText(draft.disabledReason), '');
   assert.equal(harness.seenFeatures.at(-1), feature);
   assert.notEqual(harness.seenFeatures.at(-1), unrelatedGlobalSelection[0]);
 });
@@ -157,23 +165,23 @@ test('Start of the record puts a minus-strand feature first with or without orie
   harness.workflow.open({ feature });
   const { draft } = harness.workflow;
   assert.equal(draft.startCoordinate, 2000);
-  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
+  assert.equal(shown(draft.preview), 'NC_000001.1 will start at 2,000 · orientation unchanged');
 
   harness.workflow.setOrientForward(true);
   assert.equal(draft.startCoordinate, 2999);
   assert.equal(
-    draft.preview,
+    shown(draft.preview),
     'NC_000001.1 will start at 2,999 · reverse-complemented · feature strand − → +'
   );
 
   const reversed = createHarness({ committedReverseComplement: true });
   reversed.workflow.open({ feature });
   assert.equal(reversed.workflow.draft.startCoordinate, 2999);
-  assert.equal(reversed.workflow.draft.preview, 'NC_000001.1 will start at 2,999 · orientation unchanged');
+  assert.equal(shown(reversed.workflow.draft.preview), 'NC_000001.1 will start at 2,999 · orientation unchanged');
   reversed.workflow.setOrientForward(true);
   assert.equal(reversed.workflow.draft.startCoordinate, 2000);
   assert.equal(
-    reversed.workflow.draft.preview,
+    shown(reversed.workflow.draft.preview),
     'NC_000001.1 will start at 2,000 · no longer reverse-complemented · feature strand − → +'
   );
 });
@@ -206,8 +214,8 @@ test('End of the record and Custom position map to feature-end and anchor intent
 
   workflow.setOffset('1.5');
   assert.match(workflow.draft.offsetError, /whole number/);
-  assert.equal(workflow.draft.disabledReason, '', 'the offset error is shown once, next to the field');
-  assert.equal(workflow.draft.preview, '');
+  assert.equal(errorText(workflow.draft.disabledReason), '', 'the offset error is shown once, next to the field');
+  assert.equal(shown(workflow.draft.preview), '');
   assert.equal(workflow.draft.canApply, false);
   workflow.setOffset('');
   assert.match(workflow.draft.offsetError, /Enter/);
@@ -252,12 +260,12 @@ test('a location limit that disables every placement is one whole-target reason'
   harness.workflow.open({ feature });
   const { draft } = harness.workflow;
   assert.equal(draft.targetFailure, 'location-fuzzy');
-  assert.equal(draft.disabledReason, 'This operation requires exact feature coordinates.');
+  assert.equal(errorText(draft.disabledReason), 'This operation requires exact feature coordinates.');
   assert.ok([...draft.positionChoices, ...draft.referenceChoices]
     .every(({ enabled, message }) => !enabled && message === ''));
   assert.equal(draft.orientCapability.message, '');
   assert.equal(draft.canApply, false);
-  assert.equal(draft.preview, '');
+  assert.equal(shown(draft.preview), '');
 });
 
 test('Apply rechecks freshness, suppresses double submit, and rebinds stable identity', async () => {
@@ -272,14 +280,14 @@ test('Apply rechecks freshness, suppresses double submit, and rebinds stable ide
   assert.equal((await first).status, 'ok');
   assert.equal(harness.rebound.length, 1);
   assert.equal(harness.rebound[0].regenerated, true);
-  assert.match(harness.workflow.draft.status, /applied and regenerated/);
+  assert.match(errorText(harness.workflow.draft.status), /applied and regenerated/);
 
   harness.setCurrentFeature(null);
   const stale = await harness.workflow.apply();
   assert.equal(stale.status, 'disabled');
-  assert.match(harness.workflow.draft.disabledReason, /input file differs/);
+  assert.match(errorText(harness.workflow.draft.disabledReason), /input file differs/);
   // One reason source: the reason line states it; the status line does not repeat it.
-  assert.equal(harness.workflow.draft.status, '');
+  assert.equal(errorText(harness.workflow.draft.status), '');
   assert.equal(harness.applyCount(), 1);
 });
 
@@ -288,21 +296,26 @@ test('a failed Apply and regenerate states its reason once', async () => {
   harness.workflow.open({ feature });
   harness.action.apply = async () => {
     harness.setCurrentFeature(null);
-    throw new Error(INPUT_DIFFERS);
+    throw inputDiffers();
   };
   const outcome = await harness.workflow.apply();
   const { draft } = harness.workflow;
   assert.equal(outcome.status, 'error');
-  assert.equal(draft.disabledReason, INPUT_DIFFERS);
-  assert.equal(draft.status, 'Record rotation failed. The previous Result was kept.');
+  assert.equal(errorText(draft.disabledReason), INPUT_DIFFERS);
+  assert.equal(errorText(draft.status), 'Record rotation failed. The previous Result was kept.');
   assert.equal(draft.statusKind, 'error');
 
   const transient = createHarness();
   transient.workflow.open({ feature });
   transient.action.apply = async () => { throw new Error('Worker stopped.'); };
   await transient.workflow.apply();
-  assert.equal(transient.workflow.draft.disabledReason, '');
-  assert.equal(transient.workflow.draft.status, 'Worker stopped. The previous Result was kept.');
+  assert.equal(errorText(transient.workflow.draft.disabledReason), '');
+  // A failure that is not a record target failure shows its normalized sentences, never its raw message.
+  assert.equal(errorText(transient.workflow.draft.status), errorText([
+    ...normalizeCaughtError(new Error('Worker stopped.'), { operation: 'generate' }).summaryParts,
+    { text: 'The previous Result was kept.' }
+  ]));
+  assert.doesNotMatch(errorText(transient.workflow.draft.status), /Worker stopped/);
 });
 
 test('Apply on Generate stages the resolved transform with the same validation and no candidate', async () => {
@@ -318,7 +331,7 @@ test('Apply on Generate stages the resolved transform with the same validation a
     placement: 'feature-end', anchor: null, offsetBp: 0, orientForward: false
   }]);
   assert.equal(harness.seenFeatures.at(-1), feature);
-  assert.equal(draft.status, 'Record rotation will apply on the next Generate Diagram.');
+  assert.equal(errorText(draft.status), 'Record rotation will apply on the next Generate Diagram.');
   assert.equal(draft.statusKind, 'success');
   assert.equal(draft.pending, false);
   assert.equal(draft.canApply, true);
@@ -329,14 +342,14 @@ test('Apply on Generate stages the resolved transform with the same validation a
   assert.equal(draft.canApply, false);
   assert.deepEqual(await harness.workflow.stage(), { status: 'disabled' });
   assert.equal(harness.stagedIntents.length, 1);
-  assert.equal(draft.status, '', 'the offset error is shown once, next to the field');
+  assert.equal(errorText(draft.status), '', 'the offset error is shown once, next to the field');
 
   // A target that went stale before the click: one reason, no stage.
   harness.workflow.setOffset('0');
   harness.setCurrentFeature(null);
   assert.deepEqual(await harness.workflow.stage(), { status: 'disabled' });
-  assert.match(draft.disabledReason, /input file differs/);
-  assert.equal(draft.status, '');
+  assert.match(errorText(draft.disabledReason), /input file differs/);
+  assert.equal(errorText(draft.status), '');
   assert.equal(harness.stagedIntents.length, 1);
 });
 
@@ -345,7 +358,7 @@ test('Apply on Generate reports a busy Session and is disabled while regeneratin
   harness.workflow.open({ feature });
   harness.setStageOutcome({ status: 'busy', reason: 'Saving session. Retry after saving finishes.' });
   assert.equal((await harness.workflow.stage()).status, 'busy');
-  assert.equal(harness.workflow.draft.status, 'Saving session. Retry after saving finishes.');
+  assert.equal(errorText(harness.workflow.draft.status), 'Saving session. Retry after saving finishes.');
   assert.equal(harness.workflow.draft.statusKind, 'error');
 
   harness.setStageOutcome({ status: 'ok' });
@@ -364,33 +377,33 @@ test('a pending draft for the record is shown when the popup opens', () => {
   harness.workflow.open({ feature });
   const { draft } = harness.workflow;
   assert.equal(
-    draft.pendingPreview,
+    shown(draft.pendingPreview),
     'Pending for Generate: NC_000001.1 will start at 4,500 · reverse-complemented'
   );
-  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
+  assert.equal(shown(draft.preview), 'NC_000001.1 will start at 2,000 · orientation unchanged');
 
   // A pending draft equal to the chosen outcome is stated once.
   harness.setPendingTransform({ startCoordinate: 2000, reverseComplement: false });
   harness.workflow.recompute();
   assert.equal(
-    draft.pendingPreview,
+    shown(draft.pendingPreview),
     'Pending for Generate: NC_000001.1 will start at 2,000 · orientation unchanged'
   );
-  assert.equal(draft.preview, '');
+  assert.equal(shown(draft.preview), '');
   assert.equal(draft.canApply, true);
 
   // An orientation-only draft starts at the record's default start.
   harness.setPendingTransform({ startCoordinate: null, reverseComplement: true });
   harness.workflow.recompute();
   assert.equal(
-    draft.pendingPreview,
+    shown(draft.pendingPreview),
     'Pending for Generate: NC_000001.1 will start at 9,000 · reverse-complemented'
   );
 
   harness.setPendingTransform(null);
   harness.workflow.recompute();
-  assert.equal(draft.pendingPreview, '');
-  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
+  assert.equal(shown(draft.pendingPreview), '');
+  assert.equal(shown(draft.preview), 'NC_000001.1 will start at 2,000 · orientation unchanged');
 });
 
 for (const change of ['close', 'retarget']) {
@@ -426,7 +439,7 @@ test('Cancel discards only the ephemeral popup draft', () => {
   assert.deepEqual(currentResult, { name: 'before.svg' });
 });
 
-const targetFailure = (kind, message) => Object.assign(new Error(message), { kind });
+const targetFailure = (kind, message) => recordTargetError(kind, [{ text: message }]);
 const enabled = { enabled: true, code: null, message: '' };
 const availableCapabilities = {
   featureStart: enabled,
@@ -479,7 +492,7 @@ test('unread records after Session Load are read once, then the draft is recompu
   harness.workflow.open({ feature });
   const { draft } = harness.workflow;
   assert.equal(draft.targetFailure, RECORD_TARGET_NOT_DISCOVERED);
-  assert.doesNotMatch(draft.disabledReason, /stale|ambiguous/);
+  assert.doesNotMatch(errorText(draft.disabledReason), /stale|ambiguous/);
   // A whole-target failure is one reason, not one copy per control (F4).
   assert.ok([...draft.positionChoices, ...draft.referenceChoices]
     .every(({ message }) => message === ''));
@@ -488,8 +501,8 @@ test('unread records after Session Load are read once, then the draft is recompu
 
   const reading = harness.workflow.readRecords();
   assert.equal(draft.reading, true);
-  assert.equal(draft.status, 'Reading records…');
-  assert.equal(draft.disabledReason, '');
+  assert.equal(errorText(draft.status), 'Reading records…');
+  assert.equal(errorText(draft.disabledReason), '');
   assert.equal(draft.canApply, false);
   harness.workflow.readRecords();
   assert.equal(harness.reads(), 1);
@@ -498,8 +511,8 @@ test('unread records after Session Load are read once, then the draft is recompu
   await reading;
   assert.equal(draft.reading, false);
   assert.equal(draft.targetFailure, '');
-  assert.equal(draft.status, '');
-  assert.equal(draft.disabledReason, '');
+  assert.equal(errorText(draft.status), '');
+  assert.equal(errorText(draft.disabledReason), '');
   assert.equal(draft.recordLabel, 'NC_000001.1');
   assert.equal(draft.startCoordinate, 11);
   assert.equal(draft.canApply, true);
@@ -517,8 +530,8 @@ test('a failed record read shows its own reason and is not retried automatically
   await reading;
   const { draft } = harness.workflow;
   assert.equal(draft.targetFailure, 'discovery-failed');
-  assert.equal(draft.disabledReason, 'Records could not be loaded: malformed LOCUS line.');
-  assert.equal(draft.status, '');
+  assert.equal(errorText(draft.disabledReason), 'Records could not be loaded: malformed LOCUS line.');
+  assert.equal(errorText(draft.status), '');
   await harness.workflow.readRecords();
   assert.equal(harness.reads(), 1);
 });
@@ -532,7 +545,7 @@ test('a busy Session operation leaves records unread with its reason', async () 
   harness.releaseRead();
   await reading;
   assert.equal(harness.workflow.draft.targetFailure, RECORD_TARGET_NOT_DISCOVERED);
-  assert.equal(harness.workflow.draft.disabledReason, 'Saving session. Retry after saving finishes.');
+  assert.equal(errorText(harness.workflow.draft.disabledReason), 'Saving session. Retry after saving finishes.');
 });
 
 test('a record read that settles after the popup closed writes nothing into the next draft', async () => {
@@ -544,7 +557,7 @@ test('a record read that settles after the popup closed writes nothing into the 
   const next = { ...harness.workflow.draft };
   harness.releaseRead();
   await reading;
-  assert.equal(harness.workflow.draft.status, next.status);
+  assert.equal(errorText(harness.workflow.draft.status), errorText(next.status));
   assert.equal(harness.workflow.draft.reading, false);
   assert.equal(harness.workflow.draft.targetFailure, RECORD_TARGET_NOT_DISCOVERED);
   assert.equal(harness.workflow.draft.identity.biologicalFeatureId, 'feature-2');
@@ -584,14 +597,55 @@ test('a limit that disables every control is one whole-target reason', () => {
   const { draft } = workflow;
   assert.equal(draft.targetFailure, 'record-not-circular');
   assert.equal(draft.recordLabel, 'NC_001416.1');
-  assert.equal(draft.disabledReason, limit.message);
+  assert.equal(errorText(draft.disabledReason), limit.message);
   workflow.setPosition('custom');
   workflow.setOffset('x');
-  assert.equal(draft.disabledReason, limit.message, 'the hidden offset field adds no reason');
+  assert.equal(errorText(draft.disabledReason), limit.message, 'the hidden offset field adds no reason');
   assert.equal(draft.offsetError, '');
   assert.deepEqual(choiceStates(draft.positionChoices),
     [['start', false, ''], ['end', false, ''], ['custom', false, '']]);
   assert.ok(draft.referenceChoices.every(({ enabled, message }) => !enabled && message === ''));
   assert.equal(draft.orientCapability.message, '');
   assert.equal(draft.canApply, false);
+});
+
+// OV-3676: the section keeps what its texts are made of (catalog keys, sentences, a wording of the preview), and the
+// popup words them where it shows them, so a UI language change while the popup is open rewords every line.
+test('the record rotation section rewords its lines in the language chosen while it is open', async () => {
+  const { setUiLocale, SOURCE_LOCALE, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
+  const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
+  const ja = {
+    'Start of the record': 'レコードの先頭',
+    '{record} will start at {start}': '{record}は{start}から始まります',
+    'orientation unchanged': '向きは変更なし',
+    'Enter a signed whole-number offset.': 'オフセットは整数で入力してください（負の値も指定できます）。',
+    'Record rotation will apply on the next Generate Diagram.': 'レコードの回転は、次に「図を生成」したときに適用されます。',
+    'Saving session. Retry after saving finishes.': 'セッションを保存中です。保存が終わってから再試行してください。',
+    'This operation requires exact feature coordinates.': 'この操作には、フィーチャーの正確な座標が必要です。'
+  };
+  const harness = createHarness();
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  await harness.workflow.stage();
+  const fuzzy = createHarness({ precision: 'fuzzy' });
+  fuzzy.workflow.open({ feature });
+  const busy = createHarness();
+  busy.workflow.open({ feature });
+  busy.setStageOutcome({ status: 'busy', reason: 'Saving session. Retry after saving finishes.' });
+  await busy.workflow.stage();
+  const offset = createHarness();
+  offset.workflow.open({ feature });
+  offset.workflow.setPosition('custom');
+  offset.workflow.setOffset('');
+  await setUiLocale('ja', async () => ({ default: ja }));
+  try {
+    assert.equal(tm(draft.positionChoices[0].label), 'レコードの先頭');
+    assert.equal(draft.preview(), 'NC_000001.1は2,000から始まります · 向きは変更なし');
+    assert.equal(errorText(draft.status), ja['Record rotation will apply on the next Generate Diagram.']);
+    assert.equal(errorText(fuzzy.workflow.draft.disabledReason), ja['This operation requires exact feature coordinates.']);
+    assert.equal(errorText(busy.workflow.draft.status), ja['Saving session. Retry after saving finishes.']);
+    assert.equal(tm(offset.workflow.draft.offsetError), ja['Enter a signed whole-number offset.']);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });

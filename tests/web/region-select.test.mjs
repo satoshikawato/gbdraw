@@ -345,3 +345,22 @@ result = json.dumps({'catalog': reply['featureCatalog'], 'geometry': reply['meta
   }
 });
 }
+
+// OV-3676: an action's outcome keeps its sentences, and the popup words them, so a language change rewords it.
+test('the outcome of a popup action rewords in the language chosen while the popup is open', async () => {
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const { setUiLocale, SOURCE_LOCALE } = await import('../../gbdraw/web/js/utils/i18n.js');
+  const failure = normalizeUserFacingError({ code: 'INPUT_UNREADABLE' }, { operation: 'listSequenceRecords', stage: 'helper' });
+  const { owner } = openPopup({ addRegionAnnotation: async () => { throw failure; } });
+  assert.equal(await owner.addToAnnotationSet(), false);
+  const english = owner.popup.value.add.status;
+  const catalog = Object.fromEntries(failure.summaryParts.map((part) => [part.text, `JA:${part.text}`]));
+  await setUiLocale('ja', async () => ({ default: catalog }));
+  try {
+    assert.notEqual(owner.popup.value.add.status, english);
+    assert.match(owner.popup.value.add.status, /^JA:/);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+  assert.equal(owner.popup.value.add.status, english);
+});

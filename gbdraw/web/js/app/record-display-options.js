@@ -30,9 +30,9 @@ import { circularDrawingAloneRecord, circularDrawingCroppedRecords } from '../se
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
-import { msg, t, tm } from '../utils/i18n.js';
-import { diagnosticError } from '../utils/error-normalization.js';
-import { errorText } from '../utils/error-text.js';
+import { msg } from '../utils/i18n.js';
+import { diagnosticError, renderErrorText } from '../utils/error-normalization.js';
+/** @import { ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
 /** @import { LinearCardOrientation } from '../services/record-display-model.js' */
@@ -49,8 +49,13 @@ import { errorText } from '../utils/error-text.js';
 // current source whose records are not read yet. That popup target failure is
 // not stale: its kind lets an explicit record action read them.
 export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
-/** @param {string} kind @param {string} message */
-const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
+/**
+ * A failure of the popup feature's record target: its kind and the sentences that say why. The sentences stay parts,
+ * worded with `errorText` where the popup shows them, so a language change rewords them; `message` is their English.
+ * @typedef {Error & { kind: string, parts: ErrorTextPart[] }} RecordTargetError
+ */
+/** @param {string} kind @param {ErrorTextPart[]} parts @returns {RecordTargetError} */
+export const recordTargetError = (kind, parts) => Object.assign(new Error(renderErrorText(parts)), { kind, parts });
 
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 
@@ -231,7 +236,7 @@ const linearDisplaySources = (drawing, linearRecordsFor, linearWindowsOf) => dra
  * @property {(drawing: DrawingState, sequence: LinearSeq) => SequenceRecord[]} linearRecordsFor a card's records, read in the drawing that holds it
  * @property {LinearWindowsOf} linearWindowsOf the windows a Linear drawing's request writes for a card
  * @property {(drawing: DrawingState, sequence: LinearSeq | undefined) => RecordSelectorStatus} linearRecordStatusFor
- * @property {(drawing: DrawingState, sequence: LinearSeq | undefined) => string} linearRecordErrorFor the card's error text, '' when none
+ * @property {(drawing: DrawingState, sequence: LinearSeq | undefined) => UserFacingError | ''} linearRecordErrorModelFor the card's read error, '' when none
  * @property {(label: string, apply: () => unknown) => Promise<unknown>} runUndoable History's one undoable step:
  *   the result of `apply`, or History's busy value (`{ status: 'busy', reason }`) when it refuses the step without running it
  * @property {() => Record<string, any> | null} getCommittedRequest
@@ -275,7 +280,7 @@ const shownRowsOnce = (sourcesOf) => {
  * @param {RecordDisplayControlsOptions} options
  */
 export const createRecordDisplayControls = ({
-  state, computed, watch, linearRecordsFor, linearWindowsOf, linearRecordStatusFor, linearRecordErrorFor, runUndoable,
+  state, computed, watch, linearRecordsFor, linearWindowsOf, linearRecordStatusFor, linearRecordErrorModelFor, runUndoable,
   getCommittedRequest, getCommittedSession
 }) => {
   /** @type {CommittedDisplayRow[]} */
@@ -533,7 +538,7 @@ export const createRecordDisplayControls = ({
     if (source.scope === 'circular') return circularDiscoveryForInput(state.drawingOf(source.drawingId));
     const drawing = state.drawingOf(source.drawingId);
     const sequence = drawing.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === source.sourceUid);
-    return { status: linearRecordStatusFor(drawing, sequence), error: linearRecordErrorFor(drawing, sequence) };
+    return { status: linearRecordStatusFor(drawing, sequence), error: linearRecordErrorModelFor(drawing, sequence) };
   };
   // The committed record's current sources have no read records: say whether
   // the read failed or has not happened, instead of calling the target stale.
@@ -548,9 +553,8 @@ export const createRecordDisplayControls = ({
     if (!discoveries.length || discoveries.some(({ status }) => status === 'ready')) return null;
     const failed = discoveries.find(({ status }) => status === 'error');
     return failed
-      ? recordTargetError('discovery-failed',
-        (typeof failed.error === 'string' ? failed.error : failed.error && errorText(failed.error.summaryParts)) || tm(RECORD_READ_ERROR_LABEL))
-      : recordTargetError(RECORD_TARGET_NOT_DISCOVERED, t('The records of this feature have not been read yet.'));
+      ? recordTargetError('discovery-failed', failed.error ? failed.error.summaryParts : [{ text: RECORD_READ_ERROR_LABEL }])
+      : recordTargetError(RECORD_TARGET_NOT_DISCOVERED, [{ text: msg('The records of this feature have not been read yet.') }]);
   };
   // The display start and orientation that Generate would apply from this
   // committed row's draft, when either differs from the committed request.
