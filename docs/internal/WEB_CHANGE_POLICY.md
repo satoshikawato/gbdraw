@@ -480,7 +480,17 @@ The Gate applies these rules:
   new entry. A new twin row in `tools/twins.json` (R9) cannot follow its twin,
   because the twin guard fails a twin without a row, so it goes in first with
   `"pending": true`, and the runtime pull request that adds the twin removes
-  `pending`.
+  `pending`. A row that the trusted base does not have also gives
+  `whyNotAskPython` (why the Web does not ask the Python owner, in the Worker,
+  for the result), `whyNotGenerate` (why the Web copy is not generated from the
+  Python owner), and `retireBy` (a date, `YYYY-MM-DD`, after the day of the
+  check, by which the twin retires). Each added row is paid for by one row that
+  a pull request changing production code (Web runtime or the Python package)
+  removed after this rule took effect, or carries `waiver`, which says why no
+  row could be retired first. A row with `waiver` uses no retired row; the Owner
+  grants the waiver by approving the authority-only pull request that adds the
+  row. Rows that the base already has
+  need none of these fields.
 - A malformed registry fails closed and is Review REQUIRED.
 
 Adding a test case to a guard test is neither an expansion nor a contraction

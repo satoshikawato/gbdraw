@@ -139,11 +139,12 @@ cleanup beyond it.
   reads it, and by which key. Fix the channel, not only the reader that showed
   the bug.
 - One owner per value and per transformation. A value shown on two surfaces
-  (the drawing and an editor, the live preview and Generate, Python and the
-  Web) comes from one owner function. Never add another derivation. Remove the
-  second one in the same change when it is within the task's scope; otherwise
-  list it as remaining work. Fix a live versus Generate difference in the
-  shared compile path (R3 in `gbdraw/web/CLAUDE.md`) and add a parity case.
+  (the drawing and an editor, the live preview and Generate, Circular and
+  Linear, the CLI and Session replay, Python and the Web) comes from one owner
+  function. Never add another derivation. Remove the second one in the same
+  change when it is within the task's scope; otherwise list it as remaining
+  work. Fix a live versus Generate difference in the shared compile path (R3
+  in `gbdraw/web/CLAUDE.md`) and add a parity case.
 - Find a row, slot, record, or feature by its identity (slot id, row id,
   feature id), never by its caption, display text, or kind when an identity
   exists.
@@ -163,7 +164,13 @@ cleanup beyond it.
   analysis": the channel, the rules the fix applies, what it removed, any twin
   that remains, and the remaining work. Describe each rule in words; a design
   rule number such as R3 may follow the words, but campaign-internal IDs may
-  not.
+  not. A fix pull request ends it with a line of its own:
+  `Cause class: <class>; guard: <the test that now stops this kind of defect, or why none is added>`.
+  The classes are: duplicate implementation, state path, undefined edge,
+  combination, single-site logic error, lookup by name or position,
+  performance or memory, environment, not a product defect, unknown. When one
+  of the Web [root-cause patterns P1 to P10](docs/internal/WEB_CHANGE_POLICY.md#design-rule-co-change)
+  fits, it follows the class in parentheses, for example `state path (P7)`.
 
 ## Product Behavior Semantics Review
 

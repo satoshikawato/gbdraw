@@ -48,6 +48,15 @@ this skill, they win.
   GitHub accepts (`DEFAULT_MAX_BODY_BYTES`). Move long tables into a PR
   comment.
 - In a bundled PR, list the bug IDs and the former PRs it contains.
+- For a `fix/` branch, run `python3 tools/fix_metrics.py --branch <branch>` from
+  the worktree (it compares with `origin/dev` by default). It prints two
+  judgements:
+  - "Third fix in a row in the same file: yes": the pull request's Boundary
+    analysis names the cause class and the guard that stops this kind of defect
+    (or why none is added). The pull request merges as usual.
+  - "Rewrites 3+ lines of a fix merged in the last 7 days: yes": run the
+    `gbdraw-reviewer` agent on the pull request, apply its findings, and only
+    then arm auto-merge.
 - Run `node tools/check-pr-language.mjs --title "<title>" --body-file <file>`
   once, then `gh pr create --base dev`.
 - A Product Contract change is named after its pull request
@@ -80,6 +89,9 @@ this skill, they win.
   The trusted `PR / gate` check is the authority
   (`docs/internal/SELECTIVE_CI.md`, "Dev state on pull requests"). While dev
   is red, arm auto-merge only on the fix.
+- When `tools/fix_metrics.py` said "Rewrites 3+ lines of a fix merged in the
+  last 7 days: yes" (see "Write and open"), arm auto-merge only after the
+  reviewer's findings are applied.
 - When the PR does not expand authority (see `AGENTS.md`), arm auto-merge:
   `gh pr merge <n> --auto --merge --match-head-commit <full sha>`. The Owner
   allows this for agent PRs into `dev`.

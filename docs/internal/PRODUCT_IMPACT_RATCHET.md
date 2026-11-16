@@ -276,6 +276,14 @@ the following and merged authority does not select one complete outcome:
 The developer decides whether Product judgment is required but does not
 silently select the outcome.
 
+A pull request that adds a setting, an option, an input, or an operation fills
+the edge table in its Conditional Product Impact section. The edges are: invalid value;
+empty; duplicate; upper limit; zero, one, or many; precedence over other
+settings; next step after a failure; older saved data. Each edge is Decided
+(with its Product Contract record), Not applicable, or Undecided. Implementing
+behavior for an edge that is still Undecided is a review finding, and the open
+edges go to the Product Decision Owner as that pull request's questions.
+
 ### Cases that normally need no Product Decision
 
 Use `IMPLEMENT_EXISTING_AUTHORITY` without a new Product Decision when:

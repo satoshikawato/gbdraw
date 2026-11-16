@@ -18,6 +18,12 @@ change nothing.
 - Whatever the brief lists, check a change to code under `gbdraw/` against
   "Owners and Boundaries in Every Fix" in `AGENTS.md`; any departure from it,
   including a missing or wrong "Boundary analysis", is a finding.
+- A pull request that adds a setting, an option, an input, or an operation has
+  the edge table, and no edge marked Undecided has implemented behavior;
+  report one that does as a finding.
+- A fix pull request has the `Cause class:` line in its Boundary analysis,
+  with one of the classes that `AGENTS.md` lists and a guard or the reason none
+  is added; report a missing or incomplete line as a finding.
 - For each finding give the file and line, what goes wrong, and a concrete
   case (input, state, and the wrong result).
 

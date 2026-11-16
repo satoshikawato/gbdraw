@@ -30,6 +30,10 @@ Select exactly one:
 
 - Gate result and any blocker:
 - Review result and why it is `CLEAR` or `REQUIRED`:
+- Boundary analysis, for a change to code under `gbdraw/` ("Owners and
+  Boundaries in Every Fix" in `AGENTS.md`, which lists the cause classes); a fix
+  pull request ends it with a line of its own,
+  `Cause class: <class>; guard: <test, or why none>`.
 - Architecture impact: state whether **This is not architecture-bearing** or
   **This is architecture-bearing**, and identify the affected owner, path, or
   responsibility.
@@ -52,6 +56,22 @@ The human selects an outcome with the documented `PRODUCT_DECISION` response; Co
 Every nonempty current decision requires a product-level `rationale`.
 This block does not waive any other gate. Product change or retirement requires durable base authority, or a static Product Contract co-change that carries the explicit receipt (Review REQUIRED).
 -->
+
+- Edge table, for a pull request that adds a setting, an option, an input, or an
+  operation (answer each edge Decided with its Product Contract record, Not
+  applicable, or Undecided; see "Mandatory developer preflight" in
+  `docs/internal/PRODUCT_IMPACT_RATCHET.md`):
+
+  | Edge | Decided (Product Contract record), Not applicable, or Undecided |
+  | --- | --- |
+  | Invalid value |  |
+  | Empty |  |
+  | Duplicate |  |
+  | Upper limit |  |
+  | Zero, one, or many |  |
+  | Precedence over other settings |  |
+  | Next step after a failure |  |
+  | Older saved data |  |
 
 - Product-impact role: N/A | EVIDENCE_ONLY | DECISION_ONLY | IMPLEMENTATION
 - Product preflight classification: N/A | IMPLEMENT_EXISTING_AUTHORITY | EVIDENCE_REQUIRED | PRODUCT_DECISION_REQUIRED | NOT_ALLOWED
