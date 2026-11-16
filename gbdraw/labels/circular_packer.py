@@ -9,10 +9,11 @@ label ellipse (:class:`~gbdraw.labels.circular_capacity.LabelArc`), parameterise
 
 0 at 12 o'clock, clockwise. Each label's target is where its feature's ray meets
 the ellipse. Neighbouring boxes (``_label_y_offsets`` rows and the ``start_x > 0``
-text side of ``_label_x_offsets``) stay a row gap apart vertically or 1 px apart
-side by side. The packing minimises the squared distance of each label from its
-target: pool-adjacent-violators on ``psi - D`` with the neighbour steps ``D``
-measured again a few times, then bounded sweeps.
+text side of ``_label_x_offsets``) stay a row gap apart vertically or, on one text
+line, ``LINE_GAP_EM`` of the label font size apart side by side. The packing
+minimises the squared distance of each label from its target:
+pool-adjacent-violators on ``psi - D`` with the neighbour steps ``D`` measured
+again a few times, then bounded sweeps.
 
 Two looks, named by what the reader sees, tried in this order (CP-D05):
 
@@ -47,8 +48,9 @@ PackerLook: TypeAlias = Literal["half", "pole"]
 # CP-D05: look 2 (every label on its genome half) first, look 1 (runs pass a pole) only when look 2 does not fit.
 PACKER_LOOKS: tuple[PackerLook, ...] = ("half", "pole")
 
-# Side by side, two boxes stay this far apart (LP-D37).
-SIDE_GAP_PX = 1.0
+# Two packed boxes on one text line (overlapping vertically) stay this many label font sizes apart side by side, and
+# each anchor half of it from the vertical axis, so two names at 12 or 6 o'clock never read as one phrase (OV-2036).
+LINE_GAP_EM = 1.0
 # "pole": the cone's angular margin, and its widenings tried in order.
 CONE_MARGIN_DEG = 1.0
 CONE_SCALES = (1.0, 1.25, 1.5, 2.0, 3.0, 5.0)
@@ -95,9 +97,10 @@ class _PackItem:
 class _Ring:
     """The label ellipse of one side with the gaps two neighbouring boxes keep."""
 
-    def __init__(self, arc: LabelArc, row_gap: float) -> None:
+    def __init__(self, arc: LabelArc, row_gap: float, line_gap: float) -> None:
         self.arc = arc
         self.row_gap = row_gap
+        self.line_gap = line_gap
 
     def anchor(self, psi: float) -> tuple[float, float]:
         return self.arc.center_x + self.arc.x_radius * math.sin(psi), -self.arc.y_radius * math.cos(psi)
@@ -111,8 +114,8 @@ class _Ring:
         return (
             b[1] - a[3] >= self.row_gap
             or a[1] - b[3] >= self.row_gap
-            or b[0] - a[2] >= SIDE_GAP_PX
-            or a[0] - b[2] >= SIDE_GAP_PX
+            or b[0] - a[2] >= self.line_gap
+            or a[0] - b[2] >= self.line_gap
         )
 
     def apart(self, first: _PackItem, first_psi: float, second: _PackItem, second_psi: float) -> bool:
@@ -258,14 +261,20 @@ def _placed(ring: _Ring, items: Sequence[_PackItem], psis: Sequence[float], rule
     return rules.leader_starts(placed)
 
 
-def _side_limits(arc: LabelArc) -> tuple[Span, Span]:
-    """The angles of the right and the left side, whose anchors keep the side gap from the vertical axis."""
+def _line_gap(items: Sequence[_PackItem]) -> float:
+    """The side gap of two boxes on one text line, in px: ``LINE_GAP_EM`` of the largest label font size."""
+
+    return LINE_GAP_EM * max(float(item.label["font_size"]) for item in items)
+
+
+def _side_limits(arc: LabelArc, line_gap: float) -> tuple[Span, Span]:
+    """The angles of the right and the left side, whose anchors keep half the line gap from the vertical axis."""
 
     def angle(x: float) -> float:
         return math.asin(max(-1.0, min(1.0, (x - arc.center_x) / arc.x_radius)))
 
-    right = angle(SIDE_GAP_PX)
-    left = angle(-SIDE_GAP_PX)
+    right = angle(0.5 * line_gap)
+    left = angle(-0.5 * line_gap)
     return (right, math.pi - right), (math.pi - left, _TWO_PI + left)
 
 
@@ -275,13 +284,13 @@ class _HalfLook:
     The split (0, 0) is look 2; any other split is look 1's first family.
     """
 
-    def __init__(self, items: Sequence[_PackItem], arc: LabelArc, total_length: int) -> None:
+    def __init__(self, items: Sequence[_PackItem], arc: LabelArc, total_length: int, line_gap: float) -> None:
         self.items = items
         self.count = len(items)
         self.half = next(
             (k for k, item in enumerate(items) if float(item.label["middle"]) >= total_length / 2), self.count
         )
-        self.sides = _side_limits(arc)
+        self.sides = _side_limits(arc, line_gap)
 
     def valid(self, shift: int) -> bool:
         return -(self.count - self.half) < shift < self.half
@@ -424,9 +433,10 @@ def _half_placements(
 ) -> Iterator[list[CircularLabel]]:
     """Look 2: per row gap, the split at the genome halves (no label passes a pole), when it packs."""
 
-    look = _HalfLook(items, arc, rules.total_length)
+    line_gap = _line_gap(items)
+    look = _HalfLook(items, arc, rules.total_length, line_gap)
     for row_gap in rules.row_gaps:
-        ring = _Ring(arc, row_gap)
+        ring = _Ring(arc, row_gap, line_gap)
         packing = look.packed(ring, _ON_HALVES)
         if packing is not None:
             yield _placed(ring, packing[0], packing[1], rules)
@@ -437,9 +447,10 @@ def _run_placements(
 ) -> Iterator[list[CircularLabel]]:
     """Look 1, first family: per row gap, the splits whose end runs pass a pole, by least squared displacement."""
 
-    look = _HalfLook(items, arc, rules.total_length)
+    line_gap = _line_gap(items)
+    look = _HalfLook(items, arc, rules.total_length, line_gap)
     for row_gap in rules.row_gaps:
-        ring = _Ring(arc, row_gap)
+        ring = _Ring(arc, row_gap, line_gap)
         fallback = look.greedy(ring)
         if fallback is None:
             continue
@@ -489,12 +500,13 @@ def _cycle_placements(
     for k in range(1, count):
         while targets[k] < targets[k - 1]:
             targets[k] += _TWO_PI
+    line_gap = _line_gap(items)
     for scale in CONE_SCALES:
         cones = [_cone(arc, item, target, scale) for item, target in zip(order, targets)]
         lower = [cone[0] for cone in cones]
         upper = [cone[1] for cone in cones]
         for row_gap in rules.row_gaps:
-            ring = _Ring(arc, row_gap)
+            ring = _Ring(arc, row_gap, line_gap)
             psis = ring.pack(order, targets, lower, upper)
             if psis is not None:
                 yield _placed(ring, order, psis, rules)
