@@ -527,6 +527,7 @@ const provideSettingNoteReaders = () => {
  * @property {() => void} arriveAtDrawing
  * @property {() => { status: 'busy', reason: string } | null} busy
  * @property {() => DrawingId} reviewDrawingId
+ * @property {() => boolean} reviewIsShown Whether the review (or the work in flight) is the shown drawing's.
  * @property {(drawingId: DrawingId) => void} endReviewOf
  * @property {(drawingIds: readonly DrawingId[]) => void} endReviewOutside
  */
@@ -541,6 +542,7 @@ const alignmentPortsBeforeOwner = (state) => ({
   arriveAtDrawing: () => {},
   busy: () => null,
   reviewDrawingId: () => state.activeDrawingId.value,
+  reviewIsShown: () => true,
   endReviewOf: () => {},
   endReviewOutside: () => {}
 });
@@ -1218,7 +1220,7 @@ export const createAppSetup = () => {
   // is not the held one, so the end of the review does not give it the held view and its
   // captures keep its own view.
   const similarityAlignmentHoldShown = () => {
-    return !similarityAlignmentTakeover.value || similarityAlignmentPorts.reviewDrawingId() === state.activeDrawingId.value;
+    return !similarityAlignmentTakeover.value || similarityAlignmentPorts.reviewIsShown();
   };
   // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds for
   // the shown mode. The departing mode's slot is captured before a switch changes `mode`.
@@ -2985,6 +2987,7 @@ export const createAppSetup = () => {
     alignmentStatus: similarityAlignmentActions.status,
     isDraftArtifactCurrent: similarityAlignmentActions.isDraftArtifactCurrent,
     alignmentReviewDrawingId: similarityAlignmentActions.reviewDrawingId,
+    alignmentReviewShown: similarityAlignmentActions.reviewIsShown,
     selectAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     alignmentDirectionPreview: similarityAlignmentActions.directionPreview,
     alignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
@@ -2999,6 +3002,7 @@ export const createAppSetup = () => {
     arriveAtDrawing: similarityAlignmentActions.arriveAtDrawing,
     busy: similarityAlignmentActions.workBusy,
     reviewDrawingId: similarityAlignmentActions.reviewDrawingId,
+    reviewIsShown: similarityAlignmentActions.reviewIsShown,
     endReviewOf: similarityAlignmentActions.endReviewOf,
     endReviewOutside: similarityAlignmentActions.endReviewOutside
   });

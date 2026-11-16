@@ -2320,6 +2320,8 @@ export const createSimilarityAlignmentActions = ({
     dialogOpen: computed(() => !automaticApply.value && Boolean(draft.value && status.value !== 'idle')),
     isDraftArtifactCurrent: artifactIsCurrent,
     reviewDrawingId: workDrawingId,
+    // Whether the review is the shown drawing's: the one derivation the review's hold and its marks read (D-38).
+    reviewIsShown: workIsShown,
     unresolvedCount,
     applyDisabledReason,
     canApply: computed(() => status.value === 'reviewing' && unresolvedCount.value === 0 && workIsShown()),

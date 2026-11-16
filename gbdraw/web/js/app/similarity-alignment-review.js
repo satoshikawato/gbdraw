@@ -192,6 +192,7 @@ export const createSimilarityAlignmentTakeover = ({
  * @property {{ readonly value: string }} alignmentStatus
  * @property {() => boolean} isDraftArtifactCurrent Whether the figure still shows the draft's sources.
  * @property {() => DrawingId} alignmentReviewDrawingId The drawing the review belongs to (the alignment owner's, D-38).
+ * @property {() => boolean} alignmentReviewShown Whether that drawing is the shown one (the alignment owner's).
  * @property {(recordKey: string, anchor: AliasSource) => unknown} selectAlignmentCandidate
  * @property {{ readonly value: { records: readonly DirectionPreviewRecord[] } | null }} alignmentDirectionPreview
  * @property {{ readonly value: boolean }} alignmentResetDialogOpen
@@ -220,8 +221,8 @@ export const createSimilarityAlignmentTakeover = ({
 export const createSimilarityAlignmentReview = ({
   state, resultEditRevision, similarityAlignmentTakeover, holdPreviewViewport, clearAlignmentOverlay,
   showAlignmentOverlay, closeRightDrawer, closeSettingsPopup, alignmentDialogOpen, alignmentDraft, alignmentStatus,
-  isDraftArtifactCurrent, alignmentReviewDrawingId, selectAlignmentCandidate, alignmentDirectionPreview, alignmentResetDialogOpen,
-  openAlignmentReset, alignmentError, startAlignmentFromDrawer, cancelAlignment, reviewDrawingFigure,
+  isDraftArtifactCurrent, alignmentReviewDrawingId, alignmentReviewShown, selectAlignmentCandidate, alignmentDirectionPreview,
+  alignmentResetDialogOpen, openAlignmentReset, alignmentError, startAlignmentFromDrawer, cancelAlignment, reviewDrawingFigure,
   dropSimilarityAlignmentView, fitPreviewForSimilarityAlignment, endSimilarityAlignmentTakeover,
   rememberSimilarityAlignmentInvoker, restoreSimilarityAlignmentFocus, focusSimilarityAlignmentDialog
 }) => {
@@ -239,7 +240,7 @@ export const createSimilarityAlignmentReview = ({
     }
     // While Apply runs, and while another drawing is shown, the strips keep the figure of the review's own drawing
     // they were measured from: that Result cannot change meanwhile, and arriving home measures again (D-41).
-    if (alignmentStatus.value !== 'reviewing' || alignmentReviewDrawingId() !== state.activeDrawingId.value) {
+    if (alignmentStatus.value !== 'reviewing' || !alignmentReviewShown()) {
       clearAlignmentOverlay();
       return;
     }

@@ -302,6 +302,16 @@ test('the Load rollback port ends the review only on a Load that succeeded', asy
   assert.deepEqual(ended, [['linear-2']]);
 });
 
+// D-44 (N-2): whether the review is the shown drawing's has one derivation, the alignment owner's (reviewIsShown);
+// the review's hold (the root) and its marks (the review owner) read it, and compare no drawing IDs again.
+test('only the alignment owner compares the review\'s drawing with the shown drawing', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const file of ['app-setup.js', 'similarity-alignment-review.js']) {
+    const source = await readFile(new URL(`../../gbdraw/web/js/app/${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /[Rr]eviewDrawingId\(\)\s*[!=]==\s*state\.activeDrawingId\.value/, file);
+  }
+});
+
 // D-41 (B1, OV-3618): a text that names a drawing reads its tab's name without throwing for an ID that has no tab.
 test('the drawing bar names a drawing by its tab and has no name for an ID without one', () => {
   const app = createAppSetup();

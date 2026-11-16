@@ -555,13 +555,22 @@ export const createDrawingBar = ({
   };
 
   /**
-   * The bar's tab of a drawing, by its ID; an unknown ID is a bug.
+   * The bar's tab of a drawing, by its ID, or null for an ID without one (a drawing a Load is taking away).
+   * @param {DrawingId} drawingId
+   * @returns {DrawingBarTab | null}
+   */
+  const drawingTabFor = (drawingId) => {
+    const tab = tabs().find((each) => each.kind === 'drawing' && each.id === drawingId);
+    return tab?.kind === 'drawing' ? tab : null;
+  };
+  /**
+   * The bar's tab of a drawing an operation names; an unknown ID is a bug.
    * @param {string} operation @param {DrawingId} drawingId
    * @returns {DrawingBarTab}
    */
   const drawingTabOf = (operation, drawingId) => {
-    const tab = tabs().find((each) => each.kind === 'drawing' && each.id === drawingId);
-    if (!tab || tab.kind !== 'drawing') throw listError(operation, 'UNKNOWN_DRAWING', drawingId);
+    const tab = drawingTabFor(drawingId);
+    if (!tab) throw listError(operation, 'UNKNOWN_DRAWING', drawingId);
     return tab;
   };
 
@@ -631,10 +640,7 @@ export const createDrawingBar = ({
    * @param {DrawingId} drawingId
    * @returns {string | null}
    */
-  const nameOf = (drawingId) => {
-    const tab = tabs().find((each) => each.kind === 'drawing' && each.id === drawingId);
-    return tab?.kind === 'drawing' ? tab.label : null;
-  };
+  const nameOf = (drawingId) => drawingTabFor(drawingId)?.label ?? null;
 
   return { tabs, nameOf, newDrawing, duplicateDrawing, newDrawingWithStyle, renameDrawing, moveDrawing, deleteDrawing };
 };
