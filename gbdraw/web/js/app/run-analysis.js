@@ -23,7 +23,7 @@ import { drawnInputSummaries, validateInputSummaries } from '../services/input-s
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { trackHidesOn } from '../services/setting-application.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
-import { keepResultNames } from '../services/result-normalization.js';
+import { keepResultNames, redrawsEachResult } from '../services/result-normalization.js';
 import { regionWithinRecord } from '../services/record-options.js';
 import {
   nameFeaturePlacementFailure,
@@ -1580,6 +1580,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {any[]} [timingEntries]
  * @property {readonly string[] | null} [resultNames] The names of the Results a rerender draws again,
  *   which they keep (OV-136); Generate's Results take the names the engine gives them.
+ * @property {readonly SvgResultEntry[] | null} [replacedResults] The Results a rerender draws again, whose
+ *   lines the new Results continue when the reply draws each again (`redrawsEachResult`, OV-2437).
  * @property {FeatureCatalog | null} [heldFeatureCatalog] The catalog the page holds for the drawing it
  *   renders; when this render reuses its build, the reply says so and the page keeps it.
  * @property {readonly unknown[] | null} [heldResults] The drawing's committed Results; Python
@@ -1602,6 +1604,7 @@ export const executeCanonicalRenderCandidate = async ({
   decorationContinuity = null,
   timingEntries = [],
   resultNames = null,
+  replacedResults = null,
   heldFeatureCatalog = null,
   heldResults = null,
   drawingId = null
@@ -1672,6 +1675,7 @@ export const executeCanonicalRenderCandidate = async ({
       // The Results carry the feature types of the request that drew them (R13).
       selectedFeatureTypes: canonical.renderRequest.diagramOptions?.selectedFeaturesSet ?? null,
       ...prepareCommitInput,
+      replacedResults: redrawsEachResult(replacedResults, results) ? replacedResults : null,
       resultTransforms: decorationContinuity?.(canonical, catalogState) || []
     })
   );
@@ -1810,8 +1814,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
- * @property {(moves: ReadonlyMap<string, string>) => void} moveDrawnLabelVisibility The label owner's port:
- *   the label visibility the mounted Result was drawn with follows the rows a Generate moved.
+ * @property {(results: readonly SvgResultEntry[], moves: ReadonlyMap<string, string>) => void} moveDrawnPaint
+ *   The Result paint record's port: the label rows a Generate's Results were drawn with follow the rows it moved.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
@@ -1900,7 +1904,7 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  moveDrawnLabelVisibility,
+  moveDrawnPaint,
   prepareCandidateCommit = prepareCandidateRenderCommit,
   askChoice = async () => 'cancel',
   showNotice = () => {}
@@ -5548,7 +5552,7 @@ export const createRunAnalysis = ({
         biologicalFeatures: candidateBiologicalFeatures,
         moves: recordMoves
       });
-      moveDrawnLabelVisibility(recordMoves);
+      moveDrawnPaint(candidateCommit.results, recordMoves);
       // OV-120: a source replacement also retires the renames of the Legend
       // rows the new Result does not draw (as the OV-84 strokes).
       if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);
@@ -6240,7 +6244,8 @@ export const createRunAnalysis = ({
     // The Legend rows the redraw keeps, read while the request that drew the
     // displayed Result is committed.
     const liveRedrawLegend = readLiveRedrawLegend(drawing);
-    // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
+    // The reflow draws the committed Session's Results again, so they keep their names (OV-136)
+    // and continue their lines, which key the Legend and title moves History records (OV-2437).
     const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
     clearLabelBuildNotices({ rerender: true });
@@ -6279,7 +6284,8 @@ export const createRunAnalysis = ({
           manualSpecificRules: candidateRules
         },
         timingEntries,
-        resultNames: committedResultNames
+        resultNames: committedResultNames,
+        replacedResults: results.value
       });
       console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
       if (execution.status === 'superseded' || !isCurrent()) return notAdmitted();
@@ -6299,9 +6305,10 @@ export const createRunAnalysis = ({
       // its popup, label binding, Features list row, and History projection
       // (R-5). It renders the committed request, so the records and the
       // similarity groups the Generate committed stay.
-      // OV-873: the new Results have new identities, which key the Legend and
-      // title moves History records; the rerender draws the same moves, so a
-      // step begun after its request takes the change as drawn (D-40).
+      // OV-873: the new Results continue the lines of the Results they
+      // replace, which key the Legend and title moves History records
+      // (OV-2437); the rerender draws the same moves, so a step begun after
+      // its request takes the change as drawn (D-40).
       // OV-111: they install into the artifact of the drawing whose Result they draw.
       adoptDrawnWrite(() => {
         installRedrawnArtifact(drawing.id, {

@@ -39,8 +39,8 @@ const layout = createLegendLayout({
   layOutLegend: () => null,
   previewRuntime: {
     commitActiveResultEdit: () => true,
-    getResultIdentity: (result) => result.id,
-    getActiveRuntime: () => (mounted ? { svg: svgs.R1, resultIdentity: 'R1' } : null),
+    getResultLineageKey: (result) => result.id,
+    getActiveRuntime: () => (mounted ? { svg: svgs.R1, result: state.results.value[0] } : null),
     commitResultEdit: (index, edit) => {
       const id = state.results.value[index].id;
       restored.push(id);

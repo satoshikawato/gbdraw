@@ -123,6 +123,9 @@ const text = (value) => String(value ?? '').trim();
  * The runtime state of a committed Result, never persisted.
  * @typedef {object} CommittedSvgState
  * @property {number} identity
+ * @property {number} lineage The identity of the first Result of its line: a
+ *   label rerender's Result continues the line of the Result it replaces at its
+ *   index; any other admission starts one (`lineage === identity`).
  * @property {boolean} mounted
  * @property {string} mountedContent The markup the mounted preview was built from; never read as the Result's text.
  * @property {CommittedSvgResultMetadata} metadata
@@ -198,9 +201,12 @@ const text = (value) => String(value ?? '').trim();
  */
 
 /**
+ * `replacedResults`: the Results a label rerender draws again, whose lines its
+ * Results continue at the same index.
  * @typedef {SvgAdmissionRuntime & {
  *   catalogAdmission: FeatureCatalogAdmission,
- *   mutationPlan: SvgMutationPlan
+ *   mutationPlan: SvgMutationPlan,
+ *   replacedResults?: readonly SvgResultEntry[] | null
  * }} CurrentGeneratedAdmissionOptions
  */
 
@@ -397,10 +403,13 @@ const parseSanitizedSvg = (
 /**
  * @param {SvgResultEntry} result
  * @param {CommittedSvgResultMetadata} metadata
+ * @param {SvgResultEntry | null} [replaced] The Result whose line this one continues.
  */
-const markCommitted = (result, metadata) => {
+const markCommitted = (result, metadata, replaced = null) => {
+  const identity = nextResultIdentity++;
   result[COMMITTED_SVG_RESULT] = {
-    identity: nextResultIdentity++,
+    identity,
+    lineage: committedState(replaced)?.lineage ?? identity,
     mounted: false,
     mountedContent: result.content,
     metadata
@@ -411,8 +420,9 @@ const markCommitted = (result, metadata) => {
 /**
  * @param {SvgResultEntry} result
  * @param {CommittedSvgResultMetadata} metadata
+ * @param {SvgResultEntry | null} [replaced]
  */
-const commitCatalogBackedResult = (result, metadata) => markCommitted(result, metadata);
+const commitCatalogBackedResult = (result, metadata, replaced = null) => markCommitted(result, metadata, replaced);
 
 /** @param {unknown} content */
 const hasSanitizedSvgEnvelope = (content) => {
@@ -620,6 +630,20 @@ export const getCommittedSvgResultMetadata = (result) => (
 /** @param {SvgResultEntry | null | undefined} result */
 export const getCommittedSvgResultRuntimeIdentity = (result) => (
   committedState(result)?.identity ?? null
+);
+
+/**
+ * The key of a Result's runtime state, which every content version of the
+ * Result shares: its runtime state once committed, else the entry itself. A
+ * per-Result record keyed by it lives as long as the Result is referenced.
+ * @param {SvgResultEntry} result
+ * @returns {object}
+ */
+export const getCommittedSvgResultRuntimeKey = (result) => committedState(result) ?? result;
+
+/** @param {SvgResultEntry | null | undefined} result The identity of the first Result of its line, or null. */
+export const getCommittedSvgResultLineage = (result) => (
+  committedState(result)?.lineage ?? null
 );
 
 /** @param {SvgResultEntry} result */
@@ -1660,7 +1684,7 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
  * @param {SvgResultCandidate} result
  * @param {CommittedSvgResultMetadata} metadata
  * @param {SvgMutationOperations | null} operations
- * @param {{ sanitizer?: SvgSanitizer, parser?: typeof DOMParser, resultIndex: number, sourceClass: string, legendRows?: readonly SvgLegendRowFacts[] | null }} options
+ * @param {{ sanitizer?: SvgSanitizer, parser?: typeof DOMParser, resultIndex: number, sourceClass: string, legendRows?: readonly SvgLegendRowFacts[] | null, replaced: SvgResultEntry | null }} options
  */
 const admitCurrentResult = (
   result,
@@ -1671,7 +1695,8 @@ const admitCurrentResult = (
     parser,
     resultIndex,
     sourceClass,
-    legendRows
+    legendRows,
+    replaced
   }
 ) => {
   const phase = sourceClass;
@@ -1684,7 +1709,7 @@ const admitCurrentResult = (
   // Keep its intent in the plan, but do not require transient mounted hooks on a
   // detached Worker SVG before PreviewRuntime has installed the candidate.
   if (!hasDetachedOperations(operations)) {
-    return commitCatalogBackedResult(admitted, metadata);
+    return commitCatalogBackedResult(admitted, metadata, replaced);
   }
 
   const svg = parseSanitizedSvg(sanitized, parser);
@@ -1699,16 +1724,16 @@ const admitCurrentResult = (
     .map((transform) => transform(svg, { result: admitted, resultIndex }) !== false).includes(true);
   // A Result the plan leaves as it is keeps its bytes (OV-345).
   if (!index.changed && !rowsChanged && !transformed) {
-    return commitCatalogBackedResult(admitted, metadata);
+    return commitCatalogBackedResult(admitted, metadata, replaced);
   }
   const content = serializeAdmittedSvg(svg, { phase, resultIndex });
-  return commitCatalogBackedResult({ ...admitted, content }, metadata);
+  return commitCatalogBackedResult({ ...admitted, content }, metadata, replaced);
 };
 
 /**
  * @param {SvgResultSource} source
  * @param {SvgMutationPlan | undefined} mutationPlan `requireCurrentMutationPlan` throws when it is missing.
- * @param {SvgAdmissionRuntime} [options]
+ * @param {SvgAdmissionRuntime & { replacedResults?: readonly SvgResultEntry[] | null }} [options]
  */
 const admitCatalogBackedResults = (
   source,
@@ -1716,7 +1741,8 @@ const admitCatalogBackedResults = (
   {
     sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify,
     parser = globalThis.DOMParser || globalThis.window?.DOMParser,
-    selectedFeatureTypes = null
+    selectedFeatureTypes = null,
+    replacedResults = null
   } = {}
 ) => {
   const { results, catalogAdmission, sourceClass, legendRows } = source;
@@ -1736,7 +1762,7 @@ const admitCatalogBackedResults = (
     // `requireAlignedCatalogAdmission` above throws for a null admission.
     metadataFromCatalogAdmission(/** @type {FeatureCatalogAdmission} */ (catalogAdmission), resultIndex, sourceClass, featureTypes, legendRows),
     currentResultOperations(plan, resultIndex),
-    { sanitizer, parser, resultIndex, sourceClass, legendRows }
+    { sanitizer, parser, resultIndex, sourceClass, legendRows, replaced: replacedResults?.[resultIndex] ?? null }
   ));
   recordSessionLifecycleEvent('svg.admission-completed', {
     phase: sourceClass,
@@ -1767,7 +1793,8 @@ export const admitCurrentGeneratedResults = (
     mutationPlan,
     sanitizer,
     parser,
-    selectedFeatureTypes
+    selectedFeatureTypes,
+    replacedResults = null
   } = {}
 ) => {
   if (!isCurrentWorkerGenerationResponse(generationResponse)) {
@@ -1782,7 +1809,7 @@ export const admitCurrentGeneratedResults = (
     requireAlignedCatalogAdmission(catalogAdmission, generationResponse.results),
     normalizeLegendRowFacts(generationResponse.metadata?.legendRows, generationResponse.results)
   );
-  return admitCatalogBackedResults(source, mutationPlan, { sanitizer, parser, selectedFeatureTypes });
+  return admitCatalogBackedResults(source, mutationPlan, { sanitizer, parser, selectedFeatureTypes, replacedResults });
 };
 
 /**

@@ -331,7 +331,7 @@ test('Undo and Redo of a Legend offset refit the canvas, and Undo restores the r
     layOutLegend: () => null,
     previewRuntime: {
       commitActiveResultEdit: () => true,
-      getResultIdentity: (result) => result.id,
+      getResultLineageKey: (result) => result.id,
       getActiveRuntime: () => null,
       commitResultEdit: (_index, edit) => edit(svg, { mounted: false })
     }
@@ -375,7 +375,7 @@ test('Undo and Redo of a Linear scale offset refit the canvas, and Undo restores
     layOutLegend: () => null,
     previewRuntime: {
       commitActiveResultEdit: () => true,
-      getResultIdentity: (result) => result.id,
+      getResultLineageKey: (result) => result.id,
       getActiveRuntime: () => null,
       commitResultEdit: (_index, edit) => edit(svg, { mounted: false })
     }

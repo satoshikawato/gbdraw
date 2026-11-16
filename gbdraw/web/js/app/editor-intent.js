@@ -4,15 +4,16 @@
 // (`showEditorIntent`), the live edit transition (`editEditorIntent`), the
 // projection of the canonical editor intent onto the mounted Result
 // (`projectMountedEditorIntent`) with the Legend restore that returns rows,
-// and what each Result showed: the intent a departing Result left with, the
-// projection onto a Result when it is displayed, and the display of fills and
-// visibility a blocker declined. The composition root keeps the History apply
-// registration (`setAfterApplyHistoryIntent`), which calls the projection, and
+// and what each Result showed (kept by the Result paint record): the intent a
+// departing Result left with, the projection onto a Result when it is
+// displayed, and the display of fills and visibility a blocker declined. The
+// composition root keeps the History apply registration
+// (`setAfterApplyHistoryIntent`), which calls the projection, and
 // the Result paint record, whose methods arrive as ports. The Result binder
 // (app/mounted-result-binder.js) takes the two values kept for its steps
 // through `takeLabelProjectionResultIdentity` and `takeDisplayAsks`.
 import { compileDirectEditorMutationPlan, LIVE_EDIT_DOMAINS } from './candidate-render.js';
-import { drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
+import { drawnLabelIntentGone, drawsResult, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
 import { admitFeatureCatalog, biologicalFeatureKey, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { displayedLegendRowContext, featureDrawnContext } from '../services/feature-visibility.js';
@@ -22,7 +23,6 @@ import { appliedFeatureColors } from '../utils/color-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { toRaw } from '../utils/vue-raw.js';
 /** @import { DrawingState, WebState } from '../state.js' */
-/** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
@@ -44,6 +44,7 @@ const { watch } = window.Vue;
  * preview runtime's `MountedResultContext`).
  * @typedef {object} DisplayedResultContext
  * @property {SVGSVGElement} root
+ * @property {SvgResultEntry} result
  * @property {number} resultIndex
  * @property {string} resultIdentity
  * @property {number} rootGeneration
@@ -304,8 +305,8 @@ export const createMountedEditorIntentProjection = ({
  * @typedef {object} DepartedResultIntentPorts
  * @property {WebState} state
  * @property {{ readonly value: string[] }} originalLegendOrder The captions of the rows Python drew.
- * @property {(current: EditorPaintState) => string} resultPaintDepart
- *   The displayed Result leaves; its identity, or '' (Result paint record).
+ * @property {(current: EditorPaintState, signature: string) => void} resultPaintDepart
+ *   The displayed Result leaves with the intent `signature` (Result paint record).
  */
 
 /**
@@ -317,9 +318,8 @@ export const createDepartedResultIntent = ({ state, originalLegendOrder, resultP
   const currentEditorProjectionState = (drawing) => editorPaintState(state, drawing);
   // E1: the Result shown until a mode switch followed every live edit. When
   // it is shown again with the same editor intent, nothing is projected and
-  // its bytes stay; otherwise the edits made since are projected onto it.
-  /** @type {Map<string, string>} */
-  const departedResultIntent = new Map();
+  // its bytes stay; otherwise the edits made since are projected onto it. The
+  // Result paint record keeps the intent it left with.
   /** @param {DrawingState} drawing */
   const displayedIntentSignature = (drawing) => JSON.stringify([
     currentEditorProjectionState(drawing),
@@ -333,8 +333,7 @@ export const createDepartedResultIntent = ({ state, originalLegendOrder, resultP
   ]);
   /** @param {DrawingState} drawing */
   const rememberDepartingResultProjection = (drawing) => {
-    const departed = resultPaintDepart(currentEditorProjectionState(drawing));
-    if (departed) departedResultIntent.set(departed, displayedIntentSignature(drawing));
+    resultPaintDepart(currentEditorProjectionState(drawing), displayedIntentSignature(drawing));
   };
   // Whether a Result draws a feature; an unknown catalog answers yes.
   /** @param {DrawingState} drawing @param {number} resultIndex @returns {(recordKey: string, featureId: string) => boolean} */
@@ -342,10 +341,7 @@ export const createDepartedResultIntent = ({ state, originalLegendOrder, resultP
     const rendered = resultCatalogFeatures(state, drawing.mode, resultIndex)?.renderedByIdentity;
     return (recordKey, featureId) => !rendered || rendered.has(biologicalFeatureKey(recordKey, featureId));
   };
-  return {
-    currentEditorProjectionState, departedResultIntent, displayedIntentSignature, rememberDepartingResultProjection,
-    resultDrawsFeature
-  };
+  return { currentEditorProjectionState, displayedIntentSignature, rememberDepartingResultProjection, resultDrawsFeature };
 };
 
 /**
@@ -355,9 +351,9 @@ export const createDepartedResultIntent = ({ state, originalLegendOrder, resultP
  * @property {{ readonly value: boolean }} ruleMatchingPending Whether the rule preparation runs.
  * @property {(drawing: DrawingState) => EditorPaintState} currentEditorProjectionState
  * @property {(options?: { colors?: boolean, visibility?: boolean, saving?: boolean }) => Promise<string[] | false>} projectMountedEditorIntent
- * @property {(identity: string) => Partial<EditorPaintState> | null} resultPaintLacking
+ * @property {(result: SvgResultEntry) => Partial<EditorPaintState> | null} resultPaintLacking
  *   What the displayed Result still shows of the state before a declined display (Result paint record).
- * @property {(identity: string, current: EditorPaintState, previous: EditorPaintState) => void} resultPaintShown
+ * @property {(result: SvgResultEntry, current: EditorPaintState, previous: EditorPaintState) => void} resultPaintShown
  *   Records what the displayed Result shows (Result paint record).
  */
 
@@ -379,17 +375,17 @@ export const createDeclinedPaintDisplay = ({
   /** @type {(() => void) | null} */
   let stopDeclinedPaintWait = null;
   /**
-   * @param {string} identity
+   * @param {SvgResultEntry} result
    * @param {{ saving?: boolean }} [options]
    */
-  const showDeclinedPaint = async (identity, { saving = false } = {}) => {
+  const showDeclinedPaint = async (result, { saving = false } = {}) => {
     stopDeclinedPaintWait?.();
     stopDeclinedPaintWait = null;
     if (displayBlocked(saving)) {
-      stopDeclinedPaintWait = watch(() => displayBlocked(), (/** @type {unknown} */ blocked) => { if (!blocked) void showDeclinedPaint(identity); });
+      stopDeclinedPaintWait = watch(() => displayBlocked(), (/** @type {unknown} */ blocked) => { if (!blocked) void showDeclinedPaint(result); });
       return;
     }
-    const lacking = resultPaintLacking(identity);
+    const lacking = resultPaintLacking(result);
     if (!lacking?.colors || lacking.visibility === undefined) return;
     const current = currentEditorProjectionState(state.activeDrawing());
     try {
@@ -399,10 +395,10 @@ export const createDeclinedPaintDisplay = ({
         saving
       });
       if (shown === false) {
-        if (displayBlocked()) void showDeclinedPaint(identity);
+        if (displayBlocked()) void showDeclinedPaint(result);
         return;
       }
-      if (resultPaintLacking(identity) === lacking) resultPaintShown(identity, current, current);
+      if (resultPaintLacking(result) === lacking) resultPaintShown(result, current, current);
     } catch (error) {
       console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
     }
@@ -410,10 +406,10 @@ export const createDeclinedPaintDisplay = ({
 
   // A label rerender's displayed Result, once bound, shows the fills and
   // visibility of the edits made while it ran (OV-346).
-  /** @param {Pick<DisplayedResultContext, 'resultIdentity' | 'bindingOptions'>} context */
+  /** @param {Pick<DisplayedResultContext, 'result' | 'bindingOptions'>} context */
   const showEditsMadeWhileDrawn = (context) => {
-    if (context.bindingOptions.drawnPaint && resultPaintLacking(context.resultIdentity)) {
-      void showDeclinedPaint(context.resultIdentity);
+    if (context.bindingOptions.drawnPaint && resultPaintLacking(context.result)) {
+      void showDeclinedPaint(context.result);
     }
   };
   return { displayBlocked, showDeclinedPaint, showEditsMadeWhileDrawn };
@@ -421,25 +417,27 @@ export const createDeclinedPaintDisplay = ({
 
 /**
  * @typedef {object} DisplayedResultProjectionPorts
- * @property {WebState} state
- * @property {() => string[]} liveResultIdentities The Results of all drawings.
- * @property {(drawingId: DrawingId) => string[]} resultIdentitiesOf The Results of one drawing.
+ * @property {() => SvgResultEntry[]} liveResults The Results of all drawings.
+ * @property {() => readonly DrawingState[]} drawingList The drawings, in tab order.
+ * @property {(drawingId: DrawingState['id']) => SvgResultEntry[]} resultsOf The Results one drawing shows or keeps.
+ * @property {(result: SvgResultEntry) => string} resultIdentity A Result's identity (the first drawing holding it
+ *   takes a Duplicate's shared Results).
  * @property {(drawing: DrawingState) => EditorPaintState} currentEditorProjectionState
- * @property {Map<string, string>} departedResultIntent The intent each departed Result left with.
  * @property {(drawing: DrawingState) => string} displayedIntentSignature
  * @property {(drawing: DrawingState, resultIndex: number) => (recordKey: string, featureId: string) => boolean} resultDrawsFeature
  * @property {(drawing: DrawingState, resultIndex: number, options?: { replayDefaultLegendOrder?: string[] | null, domains?: readonly string[] | null }) => SvgMutationOperations | null} compileDisplayedResultOperations
  * @property {(options: { colors?: boolean, visibility?: boolean, rerender?: boolean, show?: boolean }) => Promise<string[] | false>} projectMountedEditorIntent
  * @property {(options: { domains: readonly string[], operations?: SvgMutationOperations | null }) => unknown} showEditorIntent
  * @property {(saving?: boolean) => boolean} displayBlocked
- * @property {(identity: string) => Promise<void>} showDeclinedPaint
+ * @property {(result: SvgResultEntry) => Promise<void>} showDeclinedPaint
  * @property {readonly string[]} LEGEND_STRUCTURE_DOMAINS
  * @property {readonly string[]} STROKE_DOMAINS
- * @property {(identities: readonly string[], displayed: string, current: EditorPaintState, options?: { restored?: boolean, drawn?: EditorPaintState, drawingStateOf?: (identity: string) => EditorPaintState }) => void} resultPaintCommit
- * @property {(identity: string) => void} resultPaintRebind
- * @property {(identity: string, current: EditorPaintState) => EditorPaintState} resultPaintDisplay
- * @property {(identity: string) => EditorPaintState | undefined} resultPaintDrawn
- * @property {(identity: string, current: EditorPaintState, previous: EditorPaintState, options?: { declined?: boolean, failed?: boolean }) => void} resultPaintShown
+ * @property {(results: readonly SvgResultEntry[], displayed: SvgResultEntry, current: EditorPaintState, options?: { draws?: boolean, drawn?: EditorPaintState, drawingStateOf?: (result: SvgResultEntry) => EditorPaintState }) => void} resultPaintCommit
+ * @property {(result: SvgResultEntry) => string | null} resultPaintTakeLeft
+ * @property {(result: SvgResultEntry) => void} resultPaintRebind
+ * @property {(result: SvgResultEntry, current: EditorPaintState) => EditorPaintState} resultPaintDisplay
+ * @property {(result: SvgResultEntry) => EditorPaintState | undefined} resultPaintDrawn
+ * @property {(result: SvgResultEntry, current: EditorPaintState, previous: EditorPaintState, options?: { declined?: boolean, failed?: boolean }) => void} resultPaintShown
  *   The Result paint record's methods.
  */
 
@@ -449,10 +447,10 @@ export const createDeclinedPaintDisplay = ({
  * @param {DisplayedResultProjectionPorts} ports
  */
 export const createDisplayedResultProjection = ({
-  state, liveResultIdentities, resultIdentitiesOf, currentEditorProjectionState, departedResultIntent,
-  displayedIntentSignature, resultDrawsFeature, compileDisplayedResultOperations, projectMountedEditorIntent,
-  showEditorIntent, displayBlocked, showDeclinedPaint, LEGEND_STRUCTURE_DOMAINS, STROKE_DOMAINS, resultPaintCommit,
-  resultPaintRebind, resultPaintDisplay, resultPaintDrawn, resultPaintShown
+  liveResults, drawingList, resultsOf, resultIdentity, currentEditorProjectionState, displayedIntentSignature, resultDrawsFeature,
+  compileDisplayedResultOperations, projectMountedEditorIntent, showEditorIntent, displayBlocked, showDeclinedPaint,
+  LEGEND_STRUCTURE_DOMAINS, STROKE_DOMAINS, resultPaintCommit, resultPaintTakeLeft, resultPaintRebind,
+  resultPaintDisplay, resultPaintDrawn, resultPaintShown
 }) => {
   // A displayed Result whose label intent changed since it was last shown
   // receives the label projection in the binder's label step, also when no
@@ -460,27 +458,26 @@ export const createDisplayedResultProjection = ({
   let labelProjectionResultIdentity = '';
   /** @param {DrawingState} drawing @param {DisplayedResultContext} context */
   const rememberCommittedEditorState = (drawing, context) => {
-    const identities = liveResultIdentities();
     const current = currentEditorProjectionState(drawing);
-    // A label rerender's Results show the editor state it drew from; the
-    // edits made while it ran are shown on the displayed Result once it is
-    // bound (`afterReady`, OV-346), and on another Result when displayed.
-    const drawn = context.bindingOptions.drawnPaint || current;
+    // Python drew the Results of a Generate, a label rerender, and a committed
+    // candidate. A label rerender's Results show the editor state it drew
+    // from; the edits made while it ran are shown on the displayed Result
+    // once it is bound (`afterReady`, OV-346), and on another Result when
+    // displayed. Any other commit (a loaded Session, a History restore, a
+    // rollback) keeps each Result's bytes as they were saved or kept, a batch
+    // Result not displayed since the last edits without them (also a Session
+    // older than 40, whose strokes reached only the mounted Result).
+    const draws = drawsResult(context.phase);
+    const drawn = (draws && context.bindingOptions.drawnPaint) || current;
     if (drawn.labels !== current.labels) labelProjectionResultIdentity = context.resultIdentity;
-    // A loaded Session and a History restore keep each Result's bytes as
-    // they were saved or kept, a batch Result not displayed since the last
-    // edits without them (also a Session older than 40, whose strokes
-    // reached only the mounted Result).
-    resultPaintCommit(identities, context.resultIdentity, current, {
-      restored: context.phase === 'session-load' || Boolean(context.bindingOptions.trustedRestore),
+    resultPaintCommit(liveResults(), context.result, current, {
+      draws,
       drawn,
-      drawingStateOf: (identity) => {
-        const holder = state.drawingList().find(({ id }) => resultIdentitiesOf(id).includes(identity));
+      drawingStateOf: (result) => {
+        const identity = resultIdentity(result);
+        const holder = drawingList().find(({ id }) => resultsOf(id).some((held) => resultIdentity(held) === identity));
         return holder ? currentEditorProjectionState(holder) : current;
       }
-    });
-    [...departedResultIntent.keys()].forEach((identity) => {
-      if (!identities.includes(identity)) departedResultIntent.delete(identity);
     });
   };
   // What a displayed Result asks of the rerender, read once it is ready
@@ -499,13 +496,12 @@ export const createDisplayedResultProjection = ({
    * @param {string[]} resultLegendOrder
    */
   const projectEditorIntentOnDisplay = async (drawing, context, resultLegendOrder) => {
-    const identity = context.resultIdentity;
+    const { result, resultIdentity: identity } = context;
     const current = currentEditorProjectionState(drawing);
     displayAsks = null;
-    const departedIntent = departedResultIntent.get(identity);
-    departedResultIntent.delete(identity);
-    if (departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
-      resultPaintRebind(identity);
+    const left = resultPaintTakeLeft(result);
+    if (left !== null && left === displayedIntentSignature(drawing)) {
+      resultPaintRebind(result);
       labelProjectionResultIdentity = '';
       recordStructuralMetric('displayedResultEditorProjectionCount', 0, {
         phase: context.phase,
@@ -513,8 +509,8 @@ export const createDisplayedResultProjection = ({
       });
       return;
     }
-    const previous = resultPaintDisplay(identity, current);
-    const drawn = resultPaintDrawn(identity) ?? current;
+    const previous = resultPaintDisplay(result, current);
+    const drawn = resultPaintDrawn(result) ?? current;
     displayAsks = {
       identity,
       rules: paintRuleTable(previous) ?? paintRuleTable(drawn),
@@ -578,8 +574,8 @@ export const createDisplayedResultProjection = ({
         console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
       }
     }
-    resultPaintShown(identity, current, previous, { declined, failed });
-    if (declined && !failed && displayBlocked()) await showDeclinedPaint(identity);
+    resultPaintShown(result, current, previous, { declined, failed });
+    if (declined && !failed && displayBlocked()) await showDeclinedPaint(result);
   };
   // The binder's label step and its last step each read once what the
   // projection kept for them (`synchronizeLabelEditor`, `afterReady`).

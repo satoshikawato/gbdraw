@@ -74,6 +74,9 @@ const buildHarness = ({
   showNotice = () => {}
 } = {}) => {
   const mutations = { commit: 0 };
+  const drawnLabelVisibility = new Map(Object.entries(visibilityOverrides)
+    .filter(([, mode]) => mode === 'on' || mode === 'off')
+    .map(([id, mode]) => [keyFor(id), mode]));
   const state = {
     mode: ref('linear'),
     results: ref([{ content: '<svg></svg>' }]),
@@ -122,7 +125,10 @@ const buildHarness = ({
     },
     currentResults: () => state.results.value,
     getResultIdentity: () => 'result:1',
-    getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
+    getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null),
+    // The Result paint record's port: the displayed Result was drawn with the
+    // Label visibility the harness starts from.
+    displayedDrawnLabelVisibility: () => drawnLabelVisibility
   });
   // The label table owner, wired as app/feature-editor.js wires it.
   const labelTableActions = createLabelTableActions({
@@ -131,7 +137,7 @@ const buildHarness = ({
     applyLabelTable: labelActions.applyLabelTable, rememberLabelImportNotice: labelActions.rememberLabelImportNotice
   });
   const actions = { ...labelActions, ...labelTableActions };
-  return { actions, mutations, state, svg };
+  return { actions, mutations, state, svg, drawnLabelVisibility };
 };
 
 const exactParts = (svg, featureId) => svg
@@ -554,6 +560,53 @@ test('stored override on a metadata-free Result fails closed without partial mut
   assert.deepEqual(harness.mutations, { commit: 0 });
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
   assert.equal(harness.state.labelReflowRequestSeq.value, 0);
+});
+
+// OV-2413: a row whose Label visibility is On asks for the one rerender that
+// draws its label when the displayed Result's bytes were not drawn with it On,
+// lack its label, and draw its feature, which the drawing does not hide. The
+// root here labels `fa` only; `fx` is drawn without a label.
+test('an On row asks for a rerender only for a drawn, shown feature its bytes lack the label of (OV-2413)', () => {
+  const item = (featureIds) => ({
+    resultIndex: 0,
+    resultName: 'a.svg',
+    recordKeys: ['record-1'],
+    features: featureIds.map((featureId) => ({
+      svgId: featureId, recordKey: 'record-1', biologicalFeatureId: `bio-${featureId}`, fillColor: '', drawnSelector: null
+    })),
+    biologicalFeatures: featureIds.map((featureId) => ({
+      recordKey: 'record-1', biologicalFeatureId: `bio-${featureId}`, type: 'CDS',
+      anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' }
+    })),
+    orthogroups: [],
+    annotations: [],
+    comparisonMatches: []
+  });
+  const asks = ({ on = 'fx', drawnOn = [], hidden = false, catalog = ['fa', 'fx'] } = {}) => {
+    const harness = buildHarness({
+      svg: labelSvg({ featureId: 'fa' }),
+      featureId: 'fa',
+      visibilityOverrides: Object.fromEntries(drawnOn.map((featureId) => [featureId, 'on']))
+    });
+    const { state, actions } = harness;
+    state.results.value = [{ name: 'a.svg', content: '<svg></svg>' }];
+    state.featureCatalog = ref(catalog ? { schema: 5, items: [item(catalog)] } : null);
+    state.featureVisibilityManualRules = [];
+    setRow(state, on, { labelVisibility: 'on', ...(hidden ? { featureVisibility: 'off' } : {}) });
+    actions.reconcileLabelOverrides();
+    return { harness, requests: state.labelReflowForceRequestSeq.value };
+  };
+  const { harness, requests } = asks();
+  assert.equal(requests, 1, 'drawn not On, drawn by the Result, shown, no label');
+  assert.equal(asks({ catalog: null }).requests, 1, 'without a catalog, the label is asked for');
+  assert.equal(asks({ drawnOn: ['fx'] }).requests, 0, 'drawn On: the bytes hold what Python draws for it');
+  assert.equal(asks({ hidden: true }).requests, 0, 'a hidden feature draws no label');
+  assert.equal(asks({ catalog: ['fa'] }).requests, 0, 'a feature the Result does not draw draws no label');
+  assert.equal(asks({ on: 'fa' }).requests, 0, 'the label exists on the root');
+  // Once the rerender drew the row On, the same bytes ask for nothing more.
+  harness.drawnLabelVisibility.set(keyFor('fx'), 'on');
+  harness.actions.reconcileLabelOverrides();
+  assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
 });
 
 test('mounting Results with disjoint features keeps every label override (FE-01)', () => {

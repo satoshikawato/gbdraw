@@ -8,6 +8,7 @@
 // whose methods arrive as ports. The editor intent (app/editor-intent.js)
 // supplies the projection the steps call.
 import { COMPOSITION_METADATA_ATTRIBUTE, COMPOSITION_SCHEMA_ATTRIBUTE } from './legend-layout/composition-actions.js';
+import { drawsResult } from './result-paint-record.js';
 import { drawnBlockStroke, legendStructureEdited } from '../services/legend-svg.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { normalizeOptionalHexColor } from '../utils/color-utils.js';
@@ -40,6 +41,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
  * `MountedResultContext`).
  * @typedef {object} BoundResultContext
  * @property {SVGSVGElement} root
+ * @property {SvgResultEntry} result
  * @property {string} sourceClass
  * @property {number} resultIndex
  * @property {string} resultIdentity
@@ -52,7 +54,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
  * @typedef {object} MountedLegendBindingPorts
  * @property {WebState} state
  * @property {{ readonly value: SvgResultEntry[] }} results The displayed drawing's Results.
- * @property {() => string[]} liveResultIdentities The Results of all drawings.
+ * @property {() => SvgResultEntry[]} liveResults The Results of all drawings.
  * @property {(drawing: DrawingState, context: BoundResultContext, resultLegendOrder: string[]) => Promise<void>} projectEditorIntentOnDisplay
  * @property {(drawing: DrawingState, context: BoundResultContext) => void} rememberCommittedEditorState
  *   The editor intent's (app/editor-intent.js).
@@ -81,7 +83,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
  * @param {MountedLegendBindingPorts} ports
  */
 export const createMountedLegendBinding = ({
-  state, results, liveResultIdentities, projectEditorIntentOnDisplay, rememberCommittedEditorState,
+  state, results, liveResults, projectEditorIntentOnDisplay, rememberCommittedEditorState,
   isLegendLayoutReady, prepareLegendLayout, captureResultInventory, adoptResultInventory, onLegendGeometryChanged,
   extractLegendEntries, setupLegendDrag, getResultIdentity, commitActiveResultEdit, adoptDrawnWrite, captureBaseConfig,
   setupDiagramDrag, applyCanvasPadding
@@ -122,7 +124,7 @@ export const createMountedLegendBinding = ({
       if (selecting) {
         const resultLegendOrder = captureResultInventory(context.root, {
           resultIdentity: context.resultIdentity,
-          liveResultIdentities: liveResultIdentities()
+          liveResultIdentities: liveResults().map(getResultIdentity)
         });
         // A Result shown again by a mode switch arrives in its own drawing,
         // whose Legend edits name that Result's inventory: the inventory is
@@ -205,19 +207,19 @@ export const createMountedLegendBinding = ({
   };
 };
 
-// D-36: a label rerender or a Generate pays the redraw its drawing owes when,
-// as its Result is ready, no later rerender runs and its figure shows the
-// drawing's current paint, also after an edit made since its paint was
-// committed (read before that edit is shown on it, OV-346). A Generate that
-// names no drawn paint drew the paint the record holds for its Result
-// (`rememberCommittedEditorState`). Its drawing is the shown one: a mode
-// switch waits for a rerender (`drawingSwitchBusy`). D-24 (OV-731): History
-// keeps a rerender's figure as the last step's; a Generate is a History step
-// of its own.
+// D-36: a label rerender or a Generate (any phase whose Results Python drew,
+// `drawsResult`) pays the redraw its drawing owes when, as its Result is
+// ready, no later rerender runs and its figure shows the drawing's current
+// paint, also after an edit made since its paint was committed (read before
+// that edit is shown on it, OV-346). A Generate that names no drawn paint drew
+// the paint the record holds for its Result (`rememberCommittedEditorState`).
+// Its drawing is the shown one: a mode switch waits for a rerender
+// (`drawingSwitchBusy`). D-24 (OV-731): History keeps a rerender's figure as
+// the last step's; a Generate is a History step of its own.
 /** @param {string} phase The phase of a Result that is ready. @returns {'rerender' | 'generate' | null} */
 const redrawPayer = (phase) => {
-  if (phase === 'label-reflow') return 'rerender';
-  return phase === 'generate' || phase === 'target-record-transform' ? 'generate' : null;
+  if (!drawsResult(phase)) return null;
+  return phase === 'label-reflow' ? 'rerender' : 'generate';
 };
 
 /**
@@ -241,7 +243,7 @@ const redrawPayer = (phase) => {
  * @property {(options?: { clearStatus?: boolean, syncDom?: boolean }) => unknown} clearFeatureSelection The feature selection's clear.
  * @property {(drawn: EditorPaintState | null | undefined, current: EditorPaintState) => boolean} resultPaintDrewPaint
  *   Whether a label rerender shows the current paint (Result paint record).
- * @property {(identity: string) => EditorPaintState | undefined} resultPaintDrawn
+ * @property {(result: SvgResultEntry) => EditorPaintState | undefined} resultPaintDrawn
  *   The paint a Result was drawn with (Result paint record).
  * @property {() => unknown} handleMountedResultReady The preview feature search's reader of a ready Result.
  * @property {() => Promise<unknown>} keepRedrawnResult History keeps the redrawn figure.
@@ -307,7 +309,7 @@ export const createMountedResultReadiness = ({
       const drawing = state.activeDrawing();
       const payer = redrawPayer(context.phase);
       const drewCurrent = payer !== null && !labelReflowProcessing.value && resultPaintDrewPaint(
-        context.bindingOptions.drawnPaint ?? resultPaintDrawn(context.resultIdentity), currentEditorProjectionState(drawing));
+        context.bindingOptions.drawnPaint ?? resultPaintDrawn(context.result), currentEditorProjectionState(drawing));
       handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
       if (!drewCurrent) return;

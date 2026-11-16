@@ -41,20 +41,34 @@ export const normalizeLogicalResults = (results) => {
 };
 
 /**
+ * Whether a rerender's reply draws each of the Results it was asked to draw
+ * again, one for one: the same number of Results. A reply with another number
+ * draws new Results, which keep neither the names (OV-136) nor the lines
+ * (OV-2437) of the Results they replace.
+ * @param {readonly unknown[] | null | undefined} replaced The Results, or their names, drawn again.
+ * @param {unknown} results The reply's Results.
+ * @returns {boolean}
+ */
+export const redrawsEachResult = (replaced, results) => (
+  Array.isArray(replaced) && Array.isArray(results) && replaced.length === results.length
+);
+
+/**
  * Keep the names of the Results a rerender draws again (OV-136). The engine
  * names each Result after the request's output prefix (`out.svg`), while a
  * loaded Session's Result keeps the name its writer saved (the CLI saves the
  * output stem; a Gallery Session, its Gallery id). Every row of the Worker
  * reply that names a Result also carries its index, so all of them take the
  * kept name before admission checks each row against its Result. The caller
- * owns the reply. A reply with another number of Results keeps the engine's names.
+ * owns the reply. A reply with another number of Results keeps the engine's
+ * names (`redrawsEachResult`).
  * @param {{ results?: unknown, metadata?: unknown }} response One Worker reply.
  * @param {readonly string[] | null} names The names of the Results drawn again.
  */
 export const keepResultNames = (response, names) => {
   const results = response.results;
   if (
-    !Array.isArray(names) || !Array.isArray(results) || names.length !== results.length
+    !Array.isArray(names) || !Array.isArray(results) || !redrawsEachResult(names, results)
     || names.some((name) => typeof name !== 'string' || !name.trim())
   ) return;
   /** @type {Record<string, any>} */
