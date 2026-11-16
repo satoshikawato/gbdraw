@@ -1143,7 +1143,7 @@ state.clickedPairwiseMatch.value = clickedPairwiseMatch;
 // The popup of a settings section is a popup of the Result too: a failed load leaves it open where it was.
 floatSettingsSection(state, 'titles', { x: 31, y: 32, maxHeight: 0 });
 state.featureExtractionPending.value = true;
-state.setFeatureEditorStatus('failed', 'keep extraction error');
+state.setFeatureEditorStatus('failed', [{ text: 'keep extraction error' }]);
 const circularDrawing = modeDrawing(state, 'circular');
 circularDrawing.circularRecordList.value = [{
   selector: '#1',

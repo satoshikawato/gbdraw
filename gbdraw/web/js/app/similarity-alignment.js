@@ -4,8 +4,9 @@
  * @import { CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalRecordWindow,
  *   CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js'
  */
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
-/** @import { UserFacingError } from '../utils/error-normalization.js' */
+import { normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
+/** @import { ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { Wording } from '../utils/i18n.js' */
 /** @import { DrawnFeatureIdsOf } from './legend-layout/composition-actions.js' */
 import { msg, numberText, t, tm, tn } from '../utils/i18n.js';
@@ -239,10 +240,16 @@ const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 /** @param {unknown} anchor */
 const anchorKey = (anchor) => JSON.stringify(anchor);
 
-/** @param {unknown} strand */
-const strandLabel = (strand) => (
-  strand === 1 ? '+' : strand === -1 ? '-' : t('unknown')
+/**
+ * A displayed strand as the Review panel keeps it: `+`, `-`, or the English key of "unknown", worded with `tm` where it
+ * shows (OV-3676).
+ * @param {unknown} strand
+ */
+const strandKey = (strand) => (
+  strand === 1 ? '+' : strand === -1 ? '-' : msg('unknown')
 );
+/** @param {unknown} strand */
+const strandLabel = (strand) => tm(strandKey(strand));
 
 /** @type {Readonly<Record<string, string>>} */
 const rationaleLabels = Object.freeze({
@@ -410,10 +417,11 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     label: feature.label,
     name: feature.name,
     ids: feature.ids,
-    // A kind is helper text: one the table does not hold is shown as written (OV-573).
-    evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? tm(evidenceLabels[kind]) : kind),
+    // The English keys of the evidence kinds, worded with `tm` where the panel shows them (OV-3676). A kind is helper
+    // text: one the table does not hold is kept, and shown, as written (OV-573).
+    evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? evidenceLabels[kind] : kind),
     coordinates,
-    displayedStrand: strandLabel(candidate.displayedStrand),
+    displayedStrand: strandKey(candidate.displayedStrand),
     representative: candidate.representative,
     role: candidate.role || 'member',
     directEvidence: candidate.directEvidence.length ? candidate.directEvidence : ['None'],
@@ -445,7 +453,7 @@ const referenceView = (response, request, displayFacts, recordLabels) => {
     // Python's source coordinates of the reference, read from the committed request.
     coordinates: numberText(response.referenceSourceStart + 1) + '..'
       + numberText(response.referenceSourceEnd) + ' bp',
-    displayedStrand: strandLabel(response.referenceDisplayedStrand)
+    displayedStrand: strandKey(response.referenceDisplayedStrand)
   };
 };
 
@@ -475,12 +483,11 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       candidates: record.candidates.filter(({ usable }) => usable)
         .map((candidate) => candidateView(candidate, request, displayFacts)),
       reason,
-      reasonLabel: reason
-        ? tm(reviewReasonLabels[reason] || rationaleLabels[reason]) : t('Unchanged'),
       recommendedKey,
+      // The English key of why the candidate is recommended, worded with `tm` where the panel shows it (OV-3676).
       recommendationReasonLabel: recommendedKey
         // `recommendedKey` is set only when `REVIEW_REASONS` has the reason, so it is text.
-        ? tm(reviewReasonLabels[/** @type {string} */ (reason)]) : null,
+        ? reviewReasonLabels[/** @type {string} */ (reason)] : null,
       choice: record.kind === 'ambiguous' ? null : selectedAnchor
         ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
         : { kind: 'skip', candidateKey: null },
@@ -1192,9 +1199,9 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
 
 /**
  * What the alignment owner says of a plan that needs repair (the drawer's note and the notice): its kind, the plan's
- * group, and why (`reason`: an English sentence marked with `msg`, worded with `tm` where it shows, so a UI language
- * change rewords it, OV-3676).
- * @typedef {{ kind: 'reference' | 'targets', groupId: string, reason: string }} AlignmentRepairNote
+ * group, and why (`reason`: error text parts, worded with `errorText` where they show, so a UI language change
+ * rewords them, OV-3676; a failure's normalized parts, never its raw text, OV-3682).
+ * @typedef {{ kind: 'reference' | 'targets', groupId: string, reason: readonly ErrorTextPart[] }} AlignmentRepairNote
  */
 
 /**
@@ -1636,7 +1643,7 @@ export const createSimilarityAlignmentActions = ({
   /** @param {AlignmentRepairNote} note The shown drawing's plan needs repair: the drawer's note and the notice. */
   const showRepair = (note) => {
     repair.value = deepFreeze(note);
-    publishNotice(() => t('Alignment needs repair: {reason}', { reason: tm(note.reason) }));
+    publishNotice(() => t('Alignment needs repair: {reason}', { reason: errorText(note.reason) }));
   };
 
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
@@ -1854,12 +1861,12 @@ export const createSimilarityAlignmentActions = ({
       const candidate = row.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor));
       if (!candidate) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'select', candidateKey: candidate.key },
-        reason: 'user_selected', reasonLabel: t('Selected by user'),
+        reason: 'user_selected',
         unchanged: false, repairRequired: false };
     } else if (update.kind === 'skip') {
       if (!row.candidates.length) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'skip', candidateKey: null },
-        reason: 'skipped_by_user', reasonLabel: t('Skipped by user'),
+        reason: 'skipped_by_user',
         unchanged: true, repairRequired: false };
     } else return { status: 'rejected' };
     draft.value = deepFreeze({
@@ -2104,16 +2111,23 @@ export const createSimilarityAlignmentActions = ({
   };
 
   // The shown drawing's plan has a stale reference: its own review ends, another drawing's stays.
-  /** @param {unknown} reason */
+  /** @param {readonly ErrorTextPart[]} reason */
   const markStaleReference = (reason) => {
     if (workIsShown()) {
       clearDraft();
       status.value = 'idle';
     }
-    showRepair({ kind: 'reference', groupId: state.similarityAlignmentPlan.value?.groupId || '',
-      reason: String(reason || msg('The exact reference is no longer available.')) });
+    showRepair({ kind: 'reference', groupId: state.similarityAlignmentPlan.value?.groupId || '', reason });
     return { status: 'blocked', reason: 'stale-reference' };
   };
+  /**
+   * The reason of a reference that a failure made unusable: what failed, then the failure's normalized parts (OV-3682).
+   * @param {unknown} cause
+   * @param {{ operation: string, stage: string }} where
+   * @returns {ErrorTextPart[]}
+   */
+  const unusableReference = (cause, where) => [{ text: msg('The exact reference is no longer available.') },
+    ...normalizeCaughtError(cause, where).summaryParts];
 
   /**
    * The shown drawing's plan has stale targets: its repair review opens. While another drawing's review is open, that
@@ -2134,7 +2148,7 @@ export const createSimilarityAlignmentActions = ({
   ) => {
     /** @type {AlignmentRepairNote} */
     const note = { kind: 'targets', groupId: plan.groupId,
-      reason: msg('One or more saved target anchors are no longer usable. Select or Skip each target.') };
+      reason: [{ text: msg('One or more saved target anchors are no longer usable. Select or Skip each target.') }] };
     if (!workIsShown()) {
       // The repair review opens after the open review ends: the notice says so, and names that review's drawing.
       repair.value = deepFreeze(note);
@@ -2156,7 +2170,7 @@ export const createSimilarityAlignmentActions = ({
       response = validateSimilarityAlignmentResolution(helper?.result, repairRequest);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
-      return markStaleReference(cause?.message || cause);
+      return markStaleReference(unusableReference(cause, { operation: resolveOperation, stage: 'helper' }));
     }
     activeRequest = repairRequest;
     artifactStamp = captureArtifact(repairRequest.groupId);
@@ -2189,7 +2203,7 @@ export const createSimilarityAlignmentActions = ({
       groupAnchors: members.flatMap((member) => {
         try { return [anchorFromSource(member, 'Current Similarity Group member')]; } catch (_error) { return []; }
       }) });
-    if (check.kind === 'stale-reference') return markStaleReference(check.reason);
+    if (check.kind === 'stale-reference') return markStaleReference([{ text: check.reason }]);
     if (check.kind === 'current') {
       repair.value = null;
       return { status: 'ok' };
@@ -2205,7 +2219,7 @@ export const createSimilarityAlignmentActions = ({
         choices: planChoices(plan)
       });
     } catch (cause) {
-      return markStaleReference(cause?.message || cause);
+      return markStaleReference(unusableReference(cause, { operation: 'align', stage: 'request-validation' }));
     }
     if (goneRecordKeys.size > 0) {
       return prepareStaleTargetRepair(plan, request, members, goneRecordKeys, expectedActionId);
@@ -2226,7 +2240,7 @@ export const createSimilarityAlignmentActions = ({
       if (alignedKeys.size > 0) {
         return prepareStaleTargetRepair(plan, request, members, alignedKeys, expectedActionId);
       }
-      return markStaleReference(msg('The exact reference is no longer usable with current facts.'));
+      return markStaleReference([{ text: msg('The exact reference is no longer usable with current facts.') }]);
     }
     repair.value = null;
     return { status: 'ok' };

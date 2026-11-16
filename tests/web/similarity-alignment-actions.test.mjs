@@ -21,7 +21,8 @@ const { createSimilarityAlignmentActions } = await import(
 
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
-const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+const { SOURCE_LOCALE, setUiLocale, t, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
+const { templateBinding } = await import('./helpers/template-binding.mjs');
 const { writeCanonicalRecordReverseComplement } = await import('../../gbdraw/web/js/services/record-display-model.js');
 const { CompositionMetadataError } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 
@@ -1064,7 +1065,7 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
     'Alignment needs repair: The alignment reference feature is no longer found in its record.');
 });
 
-// OV-3676: the notice is worded where it shows, and the repair note keeps its reason as an English sentence that the
+// OV-3676: the notice is worded where it shows, and the repair note keeps its reason as error text parts that the
 // drawer words where it shows, so a UI language change rewords both.
 test('the repair notice rewords after a UI language change, and the note keeps its English reason', async () => {
   const fixture = create();
@@ -1078,7 +1079,75 @@ test('the repair notice rewords after a UI language change, and the note keeps i
   } }));
   try {
     assert.equal(fixture.actions.notice.value, '整列の修復が必要です：参照フィーチャーが見つかりません。');
-    assert.equal(fixture.actions.repair.value.reason, reason);
+    assert.deepEqual(fixture.actions.repair.value.reason, [{ text: reason }]);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// OV-3676: the review's candidate line keeps what its words are made of (the English keys of the evidence kinds, the
+// strand and the recommendation reason), so the panel words them in the language it shows, also after a change.
+test('the review draft keeps the candidate line\'s English keys when it opens in another language', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => {
+      const response = responseFor(request, { ambiguous: true });
+      response.records[1].candidates[0].directEvidence = ['rbh', 'helper_kind'];
+      return { result: response };
+    } });
+  await setUiLocale('ja', async () => ({ default: {
+    'reciprocal best hit': '相互ベストヒット',
+    'the only group representative among the candidates': 'グループの代表である唯一の候補',
+    unknown: '不明', Unchanged: '変更なし'
+  } }));
+  try {
+    await startReview(fixture);
+    const [row] = fixture.actions.draft.value.rows;
+    assert.deepEqual(row.candidates[0].evidence, ['reciprocal best hit', 'helper_kind']);
+    assert.equal(row.recommendationReasonLabel, 'the only group representative among the candidates');
+    assert.equal(Object.hasOwn(row, 'reasonLabel'), false, 'no stored label that nothing shows');
+    // The candidate line and the recommendation as index.html words them.
+    const facts = templateBinding(/<span class="alignment-review-facts">\{\{ (.+?) \}\}/);
+    const strand = templateBinding(/<span class="alignment-review-facts">.*? · \{\{ candidate\.coordinates \}\} \(\{\{ (.+?) \}\}\)<\/span>/);
+    const recommended = templateBinding(/<template v-if="record\.recommendedKey">\{\{ (.+?) \}\}<\/template>/);
+    const [candidate] = row.candidates;
+    assert.equal(facts({ candidate, t, tm }), '相互ベストヒット, helper_kind');
+    assert.equal(strand({ candidate, tm }), candidate.displayedStrand);
+    assert.match(recommended({ record: row, t, tm }), /グループの代表である唯一の候補/);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// OV-3682: a repair whose helper run fails keeps the normalized parts of the failure, never its raw text, and the
+// drawer and the notice word them in the shown language.
+test('a failed repair run keeps the failure\'s normalized parts in the repair note', async () => {
+  let fail = false;
+  const fixture = create({ helper: (_operation, { request }) => {
+    if (fail) throw new Error('PRIVATE helper text');
+    return { result: responseFor(request) };
+  } });
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.currentGroup.members.splice(1, 1, targetB);
+  fail = true;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'blocked', reason: 'stale-reference' });
+  const { reason } = fixture.actions.repair.value;
+  assert.ok(Array.isArray(reason), 'the note keeps error text parts');
+  assert.equal(JSON.stringify(reason).includes('PRIVATE'), false, 'no raw exception text');
+  assert.equal(fixture.actions.notice.value.includes('PRIVATE'), false);
+  const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
+  const english = errorText(reason);
+  assert.match(english, /^The exact reference is no longer available\. /);
+  await setUiLocale('ja', async () => ({ default: {
+    'Alignment needs repair: {reason}': '整列の修復が必要です：{reason}',
+    'The exact reference is no longer available.': '参照フィーチャーは利用できなくなりました。'
+  } }));
+  try {
+    assert.ok(errorText(reason).startsWith('参照フィーチャーは利用できなくなりました。'), errorText(reason));
+    const note = templateBinding(/<p class="mt-1">\{\{ (.+?similarityAlignmentRepair\.reason.*?) \}\}<\/p>/);
+    assert.equal(note({ similarityAlignmentRepair: fixture.actions.repair.value, errorText, tm }), errorText(reason));
+    assert.ok(fixture.actions.notice.value.startsWith('整列の修復が必要です：参照フィーチャーは利用できなくなりました。'),
+      fixture.actions.notice.value);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }

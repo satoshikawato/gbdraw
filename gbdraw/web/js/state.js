@@ -359,7 +359,7 @@ const featureEditorStatus = ref(FEATURE_EDITOR_STATUS_IDLE);
 /**
  * The one writer of the feature-editor status (Generate and Load).
  * @param {FeatureEditorStatus['status']} status
- * @param {string | null} [error] The failure, or the warning of a recovered Load (the Editor header's title).
+ * @param {FeatureEditorStatus['error']} [error] The failure, or the warning of a recovered Load (the Editor header's title).
  */
 const setFeatureEditorStatus = (status, error = null) => {
   featureEditorStatus.value = Object.freeze({ status, error });

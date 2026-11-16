@@ -198,6 +198,48 @@ test('the reference flag of the alignment overlay is translated', async ({ page 
   await expect(page.locator('[data-similarity-alignment-canvas] .gbdraw-alignment-flag')).toHaveText('b0 · 基準', { timeout: 180000 });
 });
 
+// OV-3676: the review panel keeps the words of its candidate lines and its recommendation as English keys, so a
+// language chosen while it is open rewords them, as the rest of the page.
+test('the review panel\'s candidate lines and recommendation reword in a language chosen while it is open', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  const { pathToFileURL } = require('node:url');
+  const ja = (await import(pathToFileURL(join(process.cwd(), 'gbdraw/web/js/utils/i18n-catalogs/ja.js')).href)).default;
+  await loadAmbiguousSession(page, testInfo);
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
+  const drawer = page.locator('.right-drawer');
+  await drawer.getByRole('button', { name: 'Similarity groups' }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
+  const referenceKey = await page.evaluate(() => (
+    window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+      .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || ''
+  ));
+  await drawer.getByLabel('Exact reference record and feature').selectOption(referenceKey);
+  await drawer.getByRole('button', { name: 'Align…', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  // The first record with several candidates: its first candidate's line and, when one is recommended, why.
+  const row = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.rows
+    .find((entry) => entry.candidates.length > 1));
+  expect(row, 'the fixture opens a record with several candidates').toBeTruthy();
+  const [candidate] = row.candidates;
+  // The dialog's name is worded in the chosen language too, so the card is found by its record key.
+  const card = page.locator(`[data-alignment-record-key="${row.recordKey}"]`);
+  const facts = card.locator('.alignment-review-facts').first();
+  const strand = (word) => (candidate.displayedStrand === 'unknown' ? word : candidate.displayedStrand);
+  const factsLead = (words) => (candidate.evidence.map((key) => words[key] ?? key).join(', ') || words['no direct hit']);
+  await expect(facts).toContainText(factsLead({ 'no direct hit': 'no direct hit' }));
+  await expect(facts).toContainText(`(${strand('unknown')})`);
+  await page.locator('header select[data-ui-language]').selectOption('ja');
+  await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('ja');
+  await expect(facts).toContainText(factsLead(ja));
+  await expect(facts).toContainText(`(${strand(ja.unknown)})`);
+  if (row.recommendationReasonLabel) {
+    await expect(card.locator('[data-similarity-alignment-reason]')).toContainText(ja[row.recommendationReasonLabel]);
+  }
+  expect(candidate.evidence.length + (row.recommendationReasonLabel ? 1 : 0),
+    'the case words at least one stored key').toBeGreaterThan(0);
+});
+
 test('alignment rings and the reference line stay transient and share the panel choices', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await loadAmbiguousSession(page, testInfo);

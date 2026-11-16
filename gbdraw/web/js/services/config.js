@@ -1,8 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
-import { t, tm } from '../utils/i18n.js';
-import { errorText } from '../utils/error-text.js';
+import { msg, t } from '../utils/i18n.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
@@ -6483,21 +6482,22 @@ const RECOVERED_PLAN_STATUSES = new Set(['recovered', 'aligned']);
  */
 const applySessionFeatureRecoveryPlan = (plan) => {
   state.featureExtractionPending.value = false;
-  // A plan's warning is a marked text (`msg`) or the parts of a normalized failure.
-  const shownWarning = plan?.warningParts ? errorText(plan.warningParts) : plan?.warning ? tm(plan.warning) : null;
+  // A plan's warning is a marked text (`msg`), one part, or the parts of a normalized failure; the Editor header's
+  // title words them where it shows (OV-3676).
+  const warning = plan?.warningParts ?? (plan?.warning ? [{ text: plan.warning }] : null);
 
   if (plan?.status && RECOVERED_PLAN_STATUSES.has(plan.status)) {
     // The plan read the drawn features again; the fills and strokes it moved
     // onto them are the opened drawing's install's (`withRecoveredPaint`,
     // OV-2000), with the drawing's other edits and its Legend.
     if (plan.recoveredFeatureState) applyFeatureArtifactData(plan.recoveredFeatureState);
-    state.setFeatureEditorStatus('summary-ready', shownWarning);
+    state.setFeatureEditorStatus('summary-ready', warning);
     return;
   }
 
   if (plan?.status === 'unrecoverable' || plan?.status === 'failed') {
-    const warning = shownWarning || t('Feature metadata recovery failed. The SVG preview remains available.');
-    state.setFeatureEditorStatus('failed', warning);
+    state.setFeatureEditorStatus('failed', warning
+      || [{ text: msg('Feature metadata recovery failed. The SVG preview remains available.') }]);
     return;
   }
 

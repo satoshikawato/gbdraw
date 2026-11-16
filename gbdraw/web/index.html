@@ -8832,7 +8832,7 @@
                                     </svg>
                                     <template v-if="card.kind === 'reference'">
                                         <p class="alignment-review-gene"><b>{{ record.name }}</b> <code v-if="record.ids">{{ record.ids }}</code>
-                                            <span class="alignment-review-place">{{ record.coordinates }} ({{ record.displayedStrand }})</span></p>
+                                            <span class="alignment-review-place">{{ record.coordinates }} ({{ tm(record.displayedStrand) }})</span></p>
                                         <p v-if="similarityAlignmentDirectionPreview.referenceShift" class="alignment-review-note" data-similarity-alignment-reference-correction>
                                             {{ similarityAlignmentDirectionPreview.referenceShift }}
                                         </p>
@@ -8844,9 +8844,9 @@
                                          @mouseleave="clearSimilarityAlignmentCandidatePreview">
                                         <b>{{ card.candidates[0].name }}</b>
                                         <code v-if="card.candidates[0].ids">{{ card.candidates[0].ids }}</code>
-                                        <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ card.candidates[0].displayedStrand }})</span>
+                                        <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ tm(card.candidates[0].displayedStrand) }})</span>
                                         <span class="alignment-review-evidence">
-                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || t('no direct hit') }}</span>
+                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.map((text) => tm(text)).join(', ') || t('no direct hit') }}</span>
                                             <span v-if="card.candidates[0].representative" class="alignment-review-chip is-evidence">{{ t('group representative') }}</span>
                                             <label class="alignment-review-skip">
                                                 <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
@@ -8862,7 +8862,7 @@
                                         <!-- One line: what to do in a record that still needs a choice, and why a candidate is recommended. -->
                                         <p v-if="card.needsChoice || record.recommendedKey" class="alignment-review-note" data-similarity-alignment-reason>
                                             <b v-if="card.needsChoice">{{ t('Choose the gene to line up, or skip this record.') }}{{ sentenceSeparator() }}</b>
-                                            <template v-if="record.recommendedKey">{{ t('Recommended: {name}, {reason}.', { name: record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name, reason: record.recommendationReasonLabel }) }}</template>
+                                            <template v-if="record.recommendedKey">{{ t('Recommended: {name}, {reason}.', { name: record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name, reason: tm(record.recommendationReasonLabel) }) }}</template>
                                         </p>
                                         <div class="alignment-review-candidates">
                                             <label v-for="candidate in card.candidates"
@@ -8880,13 +8880,13 @@
                                                        :checked="card.chosenKey === candidate.key"
                                                        :disabled="similarityAlignmentBusy"
                                                        @change="selectSimilarityAlignmentCandidate(card.recordKey, candidate.anchor)"
-                                                       :aria-label="t('Select {label}, {coordinates}, strand {strand} for {record}', { label: candidate.label, coordinates: candidate.coordinates, strand: candidate.displayedStrand, record: record.recordLabel })">
+                                                       :aria-label="t('Select {label}, {coordinates}, strand {strand} for {record}', { label: candidate.label, coordinates: candidate.coordinates, strand: tm(candidate.displayedStrand), record: record.recordLabel })">
                                                 <span class="min-w-0 flex-1">
                                                     <span class="alignment-review-name">
                                                         <b>{{ candidate.name }}</b>
                                                         <span v-if="record.recommendedKey === candidate.key" class="alignment-review-chip is-recommended">{{ t('Recommended') }}</span>
                                                     </span>
-                                                    <span class="alignment-review-facts">{{ candidate.evidence.join(', ') || t('no direct hit') }}{{ candidate.representative ? ' · ' + t('group representative') : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ candidate.displayedStrand }})</span>
+                                                    <span class="alignment-review-facts">{{ candidate.evidence.map((text) => tm(text)).join(', ') || t('no direct hit') }}{{ candidate.representative ? ' · ' + t('group representative') : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ tm(candidate.displayedStrand) }})</span>
                                                 </span>
                                             </label>
                                             <label class="alignment-review-candidate is-skip" :class="{ 'is-chosen': card.skipped, 'is-busy': similarityAlignmentBusy }">
@@ -9099,7 +9099,7 @@
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
                                 <p class="text-xs font-semibold text-slate-600 flex items-center gap-1" data-setting="features-editor"><span>{{ t('Features ({count})', { count: filteredFeatures.length }) }}</span><help-tip id="features-tab-help" :label="t('About the Features tab')" :text="settingApplicationHelp('features-editor') + ' ' + t('Select a row to edit its label or open its details.')"></help-tip></p>
-                                <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
+                                <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error ? errorText(featureEditorStatus.error) : featureEditorStatusText">{{ featureEditorStatusText }}</span>
                             </div>
                         </div>
                         <div v-if="featureRecordPickerVisible" class="px-4 py-2 border-b border-slate-100 shrink-0">
@@ -9253,7 +9253,7 @@
                                  role="alert"
                                  class="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
                                 <p class="font-semibold">{{ t('Saved alignment needs repair.') }}</p>
-                                <p class="mt-1">{{ tm(similarityAlignmentRepair.reason) }}</p>
+                                <p class="mt-1">{{ errorText(similarityAlignmentRepair.reason) }}</p>
                                 <div v-if="similarityAlignmentRepair.kind === 'reference'" class="mt-2 flex gap-2">
                                     <button type="button"
                                             @click="reselectSimilarityAlignmentReference"

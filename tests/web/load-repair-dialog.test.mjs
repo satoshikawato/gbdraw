@@ -17,6 +17,7 @@ import { drawingViewAt, savedDrawingView, savedModesView, withSavedDrawingView }
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
+import { templateBinding } from './helpers/template-binding.mjs';
 
 globalThis.window = {
   Vue: {
@@ -64,7 +65,8 @@ const spyOnPort = (onCapture, onRestore = () => {}) => ({
   restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); }
 });
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
-const { setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
 const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
 
@@ -682,7 +684,18 @@ test('an older Session whose feature information cannot be restored lists it (B5
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [['Features: the feature information of the saved diagram could not be restored from this file;'
     + ' the SVG preview stays, and the next Generate restores it.']]);
-  assert.match(state.featureEditorStatus.value.error, /does not include embedded GenBank inputs/);
+  assert.match(errorText(state.featureEditorStatus.value.error), /does not include embedded GenBank inputs/);
+  // The Editor header's title words the status's parts where it shows (index.html), so a UI language change
+  // rewords it; the status, which History and the artifact slot keep, holds data only (OV-3676).
+  const title = editorHeaderTitle();
+  assert.equal(title(), errorText(state.featureEditorStatus.value.error));
+  const { default: ja } = await import('../../gbdraw/web/js/utils/i18n-catalogs/ja.js');
+  await setUiLocale('ja', async () => ({ default: ja }));
+  try {
+    assert.equal(title(), ja['Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.']);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 
   // OV-1764: the failure is the shown drawing's. The other drawing, with a Result, shows its own
   // count; switching back shows the failure again (the status switches with the artifact slot).
@@ -700,8 +713,15 @@ test('an older Session whose feature information cannot be restored lists it (B5
   assert.equal(state.featureEditorStatusText.value, '3 features ready', 'the Circular drawing has its own Result');
   slots.installArtifactSlot(failedSlot, { drawing: modeDrawing(state, 'linear') });
   assert.equal(state.featureEditorStatusText.value, 'Feature editor unavailable');
-  assert.match(state.featureEditorStatus.value.error, /does not include embedded GenBank inputs/);
+  assert.match(errorText(state.featureEditorStatus.value.error), /does not include embedded GenBank inputs/);
 });
+
+// The Editor header's title as index.html binds it.
+const editorHeaderTitle = () => {
+  const title = templateBinding(/<span[^>]*:title="([^"]+)">\{\{ featureEditorStatusText \}\}<\/span>/);
+  return () => title({ featureEditorStatus: state.featureEditorStatus.value,
+    featureEditorStatusText: state.featureEditorStatusText.value, errorText });
+};
 
 // OV-1766: every Load writes the shown drawing's feature-editor status; a Load
 // whose shown drawing has no features does not keep an earlier Load's failure.
