@@ -82,6 +82,7 @@ import { msg } from '../utils/i18n.js';
  * @property {Readonly<LabelFitTrackOptions>} trackOptions The request track options, by request name.
  */
 /** @import { DrawingState } from '../state.js' */
+/** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 /**
  * @typedef {object} LabelFitDialogPorts
  * @property {(value: LabelFitDialogState) => LabelFitDialogState} reactive Vue `reactive`.
@@ -94,7 +95,7 @@ import { msg } from '../utils/i18n.js';
  * @property {(close: () => unknown) => void} closeAfterChoice
  * @property {() => boolean} choicePending
  * @property {() => Promise<unknown>} runAnalysis Generate.
- * @property {{ busy: () => { status: string, reason: string } | null }} alignment The Similarity alignment owner's
+ * @property {Pick<SimilarityAlignmentPorts, 'busy'>} alignment The Similarity alignment owner's
  *   work in flight: Apply and Generate waits for it, as Generate does, and changes nothing meanwhile.
  * @property {(error: unknown) => string} errorSummary The user-facing summary of a failure.
  * @property {(recordIndex: number) => boolean} showRecordText Shows and focuses the field that writes the name

@@ -19,6 +19,7 @@
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
@@ -518,19 +519,6 @@ const provideSettingNoteReaders = () => {
   provide(SETTING_NOTE_ONE_CIRCLE_CHANGE, committedOneCircleChange);
 };
 
-/**
- * The ports through which the drawer, the preview binder, the result watchers, the drawing switch and the drawing list
- * reach the Similarity alignment owner and its review (R13).
- * @typedef {object} SimilarityAlignmentPorts
- * @property {() => void} refreshCanvas
- * @property {() => string} editorDisabledReason
- * @property {() => void} arriveAtDrawing
- * @property {() => { status: 'busy', reason: string } | null} busy
- * @property {() => DrawingId} reviewDrawingId
- * @property {() => boolean} reviewIsShown Whether the review (or the work in flight) is the shown drawing's.
- * @property {(drawingId: DrawingId) => void} endReviewOf
- * @property {(drawingIds: readonly DrawingId[]) => void} endReviewOutside
- */
 /**
  * The alignment ports until the root assigns the owner's: no review, no work in flight.
  * @param {Pick<WebState, 'activeDrawingId'>} state

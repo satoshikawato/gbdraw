@@ -25,6 +25,7 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ShowNotice } from './app-messages.js' */
+/** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 /** @import { ExportLimitReply, ExportSnapshot, FontEmbedding, SvgRootReply } from '../services/export.js' */
 /** @import { PdfFontsReply } from '../services/pdf-fonts.js' */
 /** @import { CatalogSequences } from '../services/catalog-sequences.js' */
@@ -206,7 +207,7 @@ export const createImportedComparisonChoice = ({ state, runUndoable, errorLog, r
  * @property {(drawing: DrawingState, edgeKeys: string[]) => void} omitLinearComparisonPairs
  * @property {(edgeKey: string) => LinearComparisonPair | null} linearComparisonPairForEdgeKey
  * @property {() => unknown} runAnalysis Generate.
- * @property {{ busy: () => { status: string, reason: string } | null }} alignment The Similarity alignment owner's
+ * @property {Pick<SimilarityAlignmentPorts, 'busy'>} alignment The Similarity alignment owner's
  *   work in flight: both choices that Generate wait for it, as Generate does, and change nothing meanwhile.
  */
 
