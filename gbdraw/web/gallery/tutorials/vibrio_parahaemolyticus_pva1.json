@@ -77,7 +77,7 @@
     },
     {
       "title": "Add the reference genome",
-      "body": "Download the three files listed under Files. In File 1, click Choose GenBank / DDBJ File and choose NZ_CP046414.1.gbk. This is the reference: the plasmid you select in it is searched for in the other files.",
+      "body": "Download the three GenBank files listed under Files. In File 1, click Choose GenBank / DDBJ File and choose NZ_CP046414.1.gbk. This is the reference: the plasmid you select in it is searched for in the other files.",
       "operations": [
         {
           "dataDependent": true,
@@ -619,7 +619,7 @@
     },
     {
       "title": "Name the rows and label the genes",
-      "body": "In each File card's Record options, type the Organism / strain and Subtitle / title from the table. In Labels, set Show Labels to First record only and choose cds_gene_priority.tsv as the Priority File, so CDS labels show gene names. Generate Diagram.",
+      "body": "On the File 1 and File 2 cards, type the Organism / strain and Subtitle / title from the table. File 3 lists its three windows as records: open Number of records, then the Record options of the first one, NZ_JABKAY010000079.1, and type the Organism / strain there; it names the row. In Labels, set Show Labels to First Record Only and choose cds_gene_priority.tsv as the Priority File, so CDS labels show gene names. Generate Diagram.",
       "table": {
         "columns": [
           "File",
