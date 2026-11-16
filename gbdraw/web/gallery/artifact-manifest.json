@@ -31,8 +31,8 @@
       "sha256": "759d0a6de768addd9e56bb7afe749e4710706f71c0907c5756746e2255d09242"
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 27276558,
-      "sha256": "f3b796b9243fa6f2bba383a773023a25b940fd59978fbc37b00e014c34c1770b"
+      "bytes": 27276792,
+      "sha256": "bd38a608598b840a1a490d860a4d7a79d7c0cc4d1deffe9a0118a4b53a95575f"
     },
     "gallery/examples/ecoli_o157_sakai_rings.svg": {
       "bytes": 26737680,
@@ -79,8 +79,8 @@
       "sha256": "68a104883c549e25798f83eab216e4f96af4a3f93661e641ceaf2a0471c4668d"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw": {
-      "bytes": 7375498,
-      "sha256": "d4518ea126fdede18bb41bcf2a44fd0585520a6d8760e683ca8ce1ef23e76087"
+      "bytes": 7375597,
+      "sha256": "16b8ac9965b0bd602a52e2292c463cb54165e5448fb31805ae7ea2b8be2ae9d3"
     },
     "gallery/sessions/ecoli_o157_sakai_rings.gbdraw": {
       "bytes": 12319971,
@@ -127,8 +127,8 @@
       "sha256": "9dcef4d8e16eb2549b73b5a2263697b4c6af08fba49b88525fd5719ff8375686"
     },
     "gallery/sources/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 2628594,
-      "sha256": "21a444132ffdee959598e41bb1b366730de63c89fc5b08fa923b956f6c52ad00"
+      "bytes": 2628828,
+      "sha256": "647c0758773805f2a4f909e32886fc66006ff737cb83744cfe92884af7580717"
     },
     "gallery/sources/ecoli_o157_sakai_rings.svg": {
       "bytes": 14244271,
@@ -175,8 +175,8 @@
       "sha256": "86b9209722b0f4e4679af4107855de09e8c8fb0e6ca23b226f12791be87bcf90"
     },
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
-      "bytes": 28586,
-      "sha256": "f308eff64d1ec8705e34a0cd7261215e6a86b32f9d17b15f2f4041ccd67fe81b"
+      "bytes": 28600,
+      "sha256": "7a03885326d10fd041add530d2f5471c48165766cf025dec6d2ec390347940b5"
     },
     "gallery/thumbnails/ecoli_o157_sakai_rings.webp": {
       "bytes": 25542,
