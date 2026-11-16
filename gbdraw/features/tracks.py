@@ -15,10 +15,13 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
 
     A feature's lane covers what it draws from its first drawn base to its last, with half-open, 0-based
     bounds (a part at the first base starts at 0). Only a feature whose drawn parts reach both ends of the
-    record runs over its origin: a connector line over the origin is drawn in two pieces that reach them, and
-    parts that reach them are joined over the origin by the Circular drawer. Such a feature takes the shortest
-    arc that covers its blocks and lines (``uncovered_gap``), or its blocks alone where its lines fill that
-    arc (a join in order over both ends), and start > end says it occupies [start, length) and [0, end).
+    record is read as running over its origin (a connector line over the origin is drawn in two pieces that
+    reach them). Such a feature takes the shortest arc that covers its blocks and lines (``uncovered_gap``).
+    Where its lines fill that arc (a join written in order over both ends), it takes the shortest arc over its
+    blocks alone, in every mode and on every record: the Circular whole view joins those blocks over the
+    origin, but Linear mode and a linear record draw the join as written, with a connector line across the
+    middle of the record that this span leaves to other features. start > end says the feature occupies
+    [start, length) and [0, end).
 
     Args:
         feature: FeatureObject with location/coordinates
