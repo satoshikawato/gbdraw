@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import copy
+import functools
 import json
+import math
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+import gbdraw.labels.circular_packer as packer_module
 import gbdraw.labels.fit as fit_module
-from gbdraw.labels.circular import _count_label_overlaps
+from gbdraw.labels.circular import _count_label_overlaps, _packer_side_rules, circular_label_fits
+from gbdraw.labels.circular_capacity import LabelArc
+from gbdraw.labels.circular_packer import PackerLook, SideRules, pack_side
+from gbdraw.labels.circular_repair import MAX_DEFECTS
 from gbdraw.labels.circular_leaders import leader_crossing_count, leader_polyline
 from gbdraw.labels.circular_types import CircularLabel
 from gbdraw.labels.fit import Polyline, crossing_pairs, iter_crossing_pairs, polylines_cross
@@ -104,3 +111,133 @@ def test_leader_crossing_count_stops_at_its_limit(
     dropped = {right for _left, right in crossing_pairs(polylines)}
     kept = [label for index, label in enumerate(labels) if index not in dropped]
     assert leader_crossing_count(kept) == leader_crossing_count(kept, limit=1) == 0
+
+
+# ---- the packer on one side (fixtures: outer labels as `rearrange_labels_fc` receives them) ---------------
+
+
+PACKER_FIXTURES = TEST_INPUTS / "label_packer"
+# The three records need look 1: none packs with every label on its genome half. P1 14 pt's fewest crossings: 3.
+PACKINGS = ["p1_f13", "tobacco_f12", "p1_f14"]
+
+
+def _packer_fixture(name: str, every: int = 1) -> tuple[list[CircularLabel], int, LabelArc, float]:
+    """The fixture's labels (every ``every``-th in genome order), genome length, ellipse and spacing."""
+
+    data = json.loads((PACKER_FIXTURES / f"{name}.json").read_text())
+    labels = sorted(data["labels"], key=lambda label: float(label["middle"]))[::every]
+    return labels, int(data["total_length"]), LabelArc(*data["arc"]), float(data["spacing_px"])
+
+
+def _outer_rules(total_length: int, spacing: float, max_crossings: int = MAX_DEFECTS) -> SideRules:
+    """The placement's packer rules for the outer side, as `prepare_label_list` passes them."""
+
+    return _packer_side_rules(total_length, spacing, is_outer=True, max_crossings=max_crossings)
+
+
+def _off_their_half(labels: list[CircularLabel], total_length: int) -> list[str]:
+    """The labels whose anchor is not on their feature's genome half (first half right of the axis)."""
+
+    return [
+        str(label["label_text"])
+        for label in labels
+        if (float(label["start_x"]) > 0) != (float(label["middle"]) < total_length / 2)
+    ]
+
+
+@functools.cache
+def _shared_packing(name: str, look: PackerLook) -> list[CircularLabel] | None:
+    labels, total_length, arc, spacing = _packer_fixture(name)
+    return pack_side(labels, arc, look, _outer_rules(total_length, spacing))
+
+
+def _clockwise(label: CircularLabel) -> float:
+    """The angle of a label's anchor, clockwise from 12 o'clock."""
+
+    return math.atan2(float(label["start_x"]), -float(label["start_y"])) % (2 * math.pi)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("name", PACKINGS)
+def test_a_packed_side_keeps_genome_order_and_its_boxes_apart(name: str) -> None:
+    """Cyclic genome order kept; no overlap by the fit check (its box margins are the 0.1 px row and 1 px side gaps)."""
+
+    labels, total_length, _arc, _spacing = _packer_fixture(name)
+    before = copy.deepcopy(labels)
+    packed = _shared_packing(name, "pole")
+    assert labels == before  # the input is not changed
+    assert packed is not None and len(packed) == len(labels)
+    assert [label["middle"] for label in packed] == sorted(label["middle"] for label in labels)
+    angles = [_clockwise(label) for label in packed]
+    assert sum(1 for k in range(len(angles)) if angles[k] < angles[k - 1]) <= 1  # one turn, no label out of order
+    (fit,) = circular_label_fits(packed, total_length).values()
+    assert fit.overlap_pairs == 0
+    assert fit.crossing_pairs == leader_crossing_count(packed) == (3 if name == "p1_f14" else 0)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("name", "passing"),
+    [
+        ("p1_f13", ["Coi", "ImcB", "ImcA"]),
+        ("tobacco_f12", [
+            "tRNA-His", "photosystem II protein D1", "photosystem II protein T", "photosystem II protein N",
+            "photosystem II protein H",
+        ]),
+    ],
+)
+def test_look_1_moves_only_whole_end_runs_across_a_pole(name: str, passing: list[str]) -> None:
+    """Look 1 first moves whole runs at the ends of a genome half; the labels right of the axis stay one run."""
+
+    labels, total_length, arc, spacing = _packer_fixture(name)
+    assert pack_side(labels, arc, "half", _outer_rules(total_length, spacing)) is None
+    packed = _shared_packing(name, "pole")
+    assert packed is not None
+    right = [float(label["start_x"]) > 0 for label in packed]
+    assert sum(1 for k in range(len(right)) if right[k] != right[k - 1]) == 2
+    assert _off_their_half(packed, total_length) == passing
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("name", PACKINGS)
+def test_look_2_keeps_every_label_on_its_genome_half(name: str) -> None:
+    """Look 2 on every other label of the dense records: packed, nothing crosses, no label passes a pole."""
+
+    labels, total_length, arc, spacing = _packer_fixture(name, every=2)
+    packed = pack_side(labels, arc, "half", _outer_rules(total_length, spacing, 0))
+    assert packed is not None and len(packed) == len(labels)
+    assert _off_their_half(packed, total_length) == []
+    (fit,) = circular_label_fits(packed, total_length).values()
+    assert (fit.overlap_pairs, fit.crossing_pairs) == (0, 0)
+
+
+@pytest.mark.circular
+def test_the_run_splits_are_the_splits_whose_both_sides_fit() -> None:
+    """The prefix tables of ``_HalfLook.states`` give the splits a check of every split by ``excess`` gives."""
+
+    labels, total_length, arc, spacing = _packer_fixture("p1_f13")
+    items = [packer_module._item(label, arc, _outer_rules(total_length, spacing)) for label in labels]
+    look = packer_module._HalfLook(items, arc, total_length)
+    ring = packer_module._Ring(arc, 0.1)
+    shifts = [shift for shift in range(-packer_module.MAX_RUN_SHIFT, packer_module.MAX_RUN_SHIFT + 1) if look.valid(shift)]
+    every_split: list[tuple[int, int]] = []
+    for top in shifts:
+        bottom = next((bottom for bottom in sorted(shifts, key=abs) if look.excess(ring, top, bottom) <= 0), None)
+        if bottom is not None:
+            every_split.append((top, bottom))
+    every_split.sort(key=lambda state: abs(state[0]) + abs(state[1]))
+    assert look.states(ring) == every_split and every_split
+
+
+def test_the_packer_is_deterministic() -> None:
+    labels, total_length, arc, spacing = _packer_fixture("tobacco_f12")
+    first = pack_side(labels, arc, "pole", _outer_rules(total_length, spacing, 0))
+    second = pack_side(labels, arc, "pole", _outer_rules(total_length, spacing, 0))
+    assert first is not None and first == second == _shared_packing("tobacco_f12", "pole")
+
+
+def test_a_look_without_a_packing_under_the_crossing_limit_gives_none() -> None:
+    """P1 14 pt: look 1's fewest crossings are 3 pairs, so with at most 2 allowed the look has no placement."""
+
+    labels, total_length, arc, spacing = _packer_fixture("p1_f14")
+    assert pack_side(labels, arc, "pole", _outer_rules(total_length, spacing, 2)) is None

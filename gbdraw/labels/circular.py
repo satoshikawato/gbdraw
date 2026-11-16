@@ -15,6 +15,7 @@ from typing import Any, Literal, NamedTuple, TypeAlias, get_args
 from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import chosen_contact_end, leader_polyline
+from .circular_packer import BoxOffsets, SideRules
 from .circular_radial import place_radial_labels
 from .circular_capacity import (
     LabelArc,
@@ -921,6 +922,28 @@ def _assign_leader_start_points(labels: list[CircularLabel], total_length: int) 
 def assign_leader_start_points(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
     """Public wrapper to (re)compute leader start anchors after label motion."""
     return _assign_leader_start_points(labels, total_length)
+
+
+def _packer_side_rules(total_length: int, spacing_px: float, *, is_outer: bool, max_crossings: int) -> SideRules:
+    """This placement's rules for the order-preserving packer (CP-D04) on one side.
+
+    The boxes are `_label_y_offsets` and the text side of `_label_x_offsets` with no margin, the leader
+    starts `_assign_leader_start_points`, and the row gaps the circular label spacing, then the 0.1 px of
+    the dense rows (LP-D45 order).
+    """
+
+    def box_offsets(label: CircularLabel) -> BoxOffsets:
+        top, _, bottom, _ = _label_y_offsets(float(label["middle"]), total_length, float(label["height_px"]), 0.0, is_outer)
+        right_text, left_text = _label_x_offsets(float(label["width_px"]), 0.0, is_outer)
+        return (top, bottom), (right_text[0], right_text[2]), (left_text[0], left_text[2])
+
+    return SideRules(
+        total_length=total_length,
+        row_gaps=tuple(sorted({max(float(spacing_px), LEGACY_MIN_ROW_GAP_PX), LEGACY_MIN_ROW_GAP_PX}, reverse=True)),
+        max_crossings=max_crossings,
+        box_offsets=box_offsets,
+        leader_starts=partial(_assign_leader_start_points, total_length=total_length),
+    )
 
 
 def _leader_length_px(label: CircularLabel, total_length: int | None = None) -> float:
