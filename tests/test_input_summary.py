@@ -529,6 +529,51 @@ def test_a_web_saved_record_is_named_by_its_file_by_the_cli_replay_and_the_web(t
     assert (cli, _record_names(summary["lines"])) == (fresh, fresh)
 
 
+_SESSIONS = ROOT / "tests" / "fixtures" / "sessions"
+# OV-3660: each fixture and the names Web Load gives its record files (logs of origin/dev 3377d9a7e, through
+# config.js importSession and Python's upgrade). The rule that names each: a binding name (Session 41), a CLI file
+# binding's slot (Sessions 31-33, CLI 42), the "<resource ID>-" prefix (Session 33), and a stored name (Session 50).
+_LOADED_RECORD_NAMES = {
+    "single.v41-bindings1.json": ["original.gb"],
+    "lambda_basic_linear.v31-schema1.gbdraw-session.json.gz": ["NC_001416.gb"],
+    "se08-main-linear-cli.v42.gbdraw-session.json.gz": ["record.gb"],
+    "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz": ["record-0.gb", "record-1.gb"],
+    "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz": [
+        "BGC0000708.gbk", "BGC0000709.gbk", "BGC0000711.gbk", "BGC0000712.gbk", "BGC0000713.gbk",
+    ],
+    "HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz": ["HmmtDNA.gbk"],
+}
+
+
+@pytest.mark.parametrize("fixture", list(_LOADED_RECORD_NAMES))
+def test_the_cli_replay_names_an_older_sessions_records_as_web_load_does(tmp_path: Path, fixture: str) -> None:
+    """OV-3660: `gbdraw render --session` names each record by the file Web Load shows for it, for a Session that
+    stores no name: Python's Session migration names the files once, for both."""
+
+    completed = _gbdraw("render", "--session", str(_SESSIONS / fixture), "-o", "out", "-f", "svg", cwd=tmp_path)
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    lines = [line.removeprefix("INFO: ") for line in completed.stderr.splitlines() if line.startswith("INFO: Record ")]
+    assert _record_names(lines) == _LOADED_RECORD_NAMES[fixture]
+
+
+def test_the_cli_replay_names_two_files_of_one_name_as_its_fresh_render(tmp_path: Path) -> None:
+    """OV-3686: a CLI Save renames the second of two files named alike ("record.2.gb") and binds it by the name
+    given, which Web Load shows; the replay names it so too, as the render that saved it did."""
+
+    for folder, source in (("a", QUERY), ("b", SUBJECT)):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "record.gb").write_bytes(source.read_bytes())
+    saved = _gbdraw("linear", "--gbk", "a/record.gb", "b/record.gb", "-o", "dup", "-f", "svg", "--save_session",
+                    cwd=tmp_path)
+    replayed = _gbdraw("render", "--session", "dup.gbdraw", "-o", "replay", "-f", "svg", cwd=tmp_path)
+    assert (saved.returncode, replayed.returncode) == (0, 0), saved.stderr[-2000:] + replayed.stderr[-2000:]
+    names = [
+        _record_names([line.removeprefix("INFO: ") for line in run.stderr.splitlines() if line.startswith("INFO: Record ")])
+        for run in (saved, replayed)
+    ]
+    assert names == [["record.gb", "record.gb"]] * 2
+
+
 @pytest.mark.parametrize("name", ["hits.tsv", "my hits.tsv"])
 def test_a_session_stores_the_name_its_fresh_render_shows(tmp_path: Path, name: str) -> None:
     """The fresh render names a comparison file by its name as given, unsanitized, and the Session stores that name

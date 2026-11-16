@@ -2809,7 +2809,6 @@ const drawingProjectionInputOf = (view, {
     // derives its draft from the request (D-02); the comparison plan of a
     // Python re-save is stated the same way as the CLI's (OV-296).
     initializeCliInputs: !hasStoredDraft,
-    fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (view.cliInvocation)?.fileBindings,
     linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
       ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
       : LINEAR_TRACK_SLOT_SCHEMA_VERSION,

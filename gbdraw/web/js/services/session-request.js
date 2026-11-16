@@ -5534,118 +5534,6 @@ export const projectCompositionRecordIdentity = (canonical, keys, reference = nu
 export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput(args);
 
 /**
- * @param {{ source?: { kind?: unknown, resourceId?: unknown, gffResourceId?: unknown, fastaResourceId?: unknown } | null } | null | undefined} record
- * @param {string} field
- */
-const recordSourceResourceId = (record, field) => {
-  /** @type {Readonly<Record<string, string>>} */
-  const ids = recordSourceSlotIds(record?.source);
-  return Object.hasOwn(ids, field) ? ids[field] : '';
-};
-
-/** @param {{ resourceId?: unknown } | null | undefined} ref */
-const referencedResourceId = (ref) => String(ref?.resourceId || '').trim();
-
-/**
- * @param {Record<string, string>} target
- * @param {unknown} resourceId
- * @param {unknown} name
- */
-const addResourceOriginalNameHint = (target, resourceId, name) => {
-  const id = String(resourceId || '').trim();
-  const originalName = normalizeOriginalResourceName(name);
-  if (!id || !originalName || Object.prototype.hasOwnProperty.call(target, id)) return;
-  target[id] = originalName;
-};
-
-/**
- * The projection's unvalidated Session parts, read through views.
- * @param {{
- *   renderRequest: UnvalidatedFields<'records' | 'mode'>,
- *   legacyFiles: unknown,
- *   fileBindings: unknown
- * }} input
- */
-const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings }) => {
-  /** @type {Record<string, string>} */
-  const hints = {};
-  /** @type {readonly UnvalidatedFields<'source', UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId'>>[]} */
-  const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
-  // The cast: an object other than an array, read through views of its properties.
-  const files = legacyFiles && typeof legacyFiles === 'object' && !Array.isArray(legacyFiles)
-    ? /** @type {Readonly<Record<string, UnvalidatedFields<'name'>>>} */ (legacyFiles)
-    : {};
-  const tableRefs = editorTableTextRefs(renderRequest);
-  const namedOptionResources = {
-    d_color: referencedResourceId(tableRefs.defaultColors),
-    t_color: referencedResourceId(tableRefs.colorTable),
-    whitelist: referencedResourceId(tableRefs.whitelist),
-    qualifier_priority: referencedResourceId(tableRefs.priority)
-  };
-  Object.entries(namedOptionResources).forEach(([slot, resourceId]) => {
-    addResourceOriginalNameHint(hints, resourceId, files?.[slot]?.name);
-  });
-
-  if (renderRequest?.mode === 'linear') {
-    /** @type {readonly UnvalidatedFields<'gb' | 'gff' | 'fasta', UnvalidatedFields<'name'>>[]} */
-    const sequences = Array.isArray(files.linearSeqs) ? files.linearSeqs : [];
-    records.forEach((record, index) => {
-      const sequence = sequences[index] || {};
-      /** @type {const} */ (['gb', 'gff', 'fasta']).forEach((field) => {
-        addResourceOriginalNameHint(
-          hints,
-          recordSourceResourceId(record, field),
-          sequence?.[field]?.name
-        );
-      });
-    });
-  } else {
-    const record = records[0];
-    ['gb', 'gff', 'fasta'].forEach((field) => {
-      addResourceOriginalNameHint(
-        hints,
-        recordSourceResourceId(record, field),
-        files?.[`c_${field}`]?.name
-      );
-    });
-  }
-
-  (Array.isArray(fileBindings) ? fileBindings : []).forEach((/** @type {UnvalidatedFields<'slot' | 'name'>} */ binding) => {
-    const slot = String(binding?.slot || '');
-    const normalizedSlot = slot.replace(/^files\./, '');
-    if (Object.prototype.hasOwnProperty.call(namedOptionResources, normalizedSlot)) {
-      addResourceOriginalNameHint(
-        hints,
-        // An own key of the table, checked above.
-        namedOptionResources[/** @type {keyof typeof namedOptionResources} */ (normalizedSlot)],
-        binding?.name
-      );
-      return;
-    }
-    const linearMatch = slot.match(/^(?:files\.)?linearSeqs\[(\d+)\]\.(gb|gff|fasta)$/);
-    if (linearMatch) {
-      const record = records[Number(linearMatch[1])];
-      addResourceOriginalNameHint(
-        hints,
-        recordSourceResourceId(record, linearMatch[2]),
-        binding?.name
-      );
-      return;
-    }
-    const circularMatch = slot.match(/^(?:files\.)?c_(gb|gff|fasta)$/);
-    if (circularMatch) {
-      addResourceOriginalNameHint(
-        hints,
-        recordSourceResourceId(records[0], circularMatch[1]),
-        binding?.name
-      );
-    }
-  });
-
-  return hints;
-};
-
-/**
  * @param {StoredResources} resources
  * @param {Readonly<Record<string, unknown>>} originalNameHints
  */
@@ -7052,7 +6940,6 @@ export const projectCanonicalSessionRequest = ({
   legacyFiles = null,
   storedConfig = null,
   initializeCliInputs = false,
-  fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairLegacyTableRows = false,
   sessionResourceTable = null,
@@ -7199,11 +7086,11 @@ export const projectCanonicalSessionRequest = ({
     webMetadata = { ...webMetadata, bindings: explicitBindings };
   }
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
-  const originalNameHints = {
-    ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
-    ...(storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
-      !Array.isArray(storedResourceOriginalNames) ? storedResourceOriginalNames : {})
-  };
+  // The names a Session stored: a Web Save's, or those Python's move of a Session 31-44 to the current writer
+  // stores (`loaded_resource_display_names`, OV-3660).
+  /** @type {Readonly<Record<string, unknown>>} */
+  const originalNameHints = storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
+    !Array.isArray(storedResourceOriginalNames) ? storedResourceOriginalNames : {};
   const resources = sessionResourceTable
     ? canonicalResources
     : resourcesWithOriginalNames(canonicalResources, originalNameHints);

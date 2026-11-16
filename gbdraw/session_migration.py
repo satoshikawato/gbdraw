@@ -8,6 +8,7 @@ functions migrate the fields around it.
 from __future__ import annotations
 
 import logging
+import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -174,6 +175,110 @@ def _project_web_file_inventory(
         if isinstance(source_ids, list) and slot not in files:
             files[slot] = restore_resource_id(source_ids)
     return files
+
+
+# The source fields of a record that a CLI file binding's slot names, by the record's source kind.
+_RECORD_SOURCE_SLOT_FIELDS: Mapping[str, Mapping[str, str]] = {
+    "genbank": {"gb": "resourceId"},
+    "gffFasta": {"gff": "gffResourceId", "fasta": "fastaResourceId"},
+    "fasta": {"fasta": "fastaResourceId"},
+}
+# The slots of a CLI file binding (``cliInvocation.fileBindings``) of Sessions 31-44: a Linear record's file and
+# the Circular record's file.
+_LINEAR_FILE_BINDING_SLOT = re.compile(r"(?:files\.)?linearSeqs\[(\d+)\]\.(gb|gff|fasta)")
+_CIRCULAR_FILE_BINDING_SLOT = re.compile(r"(?:files\.)?c_(gb|gff|fasta)")
+
+
+def _binding_names(value: object, names: dict[str, str]) -> None:
+    """Each name a Web file binding (schema 1 or 2, composites included) gives a resource, the first one first;
+    "" for a schema 1 binding without one, which names the file by its resource's name."""
+
+    if isinstance(value, list):
+        for item in value:
+            _binding_names(item, names)
+    elif isinstance(value, Mapping):
+        resource_id, name = value.get("resourceId"), value.get("name")
+        if isinstance(resource_id, str):
+            names.setdefault(resource_id, name if isinstance(name, str) else "")
+        for item in value.values():
+            if isinstance(item, (list, Mapping)):
+                _binding_names(item, names)
+
+
+def _cli_binding_names(session: Mapping[str, object]) -> dict[str, str]:
+    """The record files a CLI file binding of the Session names by its slot (written by first-parent ``main``
+    10d3a3d28, be13a5c03, 6b89c7814 for Sessions 31-33, and the CLI writer of Sessions 40-44): the slot's record
+    is the request record of that position, the Circular one the first."""
+
+    invocation, request = session.get("cliInvocation"), session.get("renderRequest")
+    bindings = invocation.get("fileBindings") if isinstance(invocation, Mapping) else None
+    records = request.get("records") if isinstance(request, Mapping) else None
+    if not isinstance(bindings, list) or not isinstance(records, list):
+        return {}
+    names: dict[str, str] = {}
+    for binding in bindings:
+        if not isinstance(binding, Mapping) or not isinstance(binding.get("name"), str) or not binding["name"]:
+            continue
+        slot = str(binding.get("slot") or "")
+        if linear := _LINEAR_FILE_BINDING_SLOT.fullmatch(slot):
+            index, field_name = int(linear.group(1)), linear.group(2)
+        elif circular := _CIRCULAR_FILE_BINDING_SLOT.fullmatch(slot):
+            index, field_name = 0, circular.group(1)
+        else:
+            continue
+        record = records[index] if index < len(records) else None
+        source = record.get("source") if isinstance(record, Mapping) else None
+        if not isinstance(source, Mapping):
+            continue
+        source_field = _RECORD_SOURCE_SLOT_FIELDS.get(str(source.get("kind")), {}).get(field_name)
+        resource_id = source.get(source_field) if source_field else None
+        if isinstance(resource_id, str) and resource_id:
+            names.setdefault(resource_id, binding["name"])
+    return names
+
+
+def _without_resource_id_prefix(resource_id: str, name: str) -> str:
+    """``name`` without each leading "<resource ID>-": the Web writer names a resource "<ID>-<file>". Web Load
+    shows a resource that stores no name so (``resolveResourceFile`` in ``services/session-request.js``), also in a
+    Session 45-51, which it reads without Python."""
+
+    prefix = f"{resource_id}-"
+    while name.startswith(prefix) and len(name) > len(prefix):
+        name = name[len(prefix):]
+    return name
+
+
+def loaded_resource_display_names(session: Mapping[str, object], *, cli_file_bindings: bool) -> dict[str, object]:
+    """The name each file of ``session`` (a document or one drawing's view) is shown by, as
+    ``webFiles.resourceOriginalNames``: what `gbdraw render --session` and Web Load read (OV-3660, OV-3686).
+
+    A stored name stays. A resource without one is named by its Web file binding, else (``cli_file_bindings``: a
+    Session 31-44, which Python moves to the current writer for Web Load) by the CLI file binding of its record
+    slot, else by its name without the "<resource ID>-" prefix its writer gave it (Sessions 31-33 stored no name:
+    06e131414 added them for Session 34); a resource whose own name is the one shown gets no entry.
+    """
+
+    web_files, resources = session.get("webFiles"), session.get("resources")
+    if not isinstance(resources, Mapping):
+        return {}
+    stored_value = web_files.get("resourceOriginalNames") if isinstance(web_files, Mapping) else None
+    stored = {
+        resource_id: name for resource_id, name in (stored_value.items() if isinstance(stored_value, Mapping) else ())
+        if isinstance(resource_id, str)
+    }
+    hints: dict[str, str] = {}
+    _binding_names(web_files.get("bindings") if isinstance(web_files, Mapping) else None, hints)
+    for resource_id, name in (_cli_binding_names(session) if cli_file_bindings else {}).items():
+        hints.setdefault(resource_id, name)
+    names: dict[str, object] = {}
+    for resource_id, descriptor in resources.items():
+        if resource_id in stored or not isinstance(descriptor, Mapping):
+            continue
+        own = str(descriptor.get("name") or "")
+        shown = (hints[resource_id] or own) if resource_id in hints else _without_resource_id_prefix(resource_id, own)
+        if shown and shown != own:
+            names[resource_id] = shown
+    return {**names, **stored}
 
 
 # Similarity-alignment flags a projected source session drops from its argv:
@@ -814,6 +919,7 @@ __all__ = [
     "DraftMigrationReport",
     "LegacySourceRead",
     "legacy_source_reads",
+    "loaded_resource_display_names",
     "log_session_draft_migration",
     "project_session_adjunct_for_current_write",
     "session_with_current_anchor_modes",

@@ -6278,7 +6278,6 @@ if (projectSessionIndex >= 0) {
     webFiles: session.webFiles,
     legacyFiles: session.files,
     storedConfig: session.config,
-    fileBindings: session.cliInvocation?.fileBindings,
     linearTrackSlotSchemaVersion: Number(session.version) <= 32 ? 1 : 2
   });
   assert.ok(['circular', 'linear'].includes(projectedSession.mode));

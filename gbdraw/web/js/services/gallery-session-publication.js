@@ -393,7 +393,7 @@ const rebuildIntent = async (session, owners) => {
   const projection = owners.projectRequest({ renderRequest: inherit ? { ...renderRequest, comparisons: [] } : renderRequest,
     resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: draftConfig(session),
     initializeCliInputs: isCliWritten(session),
-    fileBindings: session.cliInvocation?.fileBindings, sessionResourceTable: adoptCurrentSessionResources(session.resources),
+    sessionResourceTable: adoptCurrentSessionResources(session.resources),
     deferResourceContent: false, adoptCanonicalPayloads: true });
   const config = publicationConfig(session, projection); validateCurrentWriterActiveConfig({ mode: projection.mode, storedConfig: config });
   const layout = publicationLayout(session, config, projection);
