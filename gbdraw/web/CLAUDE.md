@@ -1252,7 +1252,9 @@ version-by-version history.
   range of one record is drawn Circular; the copy keeps the source's settings and edits or
   starts from the mode's defaults. Into an existing drawing it appends the records after that
   drawing's records and leaves its settings, palette, color rules, label rules and tables
-  unchanged. The source drawing does not change (PD-OI-090 〔作成〕(4), PD-OI-115).
+  unchanged. A coordinate range across the origin of a circular record is drawn as one window;
+  a feature that crosses the origin is refused with the reason. The source drawing does not
+  change (PD-OI-090 〔作成〕(4), PD-OI-115).
 
 The preview and download layers consume render results; they must not infer a
 different grouping from the number of uploaded files.
