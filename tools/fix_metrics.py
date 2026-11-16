@@ -87,8 +87,9 @@ LAYOUT_TITLE = re.compile(
     r"keep\b.*\b(?:off|outside|inside))\b",
     re.I,
 )
-# The cause class line of a fix pull request's Boundary analysis: "Cause class: <class>; ...".
-CAUSE_CLASS_LINE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?\**cause class\**[ \t]*:[ \t]*(.+)$", re.I | re.M)
+# The cause class line of a fix pull request's Boundary analysis, on a line of its own:
+# "Cause class: <class>; ...", also as a list item, in bold, or copied with its backticks.
+CAUSE_CLASS_LINE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?[*`]*cause class[*`]*[ \t]*:[ \t]*(.+)$", re.I | re.M)
 CAUSE_CLASSES = (
     "duplicate implementation",
     "state path",

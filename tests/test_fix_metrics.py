@@ -276,6 +276,9 @@ def test_command_line_writes_markdown_and_json(repo: Repo, tmp_path: Path) -> No
     ("## Boundary analysis\n- Cause class: state path (P7); guard: tests/web/x.test.mjs\n", "state path"),
     ("- **Cause class:** Duplicate-implementation, guard: none because ...", "duplicate implementation"),
     ("Cause class: lookup by name or position", "lookup by name or position"),
+    ("`Cause class: undefined edge; guard: tests/test_x.py`", "undefined edge"),
+    ("- `Cause class: single-site logic error; guard: none, because y`", "single-site logic error"),
+    ("- Boundary analysis: channel x. Cause class: state path; guard: y", "none"),
     ("Cause class: a typo", "unrecognised"),
     ("No line here", "none"),
 ])
