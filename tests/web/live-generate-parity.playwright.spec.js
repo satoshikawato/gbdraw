@@ -21,7 +21,7 @@ const { expectLiveEqualsGenerate, sameStepStart, semanticSnapshot, settleLive, s
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
-  SINGLE_FIXTURE, open, openBothDrawings, otherMode, switchDrawing, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
+  SINGLE_FIXTURE, DEPTH_TSV, open, openBothDrawings, otherMode, switchDrawing, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow,
   BATCH_0004_OFF, renameLegendRow, resetSettings, displayWhileSaveHeld, saveWhileDisplaying, loadFeatureEdits
 } = require('./helpers/live-generate-parity-steps.cjs');
@@ -1729,25 +1729,40 @@ for (const { edit, states, setup, run, knownMismatch } of CASES) {
 
 // OV-484: a request without explicit track slots draws its skew track under
 // Python's preset slot id. A palette change repaints that track as the next
-// Generate draws it (the semantic snapshot does not read track fills).
+// Generate draws it (the semantic snapshot does not read track fills). The
+// GC content and Depth tracks of the same Result, drawn by the same series
+// drawer, show live what Generate draws: their paths, fills and strokes.
+const NUMERIC_SERIES_RENDERERS = ['dinucleotide_content', 'dinucleotide_skew', 'depth'];
+const DEPTH_FILE_SETTERS = {
+  circular: (text) => { window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); },
+  linear: (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.form.show_gc = true;
+    app.form.show_skew = true;
+    app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+  }
+};
 for (const mode of ['circular', 'linear']) {
-  test(`Palette change repaints the skew track of a request without track slots: ${mode}`, async ({ page }) => {
-    test.setTimeout(90_000);
+  test(`Palette change repaints the skew track of a request without track slots, and its GC content and Depth tracks match Generate: ${mode}`, async ({ page }) => {
+    test.setTimeout(120_000);
     await open(page, { mode, results: 'single', reflow: 'off' });
-    if (mode === 'linear') {
-      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_skew = true; });
-      await generate(page);
-    }
-    const skewFills = () => page.evaluate(() => [...document.querySelectorAll('svg g[data-gbdraw-slot-renderer="dinucleotide_skew"]')]
-      .map((group) => [...group.querySelectorAll('path')].map((path) => String(path.getAttribute('fill') || '').toLowerCase())
-        .filter((fill) => fill && fill !== 'none' && fill !== 'white')));
-    const drawn = await skewFills();
-    expect(drawn.flat().length, 'the Result draws a skew track').toBeGreaterThan(0);
-    await switchPalette(page, 'alpine_retreat');
-    const live = await skewFills();
-    expect(live, 'the palette repaints the skew track').not.toEqual(drawn);
+    await page.evaluate(DEPTH_FILE_SETTERS[mode], DEPTH_TSV);
     await generate(page);
-    expect(live, 'the skew track of the live edit is the one Generate draws').toEqual(await skewFills());
+    const seriesPaths = () => page.evaluate((renderers) => Object.fromEntries(renderers.map((renderer) => [renderer,
+      [...document.querySelectorAll(`svg g[data-gbdraw-slot-renderer="${renderer}"] path`)].map((path) => (
+        ['d', 'fill', 'stroke', 'stroke-width', 'fill-opacity', 'clip-path'].map((name) => path.getAttribute(name))))])),
+    NUMERIC_SERIES_RENDERERS);
+    const skewFills = (paths) => paths.dinucleotide_skew.map(([_d, fill]) => String(fill || '').toLowerCase())
+      .filter((fill) => fill && fill !== 'none' && fill !== 'white');
+    const drawn = await seriesPaths();
+    for (const renderer of NUMERIC_SERIES_RENDERERS) {
+      expect(drawn[renderer].length, `the Result draws a ${renderer} track`).toBeGreaterThan(0);
+    }
+    await switchPalette(page, 'alpine_retreat');
+    const live = await seriesPaths();
+    expect(skewFills(live), 'the palette repaints the skew track').not.toEqual(skewFills(drawn));
+    await generate(page);
+    expect(live, 'the series tracks of the live edit are the ones Generate draws').toEqual(await seriesPaths());
   });
 }
 
