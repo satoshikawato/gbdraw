@@ -219,15 +219,23 @@ const figureView = (page) => evaluateWithRetainedPromise(page, async () => {
   const room = { left: box.left + canvas.clientLeft, top: box.top + canvas.clientTop };
   Object.assign(room, { right: room.left + canvas.clientWidth - reserve, bottom: room.top + canvas.clientHeight });
   const figure = app.svgContainer?.querySelector('svg')?.getBoundingClientRect();
-  const control = document.querySelector('[data-preview-edge-control]')?.getBoundingClientRect();
-  const besideControl = Boolean(control?.width) && control.top < figure.bottom && control.bottom > figure.top
-    && control.left < room.right;
-  const frameRight = besideControl ? control.left : room.right;
+  // The control over the canvas edge beside the canvas in its workspace; the figure centred in the whole room
+  // that would meet it is centred left of it.
+  let control = null;
+  for (let node = canvas.parentElement; node && !control; node = node.parentElement) {
+    control = node.querySelector(':scope > [data-preview-edge-control]');
+  }
+  const controlBox = control?.getBoundingClientRect();
+  const besideControl = Boolean(controlBox?.width && figure?.width)
+    && Math.abs((room.left + room.right) / 2 - (controlBox.left + controlBox.right) / 2) < (figure.width + controlBox.width) / 2
+    && Math.abs((figure.top + figure.bottom) / 2 - (controlBox.top + controlBox.bottom) / 2) < (figure.height + controlBox.height) / 2;
+  const frameRight = besideControl ? controlBox.left : room.right;
   return {
     zoom: app.zoom,
     inRoom: Boolean(figure?.width) && figure.left >= room.left && figure.right <= frameRight
       && figure.top >= room.top && figure.bottom <= room.bottom,
-    centred: Boolean(figure?.width) && Math.abs((figure.left - room.left) - (frameRight - figure.right)) < 1
+    centred: Boolean(figure?.width) && Math.abs((figure.left - room.left) - (frameRight - figure.right)) < 1,
+    measured: { room, frameRight, figure: figure && [figure.left, figure.top, figure.right, figure.bottom] }
   };
 });
 test('a drawing switch keeps the zoom and centres the arriving figure in the free room, with or without an open review', async ({ page }) => {
@@ -240,8 +248,8 @@ test('a drawing switch keeps the zoom and centres the arriving figure in the fre
   expect(loaded.inRoom, 'the loaded figure').toBe(true);
   /** @param {string} step @param {number} zoom */
   const expectCentredAt = async (step, zoom) => {
-    const view = await figureView(page);
-    expect(view, step).toEqual({ zoom, inRoom: true, centred: true });
+    const { measured, ...view } = await figureView(page);
+    expect(view, `${step}: ${JSON.stringify(measured)}`).toEqual({ zoom, inRoom: true, centred: true });
   };
   const source = await shownDrawingId(page);
   const copy = await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(id).drawingId, source);
