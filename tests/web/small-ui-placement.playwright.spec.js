@@ -100,16 +100,19 @@ test('the match popup stays above the footer and its text reaches 4.5:1', async 
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       state.clickedPairwiseMatch.value = {
-        title: 'Pairwise match',
+        // The payload words its texts where the popup shows them (OV-3676).
+        title: () => 'Pairwise match',
         subtitle: 'comparison1_match1',
         fill: '#f87171',
         sections: [{
+          id: 'Summary',
           title: 'Summary',
-          rows: Array.from({ length: 24 }, (_, i) => ({ label: `Row ${i + 1}`, value: `value ${i + 1}` }))
+          rows: Array.from({ length: 24 }, (_, i) => ({ id: `Row ${i + 1}`, label: () => `Row ${i + 1}`, value: () => `value ${i + 1}` }))
         }, {
+          id: 'Features',
           title: 'Features',
           featureRows: [{
-            key: 'f1', label: 'nad1', subLabel: 'CDS 3307..4262', record: 'NC_012920.1', location: '3307..4262',
+            key: 'f1', label: () => 'nad1', subLabel: 'CDS 3307..4262', record: 'NC_012920.1', location: '3307..4262',
             product: 'NADH dehydrogenase subunit 1', canOpen: true, copyText: 'nad1'
           }]
         }]
@@ -168,8 +171,8 @@ test('feature and match popups stay above the footer when opened low or dragged 
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       state.clickedPairwiseMatch.value = {
-        title: 'Pairwise match', subtitle: 'comparison1_match1', fill: '#f87171',
-        sections: [{ title: 'Summary', rows: [{ label: 'Identity', value: '99%' }] }]
+        title: () => 'Pairwise match', subtitle: 'comparison1_match1', fill: '#f87171',
+        sections: [{ id: 'Summary', title: 'Summary', rows: [{ id: 'Identity', label: () => 'Identity', value: () => '99%' }] }]
       };
       state.clickedPairwiseMatchPos.x = 884;
       state.clickedPairwiseMatchPos.y = 300;

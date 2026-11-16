@@ -16,6 +16,7 @@ import test from 'node:test';
 import * as schema from '../../gbdraw/web/js/contracts/schema.generated.js';
 import * as slots from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
 import { buildMatchPopupPayload } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
+import { renderErrorText } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 
 const CASES = JSON.parse(readFileSync(new URL('../fixtures/embedded-match-span-cases.json', import.meta.url), 'utf8')).cases;
@@ -198,8 +199,9 @@ test('the Web app\'s match popup reads each span as Python\'s export does', () =
             : [`${label}: the app reads ${JSON.stringify(entry.read)}, Python ${JSON.stringify(pythonRead)}`];
         }
         const shown = testCase.shown[match.id]?.[entry.span.role];
-        return shown?.reason === entry.unavailableReason ? []
-          : [`${label}: the app shows "${entry.unavailableReason}", the export ${JSON.stringify(shown)}`];
+        const reason = renderErrorText(entry.unavailableReason);
+        return shown?.reason === reason ? []
+          : [`${label}: the app shows "${reason}", the export ${JSON.stringify(shown)}`];
       });
     });
   });

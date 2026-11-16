@@ -31,6 +31,15 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 /** @import { FeatureLike } from './feature-utils.js' */
 /** @import { MatchSpanInput, MatchSpanSequence, SpanCoordinate } from './diagram-worker-protocol.js' */
 /** @import { SequenceReadState } from './catalog-sequences.js' */
+/** @import { ErrorTextPart } from '../utils/error-normalization.js' */
+/** @import { Wording } from '../utils/i18n.js' */
+
+// The payload lives only while its popup is open (a History restore closes the
+// popups), and the UI language can change meanwhile. So it keeps what its texts
+// are made of and the popup words them where it shows them (OV-3676): a text of
+// one key is its `msg` key, shown with `tm`; a span's unread reason is error text
+// parts, shown with `errorText`; any other text is a `Wording`. Values the
+// drawing or the input wrote (IDs, intervals, names) stay as written.
 
 /**
  * A rendered or source feature row of the catalogs, or a saved group member:
@@ -57,7 +66,13 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 /**
  * One popup table row. `id` is the row's English label (a `msg` key) and its
  * identity: code finds a row by `id`, never by the shown `label` (`tm(id)`).
- * @typedef {{ id: string, label: string, value: string }} PopupRow
+ * `value` words a value Python names in the UI language and gives any other
+ * value as written.
+ * @typedef {{ id: string, label: Wording, value: Wording }} PopupRow
+ */
+/**
+ * A hover summary row, worded when the summary shows.
+ * @typedef {{ id: string, label: string, value: string }} HoverRow
  */
 
 /**
@@ -66,7 +81,7 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
  * adds the copy and FASTA fields.
  * @typedef {object} PopupSection
  * @property {string} id The English title (a `msg` key): the section's identity.
- * @property {string} title The shown title, `tm(id)`.
+ * @property {string} title The English title (a `msg` key, the `id`), shown with `tm`.
  * @property {PopupRow[]} rows
  * @property {FeatureListRow[]} [featureRows]
  * @property {MemberRow[]} [memberRows]
@@ -98,7 +113,7 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
  * @property {string} subjectTableInterval
  * @property {string} identity
  * @property {string} orientation
- * @property {string} title
+ * @property {Wording} title
  * @property {string} subtitle
  * @property {string} fill
  * @property {{ query: ReturnType<typeof matchEndpointReferences>, subject: ReturnType<typeof matchEndpointReferences> }} endpoints
@@ -135,7 +150,7 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
  * other kinds the `sections` and the matched sequences.
  * @typedef {object} MatchPopupPayload
  * @property {string} id
- * @property {string} title
+ * @property {Wording} title
  * @property {string} subtitle
  * @property {MatchKind} matchKind
  * @property {string} orthogroupId
@@ -150,7 +165,7 @@ import { msg, numberText, t, tm, tmx, tn, tx } from '../utils/i18n.js';
  * @property {GroupView[]} [blockOrthogroups]
  * @property {ReturnType<typeof buildCollinearBlockView>} [block]
  * @property {ReturnType<typeof buildSequenceBundleForMatch>} [sequenceBundle]
- * @property {string} [sequenceTitle]
+ * @property {string} [sequenceTitle] The English title of the matched sequences (a `msg` key).
  */
 
 /**
@@ -292,15 +307,17 @@ const normalizeMatchKind = (value, element = null) => {
 };
 
 /**
+ * A row of a value, unless it is empty.
  * @param {PopupRow[]} rows
  * @param {string} id The English row label (a `msg` key).
- * @param {unknown} value
- * @param {string} [label] The shown label, when the key of `id` has another meaning.
+ * @param {unknown} value A value as written, or a `Wording` of a value Python names.
+ * @param {Wording} [label] The label, when the key of `id` has another meaning.
  */
-const addRow = (rows, id, value, label = tm(id)) => {
-  const text = normalizeText(value);
+const addRow = (rows, id, value, label = () => tm(id)) => {
+  const shown = typeof value === 'function' ? /** @type {Wording} */ (value) : null;
+  const text = normalizeText(shown ? shown() : value);
   if (!text) return;
-  rows.push({ id, label, value: text });
+  rows.push({ id, label, value: shown || (() => text) });
 };
 
 /**
@@ -556,7 +573,7 @@ const readPairwiseMatchDescriptor = (element) => {
       attr(element, 'data-collinearity-orientation'),
       attr(element, 'data-orientation')
     ),
-    title: tm(MATCH_KIND_TITLES[matchKind] || MATCH_KIND_TITLES.pairwise),
+    title: () => tm(MATCH_KIND_TITLES[matchKind] || MATCH_KIND_TITLES.pairwise),
     subtitle: firstText(collinearityBlockId, orthogroupId, matchId),
     fill: firstText(attr(element, 'fill'), element?.style?.fill, '#94a3b8'),
     endpoints: {
@@ -1190,8 +1207,8 @@ const overrideValue = (overrides, key) => {
  */
 const section = (id, rows, extras = {}) => ({
   id,
-  title: tm(id),
-  rows: rows.filter((row) => normalizeText(row.value)),
+  title: id,
+  rows,
   ...extras
 });
 
@@ -1287,8 +1304,9 @@ export const memberValueLabelKeys = () => Object.values(MEMBER_VALUE_SOURCES).fl
 /**
  * @param {string} role
  * @param {string} confidence
+ * @returns {Wording}
  */
-const memberRoleNote = (role, confidence) => [
+const memberRoleNote = (role, confidence) => () => [
   role && role !== ORTHOGROUP_MEMBER_ROLE.default ? memberValueLabel('role', role) : '',
   confidence && confidence !== ORTHOGROUP_MEMBER_CONFIDENCE.default
     ? t('{confidence} confidence', { confidence: memberValueLabel('confidence', confidence) })
@@ -1494,8 +1512,8 @@ const buildFeatureListRows = ({
     const rowLocusId = featureRowLocusId(feature, locusIds[index]);
     const rowDisplayName = featureRowDisplayName(feature, displayNames[index]);
     const product = featureProduct(feature);
-    const label = firstText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, t('Feature {n}', { n: index + 1 }));
-    const subLabel = featureRowSubLabel(label, rowLocusId, rowDisplayName);
+    const named = firstText(displayProteinId, rowDisplayName, rowLocusId, product, svgId);
+    const subLabel = featureRowSubLabel(named, rowLocusId, rowDisplayName);
     const copyText = [
       rowRecord,
       rowLocation,
@@ -1511,7 +1529,8 @@ const buildFeatureListRows = ({
       canOpen: Boolean(
         featureRenderedSvgId(feature) && (!group || member)
       ),
-      label,
+      /** @type {Wording} */
+      label: named ? () => named : () => t('Feature {n}', { n: index + 1 }),
       record: rowRecord,
       location: rowLocation,
       proteinId: displayProteinId,
@@ -1641,12 +1660,14 @@ const buildGroupView = ({
   return {
     id,
     displayName: name,
-    title: name || id || tm(MATCH_KIND_TITLES.orthogroup),
+    /** @type {Wording} */
+    title: () => name || id || tm(MATCH_KIND_TITLES.orthogroup),
     badge: name && id && name !== id ? id : '',
     description: normalizeText(userDescription),
     memberCount,
     recordCoverage,
-    countText: groupCountText(memberCount || memberRows.length, recordCoverage),
+    /** @type {Wording} */
+    countText: () => groupCountText(memberCount || memberRows.length, recordCoverage),
     technicalRows,
     ...orthogroupMemberSectionExtras(memberRows, orthogroupId, displayName)
   };
@@ -1748,9 +1769,9 @@ const collinearDetailRows = (element, descriptor) => {
   const alignedLength = finiteNumber(attr(element, 'data-alignment-length'));
   addRow(rows, msg('Block ID'), descriptor.collinearityBlockId);
   // Python's words (`COLLINEARITY_BLOCK_KINDS`, generated for tools/i18n/source-keys.mjs): an unknown one shows as written.
-  addRow(rows, msg('Kind'), tmx('collinearity block kind', attr(element, 'data-collinearity-block-kind')));
-  addRow(rows, msg('Orientation'), shownMatchValue(COLLINEAR_ORIENTATION_TEXT, attr(element, 'data-collinearity-orientation')));
-  addRow(rows, msg('Color mode'), shownMatchValue(COLLINEAR_COLOR_MODE_TEXT, attr(element, 'data-collinearity-color-mode')));
+  addRow(rows, msg('Kind'), () => tmx('collinearity block kind', attr(element, 'data-collinearity-block-kind')));
+  addRow(rows, msg('Orientation'), () => shownMatchValue(COLLINEAR_ORIENTATION_TEXT, attr(element, 'data-collinearity-orientation')));
+  addRow(rows, msg('Color mode'), () => shownMatchValue(COLLINEAR_COLOR_MODE_TEXT, attr(element, 'data-collinearity-color-mode')));
   if (descriptor.matchKind === 'collinear') {
     addRow(rows, msg('Average identity'), identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
     // LOSATP anchors: the summed protein alignment length.
@@ -1829,13 +1850,17 @@ const genePairCells = (row) => (row
 const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }) => {
   const query = blockSpanView(descriptor.queryRecordId, descriptor.queryInterval, descriptor.queryTableInterval);
   const subject = blockSpanView(descriptor.subjectRecordId, descriptor.subjectInterval, descriptor.subjectTableInterval);
-  const orientationText = shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation);
   const identity = finiteNumber(descriptor.identity);
-  const identityText = identity === null ? '' : t('{identity}% identity', { identity: Math.round(identity) });
   const pairCount = genePairs.filter((pair) => pair.query && pair.subject).length;
-  const pairsLabel = tn(pairCount, '{count} gene pair', '{count} gene pairs');
-  const facts = [orientationText, identityText, pairsLabel].filter(Boolean);
-  const groupHeading = localGroups ? t('Collinear group') : t('Similarity group');
+  /** @type {Wording} */
+  const pairsLabel = () => tn(pairCount, '{count} gene pair', '{count} gene pairs');
+  /** @type {Wording[]} */
+  const facts = [
+    ...(normalizeText(descriptor.orientation) ? [() => shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation)] : []),
+    ...(identity === null ? [] : [() => t('{identity}% identity', { identity: Math.round(identity) })]),
+    pairsLabel
+  ];
+  const groupHeading = localGroups ? msg('Collinear group') : msg('Similarity group');
   // The copied table is clipboard text: its header stays English.
   const copiedGroupHeading = localGroups ? 'Collinear group' : 'Similarity group';
   return {
@@ -1847,7 +1872,8 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
     pairsLabel,
     groupHeading,
     genePairs,
-    summaryText: `${tm(MATCH_KIND_TITLES.collinear)}: ${query.text} ${t('vs {record}', { record: subject.text })}; ${facts.join('; ')}`,
+    /** @type {Wording} */
+    summaryText: () => `${tm(MATCH_KIND_TITLES.collinear)}: ${query.text} ${t('vs {record}', { record: subject.text })}; ${facts.map((fact) => fact()).join('; ')}`,
     pairsCopyText: [
       ['Query record', 'Query location', 'Query protein ID', 'Query product',
         'Subject record', 'Subject location', 'Subject protein ID', 'Subject product',
@@ -1860,7 +1886,7 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
       ].join('\t'))
     ].join('\n'),
     detailRows: collinearDetailRows(element, descriptor),
-    note: tm(COLLINEAR_BLOCK_NOTE)
+    note: COLLINEAR_BLOCK_NOTE
   };
 };
 
@@ -1933,7 +1959,7 @@ const buildMatchSpans = (element, matchKind) => {
   const sourceIndex = integerAttrStatus(element, 'data-source-index');
   const referenceSide = attr(element, 'data-reference-side').toLowerCase();
   /** @param {'query' | 'subject'} role */
-  const homologyDisplayRole = (role) => role === referenceSide ? t('Reference') : t('Comparison');
+  const homologyDisplayRole = (role) => role === referenceSide ? msg('Reference') : msg('Comparison');
   return [
     {
       role: 'query',
@@ -1944,7 +1970,7 @@ const buildMatchSpans = (element, matchKind) => {
       start: attr(element, 'data-qstart'),
       end: attr(element, 'data-qend'),
       sourceSpan: matchKind === 'homology' ? null : readRecordSourceSpan(element, queryRecordIndex.value),
-      displayRole: matchKind === 'homology' ? homologyDisplayRole('query') : t('Query'),
+      displayRole: matchKind === 'homology' ? homologyDisplayRole('query') : msg('Query'),
       sourceIndex: sourceIndex.value,
       recordIndex: queryRecordIndex.value,
       identityValid: queryRecordIndex.valid && sourceIndex.valid,
@@ -1959,7 +1985,7 @@ const buildMatchSpans = (element, matchKind) => {
       start: attr(element, 'data-sstart'),
       end: attr(element, 'data-send'),
       sourceSpan: matchKind === 'homology' ? null : readRecordSourceSpan(element, subjectRecordIndex.value),
-      displayRole: matchKind === 'homology' ? homologyDisplayRole('subject') : t('Subject'),
+      displayRole: matchKind === 'homology' ? homologyDisplayRole('subject') : msg('Subject'),
       sourceIndex: sourceIndex.value,
       recordIndex: subjectRecordIndex.value,
       identityValid: subjectRecordIndex.valid && sourceIndex.valid,
@@ -1983,11 +2009,12 @@ const buildMatchSpans = (element, matchKind) => {
  * that it cannot be read, with the reason).
  * @typedef {object} MatchSpanEntry
  * @property {{ role: 'query' | 'subject', recordId: string, start: number | string, end: number | string, displayRole: string }} span
+ *   `displayRole` is the English role (a `msg` key), shown with `tm`.
  * @property {'+' | '-'} orientation
  * @property {number} sequenceLength The bases the span names; 0 when a coordinate is not a whole number.
  * @property {MatchSpanInput | null} read
  * @property {boolean} available
- * @property {string} unavailableReason
+ * @property {ErrorTextPart[]} unavailableReason Why the span cannot be read, shown with `errorText`; empty when it can.
  * @property {string} matchId
  * @property {string} filename
  */
@@ -2018,29 +2045,29 @@ const safeFilePart = (value, fallback = 'sequence') => {
  * @param {MatchSequenceRecords | null} records
  * @param {SpanCoordinate} start
  * @param {SpanCoordinate} end
- * @returns {{ read: MatchSpanInput | null, reason: string }}
+ * @returns {{ read: MatchSpanInput | null, reason: ErrorTextPart[] }}
  */
 const matchSpanRead = (span, matchKind, records, start, end) => {
-  if (!span.identityValid) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.IDENTITY_INVALID, {}) };
+  if (!span.identityValid) return { read: null, reason: [{ text: MATCH_SPAN_REASON_TEXTS.IDENTITY_INVALID }] };
   // A Result without its request (a Result-only Session 27-39): the reason the read would give (SEQUENCE_REQUIRES_GENERATE).
-  if (!records) return { read: null, reason: t('This Result was saved by an older gbdraw, so its sequences are read after the next Generate.') };
+  if (!records) return { read: null, reason: [{ text: msg('This Result was saved by an older gbdraw, so its sequences are read after the next Generate.') }] };
   const { recordId } = span;
   if (matchKind === 'homology' && span.role !== span.referenceSide) {
     if (!records.comparisonSupplied(span.sourceIndex)) {
-      return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.NEVER_SUPPLIED, {}) };
+      return { read: null, reason: [{ text: MATCH_SPAN_REASON_TEXTS.NEVER_SUPPLIED }] };
     }
-    return { read: { kind: 'comparison', sourceIndex: span.sourceIndex, recordId, start, end }, reason: '' };
+    return { read: { kind: 'comparison', sourceIndex: span.sourceIndex, recordId, start, end }, reason: [] };
   }
   const recordKey = span.recordIndex === null ? null : records.unitKeys[span.recordIndex] ?? null;
   if (matchKind !== 'homology' && span.recordIndex !== null) {
     return recordKey
-      ? { read: { kind: 'record', recordKey, recordId, start, end }, reason: '' }
-      : { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.SOURCE_UNAVAILABLE, {}) };
+      ? { read: { kind: 'record', recordKey, recordId, start, end }, reason: [] }
+      : { read: null, reason: [{ text: MATCH_SPAN_REASON_TEXTS.SOURCE_UNAVAILABLE }] };
   }
-  if (!recordId && !recordKey) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.RECORD_UNNAMED, {}) };
+  if (!recordId && !recordKey) return { read: null, reason: [{ text: MATCH_SPAN_REASON_TEXTS.RECORD_UNNAMED }] };
   // A record index that names no drawn unit: no record is searched, so the named one is not found.
-  if (span.recordIndex !== null && !recordKey) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.RECORD_UNKNOWN, { id: recordId }) };
-  return { read: { kind: 'reference', recordId, recordKey, start, end }, reason: '' };
+  if (span.recordIndex !== null && !recordKey) return { read: null, reason: [{ text: MATCH_SPAN_REASON_TEXTS.RECORD_UNKNOWN, params: { id: recordId } }] };
+  return { read: { kind: 'reference', recordId, recordKey, start, end }, reason: [] };
 };
 
 /**
@@ -2104,10 +2131,10 @@ export const matchSpanFasta = (entry, read) => {
  * @param {MatchSpanEntry} entry
  * @param {MatchSpanSequence} read A span Python could not read.
  */
-export const matchSpanUnavailableReason = (entry, read) => tm(
-  read.reason ? MATCH_SPAN_REASON_TEXTS[read.reason] : MATCH_SPAN_REASON_TEXTS.OUT_OF_RANGE,
-  { id: entry.span.recordId || read.recordId, length: numberText(read.sourceLength) }
-);
+export const matchSpanUnavailableReason = (entry, read) => [{
+  text: read.reason ? MATCH_SPAN_REASON_TEXTS[read.reason] : MATCH_SPAN_REASON_TEXTS.OUT_OF_RANGE,
+  params: { id: entry.span.recordId || read.recordId, length: numberText(read.sourceLength) }
+}];
 
 /**
  * The Summary rows of a pairwise or homology match: its records, intervals,
@@ -2125,7 +2152,7 @@ const matchSummaryRows = (element, descriptor) => {
   addRow(summaryRows, msg('Query table interval'), descriptor.queryTableInterval);
   addRow(summaryRows, msg('Subject interval'), descriptor.subjectInterval);
   addRow(summaryRows, msg('Subject table interval'), descriptor.subjectTableInterval);
-  addRow(summaryRows, msg('Orientation'), shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation));
+  addRow(summaryRows, msg('Orientation'), () => shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation));
   if (descriptor.matchKind === 'homology') {
     addRow(summaryRows, msg('Ring label'), attr(element, 'data-track-label'));
     const rawSourceIndex = integerAttr(element, 'data-source-index');
@@ -2158,10 +2185,10 @@ const matchAlignmentRows = (element, descriptor) => {
   addRow(alignmentRows, msg('Group path ID'), attr(element, 'data-ortholog-path-id'));
   addRow(alignmentRows, msg('Query group genes'), attr(element, 'data-query-orthogroup-member-count'));
   addRow(alignmentRows, msg('Subject group genes'), attr(element, 'data-subject-orthogroup-member-count'));
-  addRow(alignmentRows, msg('Query member role'), memberValueLabel('role', attr(element, 'data-query-orthogroup-role')));
-  addRow(alignmentRows, msg('Subject member role'), memberValueLabel('role', attr(element, 'data-subject-orthogroup-role')));
-  addRow(alignmentRows, msg('Query confidence'), memberValueLabel('confidence', attr(element, 'data-query-orthogroup-confidence')));
-  addRow(alignmentRows, msg('Subject confidence'), memberValueLabel('confidence', attr(element, 'data-subject-orthogroup-confidence')));
+  addRow(alignmentRows, msg('Query member role'), () => memberValueLabel('role', attr(element, 'data-query-orthogroup-role')));
+  addRow(alignmentRows, msg('Subject member role'), () => memberValueLabel('role', attr(element, 'data-subject-orthogroup-role')));
+  addRow(alignmentRows, msg('Query confidence'), () => memberValueLabel('confidence', attr(element, 'data-query-orthogroup-confidence')));
+  addRow(alignmentRows, msg('Subject confidence'), () => memberValueLabel('confidence', attr(element, 'data-subject-orthogroup-confidence')));
   addRow(alignmentRows, msg('Query assignment'), attr(element, 'data-query-orthogroup-assignment-reason'));
   addRow(alignmentRows, msg('Subject assignment'), attr(element, 'data-subject-orthogroup-assignment-reason'));
   return alignmentRows;
@@ -2352,7 +2379,7 @@ export const buildMatchPopupPayload = (
   if (matchKind === 'orthogroup') {
     return {
       id: firstText(matchId, orthogroupId),
-      title: orthogroupTitle(orthogroupId, groupView?.displayName),
+      title: () => orthogroupTitle(orthogroupId, groupView?.displayName),
       subtitle: '',
       ...identity,
       group: groupView,
@@ -2432,7 +2459,7 @@ export const buildMatchPopupPayload = (
     ...identity,
     groupScope: normalizedGroupScope,
     group: groupView,
-    sequenceTitle: t('Matched sequences'),
+    sequenceTitle: msg('Matched sequences'),
     sequenceBundle,
     sections: sections.filter((entry) => (
       entry.rows.length > 0 ||
@@ -2442,7 +2469,15 @@ export const buildMatchPopupPayload = (
 };
 
 /**
+ * A hover summary is built each time it shows, so it is worded then.
+ * @param {PopupRow} row
+ * @returns {HoverRow}
+ */
+const hoverRow = ({ id, label, value }) => ({ id, label: label(), value: value() });
+
+/**
  * @param {PairwiseHoverRowValues} [values]
+ * @returns {HoverRow[]}
  */
 const formatPairwiseMatchHoverRows = ({
   matchKind,
@@ -2463,14 +2498,14 @@ const formatPairwiseMatchHoverRows = ({
    * @param {unknown} value
    */
   const addFirst = (id, value) => addRow(rows, id, value);
-  if (!matchKind) return rows;
+  if (!matchKind) return [];
   const kindText = shownMatchValue(MATCH_KIND_TITLES, matchKind);
   if (matchKind === 'orthogroup') {
     addFirst(msg('Kind'), kindText);
     addFirst(msg('Similarity group'), orthogroupId);
     addFirst(msg('Display name'), displayName);
     addFirst(msg('Genes'), memberCount);
-    return rows.slice(0, 6);
+    return rows.slice(0, 6).map(hoverRow);
   }
   addFirst(msg('Kind'), kindText);
   addFirst(msg('Identity'), identity);
@@ -2479,13 +2514,13 @@ const formatPairwiseMatchHoverRows = ({
   if (matchKind === 'collinear') {
     const groups = String(blockOrthogroupCount ?? '');
     // A count of groups, not the LOSATP mode of that name: a locale may word the two apart.
-    if (groupScope === 'adjacent_local') addRow(rows, 'Collinear groups', groups, tx('number of groups in a block', 'Collinear groups'));
-    else addRow(rows, 'Similarity groups', groups, tx('number of groups in a block', 'Similarity groups'));
+    if (groupScope === 'adjacent_local') addRow(rows, 'Collinear groups', groups, () => tx('number of groups in a block', 'Collinear groups'));
+    else addRow(rows, 'Similarity groups', groups, () => tx('number of groups in a block', 'Similarity groups'));
   } else {
     addFirst(msg('Similarity group'), orthogroupId);
   }
   addFirst(msg('Block'), collinearityBlockId);
-  return rows.slice(0, 6);
+  return rows.slice(0, 6).map(hoverRow);
 };
 
 /**
@@ -2526,7 +2561,7 @@ export const buildPairwiseMatchHoverSummary = (
     id: descriptor.matchId,
     title: descriptor.matchKind === 'orthogroup'
       ? orthogroupTitle(descriptor.orthogroupId, displayName)
-      : descriptor.title,
+      : descriptor.title(),
     subtitle: descriptor.matchKind === 'orthogroup' ? '' : descriptor.subtitle,
     fill: descriptor.fill,
     rows: formatPairwiseMatchHoverRows({
@@ -2556,7 +2591,7 @@ export const buildPairwiseMatchHoverRows = (payload) => {
    * @param {string} id
    */
   const findValue = (sectionEntry, id) => (
-    sectionEntry?.rows.find((row) => row.id === id)?.value || ''
+    sectionEntry?.rows.find((row) => row.id === id)?.value() || ''
   );
   return formatPairwiseMatchHoverRows({
     matchKind: payload.matchKind,

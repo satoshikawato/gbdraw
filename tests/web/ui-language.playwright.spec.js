@@ -335,6 +335,35 @@ test('the annotation panel notice shown before a language choice rewords in the 
     .replace('{text}', used).replace('{stored}', second));
 });
 
+// OV-3676: a match popup opened before a language choice shows its texts in the chosen language: the menu's keyboard
+// path leaves the popup open.
+test('a match popup opened before a language choice rewords in the chosen language', async ({ page }) => {
+  test.setTimeout(300_000);
+  const ja = await catalogOf('ja');
+  const file = 'hepatoplasmataceae_collinear.gbdraw';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', file));
+  await expect(page.locator('[data-app-notice] p').first()).toHaveText(`Session loaded: ${file}.`, { timeout: 180_000 });
+  const match = page.locator('.shadow-xl.origin-top > svg [data-gbdraw-match-id][data-match-kind="collinear"]').first();
+  await match.focus();
+  await match.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
+  // Found by its class: its accessible name is worded too.
+  const dialog = page.locator('.pairwise-match-popup');
+  const title = dialog.locator('[data-match-popup-title]');
+  await expect(title).toHaveText('Collinear block');
+  const pairs = dialog.locator('[data-collinear-gene-pairs] > summary');
+  const pairsText = (await pairs.innerText()).trim();
+  const count = pairsText.match(/^(\d+) gene pairs?$/)?.[1];
+  expect(count, pairsText).toBeTruthy();
+  await menu(page).selectOption('ja');
+  await expect.poll(() => pageLanguage(page)).toBe('ja');
+  await expect(page.getByRole('dialog', { name: ja['Pairwise match details'] })).toBeVisible();
+  await expect(title).toHaveText(ja['Collinear block']);
+  await expect(pairs).toHaveText(ja['{count} gene pairs'].replace('{count}', count));
+});
+
 test('French and Korean show their catalogs and plural forms, and French changes no Session or Source recipe', async ({ page }, testInfo) => {
   test.setTimeout(420_000);
   const [fr, ko] = await Promise.all(['fr', 'ko'].map(catalogOf));

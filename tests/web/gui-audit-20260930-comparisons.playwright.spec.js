@@ -551,11 +551,17 @@ test('the match popup and its FASTA header report source coordinates of a croppe
     for (let attempt = 0; attempt < 100 && !app.clickedPairwiseMatch; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    const match = JSON.parse(JSON.stringify(app.clickedPairwiseMatch));
+    // The section as it shows: its rows and feature rows word their texts where they show (OV-3676).
+    const section = app.clickedPairwiseMatch.sections.find(({ title }) => title === 'Query');
+    const query = section && {
+      ...section,
+      rows: section.rows.map((row) => ({ id: row.id, label: row.label(), value: row.value() })),
+      featureRows: (section.featureRows || []).map((row) => ({ ...row, label: row.label() }))
+    };
     // Copy reads each span from Python when pressed (D5); the copied text is the span's FASTA.
     const fastas = await window.__copySpanFastas(app);
     return {
-      query: JSON.stringify(match.sections.find(({ title }) => title === 'Query') || null),
+      query: JSON.stringify(query || null),
       headers: fastas.map(({ fasta }) => String(fasta || '').split('\n')[0])
     };
   });
