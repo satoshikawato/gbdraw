@@ -106,7 +106,7 @@ test('the held view refits the shown figure when its room changes, but not in th
   };
   const canvas = {
     offsetWidth: 800, offsetHeight: 400, clientWidth: 800, clientHeight: 400, clientLeft: 0, clientTop: 0,
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }), closest: () => null, style: {}
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }), parentElement: null, style: {}
   };
   let fits = 0;
   const svg = { getBoundingClientRect: () => { fits += 1; return { left: 300, top: 0, width: 200, height: 100 }; } };

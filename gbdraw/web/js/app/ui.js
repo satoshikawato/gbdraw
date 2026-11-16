@@ -47,8 +47,12 @@ const EDGE_CONTROL = '[data-preview-edge-control]';
  * @returns {DOMRect | null}
  */
 const edgeControlBox = (container) => {
-  const control = /** @type {HTMLElement | null | undefined} */ (
-    container.closest(`:has(> ${EDGE_CONTROL})`)?.querySelector(`:scope > ${EDGE_CONTROL}`));
+  /** @type {HTMLElement | null} */
+  let control = null;
+  // Each ancestor in turn, not `closest(':has(...)')`: a browser without `:has` would throw here.
+  for (let node = container.parentElement; node && !control; node = node.parentElement) {
+    control = /** @type {HTMLElement | null} */ (node.querySelector(`:scope > ${EDGE_CONTROL}`));
+  }
   if (!control) return null;
   const probe = /** @type {HTMLElement} */ (control.cloneNode(true));
   probe.style.transition = 'none';

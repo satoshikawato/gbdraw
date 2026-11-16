@@ -273,6 +273,8 @@ test('the Fit button below the open Editor on a phone shows the fitted figure', 
   expect(shown.svg.top, detail).toBeGreaterThanOrEqual(shown.visible.top - 1);
   expect(shown.svg.bottom, detail).toBeLessThanOrEqual(shown.visible.bottom + 1);
   expect(await scrollPositions(page)).toEqual(opened);
+  // The figure is fitted again: in the canvas left of the toggle in the corner, centred there.
+  expectFitted(await fitGeometry(page, { leftOfToggle: true }), '390x844 with the Editor open, Fit pressed below it');
 });
 test('Fit of a figure clear of the Editor toggle fills the whole frame at 390x844', async ({ page }) => {
   test.setTimeout(180000);

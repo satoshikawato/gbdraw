@@ -446,11 +446,11 @@ const workspace = {
   querySelector: (selector) => (selector === ':scope > [data-preview-edge-control]' ? control : null)
 };
 Object.assign(wrapper, { querySelector: (selector) => (selector === 'svg' ? fakeSvg : null), getBoundingClientRect: visualBox });
+Object.defineProperty(canvas, 'parentElement', { get: () => (edgeControl ? workspace : null), configurable: true });
 Object.assign(canvas, {
   clientLeft: 0, clientTop: 0, clientWidth: 896, clientHeight: 386,
   getBoundingClientRect: () => ({ left: 100, top: 50, width: 896, height: 386 }),
   appendChild: () => { probes += 1; },
-  closest: (selector) => (edgeControl && selector === ':has(> [data-preview-edge-control])' ? workspace : null),
   ownerDocument: {
     createElement: () => {
       const probe = {
@@ -551,7 +551,7 @@ wrapper.querySelector = () => null;
 panZoom.fitPreviewToViewport();
 assert.equal(uiState.zoom.value, 0.45);
 for (const key of ['querySelector', 'getBoundingClientRect']) delete wrapper[key];
-for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'closest', 'ownerDocument']) delete canvas[key];
+for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'parentElement', 'ownerDocument']) delete canvas[key];
 completeCase('fit centres the whole diagram left of the Editor reserve at the largest whole percent and cancels the interaction');
 
 panZoom.handleWheel(wheelEvent);
