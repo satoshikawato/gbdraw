@@ -2890,7 +2890,7 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
   **Done**: the past with the class noun agreeing (فائل لوڈ ہو گئی۔, سیشن محفوظ ہو گیا۔). **Could not**: نہیں … سکا / سکی / سکتا
   with the class noun (فائل {file} لوڈ نہیں ہو سکی۔; Firefox ur: … نہیں کیا جا سکتا کیونکہ …); **failed**: ناکام. A rule: …
   خالی نہیں ہو سکتا۔. The app is never "I" or "we".
-- **Values**: ضروری, اختیاری ("(اختیاری)" after the field name), تجویز کردہ, نامعتبر, غیر معاون, نامعلوم, دستیاب نہیں, آن /
+- **Values**: ضروری, اختیاری ("(اختیاری)" after the field name), تجویز کردہ, نامعتبر, غیر معاون (Unsupported; the positive adjective supported is معاونت شدہ, as Firefox ur writes it, because a bare معاون before a noun reads as helper), نامعلوم, دستیاب نہیں, آن / آف for toggles, فعال / غیر فعال for enabled and disabled.
   آف for toggles, فعال / غیر فعال for enabled and disabled.
 - **Questions**: a confirmation is a passive subjunctive with `؟` (کیا ٹریک {name} ہٹا دیا جائے؟); never کیا آپ … چاہتے ہیں.
 - **Controls named in a sentence**: class noun + curly quotes (22.3): بٹن “بنائیں”, آپشن “خودکار”, ٹیب “لیجنڈ”, سیکشن

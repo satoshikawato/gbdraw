@@ -28,3 +28,6 @@ ur-comma-before-ya	\u060C\s*\u06CC\u0627(?![\u0621-\u06D3])	u	Arabic comma befor
 ur-negative-strand	\u0645\u0646\u0641\u06CC \u0627\u0633\u0679\u0631\u06CC\u0646\u0688	u	The other strand is ریورس اسٹرینڈ (glossary row reverse strand), not منفی اسٹرینڈ.	warn
 ur-python-before-noun	Python (?:\u0631\u06CC\u06AF\u0648\u0644\u0631|\u0633\u0646\u0679\u06CC\u06A9\u0633)	u	Python follows the Urdu noun in brackets (ریگولر ایکسپریشن (Python)), as the glossary row Python (attributive) writes it.	warn
 ur-leading-hyphen-latin	[\u0621-\u064A] [-+\u2013]{1,2}[A-Za-z]	u	A Latin option name that starts with a hyphen after an Urdu word is shown with the hyphen on the wrong side (t-): put a Latin word before it (gbdraw -t) or rewrite.	warn
+ur-record-pair-singular	\u0631\u06CC\u06A9\u0627\u0631\u0688 \u06A9\u06CC (?:\S+ ){0,2}\u062C\u0648\u0691	u	A pair of records takes the oblique plural: ریکارڈوں کی جوڑی / جوڑیاں (STYLE 22.1; as in جینوں کی جوڑی).	warn
+ur-sentence-end-latin	[A-Za-z]\u06D4	u	A sentence ends on a Latin word before ۔: use another order when one is natural (STYLE 22.4).	warn
+ur-track-axis-misread	\u0627\u067E\u0646\u06D2 \u0679\u0631\u06CC\u06A9 \u0645\u062D\u0648\u0631	u	اپنے ٹریک محور reads as the compound ٹریک محور (track axis): write their tracks above the axis as اپنے ٹریکوں کو محور کے اوپر.	warn
