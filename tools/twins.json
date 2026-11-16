@@ -1504,6 +1504,21 @@
       "reason": "Python's decoder reads such a table for `gbdraw render --session` and the Worker; the Web Load reads it before any reader, the comparison classifier's included, without the Worker (a saved preview loads without Python). Both read the generated resource-ID prefix, schema list, protein column and BLAST columns (contracts/schema.generated.js, request.generated.js); the 14 cases pin which tables hold no protein matches, the BLAST rows of each one that has a BLAST form, and the feature-bound tables that keep their columns. The Web's reordering of the BLAST columns is a second mapping onto COMPARISON_COLUMNS beside gbdraw.io.comparisons, recorded here.",
       "retireWhen": "the Web Load asks Python (Worker) for the requests of a Session that stores such a table, as it does for a Session 46-50's saved LOSATP rows (withSavedProteinResults), or the app stops reading request schemas 2 and 5 to 9",
       "source": "#2051 (OV-3573, OV-3574)"
+    },
+    {
+      "id": "vector:tests/fixtures/resource-id-prefix-vectors.json",
+      "concern": "The shown name of a resource that stores none: its name without each leading \"<resource ID>-\" while a name remains (OV-3660)",
+      "pythonOwner": [
+        "gbdraw/session_migration.py:_without_resource_id_prefix"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js:withoutResourceIdPrefix"
+      ],
+      "vector": "tests/fixtures/resource-id-prefix-vectors.json",
+      "reason": "Web Load reads a Session 46-51 without Python (a saved preview loads without starting the Worker), and Web-written Sessions of those versions hold resources that store no name: tables gbdraw made (resolved and LOSAT comparison tables, color tables) and test-written fixtures. Python names the same files for `gbdraw render --session` and stores the names when it moves a Session 31-45 to the current writer (loaded_resource_display_names), so the CLI and the Web show one name. A generator cannot carry the rule: it reads each resource's own ID. Both sides take a name as given; the Web first takes its base name and drops control characters (normalizeOriginalResourceName), which its writer has already done to every name it stores.",
+      "retireWhen": "the Web reads a Session 46-51's file names through Python at Load, or no supported Session version holds a resource whose name carries its ID prefix without a stored name (the Web writer stores resourceOriginalNames for the tables gbdraw makes, and Sessions written before it are no longer read)",
+      "source": "review r1 of fix/loaded-resource-names-one-owner (OV-3660); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)",
+      "pending": true
     }
   ]
 }
