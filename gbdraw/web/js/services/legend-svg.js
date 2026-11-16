@@ -1,6 +1,6 @@
 // @ts-check
 import { parseTransform } from './svg-transform.js';
-import { isAutoFeatureUnderlay } from './feature-dom.js';
+import { drawnBlockStrokeElement } from './feature-dom.js';
 import { legendSwatch, sameLegendLine } from './legend-row-names.js';
 /** @import { DrawnLegendName, LegendRowName, LegendSwatchIdentity } from './legend-row-names.js' */
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
@@ -293,16 +293,15 @@ export const drawnLegendRowStroke = (svg, key) => {
   };
 };
 
-// The stroke Python drew on the Result's first feature path that is not an
-// automatic underlay: the Result's block-stroke default, which the Session
-// format keeps as `originalSvgStroke`; null without one.
+// The stroke Python drew on the Result's first feature block
+// (`drawnBlockStrokeElement`): the Result's block-stroke default, which the
+// Session format keeps as `originalSvgStroke`; null without one.
 /**
  * @param {SVGSVGElement | null | undefined} svg
  * @returns {{ color: string | null, width: number | null } | null}
  */
 export const drawnBlockStroke = (svg) => {
-  const block = Array.from(svg?.querySelectorAll?.('path[id^="f"]') || [])
-    .find((path) => !isAutoFeatureUnderlay(path));
+  const block = drawnBlockStrokeElement(svg?.querySelectorAll?.('path[id^="f"]'));
   if (!block) return null;
   const width = Number.parseFloat(String(pythonDrawnAttribute(block, 'stroke-width') ?? ''));
   return { color: pythonDrawnAttribute(block, 'stroke'), width: Number.isFinite(width) ? width : null };

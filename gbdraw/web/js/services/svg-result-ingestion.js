@@ -7,6 +7,7 @@
 /** @import { DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
+  blockOutlineOf,
   FEATURE_PART_CONNECTOR,
   FEATURE_SELECTOR,
   filterFeatureFillTargets,
@@ -1356,9 +1357,7 @@ const samePaint = (name, left, right) => {
 const strokeKind = (element, parts, perRecord) => {
   const record = perRecord ? text(element.getAttribute('data-gbdraw-record-index')) : '';
   if (getFeaturePart(element) === FEATURE_PART_CONNECTOR) return `${record}|connector`;
-  const id = text(element.getAttribute('id'));
-  const outlined = Boolean(id) && parts.some((part) => part.getAttribute('id') === `${id}__outline`);
-  return `${record}|${outlined ? 'outlined' : 'block'}`;
+  return `${record}|${blockOutlineOf(element, parts) ? 'outlined' : 'block'}`;
 };
 
 // Sessions older than 46 (main writes 44) saved a Result with its stroke and

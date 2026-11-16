@@ -101,7 +101,7 @@ def test_plan_factory_drawer_rotation_and_none_nonmutation(mode, reverse, monkey
 def test_feature_fragment_coverage_terminals_and_unknown_strand(strand, reverse, bounds):
     record = _record([SimpleLocation(*bounds, strand=strand)])
     plan = plan_request(_request("linear", InMemoryRecordSource(record), 5, reverse))
-    fragments = project_feature_parts(plan.records[0].features[0].location.parts, plan.transforms[0])
+    fragments = project_feature_parts(plan.records[0].features[0].location.parts, plan.transforms[0], origin_length=10)
     blocks = [p for p in fragments if p.kind == "block"]
     assert sum(p.fragment.source_end - p.fragment.source_start for p in blocks) == bounds[1] - bounds[0]
     assert sum(p.fragment.biological_end for p in blocks) == int(bounds[0] != bounds[1] and strand in (1, -1))
@@ -112,8 +112,8 @@ def test_feature_fragment_coverage_terminals_and_unknown_strand(strand, reverse,
     from gbdraw.features.factory import create_gene_object
     from gbdraw.render.drawers.circular.features import FeaturePathGenerator as Circular
     from gbdraw.render.drawers.linear.features import FeaturePathGenerator as Linear
-    feature = create_gene_object("gene", plan.records[0].features[0], {}, {"CDS": "gray"}, 10, {}, None,
-                                 glyph_kind="arrow", compute_label_text=False, instance=None)
+    feature = create_gene_object("gene", plan.records[0].features[0], {}, {"CDS": "gray"}, {},
+                                 glyph_kind="arrow", compute_label_text=False, instance=None, origin_length=None)
     feature.display_parts = fragments
     circular = Circular(100, 10, .1, .5, 0, "middle", False, head_length_ratio=1.0).generate_circular_gene_path(feature)
     linear = Linear(10, 100, 10, 1, feature.strand, False, 1).generate_linear_gene_path(feature)
@@ -184,7 +184,7 @@ def test_multipart_origin_and_connector_cut_keep_part_order(reverse, strand, bou
     source = _record(exons)
     plan = plan_request(_request("linear", InMemoryRecordSource(source), 5, reverse))
     parts = plan.records[0].features[0].location.parts
-    geometry = project_feature_parts(parts, plan.transforms[0])
+    geometry = project_feature_parts(parts, plan.transforms[0], origin_length=10)
     blocks = [p.fragment for p in geometry if p.kind == "block"]
     assert [p.part_index for p in blocks] == [0, 1]
     assert sum(p.biological_start for p in blocks) == 1
@@ -197,7 +197,7 @@ def test_multipart_origin_and_connector_cut_keep_part_order(reverse, strand, bou
     assert all(p.display_end - p.display_start < 10 for p in lines)
     if bounds == [(1, 3), (7, 9)]:
         assert len(lines) == 2  # The intron crosses the display cut; no whole-width line.
-    trans_spliced = project_feature_parts(parts, plan.transforms[0], is_trans_spliced=True)
+    trans_spliced = project_feature_parts(parts, plan.transforms[0], origin_length=10, is_trans_spliced=True)
     assert all(p.kind == "block" for p in trans_spliced)
 
 
@@ -257,12 +257,15 @@ def test_already_resolved_collection_rebinds_display_without_rc_or_crop():
     assert collection.transforms[0].start_coordinate == 3
 
 
-def test_empty_and_mixed_strand_parts_do_not_gain_connectors_or_new_terminals():
+def test_empty_parts_gain_no_terminals_and_mixed_strand_parts_connect_as_unrotated():
     from gbdraw.layout.record_coordinates import RecordDisplayTransform
     exons = [SimpleLocation(0, 0, strand=1), SimpleLocation(1, 3, strand=1),
              SimpleLocation(5, 5, strand=1), SimpleLocation(7, 9, strand=-1)]
-    geometry = project_feature_parts(exons, RecordDisplayTransform(10, 1, 1, 5, True))
-    assert [p.fragment.part_index for p in geometry] == [1, 3]
-    assert all(p.kind == "block" for p in geometry)
-    assert [p.strand for p in geometry] == ["positive", "negative"]
-    assert [p.fragment.biological_end for p in geometry] == [False, True]
+    geometry = project_feature_parts(exons, RecordDisplayTransform(10, 1, 1, 5, True), origin_length=10)
+    # A display start draws the connection the whole record draws: by the first part's strand (connector_gaps).
+    # The gap [3, 7) crosses the display cut at base 5, so its line is drawn in two pieces.
+    assert [(p.kind, p.fragment.part_index) for p in geometry] == [("block", 1), ("line", 3), ("line", 3), ("block", 3)]
+    assert sum(p.fragment.display_end - p.fragment.display_start for p in geometry if p.kind == "line") == 4
+    blocks = [p for p in geometry if p.kind == "block"]
+    assert [p.strand for p in blocks] == ["positive", "negative"]
+    assert [p.fragment.biological_end for p in blocks] == [False, True]

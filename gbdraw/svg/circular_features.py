@@ -18,6 +18,7 @@ from .arrows import (
     block_path_with_open_caps,
     cap_arrow_head_length,
     has_arrow_shaft,
+    in_drawing_order,
     is_legacy_arrow_short,
     linear_block_glyph,
     set_arrow_shoulder,
@@ -40,10 +41,12 @@ def _arc_to(radius: float, from_position: float, span_bp: float, total_length: i
     return circle_arc_to(radius, position_angle(from_position, total_length), span_angle(span_bp, total_length))
 
 
-def _coord_len_bp(start: int, end: int, total_length: int, *, strand: str = "positive") -> int:
-    if strand == "negative":
-        return (int(start) - int(end)) % int(total_length)
-    return (int(end) - int(start)) % int(total_length)
+def _span_bp(coord_dict: Dict[str, Union[str, int]], total_length: int) -> int:
+    """The bases a block covers, from its raw bounds: ``end - start``, plus the record's length for a block over
+    the origin (start > end). A block over the whole record (1..N) covers N."""
+    coord_start = int(coord_dict["coord_start"])
+    coord_end = int(coord_dict["coord_end"])
+    return coord_end - coord_start if coord_end >= coord_start else coord_end - coord_start + total_length
 
 
 def _strand_ends(coord_dict: Dict[str, Union[str, int]], total_length: int) -> tuple[str, int, int, float]:
@@ -57,12 +60,9 @@ def _strand_ends(coord_dict: Dict[str, Union[str, int]], total_length: int) -> t
 
 
 def _arrow_span(coord_dict: Dict[str, Union[str, int]], total_length: int) -> tuple[str, int, int, float, float]:
-    """``_strand_ends`` and the block's length in bp, from tail to tip (a display fragment keeps its own span)."""
+    """``_strand_ends`` and the block's length in bp, from tail to tip (``_span_bp``)."""
     coord_strand, arrow_start, arrow_end, direction = _strand_ends(coord_dict, total_length)
-    coord_len_bp: float = _coord_len_bp(arrow_start, arrow_end, total_length, strand=coord_strand)
-    if coord_dict.get("display_fragment"):
-        coord_len_bp = int(coord_dict["coord_end"]) - int(coord_dict["coord_start"])
-    return coord_strand, arrow_start, arrow_end, direction, float(coord_len_bp)
+    return coord_strand, arrow_start, arrow_end, direction, float(_span_bp(coord_dict, total_length))
 
 
 def _open_tail(coord_dict: Dict[str, Union[str, int]], coord_strand: str) -> bool:
@@ -94,10 +94,8 @@ def generate_circular_intron_path_with_radii(
     raw_start = int(coord_dict["coord_start"])
     raw_end = int(coord_dict["coord_end"])
     arc_start = raw_start % total_length
+    # A connector spans a half-open gap between two parts (``connector_gaps``), start < end.
     coord_len_bp = (raw_end % total_length - arc_start) % total_length
-    # BioPython encodes an effective 1 bp intron as start = end + 1; it is not a near-full circle.
-    if raw_start == raw_end + 1:
-        coord_len_bp = 1
     # Introns follow the axis direction (clockwise in this coordinate system).
     feature_path = (
         f"M {_point(center_radius_px, arc_start, total_length)} "
@@ -185,7 +183,7 @@ def generate_circular_rectangle_path_with_radii(
     coord_strand = str(coord_dict["coord_strand"])
     coord_start = int(coord_dict["coord_start"])
     coord_end = int(coord_dict["coord_end"])
-    coord_len_bp = coord_end - coord_start if coord_end >= coord_start else (coord_end - coord_start) + total_length
+    coord_len_bp = _span_bp(coord_dict, total_length)
     if coord_strand == "positive":
         rect_start, rect_end, span_bp = coord_start, coord_end, float(coord_len_bp)
     else:
@@ -230,10 +228,10 @@ def generate_circular_narrow_arrow_shaft_path_with_radii(
 
 
 def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -> list[tuple[CircularCoordDict, bool]]:
-    """The parts a Circular feature is drawn with, each with its ``is_last``: the record's display fragments when
-    it is projected; one block across the origin for a two-block feature that wraps it, so it is drawn without a
-    split; else its location parts. The feature path and the leader anchor (``circular_feature_edge_radii_at``)
-    read these same parts."""
+    """The parts a Circular feature is drawn with, each with its ``is_last``, in drawing order
+    (``in_drawing_order``: lines under blocks): the record's display fragments when it is projected; one block
+    across the origin for a two-block feature that wraps it, so it is drawn without a split; else its location
+    parts. The feature path and the leader anchor (``circular_feature_edge_radii_at``) read these same parts."""
     if feature_object.display_parts is None:
         merged = _merged_origin_spanning_block(feature_object, total_length)
         if merged is not None:
@@ -250,10 +248,8 @@ def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -
             "open_start": coord.open_start,
             "open_end": coord.open_end,
         }
-        if feature_object.display_parts is not None:
-            coord_dict["display_fragment"] = True
         parts.append((coord_dict, bool(coord.is_last)))
-    return parts
+    return in_drawing_order(parts, lambda part: str(part[0]["coord_type"]))
 
 
 def _merged_origin_spanning_block(
@@ -358,9 +354,8 @@ def circular_feature_edge_radii_at(
     for coord_dict, is_last in circular_feature_parts(feature_object, total_length):
         if coord_dict["coord_type"] != "block":
             continue
-        start, end = int(coord_dict["coord_start"]), int(coord_dict["coord_end"])
-        span_bp = (end - start) if coord_dict.get("display_fragment") else (end - start) % total_length
-        offset_bp = (float(position_bp) - start) % total_length
+        span_bp = _span_bp(coord_dict, total_length)
+        offset_bp = (float(position_bp) - int(coord_dict["coord_start"])) % total_length
         miss_bp = 0.0 if offset_bp <= span_bp else min(offset_bp - span_bp, total_length - offset_bp)
         if best is None or miss_bp < best[0]:
             best = (miss_bp, coord_dict, is_last)

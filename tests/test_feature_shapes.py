@@ -364,17 +364,18 @@ def test_linear_multipart_feature_paths_have_unique_dom_ids_and_shared_feature_i
     path_ids = [path.attrib.get("id") for path in feature_paths]
 
     assert len(feature_paths) == 3
+    # The connector line is drawn first, under the blocks; ids follow each kind's own order.
     assert path_ids == [
-        f"{feature_id}__part1",
         f"{feature_id}__line1",
+        f"{feature_id}__part1",
         f"{feature_id}__part2",
     ]
     assert [path.attrib.get("data-gbdraw-feature-part") for path in feature_paths] == [
-        "block",
         "connector",
         "block",
+        "block",
     ]
-    assert feature_paths[1].attrib.get("fill") == "none"
+    assert feature_paths[0].attrib.get("fill") == "none"
     assert len(path_ids) == len(set(path_ids))
 
 

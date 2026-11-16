@@ -165,6 +165,11 @@ class _Geometry:
         return box_covers_definition_text(self.box, boxes)
 
 
+def _clearance_radius(label: CircularLabel, total_length: int) -> float:
+    """The outer radius of an inner label's text box, as the feature clearance reads it (no margin)."""
+    return _label_bbox_max_radius(label, total_length, minimum_margin=0.0)
+
+
 def _angle(x: float, y: float) -> float:
     return math.degrees(math.atan2(y, x))
 
@@ -236,6 +241,7 @@ class _Repair:
             for index in self.external
         }
         self.elbow_radius = {index: self._elbow_radius(self.labels[index]) for index in self.external}
+        self.clearance_radius = {index: _clearance_radius(self.labels[index], self.total_length) for index in self.external}
         self.feature_radius = {
             index: math.hypot(
                 float(self.labels[index].get("feature_anchor_x", 0.0)),
@@ -476,6 +482,11 @@ class _Repair:
             return not elbow_moved or self.feature_radius[index] + 1.0 <= elbow_radius <= min_radius
         max_radius = _label_bbox_max_radius(label, self.total_length)
         if max_radius > max(self.max_radius[index], self.elbow_radius[index]) + 1e-6:
+            return False
+        # Nor past the feature clearance placement held its text to (or than it already was).
+        if _clearance_radius(label, self.total_length) > max(
+            float(label.get("max_inner_start_radius_px", math.inf)), self.clearance_radius[index]
+        ) + 1e-6:
             return False
         return not elbow_moved or max_radius <= elbow_radius <= self.feature_radius[index] - 1.0
 

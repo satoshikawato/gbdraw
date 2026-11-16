@@ -5,6 +5,7 @@ from typing import Any, Dict, List, NoReturn, Optional, Tuple, cast
 
 from ..exceptions import ValidationError
 from ..layout.spatial import IntervalIndex, split_circular_interval
+from .coordinates import uncovered_gap
 from .objects import FeatureObject
 
 
@@ -12,8 +13,15 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
     """
     Get feature start/end positions and the strand the feature is drawn on (``FeatureObject.strand``).
 
-    For origin-spanning features on circular genomes, returns start > end
-    to indicate the feature crosses the origin.
+    A feature's lane covers what it draws from its first drawn base to its last, with half-open, 0-based
+    bounds (a part at the first base starts at 0). Only a feature whose drawn parts reach both ends of the
+    record is read as running over its origin (a connector line over the origin is drawn in two pieces that
+    reach them). Such a feature takes the shortest arc that covers its blocks and lines (``uncovered_gap``).
+    Where its lines fill that arc (a join written in order over both ends), it takes the shortest arc over its
+    blocks alone, in every mode and on every record: the Circular whole view joins those blocks over the
+    origin, but Linear mode and a linear record draw the join as written, with a connector line across the
+    middle of the record that this span leaves to other features. start > end says the feature occupies
+    [start, length) and [0, end).
 
     Args:
         feature: FeatureObject with location/coordinates
@@ -23,36 +31,18 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
         (start, end, strand) tuple. If start > end, feature spans the origin.
     """
     strand = feature.strand
-
-    if hasattr(feature, "coordinates") and feature.coordinates:
-        parts = list(feature.coordinates)
-    else:
-        parts = list(feature.location)
-
-    if not parts:
-        return 1, 1, strand
-
-    starts = [max(1, int(part.start)) for part in parts]
-    ends = [max(1, int(part.end)) for part in parts]
-
-    # Origin-spanning features touch both the left and right genome boundaries.
-    # Avoid using part ordering for detection because negative-strand multipart features
-    # can be listed in descending genomic order without crossing the origin.
-    if len(parts) > 1 and genome_length:
-        genome_end = int(genome_length)
-        touches_left_boundary = min(starts) <= 1
-        touches_right_boundary = max(ends) >= genome_end
-        if touches_left_boundary and touches_right_boundary:
-            # Represent origin-spanning features as start > end.
-            start = max(starts)
-            end = min(ends)
-            return start, end, strand
-
-    # Normal case: use min/max
-    start = min(starts)
-    end = max(ends)
-
-    return start, end, strand
+    blocks = [part for part in feature.location if part.kind == "block"]
+    if not blocks:
+        return 0, 0, strand
+    drawn = [part for part in feature.location if part.kind in ("block", "line")]
+    start, end = min(int(p.start) for p in drawn), max(int(p.end) for p in drawn)
+    if not genome_length:
+        return start, end, strand
+    length = int(genome_length)
+    gap = None
+    if start == 0 and end >= length:
+        gap = uncovered_gap(drawn, length) or uncovered_gap(blocks, length)
+    return (gap[1], gap[0], strand) if gap is not None else (start, end, strand)
 
 
 def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> Tuple[int, int]:
@@ -68,7 +58,7 @@ def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> T
 
     # Calculate total span, accounting for origin-spanning
     if start > end and genome_length:
-        # Origin-spanning: spans from start to genome_length, then from 1 to end
+        # Origin-spanning: spans from start to genome_length, then from 0 to end
         total_span = (genome_length - start) + end
     else:
         total_span = abs(end - start)
@@ -86,7 +76,7 @@ def feature_overlap_bp(
     a: dict, b: dict, *, separate_strands: bool = False,
     genome_length: Optional[int] = None,
 ) -> int:
-    """Length of the shared outer envelope, using existing [1, length) wrap pieces."""
+    """Length of the shared outer envelope; an origin-spanning envelope is [start, length) and [0, end)."""
     if separate_strands and _strand_pool(a["strand"]) != _strand_pool(b["strand"]):
         return 0
     if genome_length is None and (a["start"] > a["end"] or b["start"] > b["end"]):
@@ -97,7 +87,7 @@ def feature_overlap_bp(
         if start <= end:
             return [(start, end)]
         # genome_length is set here: origin-spanning input without it raised above.
-        return [(start, int(cast(int, genome_length))), (1, end)]
+        return [(start, int(cast(int, genome_length))), (0, end)]
 
     return sum(
         max(0, min(a_end, b_end) - max(a_start, b_start))

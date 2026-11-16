@@ -221,7 +221,7 @@ def test_a_join_over_a_row_boundary_has_one_arrow_block_and_a_cut_connector(stra
     exons = [SimpleLocation(100, 200, strand), SimpleLocation(400, 500, strand)]
     if strand == -1:
         exons.reverse()
-    parts = project_feature_parts(exons, wrapped("plain"))
+    parts = project_feature_parts(exons, wrapped("plain"), origin_length=None)
     lines = [part for part in parts if part.kind == "line"]
     blocks = [part for part in parts if part.kind == "block"]
     assert [(p.fragment.row, p.fragment.display_start, p.fragment.display_end) for p in sorted(lines, key=lambda p: p.fragment.row)] == [
@@ -232,32 +232,70 @@ def test_a_join_over_a_row_boundary_has_one_arrow_block_and_a_cut_connector(stra
     assert all(line.location.is_last is False for line in lines)
 
 
-def _connectors(exons: list[SimpleLocation], transform: RecordDisplayTransform) -> list[tuple[int, int, int]]:
+def _connectors(
+    exons: list[SimpleLocation], transform: RecordDisplayTransform, origin_length: int | None = None
+) -> list[tuple[int, int, int]]:
     return [
         (part.fragment.row, part.fragment.display_start, part.fragment.display_end)
-        for part in project_feature_parts(exons, transform)
+        for part in project_feature_parts(exons, transform, origin_length=origin_length)
         if part.kind == "line"
     ]
 
 
 _WRAPPED = RecordDisplayTransform(30_000, 1, 1, None, True).with_wrap(10_000, 30_000)
+_WRAPPED_LINEAR = RecordDisplayTransform(30_000, 1, 1, None, False).with_wrap(10_000, 30_000)
+
+
+def _location_lines(locations: list[SimpleLocation], origin_length: int | None) -> list[tuple[int, int]]:
+    return [
+        (part.start, part.end)
+        for part in get_exon_and_intron_coordinates(locations, origin_length=origin_length)
+        if part.kind == "line"
+    ]
+
+
+_OVER_THE_ORIGIN = pytest.mark.parametrize(
+    ("exons", "gaps", "rows"),
+    [
+        # Over the origin: parts of one strand that come in the other order along it, on either side of the
+        # origin (the shortest arc that covers them runs over it).
+        ([(28_000, 28_500, 1), (1_500, 2_000, 1)], [(28_500, 30_000), (0, 1_500)], [(2, 8_500, 10_000), (0, 0, 1_500)]),
+        ([(1_500, 2_000, -1), (28_000, 28_500, -1)], [(0, 1_500), (28_500, 30_000)], [(0, 0, 1_500), (2, 8_500, 10_000)]),
+    ],
+    ids=["origin", "origin_minus"],
+)
+
+
+@_OVER_THE_ORIGIN
+def test_a_wrapped_circular_record_draws_the_connections_over_the_origin_its_unwrapped_figure_draws(
+    exons, gaps, rows
+) -> None:
+    locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
+    assert _location_lines(locations, 30_000) == gaps
+    assert sorted(_connectors(locations, _WRAPPED, 30_000)) == sorted(rows)
+
+
+@_OVER_THE_ORIGIN
+def test_a_wrapped_linear_record_adds_no_connection_its_unwrapped_figure_does_not_draw(exons, gaps, rows) -> None:
+    del gaps, rows
+    locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
+    assert _location_lines(locations, None) == []
+    assert _connectors(locations, _WRAPPED_LINEAR) == []
 
 
 @pytest.mark.parametrize(
     "exons",
-    [
-        # Over the origin of a circular record: the unwrapped figure draws two blocks and no connection.
-        [(28_000, 28_500, 1), (1_500, 2_000, 1)],
-        # Out of order without trans_splicing: the same.
-        [(12_000, 13_000, 1), (5_000, 6_000, 1)],
-        [(5_000, 6_000, -1), (12_000, 13_000, -1)],
-    ],
-    ids=["origin", "out_of_order", "out_of_order_minus"],
+    [[(12_000, 13_000, 1), (5_000, 6_000, 1)], [(5_000, 6_000, -1), (12_000, 13_000, -1)]],
+    ids=["plus", "minus"],
 )
-def test_a_wrapped_record_adds_no_connection_its_unwrapped_figure_does_not_draw(exons) -> None:
+@pytest.mark.parametrize("transform", [_WRAPPED, None], ids=["wrapped", "whole"])
+def test_parts_in_the_other_order_away_from_the_origin_connect_in_no_view(exons, transform) -> None:
+    # The shortest arc that covers 5001..6000 and 12001..13000 of 30,000 bp does not run over the origin.
     locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
-    assert not [part for part in get_exon_and_intron_coordinates(locations, 30_000) if part.kind == "line"]
-    assert _connectors(locations, _WRAPPED) == []
+    if transform is None:
+        assert _location_lines(locations, 30_000) == []
+    else:
+        assert _connectors(locations, transform, 30_000) == []
 
 
 @pytest.mark.parametrize(
@@ -273,30 +311,30 @@ def test_a_wrapped_record_adds_no_connection_its_unwrapped_figure_does_not_draw(
 )
 def test_a_wrapped_record_drops_no_connection_its_unwrapped_figure_draws(exons, expected) -> None:
     locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
-    assert [part for part in get_exon_and_intron_coordinates(locations, 30_000) if part.kind == "line"]
-    assert sorted(_connectors(locations, _WRAPPED)) == sorted(expected)
+    assert _location_lines(locations, 30_000)
+    assert sorted(_connectors(locations, _WRAPPED, 30_000)) == sorted(expected)
 
 
 def test_a_rotated_wrapped_record_keeps_its_connection_over_the_origin() -> None:
     rotated = RecordDisplayTransform(30_000, 1, 1, 20_000, True).with_wrap(10_000, 30_000)
     locations = [SimpleLocation(28_000, 28_500, strand=1), SimpleLocation(1_500, 2_000, strand=1)]
-    assert _connectors(locations, rotated)
+    assert _connectors(locations, rotated, 30_000)
 
 
 def test_a_block_cut_at_a_row_has_one_arrowhead_on_its_true_end() -> None:
-    parts = project_feature_parts([SimpleLocation(250, 350, 1)], wrapped("plain"))
+    parts = project_feature_parts([SimpleLocation(250, 350, 1)], wrapped("plain"), origin_length=None)
     assert [part.location.is_last for part in parts] == [False, True]
     assert parts[0].location.open_end and parts[1].location.open_start
 
 
 def test_a_partial_source_feature_keeps_its_open_end_and_gets_no_arrowhead() -> None:
     parts = project_feature_parts(
-        [SimpleLocation(250, AfterPosition(350), 1)], wrapped("plain")
+        [SimpleLocation(250, AfterPosition(350), 1)], wrapped("plain"), origin_length=None
     )
     assert [part.location.is_last for part in parts] == [False, False]
     assert parts[1].location.open_end
     parts = project_feature_parts(
-        [SimpleLocation(BeforePosition(250), 350, 1)], wrapped("plain")
+        [SimpleLocation(BeforePosition(250), 350, 1)], wrapped("plain"), origin_length=None
     )
     assert parts[0].location.open_start and parts[0].location.open_end
     assert parts[1].location.is_last is True

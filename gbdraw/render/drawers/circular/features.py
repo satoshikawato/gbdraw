@@ -185,58 +185,51 @@ class FeatureDrawer:
                 f"slot_{feature_dom_namespace}",
             )
 
-        # Keep intron lines behind blocks for the same feature by drawing lines first.
-        ordered_types: tuple[str, ...] = ("line", "block", "label")
+        # The paths come in drawing order (``circular_feature_parts``): lines under blocks.
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
         block_index = 0
         line_index = 0
-        for expected_type in ordered_types:
-            for gene_path in gene_paths:
-                if not gene_path or not gene_path[0]:
-                    continue
-                path_type: str = gene_path[0]
-                if path_type != expected_type:
-                    continue
-                path_data = gene_path[1]
-                if path_type == "block":
-                    block_index += 1
-                    dom_element_id = None
-                    if feature_dom_id:
-                        dom_element_id = (
-                            feature_dom_id
-                            if block_count <= 1
-                            else f"{feature_dom_id}__part{block_index}"
-                        )
-                    self.draw_path(
-                        path_data,
-                        group,
-                        fill_color=feature_object.color,
-                        feature_data_id=feature_data_id,
-                        dom_element_id=dom_element_id,
-                        rendered_feature_id=rendered_feature_id,
-                        source_feature_index=feature_instance_id,
-                        feature_part="block",
-                        stroke_path=gene_path[2] if len(gene_path) > 2 else None,
+        for gene_path in gene_paths:
+            if not gene_path or not gene_path[0]:
+                continue
+            path_type: str = gene_path[0]
+            path_data = gene_path[1]
+            if path_type == "block":
+                block_index += 1
+                dom_element_id = None
+                if feature_dom_id:
+                    dom_element_id = (
+                        feature_dom_id
+                        if block_count <= 1
+                        else f"{feature_dom_id}__part{block_index}"
                     )
-                elif path_type == "line":
-                    line_index += 1
-                    dom_element_id = f"{feature_dom_id}__line{line_index}" if feature_dom_id else None
-                    self.draw_path(
-                        path_data,
-                        group,
-                        fill_color="none",
-                        stroke_color_specified=self.intron_stroke_color,
-                        stroke_width_specified=self.intron_stroke_width,
-                        feature_data_id=feature_data_id,
-                        dom_element_id=dom_element_id,
-                        rendered_feature_id=rendered_feature_id,
-                        source_feature_index=feature_instance_id,
-                        feature_part="connector",
-                        stroke_linecap="butt" if feature_object.display_parts is not None else "round",
-                    )
-                elif path_type == "label":
-                    for element in path_data:
-                        group.add(element)
+                self.draw_path(
+                    path_data,
+                    group,
+                    fill_color=feature_object.color,
+                    feature_data_id=feature_data_id,
+                    dom_element_id=dom_element_id,
+                    rendered_feature_id=rendered_feature_id,
+                    source_feature_index=feature_instance_id,
+                    feature_part="block",
+                    stroke_path=gene_path[2] if len(gene_path) > 2 else None,
+                )
+            elif path_type == "line":
+                line_index += 1
+                dom_element_id = f"{feature_dom_id}__line{line_index}" if feature_dom_id else None
+                self.draw_path(
+                    path_data,
+                    group,
+                    fill_color="none",
+                    stroke_color_specified=self.intron_stroke_color,
+                    stroke_width_specified=self.intron_stroke_width,
+                    feature_data_id=feature_data_id,
+                    dom_element_id=dom_element_id,
+                    rendered_feature_id=rendered_feature_id,
+                    source_feature_index=feature_instance_id,
+                    feature_part="connector",
+                    stroke_linecap="butt" if feature_object.display_parts is not None else "round",
+                )
         return group
 
 

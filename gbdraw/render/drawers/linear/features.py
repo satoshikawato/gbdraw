@@ -164,7 +164,7 @@ class FeatureDrawer:
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
         block_index = 0
         line_index = 0
-        # The path generator draws every part of the feature, in order (``linear_drawn_parts``).
+        # The path generator draws every part of the feature, in drawing order (``linear_drawn_parts``: lines under blocks).
         targets = (
             [group] * len(gene_paths)
             if row_groups is None

@@ -52,6 +52,8 @@ import {
   FEATURE_SELECTOR,
   buildFeatureElementIndex,
   clearFeatureElementIndex,
+  drawnBlockStrokeElement,
+  filterFeatureFillTargets,
   getFeatureElementIndex,
   getFeatureElements,
   getFeatureFillElements,
@@ -65,6 +67,17 @@ import { t, tx } from '../../utils/i18n.js';
 // none, so the browser re-rasters no band area. It comes before the hover
 // summary (180 ms).
 export const HOVER_HIGHLIGHT_DWELL_MS = 70;
+
+// The block stroke the feature popup shows: where it is drawn
+// (`drawnBlockStrokeElement`), else on the element the popup reads the fill of.
+/** @param {Element[]} featureElements @param {Element | null} fillElement */
+const popupBlockStroke = (featureElements, fillElement) => {
+  const strokeElement = drawnBlockStrokeElement(featureElements) || fillElement;
+  return {
+    strokeColor: strokeElement?.getAttribute('stroke') || '#000000',
+    strokeWidth: parseFloat(strokeElement?.getAttribute('stroke-width') ?? '') || 0.5
+  };
+};
 
 export {
   FEATURE_ID_ATTRIBUTE,
@@ -621,22 +634,25 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers = null;
   };
 
-  // `renderedSvgId` is '' for a feature the displayed Result does not draw.
+  // `renderedSvgId` is '' for a feature the displayed Result does not draw,
+  // and `featureElements` (the feature's drawn elements) is then empty. The
+  // popup shows the fill of the first block and the block stroke where it is
+  // drawn (`drawnBlockStrokeElement`).
   /**
    * @param {DrawingState} drawing
    * @param {Record<string, any>} feat
-   * @param {Element | null} [featureElement]
+   * @param {Element[]} featureElements
    * @param {string} [renderedSvgId]
    * @returns {FeaturePopup}
    */
-  const buildClickedFeaturePayload = (drawing, feat, featureElement = null, renderedSvgId = undefined) => {
+  const buildClickedFeaturePayload = (drawing, feat, featureElements, renderedSvgId = undefined) => {
     const existingOverride = fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feat));
+    const fillElement = filterFeatureFillTargets(featureElements)[0] || featureElements[0] || null;
     return buildFeaturePopup(feat, {
       svgId: String(renderedSvgId ?? renderedFeatureSvgId(feat)).trim(),
       legendName: String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || getFeatureCaption(feat) || '').trim(),
-      color: resolveColorToHex(featureElement?.getAttribute('fill') || getFeatureColor(feat)),
-      strokeColor: featureElement?.getAttribute('stroke') || '#000000',
-      strokeWidth: parseFloat(featureElement?.getAttribute('stroke-width') ?? '') || 0.5,
+      color: resolveColorToHex(fillElement?.getAttribute('fill') || getFeatureColor(feat)),
+      ...popupBlockStroke(featureElements, fillElement),
       featureVisibility: normalizeVisibilityMode(featureOverrideValue(drawing.featureOverrides, feat, 'featureVisibility')),
       // Per-feature edits name the feature by source identity (design Q4).
       identityEditable: Boolean(featureIdentityKeyOf(feat))
@@ -675,10 +691,7 @@ export const createFeatureSvgActions = ({
     if (renderedSvgId && featureElements.length === 0) return null;
 
     closeOtherPopups('feature');
-    const featureElement = renderedSvgId
-      ? getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null
-      : null;
-    clickedFeature.value = buildClickedFeaturePayload(drawing, target, featureElement, renderedSvgId);
+    clickedFeature.value = buildClickedFeaturePayload(drawing, target, featureElements, renderedSvgId);
     if (featurePopupSize) {
       featurePopupSize.width = 0;
       featurePopupSize.height = 0;

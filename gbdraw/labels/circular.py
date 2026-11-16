@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from functools import cached_property, lru_cache, partial
 from typing import Any, Literal, NamedTuple, TypeAlias, get_args
 
-from ..features.coordinates import get_strand
 from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import chosen_contact_end, leader_polyline
@@ -46,6 +45,7 @@ from ..layout.circular import (
     CircularTickLayout,
     NO_LABEL_LANES,
     calculate_feature_position_factors_circular,
+    feature_block_intervals,
     feature_radius_intervals,
 )
 from ..layout.spatial import (
@@ -2091,34 +2091,13 @@ def _build_feature_radius_intervals(
     strandedness = profile.strandedness
 
     intervals: list[tuple[float, float, float, float]] = []
-    total_length_float = float(total_length)
 
     for feature_object in feature_dict.values():
         track_id = int(getattr(feature_object, "feature_track_id", 0))
-        feature_location_list = getattr(feature_object, "location", [])
-        list_of_coordinates = getattr(feature_object, "coordinates", [])
-
-        for coordinate_idx, coordinate in enumerate(list_of_coordinates):
-            if (
-                coordinate_idx < len(feature_location_list)
-                and getattr(feature_location_list[coordinate_idx], "kind", None) == "line"
-            ):
-                continue
-
-            coordinate_start_raw = int(coordinate.start)
-            coordinate_end_raw = int(coordinate.end)
-            if coordinate_start_raw == coordinate_end_raw:
-                continue
-
-            coordinate_start = float(coordinate_start_raw % total_length)
-            coordinate_end = float(coordinate_end_raw % total_length)
-            if coordinate_end_raw > coordinate_start_raw and coordinate_end_raw <= total_length:
-                coordinate_end = float(coordinate_end_raw)
-
-            coordinate_strand = get_strand(coordinate.strand)
+        for block, start, end in feature_block_intervals(feature_object, total_length):
             factors = calculate_feature_position_factors_circular(
                 total_length,
-                coordinate_strand,
+                block.strand,
                 track_ratio,
                 cds_ratio,
                 offset,
@@ -2128,14 +2107,7 @@ def _build_feature_radius_intervals(
             )
             factor_inner = min(float(factors[0]), float(factors[2]))
             factor_outer = max(float(factors[0]), float(factors[2]))
-            feature_inner_radius = float(radius) * factor_inner
-            feature_outer_radius = float(radius) * factor_outer
-
-            if coordinate_start < coordinate_end:
-                intervals.append((coordinate_start, coordinate_end, feature_inner_radius, feature_outer_radius))
-            else:
-                intervals.append((coordinate_start, total_length_float, feature_inner_radius, feature_outer_radius))
-                intervals.append((0.0, coordinate_end, feature_inner_radius, feature_outer_radius))
+            intervals.append((start, end, float(radius) * factor_inner, float(radius) * factor_outer))
 
     return intervals
 

@@ -264,8 +264,9 @@ def test_multipart_narrow_arrow_uses_lane_center_and_reduced_width_shafts(
     )
 
     paths = generator.generate_linear_gene_path(feature)
-    first_block = _points(paths[0][1])
-    connector = _points(paths[1][1])
+    # The connector line comes first, under the blocks.
+    connector = _points(paths[0][1])
+    first_block = _points(paths[1][1])
     terminal_block = _points(paths[2][1])
     expected_shaft_top = lane.middle_y + (lane.top_y - lane.middle_y) * 0.5
     expected_shaft_bottom = lane.middle_y + (lane.bottom_y - lane.middle_y) * 0.5

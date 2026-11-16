@@ -49,7 +49,7 @@ def test_get_feature_ends_detects_origin_spanning_when_touching_both_edges() -> 
     feature = _make_feature(
         feature_id="f1",
         strand="negative",
-        segments=[(990, 1000), (1, 20)],
+        segments=[(990, 1000), (0, 20)],
     )
 
     start, end, strand = get_feature_ends(feature, genome_length=1000)
@@ -132,7 +132,7 @@ def test_arrange_feature_tracks_non_stranded_resolve_splits_inner_outer_indices(
 
 def test_arrange_feature_tracks_indexes_origin_spanning_features_conservatively() -> None:
     feature_dict = {
-        "origin": _make_feature("origin", "positive", [(990, 1000), (1, 20)]),
+        "origin": _make_feature("origin", "positive", [(990, 1000), (0, 20)]),
         "middle": _make_feature("middle", "positive", [(500, 520)]),
         "left": _make_feature("left", "positive", [(10, 15)]),
     }
@@ -168,7 +168,7 @@ def test_arrange_feature_tracks_treats_touching_intervals_as_non_overlapping() -
 
 def test_arrange_feature_tracks_origin_span_can_touch_neighbor_without_overlap() -> None:
     feature_dict = {
-        "origin": _make_feature("origin", "positive", [(990, 1000), (1, 20)]),
+        "origin": _make_feature("origin", "positive", [(990, 1000), (0, 20)]),
         "neighbor": _make_feature("neighbor", "positive", [(20, 30)]),
     }
 
@@ -206,9 +206,10 @@ def test_shared_overlap_length_and_tolerance_boundary():
     from gbdraw.features.tracks import feature_overlap_bp, features_conflict
     a = {"start": 990, "end": 20, "strand": "positive"}
     b = {"start": 995, "end": 10, "strand": "positive"}
-    assert feature_overlap_bp(a, b, separate_strands=False, genome_length=1000) == 14
-    assert not features_conflict(a, b, tolerance_bp=14, genome_length=1000)
-    assert features_conflict(a, b, tolerance_bp=13, genome_length=1000)
+    # b covers [995, 1000) and [0, 10): 15 bp, all inside a.
+    assert feature_overlap_bp(a, b, separate_strands=False, genome_length=1000) == 15
+    assert not features_conflict(a, b, tolerance_bp=15, genome_length=1000)
+    assert features_conflict(a, b, tolerance_bp=14, genome_length=1000)
 
 
 @pytest.mark.parametrize("tolerance", [19, 20])

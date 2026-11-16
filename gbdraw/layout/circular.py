@@ -11,6 +11,7 @@ from .record_coordinates import CirclePlace
 
 if TYPE_CHECKING:
     from ..config.models import CircularRenderProfile
+    from ..features.objects import FeatureLocationPart, FeatureObject
 
 
 LAYOUT_EPSILON = 1e-6
@@ -424,6 +425,26 @@ def feature_radii_for_coordinate(
     return feature_radii_for_object(feature_object, feature_layout)
 
 
+def feature_block_intervals(
+    feature_object: FeatureObject, total_length: int
+) -> list[tuple[FeatureLocationPart, float, float]]:
+    """The record intervals each drawn block of a feature covers, with the block: ``(block, start, end)``, a block
+    over the origin in two pieces. Label placement avoids these intervals."""
+
+    intervals: list[tuple[FeatureLocationPart, float, float]] = []
+    for block in feature_object.location:
+        start_raw, end_raw = int(block.start), int(block.end)
+        if block.kind != "block" or start_raw == end_raw:
+            continue
+        start = float(start_raw % total_length)
+        end = float(end_raw) if start_raw < end_raw <= total_length else float(end_raw % total_length)
+        if start < end:
+            intervals.append((block, start, end))
+        else:
+            intervals.extend(((block, start, float(total_length)), (block, 0.0, end)))
+    return intervals
+
+
 def feature_radius_intervals(
     feature_dict: Mapping[str, Any],
     total_length: int,
@@ -433,35 +454,10 @@ def feature_radius_intervals(
         return []
 
     intervals: list[tuple[float, float, float, float]] = []
-    total_length_float = float(total_length)
     for feature_object in feature_dict.values():
         lane = feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
-        feature_location_list = getattr(feature_object, "location", [])
-        list_of_coordinates = getattr(feature_object, "coordinates", [])
-
-        for coordinate_idx, coordinate in enumerate(list_of_coordinates):
-            if (
-                coordinate_idx < len(feature_location_list)
-                and getattr(feature_location_list[coordinate_idx], "kind", None)
-                == "line"
-            ):
-                continue
-
-            coordinate_start_raw = int(coordinate.start)
-            coordinate_end_raw = int(coordinate.end)
-            if coordinate_start_raw == coordinate_end_raw:
-                continue
-
-            coordinate_start = float(coordinate_start_raw % total_length)
-            coordinate_end = float(coordinate_end_raw % total_length)
-            if coordinate_end_raw > coordinate_start_raw and coordinate_end_raw <= total_length:
-                coordinate_end = float(coordinate_end_raw)
-
-            if coordinate_start < coordinate_end:
-                intervals.append((coordinate_start, coordinate_end, lane.inner_px, lane.outer_px))
-            else:
-                intervals.append((coordinate_start, total_length_float, lane.inner_px, lane.outer_px))
-                intervals.append((0.0, coordinate_end, lane.inner_px, lane.outer_px))
+        for _block, start, end in feature_block_intervals(feature_object, total_length):
+            intervals.append((start, end, lane.inner_px, lane.outer_px))
     return intervals
 
 

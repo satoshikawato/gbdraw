@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, List, Literal, NamedTuple, Optional, cast
 
 from .shapes import FeatureGlyph
+from ..svg.arrows import in_drawing_order
 from ..layout.record_coordinates import DisplayFragment
 
 
@@ -296,12 +297,14 @@ class LinearDrawnPart(NamedTuple):
 
 
 def linear_drawn_parts(feature: FeatureObject) -> list[LinearDrawnPart]:
-    """The parts a Linear feature draws, in drawing order: its projected display parts when it has them,
-    else its location."""
+    """The parts a Linear feature draws, in drawing order (``in_drawing_order``: lines under blocks): its
+    projected display parts when it has them, else its location."""
 
     if feature.display_parts is None:
-        return [LinearDrawnPart(part, 0) for part in feature.location]
-    return [LinearDrawnPart(part.location, part.fragment.row) for part in feature.display_parts]
+        parts = [LinearDrawnPart(part, 0) for part in feature.location]
+    else:
+        parts = [LinearDrawnPart(part.location, part.fragment.row) for part in feature.display_parts]
+    return in_drawing_order(parts, lambda part: part.location.kind)
 
 
 __all__ = [

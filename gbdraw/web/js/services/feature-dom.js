@@ -24,6 +24,12 @@ const featureElementIndexCache = new WeakMap();
 
 const FEATURE_ELEMENT_SUFFIX_RE = /__(?:part|line)\d+$/;
 const CONNECTOR_ID_SUFFIX_RE = /__line\d+$/;
+// The id suffix of the stroke-only path Python draws over a block whose
+// stroke must leave an end open (gbdraw/render/drawers/*/features.py).
+const OUTLINE_ID_SUFFIX = '__outline';
+
+/** @param {Element | null | undefined} element */
+const elementDomId = (element) => String(element?.getAttribute?.('id') || element?.id || '').trim();
 
 /** @param {unknown} value */
 export const normalizeFeatureIdentity = (value) =>
@@ -46,8 +52,7 @@ export const getFeaturePart = (element) => {
     return explicitPart;
   }
 
-  const elementId = String(element?.getAttribute?.('id') || element?.id || '').trim();
-  return CONNECTOR_ID_SUFFIX_RE.test(elementId) ? FEATURE_PART_CONNECTOR : FEATURE_PART_BLOCK;
+  return CONNECTOR_ID_SUFFIX_RE.test(elementDomId(element)) ? FEATURE_PART_CONNECTOR : FEATURE_PART_BLOCK;
 };
 
 // An automatic feature underlay (gbdraw/annotations/feature_underlays.py): a
@@ -62,12 +67,41 @@ export const isAutoFeatureUnderlay = (element) => element?.getAttribute?.(AUTO_F
 /** @param {Element | null | undefined} element */
 const isFeatureFillTarget = (element) => (
   getFeaturePart(element) === FEATURE_PART_BLOCK
-  && !String(element?.getAttribute?.('id') || element?.id || '').endsWith('__outline')
+  && !elementDomId(element).endsWith(OUTLINE_ID_SUFFIX)
 );
 
 /** @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements */
 export const filterFeatureFillTargets = (elements) =>
   Array.from(elements || []).filter(isFeatureFillTarget);
+
+// The element among these that shows the block stroke Python drew on the
+// first of them that is a feature block, found by part (not a connector line
+// or an outline) and not an automatic underlay: that block's outline when it
+// has one (a partial feature's block has no stroke; its outline, open at the
+// partial end, carries it, OV-3725), else the block. Connector lines come
+// before their blocks in document order, so no reader takes the first
+// element. Null without a block.
+/** @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements */
+export const drawnBlockStrokeElement = (elements) => {
+  const all = Array.from(elements || []);
+  const block = filterFeatureFillTargets(all).find((element) => !isAutoFeatureUnderlay(element));
+  if (!block) return null;
+  return blockOutlineOf(block, all) || block;
+};
+
+// The outline Python drew over this block (its id plus the outline suffix)
+// among these elements, found by id; null when the block has none.
+/**
+ * @param {Element | null | undefined} block
+ * @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements
+ * @returns {Element | null}
+ */
+export const blockOutlineOf = (block, elements) => {
+  const id = elementDomId(block);
+  if (!id) return null;
+  const outlineId = `${id}${OUTLINE_ID_SUFFIX}`;
+  return Array.from(elements || []).find((element) => elementDomId(element) === outlineId) || null;
+};
 
 /**
  * @param {FeatureSvgRoot | null | undefined} svg
