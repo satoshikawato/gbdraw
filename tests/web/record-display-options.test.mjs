@@ -332,10 +332,13 @@ test('explicit popup target and its draft checkpoint stay record-bound', () => {
   assert.equal(model.state.recordDisplayDrafts.length, 1);
   model.controls.restoreTargetDraft(before);
   assert.deepEqual(model.state.recordDisplayDrafts, []);
-  assert.throws(
-    () => model.controls.targetForFeature({ ...model.feature, record_key: 'missing' }),
-    /stale or ambiguous/
-  );
+  // A stale target keeps its sentence as a part, so the popup words it in the shown language.
+  assert.throws(() => model.controls.targetForFeature({ ...model.feature, record_key: 'missing' }), (error) => {
+    assert.equal(error.kind, 'unavailable');
+    assert.deepEqual(error.parts, [{ text: 'The popup feature target is stale or ambiguous.' }]);
+    assert.equal(error.message, 'The popup feature target is stale or ambiguous.');
+    return true;
+  });
 });
 
 test('a popup target whose records are not read yet is not stale (Session Load, 776a2f93)', () => {

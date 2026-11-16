@@ -576,7 +576,7 @@ export const createRecordDisplayControls = ({
     if (matches.length !== 1) {
       const unread = !matches.length && unreadRecordsError(recordKey);
       if (unread) throw unread;
-      throw new Error('The popup feature target is stale or ambiguous.');
+      throw recordTargetError('unavailable', [{ text: msg('The popup feature target is stale or ambiguous.') }]);
     }
     const row = matches[0];
     const members = committedRows
