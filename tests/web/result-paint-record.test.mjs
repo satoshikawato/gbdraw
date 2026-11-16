@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  createResultPaintRecord as createRecordOf, drawnLabelIntentGone, drawsResult, paintRuleTable
+  createResultPaintRecord as createRecordOf, drawnLabelIntentGone, drawsResult, paintRuleTable, requestPaintOf, withKeptFills
 } from '../../gbdraw/web/js/app/result-paint-record.js';
 
 // A Result as the record reads it: an object whose runtime state keys its
@@ -51,7 +51,7 @@ test('a Result restored from saved bytes shows every paint domain on its first d
   assert.deepEqual(changed(loaded.display(b, edited), edited), NOTHING, 'shown once, the Result holds them');
 
   const generated = createResultPaintRecord();
-  generated.commit([a, b], a, edited, { draws: true });
+  generated.commit([a, b], a, edited, { draws: edited });
   assert.deepEqual(changed(generated.display(b, edited), edited), NOTHING, 'Generate drew the edits');
 });
 
@@ -64,7 +64,7 @@ test('a display whose palette and rules projection declined leaves the Result be
   const after = paint('after');
   const [a, b] = ['a', 'b'].map(resultNamed);
   const record = createResultPaintRecord();
-  record.commit([a, b], a, before, { draws: true });
+  record.commit([a, b], a, before, { draws: before });
   const shownB = record.display(b, after);
   assert.deepEqual(changed(shownB, after), EVERY_PAINT_DOMAIN);
   record.shown(b, after, shownB, { declined: true });
@@ -88,7 +88,7 @@ test('the domains a declined display left behind are known while the Result stay
   const after = paint('after');
   const [a, b] = ['a', 'b'].map(resultNamed);
   const record = createResultPaintRecord();
-  record.commit([a, b], a, before, { draws: true });
+  record.commit([a, b], a, before, { draws: before });
   assert.equal(record.lacking(a), null);
   const shownB = record.display(b, after);
   record.shown(b, after, shownB, { declined: true });
@@ -109,7 +109,7 @@ test('a failed display leaves the Result behind on every paint domain', () => {
   const after = paint('after');
   const [a, b] = ['a', 'b'].map(resultNamed);
   const record = createResultPaintRecord();
-  record.commit([a, b], a, before, { draws: true });
+  record.commit([a, b], a, before, { draws: before });
   const shownB = record.display(b, after);
   record.shown(b, after, shownB, { failed: true });
   record.display(a, after);
@@ -128,7 +128,7 @@ test('a commit drawn from an earlier editor state leaves the edits made meanwhil
   const edited = { ...started, visibility: 'visibility edited meanwhile' };
   const [a, b] = ['a', 'b'].map(resultNamed);
   const record = createResultPaintRecord();
-  record.commit([a, b], a, edited, { draws: true, drawn: started });
+  record.commit([a, b], a, edited, { draws: started });
   assert.deepEqual(record.lacking(a), { colors: started.colors, visibility: started.visibility });
   record.shown(a, edited, edited);
   assert.equal(record.lacking(a), null, 'shown once bound');
@@ -136,7 +136,7 @@ test('a commit drawn from an earlier editor state leaves the edits made meanwhil
     'the other Result shows the visibility edited meanwhile');
 
   const unchanged = createResultPaintRecord();
-  unchanged.commit([a, b], a, started, { draws: true, drawn: started });
+  unchanged.commit([a, b], a, started, { draws: started });
   assert.equal(unchanged.lacking(a), null, 'no edit while it ran');
 });
 
@@ -150,7 +150,7 @@ test('a rerender drew the current paint only while its fills and strokes still m
   const started = paint('started');
   const a = resultNamed('a');
   const record = createResultPaintRecord();
-  record.commit([a], a, started, { draws: true, drawn: started });
+  record.commit([a], a, started, { draws: started });
   assert.equal(record.lacking(a), null, 'nothing was edited before the paint commit');
   const drewPaint = record.drewPaint;
   assert.equal(drewPaint(started, started), true);
@@ -173,7 +173,7 @@ test('a Result shown again names the rule table it left with, and a restored Res
   const withFile = [{ feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Imported', fromFile: true }];
   const [circular, batch, kept] = ['circular', 'batch', 'kept'].map(resultNamed);
   const record = createResultPaintRecord();
-  record.commit([circular], circular, rulesOf(withFile), { draws: true });
+  record.commit([circular], circular, rulesOf(withFile), { draws: rulesOf(withFile) });
   record.depart(rulesOf(withFile), 'the intent it left with');
   // The file card's Remove while another mode is shown, then the switch back.
   assert.deepEqual(paintRuleTable(record.display(circular, rulesOf([]))), withFile);
@@ -223,7 +223,7 @@ test('a Result keeps the state its bytes were drawn with while the state it show
   const paint = (labels) => ({ colors: [null, ''], visibility: '[]', strokes: '', labels, legendOrder: '' });
   const held = paint('held');
   const [generated, kept] = ['generated', 'kept'].map(resultNamed);
-  record.commit([generated], generated, held, { draws: true });
+  record.commit([generated], generated, held, { draws: held });
   record.display(generated, paint('edited'));
   record.depart(paint('edited'), 'left');
   assert.equal(record.drawn(generated).labels, 'held');
@@ -251,12 +251,12 @@ test('only the phases Python drew record their Results as drawn from the state o
   const current = paint('current');
   const [a, b] = ['a', 'b'].map(resultNamed);
   const restored = createResultPaintRecord();
-  restored.commit([a, b], a, current, { draws: drawsResult('passive-preview'), drawingStateOf: () => paint('drawing') });
+  restored.commit([a, b], a, current, { draws: null, drawingStateOf: () => paint('drawing') });
   assert.deepEqual(changed(restored.display(b, current), current), EVERY_PAINT_DOMAIN, 'a checkpoint restore kept its batch bytes');
   assert.equal(restored.drawn(b).labels, paint('drawing').labels, 'drawn with the state of its drawing');
   assert.deepEqual(changed(restored.display(a, current), current), NOTHING, 'the mounted Result shows the restored state');
   const generated = createResultPaintRecord();
-  generated.commit([a, b], a, current, { draws: drawsResult('generate') });
+  generated.commit([a, b], a, current, { draws: current });
   assert.deepEqual(changed(generated.display(b, current), current), NOTHING, 'a Generate drew every Result');
 });
 
@@ -270,8 +270,8 @@ test('a Result an Undo of a Generate brings back keeps its record', () => {
   const [r1, r2] = ['r1', 'r2'].map(resultNamed);
   const [g1, g2] = ['g1', 'g2'].map(resultNamed);
   const record = createResultPaintRecord();
-  record.commit([r1, r2], r1, before, { draws: true });
-  record.commit([g1, g2], g1, after, { draws: true });
+  record.commit([r1, r2], r1, before, { draws: before });
+  record.commit([g1, g2], g1, after, { draws: after });
   const drawnG1 = record.drawn(g1);
   record.shown(g2, after, record.display(g2, after));
   record.display(g1, after);
@@ -294,7 +294,7 @@ test('a Result that leaves lacking a domain keeps no intent to be shown again wi
   const after = paint('after');
   const [a, b] = ['a', 'b'].map(resultNamed);
   const record = createResultPaintRecord();
-  record.commit([a, b], a, before, { draws: true });
+  record.commit([a, b], a, before, { draws: before });
   record.shown(b, after, record.display(b, after), { declined: true });
   record.depart(after, 'the intent it left with');
   assert.equal(record.takeLeft(b), null, 'no E1 rebind');
@@ -307,22 +307,65 @@ test('a Result that leaves lacking a domain keeps no intent to be shown again wi
 
 // OV-1983, OV-2413: the label owner reads the Label visibility On and Off the
 // displayed Result was drawn with; a Generate that moves a record's rows to
-// its new key moves them too.
+// its new key drew the moved rows (W15 §8.4: read as its request was built),
+// which its Results' record takes when the drawing takes them.
 test('the Label visibility the displayed Result was drawn with follows a Generate key move', () => {
-  const labels = JSON.stringify([[['old', 'f1', 'on', null, null], ['old', 'f2', null, 'text', null], ['kept', 'f3', 'off', null, null]], {}]);
-  const drawn = { ...paint('drawn'), labels };
+  const labelsOf = (from) => JSON.stringify([[[from, 'f1', 'on', null, null], [from, 'f2', null, 'text', null], ['kept', 'f3', 'off', null, null]], {}]);
+  const bound = { ...paint('drawn'), labels: labelsOf('old') };
+  const moved = { ...paint('drawn'), labels: labelsOf('new') };
   const [g, other] = ['g', 'other'].map(resultNamed);
   const record = createResultPaintRecord();
   assert.equal(record.displayedDrawnLabelVisibility(), null, 'no Result displayed');
-  record.commit([g, other], g, drawn, { draws: true });
+  record.commit([g, other], g, bound, { draws: bound });
   const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
   assert.deepEqual([...record.displayedDrawnLabelVisibility()], [[key('old', 'f1'), 'on'], [key('kept', 'f3'), 'off']]);
-  record.moveDrawn([g, other], new Map([['old', 'new']]));
+  record.moveDrawn([g, other], moved);
   assert.deepEqual(new Map(record.displayedDrawnLabelVisibility()), new Map([[key('new', 'f1'), 'on'], [key('kept', 'f3'), 'off']]));
-  assert.equal(JSON.parse(record.drawn(other).labels)[0].find(([, featureId]) => featureId === 'f2')[0], 'new',
-    'every committed Result moves its rows');
-  record.depart(drawn, 'left');
+  assert.equal(record.drawn(other), moved, 'every committed Result takes the moved rows');
+  record.depart(moved, 'left');
   assert.equal(record.displayedDrawnLabelVisibility(), null, 'the Result left');
+});
+
+// W15 §8.4: the paint a Generate drew is read as its request is built, with the palette its commit applies, and
+// names the fills the Generate keeps; the input summary's staleness reads the visibility it drew.
+test('a Generate names the paint it drew as its request is built', () => {
+  const drawing = {
+    manualSpecificRules: [], featureColorOverrides: { k: { color: '#111111' }, gone: { color: '#222222' } }, legendColorOverrides: {},
+    featureOverrides: {}, featureVisibilityManualRules: [], featureStrokeOverrides: {}, legendStrokeOverrides: {},
+    deletedLegendEntries: { value: [] }, labelTextBulkOverrides: {}, legendEntries: { value: [] }
+  };
+  const request = requestPaintOf(drawing, Object.freeze({ name: 'request', colors: { CDS: '#abcdef' } }), { value: [] });
+  assert.equal(request.palette.name, 'request');
+  assert.deepEqual(request.bound.colors[0], { CDS: '#abcdef' }, 'the palette of the request, not the one shown when it binds');
+  drawing.featureColorOverrides = {};
+  assert.match(request.bound.colors[1], /#222222/, 'read as the request is built: a later edit is an edit since');
+  const kept = withKeptFills(request.bound, { k: { color: '#111111' } });
+  assert.deepEqual(JSON.parse(kept.colors[1])[1], { k: { color: '#111111' } }, 'the fills the Generate keeps');
+  assert.equal(JSON.parse(kept.colors[1])[0].length, 0, 'its rules stay');
+  const [g] = ['g'].map(resultNamed);
+  const record = createResultPaintRecord();
+  assert.equal(record.drewOtherVisibility(g, kept.visibility), false, 'no record yet');
+  record.commit([g], g, paint('now'), { draws: kept });
+  assert.equal(record.drewOtherVisibility(g, kept.visibility), false);
+  assert.equal(record.drewOtherVisibility(g, 'another visibility'), true, 'a live hide no render drew');
+  assert.equal(record.drawn(g), kept, 'the record holds what the Generate drew, not the state at its bind');
+});
+
+// OV-3732: Duplicate gives the copy's Results records of their own, which
+// start as the source Results'; the displayed source Result followed every
+// live edit (the copied state) but what a declined display left it lacking.
+test('a copied Result has a record of its own that starts as its source\'s', () => {
+  const [a, b, aCopy, bCopy] = ['a', 'b', 'a copy', 'b copy'].map(resultNamed);
+  const record = createResultPaintRecord();
+  const drawn = paint('drawn');
+  const current = paint('current');
+  record.commit([a, b], a, drawn, { draws: drawn });
+  record.copy([a, b], [aCopy, bCopy], current);
+  assert.equal(record.drawn(aCopy), drawn);
+  assert.deepEqual(changed(record.display(aCopy, current), current), NOTHING, 'the displayed source showed the copied state');
+  assert.deepEqual(record.display(bCopy, current), drawn, 'a source not displayed is copied as it is');
+  record.shown(bCopy, paint('copy edited'), drawn);
+  assert.deepEqual(record.display(b, current), drawn, 'the source keeps its own record');
 });
 
 
@@ -338,7 +381,7 @@ test('the committed editor state records a Result as drawn only in a phase that 
   const [a, b] = ['a', 'b'].map(resultNamed);
   const [first, second] = [{ id: 'd1', step: 'current' }, { id: 'd2', step: 'second drawing' }];
   const drawnPaint = paint('drawn');
-  const commitIn = (phase) => {
+  const commitIn = (phase, bindingOptions = { drawnPaint }) => {
     const record = createResultPaintRecord();
     const unused = () => { throw new Error('not read by a commit'); };
     const { rememberCommittedEditorState } = createDisplayedResultProjection({
@@ -364,7 +407,7 @@ test('the committed editor state records a Result as drawn only in a phase that 
       resultPaintShown: record.shown
     });
     rememberCommittedEditorState(first, {
-      root: null, result: a, resultIndex: 0, resultIdentity: 'a', rootGeneration: 1, phase, bindingOptions: { drawnPaint }
+      root: null, result: a, resultIndex: 0, resultIdentity: 'a', rootGeneration: 1, phase, bindingOptions
     });
     return record;
   };
@@ -376,4 +419,7 @@ test('the committed editor state records a Result as drawn only in a phase that 
   const redrawn = commitIn('label-reflow');
   assert.equal(redrawn.drawn(b)?.visibility, drawnPaint.visibility, 'drawn from the rerender\'s request');
   assert.equal(redrawn.drawn(a)?.visibility, drawnPaint.visibility);
+  // W15 §8.4: every phase that draws names the paint it drew; none falls back to the state at its bind.
+  assert.throws(() => commitIn('generate', {}), (error) => error.code === 'RESULT_INVALID'
+    && error.context.reason === 'DRAWN_PAINT_MISSING');
 });

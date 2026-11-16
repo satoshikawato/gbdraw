@@ -229,15 +229,16 @@ const emitHistoryDiagnostic = (event) => {
 
 /**
  * The artifact a generated-artifact handle names: its fingerprint and compact
- * signature. A handle without a fingerprint names only itself.
- * @param {{ identity?: { fingerprint?: string, compactSignature?: string } }} handle
+ * signature. A held figure names the Result array it holds (`key`); another
+ * handle without a fingerprint names only itself.
+ * @param {{ identity?: { fingerprint?: string, compactSignature?: string }, key?: unknown }} handle
  * @returns {unknown}
  */
 const artifactRetentionKey = (handle) => {
   const identity = handle?.identity;
   return identity?.fingerprint
     ? `${identity.fingerprint}\u0000${identity.compactSignature ?? ''}`
-    : handle;
+    : handle.key ?? handle;
 };
 
 /**
@@ -298,8 +299,27 @@ const checkpointSvgBytes = (checkpoint) => (
  *   `name` is shown by its label.
  * @typedef {{
  *   type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string>, sequence?: number,
- *   session?: IntentEntry, detail?: HistoryStepDetail
+ *   session?: IntentEntry, detail?: HistoryStepDetail, figureMark?: StepFigureMark, figures?: HeldFigureSides
  * }} IntentEntry
+ *   `figureMark` and `figures`: what an intent step knew of its drawing's figure, and the figures its sides hold
+ *   (W15 §8.2, OV-2436; `createStepFigures`).
+ * @typedef {{ serial: number, epoch: number, drawn: boolean | undefined, ended?: number }} StepFigureMark
+ *   An intent step's number as it began and as it ended (`intentStepSerial`; `ended` once it ended), the count of
+ *   figure replacements as it began, and whether its figure was then the one its state draws (`figureDrawn`).
+ * @typedef {{ before?: HeldFigure, after?: HeldFigure }} HeldFigureSides
+ * @typedef {{ slot: object, key: object, committed: unknown, drawn: boolean | undefined, retainedBytes: number }} HeldFigure
+ *   A figure an intent step side shows, by reference: the shown drawing's artifact (`slot`, the snapshot service's),
+ *   the committed Session it was drawn from (compared by reference), whether it is the one its side's state draws
+ *   (as a checkpoint side's `drawn`), and its bytes, which the shared budget counts once per `key` (the Result array
+ *   it holds) with the generated artifacts (`uniqueArtifactBytes`).
+ * @typedef {object} HeldFigurePort
+ *   What History asks of the snapshot service for held figures (W15 §8.2, §8.3).
+ * @property {() => Omit<HeldFigure, 'drawn'>} capture The shown drawing's figure now.
+ * @property {(figure: HeldFigure) => boolean} usable Whether `figure` can show the shown drawing's state now: it is the
+ *   shown drawing's, drawn from the committed Session now, and not the figure shown.
+ * @property {(figure: HeldFigure, restoreIntent: () => Promise<unknown>) => Promise<void>} show Shows `figure`: the
+ *   shown Result leaves, `restoreIntent` restores the step's intent, and the figure arrives with the displayed Result
+ *   index kept (clamped to its Results) and shows the intent once.
  * @typedef {{
  *   type: 'checkpoint', label: string, before: CheckpointRecord, after: CheckpointRecord, byteSize: number,
  *   fileIds: Set<string>, sequence?: number, changes?: HistoryIntentChange[], session?: IntentEntry
@@ -386,14 +406,16 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeIntent?: HistoryIntent | null,
  *   takeEntry?: HistoryStepBase['takeEntry'],
  *   sessionMark?: SessionMark | null,
- *   describe?: (() => HistoryStepDetail | null) | null
+ *   describe?: (() => HistoryStepDetail | null) | null,
+ *   figureMark?: StepFigureMark,
+ *   figures?: HeldFigureSides
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
  *   calls that ran on it, each with the step name it started with. `serial`: an intent step's
  *   number, in the order the steps began (`intentStepSerial`). `sessionMark`: the router's Session
  *   values as the step opened (`stepOpened`). `describe`: the reader of the step's detail, until an
- *   action renames the step.
+ *   action renames the step. `figureMark` and `figures`: as on its `IntentEntry`, which takes them.
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {(path: readonly string[], value: unknown) => unknown} IntentEditedPart
@@ -418,8 +440,9 @@ const checkpointSvgBytes = (checkpoint) => (
  * @typedef {object} HistoryManagerOptions
  * @property {() => HistoryIntent | Promise<HistoryIntent>} buildIntent
  *   The snapshot service's capture of the current intent.
- * @property {(intent: HistoryIntent, context: { changes: HistoryIntentChange[], direction: 'undo' | 'redo' }) => unknown} applyIntent
- *   The snapshot service's restore of an intent; History awaits it.
+ * @property {(intent: HistoryIntent, context: { changes: HistoryIntentChange[], direction: 'undo' | 'redo', figure?: boolean }) => unknown} applyIntent
+ *   The snapshot service's restore of an intent; History awaits it. `figure`: a held figure arrives after it and
+ *   shows the intent (`HeldFigurePort.show`), so the restore shows nothing on the figure that leaves.
  * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
  *   The snapshot service's capture of an artifact checkpoint.
  * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean | undefined }) => unknown} applyCheckpoint
@@ -483,6 +506,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   asks for (D-174, D-211); one not drawn once restored, to be drawn again (PD-OI-114); an unknown one never.
  * @property {CheckpointHold} [checkpointHold]
  *   Runs a checkpoint step, from its first write to the end of its commit and listener (OV-2678).
+ * @property {HeldFigurePort | null} [heldFigures]
+ *   The snapshot service's held figures; without it no step holds one.
  */
 /**
  * The composition root's hold over the work a checkpoint step asks for while it runs (the automatic rerender): that
@@ -495,9 +520,10 @@ const checkpointSvgBytes = (checkpoint) => (
  * What the shared budget reads from and drops in one History manager.
  * @typedef {object} HistoryBudgetMember
  * @property {() => number} entryBytes The bytes its entries retain, without the artifacts they name.
- * @property {() => HistoryArtifactHandle[]} retainedArtifacts The generated artifacts its entries name; the
- *   budget counts each artifact once across the members, as it counts each file once.
+ * @property {() => HistoryArtifactHandle[]} retainedArtifacts The generated artifacts its entries name, the
+ *   figures they hold included; the budget counts each artifact once across the members, as it counts each file once.
  * @property {() => Set<string>} retainedFileIds The files its current intent and entries name.
+ * @property {() => boolean} dropOldestFigure Drops the figures of its oldest step that holds one; false when none.
  * @property {(kept: object | null) => 'undo' | 'redo' | null} dropOldestStep
  *   Drops its oldest Undo entry, or its Redo entries when no Undo entry is left,
  *   and says which; `null` when it holds none. It keeps `kept`, the step just
@@ -512,8 +538,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The member's bytes and files no longer count (a History the router replaced
  *   or handed to the project step that holds it, R16-3).
  * @property {(kept?: object | null) => void} enforce
- *   Drops steps until the retained bytes fit, oldest first, from the members in
- *   `evictionOrder`, keeping `kept` (OV-1260); then releases the files no member names.
+ *   Drops held figures, then steps, until the retained bytes fit, oldest first, from the members in
+ *   `evictionOrder`, keeping `kept` (OV-1260); then releases the files no member names. A step without
+ *   its figure still applies (W15 §8.2), so figures drop first, and silently.
  * @property {() => void} releaseUnreferencedFiles
  */
 
@@ -555,7 +582,11 @@ export const createHistoryBudget = ({
   // it shows it.
   /** @param {object | null} [kept] */
   const enforce = (kept = null) => {
-    evictionOrder([...members]).forEach((candidate) => {
+    const order = evictionOrder([...members]);
+    order.forEach((candidate) => {
+      while (overBudget() && candidate.dropOldestFigure());
+    });
+    order.forEach((candidate) => {
       let undoDropped = false;
       let redoDropped = false;
       while (overBudget()) {
@@ -664,6 +695,128 @@ const restoreReported = async ({ figureDrawn, figureRestored }, drawn, restore) 
  */
 const holdNothing = async (run) => await run();
 
+/**
+ * What the figures of one History's steps read of it.
+ * @typedef {object} StepFigurePorts
+ * @property {HeldFigurePort | null} port The snapshot service's held figures.
+ * @property {() => HistoryTransaction | null} openTransaction
+ * @property {{ readonly undo: readonly HistoryEntry[], readonly redo: readonly HistoryEntry[] }} stacks
+ * @property {() => boolean} busy Whether History restores a step or captures an intent now.
+ * @property {() => number} serial `intentStepSerial`.
+ * @property {() => number} nextSerial Takes the next `intentStepSerial`.
+ * @property {Required<Pick<HistoryManagerOptions, 'figureDrawn' | 'figureRestored'>>} figure
+ * @property {() => void} enforce The byte budget's enforcement.
+ */
+/** @param {IntentEntry} entry @returns {HeldFigure[]} */
+const heldFiguresOf = ({ figures }) => [figures?.before, figures?.after].filter((figure) => figure !== undefined);
+/**
+ * W15 §8.2, §8.3 (OV-2436, OV-2413): the figures History holds on the sides of a drawing's intent steps, by
+ * reference, so that the Undo or Redo of a step whose rerender replaced the figure shows the figure Python drew for
+ * that side at once. A label rerender's install (`adoptDrawnWrite`) holds them. The step that requested it (the
+ * open step, or the last step, begun at or before the request and ended at or after it) holds the figure the
+ * rerender replaced on `before` when no figure was replaced since the step began (the figure it began on), and the
+ * figure it drew on `after` (the latest wins). A rerender no step requested holds its drawn figure on the current
+ * boundary: `after` of the last step and `before` of the next Redo. A step begun after the request, or an Undo or
+ * Redo since it, holds nothing; a step still open then leaves the figures to the steps before it, unless it adds
+ * to another step's entry or is no intent step. A step whose end is not known (a remainder) bounds it only while a Redo step shows
+ * that no step ended since the last Undo or Redo.
+ * @param {StepFigurePorts} ports
+ */
+const createStepFigures = ({ port, openTransaction, stacks, busy, serial, nextSerial, figure, enforce }) => {
+  // The figure replacements so far (a rerender's install, an Undo or Redo),
+  // and the step number of the last Undo or Redo.
+  let epoch = 0;
+  let traversedAt = 0;
+  /** @param {readonly HistoryEntry[]} stack */
+  const top = (stack) => stack[stack.length - 1];
+  /** @param {number} requestedAt @returns {{ requester: HistoryTransaction | IntentEntry | null, boundary: [IntentEntry, 'before' | 'after'][] } | null} */
+  const sidesOf = (requestedAt) => {
+    if (!port || busy() || requestedAt < traversedAt) return null;
+    const open = openTransaction();
+    if (open && (!open.figureMark || open.takeEntry)) return null;
+    if (open?.figureMark && open.figureMark.serial <= requestedAt) return { requester: open, boundary: [] };
+    // A step that opened after the request (a field's focus step) leaves the figures to the steps before it.
+    const last = top(stacks.undo);
+    const next = top(stacks.redo);
+    const mark = last?.type === 'intent' ? last.figureMark : undefined;
+    if (mark && requestedAt < mark.serial) return null;
+    if (last?.type === 'intent' && mark && requestedAt <= (mark.ended ?? requestedAt)) return { requester: last, boundary: [] };
+    if (!next && !mark) return null;
+    /** @type {[IntentEntry, 'before' | 'after'][]} */
+    const boundary = [];
+    if (last?.type === 'intent') boundary.push([last, 'after']);
+    if (next?.type === 'intent') boundary.push([next, 'before']);
+    return { requester: null, boundary };
+  };
+  /** @param {'replaced' | 'drawn'} role @param {number} requestedAt */
+  const hold = (role, requestedAt) => {
+    const sides = sidesOf(requestedAt);
+    if (!sides || !port) return;
+    const { requester, boundary } = sides;
+    const mark = requester?.figureMark;
+    if (role === 'replaced') {
+      if (requester && mark && mark.epoch === epoch && !requester.figures?.before) {
+        requester.figures = { ...requester.figures, before: { ...port.capture(), drawn: mark.drawn } };
+      }
+      return;
+    }
+    const drawn = { ...port.capture(), drawn: true };
+    if (requester) requester.figures = { ...requester.figures, after: drawn };
+    boundary.forEach(([entry, side]) => { entry.figures = { ...entry.figures, [side]: drawn }; });
+    enforce();
+  };
+  // The intent entries of Undo, oldest first, then of Redo, farthest first.
+  const holders = () => [...stacks.undo, ...[...stacks.redo].reverse()]
+    .filter((entry) => entry.type === 'intent' && entry.figures !== undefined);
+  return {
+    /** What a step that begins now knows of the figure. @param {number} stepSerial @returns {StepFigureMark} */
+    mark: (stepSerial) => ({ serial: stepSerial, epoch, drawn: figure.figureDrawn() }),
+    /** A step's entry takes the mark and figures of the transaction it ends. @param {IntentEntry} entry @param {Pick<HistoryTransaction, 'figureMark' | 'figures' | 'takeEntry'>} from */
+    recordStep: (entry, { figureMark, figures, takeEntry }) => {
+      if (!figureMark || takeEntry) return;
+      entry.figureMark = { ...figureMark, ended: serial() };
+      if (figures) entry.figures = figures;
+    },
+    /**
+     * A rerender's write: `figure` names whether it replaces the shown figure (its install) or ends the drawn
+     * figure's install (its Legend).
+     * @param {() => void} write @param {number} requestedAt @param {'replaced' | 'drawn' | undefined} role
+     */
+    adopt: (write, requestedAt, role) => {
+      if (role === 'replaced') {
+        hold('replaced', requestedAt);
+        epoch += 1;
+      }
+      write();
+      if (role === 'drawn') hold('drawn', requestedAt);
+    },
+    // An Undo or Redo, or a router traversal, changes the state and may replace the figure.
+    traversed: () => {
+      traversedAt = nextSerial();
+      epoch += 1;
+    },
+    /**
+     * Restores an intent step's side (`restore`, told whether a held figure shows it): with its held figure when
+     * the figure can show the state now (`usable`), inside `restoreReported` as a checkpoint side is. True when
+     * the figure shown is the one Python draws of the state (a held figure drawn for it).
+     * @param {IntentEntry} entry @param {'before' | 'after' | null} side @param {(figure: boolean) => Promise<void>} restore
+     * @returns {Promise<boolean>}
+     */
+    apply: async (entry, side, restore) => {
+      const held = side ? entry.figures?.[side] : undefined;
+      if (!held || !port?.usable(held)) return restore(false).then(() => false);
+      const shown = port;
+      await restoreReported(figure, held.drawn, () => shown.show(held, () => restore(true)));
+      return held.drawn === true;
+    },
+    dropOldestFigure: () => {
+      const oldest = /** @type {IntentEntry | undefined} */ (holders()[0]);
+      if (oldest) delete oldest.figures;
+      return Boolean(oldest);
+    }
+  };
+};
+
 /** @param {HistoryManagerOptions} options */
 export const createHistoryManager = ({
   buildIntent,
@@ -689,7 +842,8 @@ export const createHistoryManager = ({
   applySessionPart = () => {},
   figureDrawn = () => undefined,
   figureRestored = () => {},
-  checkpointHold = holdNothing
+  checkpointHold = holdNothing,
+  heldFigures = null
 } = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -752,7 +906,7 @@ export const createHistoryManager = ({
   // reserves its number when `openStep` starts (some numbers stay unused).
   let intentStepSerial = 0;
   let totalEntryBytes = 0;
-  /** @type {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} */
+  /** @type {SettingsStepListener} */
   let settingsStepListener = () => {};
   /** @type {HistoryTransaction | null} */
   let activeTransaction = null;
@@ -760,6 +914,16 @@ export const createHistoryManager = ({
   let activeCheckpoint = null;
   /** @type {HistoryTransaction | null} */
   let activeReplacement = null;
+  const stepFigures = createStepFigures({
+    port: heldFigures,
+    openTransaction: () => openTransaction(),
+    stacks: { undo: undoStack, redo: redoStack },
+    busy: () => restoring.value || capturing.value,
+    serial: () => intentStepSerial,
+    nextSerial: () => ++intentStepSerial,
+    figure: { figureDrawn, figureRestored },
+    enforce: () => budget.enforce(null)
+  });
 
   const touch = () => {
     revision.value += 1;
@@ -981,7 +1145,7 @@ export const createHistoryManager = ({
    * @returns {HistoryArtifactHandle[]}
    */
   const entryArtifactHandles = (entry) => (
-    entry?.type === 'artifact-replacement' ? [entry.before, entry.after] : []
+    entry?.type === 'artifact-replacement' ? [entry.before, entry.after] : entry?.type === 'intent' ? heldFiguresOf(entry) : []
   );
 
   // OV-112, OV-2210: adjacent artifact replacements name one artifact (entry
@@ -1073,6 +1237,7 @@ export const createHistoryManager = ({
     entryBytes: () => totalEntryBytes,
     retainedArtifacts,
     retainedFileIds: collectRetainedFileIds,
+    dropOldestFigure: stepFigures.dropOldestFigure,
     // OV-1260: the step just recorded, undone, or redone (`kept`) stays even
     // when it alone is over the byte limit; the oldest other steps drop first.
     dropOldestStep: (kept) => {
@@ -1159,7 +1324,8 @@ export const createHistoryManager = ({
       serial,
       takeEntry: options.takeEntry,
       sessionMark: stepOpened(),
-      describe: options.detail ?? null
+      describe: options.detail ?? null,
+      figureMark: stepFigures.mark(serial)
     };
     activeTransaction = tx;
     touchTransaction();
@@ -1223,7 +1389,7 @@ export const createHistoryManager = ({
 
   /**
    * The bookkeeping of every intent step.
-   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds' | 'takeEntry' | 'sessionMark' | 'describe'>} from
+   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds' | 'takeEntry' | 'sessionMark' | 'describe' | 'figureMark' | 'figures'>} from
    *   The transaction, or the last recorded intent when an action records its remainder.
    * @param {Awaited<ReturnType<typeof captureIntent>>} afterRecord
    * @param {{ label?: string }} options
@@ -1235,6 +1401,7 @@ export const createHistoryManager = ({
     const label = entry?.label ?? from.label;
     const detail = from.describe?.() ?? null;
     if (entry && detail) entry.detail = detail;
+    if (entry) stepFigures.recordStep(entry, from);
     endStep(entry, { label, takeEntry: from.takeEntry, sessionMark: from.sessionMark, detail });
     if (!entry) {
       emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: from.label, created: false });
@@ -1592,9 +1759,13 @@ export const createHistoryManager = ({
   // is not adopted and the step that begins may record it.
   /**
    * @param {() => void} write
-   * @param {{ requestedAt: number }} request `intentStepSerial()` when the rerender was requested.
+   * @param {{ requestedAt: number, figure?: 'replaced' | 'drawn' }} request `intentStepSerial()` when the rerender
+   *   was requested. `figure`: the write replaces the shown figure (the rerender's install), or ends the drawn
+   *   figure's install (its Legend): History holds the figure before or after it (`createStepFigures`).
    */
-  const adoptDrawnWrite = (write, { requestedAt }) => {
+  const adoptDrawnWrite = (write, { requestedAt, figure }) => stepFigures.adopt(() => adoptWrite(write, requestedAt), requestedAt, figure);
+  /** @param {() => void} write @param {number} requestedAt */
+  const adoptWrite = (write, requestedAt) => {
     const open = restoring.value || capturing.value ? null : openTransaction();
     if (!open || (open.serial ?? 0) <= requestedAt) { write(); return; }
     const before = buildIntent();
@@ -2001,15 +2172,14 @@ export const createHistoryManager = ({
   /**
    * @param {IntentEntry} entry
    * @param {'undo' | 'redo'} direction
+   * @param {'before' | 'after' | null} [side] The side whose held figure may show it (W15 §8.3).
    */
-  const applyIntentEntry = async (entry, direction) => {
+  const applyIntentEntry = async (entry, direction, side = null) => {
     const nextIntent = applyIntentPatch(currentIntent || {}, entry.changes, direction);
     restoring.value = true;
-    try {
-      await applyIntent(nextIntent, { changes: entry.changes, direction });
-    } finally {
-      restoring.value = false;
-    }
+    const drawn = await stepFigures.apply(entry, side, async (figure) => {
+      await applyIntent(nextIntent, { changes: entry.changes, direction, ...(figure ? { figure } : {}) });
+    }).finally(() => { restoring.value = false; });
     const signature = computeSignature(nextIntent, 'intent-restore');
     setCurrentIntent({
       intent: nextIntent,
@@ -2017,7 +2187,7 @@ export const createHistoryManager = ({
       fileIds: collectIntentFileIds(nextIntent)
     });
     // The restored live setting values return to the Result once applied (6.4).
-    settingsStepListener(entry.changes, direction);
+    settingsStepListener(entry.changes, direction, false, drawn);
   };
 
   /** @param {CheckpointRecord} record */
@@ -2104,63 +2274,42 @@ export const createHistoryManager = ({
     }
   };
 
-  const undo = () => traverse(async () => {
+  /**
+   * Undo or Redo of the top step of its stack, which then moves to the other stack. An intent step's side may show
+   * with its held figure (W15 §8.3): Undo shows `before`, Redo `after`.
+   * @param {'undo' | 'redo'} direction
+   */
+  const traverseTop = (direction) => traverse(async () => {
+    const [from, to] = direction === 'undo' ? [undoStack, redoStack] : [redoStack, undoStack];
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
-    if (restoring.value || undoStack.length === 0) return false;
-    const stepBusy = topStepAvailability(undoStack);
+    if (restoring.value || from.length === 0) return false;
+    const stepBusy = topStepAvailability(from);
     if (stepBusy) return stepBusy;
-    const entry = undoStack[undoStack.length - 1];
+    const entry = from[from.length - 1];
+    stepFigures.traversed();
     if (entry.type === 'command') {
-      const reverted = await applyCommandWithFlag(entry, 'undo');
-      if (!reverted) {
-        warnCommandNotApplied(entry, 'undo');
+      if (!await applyCommandWithFlag(entry, direction)) {
+        warnCommandNotApplied(entry, direction);
         return false;
       }
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
-      await applyCheckpointEntry(entry.before);
+      await applyCheckpointEntry(direction === 'undo' ? entry.before : entry.after);
     } else if (entry.type === 'artifact-replacement') {
-      await applyArtifactReplacementEntry(entry, 'undo');
+      await applyArtifactReplacementEntry(entry, direction);
     } else {
-      await applyIntentEntry(entry, 'undo');
+      await applyIntentEntry(entry, direction, direction === 'undo' ? 'before' : 'after');
     }
-    await restoreSessionPart(entry, 'undo');
-    undoStack.pop();
-    redoStack.push(entry);
+    await restoreSessionPart(entry, direction);
+    from.pop();
+    to.push(entry);
     enforceLimits(entry);
     touch();
     return true;
   });
-
-  const redo = () => traverse(async () => {
-    const busy = await settleBeforeTraversal();
-    if (busy) return busy;
-    if (restoring.value || redoStack.length === 0) return false;
-    const stepBusy = topStepAvailability(redoStack);
-    if (stepBusy) return stepBusy;
-    const entry = redoStack[redoStack.length - 1];
-    if (entry.type === 'command') {
-      const applied = await applyCommandWithFlag(entry, 'redo');
-      if (!applied) {
-        warnCommandNotApplied(entry, 'redo');
-        return false;
-      }
-      await refreshCurrentIntent();
-    } else if (entry.type === 'checkpoint') {
-      await applyCheckpointEntry(entry.after);
-    } else if (entry.type === 'artifact-replacement') {
-      await applyArtifactReplacementEntry(entry, 'redo');
-    } else {
-      await applyIntentEntry(entry, 'redo');
-    }
-    await restoreSessionPart(entry, 'redo');
-    redoStack.pop();
-    undoStack.push(entry);
-    enforceLimits(entry);
-    touch();
-    return true;
-  });
+  const undo = () => traverseTop('undo');
+  const redo = () => traverseTop('redo');
 
   // D-15-51: this drawing's part of a project step (Reset all drawings). An
   // intent part restores only the values still as the step left them (a
@@ -2176,6 +2325,7 @@ export const createHistoryManager = ({
    * @param {boolean} whole
    */
   const applyProjectPart = (entry, direction, whole) => traverse(async () => {
+    stepFigures.traversed();
     if (entry.type === 'checkpoint' && whole) {
       await applyCheckpointEntry(direction === 'undo' ? entry.before : entry.after);
     } else {
@@ -2189,6 +2339,7 @@ export const createHistoryManager = ({
   // run while this History restores, so no edit they cause records a step.
   /** @param {() => unknown} fn */
   const restoreWith = (fn) => traverse(async () => {
+    stepFigures.traversed();
     restoring.value = true;
     try { await fn(); } finally { restoring.value = false; }
     touch();
@@ -2216,10 +2367,11 @@ export const createHistoryManager = ({
    * commits, or an Undo or Redo restores (`null`: any setting, a checkpoint
    * restore). The composition root registers it once both History and the
    * automatic rerender exist (R1 (c), PD-OI-102).
-   * @param {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} listener
+   * @param {SettingsStepListener} listener
    *   `direction`: set when the call restores an intent step, which way it went. `undrawn`: a checkpoint
    *   commit whose caller said its figure is not the one its state draws (the caller then asks for the automatic
-   *   rerender itself); a restore tells `figureRestored`.
+   *   rerender itself); a restore tells `figureRestored`. `drawn`: an intent step's restore shows a figure History
+   *   held, drawn by Python for its state (W15 §8.3), so no fit is owed.
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
 
@@ -2373,7 +2525,7 @@ const PROJECT_STREAM = Symbol('project stream');
  */
 /**
  * The composition root's listener of the settings a step records, commits, or restores (`setSettingsStepListener`).
- * @typedef {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} SettingsStepListener
+ * @typedef {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean, drawn?: boolean) => void} SettingsStepListener
  */
 /**
  * Connects the settings-step listener to one drawing's History: it hears that drawing's steps only while it is shown.
@@ -2382,7 +2534,9 @@ const PROJECT_STREAM = Symbol('project stream');
  */
 const listenToShownSteps = (manager, drawingId, activeDrawingId, listener) => {
   if (!listener) return;
-  manager.setSettingsStepListener((changes, direction, undrawn) => { if (drawingId === activeDrawingId()) listener(changes, direction, undrawn); });
+  manager.setSettingsStepListener((changes, direction, undrawn, drawn) => {
+    if (drawingId === activeDrawingId()) listener(changes, direction, undrawn, drawn);
+  });
 };
 
 /**
@@ -2654,13 +2808,11 @@ export const createHistoryRouter = ({
       (bytes, member) => bytes + member.entryBytes(), projectEntries().reduce((bytes, entry) => bytes + entry.byteSize, 0)
     ),
     retainedArtifacts: () => heldMembers().flatMap((member) => member.retainedArtifacts()),
-    retainedFileIds: () => {
-      /** @type {Set<string>} */
-      const ids = new Set();
-      [...projectEntries(), ...openParts.flat().map(({ entry }) => entry)].forEach((entry) => entry.fileIds.forEach((id) => ids.add(id)));
-      heldMembers().forEach((member) => member.retainedFileIds().forEach((id) => ids.add(id)));
-      return ids;
-    },
+    dropOldestFigure: () => heldMembers().some((member) => member.dropOldestFigure()),
+    retainedFileIds: () => new Set([
+      ...[...projectEntries(), ...openParts.flat().map(({ entry }) => entry)].flatMap((entry) => [...entry.fileIds]),
+      ...heldMembers().flatMap((member) => [...member.retainedFileIds()])
+    ]),
     dropOldestStep: (kept) => {
       if (projectUndo.length > 0 && projectUndo[0] !== kept) { dropOldestProject(); touchProject(); return 'undo'; }
       const keptRedo = projectRedo.filter((entry) => entry === kept);

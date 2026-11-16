@@ -86,22 +86,20 @@ test('a summary that does not name its Result, or has another shape, refuses the
   }
 });
 
-// A live hide changes what the Result draws without Python: the summary keeps
-// the Feature visibility its render drew, and the page compares it with the
-// drawing's (`visibilityPaintState`, the owner the paint record reads too).
-test('each summary keeps the Feature visibility its render drew', () => {
+// A live hide changes what the Result draws without Python: the page compares
+// the Feature visibility the Result's paint record says it was drawn with
+// (W15 §8.4) with the drawing's (`visibilityPaintState`); the summary itself
+// holds what Python sent and its warning groups.
+test('each summary holds what Python sent and its warning groups', () => {
   const drawing = { featureOverrides: {}, featureVisibilityManualRules: [] };
-  const drawn = drawnInputSummaries(validateInputSummaries([summary()], results), visibilityPaintState(drawing));
+  const drawn = drawnInputSummaries(validateInputSummaries([summary()], results));
   assert.ok(Object.isFrozen(drawn) && Object.isFrozen(drawn[0]));
-  assert.deepEqual(drawn[0], {
-    ...summary(), drawnVisibility: visibilityPaintState(drawing),
-    warningGroups: [{ kind: 'left-out', warnings: summary().warnings }]
-  });
+  assert.deepEqual(drawn[0], { ...summary(), warningGroups: [{ kind: 'left-out', warnings: summary().warnings }] });
   assert.equal(inputSummaryOf(drawn, 1, 'b.svg'), drawn[0]);
   const hidden = { ...drawing, featureOverrides: { k: { recordKey: 'r', biologicalFeatureId: 'f1', featureVisibility: 'off' } } };
-  assert.notEqual(drawn[0].drawnVisibility, visibilityPaintState(hidden), 'a hide changes the drawn visibility');
+  assert.notEqual(visibilityPaintState(drawing), visibilityPaintState(hidden), 'a hide changes the drawn visibility');
   const labelOnly = { ...drawing, featureOverrides: { k: { recordKey: 'r', biologicalFeatureId: 'f1', featureVisibility: null, labelVisibility: 'off' } } };
-  assert.equal(visibilityPaintState(labelOnly), drawn[0].drawnVisibility, 'a label-only row sets no visibility');
+  assert.equal(visibilityPaintState(labelOnly), visibilityPaintState(drawing), 'a label-only row sets no visibility');
 });
 
 // OV-2954 (Owner 2026-11-09 「Q2=C」): a comparison file whose record IDs repeat is drawn in full, so its warning
@@ -111,7 +109,7 @@ test('a warning of an input drawn in full does not say part of the input was not
   const [alone, both] = drawnInputSummaries(validateInputSummaries([
     summary({ resultIndex: 0, resultName: 'a.svg', warnings: [repeated] }),
     summary({ warnings: [repeated, ...summary().warnings] })
-  ], results), '');
+  ], results));
   assert.deepEqual(alone.warningGroups, [{ kind: 'drawn-in', warnings: [repeated] }]);
   // #1777 review 2, LOW 3: the "not drawn" heading sits over the warnings that leave input out only.
   assert.deepEqual(both.warningGroups, [

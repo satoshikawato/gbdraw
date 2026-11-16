@@ -183,12 +183,34 @@ const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
 /**
  * `slot`'s artifact as `drawing`'s (Duplicate: the copy shows its source's
  * Result without a Generate). The artifact's values are shared, as a slot
- * keeps them by reference; only the drawing it belongs to differs.
+ * keeps them by reference, except its Results: the copy shows copies of them
+ * (`copyResults`, OV-3732), each a Result of its own, whose records start as
+ * the source Results' (`copyRecords`).
+ * @template {object} R
  * @param {Readonly<ArtifactSlot>} slot
  * @param {DrawingIdentity} drawing
+ * @param {{ copyResults: (results: readonly R[]) => R[], copyRecords: (sources: readonly R[], copies: readonly R[]) => void }} copies
  * @returns {Readonly<ArtifactSlot>}
  */
-export const artifactSlotAs = (slot, drawing) => withArtifactSlotValues(slot, drawing, {});
+export const artifactSlotAs = (slot, drawing, { copyResults, copyRecords }) => {
+  /** @type {readonly R[]} */
+  const sources = slot.values.results;
+  const results = copyResults(sources);
+  copyRecords(sources, results);
+  return withArtifactSlotValues(slot, drawing, { results });
+};
+
+/**
+ * `slot` showing the Result at `selectedResultIndex`, clamped to its Results:
+ * a figure History holds shows at the displayed index (DESIGN §8.3 of W15).
+ * @param {Readonly<ArtifactSlot>} slot
+ * @param {DrawingIdentity} drawing
+ * @param {number} selectedResultIndex
+ * @returns {Readonly<ArtifactSlot>}
+ */
+export const artifactSlotShowing = (slot, drawing, selectedResultIndex) => withArtifactSlotValues(slot, drawing, {
+  selectedResultIndex: Math.max(0, Math.min(selectedResultIndex, slot.values.results.length - 1))
+});
 
 /**
  * What `ArtifactSlotStore.snapshot` returns for `restore`.

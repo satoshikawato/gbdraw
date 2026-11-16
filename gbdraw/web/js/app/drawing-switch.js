@@ -5,7 +5,8 @@
 // `switchWorkBusy`, the part outside History that a list step's Undo waits for), the
 // drawing an operation error names, and the swap of the artifact slots with
 // the install of the arriving slot, which Session Load also uses for the slot
-// it opens on (`installArrivingSlot`). The composition root passes the state, its
+// it opens on (`installArrivingSlot`) and the show of a figure a History step
+// holds (`showHeldFigure`). The composition root passes the state, its
 // refs, the members of History, the artifact slots, the preview runtime, the
 // Legend and feature editors, the feature selection, the Preview search and
 // the notice banner, and the install of the shown drawing
@@ -13,7 +14,7 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 import { msg } from '../utils/i18n.js';
-import { createArtifactSlot } from '../services/artifact-slot.js';
+import { artifactSlotShowing, createArtifactSlot } from '../services/artifact-slot.js';
 /** @import { DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
@@ -62,7 +63,8 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {() => void} rebindAnnotationRecords Rebinds the shown drawing's annotations to its record catalog (R10).
  * @property {() => void} clearActiveRuntime Releases the displayed Result.
  * @property {(result: SvgResultEntry) => string} getResultIdentity
- * @property {(bindingOptions?: { modeArrival?: boolean }) => unknown} presentSelectedResult
+ * @property {(bindingOptions?: { modeArrival?: boolean }) => { promise: Promise<unknown> } | null} presentSelectedResult
+ *   Shows the Result at the selected index as a selection; its readiness, or null with no Result there.
  * @property {() => Promise<void>} showArrivingFigure The pan and zoom owner's: the arriving figure shows from its
  *   first frame at the current zoom, its top where pan y 0 puts it, centred in the free room the Fit measures (an
  *   open review's docked panel narrows it), or its start shown when it is wider; it is not fitted (D-57).
@@ -70,8 +72,8 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} artifactSlotsSwap
  *   Keeps the departing slot and takes the arriving drawing's, or null.
  * @property {() => Readonly<ArtifactSlot>} captureArtifactSlot The displayed artifact as a slot.
- * @property {(slot: Readonly<ArtifactSlot>, options: { drawing: DrawingIdentity }) => void} installArtifactSlot
- *   Installs the slot, with its Legend inventory and colors.
+ * @property {(slot: Readonly<ArtifactSlot>, options: { drawing: DrawingIdentity, ui?: { canvasPan?: { x: number, y: number } } }) => void} installArtifactSlot
+ *   Installs the slot, with its Legend inventory and colors; the view keeps `ui.canvasPan`.
  */
 
 /**
@@ -91,11 +93,28 @@ export const createDrawingSwitch = ({
   // inventory and colors. The Legend owner also keeps each Result's inventory
   // (OV-47): the arriving Result's goes to it, and the binder adopts it when
   // the Result is displayed, as for a batch Result.
-  /** @param {Readonly<ArtifactSlot>} slot */
-  const installArrivingSlot = (slot) => {
-    installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId) });
+  /** @param {Readonly<ArtifactSlot>} slot @param {{ canvasPan?: { x: number, y: number } }} [ui] The pan the view keeps. */
+  const installArrivingSlot = (slot, ui = {}) => {
+    installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId), ui });
     const shown = results.value[Number(selectedResultIndex.value) || 0];
     if (shown) rememberResultInventory(getResultIdentity(shown), [...slot.legend.originalOrder]);
+  };
+  // DESIGN §8.3 of W15 (OV-2436): a figure a History step of the shown
+  // drawing holds shows again as a display of its Result, as a switch shows
+  // the arriving one: the displayed Result leaves with what it shows,
+  // `restoreIntent` restores the step's intent, and the figure arrives at the
+  // displayed Result index (clamped to its Results) and pan, and shows the
+  // intent once (R3). Resolves once the arriving Result is bound.
+  /** @param {Readonly<ArtifactSlot>} slot @param {() => Promise<unknown>} restoreIntent */
+  const showHeldFigure = async (slot, restoreIntent) => {
+    const drawing = state.activeDrawing();
+    rememberDepartingResultProjection(drawing);
+    await restoreIntent();
+    clearActiveRuntime();
+    installArrivingSlot(artifactSlotShowing(slot, drawing, Number(selectedResultIndex.value) || 0), {
+      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y }
+    });
+    await presentSelectedResult()?.promise;
   };
   /**
    * Shows the artifact of `arrivingDrawing`: keeps the displayed one under the
@@ -204,6 +223,6 @@ export const createDrawingSwitch = ({
   };
 
   return {
-    installArrivingSlot, drawingSwitchBusy, switchWorkBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
+    installArrivingSlot, showHeldFigure, drawingSwitchBusy, switchWorkBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
   };
 };

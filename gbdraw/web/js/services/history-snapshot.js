@@ -42,7 +42,7 @@ import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { PaletteColors, PaletteSlice } from './drawing/palette.js' */
 /** @import { GroupNamesData } from './drawing/group-names.js' */
-/** @import { HistoryArtifactHandle } from './history.js' */
+/** @import { HeldFigure, HeldFigurePort, HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
 
@@ -1000,6 +1000,53 @@ const createLosatClearReach = (artifactSlots, writeArtifactValues) => {
       if (slot && heldClears !== clears) emptyManifestOf(drawingId);
       return heldClears !== clears;
     }
+  };
+};
+
+/** @param {ArtifactSlot['runtimeState']} runtimeState @returns {unknown} */
+const committedSessionOf = (runtimeState) => runtimeState?.canonical?.committedCanonicalSession ?? null;
+/** @typedef {(slot: Readonly<ArtifactSlot>, restoreIntent: () => Promise<unknown>) => Promise<void>} HeldFigureDisplay */
+/**
+ * W15 §8.2, §8.3 (OV-2436): the figures History holds on the sides of a drawing's intent steps are its shown
+ * artifact, by reference (`captureArtifactSlot`); the display owner shows one again (`setDisplay`, the drawing
+ * switch's `showHeldFigure`). A figure shows only in its own drawing while it is shown, while the committed Session
+ * it was drawn from is the current one (compared by reference), and only when it is not the figure shown (its
+ * Result array is not the shown one).
+ * @param {() => Readonly<ArtifactSlot>} captureArtifactSlot The shown drawing's artifact now.
+ */
+const createHeldFigurePorts = (captureArtifactSlot) => {
+  /** @type {HeldFigureDisplay | null} */
+  let display = null;
+  /** @param {HeldFigure} figure @returns {Readonly<ArtifactSlot>} The snapshot service's own capture. */
+  const slotOf = (figure) => /** @type {Readonly<ArtifactSlot>} */ (figure.slot);
+  return {
+    /** @param {HeldFigureDisplay} next */
+    setDisplay: (next) => { display = next; },
+    /** @param {DrawingId} drawingId @returns {HeldFigurePort} */
+    of: (drawingId) => ({
+      capture: () => {
+        const slot = captureArtifactSlot();
+        /** @type {readonly { content?: unknown }[]} */
+        const results = slot.values.results;
+        return {
+          slot,
+          key: results,
+          committed: committedSessionOf(slot.runtimeState),
+          // The slot's bytes and the Results' text, which the slot does not count (UTF-16).
+          retainedBytes: results.reduce((bytes, result) => bytes + String(result.content ?? '').length * 2, slot.retainedBytes)
+        };
+      },
+      usable: (figure) => {
+        const shown = captureArtifactSlot();
+        return display !== null && slotOf(figure).drawingId === drawingId && shown.drawingId === drawingId
+          && figure.committed === committedSessionOf(shown.runtimeState) && figure.key !== shown.values.results;
+      },
+      // `usable` asks for the display owner, so a figure without one is not shown.
+      show: async (figure, restoreIntent) => {
+        if (display) await display(slotOf(figure), restoreIntent);
+        else await restoreIntent();
+      }
+    })
   };
 };
 
@@ -2024,9 +2071,12 @@ export const createHistorySnapshotService = ({
     discoverDrawingRecords?.(drawing);
   };
 
+  const heldFigures = createHeldFigurePorts(captureArtifactSlot);
+
   // The History ports of one drawing (`createHistoryRouter`'s managers).
   /** @param {DrawingId} drawingId */
   const drawingHistory = (drawingId) => ({
+    heldFigures: heldFigures.of(drawingId),
     buildIntent: () => buildHistoryIntent(drawingId),
     /** @param {HistoryIntentData | null | undefined} intent @param {HistoryIntentContext} [context] */
     applyIntent: (intent, context) => applyHistoryIntent(drawingId, intent, context),
@@ -2062,9 +2112,6 @@ export const createHistorySnapshotService = ({
     }
   });
 
-  /** @param {unknown} snapshot */
-  const snapshotSignature = (snapshot) => JSON.stringify(snapshot);
-
   return {
     captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet,
@@ -2087,6 +2134,8 @@ export const createHistorySnapshotService = ({
     losatClearCount: losatClearReach.count,
     putHeldSlot: losatClearReach.putHeldSlot,
     setAfterApplyHistoryIntent,
-    snapshotSignature
+    setHeldFigureDisplay: heldFigures.setDisplay,
+    /** @param {unknown} snapshot */
+    snapshotSignature: (snapshot) => JSON.stringify(snapshot)
   };
 };

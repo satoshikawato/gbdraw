@@ -20,7 +20,7 @@ import { displayedLegendRowContext, featureDrawnContext } from '../services/feat
 import { drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { appliedFeatureColors } from '../utils/color-utils.js';
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { toRaw } from '../utils/vue-raw.js';
 /** @import { DrawingState, WebState } from '../state.js' */
 /** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
@@ -51,6 +51,17 @@ const { watch } = window.Vue;
  * @property {string} phase
  * @property {Readonly<{ trustedRestore?: boolean, drawnPaint?: EditorPaintState }>} bindingOptions
  */
+
+/**
+ * The paint a Result Python drew was drawn from (`bindingOptions.drawnPaint`): every phase that draws
+ * (`drawsResult`) names it as its request is built (W15 §8.4).
+ * @param {Pick<DisplayedResultContext, 'phase' | 'bindingOptions'>} context
+ * @returns {EditorPaintState}
+ */
+const drawnPaintOf = ({ phase, bindingOptions }) => {
+  if (bindingOptions.drawnPaint) return bindingOptions.drawnPaint;
+  throw diagnosticError('RESULT_INVALID', { reason: 'DRAWN_PAINT_MISSING', phase }, { stage: 'result-admission', operation: 'rememberCommittedEditorState' });
+};
 
 /**
  * @typedef {object} EditorIntentShowPorts
@@ -432,7 +443,7 @@ export const createDeclinedPaintDisplay = ({
  * @property {(result: SvgResultEntry) => Promise<void>} showDeclinedPaint
  * @property {readonly string[]} LEGEND_STRUCTURE_DOMAINS
  * @property {readonly string[]} STROKE_DOMAINS
- * @property {(results: readonly SvgResultEntry[], displayed: SvgResultEntry, current: EditorPaintState, options?: { draws?: boolean, drawn?: EditorPaintState, drawingStateOf?: (result: SvgResultEntry) => EditorPaintState }) => void} resultPaintCommit
+ * @property {(results: readonly SvgResultEntry[], displayed: SvgResultEntry, current: EditorPaintState, options?: { draws?: EditorPaintState | null, drawingStateOf?: (result: SvgResultEntry) => EditorPaintState }) => void} resultPaintCommit
  * @property {(result: SvgResultEntry) => string | null} resultPaintTakeLeft
  * @property {(result: SvgResultEntry) => void} resultPaintRebind
  * @property {(result: SvgResultEntry, current: EditorPaintState) => EditorPaintState} resultPaintDisplay
@@ -467,12 +478,12 @@ export const createDisplayedResultProjection = ({
     // rollback) keeps each Result's bytes as they were saved or kept, a batch
     // Result not displayed since the last edits without them (also a Session
     // older than 40, whose strokes reached only the mounted Result).
-    const draws = drawsResult(context.phase);
-    const drawn = (draws && context.bindingOptions.drawnPaint) || current;
-    if (drawn.labels !== current.labels) labelProjectionResultIdentity = context.resultIdentity;
+    // Each of them names the paint it drew, read as its request was built
+    // (W15 §8.4: the one producer).
+    const drawn = drawsResult(context.phase) ? drawnPaintOf(context) : null;
+    if (drawn && drawn.labels !== current.labels) labelProjectionResultIdentity = context.resultIdentity;
     resultPaintCommit(liveResults(), context.result, current, {
-      draws,
-      drawn,
+      draws: drawn,
       drawingStateOf: (result) => {
         const identity = resultIdentity(result);
         const holder = drawingList().find(({ id }) => resultsOf(id).some((held) => resultIdentity(held) === identity));

@@ -1339,7 +1339,9 @@ test.describe('a Result displayed after its intent changed', () => {
     await loaded.context().close();
   });
   // Undo or Redo back to Label visibility On, on a figure that lacks the label:
-  // only a rerender can draw it, and the label projection asks for it (OV-2413).
+  // only a rerender can draw it (OV-2413). The rerender of the step drew it, and
+  // History holds that figure on the step's side, so the Undo or Redo shows it at
+  // once, with no rerender (W15 §8.3).
   for (const mode of ['linear', 'circular']) {
     const labelsNoneOn = async (page) => {
       await open(page, { mode, results: 'single', reflow: 'off' });
@@ -1347,22 +1349,35 @@ test.describe('a Result displayed after its intent changed', () => {
       await popupEdit(page, 'FL1', { labelVisibility: 'on' });
       await settleLive(page);
     };
-    test(`an Undo back to Label visibility On draws the label (${mode})`, async ({ page }) => {
+    // The labels of FL1 the figure shows when the step returns, with rerenders held.
+    const stepAtOnce = async (page, step) => {
+      const before = await rerenderRequests(page);
+      await holdRerenders(page);
+      const labels = await evaluateWithRetainedPromise(page, async (name) => {
+        await window.__GBDRAW_HISTORY__[name]();
+        await window.Vue.nextTick();
+        const app = window.__GBDRAW_APP__;
+        const id = app.extractedFeatures.find((feature) => feature.locus_tag === 'FL1').svg_id;
+        return [...app.svgContainer.querySelector('svg').querySelectorAll(`text[data-label-feature-id="${CSS.escape(id)}"]`)]
+          .filter((label) => !label.closest('[display="none"]')).map((label) => label.textContent);
+      }, step);
+      await releaseRerenders(page);
+      expect(await rerenderRequests(page), `${step}: no rerender`).toBe(before);
+      return labels;
+    };
+    test(`an Undo back to Label visibility On draws the label at once (${mode})`, async ({ page }) => {
       test.setTimeout(240_000);
       await labelsNoneOn(page);
       await popupEdit(page, 'FL1', { labelVisibility: 'default' });
       await settleLive(page);
-      await history(page, 'undo');
-      await settleLive(page);
+      expect((await stepAtOnce(page, 'undo')).length, 'the Undo shows the label').toBeGreaterThan(0);
       await expectLiveEqualsGenerate(page, { label: 'an Undo back to On' });
     });
-    test(`a Redo of Label visibility On draws the label (${mode})`, async ({ page }) => {
+    test(`a Redo of Label visibility On draws the label at once (${mode})`, async ({ page }) => {
       test.setTimeout(240_000);
       await labelsNoneOn(page);
-      await history(page, 'undo');
-      await settleLive(page);
-      await history(page, 'redo');
-      await settleLive(page);
+      expect(await stepAtOnce(page, 'undo'), 'the Undo shows no label').toEqual([]);
+      expect((await stepAtOnce(page, 'redo')).length, 'the Redo shows the label').toBeGreaterThan(0);
       await expectLiveEqualsGenerate(page, { label: 'a Redo of On' });
     });
   }
@@ -1400,11 +1415,11 @@ test.describe('a Result displayed after its intent changed', () => {
   });
 });
 
-// Undo and Redo of a feature hide, a Label Off, or a label text apply at once with
-// Auto Reflow off: when Undo or Redo returns, the figure shows the step, with any
-// rerender held. Guards of how History steps work, which also keep the moved
-// Legend and the displayed batch Result where they are. With Auto Reflow on, two
-// of them are confirmed mismatches, marked with their findings.
+// Undo and Redo of a feature hide, a Label Off, or a label text apply at once:
+// when Undo or Redo returns, the figure shows the step, with any rerender held.
+// With Auto Reflow on, History shows the figure the step's rerender replaced or
+// drew (W15 §8.3, OV-2436). Guards of how History steps work, which also keep
+// the moved Legend and the displayed batch Result where they are.
 test.describe('Undo and Redo', () => {
   const featureIdOf = (page, locusTag) => page.evaluate((tag) => {
     const app = window.__GBDRAW_APP__;
@@ -1500,21 +1515,23 @@ test.describe('Undo and Redo', () => {
         });
       }
     });
-    // With Auto Reflow on, an Undo of a hide or a Label Off waits for the rerender
-    // (OV-2436); the Redo after it applies at once, with the rerender held only
-    // for the Redo.
+    // With Auto Reflow on, the edit's rerender replaced the figure: the Undo shows
+    // the figure it replaced at once, with no rerender (OV-2436), and the Redo the
+    // figure it drew.
     for (const { domain, edit, edited } of AT_ONCE_CASES.slice(0, 2)) {
       test(`Undo of ${domain} applies at once, Auto Reflow on (${mode})`, async ({ page }) => {
-        test.fail(true, 'OV-2436: an Undo of a hide or a Label Off waits for the rerender with Auto Reflow on');
         test.setTimeout(180_000);
         await open(page, { mode, results: 'single', reflow: 'on' });
         const id = await featureIdOf(page, 'FL2');
         await edit(page);
         await settleLive(page);
+        const before = await rerenderRequests(page);
         await holdRerenders(page);
         const undo = await stepAndRead(page, 'undo', id);
         await releaseRerenders(page);
         expect(undo, 'Undo').toEqual(SHOWN);
+        expect(await rerenderRequests(page), 'the Undo asks for no rerender').toBe(before);
+        await expectLiveEqualsGenerate(page, { label: `Undo of ${domain}, Auto Reflow on` });
       });
       test(`Redo of ${domain} applies at once after the Undo has finished, Auto Reflow on (${mode})`, async ({ page }) => {
         test.setTimeout(180_000);
@@ -1525,10 +1542,12 @@ test.describe('Undo and Redo', () => {
         await history(page, 'undo');
         await settleLive(page);
         expect(await stepAndRead(page, null, id), 'before the Redo').toEqual(SHOWN);
+        const before = await rerenderRequests(page);
         await holdRerenders(page);
         const redo = await stepAndRead(page, 'redo', id);
         await releaseRerenders(page);
         expect(redo, 'Redo').toEqual(edited);
+        expect(await rerenderRequests(page), 'the Redo asks for no rerender').toBe(before);
       });
     }
     test(`a moved Legend returns through Undo of a label edit, and comes back through Redo, Auto Reflow off (${mode})`, async ({ page }) => {

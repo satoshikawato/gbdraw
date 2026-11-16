@@ -69,7 +69,8 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
  * @property {(result: SvgResultEntry) => string} getResultIdentity
  * @property {(reason: string) => unknown} commitActiveResultEdit
  *   The preview runtime's methods.
- * @property {(write: () => void, request: { requestedAt: number }) => unknown} adoptDrawnWrite History's adoption of a drawn write.
+ * @property {(write: () => void, request: { requestedAt: number, figure?: 'replaced' | 'drawn' }) => unknown} adoptDrawnWrite
+ *   History's adoption of a drawn write; History holds the figure a rerender drew once its Legend is read (W15 §8.2).
  * @property {() => unknown} captureBaseConfig
  * @property {(preserveOffset?: boolean) => unknown} setupDiagramDrag
  * @property {() => unknown} applyCanvasPadding
@@ -175,7 +176,7 @@ export const createMountedLegendBinding = ({
       // after it was requested (an action waiting for it, D-40).
       const { historyRequestedAt } = context.bindingOptions;
       if (historyRequestedAt === undefined) adopt();
-      else adoptDrawnWrite(adopt, { requestedAt: historyRequestedAt });
+      else adoptDrawnWrite(adopt, { requestedAt: historyRequestedAt, figure: 'drawn' });
     },
     /** @param {BoundResultContext} context */
     bindComposition(context) {
@@ -211,8 +212,8 @@ export const createMountedLegendBinding = ({
 // `drawsResult`) pays the redraw its drawing owes when, as its Result is
 // ready, no later rerender runs and its figure shows the drawing's current
 // paint, also after an edit made since its paint was committed (read before
-// that edit is shown on it, OV-346). A Generate that names no drawn paint drew
-// the paint the record holds for its Result (`rememberCommittedEditorState`).
+// that edit is shown on it, OV-346): the paint its record holds, which every
+// phase that draws names as its request is built (`rememberCommittedEditorState`).
 // Its drawing is the shown one: a mode switch waits for a rerender
 // (`drawingSwitchBusy`). D-24 (OV-731): History keeps a rerender's figure as
 // the last step's; a Generate is a History step of its own.
@@ -309,7 +310,7 @@ export const createMountedResultReadiness = ({
       const drawing = state.activeDrawing();
       const payer = redrawPayer(context.phase);
       const drewCurrent = payer !== null && !labelReflowProcessing.value && resultPaintDrewPaint(
-        context.bindingOptions.drawnPaint ?? resultPaintDrawn(context.result), currentEditorProjectionState(drawing));
+        resultPaintDrawn(context.result), currentEditorProjectionState(drawing));
       handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
       if (!drewCurrent) return;

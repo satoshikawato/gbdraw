@@ -20,7 +20,9 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-const { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+const {
+  ARTIFACT_SLOT_KEYS, artifactSlotAs, artifactSlotShowing, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact
+} = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createDrawingSwitch } = await import('../../gbdraw/web/js/app/drawing-switch.js');
 const { readdir, readFile } = await import('node:fs/promises');
@@ -249,6 +251,27 @@ test('a null applied palette restored in the shown drawing keeps the displayed p
 
 // REVIEW-1 M1: one store keeps the hidden drawings' artifacts, and only its
 // named operations change it; an entry's key is its slot's drawing.
+// OV-3732: Duplicate's slot shares its source's artifact but its Results,
+// which are copies with records of their own. W15 §8.3: a held figure shows
+// at the displayed Result index, clamped to its Results.
+test('a copied slot holds copies of its Results; a held figure keeps the displayed index', () => {
+  const results = [{ name: 'a.svg', content: '<svg/>' }, { name: 'b.svg', content: '<svg/>' }];
+  const source = createArtifactSlot({ drawing: { id: 'd1', mode: 'linear' }, values: { results, selectedResultIndex: 1 } });
+  /** @type {unknown[][]} */
+  const copied = [];
+  const copy = artifactSlotAs(source, { id: 'd2', mode: 'linear' }, {
+    copyResults: (sources) => sources.map((result) => ({ ...result, copy: true })),
+    copyRecords: (sources, copies) => { copied.push([sources, copies]); }
+  });
+  assert.equal(copy.drawingId, 'd2');
+  assert.deepEqual(copy.values.results, results.map((result) => ({ ...result, copy: true })));
+  assert.deepEqual(copied, [[results, copy.values.results]], 'the records follow the copies');
+  assert.equal(copy.values.selectedResultIndex, 1);
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, 5).values.selectedResultIndex, 1, 'clamped');
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, 0).values.selectedResultIndex, 0);
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, 0).values.results, results, 'by reference');
+});
+
 test('the slot store keeps a hidden drawing\'s artifact through its named operations', async () => {
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');
@@ -287,7 +310,7 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
     biologicalFeatures: [{ id: 'b2' }], results: [{ name: 'a.svg', content: '<svg id="a2"/>' }],
     labelFitReports: [],
     // The input summary the rerender drew replaces the Generate's (it draws the live Feature visibility).
-    inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['redrawn'], warnings: [], drawnVisibility: '[[],[]]' }]
+    inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['redrawn'], warnings: [] }]
   };
   /** @type {unknown[][]} */
   const installed = [];
