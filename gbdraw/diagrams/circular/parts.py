@@ -19,6 +19,7 @@ from ...analysis.conservation import DrawnConservationRing
 from ...analysis.depth_tracks import DepthTrackData
 from ...analysis.feature_density import FeatureDensityLayer
 from ...annotations import AnnotationOptions, ResolvedAnnotationBundle, ResolvedAnnotationTrack
+from ...labels.circular import DrawnLabelPass
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...render.groups.circular.definition import CircularDefinitionProfile
 from ...tracks import CircularTrackSlot
@@ -121,12 +122,14 @@ class CircularPresentationInputs:
     draws (``None``: none given). ``layout_definition_profile`` is the
     definition the tracks are placed around when it differs from the drawn
     one; ``definition_record_count`` and ``definition_position`` keep the
-    values a single-record figure draws unless a caller sets them.
+    values a single-record figure draws unless a caller sets them. ``label_pass`` says whether the horizontal labels
+    may be packed ("packed") or are placed as today ("todays", a figure-size search's first search, CP-D11).
     """
 
     species: str | None
     strain: str | None
     plot_title: str | None
+    label_pass: DrawnLabelPass
     definition_position: str = "center"
     definition_profile: CircularDefinitionProfile = "full"
     layout_definition_profile: CircularDefinitionProfile | None = None

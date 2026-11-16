@@ -590,7 +590,7 @@ def test_prepare_label_list_hmmtdna_d_loop_hash_override_survives_feature_object
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
         CircularRenderProfile(cfg),
-    )
+    ).labels
 
     d_loop_label = next((label for label in labels if label.get("label_text") == "D-loop"), None)
     assert d_loop_label is not None

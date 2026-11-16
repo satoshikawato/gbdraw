@@ -72,8 +72,11 @@ from ...labels.label_ink import circular_label_ink
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...render.drawers.label_backing import feature_label_drawn_parts
 from ...labels.circular import (
+    CircularLabelPass,
     CircularLabelProbeStopped,
     CircularLabelRadii,
+    DrawnLabelPass,
+    PlacedCircularLabels,
     assign_leader_start_points,
     circular_label_fits,
     circular_label_font_size,
@@ -3144,6 +3147,16 @@ def _default_outer_label_arena(
 
 
 
+class _PlacementReport(NamedTuple):
+    """What a record's drawn placement reports besides its labels: radial labels refused for want of room
+    (OV-694, RADIAL-JOIN), the sides whose labels need much more room than the map has and were not placed
+    (CAPACITY-STOP), and whether today's placement left defects it did not try the packer on (CP-D11)."""
+
+    radial_refused: bool = False
+    capacity: tuple[CircularLabelCapacity, ...] = ()
+    packer_skipped: bool = False
+
+
 class _DefinitionTrackOverlap(NamedTuple):
     """The centre definition lines that reach into a track (``lines``, how many), and what the fit report offers to clear
     them: a probe of the tracks and text at another font size, and the radius that narrows the inside tracks."""
@@ -3157,12 +3170,11 @@ def _record_label_layout(
     gb_record: SeqRecord,
     profile: CircularRenderProfile,
     drawn_labels: Sequence[CircularLabel],
-    place_labels: Callable[..., list[CircularLabel]] | None,
+    place_labels: Callable[[CircularRenderProfile], PlacedCircularLabels] | None,
     *,
     record_index: int,
     definition_text: Sequence[Aabb],
-    radial_refused: bool,
-    capacity: Sequence[CircularLabelCapacity] = (),
+    report: _PlacementReport,
     region_labels: Sequence[CircularAnnotationLabel] = (),
     region_warnings: RegionLabelWarnings = RegionLabelWarnings(FITS),
     definition_overlap: _DefinitionTrackOverlap = _DefinitionTrackOverlap(),
@@ -3177,12 +3189,14 @@ def _record_label_layout(
     their font sizes), are a
     ``circular_region`` kind that only warns, and so are the
     lines of the centre definition text that reach into a track (D-12,
-    ``circular_definition``). ``capacity`` names the sides whose labels need
-    much more room than the map has and were not placed (CAPACITY-STOP). ``total_length`` is the length the
+    ``circular_definition``). ``report`` holds what the placement reported besides the labels; its ``capacity``
+    names the sides whose labels need much more room than the map has and were not placed (CAPACITY-STOP).
+    ``place_labels`` places them again with other settings as a fit probe. ``total_length`` is the length the
     labels are placed round: the circle's when several records share it.
     """
 
     definition_track_overlaps = definition_overlap.lines
+    capacity = report.capacity
     total_length = len(gb_record.seq) if total_length is None else total_length
     label_counts: dict[LabelKind, int] = {}
     for label in drawn_labels:
@@ -3209,7 +3223,7 @@ def _record_label_layout(
         def probe_outer(overrides: Mapping[str, LabelFitValue]) -> LabelFit:
             probe_profile = replace(profile, config=with_config_overrides(cfg, overrides))
             try:
-                labels = placer(probe_profile, probe=True)
+                labels = placer(probe_profile).labels
             except CircularLabelProbeStopped as stopped:
                 # The dense candidate already overlaps; crossings are not counted.
                 return LabelFit(overlap_pairs=stopped.overlap_pairs, crossing_pairs=0)
@@ -3239,8 +3253,9 @@ def _record_label_layout(
         x_radius_offset=float(outer_offsets.x_radius_offset),
         y_radius_offset=float(outer_offsets.y_radius_offset),
         label_spacing=float(cfg.labels.spacing.circular),
-        refused=radial_refused,
+        refused=report.radial_refused,
         capacity={side.label_kind: side.record for side in capacity},
+        packer_skipped=report.packer_skipped,
         features_separated=bool(profile.resolve_overlaps),
         probe=probe,
         # The region labels' own sizes, drawn or left out; a label without a size of its own takes the record's.
@@ -3327,10 +3342,10 @@ def _place_circular_labels(
     state: _CircularLabelState,
     label_profile: CircularRenderProfile,
     *,
-    probe: bool = False,
+    label_pass: CircularLabelPass,
     candidate_caches: dict[float, CircularLabelCandidateCache],
-) -> list[CircularLabel]:
-    """Place one record's labels with ``label_profile`` and the geometry of ``state``."""
+) -> PlacedCircularLabels:
+    """Place one record's labels with ``label_profile`` and the geometry of ``state``, as far as ``label_pass``."""
 
     font_size = circular_label_font_size(label_profile.config, state.total_length)
     return prepare_label_list(
@@ -3360,7 +3375,7 @@ def _place_circular_labels(
         feature_lane_direction=state.feature_lane_direction,
         _candidate_cache=candidate_caches.setdefault(font_size, {}),
         record_transform=state.record_transform,
-        probe=probe,
+        label_pass=label_pass,
         definition_text=state.definition_text,
         label_filtering=state.label_filtering,
         record_id=state.record_id,
@@ -3384,9 +3399,7 @@ class CircularLabelPlacement:
     feature_slot: CircularTrackSlot | None
     # The annotation slots as packed where the layout draws them.
     annotation_tracks: _AnnotationTracks
-    radial_refused: bool
-    # The sides whose labels need much more room than the map has: no label of the record was placed (CAPACITY-STOP).
-    capacity: tuple[CircularLabelCapacity, ...]
+    report: _PlacementReport
     # Text measurements per label font size, for the fit probes.
     label_candidates: tuple[tuple[float, tuple[CircularLabelCandidate, ...]], ...]
 
@@ -3426,6 +3439,7 @@ def circular_labels(
     label_filtering: Mapping[str, Any],
     annotation_tracks: _AnnotationTracks,
     record_id: str,
+    label_pass: DrawnLabelPass,
 ) -> CircularLabelPlacement:
     """Place one record's external and embedded labels; radial labels grow the radius (stage ``circular_labels``).
 
@@ -3433,7 +3447,8 @@ def circular_labels(
     ``label_radii`` (``circular_label_radii``), not the centre band (OV-2103). The growth loop replans the radial layout
     with a larger radius until the radial labels fit or growing stops making
     room. It works on copies: the feature layers it is given and the canvas
-    configurator are not changed. ``radial_growth`` is None unless labels are radial.
+    configurator are not changed. ``radial_growth`` is None unless labels are radial. ``label_pass`` says whether
+    horizontal labels may be packed (CP-D11); it is an argument, so it is part of the stage key.
     """
 
     cfg = profile.config
@@ -3462,10 +3477,12 @@ def circular_labels(
     slots = list(layout_slots)
     capacity: tuple[CircularLabelCapacity, ...] = ()
     try:
-        labels = _place_circular_labels(state(), profile, candidate_caches=candidate_caches)
+        labels, packer_skipped = _place_circular_labels(
+            state(), profile, label_pass=label_pass, candidate_caches=candidate_caches
+        )
     except CircularLabelCapacityExceeded as exceeded:
         # CAPACITY-STOP: the figure stops at the label fit check; nothing of this record is placed.
-        labels, capacity = [], exceeded.capacities
+        labels, capacity, packer_skipped = [], exceeded.capacities, False
     # Radial labels that collide once the canvas stops growing are refused (OV-694, RADIAL-JOIN).
     radial_refused = False
     if radial_growth is not None:
@@ -3598,7 +3615,9 @@ def circular_labels(
             band = _feature_band_overrides(replanned_layout, float(geometry.radius), float(geometry.track_ratio))
             if band is not None:
                 resolved_feature_anchor_radius_px, feature_track_ratio_factor_override = band
-            labels = _place_circular_labels(state(), profile, candidate_caches=candidate_caches)
+            labels = _place_circular_labels(
+                state(), profile, label_pass=label_pass, candidate_caches=candidate_caches
+            ).labels
         radial_refused = radial_refused or any(
             any(label.get("layout_collision_counts", ()))
             for label in labels
@@ -3613,8 +3632,7 @@ def circular_labels(
         layout_slots=tuple(slots),
         feature_slot=feature_slot,
         annotation_tracks=annotation_tracks,
-        radial_refused=radial_refused,
-        capacity=capacity,
+        report=_PlacementReport(radial_refused, capacity, packer_skipped),
         label_candidates=tuple(
             (font_size, cache["candidates"])
             for font_size, cache in candidate_caches.items()
@@ -4241,16 +4259,17 @@ def add_record_on_circular_canvas(
     centre = centre_definition(cfg)
     definition_text = _centre_definition_text(centre) if centre is not None else ()
     definition_ink = _centre_definition_ink(centre) if centre is not None else ()
-    radial_refused = False
-    label_capacity: tuple[CircularLabelCapacity, ...] = ()
+    label_report = _PlacementReport()
     label_state: _CircularLabelState | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
     label_candidate_caches: dict[float, CircularLabelCandidateCache] = {}
     if show_external_labels:
-        # The stage key leaves out whether the capacity check runs (off only while a fit row is verified). A result
-        # reused across that flag is still right: a verified row's settings differ from the drawn ones, so only a
-        # later Generate with a found row's settings can reuse it, and those labels fit (no figure with a found row
-        # reaches the stop level in the calibration); reusing it can skip a warning, nothing more.
+        # The label pass (packed, or today's in a size search's first search, CP-D11) is an argument, so it is in the
+        # stage key, and a reused result still says whether it skipped the packer (its report). The key leaves out only
+        # whether the capacity check runs (off only while a fit row is verified). A result reused across that flag is
+        # still right: a verified row's settings differ from the drawn ones, so only a later Generate with a found
+        # row's settings can reuse it, and those labels fit (no figure with a found row reaches the stop level in the
+        # calibration); reusing it can skip a warning, nothing more.
         placement = render_stage(
             "circular_radial_labels" if profile.label_placement == "radial" else "circular_labels",
             circular_labels,
@@ -4282,6 +4301,7 @@ def add_record_on_circular_canvas(
             label_filtering=label_filtering,
             annotation_tracks=annotation_tracks,
             record_id=str(record.gb_record.id),
+            label_pass=presentation.label_pass,
         )
         # The one write of the radius the labels grew (a stage result is never changed).
         canvas_config.radius = placement.state.geometry.radius
@@ -4297,8 +4317,7 @@ def add_record_on_circular_canvas(
         feature_lane_direction = label_state.feature_lane_direction
         resolved_feature_anchor_radius_px = label_state.resolved_feature_anchor_radius_px
         feature_track_ratio_factor_override = label_state.feature_track_ratio_factor_override
-        radial_refused = placement.radial_refused
-        label_capacity = placement.capacity
+        label_report = placement.report
         label_candidate_caches.update(
             (font_size, {"candidates": candidates}) for font_size, candidates in placement.label_candidates
         )
@@ -4536,15 +4555,14 @@ def add_record_on_circular_canvas(
         profile,
         precalculated_labels or [],
         (
-            partial(_place_circular_labels, label_state, candidate_caches=label_candidate_caches)
+            partial(_place_circular_labels, label_state, label_pass="probe", candidate_caches=label_candidate_caches)
             if label_state is not None
             else None
         ),
         # The index the record's definition group carries (``definition_kwargs``).
         record_index=int(planned.annotation_record_index),
         definition_text=definition_text,
-        radial_refused=radial_refused,
-        capacity=label_capacity,
+        report=label_report,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
         region_warnings=_region_label_warnings(
             radial_layout, annotation_track_layouts, planned.annotation_record_index, annotation_labels, region_labels_not_clear

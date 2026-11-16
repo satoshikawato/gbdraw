@@ -880,7 +880,7 @@ def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() ->
         drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
 
     def failing(error: Exception):
-        def assemble(_cfg, overrides):
+        def assemble(_cfg, overrides, _label_pass):
             if not overrides:
                 return drawing
             raise error
@@ -916,7 +916,7 @@ def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
         diagnostic={"code": "TRACK_LAYOUT", "reason": "CENTER_RESERVED"},
     )
 
-    def assemble(_cfg, overrides):
+    def assemble(_cfg, overrides, _label_pass):
         if not overrides:
             return drawing
         raise error

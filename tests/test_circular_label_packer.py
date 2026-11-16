@@ -33,6 +33,7 @@ from gbdraw.layout.spatial import Aabb
 from gbdraw.session import build_session_document
 from gbdraw.session_io import materialize_embedded_file
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.render_stage_equivalence import EquivalenceHarness
 from tests.utils.session_files import embedded_session
 from gbdraw.web_support.request_render import render_canonical_web_request
 import gbdraw.labels.circular as circular_module
@@ -40,9 +41,10 @@ from gbdraw.labels.circular import (
     _count_label_overlaps,
     _packer_side_rules,
     calculate_coordinates,
+    PlacedCircularLabels,
     circular_label_fits,
-    todays_label_placement,
 )
+from gbdraw.labels.circular_fit import CircularLabelLayout
 from gbdraw.labels.circular_capacity import PACKABLE_RATIO, LabelArc, circular_label_capacity, sides_packable
 from gbdraw.labels.circular_packer import PACKER_LOOKS, PackerLook, SideRules, pack_side
 from gbdraw.labels.circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels, too_close_on_one_line
@@ -439,11 +441,11 @@ def test_the_repair_of_a_packed_record_keeps_the_line_gap(tmp_path: Path, monkey
     drawn: list[tuple[int, list[CircularLabel]]] = []
     prepare = assemble_module.prepare_label_list
 
-    def recording(feature_dict: object, total_length: int, *args: object, **kwargs: object) -> list[CircularLabel]:
-        labels = prepare(feature_dict, total_length, *args, **kwargs)  # type: ignore[arg-type]
-        if not kwargs.get("probe"):
-            drawn.append((int(total_length), labels))
-        return labels
+    def recording(feature_dict: object, total_length: int, *args: object, **kwargs: object) -> PlacedCircularLabels:
+        placed = prepare(feature_dict, total_length, *args, **kwargs)  # type: ignore[arg-type]
+        if kwargs.get("label_pass") != "probe":
+            drawn.append((int(total_length), placed.labels))
+        return placed
 
     monkeypatch.setattr(assemble_module, "prepare_label_list", recording)
     assert _draw(tmp_path, [*P1, "--label_font_size", "14"]).is_file()
@@ -491,87 +493,125 @@ def test_a_record_the_packer_cannot_fit_keeps_todays_placement_and_stop(
 
 
 @pytest.mark.circular
-def test_todays_label_placement_draws_a_record_the_packer_fits_as_today(
-    tmp_path: Path, looks: list[tuple[PackerLook, bool]]
+@pytest.mark.usefixtures("todays_label_placement_only")
+def test_todays_label_pass_draws_a_record_the_packer_fits_as_today(
+    tmp_path: Path, looks: list[tuple[PackerLook, bool]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Inside ``todays_label_placement`` P1 13 pt is drawn as today, with its one crossing, and the switch notes that
-    a placement skipped the packer (what a figure-size search reads, CP-D11)."""
+    """With today's label pass P1 13 pt is drawn as today, with its one crossing, and its label layout says that the
+    placement skipped the packer (what a figure-size search reads, CP-D11)."""
 
-    with todays_label_placement() as todays, pytest.warns(LabelLeadersCrossWarning, match=r"1 leader pairs? cross"):
+    layouts: list[CircularLabelLayout] = []
+    attach = diagram_module._attach_circular_label_layouts
+
+    def recording(drawing: object, found: list[CircularLabelLayout | None]) -> None:
+        layouts.extend(layout for layout in found if layout is not None)
+        attach(drawing, found)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(diagram_module, "_attach_circular_label_layouts", recording)
+    with pytest.warns(LabelLeadersCrossWarning, match=r"1 leader pairs? cross"):
         circular_main([*P1, "--label_font_size", "13", "-o", str(tmp_path / "out"), "-f", "svg"])
-    assert todays.packer_skipped and looks == []
+    assert looks == [] and layouts[0].packer_skipped
 
 
 # ---- a requested figure size searches with today's placement first (CP-D11) --------------------------------
 
 
 class _SearchedFigure:
-    """What one fake size search drew: its index and its labels' outcome."""
+    """What one fake size search drew at a base: the search, the base, its labels' outcome and whether its labels
+    skipped the packer. The size search reads it as the drawing, its composition plan and its one label layout."""
 
-    def __init__(self, index: int, outcome: str) -> None:
-        self.index = index
+    def __init__(self, search: int, base: int, outcome: str, packer_skipped: bool) -> None:
+        self.search = search
+        self.base = base
         self.outcome = outcome
+        self.packer_skipped = packer_skipped
+
+
+class _FakeSizeSearch:
+    """``fit_base_length`` and ``_circular_pass`` of the size search, faked: each search draws ``bases`` (offsets from
+    the first base) and keeps the last, with ``kept[search]`` (fits the box, labels' outcome); today's passes skip
+    the packer at the offsets in ``skipping``. ``drawn`` lists every pass assembled, with its label pass."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, kept: list[tuple[bool, str]], *, bases: tuple[int, ...] = (0,),
+                 skipping: frozenset[int] = frozenset({0})) -> None:
+        self.kept, self.bases, self.skipping = kept, bases, skipping
+        self.searches = 0
+        self.first_base = 0
+        self.drawn: list[tuple[int, str]] = []
+        self.cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+        monkeypatch.setattr(diagram_module, "fit_base_length", self.search)
+        monkeypatch.setattr(diagram_module, "_circular_pass", self.circular_pass)
+        monkeypatch.setattr(diagram_module, "_circular_label_layouts", lambda drawing: (drawing,))
+        monkeypatch.setattr(diagram_module, "applied_composition_plan", lambda drawing: drawing)
+        monkeypatch.setattr(diagram_module, "figure_size_excess", lambda plan, size: -1.0)
+        monkeypatch.setattr(diagram_module, "figure_size_parts", lambda plan: ())
+        monkeypatch.setattr(diagram_module, "labels_not_placed", lambda layouts: False)
+        monkeypatch.setattr(diagram_module, "circular_label_outcome", lambda layouts: layouts[0].outcome)
+        monkeypatch.setattr(diagram_module, "figure_size_refusal", lambda *args, **kwargs: AssertionError("refused"))
+
+    def search(self, measure: object, *, first_base: int, slope: float) -> BaseLengthFit[object]:
+        index, self.first_base = self.searches, first_base
+        measured = [measure(first_base + offset) for offset in self.bases]  # type: ignore[operator]
+        self.searches += 1
+        warnings.warn(f"search {index}", UserWarning)
+        fits = self.kept[index][0]
+        return BaseLengthFit(first_base, -1.0, measured[-1].built, fits)
+
+    def circular_pass(self, assemble: object, cfg: GbdrawConfig, label_pass: str) -> object:
+        offset = round(float(cfg.canvas.circular.radius)) - self.first_base
+        self.drawn.append((offset, label_pass))
+        warnings.warn(f"pass {offset} {label_pass}", UserWarning)
+        figure = _SearchedFigure(self.searches, offset, self.kept[self.searches][1],
+                                 label_pass == "todays" and offset in self.skipping)
+        return diagram_module._CircularPass(cfg, figure)  # type: ignore[arg-type]
+
+    def run(self) -> tuple[_SearchedFigure, list[str]]:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            drawn = diagram_module._fitted_circular_pass(
+                lambda *args: None, self.cfg, self.cfg.canvas.figure_size, map_item="map"  # type: ignore[arg-type, return-value]
+            )
+        return drawn.drawing, [str(warning.message) for warning in caught]  # type: ignore[return-value]
 
 
 @pytest.mark.parametrize(
-    ("searches", "skips_packer", "runs_today", "kept"),
+    ("searches", "skips_packer", "passes", "kept"),
     [
-        pytest.param([(True, "fits")], True, [True], 0, id="labels_fit_today"),
-        pytest.param([(True, "warn"), (True, "fits")], True, [True, False], 1, id="packed_search_fits"),
-        pytest.param([(True, "stop"), (True, "warn")], True, [True, False], 0, id="packed_search_does_not_fit"),
-        pytest.param([(True, "stop"), (False, "fits")], True, [True, False], 0, id="packed_search_over_the_box"),
-        pytest.param([(False, "fits"), (True, "fits")], True, [True, False], 1, id="today_over_the_box"),
-        pytest.param([(True, "warn")], False, [True], 0, id="no_pass_skipped_the_packer"),
+        pytest.param([(True, "fits")], True, ["todays"], 0, id="labels_fit_today"),
+        pytest.param([(True, "warn"), (True, "fits")], True, ["todays", "packed"], 1, id="packed_search_fits"),
+        pytest.param([(True, "stop"), (True, "warn")], True, ["todays", "packed"], 0, id="packed_search_does_not_fit"),
+        pytest.param([(True, "stop"), (False, "fits")], True, ["todays", "packed"], 0, id="packed_search_over_the_box"),
+        pytest.param([(False, "fits"), (True, "fits")], True, ["todays", "packed"], 1, id="today_over_the_box"),
+        pytest.param([(True, "warn")], False, ["todays"], 0, id="no_pass_skipped_the_packer"),
     ],
 )
 def test_the_size_search_keeps_todays_figure_unless_the_packed_search_fits(
     monkeypatch: pytest.MonkeyPatch,
     searches: list[tuple[bool, str]],
     skips_packer: bool,
-    runs_today: list[bool],
+    passes: list[str],
     kept: int,
 ) -> None:
-    """The search runs with today's placement first; a second search, with the packer, runs only when today's figure
-    does not fit (the box or the labels) and a pass skipped the packer, and is kept only when it fits both. Only the
-    kept search's warnings reach the caller."""
+    """The search draws with today's label pass first; a second search, with the packer, runs only when today's
+    figure does not fit (the box or the labels) and a pass skipped the packer (its label layout says so), and is
+    kept only when it fits both. Only the kept search's warnings reach the caller."""
 
-    ran: list[bool] = []
-
-    def search(measure: object, *, first_base: int, slope: float) -> BaseLengthFit[object]:
-        index = len(ran)
-        todays = circular_module._TODAYS_PLACEMENT.get()
-        ran.append(todays is not None)
-        if todays is not None and skips_packer:
-            todays.packer_skipped = True
-        fits, outcome = searches[index]
-        warnings.warn(f"search {index}", UserWarning)
-        return BaseLengthFit(first_base, -1.0, diagram_module._CircularPass(cfg, _SearchedFigure(index, outcome)), fits)
-
-    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
-    monkeypatch.setattr(diagram_module, "fit_base_length", search)
-    monkeypatch.setattr(diagram_module, "_circular_label_layouts", lambda drawing: drawing)
-    monkeypatch.setattr(diagram_module, "circular_label_outcome", lambda drawn: drawn.outcome)
-    monkeypatch.setattr(diagram_module, "figure_size_refusal", lambda *args, **kwargs: AssertionError("refused"))
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        drawn = diagram_module._fitted_circular_pass(
-            lambda *args: None, cfg, cfg.canvas.figure_size, map_item="map"  # type: ignore[arg-type, return-value]
-        )
-    assert ran == runs_today
-    assert drawn.drawing.index == kept  # type: ignore[attr-defined]
-    assert [str(warning.message) for warning in caught] == [f"search {kept}"]
+    fake = _FakeSizeSearch(monkeypatch, searches, skipping=frozenset({0}) if skips_packer else frozenset())
+    drawn, caught = fake.run()
+    assert [label_pass for _offset, label_pass in fake.drawn] == passes
+    assert drawn.search == kept and caught == [f"pass 0 {passes[kept]}", f"search {kept}"]
 
 
 @pytest.mark.slow
 @pytest.mark.circular
-def test_a_figure_whose_size_search_fits_today_is_drawn_as_today(tmp_path: Path) -> None:
+def test_a_figure_whose_size_search_fits_today_is_drawn_as_today(tmp_path: Path, request: pytest.FixtureRequest) -> None:
     """P1 12 pt at 1500 px wide: today's search ends in a radius whose labels fit (no warning, 900.12 px tall). Its
     passes at smaller radii do not fit; packing them changed the search and the figure (875.13 px tall)."""
 
     args = [*P1, "--label_font_size", "12", "--figure_width", "1500px"]
     drawn = _draw(tmp_path / "drawn", args).read_bytes()
-    with todays_label_placement():
-        today = _draw(tmp_path / "today", args).read_bytes()
+    request.getfixturevalue("todays_label_placement_only")
+    today = _draw(tmp_path / "today", args).read_bytes()
     assert drawn == today and b'height="900.1174px"' in drawn
 
 
@@ -635,3 +675,48 @@ def test_the_web_render_draws_p1_at_13pt_packed_without_a_fit_report(
     assert looks == [("half", False), ("pole", True)]
     cli = _draw(tmp_path / "cli", ["--gbk", str(TEST_INPUTS / "NC_005856.1.gb"), *DENSE[:5], "--label_font_size", "13"])
     assert (tmp_path / "out" / "p1.svg").read_bytes() == cli.read_bytes()
+
+
+# ---- the render-stage cache keys the label pass (Worker and Session replay = CLI) ---------------------------
+
+
+# Sized figures today's search keeps with labels that do not fit and the packed search draws: 14 pt at 1700 px stops
+# today (6 overlaps, 11 crossings), 13 pt at 1000 px warns (9 crossings).
+SIZED_PACKED = {
+    "p1_14pt_1700px_wide": [*P1, "--label_font_size", "14", "--figure_width", "1700px"],
+    "p1_13pt_1000px_tall": [*P1, "--label_font_size", "13", "--figure_height", "1000px"],
+}
+
+
+@pytest.mark.circular
+def test_a_sized_figure_the_packer_draws_is_the_clis_with_the_render_stage_cache(tmp_path: Path) -> None:
+    """A Worker transaction reuses ``circular_labels`` results by key. Its key holds the label pass, so the packed
+    search does not reuse today's placements (it drew today's figure with 9 crossings), and a later render that reuses
+    the stored placements reads from them that today's skipped the packer."""
+
+    harness = EquivalenceHarness("circular", tmp_path)
+    args = SIZED_PACKED["p1_13pt_1000px_tall"]
+    cli = harness.uncached(args)
+    assert cli.error is None and 'height=\\"1000px\\"' in json.dumps(cli.reply)
+    first = harness.warm(args)
+    again = harness.warm(args)
+    assert first == cli and again == cli
+    assert again.stages.hits.get("circular_labels") and not again.stages.builds.get("circular_labels")
+
+
+@pytest.mark.slow
+@pytest.mark.circular
+@pytest.mark.parametrize("case", sorted(SIZED_PACKED))
+def test_a_sized_figure_the_packer_draws_replays_from_its_session_and_the_worker_as_the_cli(
+    tmp_path: Path, case: str
+) -> None:
+    """The CLI's figure, its Session replayed by ``gbdraw circular --session`` (a cache transaction) and the Worker's
+    staged render with the cache are one figure."""
+
+    args = SIZED_PACKED[case]
+    session = tmp_path / "cli.gbdraw"
+    cli = _draw(tmp_path / "cli", [*args, "--session_output", str(session)])
+    replay = _draw(tmp_path / "replay", ["--session", str(session)])
+    assert replay.read_bytes() == cli.read_bytes()
+    harness = EquivalenceHarness("circular", tmp_path / "worker")
+    assert harness.cold(args) == harness.uncached(args)

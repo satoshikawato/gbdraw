@@ -351,9 +351,9 @@ def test_fit_probes_do_not_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     original = circular_labels.prepare_label_list
     calls: list[int] = []
 
-    def counting(*args, probe: bool = False, **kwargs):
-        probes.append(probe)
-        return original(*args, probe=probe, **kwargs)
+    def counting(*args, label_pass="packed", **kwargs):
+        probes.append(label_pass == "probe")
+        return original(*args, label_pass=label_pass, **kwargs)
 
     def repair(labels, total_length, *, definition_text=(), defects=None):
         calls.append(len(labels))

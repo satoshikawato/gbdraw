@@ -83,7 +83,7 @@ def _circular_policy_labels(label_rendering: str) -> list[dict]:
         390,
         0.19,
         CircularRenderProfile(cfg),
-    )
+    ).labels
 
 
 @pytest.mark.circular

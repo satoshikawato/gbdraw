@@ -47,6 +47,7 @@ from gbdraw.api.prepared import ResolvedFeatureInputs
 from gbdraw.api.requests import RecordPresentation
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
+from gbdraw.labels.circular import DrawnLabelPass
 from gbdraw.labels.linear import FeatureLabelRows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_units import CircleUnits
@@ -136,6 +137,8 @@ class CircularAssemblyInputs(DiagramAssemblyInputs):
     bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length
+    # Whether the horizontal labels may be packed; a figure-size search draws with today's placement first (CP-D11).
+    _label_pass: DrawnLabelPass = "packed"
 
 
 @dataclass(frozen=True, kw_only=True)

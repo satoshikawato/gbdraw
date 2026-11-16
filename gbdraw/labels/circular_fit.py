@@ -187,6 +187,9 @@ class CircularLabelLayout:
     # band enters a track's band (not the ink the notice reads) and no radius is set (``circular_definition``); 0
     # otherwise.
     definition_narrow_radius_px: float = 0.0
+    # Whether today's placement (a figure-size search's first search, CP-D11) left labels it did not try the packer
+    # on: the size search then searches again with the packer.
+    packer_skipped: bool = False
 
     @property
     def fit(self) -> LabelFit:

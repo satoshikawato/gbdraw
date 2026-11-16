@@ -186,7 +186,7 @@ from gbdraw.io.colors import (
     read_color_table,
     resolve_color_to_hex,
 )
-from gbdraw.labels.circular import todays_label_placement
+from gbdraw.labels.circular import DrawnLabelPass
 from gbdraw.labels.circular_capacity import label_capacity_unchecked
 from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
@@ -3409,6 +3409,7 @@ def _compose_circular_record(
             species=inputs.species,
             strain=inputs.strain,
             plot_title=title.title or None if title.definition_profile == "shared_common" else None,
+            label_pass=inputs._label_pass,
             definition_position="center",
             definition_profile=title.definition_profile,
             # The tracks are placed around the definition drawn without the plot title (OV-1710).
@@ -4004,6 +4005,7 @@ def _grid_record_drawing(
             center_reserved_radius=inputs.center_reserved_radius,
             circular_track_slots=tracks.slots,
             _implicit_track_stack=tracks.implicit,
+            _label_pass=inputs._label_pass,
             feature_density_tracks=inputs.feature_density_tracks,
             circular_track_axis_index=tracks.axis_index,
             _resolved_annotations=grid.annotations,
@@ -4306,7 +4308,8 @@ def _unfit_row_verification(error: ValidationError) -> LabelFitVerification | No
     return None
 
 
-_CircularAssemble: TypeAlias = Callable[[GbdrawConfig, Mapping[str, LabelFitValue]], Drawing]
+# A Circular assembly: the configuration, the label fit row's overrides, and whether its labels may be packed.
+_CircularAssemble: TypeAlias = Callable[[GbdrawConfig, Mapping[str, LabelFitValue], DrawnLabelPass], Drawing]
 # The padded content of a Circular map grows about 2 px per px of radius (the map's diameter).
 _CIRCULAR_PX_PER_RADIUS = 2.0
 
@@ -4319,8 +4322,14 @@ class _CircularPass:
     drawing: Drawing
 
 
-def _circular_pass(assemble: _CircularAssemble, cfg: GbdrawConfig) -> _CircularPass:
-    return _CircularPass(cfg, assemble(cfg, {}))
+def _circular_pass(assemble: _CircularAssemble, cfg: GbdrawConfig, label_pass: DrawnLabelPass) -> _CircularPass:
+    return _CircularPass(cfg, assemble(cfg, {}, label_pass))
+
+
+def _packer_skipped(measured: MeasuredBase[_CircularPass] | None) -> bool:
+    """Whether a pass drawn with today's placement left labels it did not try the packer on (CP-D11)."""
+
+    return measured is not None and any(layout.packer_skipped for layout in _circular_label_layouts(measured.built.drawing))
 
 
 def _fitted_circular_pass(
@@ -4334,20 +4343,20 @@ def _fitted_circular_pass(
     smallest drawn map does not fit is refused with that map's parts (D-13). A radius whose labels were not placed
     for lack of room (CAPACITY-STOP) left them out, and so does every smaller radius.
 
-    The search runs with today's label placement first (``todays_label_placement``), as the probes do, so a figure
-    whose search ends in labels that fit today is drawn as today (CP-D11). Only when its kept pass does not fit
-    (the box or the labels) and a pass skipped the packer, the search runs again with the packer, and its figure is
-    kept when it fits the box and its labels fit; otherwise today's figure (or refusal) stands. Only the kept
-    search's warnings reach the caller.
+    The search draws its passes with today's label placement first (``"todays"``), as the probes place them, so a
+    figure whose search ends in labels that fit today is drawn as today (CP-D11). Only when its kept pass does not
+    fit (the box or the labels) and a pass skipped the packer (its label layout says so), the search runs again with
+    the packer (``"packed"``). That figure is kept when it fits the box and its labels fit; otherwise today's figure
+    (or refusal) stands. Only the kept search's warnings reach the caller.
     """
 
     radius = float(cfg.canvas.circular.radius)
     first_base = max(1, round(radius))
 
-    def measure(base: int) -> MeasuredBase[_CircularPass] | None:
+    def measure(base: int, label_pass: DrawnLabelPass) -> MeasuredBase[_CircularPass] | None:
         scaled = cfg if base == first_base else _scale_circular_cfg(cfg, scale=base / radius)
         try:
-            built = _circular_pass(assemble, scaled)
+            built = _circular_pass(assemble, scaled, label_pass)
         except ValidationError as error:
             if base < first_base and track_layout_reason(error) is not None:
                 return None
@@ -4360,20 +4369,30 @@ def _fitted_circular_pass(
             left_out=labels_not_placed(_circular_label_layouts(built.drawing)),
         )
 
-    def search() -> tuple[BaseLengthFit[_CircularPass], tuple[warnings.WarningMessage, ...]]:
+    todays: dict[int, MeasuredBase[_CircularPass] | None] = {}
+
+    def today(base: int) -> MeasuredBase[_CircularPass] | None:
+        todays[base] = measure(base, "todays")
+        return todays[base]
+
+    def packed(base: int) -> MeasuredBase[_CircularPass] | None:
+        return measure(base, "packed")
+
+    def search(
+        measured: Callable[[int], MeasuredBase[_CircularPass] | None],
+    ) -> tuple[BaseLengthFit[_CircularPass], tuple[warnings.WarningMessage, ...]]:
         with warnings.catch_warnings(record=True) as caught:
-            fit = fit_base_length(measure, first_base=first_base, slope=_CIRCULAR_PX_PER_RADIUS)
+            fit = fit_base_length(measured, first_base=first_base, slope=_CIRCULAR_PX_PER_RADIUS)
         return fit, tuple(caught)
 
     def fits_with_labels(fit: BaseLengthFit[_CircularPass]) -> bool:
         return fit.fits and circular_label_outcome(_circular_label_layouts(fit.built.drawing)) == "fits"
 
-    with todays_label_placement() as todays:
-        fit, caught = search()
-    if todays.packer_skipped and not fits_with_labels(fit):
-        packed, packed_caught = search()
-        if fits_with_labels(packed):
-            fit, caught = packed, packed_caught
+    fit, caught = search(today)
+    if not fits_with_labels(fit) and any(_packer_skipped(measured) for measured in todays.values()):
+        packed_fit, packed_caught = search(packed)
+        if fits_with_labels(packed_fit):
+            fit, caught = packed_fit, packed_caught
     emit_caught_warnings(caught)
     if not fit.fits:
         raise figure_size_refusal(applied_composition_plan(fit.built.drawing), size, primary=map_item)
@@ -4401,22 +4420,22 @@ def _checked_circular_drawing(
 
     measures = CircularAnnotationMeasures()
 
-    def measured(drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue]) -> Drawing:
+    def measured(drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue], label_pass: DrawnLabelPass) -> Drawing:
         with kept_annotation_measures(measures):
-            return assemble(drawn_cfg, overrides)
+            return assemble(drawn_cfg, overrides, label_pass)
 
     size = cfg.canvas.figure_size
     if size.requested:
         drawn = _fitted_circular_pass(measured, cfg, size, map_item=map_item)
     else:
-        drawn = _circular_pass(measured, cfg)
+        drawn = _circular_pass(measured, cfg, "packed")
     drawing = drawn.drawing
 
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
             # A row is verified with the full placement and no capacity check, so the rows stay as they were.
             with label_capacity_unchecked():
-                verified = measured(drawn.cfg, overrides)
+                verified = measured(drawn.cfg, overrides, "packed")
         except ValidationError as error:
             unfit = _unfit_row_verification(error)
             if unfit is None:
@@ -4560,7 +4579,9 @@ def build_circular_diagram(
         )
     )
 
-    def assemble(drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue]) -> Drawing:
+    def assemble(
+        drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue], label_pass: DrawnLabelPass
+    ) -> Drawing:
         config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_record(
             gb_record,
@@ -4611,6 +4632,7 @@ def build_circular_diagram(
             _resolved_annotations=_resolved_annotations,
             _resolved_feature_inputs=feature_inputs,
             _resolved_record_features=_resolved_record_features,
+            _label_pass=label_pass,
             ),
             _record_context=CircularRecordContext(
                 precomputed_depth_track_specs=_precomputed_depth_track_specs,
@@ -5003,7 +5025,9 @@ def build_circular_multi_diagram(
         )
     )
 
-    def assemble(drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue]) -> Drawing:
+    def assemble(
+        drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue], label_pass: DrawnLabelPass
+    ) -> Drawing:
         config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_records(
             records,
@@ -5054,6 +5078,7 @@ def build_circular_multi_diagram(
             alignment_length=cast(int, options.alignment_length),
             _resolved_feature_inputs=feature_inputs,
             _resolved_record_features=_resolved_record_features,
+            _label_pass=label_pass,
             ),
             layout=layout,
             _record_transforms=_record_transforms,

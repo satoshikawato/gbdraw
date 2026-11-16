@@ -1052,7 +1052,7 @@ def _load_mjenmv_external_labels_with_config(
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
         CircularRenderProfile(cfg),
-    )
+    ).labels
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg
 
@@ -1235,7 +1235,7 @@ def test_circular_label_fit_uses_drawer_head_span_and_anchors_on_its_outline(
         track_ratio,
         CircularRenderProfile(cfg),
         _candidate_cache={"candidates": (candidate,)},
-    )
+    ).labels
 
     assert resolved_label_spans == pytest.approx([drawer_head_span])
     assert len(labels) == 1
@@ -1317,7 +1317,7 @@ def _load_hmmtdna_external_labels_with_config(
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
         CircularRenderProfile(cfg),
-    )
+    ).labels
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg
 
@@ -1392,7 +1392,7 @@ def _load_hmmtdna_external_labels_with_feature_width(
         CircularRenderProfile(cfg),
         outer_arena=outer_arena,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-    )
+    ).labels
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg, feature_track_ratio_factor_override
 
@@ -1456,7 +1456,7 @@ def _load_nc001879_external_labels_with_priority_and_color_table(
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
         CircularRenderProfile(cfg),
-    )
+    ).labels
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg
 
@@ -1526,7 +1526,7 @@ def _load_nc001454_labels_with_inner_resolve(
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
         CircularRenderProfile(cfg),
-    )
+    ).labels
     return labels, len(record.seq), cfg, feature_dict
 
 
@@ -1595,7 +1595,7 @@ def _load_nc001454_outer_labels_without_inner_resolve(
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
         CircularRenderProfile(cfg),
-    )
+    ).labels
     external_labels = [label for label in labels if not label.get("is_embedded")]
     outer_labels = [label for label in external_labels if not label.get("is_inner")]
     return outer_labels, len(record.seq), cfg
@@ -4025,7 +4025,7 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
         CircularRenderProfile(cfg),
-    )
+    ).labels
 
     nd4_baseline = next(
         label for label in baseline_labels if label.get("label_text") == "NADH dehydrogenase subunit 4"
@@ -4060,7 +4060,7 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
         override_cfg.canvas.circular.radius,
         override_cfg.canvas.circular.track_ratio,
         CircularRenderProfile(override_cfg),
-    )
+    ).labels
 
     nd4_override = next(label for label in override_labels if label.get("label_text") == "ND4")
     # "12S ribosomal RNA" does not fit s-rRNA at the lane centre it is drawn on, inside the axis (OV-3646).

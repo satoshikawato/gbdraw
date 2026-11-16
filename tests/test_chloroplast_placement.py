@@ -64,9 +64,9 @@ def test_chloroplast_placement_preserves_lanes_and_clears_labels_and_legend(
     overlaps = assemble._region_labels_on_other_tracks
 
     def capture(features, *args, **kwargs):
-        labels = original(features, *args, **kwargs)
-        measured.append((features, labels))
-        return labels
+        placed = original(features, *args, **kwargs)
+        measured.append((features, placed.labels))
+        return placed
 
     def capture_layout(layout, labels):
         # The layout drawn after the labels: the one they were placed on (the labels take its parts).

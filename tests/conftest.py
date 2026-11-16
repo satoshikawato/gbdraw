@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from functools import cache
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -260,14 +260,19 @@ def stub_typed_request_export(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def todays_label_placement_only() -> Iterator[None]:
-    """Circular horizontal labels as placed before the order-preserving packer (``todays_label_placement``).
+def todays_label_placement_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Circular horizontal labels as placed before the order-preserving packer: every drawn placement takes today's
+    label pass (``packer=False``, as a figure-size search's first search does, CP-D11).
 
     For tests of what a figure that does not fit carries (its report, rows and warning) on small records
     the packer now fits, as the repair is turned off for crossings it would clear.
     """
 
-    from gbdraw.labels.circular import todays_label_placement
+    import gbdraw.labels.circular as circular_labels
 
-    with todays_label_placement():
-        yield
+    drawn_placement = circular_labels._drawn_placement
+
+    def todays(*args: object, **kwargs: object) -> circular_labels.PlacedCircularLabels:
+        return drawn_placement(*args, **{**kwargs, "packer": False})  # type: ignore[arg-type]
+
+    monkeypatch.setattr(circular_labels, "_drawn_placement", todays)

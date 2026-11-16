@@ -976,7 +976,7 @@ def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> N
         CircularRenderProfile(cfg),
         outer_arena=outer_arena,
         feature_track_ratio_factor_override=feature_ratio_override,
-    )
+    ).labels
     outer_labels = [label for label in labels if not label.get("is_embedded")]
     assert outer_labels
 

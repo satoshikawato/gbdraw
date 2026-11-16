@@ -8,8 +8,6 @@ from __future__ import annotations
 import heapq
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cached_property, lru_cache, partial
 from typing import Any, Literal, NamedTuple, TypeAlias, get_args
@@ -89,36 +87,19 @@ DenseOuterRows: TypeAlias = Literal["spaced", "legacy"]
 PackedSides: TypeAlias = tuple[list[CircularLabel], list[CircularLabel]]
 
 
-@dataclass
-class TodaysLabelPlacement:
-    """Drawn placements made with today's placement only (``todays_label_placement``): no packer look is tried.
+# How far a record's horizontal placement goes. A fit probe ("probe") may stop at the first overlap and is never
+# repaired; a drawn placement repairs slight defects (LP-D57) and, with "packed", then tries the packer (CP-D04). A
+# figure-size search draws its passes with "todays" first (CP-D11).
+CircularLabelPass: TypeAlias = Literal["probe", "todays", "packed"]
+DrawnLabelPass: TypeAlias = Literal["todays", "packed"]
 
-    ``packer_skipped`` records whether one of them would have tried the packer: if none would have, the same
-    placements with the packer on are the same.
-    """
 
+class PlacedCircularLabels(NamedTuple):
+    """A record's placed labels, and whether a "todays" placement left defects it did not try the packer on: with
+    "packed" the same placement might have packed them. Otherwise "packed" places the same labels."""
+
+    labels: list[CircularLabel]
     packer_skipped: bool = False
-
-
-_TODAYS_PLACEMENT: ContextVar[TodaysLabelPlacement | None] = ContextVar(
-    "gbdraw_circular_todays_label_placement", default=None
-)
-
-
-@contextmanager
-def todays_label_placement() -> Iterator[TodaysLabelPlacement]:
-    """Draw every placement inside with today's placement (repaired, or as placed), as a probe does (CP-D11).
-
-    A figure-size search runs with it first, so a figure whose search ends in fitting labels today is drawn as
-    today; it yields what the placements skipped.
-    """
-
-    skipped = TodaysLabelPlacement()
-    token = _TODAYS_PLACEMENT.set(skipped)
-    try:
-        yield skipped
-    finally:
-        _TODAYS_PLACEMENT.reset(token)
 
 
 class CircularLabelProbeStopped(Exception):
@@ -5726,17 +5707,18 @@ def prepare_label_list(
     label_font_size: float | None = None,
     _candidate_cache: CircularLabelCandidateCache | None = None,
     record_transform: RecordDisplayTransform | None = None,
-    probe: bool = False,
+    label_pass: CircularLabelPass = "packed",
     definition_text: Sequence[Aabb] = (),
     label_filtering: Mapping[str, Any] | None = None,
     record_id: str | None = None,
-) -> list[CircularLabel]:
+) -> PlacedCircularLabels:
     """Return the record's drawn label list: embedded labels, then external labels.
 
-    With ``probe`` (a fit search), horizontal placement raises
+    With ``label_pass`` "probe" (a fit search), horizontal placement raises
     :class:`CircularLabelProbeStopped` as soon as the dense outer candidate
     overlaps, because such a layout does not fit. Otherwise slight defects of
-    the final horizontal layout are repaired locally (LP-D57); ``definition_text``
+    the final horizontal layout are repaired locally (LP-D57), and with "packed" the packer may place them
+    (``_drawn_placement``); ``definition_text``
     is the centre definition's lines, in the labels' coordinates.
     ``room`` (``circular_label_radii``): radial labels keep past its outer
     content radius and outside its inner reserve; horizontal outer labels and
@@ -5751,6 +5733,7 @@ def prepare_label_list(
     raise ``CircularLabelCapacityExceeded`` or warn before they are placed.
     """
     cfg = profile.config
+    probe = label_pass == "probe"
     embedded_labels: list[CircularLabel] = []
     outer_labels: list[CircularLabel] = []
     inner_labels: list[CircularLabel] = []
@@ -6036,7 +6019,7 @@ def prepare_label_list(
                 radial_result.leader_crossing_count,
                 radial_result.order_violation_count,
             )
-        return embedded_labels + external_labels
+        return PlacedCircularLabels(embedded_labels + external_labels)
 
     # The ellipses and the capacity value, derived once: the capacity check and the packer read them (CP-D04).
     outer_arc = label_arc(
@@ -6227,7 +6210,7 @@ def prepare_label_list(
             if dense_outer_rows == "legacy":
                 final_labels = embedded_labels + attempt_labels
     if probe:
-        return final_labels
+        return PlacedCircularLabels(final_labels)
     # LP-D57 repair (Q7: not in probes; Q2: not the spaced attempt), then the packer (CP-D04).
     return _drawn_placement(
         final_labels,
@@ -6241,6 +6224,7 @@ def prepare_label_list(
             spacing_px=label_spacing_px,
         ),
         place=lambda packed: embedded_labels + place_external_labels("legacy", packed),
+        packer=label_pass == "packed",
     )
 
 
@@ -6269,26 +6253,25 @@ def _drawn_placement(
     *,
     pack: Callable[[PackerLook, int], PackedSides | None],
     place: Callable[[PackedSides], list[CircularLabel]],
-) -> list[CircularLabel]:
+    packer: bool,
+) -> PlacedCircularLabels:
     """A record's drawn labels: ``labels`` with their slight defects repaired (LP-D57), or packed (CP-D04).
 
     The defects are counted once. When the repair cannot clear them and every side may fit on its ellipse
     (`sides_packable`), each packer look in turn (CP-D05: "half" first) packs the sides (``pack``) and the
     placement places them (``place``); a look's placement is drawn only when the fit check then finds no
     defect, or the repair clears them; both count a packed pair on one text line closer than its line gap as a
-    defect (`defect_count`, OV-2037). Otherwise ``labels`` are drawn as placed, with their warning. Inside
-    ``todays_label_placement`` no look is tried; the placement notes that it skipped the packer.
+    defect (`defect_count`, OV-2037). Otherwise ``labels`` are drawn as placed, with their warning. Without
+    ``packer`` (today's placement, CP-D11) no look is tried, and the result says that the packer was skipped.
     """
     from .circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels
 
     defects = defect_count(labels, total_length, definition_text)
     repaired = repair_circular_labels(labels, total_length, definition_text=definition_text, defects=defects)
     if defects == 0 or repaired is not None or not sides_packable(capacities):
-        return labels if repaired is None else repaired
-    todays = _TODAYS_PLACEMENT.get()
-    if todays is not None:
-        todays.packer_skipped = True
-        return labels
+        return PlacedCircularLabels(labels if repaired is None else repaired)
+    if not packer:
+        return PlacedCircularLabels(labels, packer_skipped=True)
     for look in PACKER_LOOKS:
         packed_sides = pack(look, MAX_DEFECTS)
         if packed_sides is None:
@@ -6296,13 +6279,13 @@ def _drawn_placement(
         packed = place(packed_sides)
         packed_defects = defect_count(packed, total_length, definition_text)
         if packed_defects == 0:
-            return packed
+            return PlacedCircularLabels(packed)
         packed_repaired = repair_circular_labels(
             packed, total_length, definition_text=definition_text, defects=packed_defects
         )
         if packed_repaired is not None:
-            return packed_repaired
-    return labels
+            return PlacedCircularLabels(packed_repaired)
+    return PlacedCircularLabels(labels)
 
 
 __all__ = [
@@ -6325,8 +6308,9 @@ __all__ = [
     "normalize_angle_near_reference",
     "euclidean_distance",
     "improved_label_placement_fc",
-    "TodaysLabelPlacement",
-    "todays_label_placement",
+    "CircularLabelPass",
+    "DrawnLabelPass",
+    "PlacedCircularLabels",
     "label_arc",
     "place_labels_on_arc_fc",
     "assign_leader_start_points",
