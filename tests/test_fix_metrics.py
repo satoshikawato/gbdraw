@@ -166,6 +166,49 @@ def test_lineage_spans_seven_days_and_half_the_lines_is_rework(tmp_path: Path) -
     assert (last.rewritten_lines, last.recent_lines, report.weeks[-1].rework) == (6, 3, 1)
 
 
+def test_seven_days_is_inside_and_two_lines_is_no_rewrite(tmp_path: Path) -> None:
+    """The window includes exactly 7 days and ends there; a rewrite of a fix needs 3 lines."""
+    repo = Repo(tmp_path)
+    repo.write({"README.md": "x\n"})
+    repo.git("commit", "-q", "-m", "root", day=-1)
+    a = "gbdraw/a.py"
+    head = [1, 2, 3]
+
+    def lines(word: str, numbers: list[int]) -> dict[int, str]:
+        return {n: f"value_{n} = '{word}'" for n in numbers}
+
+    repo.pull_request("feat/a", "Add a", {
+        a: module({}),
+        # The table forms both error baselines had until 2026-10-12.
+        "tests/test_web_error_producer_coverage.py":
+            'UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {\n    "a.py": (3, "n"),\n    "b.py": (4, "n"),\n}\n',
+        "tests/web/error-producer-coverage.test.mjs":
+            "const UNCLASSIFIED_THROW_BASELINE = {\n  'app/a.js': 2,\n  'app/b.js': 5\n};\n",
+    }, day=0)
+    repo.pull_request("fix/one", "One", {a: module({**lines("one", head), **lines("one", [5, 6])})}, day=1)
+    repo.pull_request("fix/two", "Two", {a: module({**lines("one", head), **lines("two", [5, 6])})}, day=2)
+    repo.pull_request("fix/three", "Three", {a: module({**lines("three", head), **lines("two", [5, 6])})}, day=8)
+    repo.pull_request("fix/four", "Four", {a: module({**lines("four", head), **lines("two", [5, 6])})}, day=9.01)
+    repo.pull_request("fix/five", "Five", {a: module({**lines("five", head), **lines("two", [5, 6])})}, day=15)
+    repo.pull_request("fix/six", "Six", {a: module({**lines("six", head), **lines("two", [5, 6])})}, day=22.01)
+    report = fix_metrics.period_report(fix_metrics.Git(repo.path), "dev", fix_metrics.day_start("2026-11-02"),
+                                       fix_metrics.day_start("2026-11-30"), jobs=1)
+    fixes = {fix.pr: fix for fix in report.fixes}
+    assert report.total.error_baselines == {"python_unclassified_validation_errors": 7,
+                                            "javascript_unclassified_throws": 7}
+    # #3 rewrites 2 lines of #2, 1 day old: recent rework, but no rewrite of a fix.
+    assert fixes["#3"].rewrites_recent_fix == [] and fixes["#3"].recent_lines == 2
+    # #4 rewrites #2 at exactly 7 days.
+    assert [(r.of, r.age_days) for r in fixes["#4"].rewrites_recent_fix] == [("#2", 7.0)]
+    assert fixes["#4"].recent_lines == 3
+    # #5 rewrites #4, which rewrote #2, but #2 is 8.01 days before #5: no third fix.
+    assert [r.of for r in fixes["#5"].rewrites_recent_fix] == ["#4"] and fixes["#5"].third_fix == []
+    # #6 rewrites #5, which rewrote #4, exactly 7 days before #6: a third fix.
+    assert [(t.rewrites, t.which_rewrote, t.span_days) for t in fixes["#6"].third_fix] == [("#5", "#4", 7.0)]
+    # #7 rewrites #6, merged 7.01 days before: neither a rewrite of a recent fix nor recent rework.
+    assert fixes["#7"].rewrites_recent_fix == [] and fixes["#7"].recent_lines == 0
+
+
 def test_range_reads_registry_and_baselines_at_both_ends(repo: Repo) -> None:
     report = fix_metrics.period_report(fix_metrics.Git(repo.path), "dev", fix_metrics.day_start("2026-11-03"),
                                        fix_metrics.day_start("2026-11-15"), jobs=1)
@@ -194,7 +237,7 @@ def test_branch_names_the_lines_that_make_it_a_third_fix(repo: Repo) -> None:
     assert [(r.of, r.lines) for r in report.rewrites_recent_fix] == [("#4", [1, 2, 3])]
     assert [(t.rewrites, t.which_rewrote) for t in report.third_fix] == [("#4", "#3")]
     text = fix_metrics.branch_text(report)
-    assert "Third fix in a row on the same lines: yes" in text
+    assert "Third fix in a row in the same file: yes" in text
     assert "lines 1-3 of #4 (Name the slot)" in text
 
     later = fix_metrics.branch_report(git, "dev", "fix/fourth", int((MONDAY + dt.timedelta(days=11)).timestamp()))
@@ -208,8 +251,10 @@ def test_branch_that_conflicts_is_judged_from_its_merge_base(repo: Repo) -> None
                                 7: "value_7 = -7"}) + "# note\n\n"})
     repo.git("commit", "-q", "-m", "conflict", day=12.5)
     repo.git("switch", "-q", "dev")
+    objects = repo.git("count-objects", "-v")
     report = fix_metrics.branch_report(fix_metrics.Git(repo.path), "dev", "fix/conflict",
                                        int((MONDAY + dt.timedelta(days=13)).timestamp()))
+    assert repo.git("count-objects", "-v") == objects  # the merged tree is not written to the repository
     assert not report.merged_cleanly
     assert report.rewritten_lines == 1 and report.rewrites_recent_fix == []
 
@@ -243,5 +288,10 @@ def test_production_paths_and_comment_lines() -> None:
     assert not fix_metrics.is_production("gbdraw/web/js/contracts/session.js")
     assert not fix_metrics.is_production("tests/test_x.py")
     assert not fix_metrics.is_production("gbdraw/data/fonts/a.ttf")
-    assert fix_metrics.is_comment_or_blank("   // a comment") and fix_metrics.is_comment_or_blank("  ")
-    assert not fix_metrics.is_comment_or_blank("x = 1  # trailing")
+    js, py = "gbdraw/web/js/a.js", "gbdraw/a.py"
+    assert fix_metrics.is_comment_or_blank(js, "   // a comment") and fix_metrics.is_comment_or_blank(py, "  ")
+    assert fix_metrics.is_comment_or_blank(js, "   * @param {string} x") and fix_metrics.is_comment_or_blank(py, "# x")
+    assert fix_metrics.is_comment_or_blank("gbdraw/web/index.html", "  <!-- a note -->")
+    assert not fix_metrics.is_comment_or_blank(py, "x = 1  # trailing")
+    assert not fix_metrics.is_comment_or_blank(py, "    *pairs,")  # unpacking, not a comment
+    assert not fix_metrics.is_comment_or_blank(js, "  #count = 0;")  # a private field

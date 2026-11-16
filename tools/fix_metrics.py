@@ -33,10 +33,12 @@ import argparse
 import dataclasses
 import datetime as dt
 import json
+import os
 import re
 import statistics
 import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -56,7 +58,10 @@ NOT_PRODUCTION = (
     "gbdraw/web/js/utils/i18n-catalogs/",
     "gbdraw/web/css/tailwind.css",
 )
-COMMENT_PREFIXES = ("#", "//", "*", "/*", "<!--")
+# The line starts that open or continue a comment, by file suffix: `*args` in Python and a `#private`
+# field in JavaScript are code.
+COMMENT_PREFIXES = {".py": ("#",), ".toml": ("#",), ".js": ("//", "/*", "*"), ".mjs": ("//", "/*", "*"),
+                    ".css": ("/*", "*"), ".html": ("<!--",)}
 # A file a merge deletes or rewrites wholesale says nothing about rework; its lines are not blamed.
 MAX_REMOVED_LINES = 600
 DIRECT = "direct"
@@ -102,12 +107,13 @@ BLAME_HEADER = re.compile(r"^([0-9a-f]{40}) \d+ (\d+)")
 
 
 class Git:
-    def __init__(self, repo: Path) -> None:
+    def __init__(self, repo: Path, env: dict[str, str] | None = None) -> None:
         self.repo = repo
+        self.env = {**os.environ, **env} if env else None
 
     def attempt(self, *args: str) -> tuple[int, str, str]:
         done = subprocess.run(["git", "-C", str(self.repo), "-c", "core.quotepath=false", *args],
-                              capture_output=True, check=False)
+                              capture_output=True, check=False, env=self.env)
         return done.returncode, done.stdout.decode("utf-8", errors="replace"), done.stderr.decode(errors="replace")
 
     def run(self, *args: str) -> str:
@@ -156,9 +162,9 @@ def is_production(path: str) -> bool:
             and not path.startswith(NOT_PRODUCTION))
 
 
-def is_comment_or_blank(text: str) -> bool:
+def is_comment_or_blank(path: str, text: str) -> bool:
     stripped = text.strip()
-    return not stripped or stripped.startswith(COMMENT_PREFIXES)
+    return not stripped or stripped.startswith(COMMENT_PREFIXES.get(Path(path).suffix, ()))
 
 
 def kind_of(branch_path: str) -> str:
@@ -310,7 +316,7 @@ class Analyser:
             if len(lines) > MAX_REMOVED_LINES:
                 skipped.append(path)
                 continue
-            numbers = [number for number, text in lines if not is_comment_or_blank(text)]
+            numbers = [number for number, text in lines if not is_comment_or_blank(path, text)]
             if not numbers:
                 continue
             by_writer: dict[str, list[int]] = defaultdict(list)
@@ -661,6 +667,15 @@ class BranchReport:
 
 
 def branch_report(git: Git, ref: str, branch: str, at: int) -> BranchReport:
+    # `git merge-tree --write-tree` writes the merged tree: keep its objects in a scratch folder that reads
+    # the repository's objects as an alternate, so nothing is written to the repository.
+    objects = git.run("rev-parse", "--path-format=absolute", "--git-path", "objects").strip()
+    with tempfile.TemporaryDirectory(prefix="fix-metrics-") as scratch:
+        return _branch_report(Git(git.repo, {"GIT_OBJECT_DIRECTORY": scratch,
+                                             "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects}), ref, branch, at)
+
+
+def _branch_report(git: Git, ref: str, branch: str, at: int) -> BranchReport:
     history = History(git, ref)
     analyser = Analyser(history)
     head = git.run("rev-parse", "--verify", f"{branch}^{{commit}}").strip()
@@ -700,7 +715,7 @@ def branch_text(report: BranchReport) -> str:
     ]
     out += [f"  - {r.path}: lines {ranges_text(r.lines)} of {pr(r.of)}, merged {r.age_days} days ago"
             for r in report.rewrites_recent_fix]
-    out.append(f"Third fix in a row on the same lines: {'yes' if report.third_fix else 'no'}")
+    out.append(f"Third fix in a row in the same file: {'yes' if report.third_fix else 'no'}")
     out += [f"  - {t.path}: rewrites lines {ranges_text(t.rewrites_lines)} of {t.rewrites}, which rewrote lines "
             f"{ranges_text(t.which_rewrote_lines)} of {pr(t.which_rewrote)}; {t.span_days} days from "
             f"{t.which_rewrote} to now" for t in report.third_fix]
