@@ -216,11 +216,11 @@ export const UNVARIED_LEAVES = {
     // Load writes the current version of each stack's rows (`applyConfigData`).
     linear_track_slots_schema_version: 'the current version of the stack rows',
     circular_track_slots_schema_version: 'the current version of the stack rows',
-    // OV-TBD-1: Undo (a History restore) leaves the object that one circle
+    // OV-3705: Undo (a History restore) leaves the object that one circle
     // left when the step it undoes set it from null: the merge keeps an object
     // under a null (`mergeStoredSettings`, config-field-readers.js). The fix
     // removes this entry and the known-defect case in drawing-member-paths.
-    one_circle_left: 'OV-TBD-1'
+    one_circle_left: 'OV-3705'
   },
   // The one membership mode the request schema has.
   losat: { 'blastp.orthogroupMembershipMode': 'one choice' },

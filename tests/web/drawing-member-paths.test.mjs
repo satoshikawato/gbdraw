@@ -451,10 +451,10 @@ test('known defect OV-3701: Save drops a drawing whose only change is a card fil
   }
 }));
 
-// OV-TBD-1: the Undo of choosing one circle leaves what one circle left
+// OV-3705: the Undo of choosing one circle leaves what one circle left
 // (`adv.one_circle_left`): a History restore merges the step's null under the
 // object and keeps it (`mergeStoredSettings`, services/config-field-readers.js).
-test('known defect OV-TBD-1: Undo of choosing one circle keeps what one circle left', () => withBootPalettes(state, async () => {
+test('known defect OV-3705: Undo of choosing one circle keeps what one circle left', () => withBootPalettes(state, async () => {
   await bootBases();
   assert.equal((await loadSession(bases.plain.blob)).asked, null);
   const { drawingId: id } = app.drawingList.newDrawing('circular');
@@ -464,7 +464,7 @@ test('known defect OV-TBD-1: Undo of choosing one circle keeps what one circle l
   await app.undoHistory();
   const adv = captureMember(state.drawingOf(id), 'adv');
   assert.equal(adv.circular_record_layout, 'grid');
-  assert.notEqual(adv.one_circle_left, null, 'OV-TBD-1 no longer reproduces. Remove this case and the `one_circle_left` entry of '
+  assert.notEqual(adv.one_circle_left, null, 'OV-3705 no longer reproduces. Remove this case and the `one_circle_left` entry of '
     + 'UNVARIED_LEAVES in tests/web/helpers/drawing-member-samples.mjs.');
 }));
 
