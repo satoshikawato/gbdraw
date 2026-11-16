@@ -359,12 +359,12 @@ const band = (id, attributes = {}) => new FakeElement('match', {
 });
 
 // One preview: an SVG with features and bands, the SVG owner, and a pan/zoom owner.
-const createPreview = ({ features, bands }) => {
+const createPreview = ({ features, bands, extraElements = [] }) => {
   const featureElements = features.map((feature) => new FakeElement('feature', {
     id: feature.rendered_svg_id, 'data-gbdraw-feature-id': feature.rendered_svg_id, 'data-gbdraw-feature-part': 'block',
     fill: '#123456', ...(feature.orthogroupId ? { 'data-orthogroup-id': feature.orthogroupId } : {})
   }));
-  const svg = new FakeSvg([...featureElements, ...bands]);
+  const svg = new FakeSvg([...featureElements, ...extraElements, ...bands]);
   const viewport = new FakeNode('div');
   viewport.connectedRoot = true;
   const scrollRoot = new FakeNode('div');
@@ -400,7 +400,7 @@ const createPreview = ({ features, bands }) => {
   assert.equal(actions.attachSvgFeatureHandlers({ root: svg }), true);
   const hover = (target) => svg.dispatch('mouseover', { target, relatedTarget: null, clientX: 400, clientY: 300 });
   const leave = (target) => svg.dispatch('mouseout', { target, relatedTarget: null, clientX: 0, clientY: 0 });
-  return { svg, viewport, surface, panZoom, actions, featureElements, hover, leave };
+  return { svg, viewport, surface, panZoom, actions, state, featureElements, hover, leave };
 };
 
 const tooltip = () => fakeBody.children.find((node) => node.attributes.role === 'tooltip');
@@ -723,4 +723,21 @@ test('OV-913: clearing an empty selection writes no new selection and restyles n
   selectionOwner.clearFeatureSelection();
   assert.ok(styledQueries > queriesBefore);
   assert.equal(selectionWrites, 1);
+});
+
+// OV-3725: a partial feature as Python draws it in both modes: its fill path
+// without a stroke, and an `__outline` path that carries the block stroke
+// (open at the partial end). The popup shows the stroke that is drawn.
+test('OV-3725: the feature popup shows a partial feature\'s drawn block stroke, from its outline', async () => {
+  const partial = featureRow(0, { rendered_svg_id: 'fpartial', id: 'fpartial' });
+  const outline = new FakeElement('feature', {
+    id: 'fpartial__outline', 'data-gbdraw-feature-id': 'fpartial', 'data-gbdraw-feature-part': 'block',
+    fill: 'none', stroke: 'gray', 'stroke-width': '2.0'
+  });
+  const partialPreview = createPreview({ features: [partial], bands: [], extraElements: [outline] });
+  Object.assign(partialPreview.featureElements[0].attributes, { stroke: 'none', 'stroke-width': '2.0' });
+  partialPreview.state.richFeaturePopup = ref(true); // The popup's width, which placing it reads.
+  await partialPreview.actions.openFeatureEditorForFeature(partial);
+  const shown = partialPreview.state.clickedFeature.value;
+  assert.deepEqual([shown?.color, shown?.strokeColor, shown?.strokeWidth], ['#123456', 'gray', 2]);
 });

@@ -26,3 +26,25 @@ for (const [mode, elements] of Object.entries(FIRST_FEATURE)) {
     assert.deepEqual(drawnBlockStroke(svg), { color: 'gray', width: 2 });
   });
 }
+
+// OV-3725: a partial first feature (`<101..200`) as Python draws it: its fill
+// path without a stroke, then an `__outline` path, open at the partial end,
+// that carries the block stroke.
+const PARTIAL_FIRST_FEATURE = {
+  linear: [
+    '<path d="M 20,-20 L 24,-20 L 40,0 L 24,20 L 20,20 z" data-gbdraw-feature-id="f6f815dab" data-gbdraw-feature-part="block" fill="#54bcf8" id="f6f815dab" stroke="none" stroke-width="2.0" />',
+    '<path d="M 20,-20 L 24,-20 L 40,0 L 24,20 L 20,20 " data-gbdraw-feature-id="f6f815dab" data-gbdraw-feature-part="block" fill="none" id="f6f815dab__outline" stroke="gray" stroke-width="2.0" />'
+  ],
+  circular: [
+    '<path d="M 21.917,-348.361 A 349.05,349.05 0 0 1 30.277,-347.734 L 46.069,-364.677 L 33.49,-384.645 A 386.1,386.1 0 0 0 24.243,-385.338 z" data-gbdraw-feature-id="f6f815dab" data-gbdraw-feature-part="block" fill="#54bcf8" id="f6f815dab" stroke="none" stroke-width="2.0" />',
+    '<path d="M 21.917,-348.361 A 349.05,349.05 0 0 1 30.277,-347.734 L 46.069,-364.677 L 33.49,-384.645 A 386.1,386.1 0 0 0 24.243,-385.338 " data-gbdraw-feature-id="f6f815dab" data-gbdraw-feature-part="block" fill="none" id="f6f815dab__outline" stroke="gray" stroke-width="2.0" />'
+  ]
+};
+
+for (const [mode, elements] of Object.entries(PARTIAL_FIRST_FEATURE)) {
+  test(`OV-3725: the Result's block stroke of a partial first feature is its outline's (${mode})`, () => {
+    installFakeSvgDom();
+    const svg = new DOMParser().parseFromString(`<svg><g id="features">${elements.join('')}</g></svg>`).documentElement;
+    assert.deepEqual(drawnBlockStroke(svg), { color: 'gray', width: 2 });
+  });
+}

@@ -743,22 +743,30 @@ for (const mode of ['linear', 'circular']) {
     ]);
     return { getAttribute: (name) => attributes.get(name) ?? null, setAttribute: () => {}, removeAttribute: () => {} };
   };
-  featureElementsById.set(joinedFeature.svg_id, [
-    drawnPart('line1', 'connector', 'lightgray', '5.0'),
-    drawnPart('part1', 'block', 'gray', '2.0'),
-    drawnPart('part2', 'block', 'gray', '2.0')
-  ]);
-  clickedFeature.value = { svg_id: joinedFeature.svg_id, feat: joinedFeature, color: '#54bcf8', strokeColor: 'gray', strokeWidth: 2 };
-  const joinedKey = featureOverrideKey(joinedFeature) || joinedFeature.svg_id;
-  assert.equal(await actions.updateClickedFeatureStroke('#222222', 3), true);
-  assert.deepEqual(
-    [featureStrokeOverrides[joinedKey].originalStrokeColor, featureStrokeOverrides[joinedKey].originalStrokeWidth],
-    ['gray', 2],
-    `${mode}: the edit records the block stroke Python drew`
-  );
-  assert.equal(await actions.resetClickedFeatureStroke(), true);
-  assert.deepEqual([clickedFeature.value.strokeColor, clickedFeature.value.strokeWidth], ['gray', 2],
-    `${mode}: after Reset the popup shows the block stroke Python drew`);
+  // OV-3725: a partial feature's fill path has no stroke; its `__outline`
+  // path carries the block stroke.
+  const drawnShapes = {
+    joined: [
+      drawnPart('line1', 'connector', 'lightgray', '5.0'),
+      drawnPart('part1', 'block', 'gray', '2.0'),
+      drawnPart('part2', 'block', 'gray', '2.0')
+    ],
+    partial: [drawnPart('part1', 'block', 'none', '2.0'), drawnPart('part1__outline', 'block', 'gray', '2.0')]
+  };
+  for (const [shape, elements] of Object.entries(drawnShapes)) {
+    featureElementsById.set(joinedFeature.svg_id, elements);
+    clickedFeature.value = { svg_id: joinedFeature.svg_id, feat: joinedFeature, color: '#54bcf8', strokeColor: 'gray', strokeWidth: 2 };
+    const joinedKey = featureOverrideKey(joinedFeature) || joinedFeature.svg_id;
+    assert.equal(await actions.updateClickedFeatureStroke('#222222', 3), true);
+    assert.deepEqual(
+      [featureStrokeOverrides[joinedKey].originalStrokeColor, featureStrokeOverrides[joinedKey].originalStrokeWidth],
+      ['gray', 2],
+      `${mode}, ${shape}: the edit records the block stroke Python drew`
+    );
+    assert.equal(await actions.resetClickedFeatureStroke(), true);
+    assert.deepEqual([clickedFeature.value.strokeColor, clickedFeature.value.strokeWidth], ['gray', 2],
+      `${mode}, ${shape}: after Reset the popup shows the block stroke Python drew`);
+  }
   featureElementsById.delete(joinedFeature.svg_id);
 }
 clickedFeature.value = strokePopup;
