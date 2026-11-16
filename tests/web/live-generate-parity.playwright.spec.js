@@ -1213,10 +1213,9 @@ test.describe('a Result displayed after its intent changed', () => {
       await showResult(page, 1);
       await expectLiveEqualsGenerate(page, { label: 'a label text in a Result an Undo of a Generate returned' });
     });
-    // An Undo of a Generate says nothing of what the Result it returns was drawn
-    // with beyond the state it restores, so this text stays until the next Generate.
+    // The Result an Undo of a Generate returns keeps the record of what it was
+    // drawn with, so the label text Reset took away asks for the rerender.
     test(`an Undo of a Generate that replaced an unshown Result holding a label text shows what Generate draws (${flag})`, async ({ page }) => {
-      test.fail(true, 'OV-2293: a label edit that left before the Generate an Undo takes back');
       test.setTimeout(240_000);
       await open(page, { mode: 'circular', results: 'batch', reflow });
       await showResult(page, 1);
