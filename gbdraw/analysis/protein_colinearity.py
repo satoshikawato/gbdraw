@@ -70,7 +70,12 @@ from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts, source_feature_hash_and_parts
 from gbdraw.features.visibility import should_include_feature_in_analysis
-from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_table
+from gbdraw.io.comparisons import (
+    COMPARISON_COLUMNS,
+    check_strict_outfmt6_lines,
+    is_strict_outfmt6,
+    read_comparison_table,
+)
 
 # Historical internal import; edge identity is owned by ortholog_paths.
 _edge_id = ortholog_edge_id
@@ -98,37 +103,6 @@ _MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = frozenset(
 )
 _MANIFEST_SCALAR_TYPES = frozenset({str, int, float, bool, type(None)})
 _NUMERIC_COMPARISON_COLUMNS = COMPARISON_COLUMNS[2:]
-_INTEGER_COMPARISON_COLUMNS = frozenset(
-    {
-        "alignment_length",
-        "mismatches",
-        "gap_opens",
-        "qstart",
-        "qend",
-        "sstart",
-        "send",
-    }
-)
-_STRICT_DECIMAL_INTEGER = r"[+-]?[0-9]+"
-# Digits with an optional point, or a point and digits; then an optional exponent.
-# "[0-9]+\.?[0-9]*" spells "[0-9]+(?:\.[0-9]*)?" without a group, which re matches faster.
-_STRICT_DECIMAL_NUMBER = r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
-_STRICT_DECIMAL_INTEGER_RE = re.compile(rf"^{_STRICT_DECIMAL_INTEGER}$")
-_STRICT_DECIMAL_NUMBER_RE = re.compile(rf"^{_STRICT_DECIMAL_NUMBER}$")
-# The start of a data line that is not 12 tab-separated fields of the strict
-# grammar above, searched in "\n" + data: a literal "\n" lets re skip to each line
-# start, where "^" with re.MULTILINE would try every character.
-_NON_STRICT_OUTFMT6_LINE_RE = re.compile(
-    "\n(?!"
-    + "\t".join(
-        [r"[^\t\n]*", r"[^\t\n]*"]
-        + [
-            _STRICT_DECIMAL_INTEGER if column in _INTEGER_COMPARISON_COLUMNS else _STRICT_DECIMAL_NUMBER
-            for column in COMPARISON_COLUMNS[2:]
-        ]
-    )
-    + "(?:\n|\\Z))"
-)
 LOSATP_METADATA_COLUMNS = (
     "query_protein_id",
     "subject_protein_id",
@@ -3666,34 +3640,6 @@ def _coerce_outfmt6_numeric_columns(df: DataFrame) -> DataFrame:
     return coerced
 
 
-def _is_strict_outfmt6_numeric_field(column: str, value: str) -> bool:
-    pattern = (
-        _STRICT_DECIMAL_INTEGER_RE
-        if column in _INTEGER_COMPARISON_COLUMNS
-        else _STRICT_DECIMAL_NUMBER_RE
-    )
-    if pattern.fullmatch(value) is None:
-        return False
-    try:
-        return math.isfinite(float(value))
-    except ValueError:  # pragma: no cover - the grammar excludes float parse failures
-        return False
-
-
-def _validate_losatp_outfmt6_lines(data_lines: Sequence[str]) -> None:
-    for line in data_lines:
-        columns = line.split("\t")
-        if len(columns) != len(COMPARISON_COLUMNS):
-            raise ParseError("LOSATP blastp output does not match outfmt 6 columns.")
-        if any(
-            not _is_strict_outfmt6_numeric_field(column, columns[index])
-            for index, column in enumerate(COMPARISON_COLUMNS[2:], start=2)
-        ):
-            raise ParseError(
-                "LOSATP blastp output contains non-numeric outfmt 6 fields."
-            )
-
-
 def parse_losatp_outfmt6(text: str) -> DataFrame:
     """Parse LOSATP blastp outfmt 6 text into the standard comparison columns."""
 
@@ -3709,12 +3655,12 @@ def parse_losatp_outfmt6(text: str) -> DataFrame:
     # only to choose the error that the first failing line raises, and to
     # settle a value whose float is not finite, for which read_comparison_table
     # raises.
-    if _NON_STRICT_OUTFMT6_LINE_RE.search("\n" + data) is not None:
-        _validate_losatp_outfmt6_lines(data_lines)
+    if not is_strict_outfmt6(data):
+        check_strict_outfmt6_lines(data_lines, label="LOSATP blastp output")
     try:
         table = read_comparison_table(StringIO(data), label="LOSATP blastp output")
     except ValidationError as exc:
-        _validate_losatp_outfmt6_lines(data_lines)
+        check_strict_outfmt6_lines(data_lines, label="LOSATP blastp output")
         raise ParseError(f"Failed to parse LOSATP blastp output: {exc}") from exc
     return table
 
