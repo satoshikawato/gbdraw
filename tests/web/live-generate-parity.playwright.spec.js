@@ -1340,7 +1340,7 @@ test.describe('a Result displayed after its intent changed', () => {
     await loaded.context().close();
   });
   // Undo or Redo back to Label visibility On, on a figure that lacks the label:
-  // only a rerender can draw it, and History steps ask for none here (OV-2413).
+  // only a rerender can draw it, and the label projection asks for it (OV-2413).
   for (const mode of ['linear', 'circular']) {
     const labelsNoneOn = async (page) => {
       await open(page, { mode, results: 'single', reflow: 'off' });
@@ -1349,7 +1349,6 @@ test.describe('a Result displayed after its intent changed', () => {
       await settleLive(page);
     };
     test(`an Undo back to Label visibility On draws the label (${mode})`, async ({ page }) => {
-      test.fail(true, 'OV-2413: an Undo back to Label visibility On on a figure without the label');
       test.setTimeout(240_000);
       await labelsNoneOn(page);
       await popupEdit(page, 'FL1', { labelVisibility: 'default' });
@@ -1359,7 +1358,6 @@ test.describe('a Result displayed after its intent changed', () => {
       await expectLiveEqualsGenerate(page, { label: 'an Undo back to On' });
     });
     test(`a Redo of Label visibility On draws the label (${mode})`, async ({ page }) => {
-      test.fail(true, 'OV-2413: a Redo of Label visibility On on a figure without the label');
       test.setTimeout(240_000);
       await labelsNoneOn(page);
       await history(page, 'undo');
@@ -1464,7 +1462,6 @@ test.describe('Undo and Redo', () => {
   });
   for (const mode of ['linear', 'circular']) {
     test(`a moved Legend returns through Undo after a label edit, Auto Reflow on (${mode})`, async ({ page }) => {
-      test.fail(true, 'OV-2437: the Undo of the drag after a label edit does nothing with Auto Reflow on');
       test.setTimeout(180_000);
       await open(page, { mode, results: 'single', reflow: 'on' });
       const start = await movedLegend(page);

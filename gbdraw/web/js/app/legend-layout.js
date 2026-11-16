@@ -22,8 +22,8 @@ import {
  * the preview owner.
  * @typedef {object} LegendLayoutPreviewPort
  * @property {(reason: string) => boolean} commitActiveResultEdit
- * @property {(result: SvgResultEntry) => string} getResultIdentity
- * @property {() => { svg?: Element | null, resultIdentity?: string } | null} getActiveRuntime
+ * @property {(result: SvgResultEntry) => string} getResultLineageKey The key of a Result's line (OV-2437).
+ * @property {() => { svg?: Element | null, result?: SvgResultEntry | null } | null} getActiveRuntime
  * @property {(
  *   resultIndex: number,
  *   edit: (svg: SVGSVGElement, context: { mounted: boolean }) => boolean,
@@ -84,11 +84,14 @@ export const createLegendLayout = ({
   };
 
   // B17 (R11, D-07): History records composition offsets per Result, keyed by
-  // the Result's committed identity. A Result appears in the record only while
-  // its offsets differ from the offsets History first saw it with, so showing
-  // a Result records nothing, and Undo and Redo restore the Result a step was
-  // made on. Only the displayed Result is read, and only when the mounted root
-  // is bound to it; another Result keeps the offsets last seen or restored.
+  // the Result's line (`getResultLineageKey`): its committed identity, which a
+  // label rerender's Result continues, so a step made before the rerender
+  // names the Result that replaced its own (OV-2437). A Result appears in the
+  // record only while its offsets differ from the offsets History first saw
+  // it with, so showing a Result records nothing, and Undo and Redo restore
+  // the Result a step was made on. Only the displayed Result is read, and only
+  // when the mounted root is bound to it; another Result keeps the offsets
+  // last seen or restored.
   /** @type {Map<string, CompositionRecordDeltas>} */
   const firstSeenDeltas = new Map();
   /** @type {Map<string, CompositionRecordDeltas>} */
@@ -111,13 +114,13 @@ export const createLegendLayout = ({
       [...map.keys()].forEach((identity) => { if (!keep.has(identity)) map.delete(identity); });
     }
   };
-  /** @param {SvgResultEntry} result */
-  const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
-  /** @param {readonly string[]} identities The Results of the drawing whose History captures. */
+  /** @param {SvgResultEntry | null | undefined} result */
+  const resultLineageKey = (result) => (result && previewRuntime?.getResultLineageKey?.(result)) || '';
+  /** @param {readonly string[]} identities The line keys of the Results of the drawing whose History captures. */
   const captureCompositionIntent = (identities) => {
     const runtime = previewRuntime?.getActiveRuntime?.() || null;
     const svg = state.svgContainer.value?.querySelector('svg') || null;
-    if (svg && runtime?.svg === svg && runtime.resultIdentity) {
+    if (svg && runtime?.svg === svg && resultLineageKey(runtime.result)) {
       /** @type {CompositionRecordDeltas | null} */
       let deltas = null;
       try {
@@ -125,10 +128,10 @@ export const createLegendLayout = ({
       } catch (_error) {
         deltas = null;
       }
-      if (deltas) recordSeenDeltas(runtime.resultIdentity, deltas);
+      if (deltas) recordSeenDeltas(resultLineageKey(runtime.result), deltas);
     }
-    // Result identities are `result:<id>` or `runtime-result:<n>` (or ''), so
-    // none names an Object.prototype member.
+    // Line keys are `result:<id>` or `runtime-result:<n>` (or ''), so none
+    // names an Object.prototype member.
     /** @type {Record<string, CompositionRecordDeltas>} */
     const record = {};
     if (movedDeltas.size === 0) return record;
@@ -151,7 +154,7 @@ export const createLegendLayout = ({
     let reconciled = false;
     identities.forEach((identity) => {
       const deltas = record?.[identity] || firstSeenDeltas.get(identity);
-      const index = state.results.value.findIndex((result) => resultIdentity(result) === identity);
+      const index = state.results.value.findIndex((result) => resultLineageKey(result) === identity);
       if (!deltas || index < 0) return;
       const changed = previewRuntime?.commitResultEdit(index, (svg, { mounted }) => {
         const applied = applyCompositionUserDeltas(svg, deltas);

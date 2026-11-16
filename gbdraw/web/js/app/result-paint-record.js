@@ -2,17 +2,20 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { KeptLegendRow } from '../services/drawing/paint.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
 import { isLegendOrderEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { featureVisibilityRows } from '../services/feature-visibility.js';
+import { featureVisibilityRows, movedIdentityValues } from '../services/feature-visibility.js';
+import { featureIdentityKey, parseFeatureIdentityKey } from '../services/feature-placement.js';
 
-// Which editor state each Result's bytes show (design §5.4). A Result
-// displayed again receives a domain only when that state changed since it
-// was last shown, so a Result without new edits gets no projection work and
-// an Undo reaches a Result that is displayed again. The displayed Result
-// follows every live edit; app/editor-intent.js records the states, and a label
-// rerender names the state it drew from (`editorPaintState`).
+// Which editor state each Result's bytes were drawn with and show (design
+// §5.4, W15): one record per Result. A Result displayed again receives a
+// domain only when that state changed since it was last shown, so a Result
+// without new edits gets no projection work and an Undo reaches a Result that
+// is displayed again. The displayed Result follows every live edit;
+// app/editor-intent.js records the states, and a label rerender names the
+// state it drew from (`editorPaintState`).
 
 /**
  * @typedef {{
@@ -129,105 +132,161 @@ export const drawnLabelIntentGone = (drawn, shown, current, drawsFeature) => {
 /** @param {EditorPaintState} current @returns {EditorPaintState} */
 const unknownPaint = (current) => ({ ...current, colors: [null, ''], visibility: '', strokes: '', labels: '' });
 
-export const createResultPaintRecord = () => {
-  /** @type {Map<string, EditorPaintState>} */
-  const shownByResult = new Map();
-  // The editor state each Result's bytes were drawn with, which a live edit
-  // does not change: a rerender or a Generate draws a new Result. A restored
-  // Result not displayed is taken as drawn with the state of its drawing at the
-  // restore, which is all a Session or an Undo of a Generate says of its bytes.
-  /** @type {Map<string, EditorPaintState>} */
-  const drawnByResult = new Map();
-  let bound = '';
+// The phases whose Results Python drew from the editor state of their bind:
+// a Generate, a label rerender, and a committed candidate (a rotation, an
+// alignment Apply). Every other commit (a Session Load, a History restore, a
+// rollback) mounts bytes that were saved or kept.
+const DRAW_PHASES = new Set(['generate', 'label-reflow', 'target-record-transform']);
+/** @param {string} phase The phase of a mounted Result. */
+export const drawsResult = (phase) => DRAW_PHASES.has(phase);
+
+/**
+ * What one Result's bytes hold of the editor state: `drawn`, the state Python
+ * drew them with, which a live edit does not change (a rerender or a Generate
+ * draws a new Result); `shown`, the state they show, which for the displayed
+ * Result is the current state and the domains it lacks (`behind`), written
+ * when it leaves; `left`, the intent signature it left a drawing with (E1),
+ * or null.
+ * @typedef {{ drawn: EditorPaintState, shown: EditorPaintState, left: string | null }} ResultEditorRecord
+ */
+
+/**
+ * @typedef {object} ResultPaintRecordPorts
+ * @property {(result: SvgResultEntry) => object} resultRuntimeKey
+ *   The preview owner's key of a Result's runtime state, which every content
+ *   version of the Result shares.
+ */
+
+/**
+ * The editor state of each Result, held as long as the Result is referenced
+ * (by a drawing, a History step, a rollback): one record per Result, keyed by
+ * its runtime state, so a Result an Undo brings back keeps it. Never saved.
+ * @param {ResultPaintRecordPorts} ports
+ */
+export const createResultPaintRecord = ({ resultRuntimeKey }) => {
+  /** @type {WeakMap<object, ResultEditorRecord>} */
+  const records = new WeakMap();
+  /** @param {SvgResultEntry} result */
+  const keyOf = (result) => toRaw(resultRuntimeKey(result));
+  /** @param {SvgResultEntry} result */
+  const recordOf = (result) => records.get(keyOf(result));
+  /** @param {SvgResultEntry} result @param {EditorPaintState} drawn @param {EditorPaintState} [shown] */
+  const recordNew = (result, drawn, shown = drawn) => {
+    /** @type {ResultEditorRecord} */
+    const record = { drawn, shown, left: null };
+    records.set(keyOf(result), record);
+    return record;
+  };
+  /** @type {ResultEditorRecord | null} */
+  let bound = null;
   // The paint domains the displayed Result was not shown (a declined or
   // failed display); recorded with it when it leaves.
   /** @type {Partial<EditorPaintState> | null} */
   let behind = null;
   /** @param {EditorPaintState} state */
   const recordBound = (state) => {
-    if (bound && shownByResult.has(bound)) shownByResult.set(bound, { ...state, ...behind });
+    if (bound) bound.shown = { ...state, ...behind };
     behind = null;
   };
   return {
     /**
-     * A committed artifact: each Result first seen shows `drawn` (`current`
-     * unless given), and a Result no longer live is forgotten. `displayed` is
-     * the Result mounted by the commit. A `restored` artifact (Session Load,
-     * a History restore) keeps each Result's bytes as they were saved or
-     * kept: a batch Result not displayed since the last edits lacks them, so
-     * every Result but the mounted one shows every paint domain on its first
-     * display. A label rerender draws the fills and visibility of the state
-     * it started from (`drawn`, OV-346): the displayed Result lacks those of
-     * an edit made meanwhile (`lacking`) until they are shown. `drawingStateOf`
-     * reads the state of the drawing that holds a restored Result not displayed.
-     * @param {readonly string[]} identities
-     * @param {string} displayed
+     * A committed artifact: each Result without a record gets one, and
+     * `displayed` is the Result mounted by the commit. A commit that `draws`
+     * (`drawsResult`) has Results Python drew from `drawn` (`current` unless
+     * given): a label rerender draws the fills and visibility of the state it
+     * started from (OV-346), so the displayed Result lacks those of an edit
+     * made meanwhile (`lacking`) until they are shown. Any other commit (a
+     * Session Load, a History restore, a rollback) keeps each Result's bytes
+     * as they were saved or kept: a batch Result not displayed since the last
+     * edits lacks them, so every Result but the mounted one shows every paint
+     * domain on its first display, and was drawn with the state of the drawing
+     * that holds it (`drawingStateOf`), which is all a Session or an Undo says
+     * of its bytes (OV-3730). The Result displayed until now followed every
+     * live edit until a draw; a restore may have restored the editor state
+     * before the commit (an Undo of a Generate), so what that Result shows is
+     * unknown then and its next display shows every domain.
+     * @param {readonly SvgResultEntry[]} results The Results of all drawings.
+     * @param {SvgResultEntry} displayed
      * @param {EditorPaintState} current
-     * @param {{ restored?: boolean, drawn?: EditorPaintState, drawingStateOf?: (identity: string) => EditorPaintState }} [options]
+     * @param {{ draws?: boolean, drawn?: EditorPaintState, drawingStateOf?: (result: SvgResultEntry) => EditorPaintState }} [options]
      */
-    commit(identities, displayed, current, { restored = false, drawn = current, drawingStateOf = () => current } = {}) {
-      const live = new Set(identities.filter(Boolean));
-      live.forEach((identity) => {
-        if (shownByResult.has(identity)) return;
-        const notDisplayed = restored && identity !== displayed;
-        shownByResult.set(identity, notDisplayed ? unknownPaint(current) : drawn);
-        drawnByResult.set(identity, notDisplayed ? drawingStateOf(identity) : drawn);
+    commit(results, displayed, current, { draws = false, drawn = current, drawingStateOf = () => current } = {}) {
+      const displayedKey = keyOf(displayed);
+      if (bound && bound !== records.get(displayedKey)) {
+        if (draws) recordBound(current);
+        else bound.shown = unknownPaint(current);
+      }
+      [...results, displayed].forEach((result) => {
+        if (recordOf(result)) return;
+        if (draws) recordNew(result, drawn);
+        else if (keyOf(result) === displayedKey) recordNew(result, current);
+        else recordNew(result, drawingStateOf(result), unknownPaint(current));
       });
-      [...shownByResult.keys()].forEach((identity) => {
-        if (live.has(identity)) return;
-        shownByResult.delete(identity);
-        drawnByResult.delete(identity);
-      });
-      bound = displayed;
+      bound = /** @type {ResultEditorRecord} */ (records.get(displayedKey)); // Recorded above.
+      bound.left = null;
       const { colors, visibility } = drawn;
-      behind = sameFills(drawn, current) ? null : { colors, visibility };
+      behind = !draws || sameFills(drawn, current) ? null : { colors, visibility };
     },
     /**
-     * The displayed Result leaves (a mode switch) having followed every live
-     * edit. Returns its identity, or '' when none is recorded.
+     * The displayed Result leaves a drawing (a mode switch) having followed
+     * every live edit: it keeps the intent it left with (`signature`, E1)
+     * unless a declined display left it lacking a domain, which its next
+     * display shows (OV-3731).
      * @param {EditorPaintState} current
+     * @param {string} signature
      */
-    depart(current) {
-      const departed = bound && shownByResult.has(bound) ? bound : '';
+    depart(current, signature) {
+      if (bound && !behind) bound.left = signature;
       recordBound(current);
-      bound = '';
-      return departed;
+      bound = null;
+    },
+    /**
+     * The intent signature a Result left its drawing with, once: its next
+     * display reads it (E1).
+     * @param {SvgResultEntry} result
+     */
+    takeLeft(result) {
+      const record = recordOf(result);
+      const left = record?.left ?? null;
+      if (record) record.left = null;
+      return left;
     },
     /**
      * A Result is displayed: the Result shown until now followed every live
      * edit. Returns the state the arriving Result's bytes show.
-     * @param {string} identity
+     * @param {SvgResultEntry} result
      * @param {EditorPaintState} current
      * @returns {EditorPaintState}
      */
-    display(identity, current) {
-      if (bound !== identity) recordBound(current);
-      bound = identity;
-      return shownByResult.get(identity) || current;
+    display(result, current) {
+      const record = recordOf(result) ?? recordNew(result, current);
+      if (bound !== record) recordBound(current);
+      bound = record;
+      return record.shown;
     },
     /**
      * The displayed Result now shows `current`, but the fills and visibility
      * of `previous` when its palette and rules projection `declined`, and
      * every paint domain of `previous` when its projection or compile
      * `failed` (its labels follow in the binder's label step).
-     * @param {string} identity
+     * @param {SvgResultEntry} result
      * @param {EditorPaintState} current
      * @param {EditorPaintState} previous
      * @param {{ declined?: boolean, failed?: boolean }} [options]
      */
-    shown(identity, current, previous, { declined = false, failed = false } = {}) {
+    shown(result, current, previous, { declined = false, failed = false } = {}) {
       const { colors, visibility, strokes, legendOrder } = previous;
       behind = failed ? { colors, visibility, strokes, legendOrder } : (declined ? { colors, visibility } : null);
-      shownByResult.set(identity, { ...current, ...behind });
+      (recordOf(result) ?? recordNew(result, current)).shown = { ...current, ...behind };
     },
     /**
-     * What the displayed Result `identity` still shows of the state before a
-     * declined or failed display, or null (shown in full, or not displayed).
-     * @param {string} identity
+     * What the displayed Result still shows of the state before a declined
+     * or failed display, or null (shown in full, or not displayed).
+     * @param {SvgResultEntry} result
      * @returns {Partial<EditorPaintState> | null}
      */
-    lacking(identity) {
-      return bound === identity ? behind : null;
+    lacking(result) {
+      return bound && bound === recordOf(result) ? behind : null;
     },
     /**
      * Whether a label rerender drawn from `drawn` shows the `current` editor
@@ -242,15 +301,53 @@ export const createResultPaintRecord = () => {
     },
     /**
      * The editor state the Result's bytes were drawn with.
-     * @param {string} identity
+     * @param {SvgResultEntry} result
      * @returns {EditorPaintState | undefined}
      */
-    drawn(identity) {
-      return drawnByResult.get(identity);
+    drawn(result) {
+      return recordOf(result)?.drawn;
     },
-    /** @param {string} identity The Result shown again with the intent it left with (E1). */
-    rebind(identity) {
-      bound = identity;
+    /**
+     * The Label visibility On and Off the displayed Result was drawn with, by
+     * feature identity key, or null when no Result is displayed. Only Python
+     * decides whether Default draws a label, so the label owner asks for the
+     * rerender when one of them returned to Default (UJ-01, R3), or when an
+     * On row lacks its label on bytes not drawn with it (OV-2413).
+     * @returns {ReadonlyMap<string, 'on' | 'off'> | null}
+     */
+    displayedDrawnLabelVisibility() {
+      if (!bound) return null;
+      const [rows] = /** @type {LabelPaintRows} */ (JSON.parse(bound.drawn.labels));
+      return new Map(rows.flatMap(([recordKey, featureId, visibility]) => (
+        visibility === 'on' || visibility === 'off' ? [/** @type {[string, 'on' | 'off']} */ ([featureIdentityKey(recordKey, featureId), visibility])] : []
+      )));
+    },
+    /**
+     * A Generate that moves a record's rows to its new key (OV-1949) moves them
+     * after its Results were committed: the label rows they were drawn with
+     * follow, so the moved rows ask for no rerender (OV-1983).
+     * @param {readonly SvgResultEntry[]} results The Results the Generate committed.
+     * @param {ReadonlyMap<string, string>} moves
+     */
+    moveDrawn(results, moves) {
+      if (moves.size === 0) return;
+      results.forEach((result) => {
+        const record = recordOf(result);
+        if (!record) return;
+        const [rows, bulk] = /** @type {LabelPaintRows} */ (JSON.parse(record.drawn.labels));
+        const moved = movedIdentityValues(Object.fromEntries(rows.map(([recordKey, featureId, labelVisibility, labelText, labelSourceText]) => [
+          featureIdentityKey(recordKey, featureId), { labelVisibility, labelText, labelSourceText }
+        ])), moves);
+        const movedRows = Object.entries(moved).flatMap(([key, { labelVisibility, labelText, labelSourceText }]) => {
+          const identity = parseFeatureIdentityKey(key);
+          return identity ? [[identity.recordKey, identity.biologicalFeatureId, labelVisibility, labelText, labelSourceText]] : [];
+        });
+        record.drawn = { ...record.drawn, labels: JSON.stringify([movedRows, bulk]) };
+      });
+    },
+    /** @param {SvgResultEntry} result The Result shown again with the intent it left with (E1). */
+    rebind(result) {
+      bound = recordOf(result) ?? null;
       behind = null;
     }
   };

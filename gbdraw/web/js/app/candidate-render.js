@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
-/** @import { LegendStrokeOperation, SavedFeatureColorEdit, SavedStrokeEdit, SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
+/** @import { LegendStrokeOperation, SavedFeatureColorEdit, SavedStrokeEdit, SvgAdmissionRuntime, SvgResultEntry, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack, TrackLegendRows } from '../services/track-legend-rows.js' */
@@ -91,7 +91,10 @@ import { draftLegendRows, normalizedLegendEntries } from '../services/legend-dra
  */
 
 /**
- * @typedef {EditorPlanOptions & SvgAdmissionRuntime & { generationResponse: any, catalogAdmission: FeatureCatalogAdmission }} CandidateCommitOptions
+ * `replacedResults`: the Results a label rerender draws again; its Results continue their lines (composition offsets).
+ * @typedef {EditorPlanOptions & SvgAdmissionRuntime & {
+ *   generationResponse: any, catalogAdmission: FeatureCatalogAdmission, replacedResults?: readonly SvgResultEntry[] | null
+ * }} CandidateCommitOptions
  */
 
 /** @param {unknown} value */
@@ -901,6 +904,7 @@ export const prepareCandidateRenderCommit = ({
   selectedFeatureTypes = null,
   sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify,
   parser = globalThis.DOMParser || globalThis.window?.DOMParser,
+  replacedResults = null,
   ...editorState
 }) => {
   const bundle = compilePlanBundle({ catalogAdmission, ...editorState });
@@ -910,7 +914,8 @@ export const prepareCandidateRenderCommit = ({
       mutationPlan: bundle.plan,
       sanitizer,
       parser,
-      selectedFeatureTypes
+      selectedFeatureTypes,
+      replacedResults
     }),
     featureState: catalogAdmission.featureState,
     featureColorOverrides: bundle.normalizedFeatureColorOverrides,

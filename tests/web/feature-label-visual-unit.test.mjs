@@ -74,6 +74,9 @@ const buildHarness = ({
   showNotice = () => {}
 } = {}) => {
   const mutations = { commit: 0 };
+  const drawnLabelVisibility = new Map(Object.entries(visibilityOverrides)
+    .filter(([, mode]) => mode === 'on' || mode === 'off')
+    .map(([id, mode]) => [keyFor(id), mode]));
   const state = {
     mode: ref('linear'),
     results: ref([{ content: '<svg></svg>' }]),
@@ -122,7 +125,10 @@ const buildHarness = ({
     },
     currentResults: () => state.results.value,
     getResultIdentity: () => 'result:1',
-    getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
+    getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null),
+    // The Result paint record's port: the displayed Result was drawn with the
+    // Label visibility the harness starts from.
+    displayedDrawnLabelVisibility: () => drawnLabelVisibility
   });
   // The label table owner, wired as app/feature-editor.js wires it.
   const labelTableActions = createLabelTableActions({

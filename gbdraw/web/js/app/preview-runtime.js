@@ -3,8 +3,10 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   reconcileMountedResult,
+  getCommittedSvgResultLineage,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
+  getCommittedSvgResultRuntimeKey,
   markCommittedSvgResultMounted,
   markCommittedSvgResultUnmounted
 } from '../services/svg-result-ingestion.js';
@@ -167,6 +169,35 @@ import {
  * @property {string} [phase]
  */
 
+// The identity of a Result never committed, by entry; a content write carries
+// it to the entry that replaces it (`writeResultContent`).
+/** @type {WeakMap<object, string>} */
+const fallbackResultIdentities = new WeakMap();
+let nextFallbackResultIdentity = 1;
+
+/**
+ * The key a committed identity reads as, or the fallback identity of a Result
+ * never committed ('' for no Result).
+ * @param {number | null} committed
+ * @param {SvgResultEntry | null | undefined} result
+ * @returns {string}
+ */
+const resultKeyOf = (committed, result) => {
+  if (committed !== null) return `result:${committed}`;
+  if (!result || typeof result !== 'object') return '';
+  if (!fallbackResultIdentities.has(result)) {
+    fallbackResultIdentities.set(result, `runtime-result:${nextFallbackResultIdentity++}`);
+  }
+  return /** @type {string} */ (fallbackResultIdentities.get(result)); // Set above when absent.
+};
+/** @param {SvgResultEntry | null | undefined} result */
+const resultRuntimeIdentity = (result) => resultKeyOf(getCommittedSvgResultRuntimeIdentity(result), result);
+// The key of a Result's line (OV-2437): a label rerender's Result continues
+// the line of the Result it replaces, so composition offsets keyed by it
+// survive the rerender; a Result that starts a line has its identity as key.
+/** @param {SvgResultEntry | null | undefined} result */
+const resultLineageKey = (result) => resultKeyOf(getCommittedSvgResultLineage(result), result);
+
 const REQUIRED_BINDING_FLAGS = Object.freeze([
   'rootAdopted',
   'legendReady',
@@ -237,7 +268,6 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
   /** @type {Readonly<MountedResultBinderSteps>} */
   let bindingSteps = Object.freeze({});
   let nextExpectationIdentity = 1;
-  let nextFallbackResultIdentity = 1;
   let nextRootGeneration = 1;
   let nextBindSequence = 1;
   let nextRestoreToken = 1;
@@ -252,26 +282,11 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
   const selectedResultIdentity = () => resultRuntimeIdentity(
     state.results.value[Number(state.selectedResultIndex.value)]
   );
-  /** @type {WeakMap<object, string>} */
-  const fallbackResultIdentities = new WeakMap();
   const invalidatedReceipts = new WeakSet();
 
   /** @returns {SVGSVGElement | null} */
   const getMountedSvg = () => state.svgContainer.value?.querySelector('svg') || null;
 
-  /**
-   * @param {SvgResultEntry | null | undefined} result
-   * @returns {string}
-   */
-  const resultRuntimeIdentity = (result) => {
-    const committedIdentity = getCommittedSvgResultRuntimeIdentity(result);
-    if (committedIdentity !== null) return `result:${committedIdentity}`;
-    if (!result || typeof result !== 'object') return '';
-    if (!fallbackResultIdentities.has(result)) {
-      fallbackResultIdentities.set(result, `runtime-result:${nextFallbackResultIdentity++}`);
-    }
-    return /** @type {string} */ (fallbackResultIdentities.get(result)); // Set above when absent.
-  };
 
   /**
    * @param {string | { fingerprint?: unknown } | null | undefined} value
@@ -1159,6 +1174,8 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
     currentResults,
     getActiveRuntime,
     getResultIdentity: resultRuntimeIdentity,
+    getResultLineageKey: resultLineageKey,
+    getResultRuntimeKey: getCommittedSvgResultRuntimeKey,
     invalidateReadinessExpectation,
     invalidateReadyReceipt,
     invalidatePreviewIndexes,

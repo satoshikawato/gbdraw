@@ -4,14 +4,14 @@
 /** @import { DrawingState, DiagramMode, WebState } from '../../state.js' */
 /** @import { CurrentResultsPort, SvgResultEntry } from '../../services/svg-result-ingestion.js' */
 import { diagnosticError } from '../../utils/error-normalization.js';
-import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride, movedIdentityValues } from '../../services/feature-visibility.js';
+import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
 import { replaceBulkLabelEdits } from '../../services/drawing/label-tables.js';
 import {
   featureIdentityKeyOf,
   normalizeFeatureOverrideLabelText,
   updateFeatureOverride
 } from '../../services/feature-placement.js';
-import { resultCatalogFeatures, resultRenderedFeatures } from '../../services/feature-catalog.js';
+import { biologicalFeatureKey, resultCatalogFeatures, resultRenderedFeatures } from '../../services/feature-catalog.js';
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { editorTableRef } from '../../services/file-imports.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
@@ -706,12 +706,46 @@ const withBatchLabelTargets = (state, drawing, targets) => {
  *   The visibility owner's transition: Show feature and label sets Feature visibility through it.
  * @property {() => boolean | Promise<boolean | import('../rule-matching.js').RuleTableRejection>} [prepareDrawnFeatureMatches]
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
+ * @property {DisplayedDrawnLabelVisibilityPort} displayedDrawnLabelVisibility
+ */
+
+/**
+ * The Label visibility On and Off the displayed Result was drawn with, by
+ * feature identity key (the draft key of `featureOverrides`), or null when no
+ * Result is displayed: the Result paint record's port (R13).
+ * @typedef {() => ReadonlyMap<string, 'on' | 'off'> | null} DisplayedDrawnLabelVisibilityPort
  */
 
 /** @param {unknown} value */
 const normalizeVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+};
+
+// OV-2413: a feature whose Label visibility is On, on bytes not drawn with it
+// On, lacks its label when Python did not draw one by default; only the
+// rerender draws it. A feature the Result does not draw, or the drawing hides,
+// draws no label. Once the rerender drew the row On, its bytes hold what Python
+// draws for it, so a label it cannot draw is asked for once. The catalog is
+// read only when a row lacks its label.
+/**
+ * @param {DrawingState} drawing
+ * @param {ReadonlyMap<string, 'on' | 'off'> | null} drawn The displayed Result's drawn Label visibility.
+ * @param {ReadonlySet<string>} labelled The identity keys of the features with a complete label on the root.
+ * @param {() => ReturnType<typeof resultCatalogFeatures>} catalogOf
+ * @param {(feature: LabelFeature) => boolean} hidden
+ */
+const onLabelMissing = (drawing, drawn, labelled, catalogOf, hidden) => {
+  const lacking = drawn ? Object.entries(drawing.featureOverrides).filter(([key, row]) => (
+    normalizeVisibilityMode(row.labelVisibility) === 'on' && drawn.get(key) !== 'on' && !labelled.has(key)
+  )) : [];
+  if (lacking.length === 0) return false;
+  const catalogFeatures = catalogOf();
+  return lacking.some(([, row]) => {
+    const feature = catalogFeatures?.renderedByIdentity.get(biologicalFeatureKey(row.recordKey, row.biologicalFeatureId));
+    if (catalogFeatures && !feature) return false;
+    return !feature || !hidden(feature);
+  });
 };
 
 /** @param {FeatureLabelActionsOptions} options */
@@ -725,7 +759,8 @@ export const createFeatureLabelActions = ({
   nextTick = () => Promise.resolve(),
   getCommittedRequest = () => null,
   setFeatureVisibility = null,
-  prepareDrawnFeatureMatches = () => true
+  prepareDrawnFeatureMatches = () => true,
+  displayedDrawnLabelVisibility
 }) => {
   const {
     mode,
@@ -919,41 +954,23 @@ export const createFeatureLabelActions = ({
     return { available: true, changed };
   };
 
-  // The Label visibility On and Off each mounted Result was drawn with, by
-  // feature identity key: the intent of the Result's first projection. Only
-  // Python decides whether Default draws a label, so a feature whose On or Off
+  // The Label visibility On and Off the displayed Result was drawn with
+  // (`displayedDrawnLabelVisibility`, the Result paint record's). Only Python
+  // decides whether Default draws a label, so a feature whose On or Off
   // returns to Default asks for the rerender, as a missing On label does
   // (UJ-01, R3).
-  /** @type {WeakMap<Element, Map<string, string>>} */
-  const drawnLabelVisibility = new WeakMap();
   /** @param {DrawingState} drawing */
-  const labelVisibilityIntent = (drawing) => new Map(Object.entries(drawing.featureOverrides)
-    .map(([key, row]) => /** @type {[string, string]} */ ([key, normalizeVisibilityMode(row?.labelVisibility)]))
-    .filter(([, visibility]) => visibility !== 'default'));
-  /** @param {DrawingState} drawing @param {Element} svg */
-  const labelVisibilityReturnsToDefault = (drawing, svg) => {
-    const intent = labelVisibilityIntent(drawing);
-    const drawn = drawnLabelVisibility.get(svg);
-    if (!drawn) drawnLabelVisibility.set(svg, intent);
-    return Array.from(drawn?.keys() || []).some((key) => !intent.has(key));
-  };
-  // A Generate that moves a record's rows to its new key (OV-1949) moves them
-  // after its Result was bound: the visibility that Result was drawn with
-  // follows them, so the moved rows ask for no rerender (OV-1983).
-  /** @param {ReadonlyMap<string, string>} moves */
-  const moveDrawnLabelVisibility = (moves) => {
-    const svg = svgContainer.value?.querySelector('svg');
-    const drawn = svg ? drawnLabelVisibility.get(svg) : null;
-    if (!svg || !drawn || moves.size === 0) return;
-    drawnLabelVisibility.set(svg, new Map(Object.entries(movedIdentityValues(Object.fromEntries(drawn), moves))));
-  };
+  const labelVisibilityReturnsToDefault = (drawing) => Array.from(displayedDrawnLabelVisibility()?.keys() || [])
+    .some((key) => normalizeVisibilityMode(ownEntry(drawing.featureOverrides, key)?.labelVisibility) === 'default');
 
   /** @param {DrawingState} drawing @param {Element} svg */
   const applyStoredVisibilityOverridesToSvg = (drawing, svg) => {
     let changed = false;
-    let unavailableOverride = labelVisibilityReturnsToDefault(drawing, svg);
+    let unavailableOverride = labelVisibilityReturnsToDefault(drawing);
     const displayed = displayedFeatures(drawing);
     const context = drawnContext(drawing);
+    /** @type {Set<string>} */
+    const labelled = new Set();
     svg.querySelectorAll(VISIBILITY_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
         textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
@@ -965,11 +982,16 @@ export const createFeatureLabelActions = ({
         : (featureHidden(drawing, feature, context) ? 'off' : rowOf(drawing, feature)?.labelVisibility);
       const projection = applyLabelVisibilityPreview(svg, textEl, visibilityMode);
       changed = projection.changed || changed;
+      if (projection.available && feature) labelled.add(featureIdentityKeyOf(feature));
       if (normalizeVisibilityMode(visibilityMode) !== 'default' && !projection.available) {
         unavailableOverride = true;
       }
     });
-    return { changed, unavailableOverride };
+    return {
+      changed,
+      unavailableOverride: unavailableOverride || onLabelMissing(drawing, displayedDrawnLabelVisibility(), labelled,
+        () => resultCatalogFeatures(state, drawing.mode), (feature) => featureHidden(drawing, feature, context))
+    };
   };
 
   /** @param {Element} svg */
@@ -1388,7 +1410,7 @@ export const createFeatureLabelActions = ({
     if (visibilityChanged || (!edit.hasEditableLabel && textChanged)) {
       const svg = svgContainer.value?.querySelector('svg');
       queueLabelReflow(forceReflow || !visibilityProjection.available
-        || Boolean(svg && labelVisibilityReturnsToDefault(drawing, svg)));
+        || Boolean(svg && labelVisibilityReturnsToDefault(drawing)));
       return;
     }
 
@@ -1740,7 +1762,6 @@ export const createFeatureLabelActions = ({
     closeHiddenLabelTextDialog,
     closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
-    moveDrawnLabelVisibility,
     // R13: the label table owner's ports (`label-table.js`).
     labelTargetsOf, applyLabelTable, rememberLabelImportNotice,
     getEditableLabelByFeatureId,

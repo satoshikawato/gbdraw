@@ -1810,8 +1810,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
- * @property {(moves: ReadonlyMap<string, string>) => void} moveDrawnLabelVisibility The label owner's port:
- *   the label visibility the mounted Result was drawn with follows the rows a Generate moved.
+ * @property {(results: readonly SvgResultEntry[], moves: ReadonlyMap<string, string>) => void} moveDrawnPaint
+ *   The Result paint record's port: the label rows a Generate's Results were drawn with follow the rows it moved.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
@@ -1900,7 +1900,7 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  moveDrawnLabelVisibility,
+  moveDrawnPaint,
   prepareCandidateCommit = prepareCandidateRenderCommit,
   askChoice = async () => 'cancel',
   showNotice = () => {}
@@ -5544,7 +5544,7 @@ export const createRunAnalysis = ({
         biologicalFeatures: candidateBiologicalFeatures,
         moves: recordMoves
       });
-      moveDrawnLabelVisibility(recordMoves);
+      moveDrawnPaint(candidateCommit.results, recordMoves);
       // OV-120: a source replacement also retires the renames of the Legend
       // rows the new Result does not draw (as the OV-84 strokes).
       if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);
@@ -6236,7 +6236,8 @@ export const createRunAnalysis = ({
     // The Legend rows the redraw keeps, read while the request that drew the
     // displayed Result is committed.
     const liveRedrawLegend = readLiveRedrawLegend(drawing);
-    // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
+    // The reflow draws the committed Session's Results again, so they keep their names (OV-136)
+    // and continue their lines, which key the Legend and title moves History records (OV-2437).
     const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
     clearLabelBuildNotices({ rerender: true });
@@ -6272,7 +6273,8 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: candidateRules
+          manualSpecificRules: candidateRules,
+          replacedResults: results.value
         },
         timingEntries,
         resultNames: committedResultNames
@@ -6295,9 +6297,10 @@ export const createRunAnalysis = ({
       // its popup, label binding, Features list row, and History projection
       // (R-5). It renders the committed request, so the records and the
       // similarity groups the Generate committed stay.
-      // OV-873: the new Results have new identities, which key the Legend and
-      // title moves History records; the rerender draws the same moves, so a
-      // step begun after its request takes the change as drawn (D-40).
+      // OV-873: the new Results continue the lines of the Results they
+      // replace, which key the Legend and title moves History records
+      // (OV-2437); the rerender draws the same moves, so a step begun after
+      // its request takes the change as drawn (D-40).
       // OV-111: they install into the artifact of the drawing whose Result they draw.
       adoptDrawnWrite(() => {
         installRedrawnArtifact(drawing.id, {

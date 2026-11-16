@@ -8,6 +8,7 @@
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
 /** @import { NoticeLink } from './app-messages.js' */
 /** @import { Wording } from '../utils/i18n.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
@@ -831,6 +832,10 @@ export const createAppSetup = () => {
     clearActiveRuntime: previewRuntime.clearActiveRuntime,
     currentResults: previewRuntime.currentResults
   });
+  // Each Result's bytes reflect the editor state they were drawn and last
+  // shown with, one record per Result (`createResultPaintRecord`); the label
+  // owner, Generate, the editor intent and the binder below read it (R13).
+  const resultPaintRecord = createResultPaintRecord({ resultRuntimeKey: previewRuntime.getResultRuntimeKey });
 
   // Before the History snapshot service, which clears its copy feedback (D-37).
   const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest, memberAction: sequenceReads.memberAction });
@@ -1238,6 +1243,7 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     currentResults: previewRuntime.currentResults,
     getResultIdentity: previewRuntime.getResultIdentity,
+    displayedDrawnLabelVisibility: resultPaintRecord.displayedDrawnLabelVisibility,
     showEditorIntent: (options) => showEditorIntent(options),
     selectResult,
     isPreviewTransformActive, subscribePreviewTransformChanges,
@@ -1736,18 +1742,17 @@ export const createAppSetup = () => {
     }))
   });
   // The Results of all drawings: the shown one's and every kept one's. The
-  // per-Result caches (Legend inventories, retired Legend entries, projected
-  // editor state) keep a kept Result's entries while another drawing is shown.
-  const liveResultIdentities = () => [
+  // per-Result caches (Legend inventories, retired Legend entries, composition
+  // offsets) keep a kept Result's entries while another drawing is shown.
+  /** @returns {SvgResultEntry[]} */
+  const liveResults = () => [
     ...results.value,
     ...artifactSlots.kept().flatMap((slot) => slot.values.results || [])
-  ].map(previewRuntime.getResultIdentity);
+  ];
   // The Results of one drawing: the shown one's, or those its slot keeps.
-  /** @param {DrawingId} drawingId */
+  /** @param {DrawingId} drawingId @returns {SvgResultEntry[]} */
   const resultsOf = (drawingId) => artifactSlots.readOfDrawing(drawingId, state.activeDrawingId.value,
     () => results.value, (slot) => slot.values.results) || [];
-  /** @param {DrawingId} drawingId */
-  const resultIdentitiesOf = (drawingId) => resultsOf(drawingId).map(previewRuntime.getResultIdentity);
   // R13: a moved record clears the alignment plan and keeps the aligned record
   // positions. The alignment owner runs its candidate through Generate, which
   // reads this layout owner, so the root registers both ports once the
@@ -1773,16 +1778,16 @@ export const createAppSetup = () => {
     }
   });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
-  // History's capture registers once its owner exists (R13).
-  // OV-110: each capture first releases the offsets of the Results that no
-  // drawing shows or keeps and no History step names.
+  // History's capture registers once its owner exists (R13). Composition
+  // offsets are keyed by each Result's line, which a label rerender continues
+  // (OV-2437). OV-110: each capture first releases the offsets of the Results
+  // that no drawing shows or keeps and no History step names.
   historySnapshots.registerCapture('composition', (drawingId) => {
-    legendLayout.releaseCompositionDeltas(new Set([...liveResultIdentities(), ...history.heldIdentities()]));
-    return legendLayout.captureCompositionIntent(resultIdentitiesOf(drawingId));
+    legendLayout.releaseCompositionDeltas(new Set([
+      ...liveResults().map(previewRuntime.getResultLineageKey), ...history.heldIdentities()
+    ]));
+    return legendLayout.captureCompositionIntent(resultsOf(drawingId).map(previewRuntime.getResultLineageKey));
   });
-  // Each Result's bytes reflect the editor state it was committed or last
-  // shown with (`createResultPaintRecord`); the binder below reads it (R13).
-  const resultPaintRecord = createResultPaintRecord();
   // DESIGN A4: the record discovery owner's lists, by mode; a Linear card
   // whose list is still deferred after a Load is read here. Callers read them
   // through the runner's `readDrawingRecordIdentities`, which reads a deferred
@@ -1847,7 +1852,7 @@ export const createAppSetup = () => {
     adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
-    moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
+    moveDrawnPaint: resultPaintRecord.moveDrawn,
     askChoice,
     showNotice,
     // Only a Generate that searched its drawing's rings installs them, and the
@@ -2469,8 +2474,7 @@ export const createAppSetup = () => {
   });
 
   const {
-    currentEditorProjectionState, departedResultIntent, displayedIntentSignature, rememberDepartingResultProjection,
-    resultDrawsFeature
+    currentEditorProjectionState, displayedIntentSignature, rememberDepartingResultProjection, resultDrawsFeature
   } = createDepartedResultIntent({ state, originalLegendOrder, resultPaintDepart: resultPaintRecord.depart });
   const { displayBlocked, showDeclinedPaint, showEditsMadeWhileDrawn } = createDeclinedPaintDisplay({
     state,
@@ -2484,11 +2488,11 @@ export const createAppSetup = () => {
   const {
     rememberCommittedEditorState, projectEditorIntentOnDisplay, takeLabelProjectionResultIdentity, takeDisplayAsks
   } = createDisplayedResultProjection({
-    state,
-    liveResultIdentities,
-    resultIdentitiesOf,
+    liveResults,
+    drawingList: state.drawingList,
+    resultsOf,
+    resultIdentity: previewRuntime.getResultIdentity,
     currentEditorProjectionState,
-    departedResultIntent,
     displayedIntentSignature,
     resultDrawsFeature,
     compileDisplayedResultOperations,
@@ -2499,6 +2503,7 @@ export const createAppSetup = () => {
     LEGEND_STRUCTURE_DOMAINS,
     STROKE_DOMAINS,
     resultPaintCommit: resultPaintRecord.commit,
+    resultPaintTakeLeft: resultPaintRecord.takeLeft,
     resultPaintRebind: resultPaintRecord.rebind,
     resultPaintDisplay: resultPaintRecord.display,
     resultPaintDrawn: resultPaintRecord.drawn,
@@ -2512,7 +2517,7 @@ export const createAppSetup = () => {
   } = createMountedLegendBinding({
     state,
     results,
-    liveResultIdentities,
+    liveResults,
     projectEditorIntentOnDisplay,
     rememberCommittedEditorState,
     isLegendLayoutReady: legendActions.isLegendLayoutReady,
@@ -3088,7 +3093,7 @@ export const createAppSetup = () => {
       // Save writes the displayed Result as Generate draws it: it waits for
       // the Result being displayed, then shows what its display declined.
       await previewRuntime.pendingReadiness()?.catch(() => {});
-      const displayed = previewRuntime.getActiveRuntime()?.resultIdentity;
+      const displayed = previewRuntime.getActiveRuntime()?.result;
       if (displayed) await showDeclinedPaint(displayed, { saving: true });
       recordSessionLifecycleEvent('session-save-catalog-preparation-start');
       /** @type {Awaited<ReturnType<typeof prepareLinearRecordCatalog>>['catalog']} */

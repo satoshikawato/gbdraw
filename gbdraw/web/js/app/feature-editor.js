@@ -7,7 +7,7 @@
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { CurrentResultsPort } from '../services/svg-result-ingestion.js' */
-/** @import { ResultIdentityPort } from './feature-editor/label-actions.js' */
+/** @import { DisplayedDrawnLabelVisibilityPort, ResultIdentityPort } from './feature-editor/label-actions.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { WebState } from '../state.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
@@ -67,6 +67,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {CurrentResultsPort} currentResults
  *   The preview owner's reader of the Results with the displayed Result's edits written (R1, R13).
  * @property {ResultIdentityPort} getResultIdentity The preview owner's identity of a Result.
+ * @property {DisplayedDrawnLabelVisibilityPort} displayedDrawnLabelVisibility
+ *   The Result paint record's Label visibility On and Off the displayed Result was drawn with.
  * @property {(options: { domains: readonly string[] }) => boolean} showEditorIntent
  *   The root's port of the editor intent onto the displayed Result (R3, R13).
  * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
@@ -121,6 +123,7 @@ export const createFeatureEditor = ({
   commitActiveResultEdit = null,
   currentResults,
   getResultIdentity,
+  displayedDrawnLabelVisibility,
   showEditorIntent,
   selectResult,
   isPatternEditAvailable = () => true,
@@ -203,7 +206,8 @@ export const createFeatureEditor = ({
   const labelActions = createFeatureLabelActions({
     state, commitActiveResultEdit, currentResults, getResultIdentity, computed, watch, nextTick, getCommittedRequest,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
-    prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches
+    prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
+    displayedDrawnLabelVisibility
   });
   // Load and Export Label TSV; the label owner writes the label edits a load makes.
   const labelTableActions = createLabelTableActions({
@@ -337,7 +341,6 @@ export const createFeatureEditor = ({
     closeLabelTextScopeDialog: labelActions.closeLabelTextScopeDialog,
     closeHiddenLabelTextDialog: labelActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: labelActions.clearLabelBuildNotices,
-    moveDrawnLabelVisibility: labelActions.moveDrawnLabelVisibility,
     ...featureEditTableActions,
     downloadLabelOverrideTable: labelTableActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelTableActions.loadLabelOverrideTable,
