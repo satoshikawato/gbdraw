@@ -2954,6 +2954,8 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
   Urdu letter is glued to it and nothing that depends on its value follows it: no verb, no adjective, no کا / کی / کے that
   would agree with it, because the value may be Latin, a number or any gender. Give it a class noun that carries the
   agreement (فائل {file} لوڈ نہیں ہو سکی۔, ٹریک “{name}”, ریکارڈ {record} کا نام) or use a colon (قطاریں: {count}).
+  A placeholder in brackets right after the noun it glosses, such as a command-line option after the setting it names
+  (تلاش کی حد ({option})), takes no class noun: that noun is its head, and nothing agrees with the value.
 - **Plural shape** (D-09): `Intl.PluralRules('ur')` gives `one` for exactly 1 and `other` for 0, 2, 3 and fractions. The `one` key is
   the text for exactly 1; the `other` key is a plain string that reads right at 0 and at 2 ("0 فائلیں"). For a pair whose
   `one` has no `{count}`, the `one` text is the exactly-1 sentence and carries no number.
