@@ -9,17 +9,22 @@
 // `Tests` run with the plan that tools/balance-functional-shards.mjs would compute from
 // that run's measurements, and the CI of pull requests: how many merged ones passed on one
 // run, runs per merged one, and how many of their runs failed or were replaced by a newer
-// run. It prints Markdown; with --post it
+// run; the watched dependencies (WATCHED_DEPENDENCIES: pinned version, latest release on
+// PyPI, months since it, upstream's last commit); and the result of the GFF3 tests on
+// Biopython's development head, which the workflow's earlier job passes in BIOPYTHON_HEAD_*.
+// It prints Markdown; with --post it
 // also adds the report as this week's comment on the open issue labelled
 // `ci-inventory` (creating the label and issue when missing). Week-over-week changes
 // come from the data block of the workflow's own previous comment. Job lists are read
 // only for `Tests` and `Gallery publication`, and only while RATE_RESERVE requests of the
 // hourly budget are left; other runs count by run duration.
 //
-// Reads GITHUB_TOKEN (or GH_TOKEN), GITHUB_REPOSITORY, GITHUB_API_URL, and
-// GITHUB_SERVER_URL. Run it from the repository root: it lists the functional cases
-// with @playwright/test and reads the measurements in tests/ci/functional-shards.json and
-// .github/workflows/test.yml.
+// Reads GITHUB_TOKEN (or GH_TOKEN), GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_SERVER_URL,
+// GITHUB_RUN_ID, and BIOPYTHON_HEAD_RESULT, BIOPYTHON_HEAD_VERSION, BIOPYTHON_HEAD_COMMIT.
+// The PyPI read sends no authorization header: the GitHub token never leaves GitHub.
+// Run it from the repository root: it lists the functional cases with @playwright/test
+// and reads the measurements in tests/ci/functional-shards.json,
+// .github/workflows/test.yml, and the pins in pyproject.toml.
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -62,6 +67,15 @@ export const PR_TARGETS = [
   { kind: 'with functional Playwright', functional: true, minutes: 35 }
 ];
 const FUNCTIONAL_JOB = 'Playwright functional';
+
+// Dependencies whose pin the report checks against PyPI and upstream's commits. bcbio-gff
+// has had no release since 2024 and the Web app runs one pinned wheel of it, so a newer
+// release or a silent upstream needs a session's attention (docs/internal/SELECTIVE_CI.md,
+// "Weekly CI inventory"). `staleMonths` is the limit of months since the latest release.
+export const WATCHED_DEPENDENCIES = [
+  { name: 'bcbio-gff', repository: 'chapmanb/bcbb', path: 'gff', staleMonths: 48 }
+];
+const PYPI_URL = 'https://pypi.org/pypi';
 
 const sum = (values) => values.reduce((total, value) => total + value, 0);
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -165,6 +179,52 @@ export const summarizePullRequests = (jobLists) => {
       // One rounded median decides the warning and is the number the report prints.
       return { ...target, runs: minutes.length, median, over: median !== null && round1(median) > target.minutes };
     })
+  };
+};
+
+// The version `<name>==<version>` pins in the text of pyproject.toml, or null.
+export const pinnedVersion = (pyprojectText, name) => {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return pyprojectText.match(new RegExp(`"${escaped}==([^"\\s]+)"`))?.[1] ?? null;
+};
+
+// Whole calendar months from `from` to `to` (ISO dates), UTC.
+const monthsBetween = (from, to) => {
+  const [a, b] = [new Date(from), new Date(to)];
+  const months = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + b.getUTCMonth() - a.getUTCMonth();
+  return months - (b.getUTCDate() < a.getUTCDate() ? 1 : 0);
+};
+
+/**
+ * What one read of a watched dependency found; each field is null where its read failed.
+ * @typedef {object} DependencyRead
+ * @property {string | null} latest The latest release on PyPI.
+ * @property {string | null} released When that release's first file was uploaded (ISO 8601).
+ * @property {string | null} upstreamCommit The date of upstream's last commit under the path.
+ * @property {string[]} errors One line per failed read.
+ */
+
+/**
+ * A watched dependency against its pin: `months` since the latest release at `until`
+ * (null when it was not read), `stale` over the dependency's limit, `newer` when the
+ * latest release is not the pinned version.
+ * @param {typeof WATCHED_DEPENDENCIES[number]} dependency
+ * @param {string | null} pinned
+ * @param {DependencyRead} read
+ * @param {Date} until
+ */
+export const summarizeDependency = (dependency, pinned, read, until) => {
+  const months = read.released ? monthsBetween(read.released, until.toISOString()) : null;
+  return {
+    ...dependency,
+    pinned,
+    latest: read.latest,
+    released: read.released,
+    upstreamCommit: read.upstreamCommit,
+    errors: read.errors,
+    months,
+    stale: months !== null && months > dependency.staleMonths,
+    newer: read.latest !== null && read.latest !== pinned
   };
 };
 
@@ -418,10 +478,20 @@ const table = (header, rows) => [
   ...rows.map((row) => `| ${row.join(' | ')} |`)
 ].join('\n');
 
+// One line of a failed read, safe in a table cell.
+const oneLine = (message) => message.split('\n')[0].replaceAll('|', '/').slice(0, 120);
+const notRead = (dependency, source) => {
+  const error = dependency.errors.find((line) => line.startsWith(`${source}:`));
+  return error ? `not read (${oneLine(error)})` : 'not read';
+};
+const headLabel = ({ version, commit }) => `${version || 'version unknown'}, ${commit ? commit.slice(0, 8) : 'commit unknown'}`;
+const headOutcome = ({ result }) => (result === 'success' ? 'passed' : result === 'failure' ? '**failed**'
+  : `not run${result ? ` (${result})` : ''}`);
+
 // The weekly report as Markdown, ending with its data block.
 export const renderReport = ({
   week, since, until, runs, partial = null, pullRequests, pullRequestCi, functional, functionalRun, testJobs, previous,
-  serverUrl, repository
+  serverUrl, repository, dependencies = [], biopythonHead = { result: '' }
 }) => {
   const data = {
     week,
@@ -441,6 +511,15 @@ export const renderReport = ({
   const overTarget = pullRequests.kinds.filter((kind) => kind.over);
   const runLink =`[${functionalRun.id}](${serverUrl}/${repository}/actions/runs/${functionalRun.id})`;
   const perWorker = (minutes) => fmt(minutes / WORKERS_PER_SHARD);
+  const guide = ' What to do: docs/internal/SELECTIVE_CI.md, "Weekly CI inventory".';
+  const flags = [
+    ...dependencies.filter((dependency) => dependency.newer).map((dependency) =>
+      `**Newer release of ${dependency.name}**: ${dependency.latest} is out, the pin is ${dependency.pinned ?? 'missing'}.${guide}`),
+    ...dependencies.filter((dependency) => dependency.stale).map((dependency) =>
+      `**No release of ${dependency.name} for ${dependency.months} months** (limit ${dependency.staleMonths}).${guide}`),
+    ...(biopythonHead.result === 'failure'
+      ? [`**GFF3 tests failed on Biopython's development head** (${headLabel(biopythonHead)}).${guide}`] : [])
+  ];
   return [
     `## CI inventory ${week}`,
     '',
@@ -458,6 +537,7 @@ export const renderReport = ({
       : `Pull request feedback is within target (${pullRequests.kinds.map((kind) =>
         `median ${fmt(kind.median)} of ${kind.minutes} minutes ${kind.kind}`).join('; ')}).`,
     '',
+    ...flags.flatMap((flag) => [flag, '']),
     table(['Measure', 'This week', 'Previous', 'Change'], [
       ['Functional cases', data.cases, previous?.cases ?? '-', delta(data.cases, previous?.cases)],
       ['Functional test-minutes', fmt(data.functionalTestMinutes), fmt(previous?.functionalTestMinutes),
@@ -483,6 +563,22 @@ export const renderReport = ({
     table(['Pull request runs', 'Count', 'Share (%)'], Object.entries(RUN_OUTCOMES).map(([outcome, caption]) => [
       caption, pullRequestCi.runs[outcome], fmt(share(pullRequestCi.runs[outcome], pullRequestCi.pullRequestRuns))
     ])),
+    '',
+    '### Watched dependencies',
+    '',
+    table(['Package', 'Pinned', 'Latest release', 'Released', 'Months since release', 'Upstream last commit'],
+      dependencies.map((dependency) => [
+        dependency.name, dependency.pinned ?? '-',
+        dependency.latest ?? notRead(dependency, 'PyPI'),
+        dependency.released ? dependency.released.slice(0, 10) : notRead(dependency, 'PyPI'),
+        dependency.months ?? '-',
+        dependency.upstreamCommit
+          ? `${dependency.upstreamCommit.slice(0, 10)} (under \`${dependency.path}/\` of \`${dependency.repository}\`)`
+          : notRead(dependency, dependency.repository)
+      ])),
+    '',
+    `GFF3 tests on Biopython's development head (${headLabel(biopythonHead)}): ${headOutcome(biopythonHead)}`
+      + (biopythonHead.runUrl ? ` ([workflow run](${biopythonHead.runUrl})).` : '.'),
     '',
     '### Runner-minutes by workflow and event',
     '',
@@ -641,8 +737,62 @@ export const createClient = ({ token, apiUrl, repository, retryWaitMs = RETRY_WA
       if (list.length < 100) return items;
     }
   };
-  return { json, download, pages, remaining: () => remaining, requests: () => requests };
+  return { json, download, pages, retried, remaining: () => remaining, requests: () => requests };
 };
+
+/**
+ * Reads one watched dependency: the latest release from PyPI and upstream's last commit.
+ * A failed read does not end the report; it is listed in `errors`. The PyPI read is a
+ * plain `fetch` without an authorization header: the GitHub token goes to GitHub only.
+ * @param {ReturnType<typeof createClient>} client
+ * @param {typeof WATCHED_DEPENDENCIES[number]} dependency
+ * @param {{ apiUrl: string, fetchImpl?: typeof fetch }} options
+ * @returns {Promise<DependencyRead>}
+ */
+export const readDependency = async (client, dependency, { apiUrl, fetchImpl = fetch }) => {
+  /** @type {DependencyRead} */
+  const read = { latest: null, released: null, upstreamCommit: null, errors: [] };
+  try {
+    const url = `${PYPI_URL}/${dependency.name}/json`;
+    const info = await client.retried(async () => {
+      const response = await fetchImpl(url, { headers: { accept: 'application/json' } });
+      if (!response.ok) {
+        await response.text();
+        throw httpError(`GET ${url}: ${response.status}`, response.status);
+      }
+      try {
+        return JSON.parse(await response.text());
+      } catch (error) {
+        throw transient(error);
+      }
+    });
+    read.latest = info.info.version;
+    const uploads = (info.releases?.[read.latest] ?? []).map((file) => file.upload_time_iso_8601).filter(Boolean).sort();
+    if (!uploads.length) throw new Error(`release ${read.latest} lists no uploaded file`);
+    read.released = uploads[0];
+  } catch (error) {
+    read.errors.push(`PyPI: ${error.message}`);
+  }
+  try {
+    const commits = await client.json(
+      `${apiUrl}/repos/${dependency.repository}/commits?path=${dependency.path}&per_page=1`
+    );
+    read.upstreamCommit = commits?.[0]?.commit?.committer?.date ?? null;
+    if (!read.upstreamCommit) throw new Error('no commit listed');
+  } catch (error) {
+    read.errors.push(`${dependency.repository}: ${error.message}`);
+  }
+  return read;
+};
+
+// The Biopython development head job of the workflow (BIOPYTHON_HEAD_* are empty when it did not run).
+const readBiopythonHead = (env) => ({
+  result: env.BIOPYTHON_HEAD_RESULT || '',
+  version: env.BIOPYTHON_HEAD_VERSION || '',
+  commit: env.BIOPYTHON_HEAD_COMMIT || '',
+  runUrl: env.GITHUB_RUN_ID && env.GITHUB_REPOSITORY
+    ? `${env.GITHUB_SERVER_URL || 'https://github.com'}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}` : ''
+});
 
 // A rate-limit or permission refusal ends a listing early; the report says so.
 const refused = (error) => [403, 429].includes(error.status);
@@ -799,7 +949,8 @@ const main = async (argv) => {
   const repository = process.env.GITHUB_REPOSITORY;
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   if (!repository || !token) throw new Error('set GITHUB_REPOSITORY and GITHUB_TOKEN (or GH_TOKEN)');
-  const client = createClient({ token, repository, apiUrl: process.env.GITHUB_API_URL || 'https://api.github.com' });
+  const apiUrl = process.env.GITHUB_API_URL || 'https://api.github.com';
+  const client = createClient({ token, repository, apiUrl });
   const until = new Date();
   const since = new Date(until.getTime() - 7 * DAY_MS);
   const week = isoWeek(until);
@@ -821,6 +972,14 @@ const main = async (argv) => {
   const summary = summarizeRuns({ runs, jobsByRun });
   const pullRequestCi = summarizePullRequestCi({ runs, earlierRuns, jobsByRun, pulls: windowPulls });
 
+  const pyproject = readFileSync('pyproject.toml', 'utf8');
+  const dependencies = [];
+  for (const dependency of WATCHED_DEPENDENCIES) {
+    dependencies.push(summarizeDependency(
+      dependency, pinnedVersion(pyproject, dependency.name), await readDependency(client, dependency, { apiUrl }), until
+    ));
+  }
+
   const issue = await findIssue(client);
   const { thisWeek, previous } = priorReports(
     issue ? await client.pages(`/issues/${issue.number}/comments`, null) : [], week
@@ -829,7 +988,8 @@ const main = async (argv) => {
   const markdown = renderReport({
     week, since, until, runs: summary, partial, pullRequests, pullRequestCi, functional, functionalRun,
     testJobs: countWorkflowJobs(readFileSync(TESTS_WORKFLOW, 'utf8')),
-    previous, serverUrl: process.env.GITHUB_SERVER_URL || 'https://github.com', repository
+    previous, serverUrl: process.env.GITHUB_SERVER_URL || 'https://github.com', repository,
+    dependencies, biopythonHead: readBiopythonHead(process.env)
   });
   process.stdout.write(markdown);
   console.error(`GitHub API requests: ${client.requests()}`);

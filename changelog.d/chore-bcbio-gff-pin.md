@@ -1,0 +1,1 @@
+- Changed: gbdraw now requires bcbio-gff 0.7.1, the version the Web app runs, so the command line and the Web app read GFF3 files with the same parser.

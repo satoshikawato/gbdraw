@@ -1,8 +1,9 @@
 name: CI inventory
 
-# Weekly report of CI cost and functional shard balance (docs/internal/SELECTIVE_CI.md,
-# "Weekly CI inventory"). It runs on its own schedule, never on a pull request, and
-# only writes a comment on the issue labelled `ci-inventory`.
+# Weekly report of CI cost, functional shard balance, the watched dependencies, and the
+# GFF3 tests on Biopython's development head (docs/internal/SELECTIVE_CI.md, "Weekly CI
+# inventory"). It runs on its own schedule, never on a pull request, and only writes a
+# comment on the issue labelled `ci-inventory`.
 on:
   schedule:
     - cron: '17 0 * * 1'
@@ -10,18 +11,79 @@ on:
 
 permissions:
   contents: read
-  actions: read
-  issues: write
 
 concurrency:
   group: ci-inventory
   cancel-in-progress: false
 
 jobs:
+  # The GFF3 reader (bcbio-gff) runs on Biopython. `Tests` installs the newest Biopython
+  # release on every run, so a release is tested all week; this job tests Biopython's
+  # development head instead, to show a break before the next release brings it. It runs
+  # only the three files that read GFF3, a few runner-minutes a week.
+  gff3-biopython-head:
+    name: GFF3 tests on Biopython's development head
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.head.outputs.version }}
+      commit: ${{ steps.head.outputs.commit }}
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Resolve Biopython's head commit
+        id: sha
+        run: echo "commit=$(git ls-remote https://github.com/biopython/biopython.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Install gbdraw and test dependencies
+        run: python -m pip install -e . pytest pytest-timeout
+
+      - name: Install the managed LOSAT runtime
+        uses: ./.github/actions/managed-losat
+
+      - name: Install Biopython's development head
+        id: head
+        env:
+          COMMIT: ${{ steps.sha.outputs.commit }}
+        run: |
+          test -n "$COMMIT"
+          python -m pip install --upgrade "biopython @ git+https://github.com/biopython/biopython.git@${COMMIT}"
+          version="$(python -c 'import Bio; print(Bio.__version__)')"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "Biopython ${version} at ${COMMIT}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
+      - name: Run the GFF3 tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m pytest tests/test_input_variants.py tests/test_gff_multipart.py tests/test_bcbio_gff_policy.py -q
+
   inventory:
     name: CI inventory
+    needs: gff3-biopython-head
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      issues: write
     steps:
       # The shard plan and the measured runs are those of dev.
       - name: Checkout dev
@@ -44,4 +106,7 @@ jobs:
       - name: Report the last 7 days
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          BIOPYTHON_HEAD_RESULT: ${{ needs.gff3-biopython-head.result }}
+          BIOPYTHON_HEAD_VERSION: ${{ needs.gff3-biopython-head.outputs.version }}
+          BIOPYTHON_HEAD_COMMIT: ${{ needs.gff3-biopython-head.outputs.commit }}
         run: node tools/ci-inventory.mjs --post >> "$GITHUB_STEP_SUMMARY"
