@@ -94,6 +94,8 @@ import { msg } from '../utils/i18n.js';
  * @property {(close: () => unknown) => void} closeAfterChoice
  * @property {() => boolean} choicePending
  * @property {() => Promise<unknown>} runAnalysis Generate.
+ * @property {{ busy: () => { status: string, reason: string } | null }} alignment The Similarity alignment owner's
+ *   work in flight: Apply and Generate waits for it, as Generate does, and changes nothing meanwhile.
  * @property {(error: unknown) => string} errorSummary The user-facing summary of a failure.
  * @property {(recordIndex: number) => boolean} showRecordText Shows and focuses the field that writes the name
  *   lines of the drawn record with this index (the record-definition popup's owner); false when no field does.
@@ -194,7 +196,7 @@ const createRowSelection = (dialog) => {
 /** @param {LabelFitDialogPorts} ports */
 export const createLabelFitDialog = ({
   reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary,
-  showRecordText
+  showRecordText, alignment
 }) => {
   const dialog = reactive({
     show: false, drawn: false, capacity: false, remedies: [], records: [], rows: [], selectedKind: '', finishing: false,
@@ -288,8 +290,7 @@ export const createLabelFitDialog = ({
     () => msg('Fit labels'),
     () => {
       const row = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
-      if (!row || !labelFitRowOffered(row.status) || !row.values) return false;
-      if (!dialogDrawing) return false;
+      if (!row || !labelFitRowOffered(row.status) || !row.values || !dialogDrawing) return false;
       writeRowSettings({ values: row.values, trackOptions: row.trackOptions }, dialogDrawing);
       closeAfterChoice(close);
       return true;
@@ -304,6 +305,7 @@ export const createLabelFitDialog = ({
    */
   const resolveLabelFitChoice = async (choice) => {
     if (dialog.finishing || choicePending()) return undefined;
+    if (choice === 'apply' && alignment.busy()) return alignment.busy();
     const opened = openCount;
     const running = runningRow;
     if (running) {

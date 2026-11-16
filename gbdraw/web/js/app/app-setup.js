@@ -2959,7 +2959,7 @@ export const createAppSetup = () => {
   });
   const { missingBlastTsvDialog, missingBlastTsvRows, resolveMissingBlastTsv } = createMissingBlastTsvChoice({
     state, withHistory: dialogChoice.withHistory, closeAfterChoice: dialogChoice.closeAfterChoice, choicePending: dialogChoice.pending,
-    omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis
+    omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis, alignment: similarityAlignmentPorts
   });
   const {
     reviewDrawingFigure, dropSimilarityAlignmentView, fitPreviewForSimilarityAlignment, endSimilarityAlignmentTakeover,
@@ -3218,7 +3218,7 @@ export const createAppSetup = () => {
     withHistory: dialogChoice.withHistory,
     closeAfterChoice: dialogChoice.closeAfterChoice,
     choicePending: () => dialogChoice.pending.value,
-    runAnalysis: () => runAnalysis(),
+    runAnalysis: () => runAnalysis(), alignment: similarityAlignmentPorts,
     errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts),
     // The record-definition popup (created above) owns which field writes a record's name lines.
     showRecordText: (recordIndex) => previewItemPopup.showRecordTextSettings(recordIndex)

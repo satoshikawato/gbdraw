@@ -274,7 +274,7 @@ test('a row may write exactly the config paths Python\'s rows send, in the mode 
   }
 });
 
-const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {}) => {
+const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {}, alignmentWork = () => null } = {}) => {
   const steps = [];
   const writes = [];
   const generates = [];
@@ -295,7 +295,8 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
     closeAfterChoice: (close) => closes.push(close),
     choicePending: () => pending.value,
     runAnalysis: async () => { generates.push(true); },
-    errorSummary: () => 'The row could not be computed.'
+    errorSummary: () => 'The row could not be computed.',
+    alignment: { busy: alignmentWork }
   });
   return { dialog, steps, writes, generates, shown, pending };
 };
@@ -664,6 +665,22 @@ test('Apply writes the chosen row as one History step, closes, and Generates; Ca
   assert.equal(writes.length, 1);
   assert.equal(generates.length, 1);
   assert.equal(dialog.labelFitDialog.show, false);
+});
+
+// D-44 (S-2): Apply and Generate waits for the Similarity alignment work in flight, as Generate does: while it runs,
+// Apply writes nothing, keeps the dialog open and returns the work's reason; once it ends, Apply goes on.
+test('Apply changes nothing and returns the reason while alignment work runs', async () => {
+  const rows = [foundRow('smaller_font', 1.2)];
+  let work = { status: 'busy', reason: 'Applying the alignment plan.' };
+  const { dialog, steps, writes, generates } = dialogHarness({ alignmentWork: () => work });
+  await dialog.openLabelFitDialog(normalizeReport(report(rows)), { drawing });
+  assert.deepEqual(await dialog.resolveLabelFitChoice('apply'), work);
+  assert.deepEqual({ steps, writes: writes.length, generates: generates.length, show: dialog.labelFitDialog.show },
+    { steps: [], writes: 0, generates: 0, show: true });
+  work = null;
+  await dialog.resolveLabelFitChoice('apply');
+  assert.deepEqual({ steps, writes: writes.length, generates: generates.length, show: dialog.labelFitDialog.show },
+    { steps: ['Fit labels'], writes: 1, generates: 1, show: false });
 });
 
 test('a row that leaves crossing leaders is offered after the rows that fit, and Apply writes it', async () => {

@@ -6820,7 +6820,7 @@
                 class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="mt-2 flex flex-wrap gap-2">
                     <button v-if="comparisonCauseShown" type="button" data-history-ignore @click="showComparisonCause" class="btn btn-secondary btn-sm">{{ t('Show in Comparison') }}</button>
-                    <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">{{ t('Retry Generate') }}</button>
+                    <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing || similarityAlignmentBusy" :title="similarityAlignmentBusy ? similarityAlignmentWorkReason : null" class="btn btn-secondary btn-sm">{{ t('Retry Generate') }}</button>
                     <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">{{ t('Retry table import') }}</button>
                     <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn btn-secondary btn-sm">{{ t('Retry Label TSV import') }}</button>
                     <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn btn-secondary btn-sm">{{ t('Reselect Label TSV') }}</button>
@@ -9688,8 +9688,8 @@
             </ul>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore @click="resolveMissingBlastTsv('cancel')" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
-                <button v-if="missingBlastTsvRows.some((row) => row.missing)" type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">{{ t('Skip these comparisons and Generate') }}</button>
-                <button v-else type="button" data-history-ignore :disabled="processing" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">{{ t('Generate') }}</button>
+                <button v-if="missingBlastTsvRows.some((row) => row.missing)" type="button" data-history-managed :disabled="!semanticMutationAvailable || similarityAlignmentBusy" :title="similarityAlignmentBusy ? similarityAlignmentWorkReason : null" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">{{ t('Skip these comparisons and Generate') }}</button>
+                <button v-else type="button" data-history-ignore :disabled="processing || similarityAlignmentBusy" :title="similarityAlignmentBusy ? similarityAlignmentWorkReason : null" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">{{ t('Generate') }}</button>
             </div>
         </choice-dialog>
         <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order; labels not placed for
@@ -9748,7 +9748,7 @@
             </div>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.capacity ? t('Close') : labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>
-                <button v-if="!labelFitDialog.capacity" type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
+                <button v-if="!labelFitDialog.capacity" type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind || similarityAlignmentBusy" :title="similarityAlignmentBusy ? similarityAlignmentWorkReason : null" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
             </div>
         </choice-dialog>
         <!-- Record selection (D-02, D-10): the records of one file, drawn or left out -->
