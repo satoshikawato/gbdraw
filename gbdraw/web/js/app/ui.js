@@ -13,7 +13,7 @@ const WHEEL_TRANSITION_FALLBACK_MS = 260;
 // The preview zoom range; the zoom-in and zoom-out buttons repeat it in index.html.
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
-// Fit leaves the canvas padding (p-2) free around the diagram.
+// Fit's own margin around the diagram it fits (as wide as the canvas's default padding, p-2).
 const FIT_MARGIN_PX = 8;
 
 /** @param {number} value The zoom range and the wheel's 0.1 steps. */
@@ -462,6 +462,8 @@ const createPanGesture = (state, { beginInteraction, endInteraction }) => {
  * over the canvas edge where it settles (null when none is shown). Fit and a drawing switch read it.
  * @typedef {object} PreviewFreeRoom
  * @property {number} left The frame's left edge in the page.
+ * @property {number} contentLeft Where the canvas lays out its content in the page (inside its padding): the left
+ *   edge of a figure wider than the canvas as Generate shows it.
  * @property {number} width The frame's width, left of the Editor reserve.
  * @property {number} height
  * @property {number} middle The frame's vertical middle in the page.
@@ -483,8 +485,10 @@ const createPanGesture = (state, { beginInteraction, endInteraction }) => {
 /** @param {HTMLElement} container The preview canvas. @returns {PreviewFreeRoom} */
 const measureFreeRoom = (container) => {
   const frameBox = container.getBoundingClientRect();
+  const left = frameBox.left + container.clientLeft;
   return {
-    left: frameBox.left + container.clientLeft,
+    left,
+    contentLeft: left + parseFloat(getComputedStyle(container).paddingLeft),
     width: container.clientWidth - editorReserveWidth(container),
     height: container.clientHeight,
     middle: frameBox.top + container.clientTop + container.clientHeight / 2,
@@ -588,14 +592,14 @@ const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, p
   });
 
   // A drawing switch's placement: the zoom kept, the top where pan y 0 puts it, centred in the free room. A figure
-  // wider than its frame shows its start instead, its left edge at the canvas padding, as Generate shows a wide
-  // figure at 100 %. The pan is a whole pixel, so a figure the layout places so already keeps pan 0 and is drawn
+  // wider than its frame shows its start instead, its left edge where the canvas lays out its content, as Generate
+  // shows a wide figure at 100 %. The pan is a whole pixel, so a figure the layout places so already keeps pan 0 and is drawn
   // as before, pixel for pixel.
   const centerPreviewAtZoom = () => placeShown(({ room, figure }) => {
     const zoomLevel = zoom.value;
     const frameWidth = centeringFrameWidth(room, figure, zoomLevel, figure.originY + zoomLevel * figure.centerY);
     const x = zoomLevel * figure.width > frameWidth
-      ? room.left + FIT_MARGIN_PX - figure.originX - zoomLevel * (figure.centerX - figure.width / 2)
+      ? room.contentLeft - figure.originX - zoomLevel * (figure.centerX - figure.width / 2)
       : centeringPanX(room, frameWidth, figure, zoomLevel);
     setPreviewViewport({ x: Math.round(x), y: 0 }, zoomLevel);
   });

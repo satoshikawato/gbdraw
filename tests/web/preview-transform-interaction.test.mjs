@@ -425,6 +425,12 @@ const visualBox = () => {
 };
 const fakeSvg = { getBoundingClientRect: visualBox };
 let probes = 0;
+// The canvas's computed padding: where it lays out its content (p-2, 0.5rem).
+let canvasPaddingLeft = '8px';
+const computedStyle = (element) => ({
+  transform: element.style?.transform, paddingLeft: element === canvas ? canvasPaddingLeft : '0px'
+});
+globalThis.getComputedStyle = computedStyle;
 // OV-3588: the control over the canvas edge (the Editor toggle) beside the canvas in its workspace,
 // measured through a copy of it placed beside it.
 /** @type {{ left: number, top: number, width: number, height: number } | null} */
@@ -536,8 +542,8 @@ fakeSvg.getBoundingClientRect = () => {
   return svgBox();
 };
 globalThis.getComputedStyle = (element) => {
-  transitionsSeen.push(`read ${element.style.transform} ${element.style.transition}`);
-  return { transform: element.style.transform };
+  if (element !== canvas) transitionsSeen.push(`read ${element.style.transform} ${element.style.transition}`);
+  return computedStyle(element);
 };
 Object.assign(layout, { width: 997, height: 817 });
 uiState.zoom.value = 2;
@@ -550,7 +556,7 @@ assert.equal(transitionsSeen.join('\n'), [
 expectFitted(0.45);
 assert.equal(uiState.previewTransitionHeld.value, false);
 fakeSvg.getBoundingClientRect = svgBox;
-delete globalThis.getComputedStyle;
+globalThis.getComputedStyle = computedStyle;
 completeCase('fit centres the whole diagram left of the Editor reserve at the largest whole percent and cancels the interaction');
 
 // D-57 (OV-3620, OV-3621): the figure a drawing switch shows keeps the zoom, its top stays where pan y 0
@@ -570,8 +576,8 @@ const expectCentred = (zoom, right) => {
 };
 const placements = [];
 globalThis.getComputedStyle = (element) => {
-  placements.push(`read ${element.style.transform} ${element.style.transition} ${element.style.visibility}`);
-  return { transform: element.style.transform };
+  if (element !== canvas) placements.push(`read ${element.style.transform} ${element.style.transition} ${element.style.visibility}`);
+  return computedStyle(element);
 };
 Object.assign(layout, { width: 997, height: 300 });
 uiState.zoom.value = 0.5;
@@ -597,20 +603,24 @@ uiState.zoom.value = 1;
 await panZoom.showArrivingFigure();
 expectCentred(1, 996);
 edgeControl = null;
-// A figure wider than the room at the kept zoom shows its start at the canvas padding, as Generate shows it.
+// A figure wider than the room at the kept zoom shows its start where the canvas lays out its content, inside
+// its padding, as Generate shows it: 8 px in, and 10 px in with a 20 px browser font (p-2 is 0.5rem).
 Object.assign(layout, { width: 997, height: 300 });
 uiState.zoom.value = 2;
 await panZoom.showArrivingFigure();
 assert.equal(uiState.zoom.value, 2);
 assert.equal(uiState.canvasPan.y, 0);
 assert.equal(Math.abs(visualBox().left - 108) <= 0.5, true);
+canvasPaddingLeft = '10px';
+await panZoom.showArrivingFigure();
+assert.equal(Math.abs(visualBox().left - 110) <= 0.5, true, `the start at the canvas padding: ${visualBox().left}`);
+canvasPaddingLeft = '8px';
 // N-c: a placement that throws never leaves the figure hidden.
 const canvasBox = canvas.getBoundingClientRect;
 canvas.getBoundingClientRect = () => { throw new Error('no box'); };
 await assert.rejects(panZoom.showArrivingFigure(), /no box/);
 assert.equal(uiState.previewHiddenUntilShown.value, false);
 canvas.getBoundingClientRect = canvasBox;
-delete globalThis.getComputedStyle;
 completeCase('a drawing switch keeps the zoom and centres the arriving figure in the free room, shown at once');
 
 wrapper.querySelector = () => null;
@@ -618,6 +628,7 @@ panZoom.fitPreviewToViewport();
 assert.equal(uiState.zoom.value, 2, 'with no figure the Fit changes nothing');
 for (const key of ['querySelector', 'getBoundingClientRect']) delete wrapper[key];
 for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'parentElement', 'ownerDocument']) delete canvas[key];
+delete globalThis.getComputedStyle;
 
 panZoom.handleWheel(wheelEvent);
 panZoom.disposePanZoom();
