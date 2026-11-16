@@ -1139,7 +1139,19 @@ const assertPostSettleInteraction = async (page) => {
       + '[data-gbdraw-feature-id]:not([data-gbdraw-auto-feature-underlay="true"])'
   ).first();
   await page.mouse.move(5, 5);
-  await feature.hover();
+  // The first Feature is a few pixels wide at the fitted zoom. A mouse event is hit-tested at whole
+  // pixels, so the centre of its box can fall just outside it: hover a whole pixel that lies on it.
+  const position = await feature.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    for (let y = Math.ceil(box.top); y < box.bottom; y += 1) {
+      for (let x = Math.ceil(box.left); x < box.right; x += 1) {
+        if (document.elementFromPoint(x, y) === element) return { x: x - box.left, y: y - box.top };
+      }
+    }
+    return null;
+  });
+  expect(position, 'a whole pixel of the first Feature is not covered').not.toBeNull();
+  await feature.hover({ position: /** @type {{ x: number, y: number }} */ (position) });
   await expect(feature).toHaveCSS('cursor', 'pointer');
   expect(await feature.evaluate((element) => element.style.cursor)).toBe('');
   await expect(feature).toHaveAttribute('data-gbdraw-hover-opacity', /.*/);
