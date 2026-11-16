@@ -9,8 +9,10 @@
  * @param {{ drawingOf: (id: string) => any, results: { value: SvgResultEntry[] } }} state The state.js `state` the Load runs on.
  * @param {Pick<HistoryRouter, 'captureMembers' | 'replaceMembers' | 'restoreMembers'> | null} [history] A History
  *   router whose members the Load replaces; without one the members are an empty list nobody reads.
+ * @param {{ endReviewOutside: (drawingIds: readonly string[]) => void }} [alignment] The Similarity alignment owner's
+ *   port; by default no review is open.
  */
-export const sessionRollbackPort = async (state, history = null) => {
+export const sessionRollbackPort = async (state, history = null, alignment = { endReviewOutside: () => {} }) => {
   const { createSessionImportRollbackState } = await import('../../../gbdraw/web/js/app/app-setup.js');
   const { createArtifactSlotStore } = await import('../../../gbdraw/web/js/services/artifact-slot.js');
   const { createHistorySnapshotService } = await import('../../../gbdraw/web/js/services/history-snapshot.js');
@@ -29,7 +31,6 @@ export const sessionRollbackPort = async (state, history = null) => {
     featureListScrollTop: { value: 0 },
     featureListScrollRef: { value: null },
     selectedPairwiseBlockOrthogroupId: { value: '' },
-    // No Similarity alignment review is open in these callers.
-    alignment: { endReviewOutside: () => {} }
+    alignment
   });
 };
