@@ -2398,6 +2398,7 @@ def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources()
             "records": [
                 {"recordKey": "record-1", "source": {"kind": "genbank", "resourceId": "record-1-genbank"}},
                 {"recordKey": "record-2", "source": {"kind": "genbank", "resourceId": "record-2-genbank"}},
+                {"recordKey": "record-3", "source": {"kind": "genbank", "resourceId": "record-3-genbank"}},
             ]
         },
         "webFiles": {
@@ -2405,13 +2406,16 @@ def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources()
                 "colors-default-colors-file": "colors-default-colors.tsv",
                 "record-2-genbank": "second.gbk",
                 "record-1-genbank": "first.gbk",
+                "record-3-genbank": "draft_genomic.gbff.gz",
             }
         },
     }
 
+    # A gzip-compressed GenBank file is an input file too.
     assert gallery_assets_module._session_feature_sources(session) == [
         "first.gbk",
         "second.gbk",
+        "draft_genomic.gbff.gz",
     ]
 
 

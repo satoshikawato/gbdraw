@@ -51,7 +51,8 @@ INTERACTIVE_SVG_HARD_LIMIT = 41_943_040
 DECODED_METADATA_HARD_LIMIT = 200_000_000
 DECODED_METADATA_REGRESSION_CEILING = 220_000_000
 
-GENOME_SUFFIXES = (".gb", ".gbk", ".gbff")
+# A GenBank input, plain or gzip-compressed (`.gbff.gz`).
+GENOME_SUFFIXES = tuple(f"{suffix}{gz}" for suffix in (".gb", ".gbk", ".gbff") for gz in ("", ".gz"))
 _RENDERED_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
 _SVG_PART_SUFFIX_RE = re.compile(r"__part\d+$")
 _SVG_FEATURE_ID_RE = re.compile(r'data-gbdraw-feature-id=["\']([^"\']+)["\']')
