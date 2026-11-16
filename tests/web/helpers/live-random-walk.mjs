@@ -789,14 +789,15 @@ const isolationChanges = (phase, before, after, drawings) => drawings
 // an Undo then Redo. The isolation check of the other kinds is the part of
 // this check for the drawings they did not edit.
 // The same check of a Save then Load (`load: { phase: 'Save then Load', by:
-// 'renamed' }`: Load names files and records anew) is off: every Load of a
+// 'renamed' }`: Load names files and records anew) is off because of OV-3696:
+// Save then Load does not give back a walk drawing's slices. Every Load of a
 // fixture gives back the track-slot fields that were unset as resolved values
 // (`adv.*_track_slots_axis_index` null -> 0, `adv.circular_track_slots.*.side`
-// null -> 'inside'), the Circular record list as deferred (`inputs`
-// `circularRecordDiscovery.status` 'ready' -> 'deferred', `circularRecordList`
-// gone), and the Linear genome file's `sourceId` as the content source both
-// drawings share. It goes on when those are fixed or the check is told to
-// compare them otherwise.
+// and `params.lane_direction` unset -> 'inside'), the Circular record list as
+// deferred (`inputs` `circularRecordDiscovery.status` 'ready' -> 'deferred',
+// `circularRecordList` gone), and the Linear genome file (`gb.sourceId`) as a
+// new source instead of the content source both drawings share. The check
+// goes on, with that one entry, when OV-3696 is fixed.
 const RESTORING_KINDS = Object.freeze({
   undoRedo: { phase: 'Undo then Redo', by: 'drawings' }
 });

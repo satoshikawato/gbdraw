@@ -12,12 +12,11 @@ import { SETTING_APPLICATION } from '../../gbdraw/web/js/services/setting-applic
 import { isIgnoredTarget } from '../../gbdraw/web/js/app/history-inputs.js';
 import { ROWS_DRIVEN_BY_KIND, liveRequestRows, settingControlAction } from './helpers/live-setting-rows.mjs';
 import { WALK_KINDS } from './helpers/live-random-walk-plan.mjs';
+import { descendants, parseElementTree } from './helpers/html-element-tree.mjs';
 
 const INDEX_HTML = new URL('../../gbdraw/web/index.html', import.meta.url);
-const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
-const RAW_TEXT_TAGS = new Set(['script', 'style']);
 
-/** @typedef {{ tag: string, attributes: Map<string, string>, parent: ScannedElement | null }} ScannedElement */
+/** @typedef {import('./helpers/html-element-tree.mjs').HtmlElement} ScannedElement */
 
 // An attribute selector list such as `[a], [b="c"]`, the form isIgnoredTarget passes to `closest`.
 /** @param {string} selector @returns {(element: ScannedElement) => boolean} */
@@ -39,59 +38,9 @@ const asClosestTarget = (element) => ({
   }
 });
 
-// The elements of an HTML text with their attributes and parents. Quoted
-// attribute values may hold `<` and `>` (Vue expressions); comments and the
-// text of script and style elements hold no elements.
+// The elements of an HTML text, by the scanner tests/web/setting-application.test.mjs reads index.html with.
 /** @param {string} html @returns {ScannedElement[]} */
-const scanElements = (html) => {
-  /** @type {ScannedElement[]} */
-  const elements = [];
-  /** @type {ScannedElement[]} */
-  const open = [];
-  let at = 0;
-  while ((at = html.indexOf('<', at)) >= 0) {
-    if (html.startsWith('<!--', at)) {
-      at = html.indexOf('-->', at) + 3;
-      continue;
-    }
-    const closing = html[at + 1] === '/';
-    const name = /^[a-zA-Z][\w-]*/.exec(html.slice(at + (closing ? 2 : 1)))?.[0];
-    if (!name) {
-      at += 1;
-      continue;
-    }
-    const tag = name.toLowerCase();
-    let cursor = at + (closing ? 2 : 1) + name.length;
-    /** @type {Map<string, string>} */
-    const attributes = new Map();
-    let selfClosing = false;
-    while (cursor < html.length && html[cursor] !== '>') {
-      const rest = html.slice(cursor);
-      const attribute = /^\s*([^\s=>/"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/.exec(rest);
-      if (attribute && attribute[0].trim()) {
-        attributes.set(attribute[1], attribute[2] ?? attribute[3] ?? attribute[4] ?? '');
-        cursor += attribute[0].length;
-      } else {
-        if (rest.startsWith('/')) selfClosing = true;
-        cursor += 1;
-      }
-    }
-    at = cursor + 1;
-    if (closing) {
-      const index = open.map(({ tag: openTag }) => openTag).lastIndexOf(tag);
-      if (index >= 0) open.length = index;
-      continue;
-    }
-    const element = { tag, attributes, parent: open.at(-1) ?? null };
-    elements.push(element);
-    if (RAW_TEXT_TAGS.has(tag)) {
-      at = html.indexOf(`</${tag}`, at);
-      continue;
-    }
-    if (!VOID_TAGS.has(tag) && !selfClosing) open.push(element);
-  }
-  return elements;
-};
+const scanElements = (html) => [...descendants(parseElementTree(html))];
 
 /** The static `data-setting` of the element's nearest scope, or ''. @param {ScannedElement} element */
 const nearestSetting = (element) => {

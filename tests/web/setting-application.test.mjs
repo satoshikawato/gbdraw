@@ -40,94 +40,13 @@ import {
 } from '../../gbdraw/web/js/services/setting-application.js';
 import { SETTINGS_SECTIONS } from '../../gbdraw/web/js/services/settings-sections.js';
 import { RECORD_POPUP_FIELDS } from '../../gbdraw/web/js/app/preview-item-popup.js';
+import { ancestorsOrSelf, descendants, parseElementTree } from './helpers/html-element-tree.mjs';
 
 const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
-const lineOf = (offset) => html.slice(0, offset).split('\n').length;
-
-const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 const PRESENTATION_COMPONENTS = new Set(['help-tip', 'settings-section-title', 'setting-note', 'markup-preview', 'i18n-text']);
 
-// The end of an opening tag, skipping '>' inside quoted attribute values.
-const tagEnd = (from) => {
-  let quote = null;
-  for (let index = from; index < html.length; index += 1) {
-    const char = html[index];
-    if (quote) {
-      if (char === quote) quote = null;
-    } else if (char === '"' || char === "'") {
-      quote = char;
-    } else if (char === '>') {
-      return index;
-    }
-  }
-  throw new Error(`Unterminated tag at line ${lineOf(from)}`);
-};
-
-const parseAttributes = (text) => {
-  const attributes = new Map();
-  for (const match of text.matchAll(/([^\s=/"']+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>"']+))?/g)) {
-    const value = match[2] ?? '';
-    attributes.set(match[1], value.replace(/^["']|["']$/g, ''));
-  }
-  return attributes;
-};
-
-// The element tree of index.html outside <script> and comments.
-const parseTree = () => {
-  const root = { tag: '#root', attributes: new Map(), parent: null, children: [], line: 0 };
-  let current = root;
-  let index = 0;
-  while (index < html.length) {
-    const open = html.indexOf('<', index);
-    if (open < 0) break;
-    if (html.startsWith('<!--', open)) {
-      index = html.indexOf('-->', open) + 3;
-      continue;
-    }
-    if (html.startsWith('</', open)) {
-      const end = html.indexOf('>', open);
-      const tag = html.slice(open + 2, end).trim().toLowerCase();
-      let node = current;
-      while (node && node.tag !== tag) node = node.parent;
-      if (node) current = node.parent;
-      index = end + 1;
-      continue;
-    }
-    if (!/[a-zA-Z]/.test(html[open + 1] || '')) {
-      index = open + 1;
-      continue;
-    }
-    const end = tagEnd(open);
-    const raw = html.slice(open + 1, end);
-    const tag = raw.match(/^[^\s/>]+/)[0].toLowerCase();
-    const element = {
-      tag,
-      attributes: parseAttributes(raw.slice(tag.length)),
-      parent: current,
-      children: [],
-      line: lineOf(open)
-    };
-    current.children.push(element);
-    index = end + 1;
-    if (tag === 'script') {
-      index = html.indexOf('</script>', index) + '</script>'.length;
-      continue;
-    }
-    if (!VOID.has(tag) && !raw.endsWith('/')) current = element;
-  }
-  return root;
-};
-
-const tree = parseTree();
-const descendants = function* descendants(element) {
-  for (const child of element.children) {
-    yield child;
-    yield* descendants(child);
-  }
-};
-const ancestorsOrSelf = function* ancestorsOrSelf(element) {
-  for (let node = element; node; node = node.parent) yield node;
-};
+// The element tree of index.html outside <script>, <style> and comments.
+const tree = parseElementTree(html);
 const allElements = [...descendants(tree)];
 const scopeOf = (element) => [...ancestorsOrSelf(element)]
   .find((node) => node.attributes.has('data-setting') || node.attributes.has(':data-setting')) || null;

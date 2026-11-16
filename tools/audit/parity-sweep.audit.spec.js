@@ -7,7 +7,6 @@
 // check the random walk runs after each step); the problems go to each probe's manifest row,
 // and the test fails after the whole sweep when any probe has one.
 const { expect, test } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const A = require('./helpers/audit-common.cjs');
 
@@ -143,31 +142,22 @@ test('Linear GUI Generate vs. Source recipe sweep', async ({ page }) => {
   test.setTimeout(1_800_000);
   const outdir = A.outDir('parity', 'linear-MJNV');
   const examples = join(A.REPO_ROOT, 'examples');
-  const inputs = {
-    a1: readFileSync(join(examples, 'MjeNMV.gb'), 'utf8'),
-    a2: readFileSync(join(examples, 'MelaMJNV.gb'), 'utf8'),
-    b: readFileSync(join(examples, 'MjeNMV.MelaMJNV.tblastx.out'), 'utf8')
-  };
   page.on('dialog', (d) => d.dismiss());
-  // A new Session holds one Circular drawing; the Linear one is made as a user makes it.
+  // A new Session holds one Circular drawing; the Linear one is made, and its records and the
+  // BLAST table attached, as a user does: through the drawing bar and the file inputs. The
+  // table goes in through the pair's file input, which registers it in the Session's file
+  // store; a plan edge written by hand holds a bare File the plan does not accept.
   const { showDrawing } = require(join(A.REPO_ROOT, 'tests/web/helpers/drawing-bar.cjs'));
   await sweep(page, outdir, select(LINEAR_PROBES), async () => {
     await A.helpers().openApp(page);
     await showDrawing(page, { kind: 'linear' });
-    await page.evaluate(async ({ a1, a2, b }) => {
-      const app = window.__GBDRAW_APP__;
-      if (app.linearSeqs.length < 2) app.addLinearSeq();
-      app.setLinearSeqPrimaryFile(0, 'gb', new File([a1], 'MjeNMV.gb', { type: 'text/plain' }));
-      app.setLinearSeqPrimaryFile(1, 'gb', new File([a2], 'MelaMJNV.gb', { type: 'text/plain' }));
-      app.losatProgram = 'blastn';
-      app.linearComparisonPlan.mode = 'adjacent';
-      app.linearComparisonPlan.defaultSource = 'upload';
-      app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
-        id: 'audit-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
-        included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
-        file: new File([b], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' }), losatFilename: ''
-      });
-      await window.Vue.nextTick();
-    }, inputs);
+    await page.getByTestId('linear-genbank-1').setInputFiles(join(examples, 'MjeNMV.gb'));
+    await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+    await page.getByTestId('linear-genbank-2').setInputFiles(join(examples, 'MelaMJNV.gb'));
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name)))
+      .toEqual(['MjeNMV.gb', 'MelaMJNV.gb']);
+    await page.getByRole('button', { name: 'Use uploaded BLAST TSV for all adjacent pairs', exact: true }).click();
+    await page.locator('input[type="file"][aria-label="BLAST TSV for #1 to #2"]')
+      .setInputFiles(join(examples, 'MjeNMV.MelaMJNV.tblastx.out'));
   });
 });

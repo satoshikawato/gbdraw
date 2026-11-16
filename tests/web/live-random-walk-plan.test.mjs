@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  BARRIER_KINDS, DEFAULT_WALK_LENGTH, FIXTURES, PROMOTION_PAIR_KINDS, PR_SEED, REPLACED_MATRIX_CASES, WALK_KINDS,
+  BARRIER_KINDS, DEFAULT_WALK_LENGTH, FIXTURES, PR_SEED, REPLACED_MATRIX_CASES, WALK_KINDS,
   allowedIn, coverageOf, coverageTargets, planWalk, stepCount
 } from './helpers/live-random-walk-plan.mjs';
 
@@ -19,9 +19,9 @@ const PROMOTION_SEEDS = [...Array.from({ length: 94 }, (_, offset) => offset + 1
 
 test('the pull-request plan covers every pull-request target and holds the replaced matrix cases', () => {
   const plan = planWalk(PR_SEED, { level: 'pr', required: REPLACED_MATRIX_CASES });
-  // The size the pull-request tier's time was measured at (3 walks, 120 steps): a plan that grows past it needs a new measurement.
-  assert.equal(plan.walks.length, 3);
-  assert.ok(stepCount(plan) <= 120, `${stepCount(plan)} steps`);
+  // The size the pull-request tier's time was measured at (4 walks, 124 steps): a plan that grows past it needs a new measurement.
+  assert.equal(plan.walks.length, 4);
+  assert.ok(stepCount(plan) <= 124, `${stepCount(plan)} steps`);
   assert.deepEqual(coverageOf(plan, 'pr', { required: REPLACED_MATRIX_CASES }).missing, []);
   for (const { fixture, kind, popup, reflow } of REPLACED_MATRIX_CASES) {
     const fixtureIndex = FIXTURES.findIndex(({ name }) => name === fixture);
@@ -84,11 +84,9 @@ test('the targets leave out the pairs no fixture can run', () => {
   assert.ok(!sequence.has('resultSwitch>reset'));
   assert.ok(!sequence.has('drawingSwitch>resultSwitch'));
   assert.ok(sequence.has('resultSwitch>load'));
-  // The pull-request level leaves out the pairs of the kinds it covers only in their popup and Auto Reflow states.
-  assert.equal(sequence.size, (WALK_KINDS.length - PROMOTION_PAIR_KINDS.length) ** 2 - 4);
-  assert.deepEqual(PROMOTION_PAIR_KINDS, ['setting']);
-  assert.ok(!sequence.has('setting>fill') && !sequence.has('fill>setting'));
-  assert.ok(coverageTargets('promotion').sequence.has('setting>fill'));
+  // Every kind's pairs are pull-request targets, a setting step's too (R3: every ordered pair on every run).
+  assert.equal(sequence.size, WALK_KINDS.length ** 2 - 4);
+  assert.ok(sequence.has('setting>fill') && sequence.has('fill>setting') && sequence.has('setting>setting'));
   assert.deepEqual([...BARRIER_KINDS].sort(), ['load', 'reset']);
 });
 
@@ -104,10 +102,7 @@ const expectedTargets = (level, required = []) => {
   const fixtureFlags = new Set();
   for (const first of WALK_KINDS) {
     for (const second of WALK_KINDS) {
-      const promotionPair = PROMOTION_PAIR_KINDS.includes(first) || PROMOTION_PAIR_KINDS.includes(second);
-      if (FIXTURES.some((fixture) => allowedIn(first, fixture) && allowedIn(second, fixture)) && (level === 'promotion' || !promotionPair)) {
-        pairs.add(`${first}>${second}`);
-      }
+      if (FIXTURES.some((fixture) => allowedIn(first, fixture) && allowedIn(second, fixture))) pairs.add(`${first}>${second}`);
     }
     for (const [popup, reflow] of FLAG_STATES) {
       flags.add(flagKey(first, popup, reflow));

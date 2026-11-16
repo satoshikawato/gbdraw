@@ -64,6 +64,9 @@ for (const name of names) {
     expect([...first.health, ...second.health]).toEqual([]);
     expect(stateDiff, JSON.stringify(stateDiff).slice(0, 4000)).toEqual([]);
     expect(sliceDiff, 'the slices of every drawing after Load, Save, Load').toEqual([]);
+    // OV-3697: the second save of `lambda_basic_linear.gbdraw` holds `drawings[0].ui.canvasPan`
+    // with float drift (x -754.671875 -> -754.6718444824219), so this fails for it until the
+    // saved pan is kept or rounded; it is not exempted.
     expect(docDiff, JSON.stringify(docDiff).slice(0, 4000)).toEqual([]);
   });
 }

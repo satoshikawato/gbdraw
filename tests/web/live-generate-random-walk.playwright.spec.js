@@ -2,8 +2,7 @@
 // tests/web/helpers/live-random-walk.mjs at the pull-request level of
 // tests/web/helpers/live-random-walk-plan.mjs, with a fixed seed: every
 // feasible ordered pair of edit kinds, and every kind in each popup and Auto Reflow
-// state (a `setting` step only in those states; its pairs are promotion
-// targets). Every step compares the live Result with a fresh Generate from the
+// state (4 walks, 124 steps). Every step compares the live Result with a fresh Generate from the
 // same draft and checks that the drawing it did not edit keeps its slices
 // (M6), that an Undo then Redo gives back every drawing, and that the step and
 // its Generate leave no unclassified alert, page or console error, or invalid
