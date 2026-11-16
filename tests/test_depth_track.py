@@ -2720,8 +2720,9 @@ def test_depth_df_crop_windows_read_the_source_rows_beside_the_crop() -> None:
 def test_drawn_depth_follows_crop_and_reverse_complement(
     mode: str, case: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import gbdraw.render.drawers.circular.depth as circular_drawer
-    import gbdraw.render.drawers.linear.depth as linear_drawer
+    import gbdraw.render.drawers.circular.numeric_series as circular_drawer
+    import gbdraw.render.drawers.linear.numeric_series as linear_drawer
+    import gbdraw.render.numeric_series as series_owner
     from gbdraw.api.request_render import plan_request
     from gbdraw.api.requests import (
         CircularDiagramRequest,
@@ -2734,24 +2735,28 @@ def test_drawn_depth_follows_crop_and_reverse_complement(
 
     region, reverse, spans, expected = _RECORD_FRAME_CASES[case]
     drawn: list[tuple[int, list[tuple[int, float]]]] = []
-    if mode == "circular":
-        real_circular = circular_drawer.generate_circular_depth_path_desc
+    # The depth frame each series is built from; the path drawn next is built from the latest.
+    prepared: list[pd.DataFrame] = []
+    real_prepare = series_owner._prepare_depth_plot_dataframe
 
-        def capture_circular(radius, record_len, plot_df, *args, **kwargs):
-            drawn.append((int(record_len), list(zip(plot_df["position"], plot_df["depth"]))))
-            return real_circular(radius, record_len, plot_df, *args, **kwargs)
+    def capture_prepare(*args, **kwargs):
+        prepared.append(real_prepare(*args, **kwargs))
+        return prepared[-1]
 
-        monkeypatch.setattr(circular_drawer, "generate_circular_depth_path_desc", capture_circular)
-        request_type, options_type = CircularDiagramRequest, CircularDiagramOptions
-    else:
-        real_linear = linear_drawer.calculate_depth_path_desc
+    monkeypatch.setattr(series_owner, "_prepare_depth_plot_dataframe", capture_prepare)
+    owner, name = ((circular_drawer, "circular_series_path_desc") if mode == "circular"
+                   else (linear_drawer, "linear_series_path_desc"))
+    real_desc = getattr(owner, name)
 
-        def capture_linear(start_x, start_y, plot_df, record_len, *args, **kwargs):
-            drawn.append((int(record_len), list(zip(plot_df["position"], plot_df["depth"]))))
-            return real_linear(start_x, start_y, plot_df, record_len, *args, **kwargs)
+    def capture_desc(samples, frame, *args, **kwargs):
+        plot_df = prepared[-1]
+        drawn.append((int(frame.record_len), list(zip(plot_df["position"], plot_df["depth"]))))
+        return real_desc(samples, frame, *args, **kwargs)
 
-        monkeypatch.setattr(linear_drawer, "calculate_depth_path_desc", capture_linear)
-        request_type, options_type = LinearDiagramRequest, LinearDiagramOptions
+    monkeypatch.setattr(owner, name, capture_desc)
+    request_type, options_type = (
+        (CircularDiagramRequest, CircularDiagramOptions) if mode == "circular" else (LinearDiagramRequest, LinearDiagramOptions)
+    )
 
     request = request_type(
         records=(

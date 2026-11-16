@@ -162,10 +162,7 @@ from ...layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
     LINEAR_SCALAR_AXIS_STROKE_PX,
     LINEAR_SCALAR_AXIS_TICK_PX,
-    ScalarAxisLabels,
-    _depth_axis_bounds,
-    depth_axis_labels,
-    percent_axis_labels,
+    ScalarAxis,
 )
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...labels.linear_types import LinearLabel
@@ -239,15 +236,15 @@ from .annotation_labels import (
     place_linear_annotation_labels,
 )
 from ...render.groups.linear import build_linear_feature_dom_index
+from ...render.numeric_series import depth_axis, gc_content_axis
 from ...render.composition import CompositionPrimary, compose_drawing, place_legend, place_title
 
 from .builders import (
+    LinearSeriesSlot,
     add_explicit_comparisons_on_linear_canvas,
-    add_depth_group,
     add_feature_density_heatmap_group,
-    add_gc_content_group,
-    add_gc_skew_group,
     add_length_bar_on_linear_canvas,
+    add_numeric_series_group,
     add_record_definition_group,
     add_record_group,
     add_row_window_heading_group,
@@ -1722,41 +1719,16 @@ def _linear_scalar_axis_left_room(
     axis_px = 0.0
     tick_labels_px = 0.0
     for slot in slots:
-        axis_labels: ScalarAxisLabels
+        axis: ScalarAxis | None = None
         if slot.renderer == "depth":
             depth_track = depth_by_index.get(_depth_slot_track_index(slot))
-            if depth_track is None or not bool(depth_track.config.show_axis):
-                continue
-            depth_config = depth_track.config
-            font_size = linear_scalar_axis_tick_font_size_px(depth_config, float(slot.height))
-            axis_min, axis_max = _depth_axis_bounds(depth_track.df, depth_config.min_depth, depth_config.max_depth)
-            axis_labels = depth_axis_labels(
-                axis_min,
-                axis_max,
-                label_style=depth_config.axis_labels,
-                min_depth=depth_config.min_depth,
-                normalize=bool(depth_config.normalize),
-                show_ticks=bool(depth_config.show_ticks),
-                large_tick_interval=depth_config.large_tick_interval,
-                length_px=float(slot.height),
-                label_line_px=font_size,
-            )
+            axis = None if depth_track is None else depth_axis(depth_track.config, depth_track.df)
         elif slot.renderer == "dinucleotide_content":
-            gc_slot_config = gc_config_of(slot.params, depth_by_index)
-            if str(gc_slot_config.mode) != "percent" or not bool(gc_slot_config.show_axis):
-                continue
-            font_size = linear_scalar_axis_tick_font_size_px(gc_slot_config, float(slot.height))
-            axis_labels = percent_axis_labels(
-                float(0.0 if gc_slot_config.min_percent is None else gc_slot_config.min_percent),
-                float(100.0 if gc_slot_config.max_percent is None else gc_slot_config.max_percent),
-                label_style=gc_slot_config.axis_labels,
-                show_ticks=bool(gc_slot_config.show_ticks),
-                large_tick_interval=gc_slot_config.large_tick_interval,
-                length_px=float(slot.height),
-                label_line_px=font_size,
-            )
-        else:
+            axis = gc_content_axis(gc_config_of(slot.params, depth_by_index))
+        if axis is None:
             continue
+        font_size = linear_scalar_axis_tick_font_size_px(axis, float(slot.height))
+        axis_labels = axis.labels(float(slot.height), font_size)
         axis_px = max(axis_px, 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX)
         texts = [tick.label for tick in axis_labels.ticks] + [axis_labels.range_label]
         for label in (text for text in texts if text is not None):
@@ -4057,29 +4029,33 @@ def _draw_linear_annotation_slot(canvas: Drawing, drawing: _LinearRecordDrawing,
     return canvas
 
 
+def _linear_series_slot(drawing: _LinearRecordDrawing, slot: _LinearSlotDrawing, kind: GroupKind) -> LinearSeriesSlot:
+    """Where one record's numeric series track of a slot goes, and what identifies it."""
+
+    return LinearSeriesSlot(
+        offset_y=drawing.placement.axis_y,
+        offset_x=drawing.placement.x,
+        track_offset_y=slot.resolved.origin_y,
+        track_height=float(slot.slot.height),
+        sequence_width=drawing.placement.sequence_width,
+        record_transform=drawing.record_transform,
+        row_shifts=slot.row_shifts,
+        group_id=slot.group_id,
+        group_key=GroupKey(drawing.record_key, kind, str(slot.slot.id)),
+        slot_id=str(slot.slot.id),
+        slot_renderer=str(slot.slot.renderer),
+    )
+
+
 def _draw_linear_depth_slot(canvas: Drawing, drawing: _LinearRecordDrawing, slot: _LinearSlotDrawing) -> Drawing:
     """Draw one record's depth track in a depth slot, when the record has that track."""
 
     depth_track = drawing.depth_by_index.get(_depth_slot_track_index(slot.slot))
     if depth_track is None:
         return canvas
-    return add_depth_group(
-        canvas,
-        drawing.record,
-        drawing.placement.axis_y,
-        drawing.placement.x,
-        drawing.canvas_config,
-        depth_track.config,
-        depth_df=depth_track.df,
-        group_id=slot.group_id,
-        slot_id=str(slot.slot.id),
-        slot_renderer=str(slot.slot.renderer),
-        track_height=slot.slot.height,
-        track_offset_y=slot.resolved.origin_y,
-        sequence_width=drawing.placement.sequence_width,
-        record_transform=drawing.record_transform,
-        row_shifts=slot.row_shifts,
-        group_key=GroupKey(drawing.record_key, GroupKind.DEPTH, str(slot.slot.id)),
+    return add_numeric_series_group(
+        canvas, "depth_content", drawing.record, drawing.canvas_config, depth_track.config, depth_track.df,
+        _linear_series_slot(drawing, slot, GroupKind.DEPTH),
     )
 
 
@@ -4097,23 +4073,9 @@ def _draw_linear_feature_density_slot(
     slot_renderer = str(slot.slot.renderer)
     if layer.track.style == "histogram":
         frame, histogram_config = feature_density_histogram_source(layer, profile)
-        return add_depth_group(
-            canvas,
-            drawing.record,
-            drawing.placement.axis_y,
-            drawing.placement.x,
-            drawing.canvas_config,
-            histogram_config,
-            depth_df=frame,
-            group_id=slot.group_id,
-            slot_id=slot_id,
-            slot_renderer=slot_renderer,
-            track_height=slot.slot.height,
-            track_offset_y=slot.resolved.origin_y,
-            sequence_width=drawing.placement.sequence_width,
-            record_transform=drawing.record_transform,
-            row_shifts=slot.row_shifts,
-            group_key=group_key,
+        return add_numeric_series_group(
+            canvas, "depth_content", drawing.record, drawing.canvas_config, histogram_config, frame,
+            _linear_series_slot(drawing, slot, GroupKind.DEPTH),
         )
     heatmap = FeatureDensityHeatmapGroup(
         layer,
@@ -4138,33 +4100,23 @@ def _draw_linear_feature_density_slot(
     )
 
 
-def _slot_gc_df(drawing: _LinearRecordDrawing, nt: str) -> DataFrame | None:
+def _slot_gc_df(drawing: _LinearRecordDrawing, nt: str) -> DataFrame:
     """The record's GC frame of one dinucleotide, or of the request's dinucleotide when no slot asked for it."""
 
-    return drawing.gc_df_by_dinucleotide.get(nt, drawing.default_gc_df)
+    frame = drawing.gc_df_by_dinucleotide.get(nt, drawing.default_gc_df)
+    # Every content and skew slot's dinucleotide has its frame: ``_linear_gc_frames`` reads the same slots.
+    assert frame is not None
+    return frame
 
 
 def _draw_linear_gc_content_slot(canvas: Drawing, drawing: _LinearRecordDrawing, slot: _LinearSlotDrawing) -> Drawing:
     """Draw one record's dinucleotide content in its slot."""
 
     nt = slot_dinucleotide(slot.slot.params, str(drawing.configurators.gc.dinucleotide))
-    return add_gc_content_group(
-        canvas,
-        drawing.record,
-        drawing.placement.axis_y,
-        drawing.placement.x,
-        drawing.canvas_config,
-        drawing.plan.depth.drawn_gc_config(slot.slot.params, drawing.depth_by_index),
-        gc_df=_slot_gc_df(drawing, nt),
-        track_height=slot.slot.height,
-        track_offset_y=slot.resolved.origin_y,
-        group_id=slot.group_id,
-        slot_id=str(slot.slot.id),
-        slot_renderer=str(slot.slot.renderer),
-        sequence_width=drawing.placement.sequence_width,
-        record_transform=drawing.record_transform,
-        row_shifts=slot.row_shifts,
-        group_key=GroupKey(drawing.record_key, GroupKind.GC_CONTENT, str(slot.slot.id)),
+    return add_numeric_series_group(
+        canvas, "gc_content_content", drawing.record, drawing.canvas_config,
+        drawing.plan.depth.drawn_gc_config(slot.slot.params, drawing.depth_by_index), _slot_gc_df(drawing, nt),
+        _linear_series_slot(drawing, slot, GroupKind.GC_CONTENT),
     )
 
 
@@ -4173,23 +4125,9 @@ def _draw_linear_gc_skew_slot(canvas: Drawing, drawing: _LinearRecordDrawing, sl
 
     skew_config = drawing.configurators.skew
     nt = slot_dinucleotide(slot.slot.params, str(skew_config.dinucleotide))
-    return add_gc_skew_group(
-        canvas,
-        drawing.record,
-        drawing.placement.axis_y,
-        drawing.placement.x,
-        drawing.canvas_config,
-        _slot_skew_config(skew_config, slot.slot, nt),
-        gc_df=_slot_gc_df(drawing, nt),
-        track_height=slot.slot.height,
-        track_offset_y=slot.resolved.origin_y,
-        group_id=slot.group_id,
-        slot_id=str(slot.slot.id),
-        slot_renderer=str(slot.slot.renderer),
-        sequence_width=drawing.placement.sequence_width,
-        record_transform=drawing.record_transform,
-        row_shifts=slot.row_shifts,
-        group_key=GroupKey(drawing.record_key, GroupKind.GC_SKEW, str(slot.slot.id)),
+    return add_numeric_series_group(
+        canvas, "gc_skew_content", drawing.record, drawing.canvas_config, _slot_skew_config(skew_config, slot.slot, nt),
+        _slot_gc_df(drawing, nt), _linear_series_slot(drawing, slot, GroupKind.GC_SKEW),
     )
 
 

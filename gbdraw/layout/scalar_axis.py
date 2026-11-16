@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, NamedTuple, TypeVar, cast
+from dataclasses import dataclass
+from typing import NamedTuple, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from pandas import DataFrame
+from pandas import DataFrame, Index, Series
 
-from gbdraw.auto_sizes import scalar_axis_tick_font_size
+from gbdraw.analysis.skew import DeviationScale, deviation_scale
+from gbdraw.auto_sizes import TickFontSource, scalar_axis_tick_font_size
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
@@ -79,13 +81,46 @@ def held_to_end(
     return np.append(position_array, float(end)), np.append(value_array, value_array[-1])
 
 
+class SeriesSamples(NamedTuple):
+    """The samples a numeric series track draws, record-local, and its baseline rule.
+
+    With a ``deviation`` scale the baseline is the series mean, along the middle of the band, and each value is
+    drawn as its deviation from it, the largest at the band's edge; a value that is missing lies on the baseline
+    (GC content in deviation mode, GC skew). Without one the baseline is the band's bottom and each value is the
+    fraction of the band it fills (GC content in percent, depth). ``closes_at_record_end`` repeats a first sample
+    at 0 at the record's end on a whole circular molecule (GC content in both modes)."""
+
+    positions: Index
+    values: Series
+    deviation: DeviationScale | None
+    closes_at_record_end: bool
+
+
+def deviation_samples(series: Series, *, closes_at_record_end: bool) -> SeriesSamples | None:
+    """The samples of ``series`` (indexed by window start) drawn as deviation from their mean; none when it has no
+    value at all (``deviation_scale``)."""
+
+    scale = deviation_scale(series)
+    if series.empty or scale is None:
+        return None
+    return SeriesSamples(series.index, series, scale, closes_at_record_end)
+
+
+def band_samples(frame: DataFrame, value_column: str, *, closes_at_record_end: bool) -> SeriesSamples | None:
+    """The samples of ``frame`` (``position`` and the band fraction ``value_column``) drawn up from the band's
+    bottom; none for an empty frame."""
+
+    if frame.empty:
+        return None
+    return SeriesSamples(Index(frame["position"]), frame[value_column], None, closes_at_record_end)
+
+
 class ScalarRows:
     """One track's samples on the rows of a wrapped record: projected once, read row by row."""
 
     def __init__(self, transform: RecordDisplayTransform) -> None:
         self._transform = transform
         self._rows: dict[int, ProjectedScalarLine] | None = None
-        self._plot_data: object | None = None
 
     def line(self, positions: ArrayLike, values: ArrayLike, row: int) -> ProjectedScalarLine:
         if self._rows is None:
@@ -112,20 +147,6 @@ class ScalarRow(NamedTuple):
 
     samples: ScalarRows
     row: int
-
-
-_PlotData = TypeVar("_PlotData")
-
-
-def plot_data_once(row: ScalarRow | None, build: Callable[[], _PlotData]) -> _PlotData:
-    """A track's plot data over the whole record: built once however many rows draw it."""
-
-    if row is None:
-        return build()
-    samples = row.samples
-    if samples._plot_data is None:
-        samples._plot_data = build()
-    return cast(_PlotData, samples._plot_data)
 
 
 def has_tick_value(values: list[float], candidate: float) -> bool:
@@ -249,62 +270,6 @@ def _axis_labels(
     return ScalarAxisLabels(tuple(tick._replace(label=None) for tick in ticks), range_label if ticks else None)
 
 
-def percent_axis_labels(
-    min_percent: float,
-    max_percent: float,
-    *,
-    label_style: ScalarAxisLabelStyle,
-    show_ticks: bool,
-    large_tick_interval: float | None,
-    length_px: float,
-    label_line_px: float,
-) -> ScalarAxisLabels:
-    """The large ticks and labels of a GC content axis in percent: every large tick may carry a number."""
-
-    ticks = scalar_axis_large_ticks(
-        min_percent,
-        max_percent,
-        show_ticks=show_ticks,
-        large_tick_interval=large_tick_interval,
-        length_px=length_px,
-        fraction=lambda value: scaled_scalar_fraction(value, min_percent, max_percent),
-        format_label=format_percent_tick,
-        label_line_px=label_line_px,
-    )
-    return _axis_labels(ticks, label_style, scalar_axis_range_label(min_percent, max_percent, PERCENT_UNIT))
-
-
-def depth_axis_labels(
-    axis_min: float,
-    axis_max: float,
-    *,
-    label_style: ScalarAxisLabelStyle,
-    min_depth: float | None,
-    normalize: bool,
-    show_ticks: bool,
-    large_tick_interval: float | None,
-    length_px: float,
-    label_line_px: float,
-) -> ScalarAxisLabels:
-    """The large ticks and labels of a depth axis, linear or log-scaled: numbered, the lower bound has no number
-    without a set ``min_depth``; the range label starts at the axis minimum (0 when none is set)."""
-
-    ticks = scalar_axis_large_ticks(
-        axis_min,
-        axis_max,
-        show_ticks=show_ticks,
-        large_tick_interval=large_tick_interval,
-        length_px=length_px,
-        fraction=lambda value: _scaled_depth_fraction(value, axis_min, axis_max, normalize=normalize),
-        format_label=_format_depth_tick,
-        label_line_px=label_line_px,
-        label_axis_min=min_depth is not None,
-    )
-    return _axis_labels(
-        ticks, label_style, scalar_axis_range_label(axis_min, axis_max, DEPTH_UNIT, log_scale=normalize)
-    )
-
-
 def scalar_axis_small_tick_values(
     axis_min: float,
     axis_max: float,
@@ -355,14 +320,6 @@ PERCENT_UNIT = "%"
 DEPTH_UNIT = "x"
 
 
-def format_percent_tick(value: float) -> str:
-    return _format_scalar_number(value) + PERCENT_UNIT
-
-
-def _format_depth_tick(value: float) -> str:
-    return _format_scalar_number(value) + DEPTH_UNIT
-
-
 def scalar_axis_range_label(axis_min: float, axis_max: float, unit: str, *, log_scale: bool = False) -> str:
     """The one label of an axis in the ``range`` style: ``[min–max<unit>]`` with an en dash, ``, log`` added on a
     log-scaled axis (Owner 2026-11-08, D-16)."""
@@ -384,28 +341,81 @@ def _depth_axis_bounds(depth_df: DataFrame, min_depth: float | None, max_depth: 
     return axis_min, max(axis_min, axis_max)
 
 
-def _scale_depth_value(value: float, *, normalize: bool) -> float:
-    """A depth on the track's scale: itself, or on the log scale ``log10(depth) + 1`` (0 at 0x), so 1x, 10x and
+def _axis_scale_value(value: float, *, log_scale: bool) -> float:
+    """A value on an axis's scale: itself, or on the log scale ``log10(value) + 1`` (0 at 0), so 1x, 10x and
     100x take evenly spaced heights."""
 
     value = 0.0 if not math.isfinite(value) else float(value)
-    if not normalize:
+    if not log_scale:
         return value
     return math.log10(value) + 1.0 if value > 0 else 0.0
 
 
-def _scaled_depth_fraction(
-    value: float,
-    axis_min: float,
-    axis_max: float,
-    *,
-    normalize: bool,
-) -> float:
+def scaled_axis_fraction(value: float, axis_min: float, axis_max: float, *, log_scale: bool) -> float:
+    """Where ``value`` lies on an axis from ``axis_min`` to ``axis_max``, linear or log-scaled: 0 at the baseline,
+    1 at the end, clipped to the axis."""
+
     return scaled_scalar_fraction(
-        _scale_depth_value(value, normalize=normalize),
-        _scale_depth_value(axis_min, normalize=normalize),
-        _scale_depth_value(axis_max, normalize=normalize),
+        _axis_scale_value(value, log_scale=log_scale),
+        _axis_scale_value(axis_min, log_scale=log_scale),
+        _axis_scale_value(axis_max, log_scale=log_scale),
     )
+
+
+@dataclass(frozen=True)
+class ScalarAxis:
+    """The axis of a numeric series track (depth, GC content in percent) as drawn: its bounds, its unit and scale,
+    its ticks and labels, and whether, on a circle several records share, one record draws it
+    (``once_on_shared_circle``) or each record draws its own. The drawers of both modes, the Circular ink and
+    the Linear left room read it."""
+
+    axis_min: float
+    axis_max: float
+    unit: str
+    log_scale: bool
+    # False leaves the lower bound unlabelled (a depth axis without a set minimum).
+    label_axis_min: bool
+    show_ticks: bool
+    large_tick_interval: float | None
+    small_tick_interval: float | None
+    tick_font_size: float | None
+    axis_labels: ScalarAxisLabelStyle
+    font_family: str
+    once_on_shared_circle: bool
+
+    def fraction(self, value: float) -> float:
+        return scaled_axis_fraction(value, self.axis_min, self.axis_max, log_scale=self.log_scale)
+
+    def format_tick(self, value: float) -> str:
+        return _format_scalar_number(value) + self.unit
+
+    def labels(self, length_px: float, label_line_px: float) -> ScalarAxisLabels:
+        """The large ticks and labels of the axis ``length_px`` long, its labels ``label_line_px`` high."""
+
+        ticks = scalar_axis_large_ticks(
+            self.axis_min,
+            self.axis_max,
+            show_ticks=self.show_ticks,
+            large_tick_interval=self.large_tick_interval,
+            length_px=length_px,
+            fraction=self.fraction,
+            format_label=self.format_tick,
+            label_line_px=label_line_px,
+            label_axis_min=self.label_axis_min,
+        )
+        range_label = scalar_axis_range_label(self.axis_min, self.axis_max, self.unit, log_scale=self.log_scale)
+        return _axis_labels(ticks, self.axis_labels, range_label)
+
+    def small_tick_values(self, labels: ScalarAxisLabels) -> list[float]:
+        """The small ticks drawn between the large ticks of ``labels``."""
+
+        return scalar_axis_small_tick_values(
+            self.axis_min,
+            self.axis_max,
+            show_ticks=self.show_ticks,
+            small_tick_interval=self.small_tick_interval,
+            large_tick_values=[tick.value for tick in labels.ticks],
+        )
 
 
 def _prepare_depth_plot_dataframe(
@@ -421,42 +431,43 @@ def _prepare_depth_plot_dataframe(
         plot_df["depth_normalized"] = 0.0
         return plot_df
     plot_df["depth_normalized"] = plot_df["depth"].map(
-        lambda value: _scaled_depth_fraction(
-            float(value), axis_min, axis_max, normalize=normalize
-        )
+        lambda value: scaled_axis_fraction(float(value), axis_min, axis_max, log_scale=normalize)
     )
     return plot_df
 
 
 def linear_scalar_axis_tick_font_size_px(
-    axis_config: Any,
+    axis_config: TickFontSource,
     track_height_px: float,
 ) -> float:
-    tick_font_size = getattr(axis_config, "tick_font_size", None)
+    tick_font_size = axis_config.tick_font_size
     if tick_font_size is not None:
         return max(0.0, float(tick_font_size))
     return scalar_axis_tick_font_size("linear", track_height_px)
 
 
 __all__ = [
-    "plot_data_once",
+    "DEPTH_UNIT",
     "LINEAR_SCALAR_AXIS_LABEL_GAP_PX",
     "LINEAR_SCALAR_AXIS_STROKE_PX",
     "LINEAR_SCALAR_AXIS_TICK_PX",
+    "PERCENT_UNIT",
     "ProjectedScalarLine",
+    "ScalarAxis",
+    "SeriesSamples",
     "ScalarAxisLabels",
     "ScalarAxisLargeTick",
     "ScalarTickFormatter",
-    "depth_axis_labels",
-    "format_percent_tick",
+    "band_samples",
+    "deviation_samples",
     "has_tick_value",
     "linear_scalar_axis_tick_font_size_px",
-    "percent_axis_labels",
     "project_scalar_line",
     "scalar_axis_kept_labels",
     "scalar_axis_large_ticks",
     "scalar_axis_range_label",
     "scalar_axis_small_tick_values",
     "scalar_axis_tick_values",
+    "scaled_axis_fraction",
     "scaled_scalar_fraction",
 ]

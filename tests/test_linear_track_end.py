@@ -13,13 +13,8 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.analysis.gc import gc_content_percent_df
 from gbdraw.analysis.skew import skew_df
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.scalar_axis import ScalarRow, ScalarRows
-from gbdraw.svg.linear_tracks import (
-    calculate_depth_path_desc,
-    calculate_gc_content_path_desc,
-    calculate_gc_skew_path_desc,
-    calculate_linear_scalar_area_path_desc,
-)
+from gbdraw.layout.scalar_axis import ScalarRow, ScalarRows, band_samples, deviation_samples
+from gbdraw.svg.linear_tracks import LinearTrackFrame, linear_series_path_desc
 
 # 671 bp sampled every 100 bp: the last window starts at 600, 71 bp short of the end.
 RECORD_LENGTH = 671
@@ -44,14 +39,16 @@ def _path_points(desc: str) -> list[tuple[float, float]]:
 
 def _paths(record_len: int, width: float, row: ScalarRow | None) -> dict[str, str]:
     gc = _gc_df()
-    return {
-        "gc content": calculate_gc_content_path_desc(0.0, 0.0, gc, record_len, width, HEIGHT, "GC", row=row),
-        "gc skew": calculate_gc_skew_path_desc(0.0, 0.0, gc, record_len, width, HEIGHT, row=row),
-        "gc percent": calculate_linear_scalar_area_path_desc(
-            0.0, 0.0, gc_content_percent_df(gc, dinucleotide="GC"), record_len, width, HEIGHT, row=row
+    samples = {
+        "gc content": deviation_samples(gc["GC content"], closes_at_record_end=True),
+        "gc skew": deviation_samples(gc["GC skew"], closes_at_record_end=False),
+        "gc percent": band_samples(
+            gc_content_percent_df(gc, dinucleotide="GC"), "value_normalized", closes_at_record_end=True
         ),
-        "depth": calculate_depth_path_desc(0.0, 0.0, _depth_df(), record_len, width, HEIGHT, row=row),
+        "depth": band_samples(_depth_df(), "depth_normalized", closes_at_record_end=False),
     }
+    frame = LinearTrackFrame(0.0, 0.0, record_len, width, HEIGHT)
+    return {track: linear_series_path_desc(value, frame, row=row) for track, value in samples.items() if value}
 
 
 @pytest.mark.parametrize("track", ["gc content", "gc skew", "gc percent", "depth"])

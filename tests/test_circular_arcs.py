@@ -35,10 +35,12 @@ from gbdraw.svg.circular_features import (
     generate_circular_narrow_arrow_path_with_radii,
     generate_circular_rectangle_path_with_radii,
 )
+from gbdraw.layout.scalar_axis import band_samples
 from gbdraw.svg.circular_tracks import (
-    circular_scalar_area_line,
+    CircularTrackPlace,
+    circular_series_line,
+    circular_series_path_desc,
     generate_circle_path_desc,
-    generate_circular_scalar_area_path_desc,
 )
 from gbdraw.svg.path_data import PATH_DECIMALS
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -180,7 +182,10 @@ def test_feature_writers_draw_arcs_on_their_circles(strand: str, length_bp: int)
 def test_conservation_annotation_label_and_track_arcs_stay_on_their_circles() -> None:
     inner, outer, label, track = 390.50120364, 394.32104679078, 410.3712345, 387.25683452012
     depth = pd.DataFrame({"position": [0, 6_000, 12_000, 16_568], "value_normalized": [0.2, 0.9, 0.4, 0.6]})
-    area_line = circular_scalar_area_line(track, _LENGTH, depth, 30.0, 1.0, record_transform=_circular_transform(_LENGTH))
+    samples = band_samples(depth, "value_normalized", closes_at_record_end=False)
+    assert samples is not None
+    place = CircularTrackPlace(track, _LENGTH, 30.0, 1.0, _circular_transform(_LENGTH))
+    area_line = circular_series_line(samples, place)
     assert area_line is not None
     paths = [
         (
@@ -196,7 +201,7 @@ def test_conservation_annotation_label_and_track_arcs_stay_on_their_circles() ->
         (CircularLabelArc(radius=label, angle=171.0, half_span=89.95, flipped=True).path, (label,)),
         (generate_circle_path_desc(track, 1.0), (track,)),
         # The area closes on its baseline circle.
-        (generate_circular_scalar_area_path_desc(track, _LENGTH, depth, 30.0, 1.0, record_transform=_circular_transform(_LENGTH)), (area_line[2],)),
+        (circular_series_path_desc(samples, place), (area_line.baseline_radius,)),
     ]
     for d, radii in paths:
         assert "A" in d

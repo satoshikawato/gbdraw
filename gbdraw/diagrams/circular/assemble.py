@@ -179,7 +179,7 @@ from ...annotations import (
 )
 from ...annotations.planning import prepare_annotation_track_slots
 from ...annotations.models import slots_in_paint_order
-from ...render.drawers.circular.depth import DepthDrawer
+from ...render.drawers.circular.numeric_series import circular_series_ink
 from ...render.drawers.circular.feature_density import (
     FeatureDensityHeatmapGroup,
     feature_density_heatmap_ink,
@@ -191,10 +191,10 @@ from ...render.drawers.circular.record_band import (
     RecordBandArc,
     record_band_group,
 )
-from ...render.drawers.circular.gc_content import GcContentDrawer
+from ...render.numeric_series import gc_content_band_frame, numeric_series_plot
 from ...render.groups.circular.conservation import conservation_ring_ink, conservation_ring_paints_band_edges
 from ...render.groups.circular.ticks import TickGroup
-from ...render.drawers.circular.gc_skew import SkewDrawer
+from ...svg.circular_tracks import CircularTrackPlace
 from ...render.drawers.circular.annotations import (
     AnnotationRing,
     CircularAnnotationLabel,
@@ -1467,27 +1467,15 @@ def _record_track_ink(
         slot_data = sources.slot_data.get(str(slot.id))
         if slot_data is not None:
             data_df, data_config = slot_data
-            if renderer == "dinucleotide_content" and isinstance(data_config, GcContentConfigurator):
-                inks.extend(
-                    GcContentDrawer(data_config).ink(
-                        canvas_radius, data_df, record_length, slot.draw_width_px, norm_factor,
-                        data_config.dinucleotide, record_transform,
-                    )
+            if (
+                (renderer == "dinucleotide_content" and isinstance(data_config, GcContentConfigurator))
+                or (renderer == "dinucleotide_skew" and isinstance(data_config, GcSkewConfigurator))
+                or (renderer in {"depth", "feature_density"} and isinstance(data_config, DepthConfigurator))
+            ):
+                place = CircularTrackPlace(
+                    canvas_radius, record_length, float(slot.draw_width_px), norm_factor, record_transform
                 )
-            elif renderer == "dinucleotide_skew" and isinstance(data_config, GcSkewConfigurator):
-                inks.extend(
-                    SkewDrawer(data_config).ink(
-                        canvas_radius, data_df, record_length, slot.draw_width_px, norm_factor,
-                        data_config.dinucleotide, record_transform,
-                    )
-                )
-            elif renderer in {"depth", "feature_density"} and isinstance(data_config, DepthConfigurator):
-                inks.extend(
-                    DepthDrawer(data_config).ink(
-                        canvas_radius, data_df, record_length, float(slot.draw_width_px), norm_factor,
-                        record_transform=record_transform,
-                    )
-                )
+                inks.extend(circular_series_ink(numeric_series_plot(data_config, data_df), place))
         elif renderer == "feature_density":
             layer = slot_feature_density_layer(str(slot.id), slot, sources.feature_density)
             if layer is not None:
@@ -2322,7 +2310,8 @@ def _edge_painting_slot_ids(
     the height of their lanes, OV-3192), the GC content band in percent mode with its background or border, a
     conservation ring, a feature density heatmap."""
 
-    gc_paints_edges = GcContentDrawer(configurators.gc).paints_percent_band_edges()
+    gc_band_frame = gc_content_band_frame(configurators.gc)
+    gc_paints_edges = gc_band_frame is not None and gc_band_frame.paints_edges
     for slot in slots:
         renderer = str(slot.renderer)
         if renderer == "features":

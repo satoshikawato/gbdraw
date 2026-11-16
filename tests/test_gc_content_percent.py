@@ -31,10 +31,9 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.groups.circular.definition import definition_record_facts
 from gbdraw.svg.circular_ticks import circular_tick_label_margin_px
-from gbdraw.svg.circular_tracks import (
-    generate_circular_depth_path_desc,
-    generate_circular_scalar_area_path_desc,
-)
+from gbdraw.layout.scalar_axis import band_samples
+from gbdraw.render.numeric_series import depth_series
+from gbdraw.svg.circular_tracks import CircularTrackPlace, circular_series_path_desc
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
@@ -410,27 +409,19 @@ def test_circular_scalar_area_closure_is_opt_in_for_depth_paths() -> None:
         }
     )
 
-    default_path = generate_circular_scalar_area_path_desc(
-        100,
-        100,
-        depth_plot_df,
-        20,
-        1.0,
-        value_column="depth_normalized", record_transform=_circular_transform(100)
+    place = CircularTrackPlace(100, 100, 20, 1.0, _circular_transform(100))
+    paths = {}
+    for closes in (False, True):
+        samples = band_samples(depth_plot_df, "depth_normalized", closes_at_record_end=closes)
+        assert samples is not None
+        paths[closes] = circular_series_path_desc(samples, place)
+    depth_config = SimpleNamespace(
+        fill_color="#000", stroke_color="none", stroke_width=0.0, fill_opacity=1.0, min_depth=None, max_depth=None,
+        normalize=False, show_axis=False,
     )
-    depth_path = generate_circular_depth_path_desc(100, 100, depth_plot_df, 20, 1.0, record_transform=_circular_transform(100))
-    closed_path = generate_circular_scalar_area_path_desc(
-        100,
-        100,
-        depth_plot_df,
-        20,
-        1.0,
-        value_column="depth_normalized",
-        close_at_record_len=True, record_transform=_circular_transform(100)
-    )
-
-    assert depth_path == default_path
-    assert closed_path != default_path
+    depth_samples = depth_series(depth_config, pd.DataFrame({"position": [0, 50], "depth": [25.0, 75.0]})).samples
+    assert depth_samples is not None and not depth_samples.closes_at_record_end
+    assert paths[False] != paths[True]
 
 
 @pytest.mark.circular

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Sequence
 
 from Bio.SeqRecord import SeqRecord
@@ -32,16 +33,11 @@ from ...linear_comparison import LinearComparison
 from ...configurators import (
     BlastMatchConfigurator,
     FeatureDrawingConfigurator,
-    DepthConfigurator,
-    GcContentConfigurator,
-    GcSkewConfigurator,
 )
 from ...render.groups.linear import (
     DefinitionGroup,
-    DepthGroup,
-    GcContentGroup,
-    GcSkewGroup,
     LinearFeatureDomIndex,
+    NumericSeriesGroup,
     PairWiseMatchGroup,
     SeqRecordGroup,
 )
@@ -55,6 +51,7 @@ from ...render.group_content import (
     build_group_content,
     place_content,
 )
+from ...render.numeric_series import NumericSeriesConfig, NumericSeriesStage
 from ...render_stages import render_stage
 from .positioning import (
     position_linear_track_group,
@@ -153,86 +150,55 @@ def add_record_group(
     return canvas
 
 
-def add_gc_content_group(
-    canvas: Drawing,
-    record: SeqRecord,
-    offset_y: float,
-    offset_x: float,
-    canvas_config: LinearCanvasConfigurator,
-    gc_config: GcContentConfigurator,
-    track_offset_y: float,
-    gc_df: DataFrame | None = None,
-    track_height: float | None = None,
-    *,
-    group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-    row_shifts: tuple[float, ...] = (),
-    sequence_width: float,
-    group_key: GroupKey,
-) -> Drawing:
-    """Adds a GC content group to the linear canvas."""
-    content = render_stage(
-        "gc_content_content",
-        build_group_content,
-        GcContentGroup,
-        gb_record=record,
-        track_height=canvas_config.gc_height if track_height is None else float(track_height),
-        gc_config=gc_config,
-        gc_df=gc_df,
-        group_id=group_id,
-        sequence_width=sequence_width,
-        record_transform=record_transform,
-        row_shifts=row_shifts,
-    )
-    gc_content_group = place_content(canvas, content, group_key)
-    gc_content_group.attribs["data-gbdraw-slot-id"] = slot_id
-    gc_content_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
-    position_linear_track_group(gc_content_group, offset_y, offset_x, canvas_config, track_offset_y)
-    canvas.add(gc_content_group)
-    return canvas
+@dataclass(frozen=True)
+class LinearSeriesSlot:
+    """A slot's numeric series track as its group is built and placed: the record's offsets on the canvas, the
+    track's offset below the record's axis and its height, the record's drawn axis width, transform and row
+    shifts, the group's id and key, and the slot it tags."""
+
+    offset_y: float
+    offset_x: float
+    track_offset_y: float
+    track_height: float
+    sequence_width: float
+    record_transform: RecordDisplayTransform | None
+    row_shifts: tuple[float, ...]
+    group_id: str
+    group_key: GroupKey
+    slot_id: str
+    slot_renderer: str
 
 
-def add_depth_group(
+def add_numeric_series_group(
     canvas: Drawing,
+    stage: NumericSeriesStage,
     record: SeqRecord,
-    offset_y: float,
-    offset_x: float,
     canvas_config: LinearCanvasConfigurator,
-    depth_config: DepthConfigurator,
-    track_offset_y: float,
-    depth_df: DataFrame | None = None,
-    *,
-    group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    track_height: float | None = None,
-    record_transform: RecordDisplayTransform | None = None,
-    row_shifts: tuple[float, ...] = (),
-    sequence_width: float,
-    group_key: GroupKey,
+    config: NumericSeriesConfig,
+    frame: DataFrame,
+    slot: LinearSeriesSlot,
 ) -> Drawing:
-    """Adds a depth coverage group to the linear canvas."""
+    """Add a numeric series track (GC content, GC skew, depth) to the linear canvas, built in the render stage
+    ``stage``."""
+
     content = render_stage(
-        "depth_content",
+        stage,
         build_group_content,
-        DepthGroup,
+        NumericSeriesGroup,
         gb_record=record,
-        track_height=canvas_config.depth_height if track_height is None else float(track_height),
-        depth_config=depth_config,
-        depth_df=depth_df,
-        group_id=group_id,
-        axis_group_id=f"{group_id}_axis",
-        sequence_width=sequence_width,
-        record_transform=record_transform,
-        row_shifts=row_shifts,
+        track_height=slot.track_height,
+        config=config,
+        frame=frame,
+        group_id=slot.group_id,
+        sequence_width=slot.sequence_width,
+        record_transform=slot.record_transform,
+        row_shifts=slot.row_shifts,
     )
-    depth_group = place_content(canvas, content, group_key)
-    depth_group.attribs["data-gbdraw-slot-id"] = slot_id
-    depth_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
-    position_linear_track_group(depth_group, offset_y, offset_x, canvas_config, track_offset_y)
-    canvas.add(depth_group)
+    group = place_content(canvas, content, slot.group_key)
+    group.attribs["data-gbdraw-slot-id"] = slot.slot_id
+    group.attribs["data-gbdraw-slot-renderer"] = slot.slot_renderer
+    position_linear_track_group(group, slot.offset_y, slot.offset_x, canvas_config, slot.track_offset_y)
+    canvas.add(group)
     return canvas
 
 
@@ -254,47 +220,6 @@ def add_feature_density_heatmap_group(
     heatmap_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
     position_linear_track_group(heatmap_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(heatmap_group)
-    return canvas
-
-
-def add_gc_skew_group(
-    canvas: Drawing,
-    record: SeqRecord,
-    offset: float,
-    offset_x: float,
-    canvas_config: LinearCanvasConfigurator,
-    skew_config: GcSkewConfigurator,
-    track_offset_y: float,
-    gc_df: DataFrame | None = None,
-    track_height: float | None = None,
-    *,
-    group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-    row_shifts: tuple[float, ...] = (),
-    sequence_width: float,
-    group_key: GroupKey,
-) -> Drawing:
-    """Adds a GC skew group to the linear canvas."""
-    content = render_stage(
-        "gc_skew_content",
-        build_group_content,
-        GcSkewGroup,
-        gb_record=record,
-        track_height=canvas_config.skew_height if track_height is None else float(track_height),
-        skew_config=skew_config,
-        gc_df=gc_df,
-        group_id=group_id,
-        sequence_width=sequence_width,
-        record_transform=record_transform,
-        row_shifts=row_shifts,
-    )
-    gc_skew_group = place_content(canvas, content, group_key)
-    gc_skew_group.attribs["data-gbdraw-slot-id"] = slot_id
-    gc_skew_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
-    position_linear_track_group(gc_skew_group, offset, offset_x, canvas_config, track_offset_y)
-    canvas.add(gc_skew_group)
     return canvas
 
 
@@ -608,10 +533,9 @@ def add_length_bar_on_linear_canvas(
 __all__ = [
     "linear_comparison_content",
     "add_record_group",
-    "add_depth_group",
+    "LinearSeriesSlot",
     "add_feature_density_heatmap_group",
-    "add_gc_content_group",
-    "add_gc_skew_group",
+    "add_numeric_series_group",
     "add_record_definition_group",
     "add_explicit_comparisons_on_linear_canvas",
     "add_length_bar_on_linear_canvas",

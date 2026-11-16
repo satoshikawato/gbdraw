@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import numpy as np
-from numpy.typing import ArrayLike
-from pandas import DataFrame, Series
+from typing import NamedTuple
 
-from ..analysis.skew import DeviationScale, deviation_scale
+import numpy as np
+from numpy.typing import ArrayLike, NDArray
+
 from ..layout.linear_coords import normalize_position_to_linear_track
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from ..layout.scalar_axis import ProjectedScalarLine, ScalarRow, held_to_end, project_scalar_line
+from ..layout.scalar_axis import ProjectedScalarLine, ScalarRow, SeriesSamples, held_to_end, project_scalar_line
 from .path_data import path_line_to, path_number
 from .track_paths import track_line_to
 
@@ -32,154 +32,70 @@ def _samples(
     return ProjectedScalarLine(*held_to_end(positions, values, record_len), ())
 
 
-def _deviation_path_desc(
-    start_x: float,
-    start_y: float,
-    series: Series,
-    scale: DeviationScale,
-    record_len: int,
-    alignment_width: float,
-    track_height: float,
-    record_transform: RecordDisplayTransform | None,
-    row: ScalarRow | None,
-) -> str:
-    """A GC content (deviation) or skew path: the line of each sample's deviation from the mean of the series'
-    windows with a value, closed to the baseline at ``start_y``; a window without a value lies on the baseline,
-    so the area breaks there (OV-2799)."""
+class LinearTrackFrame(NamedTuple):
+    """Where a Linear numeric series track draws: its top left corner, the bases and width of what it draws (one
+    row of a wrapped record), and its height."""
 
-    positions, values, segment_starts = _samples(
-        series.index, series.fillna(scale.mean), record_len, record_transform, row
-    )
-    if not len(positions):
-        return ""
-    xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
-    max_diff = scale.max_diff
-    # A completely flat series draws a flat line (no division by zero).
-    ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - scale.mean) / max_diff))
+    start_x: float
+    start_y: float
+    record_len: int
+    alignment_width: float
+    track_height: float
+
+
+def _area_path(start_x: float, base_y: float, xs: NDArray[np.float64], ys: NDArray[np.float64],
+               segment_starts: tuple[int, ...]) -> str:
+    """The area between a track's line and its baseline at ``base_y``: from the baseline at ``start_x`` along the
+    line, down to the baseline and back."""
+
     return (
-        f"M{path_number(start_x)} {path_number(start_y)}"
+        f"M{path_number(start_x)} {path_number(base_y)}"
         + track_line_to(xs, ys, segment_starts)
-        + path_line_to([xs[-1], start_x], [start_y, start_y])
+        + path_line_to([xs[-1], start_x], [base_y, base_y])
         + "z"
     )
 
 
-def calculate_gc_content_path_desc(
-    start_x: float,
-    start_y: float,
-    gc_df: DataFrame,
-    record_len: int,
-    alignment_width: float,
-    track_height: float,
-    dinucleotide: str,
+def linear_series_path_desc(
+    samples: SeriesSamples,
+    frame: LinearTrackFrame,
     record_transform: RecordDisplayTransform | None = None,
     row: ScalarRow | None = None,
 ) -> str:
-    if gc_df.empty:
+    """The path of a numeric series track. A deviation series draws each sample's deviation from the mean of the
+    series' windows with a value, closed to the baseline at ``start_y``; a window without a value lies on the
+    baseline, so the area breaks there (OV-2799). A band series draws each value as the fraction of the height it
+    fills, closed to the baseline at the bottom of the track."""
+
+    start_x, start_y, record_len, alignment_width, track_height = frame
+    scale = samples.deviation
+    if scale is not None:
+        positions, values, segment_starts = _samples(
+            samples.positions, samples.values.fillna(scale.mean), record_len, record_transform, row
+        )
+        if not len(positions):
+            return ""
+        xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
+        max_diff = scale.max_diff
+        # A completely flat series draws a flat line (no division by zero).
+        ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - scale.mean) / max_diff))
+        return _area_path(start_x, start_y, xs, ys, segment_starts)
+    if record_len <= 0 or track_height <= 0:
         return ""
-    series = gc_df[f"{dinucleotide} content"]
-    scale = deviation_scale(series)
-    if scale is None:
-        return ""
-    return _deviation_path_desc(
-        start_x, start_y, series, scale, record_len, alignment_width, track_height, record_transform, row
-    )
-
-
-def calculate_gc_skew_path_desc(
-    start_x: float,
-    start_y: float,
-    skew_df: DataFrame,
-    record_len: int,
-    alignment_width: float,
-    track_height: float,
-    record_transform: RecordDisplayTransform | None = None,
-    row: ScalarRow | None = None,
-) -> str:
-    if skew_df.empty:
-        return ""
-    column = [col for col in skew_df.columns if "skew" in col and "cumulative" not in col.lower()][0]
-    series = skew_df[column]
-    scale = deviation_scale(series)
-    if scale is None:
-        return ""
-    return _deviation_path_desc(
-        start_x, start_y, series, scale, record_len, alignment_width, track_height, record_transform, row
-    )
-
-
-def calculate_linear_scalar_area_path_desc(
-    start_x: float,
-    start_y: float,
-    scalar_df: DataFrame,
-    record_len: int,
-    alignment_width: float,
-    track_height: float,
-    *,
-    value_column: str = "value_normalized",
-    position_column: str = "position",
-    record_transform: RecordDisplayTransform | None = None,
-    row: ScalarRow | None = None,
-) -> str:
-    """Return a filled linear area path for normalized scalar values."""
-
-    if scalar_df.empty or record_len <= 0 or track_height <= 0:
-        return ""
-
     baseline_y = float(start_y) + float(track_height)
     positions, values, segment_starts = _samples(
         # Unprojected positions are whole bases.
-        scalar_df[position_column] if record_transform is not None and record_transform.projects
-        else scalar_df[position_column].to_numpy().astype(np.int64),
-        scalar_df[value_column],
+        samples.positions if record_transform is not None and record_transform.projects
+        else samples.positions.to_numpy().astype(np.int64),
+        samples.values,
         record_len,
         record_transform,
         row,
     )
     if not len(positions):
         return ""
-    x_values = normalize_position_to_linear_track(positions, record_len, alignment_width)
-    y_values = baseline_y - (float(track_height) * np.clip(values, 0.0, 1.0))
-
-    path_segments = [
-        f"M{path_number(start_x)} {path_number(baseline_y)}",
-        track_line_to(x_values, y_values, segment_starts),
-        path_line_to([x_values[-1], start_x], [baseline_y, baseline_y]),
-        "z",
-    ]
-    return "".join(path_segments)
+    xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
+    return _area_path(start_x, baseline_y, xs, baseline_y - (float(track_height) * np.clip(values, 0.0, 1.0)), segment_starts)
 
 
-def calculate_depth_path_desc(
-    start_x: float,
-    start_y: float,
-    depth_df: DataFrame,
-    record_len: int,
-    alignment_width: float,
-    track_height: float,
-    record_transform: RecordDisplayTransform | None = None,
-    row: ScalarRow | None = None,
-) -> str:
-    """Return a filled linear area path for binned depth coverage."""
-
-    return calculate_linear_scalar_area_path_desc(
-        start_x,
-        start_y,
-        depth_df,
-        record_len,
-        alignment_width,
-        track_height,
-        value_column="depth_normalized",
-        record_transform=record_transform,
-        row=row,
-    )
-
-
-__all__ = [
-    "calculate_depth_path_desc",
-    "calculate_gc_content_path_desc",
-    "calculate_gc_skew_path_desc",
-    "calculate_linear_scalar_area_path_desc",
-]
-
-
+__all__ = ["LinearTrackFrame", "linear_series_path_desc"]
