@@ -298,3 +298,23 @@ test('the Similarity groups panel binds the selected detail, not enriching helpe
   assert.match(panel, /selectedOrthogroupDetail\.membersByRecord/);
   assert.match(panel, /similarityAlignmentDrawer\.options/);
 });
+
+// OV-3694: a row's gene and record counts are worded in the UI language, with its plural forms. (This file imports
+// i18n.js before it sets the page's Vue, so the locale is not reactive here: the rows are read after the choice.)
+test('the group list counts show in the UI language', async () => {
+  const { setUiLocale, SOURCE_LOCALE } = await import('../../gbdraw/web/js/utils/i18n.js');
+  const rowsOf = () => createOrthogroupEditor({ state: withDrawings({
+    mode: 'linear', orthogroups: ref([{ id: 'one', member_count: 2, record_coverage_count: 1, members: [] }]),
+    orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
+    selectedOrthogroupId: ref('one'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
+    svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
+  }) }).orthogroupRows.value;
+  assert.equal(rowsOf()[0].countsLabel, '2 genes · 1 record');
+  try {
+    await setUiLocale('ja');
+    assert.equal(rowsOf()[0].countsLabel, '2個の遺伝子 · 1件のレコード');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});

@@ -397,3 +397,15 @@ test('OV-1390: member roles and confidence levels show in the UI language; an un
     await setUiLocale(SOURCE_LOCALE);
   }
 });
+
+// OV-3685: every group scope name is a catalog key, so the translation batch offers it and `tm` shows it in the UI
+// language (the match popup's Scope row, the Similarity groups list and the group popup).
+test('every similarity group scope name is a source key of the UI catalogs', async () => {
+  const { groupMetadataScopeLabel } = await import('../../gbdraw/web/js/services/losat-normalization.js');
+  const { sourceKeys } = await import('../../tools/i18n/source-keys.mjs');
+  const { keys } = await sourceKeys();
+  for (const scope of ['global_collinear', 'adjacent_local', 'record_local', 'global']) {
+    const name = groupMetadataScopeLabel(scope);
+    assert.ok(keys.has(name), `${scope}: "${name}" is no source key`);
+  }
+});

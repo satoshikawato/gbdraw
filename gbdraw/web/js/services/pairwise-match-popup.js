@@ -1645,7 +1645,7 @@ const buildGroupView = ({
   const technicalRows = [];
   addRow(technicalRows, localGroups ? msg('Collinear group ID') : msg('Similarity group ID'), orthogroupId);
   addRow(technicalRows, msg('Description'), userDescription ? '' : group?.description);
-  addRow(technicalRows, msg('Scope'), groupMetadataScopeLabel(normalizeGroupMetadataScope(groupScopeValue(group) || groupScope)));
+  addRow(technicalRows, msg('Scope'), () => tm(groupMetadataScopeLabel(normalizeGroupMetadataScope(groupScopeValue(group) || groupScope))));
   addRow(technicalRows, msg('RBH seeds'), Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
   addRow(technicalRows, msg('Group paths'), firstText(
     group?.orthologPathCount,
