@@ -7470,7 +7470,7 @@
                                     </button>
                                 </div>
                                 <p v-if="clickedFeatureLabelHint" data-label-visibility-hint class="feature-popup-note">{{ clickedFeatureLabelHint }}</p>
-                                <p v-else-if="!clickedFeature.hasEditableLabel" class="feature-popup-note">{{ clickedFeature.labelUnavailableReason }}</p>
+                                <p v-else-if="!clickedFeature.hasEditableLabel" class="feature-popup-note">{{ tm(clickedFeature.labelUnavailableReason) }}</p>
                             </fieldset>
                             <div class="feature-popup-grid mt-3">
                         <div>
@@ -7650,10 +7650,10 @@
                                                    @change="setFeatureRecordRotationPosition(choice.value)"
                                                    :disabled="!semanticMutationAvailable || !choice.enabled || featureRecordRotationDraft.pending"
                                                    :aria-describedby="!choice.enabled && choice.message ? `feature-record-rotation-${choice.value}-reason` : null">
-                                            <span>{{ choice.label }}</span>
+                                            <span>{{ tm(choice.label) }}</span>
                                         </label>
                                         <span v-if="!choice.enabled && choice.message" :id="`feature-record-rotation-${choice.value}-reason`"
-                                              class="text-[10px] text-amber-700">{{ choice.message }}</span>
+                                              class="text-[10px] text-amber-700">{{ tm(choice.message) }}</span>
                                     </div>
                                     <div v-if="featureRecordRotationDraft.position === 'custom'"
                                          class="mt-1 ml-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
@@ -7666,7 +7666,7 @@
                                             <option v-for="choice in featureRecordRotationDraft.referenceChoices"
                                                     :key="choice.value"
                                                     :value="choice.value"
-                                                    :disabled="!choice.enabled">{{ choice.label }}{{ choice.message ? ' — ' + choice.message : '' }}</option>
+                                                    :disabled="!choice.enabled">{{ tm(choice.label) }}{{ choice.message ? ' — ' + tm(choice.message) : '' }}</option>
                                         </select>
                                         <span class="inline-flex items-center gap-1">
                                             <label for="feature-record-rotation-offset">{{ t('shifted by') }}</label>
@@ -7686,7 +7686,7 @@
                                         </span>
                                         <span id="feature-record-rotation-offset-error"
                                               v-if="featureRecordRotationDraft.offsetError"
-                                              class="basis-full text-[10px] text-red-700">{{ featureRecordRotationDraft.offsetError }}</span>
+                                              class="basis-full text-[10px] text-red-700">{{ tm(featureRecordRotationDraft.offsetError) }}</span>
                                     </div>
                                 </fieldset>
                                 <div class="mt-3">
@@ -7700,23 +7700,23 @@
                                         <span>{{ t('Show this feature on the forward strand') }}</span>
                                     </label>
                                     <p id="feature-record-rotation-orient-note" class="ml-5 text-[10px]"
-                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : featureRecordRotationDraft.orientCapability.message }}</p>
+                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : tm(featureRecordRotationDraft.orientCapability.message) }}</p>
                                 </div>
                                 <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
-                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview }}</p>
+                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview() }}</p>
                                 <p v-if="featureRecordRotationDraft.preview" data-record-rotation-preview
                                    class="mt-3 flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview }}</span>
+                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview() }}</span>
                                     <help-tip id="feature-record-rotation-coordinate-note" :label="t('About these coordinates')"
                                               :text="t('Coordinates refer to the original record.')"></help-tip>
                                 </p>
                                 </template>
                                 <p id="feature-record-rotation-reason"
-                                   v-if="featureRecordRotationDraft.disabledReason"
-                                   class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ featureRecordRotationDraft.disabledReason }}</p>
+                                   v-if="featureRecordRotationDraft.disabledReason.length"
+                                   class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ errorText(featureRecordRotationDraft.disabledReason) }}</p>
                                 <p aria-live="polite"
                                    class="mt-2 min-h-4 text-[10px]"
-                                   :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ featureRecordRotationDraft.status }}</p>
+                                   :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ errorText(featureRecordRotationDraft.status) }}</p>
                                 <div class="mt-3 flex flex-wrap justify-end gap-2">
                                     <button type="button"
                                             @click.stop="cancelRecordActions"
@@ -7750,7 +7750,7 @@
                             </div>
                             <dl class="feature-popup-fields" data-feature-popup-details>
                                 <template v-for="row in clickedFeature.detailRows" :key="`feature-detail-${row.key}`">
-                                    <dt>{{ row.label }}</dt>
+                                    <dt>{{ tm(row.label) }}</dt>
                                     <dd>{{ row.value }}</dd>
                                 </template>
                             </dl>

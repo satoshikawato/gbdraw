@@ -1,7 +1,10 @@
 // @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
-import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
-import { joinSentences, msg, numberText, t, tm } from '../../utils/i18n.js';
+import { RECORD_TARGET_NOT_DISCOVERED, recordTargetError } from '../record-display-options.js';
+import { normalizeCaughtError, renderErrorText } from '../../utils/error-normalization.js';
+import { msg, numberText, t } from '../../utils/i18n.js';
+/** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
+/** @import { Wording } from '../../utils/i18n.js' */
 /** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
 /** @import { AnchorIntent } from './feature-anchor.js' */
 /** @import { SessionBusy } from '../../state.js' */
@@ -9,8 +12,13 @@ import { joinSentences, msg, numberText, t, tm } from '../../utils/i18n.js';
 /** @import { CommittedCanonicalSession, RecordTransformInput, RecordTransformTarget } from '../../services/session-request.js' */
 
 /**
- * One capability verdict as the popup shows it.
+ * One capability verdict as the popup shows it. `message` is the English catalog key of why it is unavailable
+ * (`msg`, '' when none); the popup words it with `tm`.
  * @typedef {{ enabled: boolean, code: string | null, message: string }} CapabilityView
+ */
+/**
+ * One choice of the section: its value, the English catalog key of its name (`msg`, worded with `tm`), and its verdict.
+ * @typedef {CapabilityView & { value: string, label: string }} ChoiceView
  */
 
 /** @param {Record<string, any> | null | undefined} feature */
@@ -89,19 +97,19 @@ export const createFeatureRecordRotationAction = ({
   const currentFeature = (feature) => {
     const identity = featureIdentity(feature);
     if (!identity.recordKey || !identity.biologicalFeatureId) {
-      throw new Error('Feature rotation requires a stable record and feature identity.');
+      throw recordTargetError('unavailable', [{ text: msg('Feature rotation requires a stable record and feature identity.') }]);
     }
     const resolved = typeof resolveCurrentFeature === 'function'
       ? resolveCurrentFeature(identity)
       : feature;
     if (!resolved || !sameFeatureIdentity(resolved, identity)) {
-      throw new Error(t('The popup feature is no longer present in the current Result.'));
+      throw recordTargetError('unavailable', [{ text: msg('The popup feature is no longer present in the current Result.') }]);
     }
     // The bound input can differ before the popup opens (a File replaced
     // after Generate, or a Session that needs one Generate), not only after.
     if (typeof isCurrentFeature === 'function' && !isCurrentFeature(resolved)) {
-      throw new Error(joinSentences(t("This feature's input file differs from the one the current Result was drawn from."),
-        t('Generate Diagram to use the current file.')));
+      throw recordTargetError('unavailable', [{ text: msg("This feature's input file differs from the one the current Result was drawn from.") },
+        { text: msg('Generate Diagram to use the current file.') }]);
     }
     return resolved;
   };
@@ -130,7 +138,7 @@ export const createFeatureRecordRotationAction = ({
   const resolveEligible = ({ feature, intent }) => {
     const snapshot = resolve({ feature, intent });
     if (!snapshot.resolved.eligibility.enabled) {
-      throw new Error(snapshot.resolved.eligibility.message);
+      throw recordTargetError('unavailable', [{ text: snapshot.resolved.eligibility.message }]);
     }
     return snapshot;
   };
@@ -178,22 +186,25 @@ export const createFeatureRecordRotationAction = ({
   // The explicit record action that reads records a Session Load left unread.
   const readTargetRecords = async () => (typeof readRecords === 'function'
     ? readRecords()
-    : { status: 'unavailable', reason: t('Records cannot be read here.') });
+    : { status: 'unavailable', reason: msg('Records cannot be read here.') });
 
   return Object.freeze({ currentFeature, resolve, apply, stage, readRecords: readTargetRecords });
 };
 
-/** @param {unknown} value */
+/**
+ * The offset typed into the Custom field; `message` is the English catalog key of why it is refused (`msg`).
+ * @param {unknown} value
+ */
 const parseSignedOffset = (value) => {
   const text = String(value ?? '').trim();
   if (!text) {
-    return { valid: false, value: Number.NaN, message: t('Enter a signed whole-number offset.') };
+    return { valid: false, value: Number.NaN, message: msg('Enter a signed whole-number offset.') };
   }
   if (!/^[+-]?\d+$/.test(text)) {
     return {
       valid: false,
       value: Number.NaN,
-      message: t('Offset must be a signed whole number of base pairs.')
+      message: msg('Offset must be a signed whole number of base pairs.')
     };
   }
   const number = Number(text);
@@ -201,7 +212,7 @@ const parseSignedOffset = (value) => {
     return {
       valid: false,
       value: Number.NaN,
-      message: t('Offset is outside the supported integer range.')
+      message: msg('Offset is outside the supported integer range.')
     };
   }
   return { valid: true, value: number, message: '' };
@@ -238,9 +249,10 @@ const REFERENCE_CHOICES = Object.freeze([
 /**
  * @param {readonly string[][]} entries `[value, label]` pairs
  * @param {(value: string) => CapabilityView | undefined} [capabilityFor]
+ * @returns {ChoiceView[]}
  */
 const choicesFrom = (entries, capabilityFor = () => emptyCapability()) => entries
-  .map(([value, label]) => ({ value, label: tm(label), ...copyCapability(capabilityFor(value)) }));
+  .map(([value, label]) => ({ value, label, ...copyCapability(capabilityFor(value)) }));
 
 /**
  * @param {{ featureEnd: CapabilityView, anchors?: Readonly<Record<string, CapabilityView | undefined>> }} capabilities
@@ -299,9 +311,12 @@ const intentFor = ({ position, reference, offsetText, orientForward }) => {
 /** @type {Readonly<Record<string, string | undefined>>} */
 const STRAND_SYMBOLS = Object.freeze({ '+': '+', '-': '−' });
 
-// "<record> will start at <n> · <orientation>", relative to the Result.
-/** @param {{ recordLabel: string, startCoordinate: number, reverseComplement: boolean | null, committedReverseComplement: boolean }} sentence */
-const startSentence = ({ recordLabel, startCoordinate, reverseComplement, committedReverseComplement }) => {
+// "<record> will start at <n> · <orientation>", relative to the Result, worded where it shows.
+/**
+ * @param {{ recordLabel: string, startCoordinate: number, reverseComplement: boolean | null, committedReverseComplement: boolean }} sentence
+ * @returns {Wording}
+ */
+const startSentence = ({ recordLabel, startCoordinate, reverseComplement, committedReverseComplement }) => () => {
   const orientation = reverseComplement === committedReverseComplement
     ? t('orientation unchanged')
     : reverseComplement
@@ -315,22 +330,23 @@ const startSentence = ({ recordLabel, startCoordinate, reverseComplement, commit
  *   recordLabel: string, committedReverseComplement: boolean,
  *   resolved: { startCoordinate: number | null, reverseComplement: boolean | null, displayedStrand?: { before: string | null, after: string | null } }
  * }} preview
+ * @returns {Wording | null}
  */
 const previewFor = ({ recordLabel, resolved, committedReverseComplement }) => {
-  if (!Number.isSafeInteger(resolved.startCoordinate)) return '';
+  if (!Number.isSafeInteger(resolved.startCoordinate)) return null;
   // A safe-integer start means an eligible resolution, which sets both strands.
   const before = STRAND_SYMBOLS[/** @type {string} */ (resolved.displayedStrand?.before)];
   const after = STRAND_SYMBOLS[/** @type {string} */ (resolved.displayedStrand?.after)];
-  const strandChange = before && after && before !== after
-    ? ` · ${t('feature strand {before} → {after}', { before, after })}`
-    : '';
-  return startSentence({
+  const sentence = startSentence({
     recordLabel,
     // `isSafeInteger` above is true only for a number.
     startCoordinate: /** @type {number} */ (resolved.startCoordinate),
     reverseComplement: resolved.reverseComplement,
     committedReverseComplement
-  }) + strandChange;
+  });
+  return before && after && before !== after
+    ? () => `${sentence()} · ${t('feature strand {before} → {after}', { before, after })}`
+    : sentence;
 };
 
 // The start and orientation staged in the record's draft for Generate, when
@@ -348,6 +364,46 @@ const pendingStartFor = (target) => {
     : null;
 };
 
+/** @param {string} key An English catalog key, or '' for none. @returns {ErrorTextPart[]} */
+const keyParts = (key) => (key ? [{ text: key }] : []);
+/**
+ * The sentences of a caught failure: a record target failure's own, else the normalized model's, never the raw
+ * message (`normalizeCaughtError`).
+ * @param {unknown} error
+ * @param {string} [operation]
+ * @returns {ErrorTextPart[]}
+ */
+const failureParts = (error, operation) => {
+  const parts = /** @type {{ parts?: ErrorTextPart[] } | null | undefined} */ (error)?.parts;
+  return Array.isArray(parts) ? parts : normalizeCaughtError(error, { operation }).summaryParts;
+};
+// Why a record read left the records unread: a busy or unavailable read names its reason by its catalog key, a failed
+// one keeps its sentences.
+/** @param {{ status?: unknown, reason?: string, error?: unknown } | null | undefined} outcome @returns {ErrorTextPart[]} */
+const readFailureParts = (outcome) => (outcome?.status === 'error' ? failureParts(outcome.error) : keyParts(outcome?.reason || ''));
+// A failure for the status line, unless the reason line, recomputed after the action, already states it.
+/** @param {ErrorTextPart[]} failure @param {ErrorTextPart[]} fallback @param {ErrorTextPart[]} reason The reason line. */
+const unlessShown = (failure, fallback, reason) => (
+  failure.length && renderErrorText(failure) !== renderErrorText(reason) ? failure : fallback
+);
+// "Pending for Generate: <start sentence>", the staged start and orientation (PD-OI-085), or null without one.
+/**
+ * @param {{ startCoordinate: number, reverseComplement: boolean } | null} pending
+ * @param {string} recordLabel @param {boolean} committedReverseComplement
+ * @returns {Wording | null}
+ */
+const pendingLine = (pending, recordLabel, committedReverseComplement) => {
+  if (!pending) return null;
+  const sentence = startSentence({ recordLabel, ...pending, committedReverseComplement });
+  return () => t('Pending for Generate: {sentence}', { sentence: sentence() });
+};
+
+/**
+ * The popup's record rotation draft. It lives only while the popup is open (History never holds it), and its texts
+ * keep what they are made of, so the popup words them where it shows them and a language change rewords them:
+ * `offsetError` and each verdict's `message` are English catalog keys (`tm`), `disabledReason` and `status` are
+ * sentences (`errorText`; empty when none), and the previews are wordings (null when none).
+ */
 const initialDraft = () => ({
   active: false,
   feature: /** @type {PopupFeature | null} */ (null),
@@ -365,16 +421,16 @@ const initialDraft = () => ({
   // act on; otherwise the kind of the whole-target failure, whose one reason is
   // disabledReason and which hides the form.
   targetFailure: '',
-  disabledReason: '',
+  disabledReason: /** @type {ErrorTextPart[]} */ ([]),
   canApply: false,
   pending: false,
   reading: false,
-  status: '',
+  status: /** @type {ErrorTextPart[]} */ ([]),
   statusKind: 'idle',
   startCoordinate: /** @type {number | null} */ (null),
-  preview: '',
+  preview: /** @type {Wording | null} */ (null),
   // The record's start and orientation already staged for Generate (PD-OI-085).
-  pendingPreview: ''
+  pendingPreview: /** @type {Wording | null} */ (null)
 });
 
 /**
@@ -452,21 +508,17 @@ export const createFeatureRecordRotationWorkflow = ({
         : { valid: true, message: '' };
       const { eligibility } = snapshot.resolved;
       draft.offsetError = offset.message;
-      draft.disabledReason = targetLimit?.message || (offset.valid ? eligibility.message || '' : '');
+      draft.disabledReason = keyParts(targetLimit?.message || (offset.valid ? eligibility.message || '' : ''));
       draft.canApply = offset.valid && eligibility.enabled && !draft.pending;
       draft.startCoordinate = snapshot.resolved.startCoordinate;
       const { committedReverseComplement } = snapshot.target;
       const pending = pendingStartFor(snapshot.target);
-      draft.pendingPreview = pending
-        ? t('Pending for Generate: {sentence}', { sentence: startSentence({
-          recordLabel: draft.recordLabel, ...pending, committedReverseComplement
-        }) })
-        : '';
+      draft.pendingPreview = pendingLine(pending, draft.recordLabel, committedReverseComplement);
       // A choice that resolves to the staged transform is stated once, by the pending line.
       draft.preview = pending
         && pending.startCoordinate === snapshot.resolved.startCoordinate
         && pending.reverseComplement === snapshot.resolved.reverseComplement
-        ? ''
+        ? null
         : previewFor({
           recordLabel: draft.recordLabel,
           resolved: snapshot.resolved,
@@ -481,11 +533,11 @@ export const createFeatureRecordRotationWorkflow = ({
       draft.referenceChoices = choicesFrom(REFERENCE_CHOICES);
       draft.orientCapability = emptyCapability();
       draft.offsetError = '';
-      draft.disabledReason = error.message;
+      draft.disabledReason = failureParts(error);
       draft.canApply = false;
       draft.startCoordinate = null;
-      draft.preview = '';
-      draft.pendingPreview = '';
+      draft.preview = null;
+      draft.pendingPreview = null;
       return null;
     }
   };
@@ -516,19 +568,19 @@ export const createFeatureRecordRotationWorkflow = ({
     if (draft.targetFailure !== RECORD_TARGET_NOT_DISCOVERED) return null;
     const generation = draftGeneration;
     Object.assign(draft, {
-      reading: true, disabledReason: '', status: t('Reading records…'), statusKind: 'pending'
+      reading: true, disabledReason: [], status: keyParts(msg('Reading records…')), statusKind: 'pending'
     });
     let outcome;
     try {
       outcome = await action.readRecords();
     } catch (error) {
-      outcome = { status: 'error', reason: error?.message || String(error) };
+      outcome = { status: 'error', error };
     }
     if (generation !== draftGeneration) return outcome;
-    Object.assign(draft, { reading: false, status: '', statusKind: 'idle' });
+    Object.assign(draft, { reading: false, status: [], statusKind: 'idle' });
     recompute();
-    if (draft.targetFailure === RECORD_TARGET_NOT_DISCOVERED && outcome?.reason) {
-      draft.disabledReason = outcome.reason;
+    if (draft.targetFailure === RECORD_TARGET_NOT_DISCOVERED && readFailureParts(outcome).length) {
+      draft.disabledReason = readFailureParts(outcome);
     }
     return outcome;
   };
@@ -562,18 +614,12 @@ export const createFeatureRecordRotationWorkflow = ({
   const applicableSnapshot = () => {
     const snapshot = recompute();
     if (snapshot && draft.canApply) return snapshot;
-    const shown = Boolean(draft.disabledReason || draft.offsetError);
-    draft.status = shown ? '' : t('Record rotation is unavailable.');
+    const shown = Boolean(draft.disabledReason.length || draft.offsetError);
+    draft.status = shown ? [] : keyParts(msg('Record rotation is unavailable.'));
     draft.statusKind = shown ? 'idle' : 'error';
     return null;
   };
 
-  // A failure message for the status line, unless the reason line, recomputed
-  // after the action, already states it.
-  /** @param {string | undefined} message @param {string} fallback */
-  const unlessShown = (message, fallback) => (
-    message && message !== draft.disabledReason ? message : fallback
-  );
 
   const apply = async () => {
     if (draft.pending) return { status: 'pending' };
@@ -584,10 +630,11 @@ export const createFeatureRecordRotationWorkflow = ({
     const generation = draftGeneration;
     draft.pending = true;
     draft.canApply = false;
-    draft.status = t('Regenerating the target record…');
+    draft.status = keyParts(msg('Regenerating the target record…'));
     draft.statusKind = 'pending';
     let outcome;
-    let failure = '';
+    /** @type {ErrorTextPart[]} */
+    let failure = [];
     try {
       outcome = await action.apply({
         feature: snapshot.feature,
@@ -600,20 +647,20 @@ export const createFeatureRecordRotationWorkflow = ({
       }
     } catch (error) {
       outcome = { status: 'error', error };
-      failure = error?.message || String(error);
+      failure = failureParts(error, 'generate');
     }
     if (generation !== draftGeneration) return outcome;
     draft.pending = false;
     recompute();
-    const kept = t('The previous Result was kept.');
+    const kept = { text: msg('The previous Result was kept.') };
     if (outcome?.status === 'ok') {
-      draft.status = t('Record rotation applied and regenerated.');
+      draft.status = keyParts(msg('Record rotation applied and regenerated.'));
       draft.statusKind = 'success';
     } else if (outcome?.status === 'canceled') {
-      draft.status = joinSentences(t('Record rotation canceled.'), kept);
+      draft.status = [{ text: msg('Record rotation canceled.') }, kept];
       draft.statusKind = 'idle';
     } else {
-      draft.status = joinSentences(unlessShown(failure, t('Record rotation failed.')), kept);
+      draft.status = [...unlessShown(failure, keyParts(msg('Record rotation failed.')), draft.disabledReason), kept];
       draft.statusKind = 'error';
     }
     return outcome;
@@ -642,13 +689,13 @@ export const createFeatureRecordRotationWorkflow = ({
     if (generation !== draftGeneration) return outcome;
     recompute();
     if (outcome?.status === 'ok') {
-      draft.status = t('Record rotation will apply on the next Generate Diagram.');
+      draft.status = keyParts(msg('Record rotation will apply on the next Generate Diagram.'));
       draft.statusKind = 'success';
     } else {
       draft.status = outcome?.status === 'busy'
-        ? outcome.reason
-        : unlessShown(outcome?.error?.message, '');
-      draft.statusKind = draft.status ? 'error' : 'idle';
+        ? keyParts(outcome.reason)
+        : unlessShown(outcome?.status === 'error' ? failureParts(outcome.error) : [], [], draft.disabledReason);
+      draft.statusKind = draft.status.length ? 'error' : 'idle';
     }
     return outcome;
   };

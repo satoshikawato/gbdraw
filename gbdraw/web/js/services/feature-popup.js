@@ -12,14 +12,15 @@ import {
   normalizeStringArray,
   resolveFeatureProteinId
 } from './feature-utils.js';
-import { t } from '../utils/i18n.js';
+import { msg } from '../utils/i18n.js';
 
 /**
  * A qualifier of the Qualifiers tab: its name and values.
  * @typedef {{ key: string, values: string[] }} FeaturePopupQualifierRow
  */
 /**
- * A row of the Details tab.
+ * A row of the Details tab. `label` is the English catalog key of its name (`msg`); the popup and Copy details word it
+ * with `tm` where they show it, so a language change while the popup is open rewords it.
  * @typedef {{ key: string, label: string, value: string }} FeaturePopupDetailRow
  */
 /**
@@ -88,7 +89,8 @@ export const unreadFeatureSequence = () => ({ status: 'idle', warnings: [], nucl
  * @property {boolean} orthogroupRepresentative
  * @property {unknown} orthogroupMember
  * @property {boolean} hasEditableLabel
- * @property {string} labelUnavailableReason
+ * @property {string} labelUnavailableReason Why the label cannot be edited: an English catalog key (`msg`) the popup words
+ *   with `tm`, '' when it can.
  */
 
 /**
@@ -126,9 +128,9 @@ const normalizeQualifierRows = (qualifiers) => {
  * @returns {FeaturePopupDetailRow[]}
  */
 const buildDetailRows = (feat) => [
-  { key: 'type', label: t('Feature type'), value: feat.type },
-  { key: 'length', label: t('Length'), value: formatFeatureLength(feat) },
-  { key: 'protein_id', label: t('Protein ID'), value: resolveFeatureProteinId(feat, /** @type {Record<string, unknown> | null} */ (feat?.orthogroupMember || feat?.orthogroup_member || null)) }
+  { key: 'type', label: msg('Feature type'), value: feat.type },
+  { key: 'length', label: msg('Length'), value: formatFeatureLength(feat) },
+  { key: 'protein_id', label: msg('Protein ID'), value: resolveFeatureProteinId(feat, /** @type {Record<string, unknown> | null} */ (feat?.orthogroupMember || feat?.orthogroup_member || null)) }
 ]
   .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
   .filter((row) => row.value !== '');
@@ -187,6 +189,6 @@ export const buildFeaturePopup = (feat, view) => {
     orthogroupRepresentative: Boolean(feat.orthogroupRepresentative),
     orthogroupMember: feat.orthogroupMember || null,
     hasEditableLabel: false,
-    labelUnavailableReason: t('No editable feature label for this feature in current diagram.')
+    labelUnavailableReason: msg('No editable feature label for this feature in current diagram.')
   };
 };

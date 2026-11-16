@@ -1056,8 +1056,8 @@ export const createFeatureLabelActions = ({
     clickedFeature.value.labelUnavailableReason = editable
       ? ''
       : (featureId
-        ? t('Generate the diagram again to edit this feature\'s label.')
-        : t('No editable feature label for this feature in current diagram.'));
+        ? msg('Generate the diagram again to edit this feature\'s label.')
+        : msg('No editable feature label for this feature in current diagram.'));
   };
 
   /**

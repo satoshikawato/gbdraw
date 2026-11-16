@@ -58,7 +58,7 @@ const controlsFor = ({ mode = 'linear', runUndoable, sessionBusy = null }) => {
     linearWindowsOf: linearDrawingWindowsOf, linearRecordsFor: (seq) => [{
       selector: '#1', recordId: seq.uid === 'ca' ? 'first' : 'second', recordLength: 100, detectedTopology: 'linear'
     }],
-    linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
+    linearRecordStatusFor: () => 'ready', linearRecordErrorModelFor: () => '',
     runUndoable, getCommittedRequest: () => committed.renderRequest, getCommittedSession: () => committed
   });
   return { controls, reversed: () => state.linearSeqs.map((seq) => seq.region_reverse) };

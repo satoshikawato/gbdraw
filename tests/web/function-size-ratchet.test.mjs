@@ -103,7 +103,7 @@ const FUNCTION_STATEMENTS = {
   'app/orthogroups.js::createOrthogroupEditor': 259,
   'app/preview-runtime.js::createPreviewRuntime': 381,
   'app/record-display-options.js::createRecordDisplayControls': 307,
-  'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 165,
+  'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 163,
   'app/record-selection.js::createRecordSelection': 115,
   'app/region-drawing.js::createRegionDrawing': 94,
   'app/region-select.js::createRegionSelect': 240,
