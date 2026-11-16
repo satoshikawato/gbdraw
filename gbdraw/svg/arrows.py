@@ -71,6 +71,15 @@ def circular_head_length_px_to_bp(
     return float(head_length_px) * float(total_length) / circumference_px
 
 
+CIRCULAR_AUTO_HEAD_MAX_THICKNESS_RATIO = 0.5
+"""The longest automatic Circular head, as a multiple of the feature's thickness.
+
+The automatic head length grows with the record's length and has a 30 bp floor; on a record of a few
+hundred bases that floor spans tens of degrees, many times the feature's thickness. Above about 6 kb
+at default sizes the automatic head is already shorter than this cap and is drawn unchanged.
+"""
+
+
 def resolve_circular_arrow_head_length_bp(
     head_length_ratio: ArrowHeadLengthRatio,
     feature_thickness_px: float,
@@ -79,26 +88,36 @@ def resolve_circular_arrow_head_length_bp(
     center_radius_px: float,
     shaft_width_ratio: float = 1.0,
 ) -> float:
-    """Resolve a Circular head span, keeping full-width Auto exactly legacy."""
-    if head_length_ratio == "auto" and float(shaft_width_ratio) == 1.0:
-        return float(automatic_head_length_bp)
-    automatic_head_length_px = (
-        circular_head_length_bp_to_px(
-            automatic_head_length_bp,
+    """Resolve a Circular head span in bp.
+
+    Auto takes the record's automatic head, capped at ``CIRCULAR_AUTO_HEAD_MAX_THICKNESS_RATIO`` times
+    the feature's thickness, and extends it for a narrowed shaft; a full-width Auto head below the cap
+    is returned exactly. A numeric ratio is a multiple of the thickness, not capped.
+    """
+    if head_length_ratio != "auto":
+        return circular_head_length_px_to_bp(
+            resolve_arrow_head_length_px(head_length_ratio, feature_thickness_px, 0.0, shaft_width_ratio),
             total_length,
             center_radius_px,
         )
-        if head_length_ratio == "auto"
-        else 0.0
+    automatic_head_length_px = circular_head_length_bp_to_px(
+        automatic_head_length_bp,
+        total_length,
+        center_radius_px,
     )
-    head_length_px = resolve_arrow_head_length_px(
-        head_length_ratio,
-        feature_thickness_px,
-        automatic_head_length_px,
-        shaft_width_ratio,
-    )
+    cap_px = CIRCULAR_AUTO_HEAD_MAX_THICKNESS_RATIO * abs(float(feature_thickness_px))
+    if automatic_head_length_px > cap_px:
+        automatic_head_length_px = cap_px
+        automatic_head_length_bp = circular_head_length_px_to_bp(cap_px, total_length, center_radius_px)
+    if float(shaft_width_ratio) == 1.0:
+        return float(automatic_head_length_bp)
     return circular_head_length_px_to_bp(
-        head_length_px,
+        resolve_arrow_head_length_px(
+            head_length_ratio,
+            feature_thickness_px,
+            automatic_head_length_px,
+            shaft_width_ratio,
+        ),
         total_length,
         center_radius_px,
     )
@@ -236,6 +255,7 @@ def in_drawing_order(parts: Iterable[_Part], kind: Callable[[_Part], str]) -> li
 
 __all__ = [
     "ArrowHeadLengthRatio",
+    "CIRCULAR_AUTO_HEAD_MAX_THICKNESS_RATIO",
     "LinearBlockGlyph",
     "LinearBlockOutline",
     "calculate_arrow_shaft_bounds",
