@@ -494,11 +494,12 @@ def test_a_record_the_packer_cannot_fit_keeps_todays_placement_and_stop(
 
 @pytest.mark.circular
 @pytest.mark.usefixtures("todays_label_placement_only")
-def test_todays_label_pass_draws_a_record_the_packer_fits_as_today(
+def test_the_stage_report_of_a_placement_that_skipped_the_packer_reaches_the_label_layout(
     tmp_path: Path, looks: list[tuple[PackerLook, bool]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """With today's label pass P1 13 pt is drawn as today, with its one crossing, and its label layout says that the
-    placement skipped the packer (what a figure-size search reads, CP-D11)."""
+    """Under the ``todays_label_placement_only`` fixture (it forces ``packer=False`` in the placement) P1 13 pt is drawn
+    as today, with its one crossing, and the placement's stage report reaches ``CircularLabelLayout.packer_skipped``
+    (what a figure-size search reads, CP-D11). The production "todays" label pass is covered by the cached tests below."""
 
     layouts: list[CircularLabelLayout] = []
     attach = diagram_module._attach_circular_label_layouts
@@ -696,8 +697,11 @@ def test_a_sized_figure_the_packer_draws_is_the_clis_with_the_render_stage_cache
 
     harness = EquivalenceHarness("circular", tmp_path)
     args = SIZED_PACKED["p1_13pt_1000px_tall"]
-    cli = harness.uncached(args)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cli = harness.uncached(args)
     assert cli.error is None and 'height=\\"1000px\\"' in json.dumps(cli.reply)
+    assert not [w for w in caught if issubclass(w.category, LabelLeadersCrossWarning)]  # the packed figure
     first = harness.warm(args)
     again = harness.warm(args)
     assert first == cli and again == cli
@@ -719,4 +723,8 @@ def test_a_sized_figure_the_packer_draws_replays_from_its_session_and_the_worker
     replay = _draw(tmp_path / "replay", ["--session", str(session)])
     assert replay.read_bytes() == cli.read_bytes()
     harness = EquivalenceHarness("circular", tmp_path / "worker")
-    assert harness.cold(args) == harness.uncached(args)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        uncached = harness.uncached(args)
+    assert not [w for w in caught if issubclass(w.category, LabelLeadersCrossWarning)]  # the packed figure
+    assert harness.cold(args) == uncached
