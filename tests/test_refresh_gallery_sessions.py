@@ -474,21 +474,23 @@ _GALLERY_ROOT = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery"
 _GALLERY_ENTRIES = json.loads(
     (_GALLERY_ROOT / "examples.json").read_text(encoding="utf-8")
 )
-_SEQUENCE_INPUT_SUFFIXES = frozenset(
-    {".gb", ".gbk", ".gbff", ".gff", ".gff3", ".fa", ".fas", ".fasta", ".fna"}
-)
+# The flags whose values are record input files.
+_RECORD_INPUT_FLAGS = frozenset({"--gbk", "--gff", "--fasta"})
 
 
-def _declared_input_names(entry: dict[str, object]) -> set[str]:
-    """The input files a Gallery entry declares: Files plus command inputs."""
+def _command_input_names(entry: dict[str, object]) -> set[str]:
+    """The record input files a Gallery card's command reads: the values of
+    its record input flags and the files of its records table. A command that
+    replays a Session reads none of them."""
 
-    declared = {str(name) for name in entry["featureSources"]}
+    declared: set[str] = set()
     args = shlex.split(str(entry["command"]))
-    declared.update(
-        Path(arg).name
-        for arg in args
-        if Path(arg).suffix.lower() in _SEQUENCE_INPUT_SUFFIXES
-    )
+    flag = None
+    for arg in args:
+        if arg.startswith("-"):
+            flag = arg
+        elif flag in _RECORD_INPUT_FLAGS:
+            declared.add(Path(arg).name)
     for flag, value in zip(args, args[1:]):
         if flag != "--records_table":
             continue
@@ -529,10 +531,11 @@ def test_gallery_session_record_sources_are_the_declared_input_files(
     entry: dict[str, object],
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
-    """One declared input file is one Session resource with its own name.
+    """One input file is one Session resource with its own name.
 
     A Session that stores each record of a multi-record file as its own
-    resource names resources that no declared input has, or repeats one.
+    resource names resources that no input file has, or repeats one. The
+    card lists these files, and a command that reads input files reads them.
     """
 
     session = session_view(load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"])))
@@ -540,7 +543,10 @@ def test_gallery_session_record_sources_are_the_declared_input_files(
 
     assert names
     assert len(names) == len(set(names)), names
-    assert set(names) <= _declared_input_names(entry), names
+    assert sorted(entry["featureSources"]) == sorted(names), names
+    command_inputs = _command_input_names(entry)
+    if "--session" not in shlex.split(str(entry["command"])):
+        assert set(names) <= command_inputs, names
 
 
 def test_gallery_session_inventory_matches_files_and_examples() -> None:
@@ -2390,32 +2396,43 @@ def test_declared_command_invocation_keeps_its_declared_inputs(tmp_path: Path) -
     ]
 
 
-def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources() -> None:
-    # A Web-saved Session has no cliInvocation; its input names live in
-    # webFiles.resourceOriginalNames, keyed by each record's source resource.
+def test_feature_sources_of_a_session_come_from_its_record_resources() -> None:
+    # A card lists the files its records read, found by each record's source
+    # resource IDs and named as the user chose them
+    # (webFiles.resourceOriginalNames), whatever their suffix: a gzip-compressed
+    # GenBank file, a .genbank file, and a GFF3 file with its FASTA. A file two
+    # records read is listed once; a table no record reads is not listed.
     session = {
         "renderRequest": {
             "records": [
                 {"recordKey": "record-1", "source": {"kind": "genbank", "resourceId": "record-1-genbank"}},
                 {"recordKey": "record-2", "source": {"kind": "genbank", "resourceId": "record-2-genbank"}},
                 {"recordKey": "record-3", "source": {"kind": "genbank", "resourceId": "record-3-genbank"}},
+                {"recordKey": "record-4", "source": {"kind": "genbank", "resourceId": "record-3-genbank"}},
+                {
+                    "recordKey": "record-5",
+                    "source": {"kind": "gff_fasta", "gffResourceId": "record-5-gff", "fastaResourceId": "record-5-fasta"},
+                },
             ]
         },
         "webFiles": {
             "resourceOriginalNames": {
                 "colors-default-colors-file": "colors-default-colors.tsv",
-                "record-2-genbank": "second.gbk",
+                "record-2-genbank": "second.genbank",
                 "record-1-genbank": "first.gbk",
                 "record-3-genbank": "draft_genomic.gbff.gz",
+                "record-5-gff": "annotation.gff3",
+                "record-5-fasta": "genome.fna",
             }
         },
     }
 
-    # A gzip-compressed GenBank file is an input file too.
     assert gallery_assets_module._session_feature_sources(session) == [
         "first.gbk",
-        "second.gbk",
+        "second.genbank",
         "draft_genomic.gbff.gz",
+        "genome.fna",
+        "annotation.gff3",
     ]
 
 

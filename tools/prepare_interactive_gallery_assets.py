@@ -20,6 +20,8 @@ from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.session import _resource_original_names
+from gbdraw.session_resources import canonical_resource_ids
 from gbdraw.web_support.feature_catalog import (
     ANCHOR_FEATURE_CATALOG_SCHEMA,
     FEATURE_CATALOG_SCHEMA,
@@ -51,8 +53,6 @@ INTERACTIVE_SVG_HARD_LIMIT = 41_943_040
 DECODED_METADATA_HARD_LIMIT = 200_000_000
 DECODED_METADATA_REGRESSION_CEILING = 220_000_000
 
-# A GenBank input, plain or gzip-compressed (`.gbff.gz`).
-GENOME_SUFFIXES = tuple(f"{suffix}{gz}" for suffix in (".gb", ".gbk", ".gbff") for gz in ("", ".gz"))
 _RENDERED_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
 _SVG_PART_SUFFIX_RE = re.compile(r"__part\d+$")
 _SVG_FEATURE_ID_RE = re.compile(r'data-gbdraw-feature-id=["\']([^"\']+)["\']')
@@ -69,7 +69,6 @@ class GallerySessionExample:
     display_order: int
     command_kind: str
     command_note: str
-    feature_sources: tuple[str, ...] = ()
     sync_result_svg: bool = True
     interactive_svg: bool = True
     compressed_metadata: bool = False
@@ -458,10 +457,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         ),
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         session_from_command=True,
-        feature_sources=(
-            "GCF_000196095.1_ASM19609v1_genomic.gbff",
-            "GCF_000354175.2_ASM35417v2_genomic.gbff",
-        ),
         compressed_metadata=True,
         source_note=(
             "The interactive SVG with gzip-compressed metadata, complete Session file, "
@@ -547,7 +542,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         input_summary="3 GenBank + 3 color/label TSV files",
         display_order=100,
         command_kind="runnable",
-        command_note="Download the three genomes and the three TSV files from Files.",
+        command_note=(
+            "Download the Session file with the Session button, then run this command in the same directory. "
+            "The Session holds the input files and the color and label tables."
+        ),
     ),
     GallerySessionExample(
         id="vibrio_parahaemolyticus_pva1",
@@ -566,7 +564,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         input_summary="3 GenBank + 3 color/label TSV files",
         display_order=110,
         command_kind="runnable",
-        command_note="Download the three genomes and the three TSV files from Files.",
+        command_note=(
+            "Download the Session file with the Session button, then run this command in the same directory. "
+            "The Session holds the input files and the color and label tables."
+        ),
     ),
 )
 
@@ -622,7 +623,10 @@ def _session_cli_options(session: dict[str, Any]) -> dict[str, Any]:
     return cli_options if isinstance(cli_options, dict) else {}
 
 
-def _session_command(session: dict[str, Any], drawing: str | None = None) -> str:
+def _session_command(session: dict[str, Any], session_name: str, drawing: str | None = None) -> str:
+    """The card command: the Session's own CLI arguments, or a replay of the Session file under the name
+    the Gallery downloads it as (``session_name``), naming ``drawing`` when the Session holds others."""
+
     cli = _session_cli_invocation(session)
     ui = session.get("ui") if isinstance(session.get("ui"), dict) else {}
     cli_options = _session_cli_options(session)
@@ -630,7 +634,7 @@ def _session_command(session: dict[str, Any], drawing: str | None = None) -> str
     raw_args = _session_raw_args(session)
     if raw_args:
         return shlex.join(["gbdraw", mode, *raw_args])
-    return shlex.join(["gbdraw", mode, "--session", "session.gbdraw", *(["--drawing", drawing] if drawing else [])])
+    return shlex.join(["gbdraw", mode, "--session", session_name, *(["--drawing", drawing] if drawing else [])])
 
 
 # Settings a Web-saved Session stores as configuration overrides (key, with the Session's mode) and the CLI
@@ -685,58 +689,30 @@ def _with_session_values(command: str, session: dict[str, Any]) -> str:
 
 
 def _example_command(example: GallerySessionExample, session: dict[str, Any], drawing: str | None = None) -> str:
-    command = example.command or _session_command(session, drawing)
+    command = example.command or _session_command(session, example.session_path.name, drawing)
     if example.command and not example.session_from_command:
         command = _with_session_values(command, session)
     return command.replace("interactive-svg", "interactive_svg")
 
 
 def _session_feature_sources(session: dict[str, Any]) -> list[str]:
-    cli = _session_cli_invocation(session)
-    seen: set[str] = set()
+    """The input files of a card: the files the shown drawing's records read.
+
+    Each record names its files by resource ID (``renderRequest.records[].source``,
+    ``canonical_resource_ids``), and the Session names each resource by the
+    file the user chose (``webFiles.resourceOriginalNames``), whatever its
+    suffix or compression.
+    """
+
+    original_names = _resource_original_names(session)
     sources: list[str] = []
-
-    def add_name(value: object) -> None:
-        if not isinstance(value, str) or not value.lower().endswith(GENOME_SUFFIXES):
-            return
-        if value in seen:
-            return
-        seen.add(value)
-        sources.append(value)
-
-    bindings = cli.get("fileBindings")
-    if isinstance(bindings, list):
-        for binding in bindings:
-            if not isinstance(binding, dict):
-                continue
-            add_name(binding.get("name"))
-
-    # A Web-saved Session has no cliInvocation: name each record's source
-    # resources from webFiles.resourceOriginalNames, in record order.
-    web_files = session.get("webFiles")
-    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, dict) else None
-    render_request = session.get("renderRequest")
-    records = render_request.get("records") if isinstance(render_request, dict) else None
-    if isinstance(original_names, dict) and isinstance(records, list):
-        for record in records:
-            source = record.get("source") if isinstance(record, dict) else None
-            if not isinstance(source, dict):
-                continue
-            for key, resource_id in source.items():
-                if key.endswith("esourceId") and isinstance(resource_id, str):
-                    add_name(original_names.get(resource_id))
-
-    files = session.get("files")
-    if isinstance(files, dict):
-        linear_seqs = files.get("linearSeqs")
-        if isinstance(linear_seqs, list):
-            for entry in linear_seqs:
-                if not isinstance(entry, dict):
-                    continue
-                gb_entry = entry.get("gb")
-                if isinstance(gb_entry, dict):
-                    add_name(gb_entry.get("name"))
-                add_name(entry.get("name"))
+    for record in session["renderRequest"]["records"]:
+        for resource_id in sorted(canonical_resource_ids(record["source"])):
+            name = original_names.get(resource_id)
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"The Session names no file for its record resource {resource_id}.")
+            if name not in sources:
+                sources.append(name)
     return sources
 
 
@@ -1864,7 +1840,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
             "sourceOutput": str(example.output_svg_path.relative_to(REPO_ROOT)),
             "sourceFigure": str(example.source_svg_path.relative_to(REPO_ROOT)),
             "sourceNote": example.source_note,
-            "featureSources": list(example.feature_sources) or _session_feature_sources(session),
+            "featureSources": _session_feature_sources(session),
             "fileSizeLabel": _format_size(example.gallery_svg_path.stat().st_size),
             "command": _example_command(example, session, drawing),
             "commandKind": example.command_kind,

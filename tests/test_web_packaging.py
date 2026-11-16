@@ -989,6 +989,11 @@ def test_gallery_session_commands_select_one_drawing(
         if "--session" not in args:
             continue
         replayed += 1
+        # The command names the Session file under the name the Gallery downloads it as (gallery.js takes
+        # the last part of `session`), and the note sends the reader to that file, not to the input files
+        # a Session replay does not read.
+        assert args[args.index("--session") + 1] == str(entry["session"]).split("/")[-1], entry["id"]
+        assert "Session" in entry["commandNote"] and "genomes" not in entry["commandNote"], entry["id"]
         document = load_cached_gallery_session(GALLERY_ROOT / "sessions" / f"{entry['id']}.gbdraw")
         drawings = read_session_drawings(document)
         selector = args[args.index("--drawing") + 1] if "--drawing" in args else None
