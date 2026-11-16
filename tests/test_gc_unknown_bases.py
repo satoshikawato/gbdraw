@@ -28,7 +28,7 @@ from gbdraw.api.request_render import plan_request
 from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, LinearDiagramRequest, RecordInput
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.scalar_axis import band_samples, deviation_samples
-from gbdraw.svg.circular_tracks import CircularTrackPlace, circular_series_line, circular_series_path_desc
+from gbdraw.svg.circular_tracks import CircularTrackPlace, circular_series_line
 from gbdraw.svg.linear_tracks import LinearTrackFrame, linear_series_path_desc
 
 WINDOW = 1_000
@@ -108,16 +108,10 @@ def _transform(length: int) -> RecordDisplayTransform:
 _CLOSES = {"GC content": True, "GC skew": False}
 
 
-def _circular_desc(frame, column: str, record_len: int) -> str:
-    samples = deviation_samples(frame[column], closes_at_record_end=_CLOSES[column])
-    place = CircularTrackPlace(100.0, record_len, 20.0, 1.0, _transform(record_len))
-    return "" if samples is None else circular_series_path_desc(samples, place)
-
-
 def _linear_desc(frame, column: str, record_len: int) -> str:
     samples = deviation_samples(frame[column], closes_at_record_end=_CLOSES[column])
-    frame_px = LinearTrackFrame(0.0, 0.0, record_len, 1_000.0, 100.0)
-    return "" if samples is None else linear_series_path_desc(samples, frame_px)
+    assert samples is not None
+    return linear_series_path_desc(samples, LinearTrackFrame(0.0, 0.0, record_len, 1_000.0, 100.0))
 
 
 @pytest.mark.parametrize("column", ["GC content", "GC skew"])
@@ -165,8 +159,8 @@ def test_a_record_of_unknown_bases_only_draws_no_gc_track() -> None:
         frame = skew_df(record, WINDOW, STEP, "GC", circular=True)
         assert frame.isna().all().all() and len(frame) == 50
         for column in ("GC content", "GC skew"):
-            assert _circular_desc(frame, column, 5_000) == ""
-            assert _linear_desc(frame, column, 5_000) == ""
+            # No samples: neither drawer writes a path (``test_a_diagram_of_unknown_bases_only_draws_no_gc_track``).
+            assert deviation_samples(frame[column], closes_at_record_end=_CLOSES[column]) is None
         percent = gc_content_percent_df(frame, dinucleotide="GC")
         assert percent.empty
         assert band_samples(percent, "value_normalized", closes_at_record_end=True) is None
@@ -223,7 +217,9 @@ def test_a_circular_diagram_draws_the_gap_on_the_baseline_circle() -> None:
         np.testing.assert_allclose(heights[inside], baseline, atol=0.01, err_msg=track)
 
 
-def test_a_linear_diagram_of_unknown_bases_only_draws_no_gc_track() -> None:
-    tracks = _drawn_tracks("linear", _record("N" * 5_000, "linear"))
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_diagram_of_unknown_bases_only_draws_no_gc_track(mode: str) -> None:
+    # The whole writer: the series builders, the drawers and their path writers.
+    tracks = _drawn_tracks(mode, _record("N" * 5_000, mode))
     assert set(tracks) == {"GC content", "GC skew"}
     assert all(not any(_POINT.findall(d) for d in descs) for descs in tracks.values()), tracks

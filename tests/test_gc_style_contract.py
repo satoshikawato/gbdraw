@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pandas as pd
 import pytest
 from svgwrite.container import Group
@@ -13,6 +11,7 @@ from gbdraw.render.drawers.linear.numeric_series import draw_linear_series
 from gbdraw.render.numeric_series import NumericSeriesPlot, gc_content_series, gc_skew_series
 from gbdraw.svg.circular_tracks import CircularTrackPlace
 from gbdraw.svg.linear_tracks import LinearTrackFrame
+from tests.utils.series_configs import gc_content_config, gc_skew_config
 
 ALONE = RecordDisplayTransform(120, 1, 1, None, True)
 
@@ -25,29 +24,19 @@ def _draw_linear(plot: NumericSeriesPlot, group_id: str = "gc_track") -> Group:
     return draw_linear_series(Group(), plot, LinearTrackFrame(0, 0, 120, 600.0, 24.0), group_id)
 
 
-def _gc_content_config(*, stroke_color: str, stroke_width: float) -> SimpleNamespace:
-    return SimpleNamespace(
-        high_fill_color="#10b981",
-        low_fill_color="#10b981",
-        fill_color="#10b981",
-        stroke_color=stroke_color,
-        stroke_width=stroke_width,
-        fill_opacity=0.75,
-        mode="deviation",
-        dinucleotide="GC",
-        font_family="Liberation Sans",
-        percent_background_color="#e5e5e5",
+def _gc_content_config(*, stroke_color: str, stroke_width: float):
+    return gc_content_config(
+        fill_color="#10b981", stroke_color=stroke_color, stroke_width=stroke_width, fill_opacity=0.75, mode="deviation"
     )
 
 
-def _gc_skew_config(*, stroke_color: str, stroke_width: float) -> SimpleNamespace:
-    return SimpleNamespace(
+def _gc_skew_config(*, stroke_color: str, stroke_width: float):
+    return gc_skew_config(
         high_fill_color="#ef4444",
         low_fill_color="#3b82f6",
         stroke_color=stroke_color,
         stroke_width=stroke_width,
         fill_opacity=0.75,
-        dinucleotide="GC",
     )
 
 

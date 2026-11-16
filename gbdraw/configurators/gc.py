@@ -7,17 +7,16 @@ from pandas import DataFrame
 
 from gbdraw.config.models import RenderProfile
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
-from gbdraw.tracks.parsing import slot_skew_colors
+from gbdraw.layout.series_style import ScalarAxisStyle, SeriesPaint
+from gbdraw.tracks.parsing import slot_skew_fill_colors
 
 
 def _slot_skew_config(skew_config, slot, dinucleotide: str):
     cloned = copy.copy(skew_config)
     cloned.dinucleotide = str(dinucleotide).upper()
-    high_fill_color, low_fill_color = slot_skew_colors(slot)
-    if high_fill_color:
-        cloned.high_fill_color = high_fill_color
-    if low_fill_color:
-        cloned.low_fill_color = low_fill_color
+    cloned.high_fill_color, cloned.low_fill_color = slot_skew_fill_colors(
+        slot, cloned.high_fill_color, cloned.low_fill_color
+    )
     return cloned
 
 
@@ -83,6 +82,21 @@ class GcContentConfigurator:
         self.percent_border_color: str = cfg.objects.gc_content.percent_border_color
         self.percent_border_width: float = cfg.objects.gc_content.percent_border_width
 
+    @property
+    def series_paint(self) -> SeriesPaint:
+        """How the track's path is painted, as drawn and as its Legend row shows it."""
+
+        return SeriesPaint(
+            self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None,
+            frozenset({"circular", "linear"}),
+        )
+
+    @property
+    def axis_style(self) -> ScalarAxisStyle | None:
+        """The axis the track draws and keeps room for: in percent mode only."""
+
+        return ScalarAxisStyle.of(self) if self.mode == "percent" else None
+
 class GcSkewConfigurator:
     """
     Configurator for GC skew calculation parameters.
@@ -125,6 +139,16 @@ class GcSkewConfigurator:
         self.stroke_color: str = cfg.objects.gc_skew.stroke_color
         self.stroke_width: float = cfg.objects.gc_skew.stroke_width
         self.fill_opacity: float = cfg.objects.gc_skew.fill_opacity
+
+    @property
+    def series_paint(self) -> SeriesPaint:
+        """How the track's path is painted, as drawn and as its Legend rows show it: the high fill above the
+        baseline and the low fill below it."""
+
+        return SeriesPaint(
+            self.high_fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, self.low_fill_color,
+            frozenset({"circular"}),
+        )
 
 __all__ = [
     "GcContentConfigurator",

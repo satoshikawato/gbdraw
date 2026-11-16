@@ -5,16 +5,17 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import NamedTuple, cast
+from typing import NamedTuple, Protocol, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from pandas import DataFrame, Index, Series
 
 from gbdraw.analysis.skew import DeviationScale, deviation_scale
-from gbdraw.auto_sizes import TickFontSource, scalar_axis_tick_font_size
+from gbdraw.auto_sizes import TickedAxisSource, TickFontSource, scalar_axis_tick_font_size
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
+from .series_style import ScalarAxisStyle
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
 
@@ -79,6 +80,14 @@ def held_to_end(
     if not len(position_array) or position_array[-1] >= end:
         return position_array, value_array
     return np.append(position_array, float(end)), np.append(value_array, value_array[-1])
+
+
+class ScalarAxisSource(TickedAxisSource, Protocol):
+    """What a scalar track's configurator (depth, GC content in percent) says of its axis: whether it draws it and
+    its ticks, their font size and their labels."""
+
+    @property
+    def axis_labels(self) -> ScalarAxisLabelStyle: ...
 
 
 class SeriesSamples(NamedTuple):
@@ -375,11 +384,9 @@ class ScalarAxis:
     log_scale: bool
     # False leaves the lower bound unlabelled (a depth axis without a set minimum).
     label_axis_min: bool
-    show_ticks: bool
+    style: ScalarAxisStyle
     large_tick_interval: float | None
     small_tick_interval: float | None
-    tick_font_size: float | None
-    axis_labels: ScalarAxisLabelStyle
     font_family: str
     once_on_shared_circle: bool
 
@@ -395,7 +402,7 @@ class ScalarAxis:
         ticks = scalar_axis_large_ticks(
             self.axis_min,
             self.axis_max,
-            show_ticks=self.show_ticks,
+            show_ticks=self.style.show_ticks,
             large_tick_interval=self.large_tick_interval,
             length_px=length_px,
             fraction=self.fraction,
@@ -404,7 +411,7 @@ class ScalarAxis:
             label_axis_min=self.label_axis_min,
         )
         range_label = scalar_axis_range_label(self.axis_min, self.axis_max, self.unit, log_scale=self.log_scale)
-        return _axis_labels(ticks, self.axis_labels, range_label)
+        return _axis_labels(ticks, self.style.axis_labels, range_label)
 
     def small_tick_values(self, labels: ScalarAxisLabels) -> list[float]:
         """The small ticks drawn between the large ticks of ``labels``."""
@@ -412,7 +419,7 @@ class ScalarAxis:
         return scalar_axis_small_tick_values(
             self.axis_min,
             self.axis_max,
-            show_ticks=self.show_ticks,
+            show_ticks=self.style.show_ticks,
             small_tick_interval=self.small_tick_interval,
             large_tick_values=[tick.value for tick in labels.ticks],
         )
@@ -454,6 +461,7 @@ __all__ = [
     "PERCENT_UNIT",
     "ProjectedScalarLine",
     "ScalarAxis",
+    "ScalarAxisSource",
     "SeriesSamples",
     "ScalarAxisLabels",
     "ScalarAxisLargeTick",

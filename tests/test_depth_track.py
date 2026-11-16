@@ -45,7 +45,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.scalar_axis import _prepare_depth_plot_dataframe
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
-from tests.utils.circular_drawer_fakes import patch_circular_series_builders
+from tests.utils.circular_drawer_fakes import patch_series_groups
 
 
 # These tests read the numbered tick labels; the default draws one range label per axis (D-16).
@@ -784,64 +784,55 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
 
     def fake_add_gc_content_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         gc_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured["gc_width"] = float(track_width_override)
-        captured["gc_center"] = float(norm_factor_override) * float(canvas_config.radius)
+        assert slot.track_width is not None
+        assert slot.norm_factor is not None
+        captured["gc_width"] = float(slot.track_width)
+        captured["gc_center"] = float(slot.norm_factor) * float(canvas_config.radius)
         return canvas
 
     def fake_add_gc_skew_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         skew_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured["skew_width"] = float(track_width_override)
-        captured["skew_center"] = float(norm_factor_override) * float(canvas_config.radius)
+        assert slot.track_width is not None
+        assert slot.norm_factor is not None
+        captured["skew_width"] = float(slot.track_width)
+        captured["skew_center"] = float(slot.norm_factor) * float(canvas_config.radius)
         return canvas
 
     def fake_add_depth_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         depth_df,
         canvas_config,
         depth_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured["depth_width"] = float(track_width_override)
-        captured["depth_center"] = float(norm_factor_override) * float(canvas_config.radius)
+        assert slot.track_width is not None
+        assert slot.norm_factor is not None
+        captured["depth_width"] = float(slot.track_width)
+        captured["depth_center"] = float(slot.norm_factor) * float(canvas_config.radius)
         return canvas
 
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        depth=fake_add_depth_group_on_canvas,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        depth_content=fake_add_depth_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -892,43 +883,35 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
 
     def fake_add_gc_content_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         gc_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        captured["gc_width"] = float(track_width_override)
-        captured["gc_norm"] = float(norm_factor_override)
+        captured["gc_width"] = float(slot.track_width)
+        captured["gc_norm"] = float(slot.norm_factor)
         return canvas
 
     def fake_add_gc_skew_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         skew_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        captured["skew_width"] = float(track_width_override)
-        captured["skew_norm"] = float(norm_factor_override)
+        captured["skew_width"] = float(slot.track_width)
+        captured["skew_norm"] = float(slot.norm_factor)
         return canvas
 
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
 
     assemble_circular_diagram_from_record(

@@ -1,11 +1,12 @@
 """One numeric series track as a value that both modes draw: GC content, GC skew and depth.
 
-``NumericSeriesPlot`` says what one series track draws: its samples and baseline rule (``SeriesSamples``), its paint,
-the band frame of a GC content track in percent, and its axis. The three builders below turn a track's configurator
-and data frame into that value; they are the only code that tells the kinds apart. The Circular and Linear drawers
-(``render/drawers/{circular,linear}/numeric_series.py``) read the value and nothing else, so what a track paints, what
-the Circular label placement reserves for it (its ink) and what the Linear left room keeps for its axis come from one
-value.
+``NumericSeriesPlot`` says what one series track draws: its samples and baseline rule (``SeriesSamples``), its paint
+(``SeriesPaint``, from the configurator's ``series_paint``), the band frame of a GC content track in percent, and its
+axis (``ScalarAxis``, whose style is the configurator's ``axis_style``). The three builders below turn a track's
+configurator and data frame into that value, and ``numeric_series_plot`` picks the builder of a configurator's kind.
+The Circular and Linear drawers (``render/drawers/{circular,linear}/numeric_series.py``) read the value and nothing
+else, so what a track paints, what the Circular label placement reserves for it (its ink), the room both modes keep
+for its axis and its Legend rows come from one owner.
 """
 
 from __future__ import annotations
@@ -28,33 +29,14 @@ from ..layout.scalar_axis import (
     band_samples,
     deviation_samples,
 )
+from ..layout.series_style import ScalarAxisStyle, SeriesPaint
 
-DiagramMode = Literal["circular", "linear"]
 # The render stage that builds each kind's track group; a stage keeps its own name, so a cache entry of one kind
 # never serves another.
 NumericSeriesStage = Literal["gc_content_content", "gc_skew_content", "depth_content"]
 NumericSeriesConfig = GcContentConfigurator | GcSkewConfigurator | DepthConfigurator
 # The colour of a series axis, its ticks and its labels, in both modes.
 AXIS_STROKE = "#4b5563"
-
-
-@dataclass(frozen=True)
-class SeriesPaint:
-    """How a series path is painted. ``below_fill`` is the fill of the part below the baseline (GC skew), drawn
-    by a copy of the path clipped to the band; none for a series of one fill."""
-
-    fill: str
-    stroke: str
-    stroke_width: float
-    fill_opacity: float
-    below_fill: str | None
-    # The modes in which a stroke that paints nothing (width 0 and colour ``none``) writes no ``stroke-width``;
-    # the other modes always write it. GC content leaves it out in both modes, GC skew in Circular only, depth in
-    # neither: the old drawers differed, and the output keeps their bytes.
-    bare_stroke_modes: frozenset[DiagramMode]
-
-    def writes_stroke_width(self, mode: DiagramMode) -> bool:
-        return mode not in self.bare_stroke_modes or self.stroke_width > 0 or self.stroke.strip().lower() != "none"
 
 
 @dataclass(frozen=True)
@@ -120,10 +102,16 @@ def _percent_bounds(config: GcContentConfigurator) -> tuple[float, float]:
     )
 
 
-def gc_content_axis(config: GcContentConfigurator) -> ScalarAxis | None:
-    """The axis of a GC content track: in percent mode, when it is shown; drawn once on a shared circle."""
+def _drawn_style(style: ScalarAxisStyle | None) -> ScalarAxisStyle | None:
+    return style if style is not None and style.show_axis else None
 
-    if config.mode != "percent" or not bool(config.show_axis):
+
+def gc_content_axis(config: GcContentConfigurator) -> ScalarAxis | None:
+    """The axis of a GC content track: in percent mode, when it is shown (``axis_style``); drawn once on a shared
+    circle."""
+
+    style = _drawn_style(config.axis_style)
+    if style is None:
         return None
     axis_min, axis_max = _percent_bounds(config)
     return ScalarAxis(
@@ -132,11 +120,9 @@ def gc_content_axis(config: GcContentConfigurator) -> ScalarAxis | None:
         unit=PERCENT_UNIT,
         log_scale=False,
         label_axis_min=True,
-        show_ticks=bool(config.show_ticks),
+        style=style,
         large_tick_interval=config.large_tick_interval,
         small_tick_interval=config.small_tick_interval,
-        tick_font_size=config.tick_font_size,
-        axis_labels=config.axis_labels,
         font_family=config.font_family,
         once_on_shared_circle=True,
     )
@@ -146,7 +132,8 @@ def depth_axis(config: DepthConfigurator, depth_df: DataFrame) -> ScalarAxis | N
     """The axis of a depth track, when it is shown: from the set minimum (else 0) to the set maximum (else the
     largest depth), linear or log-scaled; each record of a shared circle draws its own."""
 
-    if not bool(config.show_axis):
+    style = _drawn_style(config.axis_style)
+    if style is None:
         return None
     axis_min, axis_max = _depth_axis_bounds(depth_df, config.min_depth, config.max_depth)
     return ScalarAxis(
@@ -155,11 +142,9 @@ def depth_axis(config: DepthConfigurator, depth_df: DataFrame) -> ScalarAxis | N
         unit=DEPTH_UNIT,
         log_scale=bool(config.normalize),
         label_axis_min=config.min_depth is not None,
-        show_ticks=bool(config.show_ticks),
+        style=style,
         large_tick_interval=config.large_tick_interval,
         small_tick_interval=config.small_tick_interval,
-        tick_font_size=config.tick_font_size,
-        axis_labels=config.axis_labels,
         font_family=config.font_family,
         once_on_shared_circle=False,
     )
@@ -169,10 +154,7 @@ def gc_content_series(config: GcContentConfigurator, gc_df: DataFrame) -> Numeri
     """A GC content track: the deviation of each window's content from the mean, or, in percent mode, the content
     on its axis with the band frame."""
 
-    paint = SeriesPaint(
-        config.fill_color, config.stroke_color, config.stroke_width, config.fill_opacity, None,
-        frozenset({"circular", "linear"}),
-    )
+    paint = config.series_paint
     if config.mode != "percent":
         samples = None if gc_df.empty else deviation_samples(
             gc_df[f"{config.dinucleotide} content"], closes_at_record_end=True
@@ -190,39 +172,23 @@ def gc_content_series(config: GcContentConfigurator, gc_df: DataFrame) -> Numeri
     )
 
 
-def _skew_column(gc_df: DataFrame, dinucleotide: str) -> str:
-    """The skew column of a GC frame: the dinucleotide's, else the frame's one skew column."""
-
-    column = f"{dinucleotide} skew"
-    if column in gc_df.columns:
-        return column
-    return [name for name in gc_df.columns if "skew" in name and "cumulative" not in name.lower()][0]
-
-
 def gc_skew_series(config: GcSkewConfigurator, gc_df: DataFrame) -> NumericSeriesPlot:
     """A GC skew track: the deviation of each window's skew from the mean, in the high colour above the baseline
     and the low colour below it."""
 
     samples = None if gc_df.empty else deviation_samples(
-        gc_df[_skew_column(gc_df, config.dinucleotide)], closes_at_record_end=False
+        gc_df[f"{config.dinucleotide} skew"], closes_at_record_end=False
     )
-    paint = SeriesPaint(
-        config.high_fill_color, config.stroke_color, config.stroke_width, config.fill_opacity, config.low_fill_color,
-        frozenset({"circular"}),
-    )
-    return NumericSeriesPlot(samples, paint, None, None, config.dinucleotide, 0)
+    return NumericSeriesPlot(samples, config.series_paint, None, None, config.dinucleotide, 0)
 
 
 def depth_series(config: DepthConfigurator, depth_df: DataFrame) -> NumericSeriesPlot:
     """A depth track (or a feature density histogram): each window's depth as the share of its axis it fills."""
 
     plot_df = _prepare_depth_plot_dataframe(depth_df, config.min_depth, config.max_depth, normalize=config.normalize)
-    paint = SeriesPaint(
-        config.fill_color, config.stroke_color, config.stroke_width, config.fill_opacity, None, frozenset()
-    )
     return NumericSeriesPlot(
         band_samples(plot_df, "depth_normalized", closes_at_record_end=False),
-        paint,
+        config.series_paint,
         None,
         depth_axis(config, depth_df),
         "",
@@ -246,7 +212,6 @@ __all__ = [
     "NumericSeriesPlot",
     "NumericSeriesStage",
     "SeriesBandFrame",
-    "SeriesPaint",
     "depth_axis",
     "depth_series",
     "gc_content_axis",

@@ -140,7 +140,8 @@ from ...layout.spatial import Aabb, BoxedLetters, bounding_aabb, union_aabbs
 from ...comparisons.identity_scale import IdentityColorDomain, identity_color_domain
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
-    SeriesLegendSource,
+    DepthLegendSource,
+    DinucleotideLegendSource,
     LegendSlotSource,
     LegendSources,
     depth_legend_sources,
@@ -2341,11 +2342,14 @@ def _circular_scalar_axes(
     settings as its slot draws it (``_slot_depth_source``), and the GC content track's in percent mode; and which of
     ``record``'s ``slots`` paint their band's edges (``_edge_painting_slot_ids``)."""
 
-    gc = configurators.gc
     return CircularScalarAxes.of(
-        configurators.depth if show_depth_track else None,
-        gc if str(gc.mode).strip().lower() == "percent" else None,
-        None if depth_tracks_by_index is None else {index: track.config for index, track in depth_tracks_by_index.items()},
+        configurators.depth.axis_style if show_depth_track and configurators.depth is not None else None,
+        configurators.gc.axis_style,
+        (
+            None
+            if depth_tracks_by_index is None
+            else {index: track.config.axis_style for index, track in depth_tracks_by_index.items()}
+        ),
         edge_painting_slot_ids=_edge_painting_slot_ids(slots, configurators, record, cfg),
     )
 
@@ -2359,7 +2363,7 @@ def _gc_content_axis_font_size(
     for it."""
 
     gc = configurators.gc
-    if str(gc.mode).strip().lower() != "percent":
+    if gc.axis_style is None:
         return None
     return scalar_axes.gc_tick_font_size(
         gc,
@@ -2633,10 +2637,10 @@ def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: SeriesLegendSource,
-    skew: SeriesLegendSource,
-    depth: SeriesLegendSource | None,
-    depth_tracks: Sequence[SeriesLegendSource] | None = None,
+    gc: DinucleotideLegendSource,
+    skew: DinucleotideLegendSource,
+    depth: DepthLegendSource | None,
+    depth_tracks: Sequence[DepthLegendSource] | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_colors: tuple[str, str] = ("", ""),
     conservation_domain: IdentityColorDomain | None = None,
@@ -2652,12 +2656,11 @@ def _sync_legend_table_for_circular_slots(
     default_nt = str(gc.dinucleotide).upper()
     removable = {
         "Depth",
-        f"{default_nt} content",
-        f"{default_nt} content (+)",
-        f"{default_nt} content (-)",
-        f"{default_nt} skew",
-        f"{default_nt} skew (+)",
-        f"{default_nt} skew (-)",
+        *(
+            f"{source.row_name(default_nt)}{sign}"
+            for source in (gc, skew)
+            for sign in ("", " (+)", " (-)")
+        ),
     }
     for key in removable:
         out.discard_default_track(key)
@@ -2680,16 +2683,14 @@ def _sync_legend_table_for_circular_slots(
                 label = slot_legend_label(slot, "Depth")
             out.add_source(label, {
                 "type": "solid",
-                "fill": swatch.fill_color,
-                "stroke": swatch.stroke_color,
-                "width": swatch.stroke_width,
+                "fill": swatch.paint.fill,
+                "stroke": swatch.paint.stroke,
+                "width": swatch.paint.stroke_width,
             })
-        elif renderer == "dinucleotide_content":
+        elif renderer in ("dinucleotide_content", "dinucleotide_skew"):
+            source = gc if renderer == "dinucleotide_content" else skew
             nt = slot_dinucleotide(slot.params, default_nt)
-            out.add_numeric_source(slot_legend_label(slot, f"{nt} content"), gc)
-        elif renderer == "dinucleotide_skew":
-            nt = slot_dinucleotide(slot.params, default_nt)
-            out.add_numeric_source(slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt))
+            out.add_numeric_source(slot_legend_label(slot, source.row_name(nt)), source.slot_paint(slot))
     if conservation_legend:
         _add_conservation_ring_rows(
             out, conservation_legend, conservation_colors, conservation_domain or identity_color_domain(0.0, None)
@@ -4656,11 +4657,11 @@ def _compose_circular_plot(
 
 def _circular_legend_slots(
     slots: tuple[LegendSlotSource, ...] | None,
-    depth_tracks: tuple[SeriesLegendSource, ...] | None,
+    depth_tracks: tuple[DepthLegendSource, ...] | None,
     *,
     show_gc: bool,
     show_skew: bool,
-    gc: SeriesLegendSource,
+    gc: DinucleotideLegendSource,
 ) -> tuple[LegendSlotSource, ...] | None:
     """The slots whose order the legend's track rows follow: the explicit ones, else, with Depth series, the
     default stack the rings are drawn in (``default_circular_track_slots``), so the Depth rows stand between
@@ -4689,9 +4690,9 @@ def build_circular_legend_table(
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
-    depth: SeriesLegendSource | None = None,
+    depth: DepthLegendSource | None = None,
     has_depth_frame: bool = False,
-    depth_tracks: tuple[SeriesLegendSource, ...] | None = None,
+    depth_tracks: tuple[DepthLegendSource, ...] | None = None,
     depth_track_count_value: int = 0,
     slots: tuple[LegendSlotSource, ...] | None = None,
     annotation_slots: tuple[LegendSlotSource, ...] | None = None,
@@ -4784,7 +4785,7 @@ def circular_legend_table(
         show_gc=profile.show_gc,
         show_skew=profile.show_skew,
         show_depth=profile.show_depth,
-        depth=SeriesLegendSource.of_depth(depth_config) if depth_config is not None else None,
+        depth=DepthLegendSource.lone(depth_config) if depth_config is not None else None,
         has_depth_frame=depth_df is not None,
         depth_tracks=depth_legend_sources(depth_tracks) if depth_tracks is not None else None,
         depth_track_count_value=depth_track_count_value,

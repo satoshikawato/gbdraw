@@ -85,7 +85,8 @@ from ...io.comparisons import comparison_row_tally, read_comparison_resource
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     ComparisonLegendSource,
-    SeriesLegendSource,
+    DepthLegendSource,
+    DinucleotideLegendSource,
     LegendSlotSource,
     LegendSources,
     depth_legend_sources,
@@ -155,7 +156,6 @@ from ...linear_comparison import (
     search_frame_linear_comparisons,
     validate_linear_comparison_record_ids,
 )
-from ...layout.circular_depth_axis import ScalarAxisSource
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
@@ -163,6 +163,7 @@ from ...layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_TICK_PX,
     ScalarAxis,
 )
+from ...layout.series_style import ScalarAxisStyle, SeriesPaint
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...labels.linear_types import LinearLabel
 from ...labels.linear import (
@@ -562,9 +563,9 @@ def _sync_legend_table_for_linear_slots(
     legend_table: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: SeriesLegendSource,
-    skew: SeriesLegendSource,
-    depth_tracks: Sequence[SeriesLegendSource] | None,
+    gc: DinucleotideLegendSource,
+    skew: DinucleotideLegendSource,
+    depth_tracks: Sequence[DepthLegendSource] | None,
 ) -> LegendTable:
     """Replace singleton numeric legends with slot-authoritative entries.
 
@@ -576,23 +577,20 @@ def _sync_legend_table_for_linear_slots(
         return legend_table
 
     default_nt = str(gc.dinucleotide).upper()
-    for kind in ("content", "skew"):
-        for key in (f"{default_nt} {kind}", f"{default_nt} {kind} (+)", f"{default_nt} {kind} (-)"):
-            legend_table.discard_default_track(key)
+    for source in (gc, skew):
+        for sign in ("", " (+)", " (-)"):
+            legend_table.discard_default_track(f"{source.row_name(default_nt)}{sign}")
 
-    def add_slot_rows(table: LegendTable, renderer: str) -> None:
+    def add_slot_rows(table: LegendTable, renderer: str, source: DinucleotideLegendSource) -> None:
         for slot in slots:
             if slot.renderer != renderer:
                 continue
             nt = slot_dinucleotide(slot.params, default_nt)
-            if renderer == "dinucleotide_content":
-                table.add_numeric_source(slot_legend_label(slot, f"{nt} content"), gc)
-            else:
-                table.add_numeric_source(slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt))
+            table.add_numeric_source(slot_legend_label(slot, source.row_name(nt)), source.slot_paint(slot))
 
-    add_slot_rows(legend_table, "dinucleotide_content")
+    add_slot_rows(legend_table, "dinucleotide_content", gc)
     out = sync_depth_track_legend_entries(legend_table, depth_tracks, slots=slots)
-    add_slot_rows(out, "dinucleotide_skew")
+    add_slot_rows(out, "dinucleotide_skew", skew)
     return out
 
 
@@ -934,19 +932,23 @@ def _slot_body_band(slot: LinearResolvedTrack) -> VerticalBand:
     return VerticalBand(-float(slot.top_extent), float(slot.bottom_extent))
 
 
-def _axis_text_overhang(axis_config: ScalarAxisSource, track_height: float) -> float:
-    """How far a Linear scalar axis paints above and below its track: half its stroke, or half a label line when
-    numbered tick labels sit centred on the top and bottom ticks (the range label sits centred on the track)."""
+def _axis_text_overhang(axis: ScalarAxisStyle | None, track_height: float) -> float:
+    """How far a Linear scalar axis (as its track draws it; none without one) paints above and below its track:
+    half its stroke, or half a label line when numbered tick labels sit centred on the top and bottom ticks (the
+    range label sits centred on the track)."""
 
-    if not bool(axis_config.show_axis):
+    if axis is None or not axis.show_axis:
         return 0.0
     axis_stroke = 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX
-    if not bool(axis_config.show_ticks) or axis_config.axis_labels != "numbered":
+    if not axis.draws_numbered_labels:
         return axis_stroke
-    return max(
-        axis_stroke,
-        0.5 * linear_scalar_axis_tick_font_size_px(axis_config, track_height),
-    )
+    return max(axis_stroke, 0.5 * linear_scalar_axis_tick_font_size_px(axis, track_height))
+
+
+def _stroke_overhang(paint: SeriesPaint) -> float:
+    """How far a series path's stroke paints past its band."""
+
+    return 0.5 * max(0.0, float(paint.stroke_width))
 
 
 def _linear_slot_footprints_for_record(
@@ -1005,15 +1007,14 @@ def _linear_slot_footprints_for_record(
             track_index = _depth_slot_track_index(slot)
             axis_config = depth_config_by_index.get(track_index)
             overhang = (
-                _axis_text_overhang(axis_config, float(slot.height))
-                if axis_config is not None
-                else 0.0
+                0.0
+                if axis_config is None
+                else max(
+                    _axis_text_overhang(axis_config.axis_style, float(slot.height)),
+                    _stroke_overhang(axis_config.series_paint),
+                )
             )
-            stroke_overhang = 0.5 * max(
-                0.0,
-                float(getattr(axis_config, "stroke_width", 0.0)),
-            )
-            expanded = body_band.expand(max(overhang, stroke_overhang))
+            expanded = body_band.expand(overhang)
             available = track_index in depth_by_index
             footprints[slot.id] = LinearSlotFootprint(
                 paint_band=expanded if available else None,
@@ -1025,18 +1026,18 @@ def _linear_slot_footprints_for_record(
         if slot.renderer == "dinucleotide_content":
             slot_gc_config = gc_config_of(slot.params, depth_by_index)
             overhang = max(
-                0.5 * max(0.0, float(slot_gc_config.stroke_width)),
+                _stroke_overhang(slot_gc_config.series_paint),
+                # Half the percent border width in either mode, though only percent mode draws the border (its
+                # band frame): reading the frame would move every figure with a deviation GC track (OV-3743).
                 0.5 * max(0.0, float(slot_gc_config.percent_border_width)),
+                _axis_text_overhang(slot_gc_config.axis_style, float(slot.height)),
             )
-            if str(slot_gc_config.mode) == "percent":
-                overhang = max(overhang, _axis_text_overhang(slot_gc_config, float(slot.height)))
             expanded = body_band.expand(overhang)
             footprints[slot.id] = LinearSlotFootprint(expanded, expanded)
             continue
 
         if slot.renderer == "dinucleotide_skew":
-            overhang = 0.5 * max(0.0, float(skew_config.stroke_width))
-            expanded = body_band.expand(overhang)
+            expanded = body_band.expand(_stroke_overhang(skew_config.series_paint))
             footprints[slot.id] = LinearSlotFootprint(expanded, expanded)
             continue
 
@@ -1726,16 +1727,12 @@ def _linear_scalar_axis_left_room(
             axis = gc_content_axis(gc_config_of(slot.params, depth_by_index))
         if axis is None:
             continue
-        font_size = linear_scalar_axis_tick_font_size_px(axis, float(slot.height))
+        font_size = linear_scalar_axis_tick_font_size_px(axis.style, float(slot.height))
         axis_labels = axis.labels(float(slot.height), font_size)
         axis_px = max(axis_px, 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX)
         texts = [tick.label for tick in axis_labels.ticks] + [axis_labels.range_label]
         for label in (text for text in texts if text is not None):
-            width, _height = calculate_svg_bbox_dimensions(
-                label,
-                cfg.objects.text.font_family,
-                font_size,
-            )
+            width, _height = calculate_svg_bbox_dimensions(label, axis.font_family, font_size)
             tick_labels_px = max(
                 tick_labels_px, LINEAR_SCALAR_AXIS_TICK_PX + LINEAR_SCALAR_AXIS_LABEL_GAP_PX + float(width)
             )
@@ -2159,11 +2156,11 @@ def build_linear_legend_table(
     sources: LegendSources,
     comparison: ComparisonLegendSource | None,
     pairwise_identity_legend: PairwiseIdentityLegend,
-    depth: SeriesLegendSource | None,
+    depth: DepthLegendSource | None,
     show_gc: bool,
     show_skew: bool,
     slots: tuple[LegendSlotSource, ...] | None,
-    depth_tracks: tuple[SeriesLegendSource, ...] | None,
+    depth_tracks: tuple[DepthLegendSource, ...] | None,
     annotations: ResolvedAnnotationBundle,
     edits: LegendRowEdits = LegendRowEdits(),
 ) -> LegendTable:
@@ -3243,7 +3240,7 @@ def _linear_legend_table(
                 or PairwiseIdentityLegend()
             ),
             depth=(
-                SeriesLegendSource.of_depth(depth_config)
+                DepthLegendSource.lone(depth_config)
                 if singleton_depth and depth_config is not None
                 else None
             ),

@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from gbdraw.analysis.depth_tracks import sync_depth_track_legend_entries
+from tests.utils.series_configs import depth_config
 from gbdraw.annotations.legend import sync_annotation_legend_entries
 from gbdraw.annotations.models import HatchStyle, RegionAnnotationStyle
 from gbdraw.legend.circular_layout import build_circular_legend_layout
@@ -105,7 +106,7 @@ def _depth_track(index: int, fill: str, label: str = "Coverage") -> SimpleNamesp
     return SimpleNamespace(
         track_index=index,
         label=label,
-        config=SimpleNamespace(fill_color=fill, stroke_color="none", stroke_width=0),
+        config=depth_config(fill_color=fill, stroke_color="none", stroke_width=0),
     )
 
 

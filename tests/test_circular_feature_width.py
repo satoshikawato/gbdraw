@@ -33,7 +33,7 @@ from gbdraw.tracks import default_circular_track_slots, parse_circular_track_slo
 from tests.utils.circular_drawer_fakes import (
     make_feature_draw_ratio_capture,
     make_numeric_track_capture,
-    patch_circular_series_builders,
+    patch_series_groups,
 )
 from svgwrite import Drawing
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
@@ -399,11 +399,11 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", fake_add_labels_group_on_canvas)
     label_calls = _capture_label_arenas(monkeypatch)
@@ -471,11 +471,11 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", fake_add_labels_group_on_canvas)
     label_calls = _capture_label_arenas(monkeypatch)
@@ -1066,11 +1066,11 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
 
     monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=lambda canvas, *args, **kwargs: canvas,
-        gc_skew=lambda canvas, *args, **kwargs: canvas,
+        gc_content_content=lambda canvas, *args, **kwargs: canvas,
+        gc_skew_content=lambda canvas, *args, **kwargs: canvas,
     )
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
@@ -1164,11 +1164,11 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1287,11 +1287,11 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1408,11 +1408,11 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1524,11 +1524,11 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
     fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    patch_circular_series_builders(
+    patch_series_groups(
         monkeypatch,
         circular_assemble_module,
-        gc_content=fake_add_gc_content_group_on_canvas,
-        gc_skew=fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1615,9 +1615,9 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         original_legend = circular_assemble_module.place_legend
         circular_assemble_module.add_axis_group_on_canvas = fake_add_axis_group_on_canvas
         circular_assemble_module.add_tick_group_on_canvas = fake_add_tick_group_on_canvas
-        patch_circular_series_builders(
+        patch_series_groups(
             series_patch, circular_assemble_module,
-            gc_content=fake_add_gc_content_group_on_canvas, gc_skew=fake_add_gc_skew_group_on_canvas,
+            gc_content_content=fake_add_gc_content_group_on_canvas, gc_skew_content=fake_add_gc_skew_group_on_canvas,
         )
         circular_assemble_module.add_labels_group_on_canvas = fake_add_labels_group_on_canvas
         circular_assemble_module.add_record_group_on_canvas = lambda canvas, *args, **kwargs: canvas

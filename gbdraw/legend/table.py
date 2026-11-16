@@ -20,10 +20,12 @@ from gbdraw.features.colors import build_default_color_map, feature_type_color
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
-    SeriesLegendSource,
+    DepthLegendSource,
+    DinucleotideLegendSource,
     FeatureDensityLegendSource,
     FeatureLegendSource,
 )
+from gbdraw.layout.series_style import SeriesPaint
 from gbdraw.tracks.parsing import SlotView, feature_density_slot_track_id, slot_legend_label
 
 if TYPE_CHECKING:
@@ -187,15 +189,11 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
 
         self._add(name, entry, _unique_legend_key([*self._rows, *self._shared_keys], name))
 
-    def add_numeric_source(self, name: str, swatch: SeriesLegendSource) -> None:
-        """Add a content or skew slot's rows: one when its fills are equal, else ``(+)`` and ``(-)``."""
+    def add_numeric_source(self, name: str, paint: SeriesPaint) -> None:
+        """Add a content or skew slot's rows (``series_legend_rows``)."""
 
-        stroke = {"stroke": swatch.stroke_color, "width": swatch.stroke_width}
-        if swatch.fill_color == swatch.low_fill_color:
-            self.add_source(name, {"type": "solid", "fill": swatch.fill_color, **stroke})
-        else:
-            self.add_source(f"{name} (+)", {"type": "solid", "fill": swatch.fill_color, **stroke})
-            self.add_source(f"{name} (-)", {"type": "solid", "fill": swatch.low_fill_color, **stroke})
+        for row_name, entry in series_legend_rows(name, paint):
+            self.add_source(row_name, entry)
 
     def add_default_track(self, name: str, entry: LegendEntry) -> None:
         """Add the renderer's own row of a numeric track, which explicit slots replace (``discard_default_track``)."""
@@ -636,6 +634,18 @@ def _solid_legend_entry(fill: object, stroke: object, width: object) -> dict[str
     return {"type": "solid", "fill": fill, "stroke": stroke, "width": width}
 
 
+def series_legend_rows(name: str, paint: SeriesPaint) -> tuple[tuple[str, dict[str, object]], ...]:
+    """The rows of a numeric series track named ``name``: one when its fill is the same below its baseline,
+    else ``(+)`` and ``(-)``."""
+
+    if paint.fill == paint.low_fill:
+        return ((name, _solid_legend_entry(paint.fill, paint.stroke, paint.stroke_width)),)
+    return (
+        (f"{name} (+)", _solid_legend_entry(paint.fill, paint.stroke, paint.stroke_width)),
+        (f"{name} (-)", _solid_legend_entry(paint.low_fill, paint.stroke, paint.stroke_width)),
+    )
+
+
 def feature_type_rows(
     feature_specific_colors: Mapping[str, Sequence[tuple[str, str]]],
     features_present: Sequence[str],
@@ -700,9 +710,9 @@ def _generated_legend_rows(
     *,
     used_color_rules: Optional[Set[Tuple[str, str]]],
     default_used_features: Set[str],
-    gc: SeriesLegendSource,
-    skew: SeriesLegendSource,
-    depth: SeriesLegendSource | None,
+    gc: DinucleotideLegendSource,
+    skew: DinucleotideLegendSource,
+    depth: DepthLegendSource | None,
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
@@ -718,31 +728,24 @@ def _generated_legend_rows(
             feature_specific_colors, features_present, used_color_rules, default_used_features
         )
     }
-    dinucleotide = gc.dinucleotide
     if show_depth and depth is not None:
-        rows["Depth"] = _solid_legend_entry(depth.fill_color, depth.stroke_color, depth.stroke_width)
-    for show, source, name in ((show_gc, gc, "content"), (show_skew, skew, "skew")):
-        if not show:
-            continue
-        stroke = (source.stroke_color, source.stroke_width)
-        if source.fill_color == source.low_fill_color:
-            rows[f"{dinucleotide} {name}"] = _solid_legend_entry(source.fill_color, *stroke)
-        else:
-            rows[f"{dinucleotide} {name} (+)"] = _solid_legend_entry(source.fill_color, *stroke)
-            rows[f"{dinucleotide} {name} (-)"] = _solid_legend_entry(source.low_fill_color, *stroke)
+        rows["Depth"] = _solid_legend_entry(depth.paint.fill, depth.paint.stroke, depth.paint.stroke_width)
+    for show, source in ((show_gc, gc), (show_skew, skew)):
+        if show:
+            rows.update(series_legend_rows(source.name, source.paint))
     return rows
 
 
 def prepare_legend_table(
-    gc: SeriesLegendSource,
-    skew: SeriesLegendSource,
+    gc: DinucleotideLegendSource,
+    skew: DinucleotideLegendSource,
     features: FeatureLegendSource,
     features_present: List[str],
     *,
     comparison: ComparisonLegendSource | None = None,
     used_color_rules: Optional[Set[Tuple[str, str]]] = None,
     default_used_features: Optional[Set[str]] = None,
-    depth: SeriesLegendSource | None = None,
+    depth: DepthLegendSource | None = None,
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
@@ -887,6 +890,7 @@ __all__ = [
     "pairwise_identity_legend_from_comparisons",
     "prepare_legend_table",
     "rule_legend_keys",
+    "series_legend_rows",
     "write_legend_row_names",
 ]
 

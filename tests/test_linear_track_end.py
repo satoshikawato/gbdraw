@@ -48,7 +48,11 @@ def _paths(record_len: int, width: float, row: ScalarRow | None) -> dict[str, st
         "depth": band_samples(_depth_df(), "depth_normalized", closes_at_record_end=False),
     }
     frame = LinearTrackFrame(0.0, 0.0, record_len, width, HEIGHT)
-    return {track: linear_series_path_desc(value, frame, row=row) for track, value in samples.items() if value}
+    paths = {}
+    for track, value in samples.items():
+        assert value is not None, track
+        paths[track] = linear_series_path_desc(value, frame, row=row)
+    return paths
 
 
 @pytest.mark.parametrize("track", ["gc content", "gc skew", "gc percent", "depth"])
