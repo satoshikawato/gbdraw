@@ -64,7 +64,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(bindingOptions?: { modeArrival?: boolean }) => unknown} presentSelectedResult
  * @property {() => Promise<void>} showArrivingFigure The pan and zoom owner's: the arriving figure shows from its
  *   first frame at the current zoom, its top where pan y 0 puts it, centred in the free room the Fit measures (an
- *   open review's docked panel narrows it); it is not fitted (D-57).
+ *   open review's docked panel narrows it), or its start shown when it is wider; it is not fitted (D-57).
  * @property {(identity: string | undefined, inventory: readonly PythonLegendKey[]) => void} rememberResultInventory
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} artifactSlotsSwap
  *   Keeps the departing slot and takes the arriving drawing's, or null.

@@ -586,17 +586,24 @@ editorReserve = 360;
 await panZoom.showArrivingFigure();
 expectCentred(0.5, 636);
 editorReserve = 0;
-// A figure centred in the whole room at 0.88 would end at x 987 over the control: it is centred left of it.
+// A figure centred in the whole room at 0.84 would end at x 967 over the control: it is centred left of it.
 edgeControl = { left: 956, top: 223, width: 40, height: 40 };
-uiState.zoom.value = 0.88;
+uiState.zoom.value = 0.84;
 await panZoom.showArrivingFigure();
-expectCentred(0.88, 956);
+expectCentred(0.84, 956);
 // Clear of the control, a small figure stays centred in the whole room, at its own zoom.
 Object.assign(layout, { width: 50, height: 40 });
 uiState.zoom.value = 1;
 await panZoom.showArrivingFigure();
 expectCentred(1, 996);
 edgeControl = null;
+// A figure wider than the room at the kept zoom shows its start at the canvas padding, as Generate shows it.
+Object.assign(layout, { width: 997, height: 300 });
+uiState.zoom.value = 2;
+await panZoom.showArrivingFigure();
+assert.equal(uiState.zoom.value, 2);
+assert.equal(uiState.canvasPan.y, 0);
+assert.equal(Math.abs(visualBox().left - 108) <= 0.5, true);
 // N-c: a placement that throws never leaves the figure hidden.
 const canvasBox = canvas.getBoundingClientRect;
 canvas.getBoundingClientRect = () => { throw new Error('no box'); };
@@ -608,7 +615,7 @@ completeCase('a drawing switch keeps the zoom and centres the arriving figure in
 
 wrapper.querySelector = () => null;
 panZoom.fitPreviewToViewport();
-assert.equal(uiState.zoom.value, 1, 'with no figure the Fit changes nothing');
+assert.equal(uiState.zoom.value, 2, 'with no figure the Fit changes nothing');
 for (const key of ['querySelector', 'getBoundingClientRect']) delete wrapper[key];
 for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'parentElement', 'ownerDocument']) delete canvas[key];
 

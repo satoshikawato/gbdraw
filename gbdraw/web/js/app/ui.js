@@ -110,7 +110,8 @@ const isSvgEditingTarget = (target) =>
  * and shown; hiding a figure again, or showing it without the Fit, drops that wait. The figure a drawing
  * switch shows in place of the shown one is hidden until Vue mounts it, then placed at once and shown
  * (`showArrivingFigure`, OV-3620, D-57): it keeps the zoom, its top stays where pan y 0 puts it, and it is
- * centred in the free room the Fit measures; it is not fitted. It waits for room in the same way. A placement
+ * centred in the free room the Fit measures (a figure wider than that room shows its start, at the canvas padding, as
+ * Generate shows it); it is not fitted. It waits for room in the same way. A placement
  * that throws still shows the figure.
  * @param {{ hidden: { value: boolean }, canvas: { value: HTMLElement | null }, fitAtOnce: () => void,
  *   centerAtOnce: () => void, setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }}
@@ -586,12 +587,17 @@ const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, p
     }, nextZoom);
   });
 
-  // A drawing switch's placement: the zoom kept, the top where pan y 0 puts it, centred in the free room. The pan
-  // is a whole pixel, so a figure the layout centres already keeps pan 0 and is drawn as before, pixel for pixel.
+  // A drawing switch's placement: the zoom kept, the top where pan y 0 puts it, centred in the free room. A figure
+  // wider than its frame shows its start instead, its left edge at the canvas padding, as Generate shows a wide
+  // figure at 100 %. The pan is a whole pixel, so a figure the layout places so already keeps pan 0 and is drawn
+  // as before, pixel for pixel.
   const centerPreviewAtZoom = () => placeShown(({ room, figure }) => {
     const zoomLevel = zoom.value;
     const frameWidth = centeringFrameWidth(room, figure, zoomLevel, figure.originY + zoomLevel * figure.centerY);
-    setPreviewViewport({ x: Math.round(centeringPanX(room, frameWidth, figure, zoomLevel)), y: 0 }, zoomLevel);
+    const x = zoomLevel * figure.width > frameWidth
+      ? room.left + FIT_MARGIN_PX - figure.originX - zoomLevel * (figure.centerX - figure.width / 2)
+      : centeringPanX(room, frameWidth, figure, zoomLevel);
+    setPreviewViewport({ x: Math.round(x), y: 0 }, zoomLevel);
   });
 
   return {
