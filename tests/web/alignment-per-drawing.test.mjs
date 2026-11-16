@@ -283,6 +283,31 @@ test('Undo and Redo are disabled with the reason while the drawing list step the
   assert.equal(app.canRedoHistory.value, true);
 });
 
+// D-57 (N-a): a History list row is disabled, with the reason as the list's hint, when any step of its walk would
+// wait, read from the same one check the router uses; a pick of it takes no step, so no walk stops half way. The
+// reviewer's sequence: Duplicate, a setting changed in the copy, then a review resolving: the "Duplicate drawing" row
+// walks the setting step and then the Duplicate, which waits.
+test('a History list row is disabled when any step of its walk waits, and its pick undoes nothing', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('linear');
+  app.drawingList.duplicateDrawing(source);
+  await drag(history, 7);
+  const duplicateRow = app.historyList.rows.value.find((row) => row.direction === 'undo' && row.steps === 2);
+  assert.ok(duplicateRow, 'the Duplicate is the second step back');
+  const settingRow = app.historyList.rows.value.find((row) => row.direction === 'undo' && row.steps === 1);
+  app.similarityAlignmentStatus.value = 'resolving';
+  assert.equal(app.historyList.rowDisabled(settingRow), false, 'the setting step alone waits for nothing');
+  assert.equal(app.historyList.rowDisabled(duplicateRow), true, 'the walk through the Duplicate waits');
+  app.historyList.pointed.value = duplicateRow.key;
+  assert.equal(app.historyList.hint.value, 'Resolving the current alignment.');
+  assert.deepEqual(await history.travelTo(duplicateRow.target), { status: 'busy', reason: 'Resolving the current alignment.' });
+  assert.deepEqual(shownAlignment().translations, [7], 'the pick undid nothing');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(app.historyList.rowDisabled(duplicateRow), false);
+  assert.match(app.historyList.hint.value, /^Undo 2 steps$/);
+});
+
 // D-44 (S-3, N-1): the Load rollback port's commit member replaces the History router's members only; the alignment
 // review of a drawing the Load did not keep ends through its own member, which the Load calls once it succeeds.
 test('the Load rollback port ends the review only on a Load that succeeded', async () => {

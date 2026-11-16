@@ -2392,6 +2392,37 @@ const listenToShownSteps = (manager, drawingId, activeDrawingId, listener) => {
  * @returns {HistoryBusy | null}
  */
 const projectStepWait = (project) => project?.list?.busy?.() ?? null;
+/**
+ * The walk a pick in the History list takes to the state right after the step `target` (its sequence; `null`: the
+ * state before every kept step), over the steps Undo and Redo take in order: its direction and its steps, or null
+ * when no kept step has `target`.
+ * @param {HistoryTimelineStep[]} undo
+ * @param {HistoryTimelineStep[]} redo
+ * @param {number | null} target
+ * @returns {{ direction: 'undo' | 'redo', steps: HistoryTimelineStep[] } | null}
+ */
+const walkOf = (undo, redo, target) => {
+  const back = target === null ? undo.length : undo.findIndex((step) => step.sequence === target);
+  const forward = redo.findIndex((step) => step.sequence === target) + 1;
+  if (back < 0 && forward === 0) return null;
+  return back >= 0 ? { direction: 'undo', steps: undo.slice(0, back) } : { direction: 'redo', steps: redo.slice(0, forward) };
+};
+/**
+ * Why a walk waits now: the wait of the first of its steps that is a project step and would wait
+ * (`projectStepWait`), or null (also for no walk).
+ * @param {{ direction: 'undo' | 'redo', steps: HistoryTimelineStep[] } | null} walk
+ * @param {readonly ProjectEntry[]} projectUndo
+ * @param {readonly ProjectEntry[]} projectRedo
+ * @returns {HistoryBusy | null}
+ */
+const walkStepWait = (walk, projectUndo, projectRedo) => {
+  const stack = walk?.direction === 'undo' ? projectUndo : projectRedo;
+  for (const step of walk?.steps ?? []) {
+    const wait = projectStepWait(stack.find((entry) => entry.sequence === step.sequence));
+    if (wait) return wait;
+  }
+  return null;
+};
 /** @param {{ restoring: { readonly value: boolean }, historyAvailability: () => unknown }} manager */
 const managerIdle = (manager) => !manager.restoring.value && !manager.historyAvailability();
 
@@ -2737,6 +2768,10 @@ export const createHistoryRouter = ({
     }
     return steps;
   };
+  /** @param {number | null} target */
+  const walkTo = (target) => walkOf(stepsInOrder('undo'), stepsInOrder('redo'), target);
+  /** Why the walk to `target` waits now, or null. @param {number | null} target */
+  const walkWait = (target) => walkStepWait(walkTo(target), projectUndo, projectRedo);
   const shownIdle = () => managerIdle(managerOf(activeDrawingId()));
   /** @param {string} drawingId */
   const projectPartsOf = (drawingId) => projectEntries()
@@ -2773,6 +2808,7 @@ export const createHistoryRouter = ({
       && (managerOf(activeDrawingId()).canRedo() || (projectRedo.length > 0 && shownIdle())),
     /** Why the step Undo or Redo would take waits now, or null. @param {'undo' | 'redo'} direction */
     stepWait: (direction) => projectStepWait(nextProjectStep(direction)),
+    walkWait,
     getUndoCount: () => managerOf(activeDrawingId()).getUndoCount() + projectUndo.length,
     getRedoCount: () => managerOf(activeDrawingId()).getRedoCount() + projectRedo.length,
     // A drawing that is not shown has no artifact installed, so its baseline
@@ -2806,7 +2842,8 @@ export const createHistoryRouter = ({
     // the state before every kept step). Each step is the one planned after
     // the open step settled: a step recorded meanwhile stops the walk, as does
     // a step not taken (with its own warning). The walk is one traversal, so a
-    // drawing switch waits for all of it.
+    // drawing switch waits for all of it. A walk with a step that would wait
+    // takes none and returns the wait (`walkWait`), so no walk stops half way.
     travelTo: async (/** @type {number | null} */ target) => {
       if (walks.value > 0) return false;
       projectTraversals.value += 1;
@@ -2814,15 +2851,11 @@ export const createHistoryRouter = ({
       try {
         const busy = await managerOf(activeDrawingId()).settleBeforeTraversal();
         if (busy) return busy;
-        const undo = stepsInOrder('undo');
-        const redo = stepsInOrder('redo');
-        const back = target === null ? undo.length : undo.findIndex((step) => step.sequence === target);
-        const forward = redo.findIndex((step) => step.sequence === target) + 1;
-        if (back < 0 && forward === 0) return false;
-        /** @type {'undo' | 'redo'} */
-        const direction = back >= 0 ? 'undo' : 'redo';
-        for (const step of back >= 0 ? undo.slice(0, back) : redo.slice(0, forward)) {
-          const result = await traverseShown(direction, step.sequence);
+        const walk = walkTo(target);
+        const wait = walkStepWait(walk, projectUndo, projectRedo);
+        if (!walk || wait) return wait ?? false;
+        for (const step of walk.steps) {
+          const result = await traverseShown(walk.direction, step.sequence);
           if (result !== true) return result;
         }
         return true;
