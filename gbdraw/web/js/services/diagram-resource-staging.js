@@ -7,7 +7,7 @@ import {
 } from './file-content-cache.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
-import { fileBackedReaderOf } from './session-resource-backing.js';
+import { fileBackedReaderOf, isSessionResourceFileView } from './session-resource-backing.js';
 export { recordSourceOwnedBy, recordSourceResourceIds } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
@@ -54,6 +54,17 @@ const decodeBase64ForTransfer = async (encoded, resourceId) => {
     throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
 };
+
+// The input summary names the file the page read (gbdraw/api/input_summary.py), not its Session
+// resource name: the File the user chose, or after a Load the Session resource view whose name Load
+// gave it (the name the File chip and the Source recipe show, OV-3591).
+/**
+ * @param {ResourcePayloadOwner | null} owner
+ * @returns {string}
+ */
+const inputFileNameOf = (owner) => (
+  owner instanceof File || isSessionResourceFileView(owner) ? owner.name : ''
+);
 
 /**
  * @param {string} resourceId
@@ -265,8 +276,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       resourceManifest.push({
         resourceId,
         cacheToken,
-        // The input summary names the file the user chose (gbdraw/api/input_summary.py), not its Session name.
-        name: owner instanceof File && owner.name ? owner.name : String(descriptor.name || `${resourceId}.bin`),
+        name: inputFileNameOf(owner) || String(descriptor.name || `${resourceId}.bin`),
         kind: String(descriptor.kind || 'web-file'),
         type: String(descriptor.type || 'application/octet-stream'),
         size: descriptor.size,

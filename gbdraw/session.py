@@ -24,6 +24,7 @@ from gbdraw.session_contract import (
     CanonicalRequestJson,
     GbdrawSession51,
     SessionContainerResource,
+    SessionProjectWebFiles,
     SessionResult,
     keys_of,
 )
@@ -1005,6 +1006,50 @@ def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
         raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
 
 
+def _resource_original_names(fields: Mapping[str, object]) -> Mapping[str, object]:
+    """``webFiles.resourceOriginalNames`` of a Session or of a drawing's view (``SessionProjectWebFiles``): the file
+    the user chose for each resource, by resource ID; empty when the Session stores none."""
+
+    web_files = fields.get("webFiles")
+    if not isinstance(web_files, Mapping):
+        return {}
+    names = cast(SessionProjectWebFiles, web_files).get("resourceOriginalNames")
+    return names if isinstance(names, Mapping) else {}
+
+
+def _with_stored_file_names(
+    result: RequestRenderResult | CircularBatchRenderResult,
+    drawing: SessionDrawingParts,
+    resource_paths: Mapping[str, Path],
+) -> RequestRenderResult | CircularBatchRenderResult:
+    """``result`` with its input summary naming each file by the name a Web Save stored for it (OV-3591).
+
+    A Web Save names a resource "<resource ID>-<file>" and stores the file the
+    user chose in ``webFiles.resourceOriginalNames``; a Load shows that name,
+    and the Web's input summary names the file by it. The replay reads the copy
+    named by the resource, so it names the file by the same stored value.
+    """
+
+    from gbdraw.api.input_summary import source_names_by_file, with_source_names
+    from gbdraw.api.request_render import CircularBatchRenderResult
+
+    names = source_names_by_file(
+        {
+            resource_id: name
+            for resource_id, name in _resource_original_names(drawing.artifacts.fields).items()
+            if resource_id in resource_paths and isinstance(name, str) and name
+        },
+        resource_paths,
+    )
+    if not names:
+        return result
+    if isinstance(result, CircularBatchRenderResult):
+        return replace(result, items=tuple(
+            replace(item, input_summary=with_source_names(item.input_summary, names)) for item in result.items
+        ))
+    return replace(result, input_summary=with_source_names(result.input_summary, names))
+
+
 def _render_session_drawing_plans(
     materialized: MaterializedSession,
     plans: Sequence[_SessionDrawingRender],
@@ -1026,10 +1071,14 @@ def _render_session_drawing_plans(
     try:
         for plan in plans:
             with noting_session_png_dpi(plan.png_dpi):
-                results[plan.drawing.id] = render_session_compatible_request(
-                    plan.request,
-                    plan.drawing.artifacts,
-                    include_feature_catalog=include_feature_catalog,
+                results[plan.drawing.id] = _with_stored_file_names(
+                    render_session_compatible_request(
+                        plan.request,
+                        plan.drawing.artifacts,
+                        include_feature_catalog=include_feature_catalog,
+                    ),
+                    plan.drawing,
+                    materialized.resource_paths,
                 )
     except SessionError:
         raise
@@ -1466,16 +1515,15 @@ def _drop_unreferenced_resources(
 def _keep_resources(data: dict[str, Any], kept: set[str]) -> None:
     """Keep only the resources ``kept`` names in ``data``, and their original names."""
 
-    web_files = data.get("webFiles")
     data["resources"] = {
         resource_id: descriptor
         for resource_id, descriptor in data["resources"].items()
         if resource_id in kept
     }
-    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, Mapping) else None
-    if isinstance(web_files, Mapping) and isinstance(original_names, Mapping):
+    original_names = _resource_original_names(data)
+    if original_names:
         data["webFiles"] = {
-            **web_files,
+            **data["webFiles"],
             "resourceOriginalNames": {
                 resource_id: name
                 for resource_id, name in original_names.items()

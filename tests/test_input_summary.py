@@ -495,6 +495,40 @@ def test_a_stored_comparison_is_named_alike_by_the_cli_replay_and_the_web(tmp_pa
     assert (cli, web) == (shown, shown)
 
 
+def _record_names(texts: list[str]) -> list[str]:
+    """The file name each record line gives its record."""
+
+    return [text.partition(" (")[2].partition("), ")[0] for text in texts if text.startswith("Record ")]
+
+
+def test_a_web_saved_record_is_named_by_its_file_by_the_cli_replay_and_the_web(tmp_path: Path) -> None:
+    """OV-3591: a Web Save names each record resource "<id>-<file>" and stores the file the user chose in
+    ``webFiles.resourceOriginalNames``. The CLI replay names each record by that stored name, as its fresh render
+    did. The Web half supplies the manifest names itself (the stored names, as the page sends them after a Load), so
+    it checks only that the Worker names records by the manifest; the page side, which takes the manifest name
+    from the Session resource view, is pinned by tests/web/diagram-resource-staging.test.mjs (OV-3591 case)."""
+
+    request = _blast_request(tmp_path / "build", [("hits.tsv", _ROWS)])
+    document = _embedded(build_session_document(request))
+    fresh = _record_names(list(input_summary_lines(render_request(request).input_summary)))
+    assert fresh == [QUERY.name, SUBJECT.name]
+    stored = {}
+    for record in document["drawings"][0]["renderRequest"]["records"]:
+        resource_id = record["source"]["resourceId"]
+        entry = document["resources"][resource_id]
+        stored[resource_id] = entry["name"]
+        entry["name"] = f"{resource_id}-{entry['name']}"
+    document.setdefault("webFiles", {})["resourceOriginalNames"] = stored
+    payload = document["drawings"][0]["renderRequest"]
+    reply = _staged_reply(payload, document["resources"], tmp_path / "web", stored)
+    (summary,) = reply["metadata"]["inputSummaries"]
+    from gbdraw.session import materialize_session, render_session
+
+    with materialize_session(load_session_mapping(document), output_directory=tmp_path / "replay") as materialized:
+        cli = _record_names(list(input_summary_lines(render_session(materialized).input_summary)))
+    assert (cli, _record_names(summary["lines"])) == (fresh, fresh)
+
+
 @pytest.mark.parametrize("name", ["hits.tsv", "my hits.tsv"])
 def test_a_session_stores_the_name_its_fresh_render_shows(tmp_path: Path, name: str) -> None:
     """The fresh render names a comparison file by its name as given, unsanitized, and the Session stores that name
