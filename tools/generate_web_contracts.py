@@ -206,6 +206,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("LOSAT_SEARCH_FLAGS", "gbdraw.comparisons.losat_runtime", "losat_search_flags"),
     # The style of a new annotation set: Python's style defaults with the highlight fill (OV-2813).
     ("DRAFT_ANNOTATION_STYLE", "gbdraw.session_request_codec", "describe_draft_annotation_style"),
+    # The command line of a protein comparison: the Source recipe writes each setting that differs from its default.
+    ("PROTEIN_COMPARISON_FLAGS", "gbdraw.linear", "describe_protein_comparison_flags"),
 )
 # (Web name, Python module, dataclass, field): the values of a field typed as a
 # string Literal (typing.get_args, in the owner's order) and the field's

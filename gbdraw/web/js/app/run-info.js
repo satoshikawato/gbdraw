@@ -28,13 +28,17 @@ import {
   FEATURE_DENSITY_TRACK_WORDS,
   FEATURE_INSTANCE_SEPARATOR,
   LINEAR_SLOT_UNREAD_PARAM_KEYS,
+  LOSATP_NO_SEARCH_MODE,
+  PROTEIN_COMPARISON_FLAGS,
   RECORD_SOURCE_FILES
 } from '../contracts/schema.generated.js';
+import { isResourceBackedCanonicalComparison } from '../services/canonical-comparisons.js';
+import { storedProteinResultMode } from '../services/imported-comparison-intent.js';
 import { inputSequenceSource, inputTypeOfSourceKind, recordSourceFilesOf } from '../services/input-types.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
 import { unitRecordsOf } from '../services/linear-units.js';
 import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
-/** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureDensityTrack, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureDensityTrack, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalComparison, CanonicalGeneratedProteinComparison, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -51,7 +55,7 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
  * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
  * @typedef {(resourceId: string) => string | Promise<string>} ResourceTextReader
  * @typedef {(resourceId: string) => Promise<Uint8Array | null>} ResourceFileBytesReader The bytes a File holds for a
- *   resource whose descriptor holds none (a File Generate described), else null.
+ *   resource whose descriptor holds none (a File Generate described), as stored (a gzip input unexpanded), else null.
  * @typedef {{ source?: boolean, fallback?: string, slot?: string, nameHintSlot?: string }} RecipeResourcePathOptions
  * @typedef {object} RecipeFiles The files a recipe names, by visible name and resource.
  * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
@@ -722,6 +726,129 @@ const coverConservationFiles = (coverage, options) => {
       coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)))));
 };
 
+/**
+ * @typedef {{ queryRecordIndex: number, subjectRecordIndex: number }} UnitPair A compared pair by drawn unit.
+ * @typedef {object} ProteinSearchProjection The LOSATP search the recipe runs.
+ * @property {Exclude<CanonicalGeneratedProteinComparison['mode'], 'none'>} mode
+ * @property {UnitPair[]} pairs The pairs it compares; none for the records of adjacent rows.
+ * @property {CanonicalGeneratedProteinComparison['settings']} settings
+ * @typedef {'table' | 'search' | 'unread'} ComparisonRole What the recipe makes of a comparison: a BLAST table it
+ *   gives, the search it runs, or what draws nothing (a marker of no search) or the search computes (its results).
+ * @typedef {object} ComparisonProjection The one reading of a Linear request's comparisons that the recipe's coverage
+ *   check and its options both take.
+ * @property {CanonicalNucleotideBlastComparison[]} tables
+ * @property {ProteinSearchProjection | null} search
+ * @property {ComparisonRole[]} roles Each comparison's, in request order.
+ */
+
+/**
+ * What the CLI runs and reads of a Linear request's comparisons (OV-3590). A protein search is its marker
+ * (`generatedProteinComparison`): of a mode other than none, it is that search; of mode none, beside the results a
+ * render stored, it is the search of the mode those results are (`storedProteinResultMode`), over the pairs of its
+ * tables; of mode none alone it draws nothing. Results without a marker have no search to compute them.
+ * @param {readonly CanonicalComparison[]} comparisons
+ * @returns {ComparisonProjection}
+ */
+const projectComparisons = (comparisons) => {
+  const markers = comparisons.filter((comparison) => comparison?.kind === 'generatedProteinComparison');
+  const results = comparisons.filter(isResourceBackedCanonicalComparison);
+  if (comparisons.some((comparison) => comparison?.kind !== 'nucleotideBlast' && comparison?.kind !== 'generatedProteinComparison'
+    && !isResourceBackedCanonicalComparison(comparison))) {
+    throw recipeUnavailable(msg('a comparison of an unknown kind has no current CLI projection.'));
+  }
+  if (markers.length > 1) throw recipeUnavailable(msg('more than one protein search has no current CLI projection.'));
+  const marker = markers[0] ?? null;
+  if (marker === null && results.length > 0) {
+    throw recipeUnavailable(msg('a saved protein comparison result without its search has no current CLI projection.'));
+  }
+  const resultMode = storedProteinResultMode(results);
+  if (results.length > 0 && marker?.mode === LOSATP_NO_SEARCH_MODE && (resultMode === ''
+    || results.some((result) => result.kind === 'precomputedProteinComparison' && result.proteinMatches === false))) {
+    throw recipeUnavailable(msg('a saved comparison table in protein form has no current CLI projection.'));
+  }
+  /** @type {ProteinSearchProjection | null} */
+  let search = null;
+  if (marker !== null && marker.mode !== LOSATP_NO_SEARCH_MODE) {
+    search = { mode: marker.mode, pairs: marker.pairs, settings: marker.settings };
+  } else if (marker !== null && resultMode !== '') {
+    const pairs = resultMode === 'pairwise'
+      ? results.flatMap((result) => (result.kind === 'precomputedProteinComparison'
+        ? [{ queryRecordIndex: result.queryRecordIndex, subjectRecordIndex: result.subjectRecordIndex }] : []))
+      : [];
+    search = { mode: resultMode, pairs, settings: marker.settings };
+  }
+  return {
+    tables: comparisons.filter((comparison) => comparison.kind === 'nucleotideBlast'),
+    search,
+    roles: comparisons.map((comparison) => {
+      if (comparison.kind === 'nucleotideBlast') return 'table';
+      return comparison.kind === 'generatedProteinComparison' && search !== null ? 'search' : 'unread';
+    })
+  };
+};
+
+/**
+ * `--losat losatp`, its mode, and each setting that differs from what the CLI writes without its option.
+ * @param {ProteinSearchProjection} search
+ * @returns {string[]}
+ */
+const proteinSearchArgs = (search) => {
+  const args = ['--losat', PROTEIN_COMPARISON_FLAGS.program, '--losatp_mode', PROTEIN_COMPARISON_FLAGS.modes[search.mode]];
+  /** @type {Readonly<Record<string, unknown>>} */
+  const settings = search.settings;
+  PROTEIN_COMPARISON_FLAGS.settings.forEach(({ setting, parameter, flag, cliDefault }) => {
+    const held = settings[setting];
+    const value = parameter === null ? held : /** @type {Record<string, unknown>} */ (
+      /** @type {{ parameters: Record<string, unknown> }} */ (held).parameters)[parameter];
+    if (value === cliDefault) return;
+    if (flag === null) {
+      throw recipeUnavailable(msg('a protein comparison setting that has no CLI option differs from its default.'));
+    }
+    const words = /** @type {Readonly<Record<string, string>>} */ (PROTEIN_COMPARISON_FLAGS.words);
+    args.push(flag, typeof value === 'boolean' || value === null ? words[String(value)] : String(value));
+  });
+  return args;
+};
+
+/**
+ * The request's comparisons: a BLAST table's fields, and a protein search's settings, each key the CLI has an option
+ * for (`PROTEIN_COMPARISON_FLAGS`); what the recipe does not read is metadata.
+ * @param {RecipeCoverage} coverage
+ * @param {readonly CanonicalComparison[]} comparisons
+ */
+const coverComparisons = (coverage, comparisons) => {
+  const { roles } = projectComparisons(comparisons);
+  const settingRows = PROTEIN_COMPARISON_FLAGS.settings;
+  comparisons.forEach((comparison, index) => {
+    const path = `comparisons[${index}]`;
+    if (roles[index] === 'unread') {
+      coverObject(coverage, comparison, path, [], Object.keys(comparison));
+    } else if (comparison.kind === 'nucleotideBlast') {
+      // `sourceName`, the name of the file the user gave (null for a LOSAT result), names the table in Run info and
+      // draws nothing; the recipe's `-b` file is the resource, whose name a CLI run stores again.
+      coverObject(coverage, comparison, path, [
+        'kind', 'resourceId', 'queryRecordIndex', 'subjectRecordIndex'
+      ], ['sourceName']);
+    } else if (comparison.kind === 'generatedProteinComparison') {
+      coverObject(coverage, comparison, path, ['kind', 'mode', 'pairs', 'settings']);
+      /** @type {Record<string, unknown>} */
+      const settings = comparison.settings;
+      const keys = [...new Set(settingRows.map(({ setting }) => setting))];
+      coverObject(coverage, settings, `${path}.settings`, keys);
+      keys.forEach((setting) => {
+        const parameters = settingRows.flatMap((row) => (row.setting === setting && row.parameter !== null ? [row.parameter] : []));
+        const field = `${path}.settings.${setting}`;
+        if (parameters.length === 0) {
+          if (settings[setting] === undefined) throw recipeUnavailable(msg('semantic field "{field}" is malformed.'), { field });
+          return;
+        }
+        coverObject(coverage, settings[setting], field, ['kind', 'parameters']);
+        coverObject(coverage, /** @type {{ parameters: unknown }} */ (settings[setting]).parameters, `${field}.parameters`, parameters);
+      });
+    }
+  });
+};
+
 /** @param {CanonicalRenderRequest} request */
 const validateCurrentSemanticCoverage = (request) => {
   /** @type {RecipeCoverage} */
@@ -863,17 +990,7 @@ const validateCurrentSemanticCoverage = (request) => {
       throw recipeUnavailable(msg('a resolved similarity alignment has no current CLI projection.'));
     }
   }
-  (Array.isArray(request.comparisons) ? request.comparisons : []).forEach((comparison, index) => {
-    const path = `comparisons[${index}]`;
-    if (comparison?.kind !== 'nucleotideBlast') {
-      throw recipeUnavailable(msg('comparison "{comparison}" has no lossless current CLI projection.'), { comparison: String(comparison?.kind || 'unknown') });
-    }
-    // `sourceName`, the name of the file the user gave (null for a LOSAT result), names the table in Run info and
-    // draws nothing; the recipe's `-b` file is the resource, whose name a CLI run stores again.
-    coverObject(coverage, comparison, path, [
-      'kind', 'resourceId', 'queryRecordIndex', 'subjectRecordIndex'
-    ], ['sourceName']);
-  });
+  coverComparisons(coverage, Array.isArray(request.comparisons) ? request.comparisons : []);
   const [output, outputPath] = Array.isArray(request.output) ? [request.output[0], 'output[0]'] : [request.output, 'output'];
   coverObject(coverage, output, outputPath, ['prefix', 'formats', 'overwrite', 'interactiveMetadataPolicy']);
   if (output.interactiveMetadataPolicy !== 'auto') {
@@ -2061,32 +2178,49 @@ const appendComparisonOptions = (args, request, files, units) => {
     return;
   }
 
-  // A comparison of another kind has no record indexes; the `Number.isInteger` tests below reject it before any other use.
-  const comparisons = /** @type {(Omit<CanonicalNucleotideBlastComparison, 'kind'> & { kind: string })[]} */ (
-    Array.isArray(request.comparisons) ? request.comparisons : []
-  );
-  if (comparisons.length === 0) return;
+  const { tables: comparisons, search } = projectComparisons(Array.isArray(request.comparisons) ? request.comparisons : []);
+  if (comparisons.length === 0 && search === null) return;
   // A comparison names drawn units; the CLI's `#n` counts records (review S4).
   const unitRecords = unitRecordsOf(request.records, units);
   /** @param {unknown} unit */
   const recordOf = (unit) => (unitRecords && Number.isInteger(unit) ? unitRecords[Number(unit)] ?? null : null);
-  const drawable = comparisons.map((comparison) => ({
-    comparison, query: recordOf(comparison?.queryRecordIndex), subject: recordOf(comparison?.subjectRecordIndex)
+  /** @param {readonly UnitPair[]} pairs */
+  const drawnPairs = (pairs) => pairs.map(({ queryRecordIndex, subjectRecordIndex }) => ({
+    query: recordOf(queryRecordIndex), subject: recordOf(subjectRecordIndex)
   }));
-  if (drawable.some(({ query, subject }) => !query || !subject)) {
+  const drawable = drawnPairs(comparisons);
+  const searched = drawnPairs(search?.pairs ?? []);
+  if ([...drawable, ...searched].some(({ query, subject }) => !query || !subject)) {
     throw recipeUnavailable(msg('a comparison cannot be bound losslessly to its source records.'));
-  }
-  if (comparisons.some((comparison) => comparison.kind !== 'nucleotideBlast')) {
-    throw recipeUnavailable(msg('this committed protein comparison has no lossless source CLI projection.'));
   }
   // The CLI refuses a comparison file for a record drawn in several windows (`refuse_file_comparison_of_windows`).
   if (drawable.some(({ query, subject }) => query?.oneOfSeveral || subject?.oneOfSeveral)) {
     throw recipeUnavailable(msg('the command line takes no comparison file for a record drawn in several windows.'));
   }
-  const records = drawable.map(({ query, subject }) => ({
+  // A `source=losat` row of a record drawn in windows searches every window pair of its records.
+  if (searched.some(({ query, subject }) => query?.oneOfSeveral || subject?.oneOfSeveral)) {
+    throw recipeUnavailable(msg('the command line lists no protein search pairs of a record drawn in several windows.'));
+  }
+  /** @param {typeof drawable} pairs */
+  const recordPairs = (pairs) => pairs.map(({ query, subject }) => ({
     query: /** @type {LinearUnitRecord} */ (query).recordIndex, subject: /** @type {LinearUnitRecord} */ (subject).recordIndex
   }));
-  const adjacent = records.every(({ query, subject }, index) => query === index && subject === index + 1);
+  const records = recordPairs(drawable);
+  const losatRows = recordPairs(searched);
+  if (search !== null) {
+    // `-b` takes no LOSAT search, and Linear assembly takes no comparison table row beside the pairs a search lists
+    // (`_linear_comparison_modes`, OV-3688).
+    if (comparisons.length > 0) {
+      throw recipeUnavailable(msg('the command line takes no BLAST table beside a protein search.'));
+    }
+    // Only a Pairwise search lists its pairs, as `source=losat` rows of a comparisons table.
+    if (search.mode !== 'pairwise' && losatRows.length > 0) {
+      throw recipeUnavailable(msg('the command line lists no comparison table rows for this protein search mode.'));
+    }
+    args.push(...proteinSearchArgs(search));
+    if (losatRows.length === 0) return;
+  }
+  const adjacent = losatRows.length === 0 && records.every(({ query, subject }, index) => query === index && subject === index + 1);
   if (adjacent) {
     const paths = comparisons.map((comparison, index) => files.resourcePath(
       referencedResourceId(comparison),
@@ -2107,17 +2241,18 @@ const appendComparisonOptions = (args, request, files, units) => {
     });
     return { blastPath: path, query: `#${records[index].query + 1}`, subject: `#${records[index].subject + 1}` };
   });
+  // The pairs the search compares are `source=losat` rows, without a file; a search comes with no BLAST table row.
+  const searchRows = losatRows.map(({ query, subject }) => ({ query: `#${query + 1}`, subject: `#${subject + 1}`, source: 'losat' }));
   appendOption(
     args,
     '--comparisons_table',
     files.generatedTextPath(
       'comparisons.tsv',
       (finalNameForPath) => tsv(
-        ['blast', 'query', 'subject'],
-        rows.map(({ blastPath, ...row }) => ({
-          ...row,
-          blast: finalNameForPath(blastPath)
-        }))
+        searchRows.length > 0 ? ['blast', 'query', 'subject', 'source'] : ['blast', 'query', 'subject'],
+        searchRows.length > 0
+          ? searchRows.map((row) => ({ ...row, blast: '' }))
+          : rows.map(({ blastPath, ...row }) => ({ ...row, blast: finalNameForPath(blastPath) }))
       ),
       'generatedFiles.source_recipe.comparisons_table'
     )

@@ -834,6 +834,7 @@ under "Cited ids without a record".
   - `tests/web/gzip-inputs.playwright.spec.js`
   - `tests/web/input-copies.test.mjs`
   - `tests/web/record-metadata-inference.test.mjs`
+  - `tests/web/run-info.test.mjs`
   - `tests/web/sequence-search-programs.test.mjs`
 
 - [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search): Sequence search. ACCEPTED, concern `web.sequence-search`, scenario revision 1.

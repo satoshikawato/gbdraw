@@ -28,6 +28,9 @@ IGNORED = {
     "data-label-feature-id", "data-gbdraw-label-binding-schema",
     "data-record-key", "data-record-translation-x", "data-record-translation-y",
     "baseProfile",
+    # A protein link's runtime handles hash the record key (build_protein_runtime_handle), which the Web and the CLI
+    # give each record differently, as data-record-key.
+    "data-query-protein-id", "data-subject-protein-id",
 }
 
 work, command, gui_svg, previous_svg, bundle, *inputs = sys.argv[1:]

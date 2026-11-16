@@ -6241,6 +6241,36 @@ def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:
     }
 
 
+class ProteinSettingDefault(TypedDict):
+    """A ``generatedProteinComparison`` setting, or one key of its value, and what ``gbdraw linear --losat losatp``
+    writes for it without an option."""
+
+    setting: str
+    # The key in the setting's value (``collinearityParams``), else None.
+    parameter: str | None
+    cliDefault: object
+
+
+def protein_setting_defaults() -> list[ProteinSettingDefault]:
+    """Each setting of a LOSATP search, in ``_PROTEIN_SETTINGS_WIRE`` order and ``collinearityParams`` by its keys,
+    with what the command writes without its option: the settings of the Linear option defaults with a LOSATP
+    search of the search defaults. ``gbdraw.linear.describe_protein_comparison_flags`` names their options."""
+
+    defaults = _encode_protein_settings(
+        replace(_DEFAULT_LINEAR_OPTIONS, losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise"))
+    )
+    rows: list[ProteinSettingDefault] = []
+    for setting, value in defaults.items():
+        if setting == "collinearityParams":
+            rows.extend(
+                {"setting": setting, "parameter": parameter, "cliDefault": held}
+                for parameter, held in value["parameters"].items()
+            )
+        else:
+            rows.append({"setting": setting, "parameter": None, "cliDefault": value})
+    return rows
+
+
 class RecordSourceFile(TypedDict):
     resource: str
     field: str

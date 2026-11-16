@@ -778,6 +778,131 @@ export const DRAFT_ANNOTATION_STYLE = Object.freeze({
   labelOffset: 4
 });
 
+// gbdraw/linear.py: describe_protein_comparison_flags()
+export const PROTEIN_COMPARISON_FLAGS = Object.freeze({
+  program: 'losatp',
+  modes: Object.freeze({
+    orthogroup: 'similarity_groups',
+    collinear: 'collinear',
+    pairwise: 'pairwise'
+  }),
+  settings: Object.freeze([
+    Object.freeze({
+      setting: 'collinearityParams',
+      parameter: 'minAnchors',
+      flag: '--collinear_min_anchors',
+      cliDefault: 1
+    }),
+    Object.freeze({
+      setting: 'collinearityParams',
+      parameter: 'maxUnitGap',
+      flag: '--collinear_max_unit_gap',
+      cliDefault: 0
+    }),
+    Object.freeze({
+      setting: 'collinearityParams',
+      parameter: 'maxDiagonalDrift',
+      flag: '--collinear_max_diagonal_drift',
+      cliDefault: 0
+    }),
+    Object.freeze({
+      setting: 'collinearityParams',
+      parameter: 'maxConflicts',
+      flag: '--collinear_max_conflicts_in_merge_gap',
+      cliDefault: 1
+    }),
+    Object.freeze({
+      setting: 'collinearityParams',
+      parameter: 'mergeOrientation',
+      flag: '--collinear_merge_orientation',
+      cliDefault: 'strand'
+    }),
+    Object.freeze({
+      setting: 'collinearityUnitMode',
+      parameter: null,
+      flag: '--collinear_unit_mode',
+      cliDefault: 'auto'
+    }),
+    Object.freeze({
+      setting: 'collinearityAnchorMode',
+      parameter: null,
+      flag: '--collinear_anchor_mode',
+      cliDefault: 'rbh'
+    }),
+    Object.freeze({
+      setting: 'collinearitySearchScope',
+      parameter: null,
+      flag: '--collinear_search_scope',
+      cliDefault: 'adjacent'
+    }),
+    Object.freeze({
+      setting: 'collinearityColorMode',
+      parameter: null,
+      flag: '--collinear_color_mode',
+      cliDefault: 'orientation'
+    }),
+    Object.freeze({
+      setting: 'losatpBin',
+      parameter: null,
+      flag: '--losat_bin',
+      cliDefault: 'losat'
+    }),
+    Object.freeze({
+      setting: 'ncbiBlastpBin',
+      parameter: null,
+      flag: '--ncbi_blast_bin',
+      cliDefault: null
+    }),
+    Object.freeze({
+      setting: 'losatpThreads',
+      parameter: null,
+      flag: '--losat_threads',
+      cliDefault: null
+    }),
+    Object.freeze({
+      setting: 'proteinBlastpMaxHits',
+      parameter: null,
+      flag: '--losatp_max_hits',
+      cliDefault: 5
+    }),
+    Object.freeze({
+      setting: 'proteinBlastpCandidateLimit',
+      parameter: null,
+      flag: '--losatp_max_target_seqs',
+      cliDefault: null
+    }),
+    Object.freeze({
+      setting: 'orthogroupMembershipMode',
+      parameter: null,
+      flag: null,
+      cliDefault: 'anchor_core_v1'
+    }),
+    Object.freeze({
+      setting: 'orthogroupMemberMaxHits',
+      parameter: null,
+      flag: '--losatp_member_max_hits',
+      cliDefault: null
+    }),
+    Object.freeze({
+      setting: 'collinearInferOrthogroups',
+      parameter: null,
+      flag: '--collinear_infer_orthogroups',
+      cliDefault: false
+    }),
+    Object.freeze({
+      setting: 'collinearMaxParalogLinksPerOrthogroup',
+      parameter: null,
+      flag: '--collinear_max_paralog_links_per_orthogroup',
+      cliDefault: 2
+    })
+  ]),
+  words: Object.freeze({
+    true: 'on',
+    false: 'off',
+    null: 'none'
+  })
+});
+
 // gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
 /** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
 export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({
