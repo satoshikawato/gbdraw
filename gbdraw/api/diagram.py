@@ -104,6 +104,7 @@ from gbdraw.api.options import (
     LinearMultiRecordOptions,
     LinearRecordTranslation,
     LosatRuntimeOptions,
+    LOSATP_MODE_WIRE,
     LOSATP_NO_SEARCH_MODE,
     LosatSearchOptions,
     losatp_analysis_mode,
@@ -234,7 +235,12 @@ from gbdraw.layout.figure_size import (
     fit_base_length,
     larger_figure,
 )
-from gbdraw.layout.linear_multi_record import grid_display_pairs, record_key_at, stable_record_keys
+from gbdraw.layout.linear_multi_record import (
+    grid_display_pairs,
+    record_key_at,
+    record_pairs_between_adjacent_rows,
+    stable_record_keys,
+)
 from gbdraw.layout.linear_wrap import (
     LinearWrapSummary,
     drawn_axis_length,
@@ -2511,6 +2517,26 @@ def _linear_protein_pairs(
     return tuple(normalized_pairs)
 
 
+def _refuse_pairs_of_two_sources(
+    protein_pairs: Sequence[tuple[int, int]] | None,
+    linear_comparisons: Sequence[LinearComparison] | None,
+) -> None:
+    """Refuse a record pair that a given comparison and the LOSATP search both name; others draw side by side
+    (OV-3688), as nucleotide searches append theirs to the given comparisons."""
+
+    given = {
+        frozenset((item.query_record_index, item.subject_record_index)) for item in linear_comparisons or ()
+    }
+    for query_index, subject_index in protein_pairs or ():
+        if frozenset((query_index, subject_index)) in given:
+            first, second = sorted((query_index + 1, subject_index + 1))
+            raise ValidationError(
+                f"The record pair #{first} and #{second} has a comparison table and is also searched by LOSATP; "
+                "give it one of them, not both (list the search pairs without it).",
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+            )
+
+
 def _linear_comparison_modes(
     records: Sequence[SeqRecord],
     inputs: LinearAssemblyInputs,
@@ -2520,8 +2546,13 @@ def _linear_comparison_modes(
 
     protein_blastp_mode = losatp_analysis_mode(inputs.losat_search)
     protein_pairs = _linear_protein_pairs(records, inputs, layout)
-    if protein_pairs is not None and inputs.linear_comparisons:
-        raise ValidationError("Pass either losat_search pairs or linear_comparisons, not both")
+    searched_pairs = protein_pairs
+    if searched_pairs is None and protein_blastp_mode == LOSATP_MODE_WIRE["pairwise"]:
+        # Pairwise without listed pairs searches every adjacent-row pair (OV-3728).
+        searched_pairs = record_pairs_between_adjacent_rows(
+            resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1]
+        )
+    _refuse_pairs_of_two_sources(searched_pairs, inputs.linear_comparisons)
     pairwise_match_style = normalize_pairwise_match_style(inputs.pairwise_match_style)
     anchor_mode = normalize_collinearity_anchor_mode(str(inputs.collinearity_anchor_mode))
     search_scope = normalize_collinearity_search_scope(str(inputs.collinearity_search_scope))

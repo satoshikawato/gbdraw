@@ -333,6 +333,10 @@ def test_options_of_another_program_are_rejected(kwargs: dict, field: str) -> No
         (["--losat", "tlosatx", "--losatn_task", "blastn"], "--losatn_task", "losatn_task"),
         (["--losat", "losatn", "--losatp_mode", "pairwise"], "--losatp_mode", "losatp_mode"),
         (["--losat", "tlosatx", "--collinear_min_anchors", "2"], "--collinear_min_anchors", "collinear_min_anchors"),
+        # Each option is named as the parser spells it, which the diagnostic reads by the field's name.
+        (["--losat", "losatn", "--losatp_max_hits", "3"], "--losatp_max_hits", "losatp_max_hits"),
+        (["--losat", "tlosatx", "--losatp_max_target_seqs", "3"], "--losatp_max_target_seqs", "losatp_max_target_seqs"),
+        (["--losat", "losatn", "--losatp_member_max_hits", "3"], "--losatp_member_max_hits", "losatp_member_max_hits"),
     ],
 )
 def test_cli_option_program_diagnostics(tmp_path: Path, argv: list[str], message: str, field: str) -> None:
