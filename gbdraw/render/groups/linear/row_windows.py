@@ -22,13 +22,16 @@ from ....layout.linear_row_windows import (
     RowWindowStyle,
 )
 from ....layout.spatial import Aabb, union_aabbs
-from .definition import DefinitionGroup, LinearDefinitionStyle, DefinitionLine
+from ....svg.ids import RECORD_ID_ATTRIBUTE, RECORD_INDEX_ATTRIBUTE
+from .definition import DEFINITION_LINE_KIND_ATTRIBUTE, DefinitionGroup, LinearDefinitionStyle, DefinitionLine
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
 
 ROW_MARK_ATTRIBUTE = "data-gbdraw-row-mark"
 WINDOW_NUMBER_ATTRIBUTE = "data-gbdraw-window-number"
+# The kind of the list line of one window (``DefinitionLine.kind``); the Web selects a record by that line.
+WINDOW_LINE_KIND = "window"
 
 
 def _px(value: float) -> float:
@@ -108,7 +111,7 @@ class RowWindowHeadingGroup(DefinitionGroup):
             height = max(height, drawn_text_box("0", style.font_family, style.list_font_size)[1])
             lines.append(
                 DefinitionLine(
-                    kind="window",
+                    kind=WINDOW_LINE_KIND,
                     text="".join(str(part.get("text") or "") for part in parts),
                     width=style.number_room + width,
                     height=max(height, 2.0 * (style.circle_radius + style.circle_stroke)),
@@ -126,7 +129,7 @@ class RowWindowHeadingGroup(DefinitionGroup):
                 line.y += shift
 
     def _list_left(self) -> float:
-        block = max((line.width for line in self.definition_lines if line.kind == "window"), default=0.0)
+        block = max((line.width for line in self.definition_lines if line.kind == WINDOW_LINE_KIND), default=0.0)
         anchor = str(self.linear_text_anchor).strip().lower()
         return self.text_x if anchor == "start" else self.text_x - (block if anchor == "end" else 0.5 * block)
 
@@ -136,7 +139,7 @@ class RowWindowHeadingGroup(DefinitionGroup):
         boxes = [
             Aabb(left, line.y - 0.5 * line.height, left + line.width, line.y + 0.5 * line.height)
             for line in self.definition_lines
-            if line.kind == "window"
+            if line.kind == WINDOW_LINE_KIND
         ]
         names = [name_bounds] if any(line.kind == "name" for line in self.definition_lines) else []
         merged = union_aabbs([*names, *boxes])
@@ -147,7 +150,7 @@ class RowWindowHeadingGroup(DefinitionGroup):
         left = self._list_left()
         number = 0
         for line in self.definition_lines:
-            if line.kind != "window":
+            if line.kind != WINDOW_LINE_KIND:
                 self.definition_group.add(self.create_name_text(line, line.y))
                 continue
             window_line = self._windows.lines[number]
@@ -165,8 +168,12 @@ class RowWindowHeadingGroup(DefinitionGroup):
                 text_anchor="start",
                 dominant_baseline="middle",
             )
-            text.attribs["data-definition-line-kind"] = "window"
+            text.attribs[DEFINITION_LINE_KIND_ATTRIBUTE] = WINDOW_LINE_KIND
             text.attribs[WINDOW_NUMBER_ATTRIBUTE] = str(window_line.number)
+            # The row draws its records' names only here: each line names the drawn record of its window, as a
+            # record's own heading does, so a selection over the line finds that record.
+            text.attribs[RECORD_ID_ATTRIBUTE] = window_line.record_id
+            text.attribs[RECORD_INDEX_ATTRIBUTE] = str(window_line.record_index)
             for part in line.parts or []:
                 part_text = part.get("text")
                 if part_text:

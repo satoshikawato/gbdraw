@@ -17,7 +17,7 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
-import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
+import { INPUTS_SLICE, bindDrawingCanonicalComparisons, createCircularSource, createLinearSeq, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, parseColorTable, userTableRows } from './file-imports.js';
@@ -55,8 +55,13 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
-import { readStoredRecordIdPlaces } from './record-discovery.js';
+import {
+  cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey, pastedNamedCardRecords, placeNamedRecordsInDraft,
+  readNamedCardRecords
+} from './record-draw-selection.js';
+import { circularRecordEntries } from './record-options.js';
+import { readCircularSourceRecords, readStoredRecordIdPlaces } from './record-discovery.js';
+import { isInputFileRef } from './history-files.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -81,7 +86,7 @@ import {
   normalizeFeatureVisibilityRule,
   splitLegacyVisibilityRules
 } from './feature-visibility.js';
-import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
+import { canonicalFeatureOverrides, featureDraftMap, featureIdentityKeyOf } from './feature-placement.js';
 import { ANNOTATION_TARGET_MIGRATION_NOTICE, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { buildSessionFeatureRecoveryPlan } from './session-feature-recovery.js';
 import {
@@ -107,13 +112,15 @@ import {
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
   readEditorTableTexts,
+  readFileRecordCount,
   readStoredBlastTables,
   withStoredTablesWithoutProteinMatches,
   readStoredRenderRequest,
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
   linearCardWindowPlanRecords,
-  requestRunsProteinSearch
+  requestRunsProteinSearch,
+  writtenTextResource
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -130,7 +137,7 @@ import { windowLosatFilenamesOf } from './linear-comparison-retained.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionDrawingResources } from './session-resources.js';
 import { savedDrawingsOf } from './session-drawings.js';
-import { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore, installShownSetLegend, requestStateOfDrawing } from './artifact-slot.js';
+import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend, requestStateOfDrawing } from './artifact-slot.js';
 import {
   base64ToBytes,
   contentFactsOfStream,
@@ -379,11 +386,16 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { CanonicalRenderEnvelope, RequestRecordDisplayRow, ResourceTexts } from './session-request.js' */
-/** @import { DerivedRegionDrawing } from '../contracts/locate.generated.js' */
+/** @import { AddedResource, DerivedRegionDrawing, PastedRecords } from '../contracts/locate.generated.js' */
+/** @import { SpecificColorRule } from './specific-color-rules.js' */
+/** @import { RecordDisplayDraft } from './record-display-model.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
+/** @import { CircularSourceInput } from './input-types.js' */
+/** @import { NamedCardRecord, NamedCardRecords } from './record-draw-selection.js' */
+/** @import { CircularListRecord } from './record-discovery.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedFileValue, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -1045,6 +1057,17 @@ export const buildConfigData = (drawing) => ({
   ),
   unmanagedConfigOverrides: cloneJsonData(drawing.unmanagedConfigOverrides || {}),
   webEdits: buildGroupNamesData(drawing)
+});
+
+/**
+ * A drawing's settings as a History step captures them: its Session slice `config` (`buildConfigData`) and the
+ * records its File cards name of their files while their read has not placed them (`recordsNamed`), which no Session
+ * holds. `applyConfigData` reads both back, so an Undo returns `recordsOff` and the named records as one value (R11).
+ * @param {DrawingState} drawing
+ */
+export const captureConfigData = (drawing) => ({
+  ...buildConfigData(drawing),
+  ...(drawing.recordsNamed.length ? { recordsNamed: cloneJsonData(drawing.recordsNamed) } : {})
 });
 
 const defaultEditorStateData = () => ({
@@ -1731,6 +1754,9 @@ const applyModeSliceData = (drawing, mode, slice, {
   projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
 } = {}) => {
   const config = overlayModeSliceConfig(projectedConfig ? { mode, config: projectedConfig } : null, slice.config);
+  // A draft Load read from a request holds the records its File cards name (`recordsNamed`), which no Session slice
+  // holds and the registry rows above leave out.
+  if (isPlainObject(slice.config) && Object.hasOwn(slice.config, 'recordsNamed')) config.recordsNamed = slice.config.recordsNamed;
   if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
   const features = isPlainObject(slice.features) ? slice.features : {};
   applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
@@ -3604,6 +3630,8 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, capture
     recordDisplayDrafts: readRecordDisplayDrafts(data.recordDisplayDrafts).value,
     // Omitted: every record is drawn.
     recordsOff: recordsOffReader(mode)(data.recordsOff).value,
+    // Omitted: no card names records of its file (a Session never holds them; a projection and a History step do).
+    recordsNamed: readNamedCardRecords(data.recordsNamed),
     // Omission takes the fresh default in every Session version.
     linearRecordLayoutEnabled: readLinearRecordLayoutEnabled(linearLayout.enabled).value,
     linearRecordGap: readLinearRecordGap(linearLayout.recordGap).value,
@@ -6657,7 +6685,7 @@ const artifactUiState = (view) => ({
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
  *   planLinearUnits: DraftRequestFacts['planLinearUnits'],
- *   readOfDrawing?: DraftRequestFacts['readOfDrawing'],
+ *   readOfDrawing: DraftRequestFacts['readOfDrawing'],
  *   recordDisplayRows?: { value: readonly RequestRecordDisplayRow[] } | null,
  *   written: readonly SavedSessionDrawing[],
  *   activeDrawingId: DrawingId,
@@ -6669,15 +6697,22 @@ const artifactUiState = (view) => ({
  * One drawing Save writes: the drawing, whether Save writes its inputs as
  * its draft request (the shown drawing's, without a Generate), its slice as
  * Save writes it, its artifact (null: no Result and no request it writes),
- * and its view keys (`ui` of its one-drawing view: its input type, the
- * generated layout of its Results, the shown one's viewport).
+ * its view keys (`ui` of its one-drawing view: its input type, the
+ * generated layout of its Results, the shown one's viewport), and the records
+ * its File cards name as Save captured them with its slice (`SavedNamedRecords`).
  * @typedef {{
  *   drawing: DrawingState,
  *   draftRequest: boolean,
  *   slice: SessionModeSlice & { config: ActiveWebConfig },
  *   artifact: SessionArtifactView | null,
- *   ui: Record<string, unknown>
+ *   ui: Record<string, unknown>,
+ *   namedRecords: SavedNamedRecords | null
  * }} SavedSessionDrawing
+ */
+/**
+ * The records a Circular drawing's File cards name of their files (`recordsNamed`) as Save captures them with the
+ * drawing's slice, before any of its awaits: the named records, the drawing's read records, and its cards.
+ * @typedef {{ named: NamedCardRecords[], records: CircularListRecord[], inputs: CircularSourceInput<InputFileRef>[] }} SavedNamedRecords
  */
 
 /**
@@ -6782,7 +6817,7 @@ const exportSessionDocument = async (
   {
     askChoice = async () => 'cancel',
     drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, written, planLinearUnits,
-    readOfDrawing = createArtifactSlotStore().readOfDrawing, activeDrawingId, projectUi, isCurrent
+    readOfDrawing, activeDrawingId, projectUi, isCurrent
   }
 ) => {
   const resolvedTitle =
@@ -6811,8 +6846,9 @@ const exportSessionDocument = async (
   // Each drawing's Results, catalog and committed request; its slice's
   // unmanaged overrides are checked against its own mode (PD-OI-009, OV-106).
   const parts = [];
-  for (const { drawing: saved, slice, artifact, ui, draftRequest } of written) {
+  for (const { drawing: saved, slice, artifact, ui, draftRequest, namedRecords } of written) {
     const config = slice.config;
+    if (namedRecords) await placeSavedNamedRecords(config, namedRecords);
     Object.assign(config.adv, normalizedArrowGeometryState(config.adv));
     config.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
       mode: saved.mode,
@@ -7254,17 +7290,30 @@ const readStoredDrawingDraft = async (view, repairs) => {
  * @property {{ features: Readonly<Record<string, unknown>> } & LoadedDraft} draft
  * @property {boolean} resolveTrackPlacements
  * @property {boolean} applyCanvasPadding False for the drawing that opens: its padding follows its mounted Result.
+ * @property {StoredLayoutPreferences | null} requestLayout The layout the drawing's request sets
+ *   (`requestLayoutPreferences`); null: the drawing holds no request.
  */
 /**
  * Installs one loaded drawing's input type and settings over its mode's
- * defaults (a new drawing state, or one `resetDrawingSettings` reset).
+ * defaults (a new drawing state, or one `resetDrawingSettings` reset). Layout
+ * preferences (the legend and plot title positions): a drawing's slice holds
+ * its mode's slot; a drawing whose slice has none takes its own request's,
+ * opened or not (OV-2493), and so does a drawing made from a request outside a
+ * Load (a copy, a paste: OV-3583); a Session 27-44's layout was read before
+ * Python converted it (OV-1967).
  * @param {DrawingState} drawing
  * @param {StoredDrawingInstall} install
  * @returns {DrawingAlignment} The alignment its draft holds (`applyModeSliceData`).
  */
-const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPlacements, applyCanvasPadding }) => {
+const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPlacements, applyCanvasPadding, requestLayout }) => {
   INPUTS_SLICE.install(drawing.slices.inputs, { inputType });
-  return applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
+  const alignment = applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
+  if (!requestLayout || isPlainObject(slice.ui?.layoutPreferences)) return alignment;
+  SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
+    ...cloneJsonData(drawing.layoutPreferences),
+    [drawing.mode]: normalizeLayoutPreferences(requestLayout)[drawing.mode]
+  }) });
+  return alignment;
 };
 /**
  * One drawing to install outside a whole Load (a New drawing from a region):
@@ -7327,7 +7376,11 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
       slice: part.slice,
       draft: { features: inputs.requestFeatureEdits ? featureEditsOverProjection(undefined, inputs.requestFeatureEdits) : {}, ...draft },
       resolveTrackPlacements: true,
-      applyCanvasPadding: true
+      applyCanvasPadding: true,
+      // The positions the request states (a copy into the source's mode keeps them, OV-3583); a request into the
+      // other mode states none, and the new drawing starts with its mode's Web layout (Owner Q3, R17-39 A).
+      requestLayout: isPlainObject(/** @type {{ diagramOptions?: { output?: unknown } }} */ (renderRequest).diagramOptions?.output)
+        ? inputs.layoutPreferences : null
     },
     settle: {
       inputs: liveFileStateOf(files),
@@ -7424,35 +7477,188 @@ export const projectDraftRequest = async (sourceState, drawing, {
  * @property {DerivedRegionDrawing} derived
  * @property {ProjectedDraftRequest} sent
  */
+const derivedReplyInvalid = () => diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
 /**
- * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a
- * stored drawing: each resource ID it names holds the bytes of the sent
- * request's resource it reads (`resourceSources`), and binds that resource's
- * Web file. A read that repairs anything refuses (`RESULT_INVALID`): the
- * region drawing has no Load dialog to list a loss in.
- * @param {RegionDerivation} derivation
+ * A request Python derived from drawings' draft requests: each resource ID it names reads a resource of one of the
+ * sent requests (`ResourceSources`: the resource ID it reads there), or holds a table Python wrote (`added`).
+ * @typedef {object} DerivedRequestReply
+ * @property {'circular' | 'linear'} mode
+ * @property {Record<string, unknown>} renderRequest
+ * @property {readonly (readonly [Readonly<Record<string, string>>, ProjectedDraftRequest])[]} sources
+ * @property {readonly AddedResource[]} added
+ */
+/**
+ * Reads a request Python derived (a new drawing, a paste) as Load reads a stored drawing: each resource ID holds the
+ * bytes of the sent resource it reads and binds that resource's Web file, or holds the table Python wrote. A read that
+ * repairs anything refuses (`RESULT_INVALID`): Python derived a request the Load readers read whole, so a repair means
+ * the two disagree, and the drawing would lose a setting with no Load dialog to list it in.
+ * @param {DerivedRequestReply} reply
  * @returns {Promise<PreparedStoredDrawing>}
  */
-export const prepareRegionDrawing = async ({ derived, sent }) => {
+const prepareDerivedRequest = async ({ mode, renderRequest, sources, added }) => {
   /** @type {Record<string, unknown>} */
   const resources = {};
   /** @type {Map<string, InputFileRef>} */
   const sourceFiles = new Map();
-  for (const [resourceId, sourceId] of Object.entries(derived.resourceSources)) {
-    if (!Object.hasOwn(sent.envelope.resources, sourceId)) {
-      throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
+  for (const [table, sent] of sources) {
+    for (const [resourceId, sourceId] of Object.entries(table)) {
+      if (!Object.hasOwn(sent.envelope.resources, sourceId)) throw derivedReplyInvalid();
+      resources[resourceId] = sent.envelope.resources[sourceId];
+      const ref = sent.filesByResource.get(sourceId);
+      if (ref) sourceFiles.set(resourceId, ref);
     }
-    resources[resourceId] = sent.envelope.resources[sourceId];
-    const ref = sent.filesByResource.get(sourceId);
-    if (ref) sourceFiles.set(resourceId, ref);
   }
-  const prepared = await prepareStoredDrawing({ mode: derived.mode, renderRequest: derived.renderRequest, resources, sourceFiles });
-  // Python derived a request the Load readers can read whole; a repair means
-  // the two disagree, and the drawing would lose a setting with no Load dialog.
-  if (prepared.repairs.length > 0) {
-    throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
-  }
+  for (const { resourceId, name, text } of added) resources[resourceId] = writtenTextResource(resourceId, name, text);
+  const prepared = await prepareStoredDrawing({ mode, renderRequest, resources, sourceFiles });
+  if (prepared.repairs.length > 0) throw derivedReplyInvalid();
+  await placeCopiedNamedRecords(prepared);
   return prepared;
+};
+/**
+ * Whether a File card names every record of its file, so its placement leaves no record OFF and needs no read: as
+ * many distinct places (a record ID, or a recordIndex within the count) as the file holds records. The CLI's
+ * expansion of a whole file names a record whose ID repeats in the file, or is unsafe, by its place and the others by
+ * ID, so both kinds count together. The count is the one that reads no Python (`readFileRecordCount`): a GenBank or
+ * FASTA file. A GFF3 + FASTA card draws the records its GFF3 names, which that counter does not read, so it is read
+ * (by the one read, without Python when the browser reader takes both files); so is a card whose count fails.
+ * Unlike the read, this does not check that a named record ID is in the file: a hand-edited card that names an ID
+ * its file lacks, with as many places as the file holds records, saves every record ON where the read fails NO_MATCH.
+ * @template F
+ * @param {readonly NamedCardRecord[]} named
+ * @param {CircularSourceInput<F>} input
+ * @param {(file: F | null) => FileLike | null | undefined} fileOf
+ * @returns {Promise<boolean>}
+ */
+const namesWholeFile = async (named, { spec: { sourceKind }, primaryFile }, fileOf) => {
+  const file = fileOf(primaryFile);
+  if (sourceKind === 'gffFasta' || !file) return false;
+  const count = await readFileRecordCount(file, sourceKind).catch(() => -1);
+  const places = new Set(named.map(({ selector }) => (selector.kind === 'recordIndex' ? selector.index : selector.value)));
+  return places.size === count && named.every(({ selector }) => selector.kind !== 'recordIndex' || selector.index < count);
+};
+/**
+ * Places the records File cards name of their files (`named`, OV-3530, OV-3531) in a draft config
+ * (`placeNamedRecordsInDraft`), from the drawing's read records (`records`) and a read of each named card they do not
+ * hold. A card that names every record of its file (`namesWholeFile`: Python's expansion of a whole file, a CLI
+ * Session's default) leaves none OFF and is not read, so it needs no diagram Worker. `error` is the first failed
+ * read's.
+ * @template F
+ * @param {{ recordsOff?: unknown, adv?: unknown }} config The draft config, changed in place.
+ * @param {{ named: readonly NamedCardRecords[], records: readonly CircularListRecord[],
+ *   inputs: readonly CircularSourceInput<F>[] }} cards `inputs`: the drawing's cards (`circularSourceInputs`).
+ * @param {(file: F | null) => FileLike | null | undefined} fileOf
+ * @returns {Promise<{ left: NamedCardRecords[], error: unknown }>} `left`: the cards it could not place.
+ */
+const readAndPlaceNamedRecords = async (config, { named, records, inputs }, fileOf) => {
+  const held = new Set(records.map(({ uid }) => uid));
+  const unread = inputs.flatMap((input) => {
+    const card = held.has(input.uid) ? undefined : named.find(({ uid }) => uid === input.uid);
+    return card ? [{ input, card }] : [];
+  });
+  const whole = new Set((await Promise.all(unread.map(async ({ input, card }) => (
+    await namesWholeFile(card.named, input, fileOf) ? [card.uid] : []
+  )))).flat());
+  const reads = await readCircularSourceRecords(unread.flatMap(({ input }) => (whole.has(input.uid) ? [] : [input])), fileOf);
+  const left = placeNamedRecordsInDraft(config, named.filter(({ uid }) => !whole.has(uid)),
+    circularRecordEntries([...records, ...reads.flatMap((read) => read.records)]));
+  return { left, error: reads.find((read) => read.error !== null)?.error ?? null };
+};
+/**
+ * Writes in a saved draft the records OFF of a drawing whose File cards still name some records of their files
+ * (`recordsNamed`), which no Session holds and a Load of a Web draft does not read from its request: each such card
+ * is placed (`readAndPlaceNamedRecords`) from the drawing as Save captured it, read only when the drawing has not read
+ * it. The drawing is not changed. A card Save reads and cannot place fails the Save, with its read's error (R6) or
+ * as a record selection its file lacks, so no Session draws a card's whole file that the drawing drew some records of;
+ * a card Save does not read (`namesWholeFile`) is saved whole, its record IDs unchecked.
+ * @param {{ recordsOff?: unknown, adv?: unknown }} config The saved draft config, changed in place.
+ * @param {SavedNamedRecords} namedRecords
+ */
+const placeSavedNamedRecords = async (config, namedRecords) => {
+  const { left, error } = await readAndPlaceNamedRecords(config, namedRecords, (ref) => state.inputFiles.fileOf(ref));
+  if (error !== null) throw error;
+  if (left.length > 0) throw diagnosticError('RECORD_SELECTION', { reason: 'NO_MATCH' });
+};
+/**
+ * What Save captures of a drawing's named card records (`SavedNamedRecords`), copied; null for a drawing whose cards
+ * name none.
+ * @param {DrawingState} drawing
+ * @returns {SavedNamedRecords | null}
+ */
+const savedNamedRecordsOf = (drawing) => (drawing.mode !== 'circular' || drawing.recordsNamed.length === 0 ? null : {
+  named: readNamedCardRecords(cloneJsonData(drawing.recordsNamed)),
+  records: [...drawing.circularRecordList.value],
+  inputs: circularSourceInputs(drawing.inputType.value, drawing.circularSources)
+});
+/** @param {LoadedFileValue} value @returns {value is readonly LoadedFileValue[]} */
+const isLoadedFileList = (value) => Array.isArray(value);
+/**
+ * The bytes a Load candidate's file names before Load binds it (`LoadedFileValue`): a File or a Session resource
+ * view; none for a ref (its bytes are the store's) or a list.
+ * @param {LoadedFileValue | null} value
+ * @returns {FileLike | null}
+ */
+const loadedFileBytes = (value) => (value === null || value === undefined || isLoadedFileList(value) || isInputFileRef(value) ? null : value);
+/**
+ * A copy or a paste reads now the cards whose records its request names some of (`recordsNamed`, OV-3530) and places
+ * them (`readAndPlaceNamedRecords`), as the drawing's first settled read would: its draft names the records OFF, not
+ * the named records, which no Session holds. Python derived the request, so the read reuses the Worker that derived
+ * it; a Load leaves them to the drawing's own read. A card whose read fails keeps its named records, which its request
+ * records draw alone, and Save places them (`placeSavedNamedRecords`).
+ * @param {PreparedStoredDrawing} prepared
+ */
+const placeCopiedNamedRecords = async ({ install, settle }) => {
+  const { config } = install.draft;
+  const named = readNamedCardRecords(config.recordsNamed);
+  if (named.length === 0) return;
+  const { left } = await readAndPlaceNamedRecords(config, {
+    named, records: [], inputs: circularSourceInputs(install.inputType, settle.inputs.circularSources)
+  }, loadedFileBytes);
+  if (left.length) config.recordsNamed = left;
+  else delete config.recordsNamed;
+};
+/**
+ * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a stored drawing (`prepareDerivedRequest`):
+ * each resource ID it names reads the sent request's resource of `resourceSources`.
+ * @param {RegionDerivation} derivation
+ * @returns {Promise<PreparedStoredDrawing>}
+ */
+export const prepareRegionDrawing = ({ derived, sent }) => prepareDerivedRequest({
+  mode: derived.mode, renderRequest: derived.renderRequest, sources: [[derived.resourceSources, sent]], added: []
+});
+/**
+ * A paste into an existing drawing (`deriveRegionDrawing` with `copy.into` `existing`) and the draft requests it was
+ * pasted from: the source drawing's (`sent`) and the target drawing's (`targetSent`).
+ * @typedef {object} PasteDerivation
+ * @property {PastedRecords} pasted
+ * @property {ProjectedDraftRequest} sent
+ * @property {ProjectedDraftRequest} targetSent
+ */
+/**
+ * The target drawing's new request read whole (`prepared`), and what of it the paste adds: the records of
+ * `pastedRecordKeys`, which read the File cards the reader makes last (`pastedCards`, Circular).
+ * @typedef {object} PreparedPaste
+ * @property {PreparedStoredDrawing} prepared
+ * @property {ReadonlySet<string>} pastedRecordKeys
+ * @property {number} pastedCards
+ */
+/**
+ * Reads a paste as Load reads the target drawing's new request (`prepareDerivedRequest`): its resources read the
+ * target's request (`targetResourceSources`), the source's (`resourceSources`), or the tables Python wrote.
+ * @param {PasteDerivation} paste
+ * @returns {Promise<PreparedPaste>}
+ */
+export const preparePastedRecords = async ({ pasted, sent, targetSent }) => {
+  const prepared = await prepareDerivedRequest({
+    mode: pasted.mode, renderRequest: pasted.renderRequest, added: pasted.addedResources,
+    sources: [[pasted.targetResourceSources, targetSent], [pasted.resourceSources, sent]]
+  });
+  const pastedRecordKeys = new Set(pasted.pastedRecordKeys);
+  // The reader makes one File card per file of the records, in the order the records first read it; the pasted
+  // records follow the target's and read files of their own.
+  const { records } = /** @type {CanonicalRenderRequest} */ (/** @type {unknown} */ (pasted.renderRequest));
+  const pastedCards = new Set(records.filter((record) => pastedRecordKeys.has(record.recordKey))
+    .map((record) => JSON.stringify(record.source))).size;
+  return { prepared, pastedRecordKeys, pastedCards };
 };
 /**
  * Installs a prepared drawing into its drawing state as Load installs a
@@ -7460,9 +7666,10 @@ export const prepareRegionDrawing = async ({ derived, sent }) => {
  * resource its source drawing's file backs binds that file.
  * @param {DrawingState} drawing A new drawing state of the prepared drawing's ID and mode.
  * @param {PreparedStoredDrawing} prepared
+ * @returns {DrawingAlignment} The alignment its request states, which the caller installs as the drawing's own.
  */
 export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }) => {
-  installStoredDrawing(drawing, install);
+  const alignment = installStoredDrawing(drawing, install);
   /** @type {Pick<InputFileStore, 'registerFile'>} */
   const store = {
     registerFile: (file) => {
@@ -7472,6 +7679,7 @@ export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }
     }
   };
   settleStoredDrawing(drawing, { ...settle, bound: bindLoadedInputs(store, settle.inputs) });
+  return alignment;
 };
 /**
  * The drawing list's region port: reads a derived region drawing now
@@ -7492,6 +7700,156 @@ export const makeRegionDrawing = async (derivation, { runSavedComparison }) => {
     installPreparedDrawing(drawing, prepared);
     return drawing;
   };
+};
+/**
+ * A key of `uids`' records (a card uid, or its `<uid>:<k>` record identity) under the card's new uid; null for a key
+ * of another card.
+ * @param {string} key
+ * @param {ReadonlyMap<string, string>} uids The new uid of each pasted card, by its uid in the read request.
+ * @returns {string | null}
+ */
+const pastedKeyOf = (key, uids) => {
+  for (const [from, to] of uids) {
+    if (key === from) return to;
+    if (key.startsWith(`${from}:`)) return `${to}${key.slice(from.length)}`;
+  }
+  return null;
+};
+/**
+ * A Circular target's places after a paste: the read request's (`read`, by the read cards' uids), under the target's
+ * card uids (`cards`), then each place of `own` the request names no record of (a record the target leaves off).
+ * @param {readonly MultiRecordPosition[]} own
+ * @param {readonly MultiRecordPosition[]} read
+ * @param {ReadonlyMap<string, string>} cards The target's uid of each read card.
+ * @param {ReadonlyMap<string, string>} named The target's key of each record a pasted card names of its file
+ *   (`pastedNamedCardRecords`), which the read request's places name by its request key.
+ * @returns {MultiRecordPosition[]}
+ */
+const pastedPlaces = (own, read, cards, named) => {
+  const placed = read.flatMap((entry) => {
+    const selector = named.get(entry.selector) ?? pastedKeyOf(entry.selector, cards);
+    return selector === null ? [] : [{ ...entry, selector }];
+  });
+  const taken = new Set(placed.map(({ selector }) => selector));
+  return [...placed, ...own.filter(({ selector }) => !taken.has(selector)).map((entry) => ({ ...entry }))];
+};
+/**
+ * The color rules after a paste: the read table, where each rule the target has is the target's own row (its
+ * identity), and each other rule is one the paste adds (the colors of the pasted features, which Python puts in the
+ * table where they apply). Unchanged when the paste adds none.
+ * @param {readonly Readonly<SpecificColorRule>[]} own The target's rules.
+ * @param {readonly Readonly<SpecificColorRule>[]} read The rules of the target's new request.
+ * @returns {readonly Readonly<SpecificColorRule>[]}
+ */
+const pastedColorRules = (own, read) => {
+  const shown = (/** @type {Readonly<SpecificColorRule>} */ { feat, qual, val, color, cap }) => JSON.stringify([feat, qual, val, color, cap]);
+  const left = own.map((rule) => ({ rule, key: shown(rule) }));
+  const rules = read.map((rule) => {
+    const index = left.findIndex(({ key }) => key === shown(rule));
+    return index < 0 ? rule : left.splice(index, 1)[0].rule;
+  });
+  return rules.length === own.length ? own : rules;
+};
+/**
+ * A read request's alignment with each pasted record's key under the uid its row takes in the target (`uids`); the
+ * target's own records keep theirs.
+ * @param {DrawingAlignment} alignment
+ * @param {ReadonlyMap<string, string>} uids
+ * @returns {DrawingAlignment}
+ */
+const pastedAlignment = ({ similarityAlignmentPlan: plan, linearRecordTranslations }, uids) => {
+  /** @template {{ recordKey: string }} T @param {T} entry @returns {T} */
+  const keyed = (entry) => ({ ...entry, recordKey: pastedKeyOf(entry.recordKey, uids) ?? entry.recordKey });
+  return {
+    similarityAlignmentPlan: plan && { ...plan, reference: keyed(plan.reference),
+      records: plan.records.map((decision) => ({ ...keyed(decision), anchor: decision.anchor && keyed(decision.anchor) })) },
+    linearRecordTranslations: linearRecordTranslations.map(keyed)
+  };
+};
+/**
+ * The pasted cards of a read request (`read`) under uids of their own in `target`: the Linear rows of the pasted
+ * records (a row's uid is its record key; one the target has takes a new one), or the Circular File cards the reader
+ * made last, each under a new uid. `own` names the target's card of each other card the reader made (Circular: the
+ * first card of the target that reads the same files).
+ * @param {DrawingState} read
+ * @param {DrawingState} target
+ * @param {PreparedPaste} paste
+ */
+const pastedCardsOf = (read, target, { pastedRecordKeys, pastedCards }) => {
+  if (target.mode === 'circular') {
+    const ownCount = read.circularSources.length - pastedCards;
+    const cards = read.circularSources.slice(ownCount);
+    const uids = new Map(cards.map(({ uid }) => [uid, createCircularSource().uid]));
+    /** @param {CircularSource} card */
+    const filesOf = ({ gb, gff, fasta }) => JSON.stringify([gb, gff, fasta].map((ref) => ref?.fileId ?? null));
+    const unmatched = [...target.circularSources];
+    const own = new Map(read.circularSources.slice(0, ownCount).flatMap((card) => {
+      const index = unmatched.findIndex((candidate) => filesOf(candidate) === filesOf(card));
+      return index < 0 ? [] : [[card.uid, unmatched.splice(index, 1)[0].uid]];
+    }));
+    return { uids, own, linearSeqs: [], circularSources: cards.map((card) => ({ ...card, uid: String(uids.get(card.uid)) })) };
+  }
+  const taken = new Set(target.linearSeqs.map(({ uid }) => uid));
+  const rows = read.linearSeqs.filter(({ uid }) => pastedRecordKeys.has(uid));
+  const uids = new Map(rows.map(({ uid }) => [uid, taken.has(uid) ? createLinearSeq().uid : uid]));
+  return { uids, own: new Map(), linearSeqs: rows.map((row) => ({ ...row, uid: String(uids.get(row.uid)) })), circularSources: [] };
+};
+/**
+ * Installs a paste into its existing drawing (PD-OI-090 〔作成〕(4)): the records it adds, after the drawing's own,
+ * through each slice's install, as Load installs them (`installPreparedDrawing` of the drawing's new request, read
+ * apart): their cards, the records of those cards left out, their rows and display, their per-feature edits, and the
+ * colors of the pasted features. The drawing keeps everything else: its settings, palette, rules, tables, paint and
+ * annotations. A Circular drawing of several records becomes a Multi-Record Canvas placed as the request places its
+ * records, and reads its records again.
+ * @param {DrawingState} target
+ * @param {PreparedPaste} paste
+ * @returns {DrawingAlignment} The drawing's alignment after the paste: the request's, whose plan and translations name
+ *   the pasted records too (a Linear drawing's), under the keys they take here. The caller writes it as the drawing's
+ *   own artifact values, in the paste's History step (OV-3532).
+ */
+export const installPastedRecords = (target, paste) => {
+  const read = createDrawingState(target.id, paste.prepared.mode);
+  const alignment = installPreparedDrawing(read, paste.prepared);
+  const { uids, own, linearSeqs, circularSources } = pastedCardsOf(read, target, paste);
+  const cards = new Map([...own, ...uids]);
+  const pastedNamed = pastedNamedCardRecords(read.recordsNamed, uids);
+  /** @param {readonly string[]} keys */
+  const pastedKeys = (keys) => keys.flatMap((key) => pastedKeyOf(key, uids) ?? []);
+  const inputs = INPUTS_SLICE.capture(target.slices.inputs);
+  const readInputs = INPUTS_SLICE.capture(read.slices.inputs);
+  INPUTS_SLICE.install(target.slices.inputs, target.mode === 'circular'
+    ? { circularSources: [...inputs.circularSources, ...circularSources],
+        circularRecordList: readInputs.circularRecordList, circularRecordDiscovery: readInputs.circularRecordDiscovery }
+    : { linearSeqs: [...inputs.linearSeqs, ...linearSeqs] });
+  SETTINGS_SLICE.install(target.slices.settings, {
+    recordsOff: [...target.recordsOff, ...pastedKeys(read.recordsOff)],
+    // The target's own cards keep the records they name; a pasted card whose read failed names its records too,
+    // under the keys they take in the target.
+    recordsNamed: [...target.recordsNamed, ...pastedNamed.cards],
+    linearRecordRows: [...target.linearRecordRows, ...read.linearRecordRows.flatMap((/** @type {LinearRecordRow} */ row) => {
+      const uid = pastedKeyOf(row.uid, uids);
+      return uid === null ? [] : [{ ...row, uid }];
+    })],
+    recordDisplayDrafts: [...target.recordDisplayDrafts, ...read.recordDisplayDrafts.flatMap((/** @type {RecordDisplayDraft} */ draft) => {
+      const sourceUid = pastedKeyOf(draft.sourceUid, uids);
+      return sourceUid === null ? [] : [{ ...draft, sourceUid }];
+    })],
+    form: { ...target.form, multi_record_canvas: read.form.multi_record_canvas },
+    // The places of a Multi-Record Canvas are the request's, which names the target's drawn records and the pasted
+    // ones; the target keeps the places of its records the request does not draw (those it leaves off).
+    adv: { ...target.adv, multi_record_positions: pastedPlaces(target.adv.multi_record_positions, read.adv.multi_record_positions, cards, pastedNamed.moves) }
+  });
+  FEATURE_EDITS_SLICE.install(target.slices.featureEdits, { featureOverrides: {
+    ...FEATURE_EDITS_SLICE.capture(target.slices.featureEdits).featureOverrides,
+    ...Object.fromEntries(Object.values(read.featureOverrides).flatMap((row) => {
+      const recordKey = pastedKeyOf(row.recordKey, uids);
+      return recordKey === null ? [] : [[featureIdentityKeyOf({ ...row, recordKey }), { ...row, recordKey }]];
+    }))
+  } });
+  COLOR_RULES_SLICE.install(target.slices.colorRules, {
+    manualSpecificRules: pastedColorRules(target.manualSpecificRules, read.manualSpecificRules)
+  });
+  return pastedAlignment(alignment, uids);
 };
 /**
  * Records the Use custom stack switch beside a committed Session Load installs
@@ -8709,7 +9067,8 @@ const importSessionDocument = async (e, options = {}) => {
         // where its draft has none (OV-220), opened or not (OV-1786).
         draft: withRecoveredPaint(id, loadedFeatureEditsOf(id), draftOf(id)),
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
-        applyCanvasPadding: id !== plan.activeDrawingId
+        applyCanvasPadding: id !== plan.activeDrawingId,
+        requestLayout: requestLayoutOf(id)
       }));
     }
     // App-level settings: LOSAT execution (after the drafts, whose request
@@ -8730,17 +9089,6 @@ const importSessionDocument = async (e, options = {}) => {
       setDrawingIds: new Set([committedSetDrawingId, ...storedSetSlots.map((slot) => slot.drawingId)]), draftAlignments
     });
     restoreAppliedPaletteFromSession(shownDrawing, ui);
-    // Layout preferences: a drawing's slice holds its mode's slot; a drawing
-    // whose slice has none takes its own request's, opened or not (OV-2493);
-    // a Session 27-44's layout was read before Python converted it (OV-1967).
-    for (const drawing of committed) {
-      const requestLayout = requestLayoutOf(drawing.id);
-      if (!requestLayout || isPlainObject(draftPartOf(drawing.id).slice.ui?.layoutPreferences)) continue;
-      SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
-        ...cloneJsonData(drawing.layoutPreferences),
-        [drawing.mode]: normalizeLayoutPreferences(requestLayout)[drawing.mode]
-      }) });
-    }
 
     /** @type {Map<LoadedFiles, { inputs: LiveFileState, bound: ReturnType<typeof bindLoadedInputs> }>} One state per set of files, so each binds once. */
     const liveFileStates = new Map();
@@ -9063,8 +9411,8 @@ export const disposeSessionOperations = () => {
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value: readonly RequestRecordDisplayRow[] }} [recordDisplayRows]
  * @property {() => readonly Readonly<ArtifactSlot>[]} [readKeptArtifacts]
- * @property {DraftRequestFacts['readOfDrawing']} [readOfDrawing] The reader of each drawing's artifact (without
- *   it, as without `readKeptArtifacts`, the page keeps no artifact of a drawing not shown).
+ * @property {DraftRequestFacts['readOfDrawing']} readOfDrawing The reader of each drawing's artifact (the artifact
+ *   slot store's, which `readKeptArtifacts` lists), through which a draft request reads its drawing's own values.
  * @property {() => Promise<string | null>} [resolveTitle] Null when the person canceled the title dialog.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
@@ -9124,6 +9472,8 @@ export const exportSession = (titleOverride = null, options) => {
       selectedFeatureRecordIdx: saved.id === drawing.id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
     }))]));
     slices.forEach((slice) => validateModeSliceFields(slice));
+    // The records each drawing's cards name, captured with its slice: Save places them from these (D-50 D).
+    const namedRecords = new Map(savedDrawings.map((saved) => [saved.id, savedNamedRecordsOf(saved)]));
     const readArtifacts = () => sessionArtifactsByDrawing(drawing, options?.readKeptArtifacts?.() ?? []);
     let artifacts = readArtifacts();
     // A drawing is written when it has an input file, a setting or an edit
@@ -9162,6 +9512,7 @@ export const exportSession = (titleOverride = null, options) => {
         draftRequest,
         slice: /** @type {SavedSessionDrawing['slice']} */ (slices.get(saved.id)),
         artifact,
+        namedRecords: namedRecords.get(saved.id) ?? null,
         // The view keys of the drawing's one-drawing view: its mode and input
         // type, the generated layout of its Results, the shown one's viewport.
         ui: {

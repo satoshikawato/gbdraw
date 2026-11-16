@@ -6,11 +6,13 @@ import { reactive } from '../utils/reactivity.js';
 import { drawnRecordIdentities } from '../services/record-draw-selection.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { copyRefusalLine } from './region-drawing/copy-text.js';
+import { createLastTarget, pasteLinesOf, pastePayloadOf, pasteTargetsOf } from './region-drawing/paste.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
-/** @import { DerivedRegionDrawing, NewDrawingCopy, NotCarriedItem, RefusedCopy } from '../contracts/locate.generated.js' */
-/** @import { RefusedRegionDrawing, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
+/** @import { DerivedRegionDrawing, NewDrawingCopy, NotCarriedItem, PastedRecords, RefusedCopy } from '../contracts/locate.generated.js' */
+/** @import { CopyTarget, PasteTargetPorts } from './region-drawing/paste.js' */
+/** @import { PageExistingDrawingCopy, RefusedRegionDrawing, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
 /** @import { DrawingListOutcome } from './drawing-list.js' */
 /** @import { IdentityRequestRecord, RecordIdentitySources } from '../services/record-draw-selection.js' */
 
@@ -27,6 +29,7 @@ import { copyRefusalLine } from './region-drawing/copy-text.js';
  *   Result drew under a record key (the committed request's), or null when it drew none under that key.
  * @property {(drawn: DrawnRecordChoice) => string | null} committedRecordKeyOf The committed request's record key of a
  *   drawn record (its definition group's index and ID), found as the record popup finds it; null when none.
+ * @property {PasteTargetPorts} pasteTargets The existing drawings a copy can paste into.
  */
 
 /** @typedef {{ recordIndex: number, recordId: string }} DrawnRecordChoice A drawn record (the record popup's identity). */
@@ -105,6 +108,14 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
  * @property {string} message The reason shown for 'idle', 'invalid', 'refused' and 'error'.
  * @property {{ setting: string, label: string, explicit: string, auto: string }[]} returnedToAuto
  * @property {string[]} notCarried
+ * @property {CopyTarget} target A new drawing, or the existing drawing the copy pastes into.
+ * @property {{ id: DrawingId, name: string }[]} targets The existing drawings offered: every drawing but the shown one.
+ * @property {PageExistingDrawingCopy['edits']} edits "Bring the records' edits" or "Records only" (an existing drawing).
+ * @property {PageExistingDrawingCopy['duplicates']} duplicates "Skip it" or "Add it again" for what the drawing has already.
+ * @property {string[]} alreadyPresent The lines of what the existing drawing has already.
+ * @property {string[]} leftOut The lines of what the existing drawing leaves out, with the reason.
+ * @property {boolean} addsNothing A paste that adds no record (each choice is already there with Skip it, or left out):
+ *   Copy is off, and the lines above say why (D-35).
  */
 
 /**
@@ -217,18 +228,27 @@ export const derivedDrawingNotes = ({ mode, returnedToAuto, notCarried }) => ({
   notCarried: notCarried.map((item) => notCarriedLine(mode, item.kind))
 });
 
+/** The lines of a derived drawing or a paste, none shown (and so no paste that adds nothing). */
+const NO_LINES = Object.freeze({ returnedToAuto: [], notCarried: [], alreadyPresent: [], leftOut: [], addsNothing: false });
 /** The dialog as it opens and after Close. @returns {Omit<RegionDialogView, 'show' | 'rows'>} */
 const startingChoices = () => ({
-  keepValues: false, newMode: null, settings: 'keep', mode: null, status: 'idle', message: '', returnedToAuto: [], notCarried: []
+  keepValues: false, newMode: null, settings: 'keep', mode: null, status: 'idle', message: '', ...NO_LINES,
+  target: 'new', targets: [], edits: 'edits', duplicates: 'skip'
 });
 
 /**
- * The user's choices of the dialog that are not rows: Keep my values, the new drawing's mode and settings.
- * @typedef {Partial<Pick<RegionDialogView, 'keepValues' | 'newMode' | 'settings'>>} RegionChoiceEdit
+ * The user's choices of the dialog that are not rows: Keep my values, the target, the new drawing's mode and settings,
+ * and an existing drawing's edits and duplicates.
+ * @typedef {Partial<Pick<RegionDialogView, 'keepValues' | 'newMode' | 'settings' | 'target' | 'edits' | 'duplicates'>>} RegionChoiceEdit
  */
 
-/** The copy the dialog's choices make (a new drawing). @param {RegionDialogView} dialog @returns {NewDrawingCopy} */
-const copyOf = (dialog) => ({ into: 'new', settings: dialog.settings, mode: dialog.newMode });
+/** A copy as the dialog's choices make it: a new drawing, or a paste into the drawing of `drawingId`. */
+/** @typedef {NewDrawingCopy | ({ into: 'existing', drawingId: DrawingId } & Pick<PageExistingDrawingCopy, 'edits' | 'duplicates'>)} CopyChoice */
+
+/** The copy the dialog's choices make. @param {RegionDialogView} dialog @returns {CopyChoice} */
+const copyOf = ({ target, settings, newMode, edits, duplicates }) => (target === 'new'
+  ? { into: 'new', settings, mode: newMode }
+  : { into: 'existing', drawingId: target, edits, duplicates });
 
 /** The reason a refusal shows, from the wording owner of its vocabulary. @param {RefusedRegionDrawing | RefusedCopy} offer */
 const refusalText = (offer) => (offer.reason === 'START_AFTER_END'
@@ -287,7 +307,7 @@ const regionsOf = (rows) => {
 /**
  * What the creation screen shows: the refusal, or the derived drawing (what
  * returned to Auto, what is not carried) with the Create that adds it.
- * @typedef {RefusedRegionDrawing | RefusedCopy | (DerivedRegionDrawing & { create: () => Promise<DrawingListOutcome> })} RegionDrawingOffer
+ * @typedef {RefusedRegionDrawing | RefusedCopy | ((DerivedRegionDrawing | PastedRecords) & { create: () => Promise<DrawingListOutcome> })} RegionDrawingOffer
  */
 
 const REPLY_INVALID = () => diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
@@ -297,16 +317,33 @@ const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Arra
 
 /** The reply's vocabularies, from Python's `StartAfterEndReason`, `CopyRefusalReason` and `NotCarriedKind`. */
 const {
-  refusalReasons: REFUSAL_REASONS, copyRefusalReasons: COPY_REFUSAL_REASONS, notCarriedKinds: NOT_CARRIED_KINDS
+  refusalReasons: REFUSAL_REASONS, copyRefusalReasons: COPY_REFUSAL_REASONS, notCarriedKinds: NOT_CARRIED_KINDS,
+  pasteNotCarriedKinds: PASTE_NOT_CARRIED_KINDS
 } = MODE_PROFILE_DATA.regionDrawing;
+
+/** @param {unknown} value @returns {value is Record<string, string>} */
+const isIdTable = (value) => isRecord(value) && Object.values(value).every((id) => typeof id === 'string');
+
+/** A paste's reply, checked against `PastedRecords`. @param {Record<string, unknown>} result @returns {PastedRecords} */
+const readPastedRecords = (result) => {
+  const lists = [result.pastedRecordKeys, result.alreadyPresent, result.leftOut, result.notCarried, result.addedResources];
+  if ((result.mode !== 'circular' && result.mode !== 'linear') || !isRecord(result.renderRequest)
+    || !isIdTable(result.resourceSources) || !isIdTable(result.targetResourceSources) || !lists.every(Array.isArray)
+    || !/** @type {unknown[]} */ (result.leftOut).every((item) => isRecord(item) && COPY_REFUSAL_REASONS.includes(String(item.reason)))
+    || !/** @type {unknown[]} */ (result.notCarried).every((item) => isRecord(item) && PASTE_NOT_CARRIED_KINDS.includes(String(item.kind)))) {
+    throw REPLY_INVALID();
+  }
+  return /** @type {PastedRecords} */ (/** @type {unknown} */ (result));
+};
 
 /**
  * The Worker's reply, checked against `RegionDrawingReply` or a refused copy (`RefusedCopy`).
  * @param {unknown} result
- * @returns {RegionDrawingReply | RefusedCopy}
+ * @returns {RegionDrawingReply | RefusedCopy | PastedRecords}
  */
 const readRegionDrawingReply = (result) => {
   if (!isRecord(result)) throw REPLY_INVALID();
+  if (result.status === 'pasted') return readPastedRecords(result);
   if (result.status === 'refused' && Object.keys(result).length === 2) {
     if (typeof result.reason !== 'string' || !COPY_REFUSAL_REASONS.includes(result.reason)) throw REPLY_INVALID();
     return /** @type {RefusedCopy} */ (result);
@@ -328,35 +365,41 @@ const readRegionDrawingReply = (result) => {
 };
 
 /**
+ * The offer of a copy of `regions` of the shown drawing: Python derives the new drawing, or pastes into an existing
+ * drawing, whose draft request travels with the source's (`pastePayloadOf`).
+ * @param {RegionDrawingPorts} ports
+ * @param {readonly RegionDrawingRegion[]} regions Source coordinates, 1-based and inclusive.
+ * @param {boolean} adaptSizes Whether hand-set sizes whose Auto differs return to Auto.
+ * @param {CopyChoice} choice Where the regions go and with which settings or edits.
+ * @returns {Promise<RegionDrawingOffer>}
+ */
+const deriveCopy = async (ports, regions, adaptSizes, choice) => {
+  const { shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, pasteTargets } = ports;
+  const sourceId = shownDrawingId();
+  const sent = await projectShownRequest();
+  const resources = /** @type {RegionDrawingHelperPayload['resources']} */ (sent.envelope.resources);
+  const into = choice.into === 'existing' ? { choice, targetSent: await pasteTargets.projectDrawing(choice.drawingId) } : null;
+  const payload = into
+    ? pastePayloadOf(resources, into.targetSent, { edits: into.choice.edits, duplicates: into.choice.duplicates })
+    : { resources, copy: /** @type {NewDrawingCopy} */ (choice) };
+  const reply = readRegionDrawingReply((await deriveRegion({ canonicalRequest: sent.envelope.renderRequest, regions, adaptSizes, ...payload })).result);
+  if (reply.status === 'refused') return reply;
+  if (reply.status !== 'pasted') return { ...reply, create: () => newDrawingFromRegion(sourceId, { derived: reply, sent }) };
+  if (!into) throw REPLY_INVALID();
+  return { ...reply, create: () => pasteTargets.pasteInto(into.choice.drawingId, { pasted: reply, sent, targetSent: into.targetSent }) };
+};
+
+/**
  * Copy to another drawing (PD-OI-090 〔作成〕(4)): Python derives the
  * drawing from the shown drawing's draft request; Copy adds it with the
- * Web files of the request that was sent.
+ * Web files of the request that was sent, or pastes it into an existing drawing.
  * @param {RegionDrawingPorts} ports
  */
-export const createRegionDrawing = ({
-  shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, readRecordSources, resultFeatures,
-  committedRecordKeyOf
-}) => {
-  /**
-   * @param {readonly RegionDrawingRegion[]} regions Source coordinates, 1-based and inclusive.
-   * @param {boolean} adaptSizes Whether hand-set sizes whose Auto differs return to Auto.
-   * @param {NewDrawingCopy} copy Where the regions go and with which settings.
-   * @returns {Promise<RegionDrawingOffer>}
-   */
-  const deriveFromShown = async (regions, adaptSizes, copy) => {
-    const sourceId = shownDrawingId();
-    const sent = await projectShownRequest();
-    const { renderRequest, resources } = sent.envelope;
-    const reply = readRegionDrawingReply((await deriveRegion({
-      canonicalRequest: renderRequest,
-      resources: /** @type {RegionDrawingHelperPayload['resources']} */ (resources),
-      regions,
-      adaptSizes,
-      copy
-    })).result);
-    if (reply.status === 'refused') return reply;
-    return { ...reply, create: () => newDrawingFromRegion(sourceId, { derived: reply, sent }) };
-  };
+export const createRegionDrawing = (ports) => {
+  const { shownDrawingId, projectShownRequest, readRecordSources, resultFeatures, committedRecordKeyOf, pasteTargets } = ports;
+  /** @param {readonly RegionDrawingRegion[]} regions @param {boolean} adaptSizes @param {CopyChoice} choice */
+  const deriveFromShown = (regions, adaptSizes, choice) => deriveCopy(ports, regions, adaptSizes, choice);
+  const lastTarget = createLastTarget(pasteTargets.drawingOf);
 
   // The dialog (the one owner of its open, close, reset and input edits; the template assigns none of its state).
   /** @type {RegionDialogView} */
@@ -368,7 +411,7 @@ export const createRegionDrawing = ({
   /** @param {RegionDialogView['status']} status @param {string} message */
   const showStatus = (status, message) => {
     create = null;
-    Object.assign(dialog, { status, message, returnedToAuto: [], notCarried: [] });
+    Object.assign(dialog, { status, message, ...NO_LINES });
   };
 
   /** Derives again from the inputs; a reply that a newer request superseded is dropped. None while Create runs. */
@@ -383,8 +426,11 @@ export const createRegionDrawing = ({
       if (mine !== request) return undefined;
       // The reason alone, from the wording owner of its vocabulary: the dialog's rows are the region.
       if (offer.status === 'refused') return showStatus('refused', refusalText(offer));
-      Object.assign(dialog, { status: 'derived', message: '', mode: offer.mode, ...derivedDrawingNotes(offer) });
-      create = offer.create;
+      Object.assign(dialog, { status: 'derived', message: '', mode: offer.mode, ...NO_LINES, ...(offer.status === 'pasted'
+        ? { ...pasteLinesOf(offer, captionOf, dialog.targets.find(({ id }) => id === dialog.target)?.name ?? ''),
+            addsNothing: offer.pastedRecordKeys.length === 0 }
+        : derivedDrawingNotes(offer)) });
+      create = dialog.addsNothing ? null : offer.create;
     } catch (error) {
       if (mine !== request) return undefined;
       const normalized = normalizeUserFacingError(error);
@@ -406,7 +452,10 @@ export const createRegionDrawing = ({
     return refresh();
   };
 
-  /** A choice that is not a row (Keep my values, the mode, the settings): derives again. @param {RegionChoiceEdit} edit */
+  /** A source record's caption, by its record key; the key when no row names it. @param {string} recordKey */
+  const captionOf = (recordKey) => dialog.rows.find((row) => row.recordKey === recordKey)?.caption ?? recordKey;
+
+  /** A choice that is not a row (Keep my values, the target, the mode, the settings): derives again. @param {RegionChoiceEdit} edit */
   const setChoice = (edit) => {
     Object.assign(dialog, edit);
     return refresh();
@@ -442,6 +491,8 @@ export const createRegionDrawing = ({
     }
     if (mine !== request) return undefined;
     dialog.rows = dialogRowsOf(records, chosen);
+    dialog.targets = pasteTargetsOf(pasteTargets.tabs(), shownDrawingId());
+    dialog.target = lastTarget.read(dialog.targets);
     return refresh();
   };
 
@@ -473,6 +524,13 @@ export const createRegionDrawing = ({
     dialog.status = 'creating';
     try {
       const outcome = await run();
+      if (outcome.status === 'busy') {
+        // Nothing was copied: the dialog stays open on its choices, says why, and Copy can run again.
+        Object.assign(dialog, { status: 'derived', message: typeof outcome.reason === 'string' ? tm(outcome.reason) : '' });
+        create = run;
+        return outcome;
+      }
+      lastTarget.remember(outcome);
       close();
       return outcome;
     } catch (error) {

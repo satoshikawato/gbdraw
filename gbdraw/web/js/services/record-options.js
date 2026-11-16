@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { LinearSeqWindow } from './drawing/inputs.js' */
-import { circularRecordsToDraw } from './record-draw-selection.js';
+import { circularRecordsOff, circularRecordsToDraw } from './record-draw-selection.js';
+/** @import { NamedCardRecords } from './record-draw-selection.js' */
 /** @import { CircularListRecord } from './record-discovery.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
 import { numberText } from '../utils/i18n.js';
@@ -143,6 +144,8 @@ export const circularRecordSelection = (entries, requestedValue) => selectAmongR
  * @property {boolean} [multiRecordCanvas]
  * @property {string} [groupingIntent]
  * @property {readonly string[]} [recordsOff] The drawing's OFF records (their identities).
+ * @property {readonly NamedCardRecords[]} [recordsNamed] The records File cards name of their files
+ *   (`namedCardRecordReading`): a read card draws those alone.
  */
 
 /** @param {CircularRequestRecordSetOptions} [options] */
@@ -151,7 +154,8 @@ export const resolveCircularRequestRecordSet = ({
   selector = '',
   multiRecordCanvas = false,
   groupingIntent = '',
-  recordsOff = []
+  recordsOff = [],
+  recordsNamed = []
 } = {}) => {
   const recordSelectors = circularRecordEntries(records);
   const requestedSelector = String(selector || '').trim();
@@ -166,7 +170,7 @@ export const resolveCircularRequestRecordSet = ({
     return { recordSelectors, records: [selection.record], omittedRecords: [], presentedCount: 1,
       singlePresentation, selectionFailure };
   }
-  const drawnRecords = circularRecordsToDraw(recordSelectors, recordsOff);
+  const drawnRecords = circularRecordsToDraw(recordSelectors, circularRecordsOff({ recordsOff, recordsNamed }, recordSelectors));
   const drawn = new Set(drawnRecords);
   return {
     recordSelectors,
@@ -229,6 +233,7 @@ export const circularRangesWithoutCard = (ranges, uid) => ranges.filter((range) 
  *   circular_record_ranges: readonly CircularRecordRange[] }} form
  * @property {{ circular_grouping_intent: string }} adv
  * @property {readonly string[]} recordsOff
+ * @property {readonly NamedCardRecords[]} recordsNamed
  */
 
 /**
@@ -244,7 +249,8 @@ export const circularDrawingRecordSet = (records, drawing) => resolveCircularReq
   selector: drawing.form.circular_record_selector,
   multiRecordCanvas: drawing.form.multi_record_canvas,
   groupingIntent: drawing.adv.circular_grouping_intent,
-  recordsOff: drawing.recordsOff
+  recordsOff: drawing.recordsOff,
+  recordsNamed: drawing.recordsNamed
 });
 
 /**

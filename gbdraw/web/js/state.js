@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
 /** @import { FileImports, ParsedSpecificRule } from './services/file-imports.js' */
+/** @import { NamedCardRecords } from './services/record-draw-selection.js' */
 /** @typedef {import('./services/drawing/inputs.js').LinearSeq} LinearSeq */
 import { msg, numberText, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
@@ -971,6 +972,7 @@ const settingsDefaults = (drawingMode) => () => ({
   linearRecordRows: [],
   recordDisplayDrafts: [],
   recordsOff: [],
+  recordsNamed: [],
   unmanagedConfigOverrides: {},
   importedComparisonIntent: createImportedComparisonIntentState(),
   layoutPreferences: createDefaultLayoutPreferences(),
@@ -1045,6 +1047,9 @@ export const createDrawingState = (id, drawingMode) => {
     linearRecordRows,
     recordDisplayDrafts: reactive(initial.recordDisplayDrafts),
     recordsOff,
+    // The records File cards a Load or a copy installed name of their files, which those cards draw alone until
+    // their read places them (`NamedCardRecords`, services/record-draw-selection.js; never saved).
+    recordsNamed: /** @type {NamedCardRecords[]} */ (reactive(initial.recordsNamed)),
     unmanagedConfigOverrides: reactive(initial.unmanagedConfigOverrides),
     importedComparisonIntent: reactive(initial.importedComparisonIntent),
     layoutPreferences,

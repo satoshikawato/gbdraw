@@ -243,7 +243,7 @@ const positionsOf = (entries) => {
  * @param {IdentityRequestRecord} record
  * @param {readonly RecordSourceEntry[]} entries
  */
-const selectedPosition = (record, entries) => {
+export const selectedPosition = (record, entries) => {
   const selector = record.selector;
   if (selector?.kind === 'recordIndex' && Number.isInteger(selector.index)) {
     return Number(selector.index) < entries.length ? Number(selector.index) : null;
@@ -396,6 +396,180 @@ export const placeFlatRecordSelectors = ({ recordsOff, selector, positions }, so
       return placed === null ? [] : [{ ...row, selector: placed }];
     })
   };
+};
+
+/**
+ * The one record a request record names of its card's file, by its place or its record ID.
+ * @typedef {{ kind: 'recordIndex', index: number } | { kind: 'recordId', value: string }} NamedRecordSelector
+ * A record a Circular request names of its card's file: its request key, by which the draft names it (its Record
+ * Order row, the request records before its card is read) until the card's read names it by its identity, and its
+ * selector.
+ * @typedef {{ recordKey: string, selector: NamedRecordSelector }} NamedCardRecord
+ * The records a Circular File card draws of its file when a Load or a copy installed a request whose records of the
+ * card each name one record (OV-3530: Python's copy of some records of a file; OV-3531: a CLI records table): the
+ * drawing's settings hold them beside `recordsOff` (`recordsNamed`, never saved) until the card's read places them
+ * (`placeNamedCardRecords`).
+ * @typedef {{ uid: string, named: readonly NamedCardRecord[] }} NamedCardRecords
+ */
+
+/** @param {unknown} value @returns {value is NamedRecordSelector} */
+const isNamedRecordSelector = (value) => {
+  const selector = /** @type {{ kind?: unknown, index?: unknown, value?: unknown } | null} */ (
+    typeof value === 'object' && value !== null ? value : null);
+  return (selector?.kind === 'recordIndex' && Number.isSafeInteger(selector.index) && Number(selector.index) >= 0)
+    || (selector?.kind === 'recordId' && typeof selector.value === 'string' && selector.value !== '');
+};
+/**
+ * The record a request record's selector names of its card's file (`NamedRecordSelector`), or null when it names
+ * none.
+ * @param {unknown} selector
+ * @returns {NamedRecordSelector | null}
+ */
+export const namedRecordSelectorOf = (selector) => {
+  if (!isNamedRecordSelector(selector)) return null;
+  return selector.kind === 'recordIndex' ? { kind: 'recordIndex', index: selector.index } : { kind: 'recordId', value: selector.value };
+};
+/**
+ * A drawing's named card records as its settings or a History step hold them (`recordsNamed`); a value of another
+ * shape names none.
+ * @param {unknown} value
+ * @returns {NamedCardRecords[]}
+ */
+export const readNamedCardRecords = (value) => (Array.isArray(value) ? value : []).flatMap((/** @type {unknown} */ card) => {
+  const { uid, named } = /** @type {{ uid?: unknown, named?: unknown }} */ (typeof card === 'object' && card !== null ? card : {});
+  if (typeof uid !== 'string' || uid === '' || !Array.isArray(named) || named.length === 0) return [];
+  const records = named.flatMap((/** @type {unknown} */ record) => {
+    const { recordKey, selector } = /** @type {{ recordKey?: unknown, selector?: unknown }} */ (
+      typeof record === 'object' && record !== null ? record : {});
+    const parsed = namedRecordSelectorOf(selector);
+    return typeof recordKey === 'string' && recordKey !== '' && parsed ? [{ recordKey, selector: parsed }] : [];
+  });
+  return records.length === named.length ? [{ uid, named: records }] : [];
+});
+
+/**
+ * What a drawing's named card records (`NamedCardRecords`) say against its read records: for each card whose
+ * records are read and whose every named record is one of them, the identities of the file's other records (`off`)
+ * and the identity of each named record by its request key (`identityOfKey`); `read` lists those cards. A card not
+ * read, or one that names a record its file lacks, says nothing: it draws its named records alone through its
+ * request records (`circularRecordPlan` in services/session-request.js). The one reading of the named records: the
+ * records a Circular drawing draws (`circularRecordsOff`) and the placement (`placeNamedCardRecords`, which the
+ * places a request names read too) read it.
+ * @param {readonly NamedCardRecords[]} cards
+ * @param {readonly (RecordSourceEntry & { uid?: unknown, value: string })[]} entries The drawing's read records,
+ *   named (`circularRecordEntries`: `value` is a record's identity).
+ * @returns {{ off: string[], identityOfKey: Map<string, string>, read: Set<string> }}
+ */
+const namedCardRecordReading = (cards, entries) => {
+  /** @type {string[]} */
+  const off = [];
+  /** @type {Map<string, string>} */
+  const identityOfKey = new Map();
+  /** @type {Set<string>} */
+  const read = new Set();
+  cards.forEach(({ uid, named }) => {
+    const cardEntries = entries.filter((entry) => cleanKey(entry.uid) === uid);
+    const drawn = named.map(({ recordKey, selector }) => {
+      const position = selectedPosition({ recordKey, selector, windows: [] }, cardEntries);
+      return cardEntries.find((entry) => position !== null && Number(entry.sourceIndex) === position);
+    });
+    if (cardEntries.length === 0 || drawn.includes(undefined)) return;
+    read.add(uid);
+    named.forEach(({ recordKey }, index) => identityOfKey.set(recordKey, /** @type {{ value: string }} */ (drawn[index]).value));
+    off.push(...cardEntries.filter((entry) => !drawn.includes(entry)).map((entry) => entry.value));
+  });
+  return { off, identityOfKey, read };
+};
+
+/**
+ * The records a Circular drawing leaves OFF as its request draws them: its `recordsOff` and, of each read card that
+ * names some records of its file (`recordsNamed`), the file's other records (`namedCardRecordReading`). The one
+ * answer to "is this record drawn" for the request (`resolveCircularRequestRecordSet`), the placement, and every
+ * control that shows it (the Records list, the Draw this record checkbox, the drawn count), so the screen shows what
+ * the figure draws before and after the placement, also after an Undo across it.
+ * @param {{ readonly recordsOff: readonly string[], readonly recordsNamed: readonly NamedCardRecords[] }} drawing
+ * @param {readonly (RecordSourceEntry & { uid?: unknown, value: string })[]} entries The drawing's read records,
+ *   named (`circularRecordEntries`).
+ * @returns {string[]}
+ */
+export const circularRecordsOff = ({ recordsOff, recordsNamed }, entries) => {
+  const { off } = namedCardRecordReading(recordsNamed, entries);
+  return [...recordsOff, ...off.filter((key) => !recordsOff.includes(key))];
+};
+
+/**
+ * The choices and named card records after a settled read of the drawing's cards places the named records
+ * (`namedCardRecordReading`): the other records of each read card's file are OFF, a Record Order row that names a
+ * named record by its request key names it by its identity (OV-3534), and the read cards' named records go
+ * (`cards`: those left, a card not read or not placed). It changes no record the drawing draws, so a placement that
+ * runs twice changes nothing more.
+ * @template {{ selector: string }} P
+ * @param {CircularRecordChoices<P>} choices
+ * @param {readonly NamedCardRecords[]} cards
+ * @param {readonly (RecordSourceEntry & { uid?: unknown, value: string })[]} entries The drawing's read records, named.
+ * @returns {{ choices: CircularRecordChoices<P>, cards: NamedCardRecords[] }}
+ */
+export const placeNamedCardRecords = ({ recordsOff, selector, positions }, cards, entries) => {
+  const { identityOfKey, read } = namedCardRecordReading(cards, entries);
+  return {
+    choices: {
+      recordsOff: circularRecordsOff({ recordsOff, recordsNamed: cards }, entries), selector,
+      positions: positions.map((row) => {
+        const identity = identityOfKey.get(row.selector);
+        return identity === undefined ? row : { ...row, selector: identity };
+      })
+    },
+    cards: cards.filter(({ uid }) => !read.has(uid))
+  };
+};
+
+/**
+ * Places the records File cards name of their files (`named`) in a draft config, as a settled read of the cards
+ * places them (`placeNamedCardRecords`): the other records of each card `entries` reads OFF, and the places that named
+ * them by request key under their identities. An empty `recordsOff` is left out, as a Session writes it (omission =
+ * every record ON). The one placement of a draft config: Save's, a copy's and a Gallery publication's.
+ * @param {{ recordsOff?: unknown, adv?: unknown }} config Changed in place.
+ * @param {readonly NamedCardRecords[]} named
+ * @param {readonly (RecordSourceEntry & { uid?: unknown, value: string })[]} entries The cards' read records, named
+ *   (`circularRecordEntries`).
+ * @returns {NamedCardRecords[]} The cards it could not place: not read, or naming a record their file lacks.
+ */
+export const placeNamedRecordsInDraft = (config, named, entries) => {
+  const adv = /** @type {{ multi_record_positions?: unknown }} */ (typeof config.adv === 'object' && config.adv !== null ? config.adv : {});
+  /** @type {{ selector: string }[]} */
+  const positions = Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions : [];
+  const placed = placeNamedCardRecords({
+    recordsOff: Array.isArray(config.recordsOff) ? config.recordsOff.map(String) : [], selector: '', positions
+  }, named, entries);
+  if (placed.choices.recordsOff.length > 0) config.recordsOff = placed.choices.recordsOff;
+  else delete config.recordsOff;
+  if (Array.isArray(adv.multi_record_positions)) adv.multi_record_positions = placed.choices.positions;
+  return placed.cards;
+};
+
+/**
+ * The named records of the File cards a paste adds that its read could not place (`placeNamedCardRecords`), under
+ * each card's uid in the target (`uids`, from the read request's): each named record keeps its request key under the
+ * card, `<card uid>:<request key>`, which no key of the target holds (the card's uid is new), until the card's read
+ * names it by its identity, as the request key of every named record does. `moves` takes each read request key to
+ * its new key (the places of the read request). A card the paste does not add is left out.
+ * @param {readonly NamedCardRecords[]} cards
+ * @param {ReadonlyMap<string, string>} uids
+ * @returns {{ cards: NamedCardRecords[], moves: Map<string, string> }}
+ */
+export const pastedNamedCardRecords = (cards, uids) => {
+  /** @type {Map<string, string>} */
+  const moves = new Map();
+  const pasted = cards.flatMap(({ uid, named }) => {
+    const card = uids.get(uid);
+    if (card === undefined) return [];
+    return [{ uid: card, named: named.map(({ recordKey, selector }) => {
+      const key = `${card}:${recordKey}`;
+      moves.set(recordKey, key);
+      return { recordKey: key, selector };
+    }) }];
+  });
+  return { cards: pasted, moves };
 };
 
 /**

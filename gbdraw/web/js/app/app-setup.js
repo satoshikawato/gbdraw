@@ -15,7 +15,7 @@
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { CommitSpecificRulesPort } from './feature-editor/color-actions.js' */
 /** @import { LegendRowColorOf } from './candidate-render.js' */
-/** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
+/** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput, DraftRequestFacts } from '../services/config.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
@@ -73,6 +73,7 @@ import { createDrawingSwitch } from './drawing-switch.js';
 import { createInputReplacementPorts } from './input-replacement-ports.js';
 import { createDrawingReset, createResetSettings } from './reset-settings.js';
 import { createRegionDrawing } from './region-drawing.js';
+import { createPasteTargets } from './region-drawing/paste-into.js';
 import { createFindInOtherFiles } from './find-in-other-files.js';
 import { createRegionSelect } from './region-select.js';
 import { readRegionAxisRecords, shownAxisRecords as shownAxisRecordsOf } from '../services/region-axis.js';
@@ -90,7 +91,7 @@ import {
   applyRunStateData,
   applyUiStateData,
   applySessionUiData,
-  buildConfigData,
+  captureConfigData,
   buildEditorStateData,
   buildFeatureStateData,
   buildOrthogroupStateData,
@@ -118,6 +119,8 @@ import {
   writeSessionDocumentFile,
   projectDraftRequest,
   makeRegionDrawing,
+  installPastedRecords,
+  preparePastedRecords,
   heldDepthFiles,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
@@ -440,6 +443,29 @@ const planDraftGenomeScales = async (drawing, { program, ...facts }) => {
   return (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES, {
     canonicalRequest: renderRequest, resources: /** @type {GenerationPayload['resources']} */ (resources), program
   })).result;
+};
+/**
+ * What the draft request of a drawing that may not be shown reads besides the drawing (Copy to another drawing, Find
+ * in other files).
+ * @typedef {object} DrawingDraftPorts
+ * @property {(drawing: DrawingState, options: { privateCandidate: boolean }) => Promise<{ catalog: unknown, error: unknown }>} prepareLinearRecordCatalog
+ * @property {(drawing: DrawingState) => { omittedRecordKeys?: string[] }} getAnnotationRecordCatalog
+ * @property {() => DraftRequestFacts['recordDisplayRows']} recordDisplayRows Every drawing's record display rows.
+ * @property {ArtifactSlotStore['readOfDrawing']} readOfDrawing
+ */
+/**
+ * The draft request of `drawing`, shown or not, as Save stores it. It reads the drawing's own artifact: the shown
+ * one, or the slot that keeps it while another drawing is shown (R15: it takes the drawing it projects).
+ * @param {DrawingState} drawing
+ * @param {DrawingDraftPorts} ports
+ */
+const projectDrawingDraft = async (drawing, { prepareLinearRecordCatalog, getAnnotationRecordCatalog, recordDisplayRows, readOfDrawing }) => {
+  const { catalog, error } = await prepareLinearRecordCatalog(drawing, { privateCandidate: true });
+  if (error) throw error;
+  return projectDraftRequest(state, drawing, {
+    linearRecordCatalog: catalog, planLinearUnits, readOfDrawing, recordDisplayRows: recordDisplayRows(),
+    omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
+  });
 };
 // The Worker helper that plans a Linear card's window numbers and omitted lengths (PD-OI-124).
 /** @param {{ records: CardWindowRecordInput[] }} payload */
@@ -809,7 +835,7 @@ export const createAppSetup = () => {
     getCircularRecordDiscoveryState, circularAnnotationSourceKey, linearAnnotationSource, getAnnotationRecordCatalog,
     recordCatalogError, prepareLinearRecordCatalog
   } = createDrawingRecordCatalog({
-    state, readInputRecords, linearRecordCatalogStateFor: linearRecordSelector.catalogStateFor,
+    readInputRecords, linearRecordCatalogStateFor: linearRecordSelector.catalogStateFor,
     linearRecordErrorModelFor: linearRecordSelector.errorModelFor, refreshLinearRecords: linearRecordSelector.refresh
   });
   const { rebindAnnotationRecords } = createAnnotationRecordRebind({
@@ -840,7 +866,7 @@ export const createAppSetup = () => {
     nextTick,
     // The discovery owner exists once the runner does; a restore runs after setup.
     discoverDrawingRecords: (drawing) => discoverDrawingRecords(drawing),
-    buildConfigData,
+    buildConfigData: captureConfigData,
     applyConfigData: applyCapturedConfigData,
     buildUiStateData,
     applyUiStateData,
@@ -3096,7 +3122,7 @@ export const createAppSetup = () => {
       /** @type {Awaited<ReturnType<typeof prepareLinearRecordCatalog>>['error']} */
       let error = '';
       if (draftRequest) {
-        ({ catalog, error } = await prepareLinearRecordCatalog({ privateCandidate: true }));
+        ({ catalog, error } = await prepareLinearRecordCatalog(drawing, { privateCandidate: true }));
         await afterPaint();
       }
       recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
@@ -3307,7 +3333,9 @@ export const createAppSetup = () => {
     setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
 
-  const { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
+  const {
+    circularIdentitySources, drawnRecordsOff, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf, writeRecordsOff
+  } = createRecordSettingsSources({
     shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearCardRecord,
     linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
     takeBackRuleRows: featureActions.takeBackRuleRows
@@ -3321,12 +3349,10 @@ export const createAppSetup = () => {
   const recordSelection = createRecordSelection({
     reactive,
     computed,
-    // The OFF list of the shown drawing when it is of `listMode` (every port
-    // here acts on the shown drawing; the lists and checkboxes are in its panel).
-    recordsOff: (listMode) => {
-      const drawing = shownDrawingOfMode(listMode);
-      return drawing ? drawing.recordsOff : [];
-    },
+    // The OFF records of the shown drawing when it is of `listMode`, as it draws them (every port here acts on the
+    // shown drawing; the lists and checkboxes are in its panel).
+    recordsOff: (listMode) => drawnRecordsOff(shownDrawingOfMode(listMode)),
+    writeRecordsOff: (listMode, next) => writeRecordsOff(shownDrawingOfMode(listMode), next),
     source: recordSourceOf,
     runUndoable: history.runUndoable,
     withDialogChoice: dialogChoice.withHistory,
@@ -3369,32 +3395,28 @@ export const createAppSetup = () => {
     state, linearComparisonGlobalAction, userDefaultColorRows: resultsManager.userDefaultColorRows
   });
 
-  // Copy to another drawing and Find in other files: the shown drawing's draft request, as Save stores it, goes to Python.
-  const projectShownRequest = async () => {
-    const drawing = state.activeDrawing();
-    const { catalog, error } = drawing.mode === 'linear'
-      ? await prepareLinearRecordCatalog({ privateCandidate: true })
-      : { catalog: null, error: '' };
-    if (error) throw error;
-    return projectDraftRequest(state, drawing, {
-      linearRecordCatalog: catalog, planLinearUnits, readOfDrawing: artifactSlots.readOfDrawing,
-      recordDisplayRows: recordDisplayControls.allRows.value,
-      omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
-    });
-  };
+  // Copy to another drawing and Find in other files: a drawing's draft request, as Save stores it, goes to Python.
+  /** @param {DrawingState} drawing */
+  const projectRequestOf = (drawing) => projectDrawingDraft(drawing, { prepareLinearRecordCatalog, getAnnotationRecordCatalog,
+    recordDisplayRows: () => recordDisplayControls.allRows.value, readOfDrawing: artifactSlots.readOfDrawing });
   const regionDrawings = createRegionDrawing({
     shownDrawingId: () => state.activeDrawingId.value,
-    projectShownRequest,
+    projectShownRequest: () => projectRequestOf(state.activeDrawing()),
     // The projection's resource table holds the descriptors Save would write.
     deriveRegion: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, { ...payload,
       resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
     newDrawingFromRegion: drawingList.newDrawingFromRegion,
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures,
-    committedRecordKeyOf: previewItemPopup.committedRecordKeyOf
+    committedRecordKeyOf: previewItemPopup.committedRecordKeyOf,
+    pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
+      readRecords: readDrawingRecordIdentities, project: projectRequestOf, show: selectDrawing, runUndoable: history.runUndoable,
+      prepare: preparePastedRecords, install: installPastedRecords, writeArtifactValues: historySnapshots.writeArtifactValues,
+      endAlignmentWorkOf: similarityAlignmentActions.endWorkOf })
   });
   const findInOtherFiles = createFindInOtherFiles({
-    shownDrawingId: () => state.activeDrawingId.value, projectShownRequest, runInOverlay: runInLosatOverlay,
+    shownDrawingId: () => state.activeDrawingId.value, projectShownRequest: () => projectRequestOf(state.activeDrawing()),
+    runInOverlay: runInLosatOverlay,
     runLocateStep: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES, payload),
     shownDrawing: () => state.activeDrawing(), newDrawingFromSearch: drawingList.newDrawingFromRegion
   });

@@ -1089,12 +1089,15 @@ def render_drawn_attributes_module() -> str:
         RING_RADIUS_ATTRIBUTES,
     )
     from gbdraw.render.drawers.linear.wrap_rows import WRAP_ROW_ATTRIBUTE
+    from gbdraw.render.groups.linear.definition import DEFINITION_LINE_KIND_ATTRIBUTE
+    from gbdraw.render.groups.linear.row_windows import WINDOW_LINE_KIND
     from gbdraw.render.interactive_svg import (
         MATCH_FRAGMENT_OWN_ATTRIBUTES,
         STANDALONE_BASE_COMPLEMENTS_SLOT,
         STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT,
         STANDALONE_MATCH_SPAN_REASON_TEXTS_SLOT,
     )
+    from gbdraw.svg.ids import RECORD_ID_ATTRIBUTE, RECORD_INDEX_ATTRIBUTE
     from gbdraw.web_support.feature_catalog import BASE_COMPLEMENTS, MATCH_SPAN_REASON_TEXTS
 
     minimum, maximum = GRADIENT_SCALE_NAME_ATTRIBUTES
@@ -1107,9 +1110,15 @@ def render_drawn_attributes_module() -> str:
         "// gbdraw/render/drawers/annotation_marks.py (the annotation attributes) and\n"
         "// gbdraw/render/drawers/circular/conservation.py (the similarity-ring attributes) and\n"
         "// gbdraw/render/interactive_svg.py (the attributes of a match fragment and the slots of the standalone\n"
-        "// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS, BASE_COMPLEMENTS); do not edit\n"
-        "// manually.\n"
+        "// script) and gbdraw/web_support/feature_catalog.py (MATCH_SPAN_REASON_TEXTS, BASE_COMPLEMENTS) and\n"
+        "// gbdraw/svg/ids.py (the record attributes) and gbdraw/render/groups/linear/definition.py and row_windows.py\n"
+        "// (the definition line kind); do not edit manually.\n"
         "\n"
+        "/** A drawn group of a record names the record: its record ID and its index in the request. */\n"
+        f"export const RECORD_ATTRIBUTES = Object.freeze({{ id: {_scalar(RECORD_ID_ATTRIBUTE)}, index: {_scalar(RECORD_INDEX_ATTRIBUTE)} }});\n"
+        "/** A drawn definition line names its kind; the list line of a window in a Linear row of windows is a WINDOW_LINE_KIND line. */\n"
+        f"export const DEFINITION_LINE_KIND_ATTRIBUTE = {_scalar(DEFINITION_LINE_KIND_ATTRIBUTE)};\n"
+        f"export const WINDOW_LINE_KIND = {_scalar(WINDOW_LINE_KIND)};\n"
         "/** A drawn region annotation's group names its annotation and its set, in both modes. */\n"
         f"export const ANNOTATION_ID_ATTRIBUTE = {_scalar(ANNOTATION_ID_ATTRIBUTE)};\n"
         f"export const ANNOTATION_SET_ID_ATTRIBUTE = {_scalar(ANNOTATION_SET_ID_ATTRIBUTE)};\n"

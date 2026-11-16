@@ -5,6 +5,7 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   DIAGRAM_HELPER_STAGING_OPERATIONS,
   STAGED_RESOURCE_PAYLOAD_KEYS,
+  pasteTargetPaths,
   readFeatureCatalogRevision,
   readHeldSegments,
   readSvgDocumentParts
@@ -1249,21 +1250,26 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     )
   },
   // Copy to another drawing: Python derives the drawing from the source
-  // drawing's draft projection and returns it with its resource sources.
+  // drawing's draft projection and returns it with its resource sources. A
+  // paste's target drawing staged its resources in the same table, under the
+  // staging IDs its `resourceIds` names: Python reads them by their own IDs.
   [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: {
     keys: ['canonicalRequest', 'regions', 'adaptSizes', 'copy'],
     fileRoles: [],
-    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
-      pyodide, 'derive_web_region_drawing_json', [
+    run: async (pyodide, payload, _paths, _operation, workspace) => {
+      const staged = await prepareCanonicalResources(pyodide, `${workspace}/request`, payload);
+      const { copy, sourcePaths, sourceIdentities } = pasteTargetPaths(
+        payload.copy, staged, buildPreparedResourceIdentityMap(payload.resourceManifest));
+      return callJsonHelper(pyodide, 'derive_web_region_drawing_json', [
         jsonArgument(payload.canonicalRequest, null),
-        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        jsonArgument(sourcePaths, {}),
         `${workspace}/output`,
         jsonArgument(payload.regions, []),
         jsonArgument(payload.adaptSizes, true),
-        jsonArgument(payload.copy, null),
-        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
-      ]
-    )
+        jsonArgument(copy, null),
+        jsonArgument(sourceIdentities, {})
+      ]);
+    }
   },
   // Find in other files: one step (the reference, the search plan, the plan of its rows, the new drawing) over the
   // Files of the shown drawing's draft projection.

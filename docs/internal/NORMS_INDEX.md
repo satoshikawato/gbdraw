@@ -584,7 +584,7 @@ under "Cited ids without a record".
   - `tests/web/palette-default-colors.playwright.spec.js`
   - `tests/web/palette-default-colors.test.mjs`
 
-- [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings): Project with drawings. ACCEPTED, concern `session.project-drawings`, scenario revision 10, supersedes scenario revision 9.
+- [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings): Project with drawings. ACCEPTED, concern `session.project-drawings`, scenario revision 11, supersedes scenario revision 10.
   - `tests/test_session_compat.py`
   - `tests/test_session_drawings.py`
   - `tests/test_session_io.py`
@@ -625,6 +625,7 @@ under "Cited ids without a record".
   - `tests/web/per-mode-results.playwright.spec.js`
   - `tests/web/region-drawing.playwright.spec.js`
   - `tests/web/region-drawing.test.mjs`
+  - `tests/web/region-select.playwright.spec.js`
   - `tests/web/scale-visibility.playwright.spec.js`
   - `tests/web/session-active-mode.playwright.spec.js`
   - `tests/web/session-loading-feedback.playwright.spec.js`
@@ -815,8 +816,9 @@ under "Cited ids without a record".
   - `tests/web/legend-edit-refit.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
 
-- [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing): Select region on the drawing. ACCEPTED, concern `web.result.region-select`, scenario revision 1.
+- [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing): Select region on the drawing. ACCEPTED, concern `web.result.region-select`, scenario revision 2, supersedes scenario revision 1.
   - `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.provenance.json`
+  - `tests/test_linear_row_windows.py`
   - `tests/test_web_record_spans.py`
   - `tests/web/annotations.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`

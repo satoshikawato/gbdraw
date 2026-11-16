@@ -25,6 +25,8 @@ import { adoptCurrentSessionResources } from './session-resource-backing.js';
 /** @import { CardRecordFacts } from './linear-card-windows.js' */
 import { storesDrawnFrameProteinResults } from './main-session-comparison-frame.js';
 import { discoverInputRecords, readCircularSourceRecords } from './record-discovery.js';
+import { placeNamedRecordsInDraft } from './record-draw-selection.js';
+import { circularRecordEntries } from './record-options.js';
 import { circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { cardFileRecordFacts } from './linear-card-windows.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -261,7 +263,9 @@ const publicationConfig = (session, projection) => {
   const colors = session.renderRequest.diagramOptions?.colors;
   if (!colors?.defaultColors && !colors?.defaultColorsFile) Object.assign(config, { colors: {}, colorsAreOverrides: false });
   for (const key of ['webEdits', 'paletteInstantPreviewEnabled']) if (has(stored, key)) config[key] = clone(stored[key]);
-  delete config.blastSource; delete config.adv.losatProgram;
+  // The records a File card names of its file are the drawing's until its read places them (`rebuildIntent`); no
+  // Session holds them.
+  delete config.blastSource; delete config.adv.losatProgram; delete config.recordsNamed;
   return config;
 };
 // The layout preferences of the Session's drawing: a Session 46 slice's slot
@@ -405,6 +409,11 @@ const rebuildIntent = async (session, owners) => {
     const failed = reads.find(({ error }) => error !== null);
     if (failed) throw failed.error;
     drawing.circularRecordList.value = reads.flatMap(({ records }) => records);
+    // The published draft holds the records OFF that the cards' named records leave out (a CLI Session's, OV-3531):
+    // a Load of a Web draft reads its own records OFF, not the request's named records.
+    if (placeNamedRecordsInDraft(config, drawing.recordsNamed, circularRecordEntries(drawing.circularRecordList.value)).length) {
+      throw diagnosticError('RECORD_SELECTION', { reason: 'NO_MATCH' });
+    }
   }
   // It reads the records of each Linear card too: the request names a card's record by the records its file holds
   // (`cliRecordSelector`), which Generate's catalog and this read count with one producer (`cardFileCount`).

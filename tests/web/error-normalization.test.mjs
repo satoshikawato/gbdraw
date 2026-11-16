@@ -482,10 +482,39 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   assert.equal(hiddenMode.context.diagramMode, 'linear');
   assert.match(hiddenMode.summary, / Diagram: Linear\.$/);
   assert.deepEqual(hiddenMode.actions, ['generate']);
-  assert.match(indexHtml, /errorDisplay\.actions\.includes\('save-session'\) && errorDisplay\.operation !== 'session-save'/);
   const saveFailure = normalizeUserFacingError(new Error('PRIVATE'), { operation: 'session-save' });
   assert.equal(saveFailure.code, 'UNKNOWN');
   assert.equal(saveFailure.operation, 'session-save');
+  // The normalizer leaves Save Session out of a failed Save's actions (R6), so the panel shows the button by its
+  // actions alone; a model normalized again (`errorDisplay`) keeps that.
+  assert.deepEqual(saveFailure.actions, ['retry', 'reload']);
+  assert.deepEqual(normalizeUserFacingError(saveFailure).actions, ['retry', 'reload']);
+  assert.match(indexHtml, /<button v-if="errorDisplay\.actions\.includes\('save-session'\) \|\| generationFailureRecovery === 'restore-failed'"/);
+  const saveInit = normalizeUserFacingError({ code: 'WORKER_INIT', operation: 'listSequenceRecords' }, { operation: 'session-save' });
+  assert.deepEqual(saveInit.actions, ['retry', 'reload']);
+  assert.doesNotMatch(saveInit.summary, /Save a Session/);
+  assert.deepEqual(normalizeUserFacingError({ code: 'WORKER_INIT' }, { operation: 'generate' }).actions, ['save-session', 'reload', 'retry']);
+  // No failure of a Save tells the user to save a Session: each code whose own sentence says so has a Save sentence
+  // that names what failed and offers only Retry and Reload.
+  for (const code of ['WORKER_INIT', 'CLEANUP_FAILED', 'UNKNOWN']) {
+    const failed = normalizeUserFacingError({ code }, { operation: 'session-save' });
+    assert.equal(failed.code, code);
+    assert.match(failed.summary, /the Session was not saved/i, code);
+    assert.doesNotMatch(failed.summary, /save a Session/i, code);
+    assert.deepEqual(failed.actions, ['retry', 'reload'], code);
+  }
+  // The reproducibility-files download writes the replay Session with Save's writer but is not a Save: it keeps each
+  // code's own sentence, and, as a Session write, offers no Save Session and gives a size refusal Save's sentences.
+  for (const [code, summary, actions] of [
+    ['WORKER_INIT', 'The diagram runtime could not start. Save a Session and reload before retrying.', ['reload', 'retry']],
+    ['CLEANUP_FAILED', 'Temporary resource cleanup failed. Save a Session and reload before retrying.', ['reload', 'retry']],
+    ['UNKNOWN', 'The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.', ['retry']]
+  ]) {
+    const failed = normalizeUserFacingError({ code }, { operation: 'reproducibility-files', stage: 'write' });
+    assert.deepEqual([failed.operation, failed.summary, failed.actions], ['reproducibility-files', summary, actions], code);
+  }
+  const replayTooLarge = sessionLimit({ sessionBytes: 600 * 1024 * 1024, sessionByteLimit: 512 * 1024 * 1024 }, 'reproducibility-files');
+  assert.deepEqual([replayTooLarge.summary, replayTooLarge.actions], [saveTooLarge.summary, saveTooLarge.actions]);
 });
 
 // #941 residual: every action of an operation error panel is the same small

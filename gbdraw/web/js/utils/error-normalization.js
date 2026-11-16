@@ -12,7 +12,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
   'planRecordPlaces', 'planRingScales',
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readEmbedSequences', 'readFeatureOverrideTable', 'readFeatureSequences', 'readMatchSequences', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
-  'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesisQualifiers', 'synthesizeColorRules', 'storeSavedProteinResults', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
+  'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesisQualifiers', 'synthesizeColorRules', 'storeSavedProteinResults', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'reproducibility-files', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse', 'drawing-list']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
@@ -355,9 +355,20 @@ const DEFINITIONS = Object.freeze({
   CLEANUP_FAILED: ['Temporary resource cleanup failed. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']]
 });
 
-// The sequence reads of a shown Result (D5) give their own meaning to a code that names another operation's failure.
+// The operations that write a Session: Save, and the reproducibility-files download, which writes the replay Session
+// with Save's writer. Both give a Session refused for its size the Save sentences and offer no Save Session; only a
+// Save has the sentences of a failed Save (`OPERATION_DEFINITIONS`).
+const SESSION_WRITES = new Set(['session-save', 'reproducibility-files']);
+
+// An operation's own meaning of a code that names another operation's failure: the sequence reads of a shown Result
+// (D5); a Save, whose runtime failure cannot be recovered by saving (R6).
 /** @type {Readonly<Record<string, Readonly<Record<string, readonly [string, readonly string[], string?]>>>>} */
 const OPERATION_DEFINITIONS = Object.freeze({
+  'session-save': Object.freeze(/** @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>} */ ({
+    WORKER_INIT: ['The diagram runtime could not start, so the Session was not saved. Retry; if it fails again, reload the page.', ['retry', 'reload']],
+    CLEANUP_FAILED: ['Temporary resource cleanup failed, so the Session was not saved. Retry; if it fails again, reload the page.', ['retry', 'reload']],
+    UNKNOWN: ['The Session was not saved, and the failure gave no recognized diagnostic information. Retry; if it fails again, reload the page.', ['retry', 'reload']]
+  })),
   readFeatureSequences: Object.freeze(/** @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>} */ ({
     FEATURE_IDENTITY: ['The request of the shown Result does not draw this feature, so its sequence cannot be read. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']]
   }))
@@ -1000,7 +1011,7 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
  */
 const sessionLimitParts = ({ code, operation, context }) => {
   const { sessionBytes, sessionByteLimit, storageNeedBytes, storageFreeBytes, largestInputs } = context;
-  const save = operation === 'session-save';
+  const save = SESSION_WRITES.has(operation);
   if (code !== 'SESSION_SIZE_LIMIT' || (!save && operation !== 'session-load')) return null;
   /** @param {number} bytes */
   const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
@@ -1264,9 +1275,12 @@ export const normalizeUserFacingError = (value, {
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
-  result.actions = sessionTable !== undefined || sessionLimit ? ['select-input']
+  const offered = sessionTable !== undefined || sessionLimit ? ['select-input']
     : comparisonCauseRepeats(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
+  // Save Session is no way out of a failed Session write (R6): the write itself is what failed. The one rule for every
+  // surface.
+  result.actions = SESSION_WRITES.has(result.operation) ? offered.filter((action) => action !== 'save-session') : offered;
   return result;
 };
 

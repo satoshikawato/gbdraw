@@ -7,7 +7,7 @@ import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './help
 import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -17,8 +17,8 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
-import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
-import { readSessionFile } from './helpers/written-resources.mjs';
+import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { readSessionFile, writeSessionFile } from './helpers/written-resources.mjs';
 
 globalThis.window = {
   Vue: {
@@ -182,6 +182,342 @@ for (const grouping of ['grid', 'batch']) {
     }
   });
 }
+
+// S2 (OV-3531): a stored grid that draws one record of a file of two (and a file of one), named by record ID over the
+// shared file; the read turns the other OFF, and the user turns it ON again. A Save before Generate keeps that choice:
+// the next Load draws both records, not the one the Result drew.
+await test('a record turned ON after the read of a stored canvas of some records stays ON over Save and Load', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-all-on-'));
+  try {
+    const { bytes } = await cliSession(directory, ['--gbk', twoRecords, mito, '--multi_record_canvas']);
+    const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+    const named = withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+      const [first, , mitoRecord] = view.renderRequest.records;
+      view.renderRequest.records = [{ ...first, selector: { kind: 'recordId', value: 'TESTA' } }, mitoRecord];
+    });
+    assert.equal((await load(await writeSessionFile(named, resourceBytes))).status, 'ok');
+    const recordIdsOf = (records) => records.map(({ selector }) => selector?.value ?? selector?.index ?? null);
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', null], 'the canvas draws TESTA alone of its file');
+    // The user turns TESTB ON again: every record ON, none named.
+    const drawing = modeDrawing(state, 'circular');
+    drawing.recordsOff.splice(0, Infinity);
+    drawing.recordsNamed?.splice(0, Infinity);
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', 'TESTB', null]);
+    const result = await sessionConfig.exportSession('all-on', { shownDrawing: state.activeDrawing,
+      readOfDrawing: (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore().readOfDrawing, askChoice: async () => 'download' });
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    // The Result's request names TESTA alone; the drawing's choice (every record ON) is saved beside it.
+    const { document: saved } = await readSessionFile(result.blob);
+    assert.equal(Object.hasOwn(saved.drawings.find(({ id }) => id === drawing.id).config, 'recordsOff'), false,
+      'Save writes every record ON as dev does: no recordsOff');
+    assert.equal((await load(result.blob)).status, 'ok');
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', 'TESTB', null], 'the Load draws both');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// Save then Load draws the records each card draws, in every mix of cards placed by their read and cards that still
+// name some records of their files (`recordsNamed`): a stored grid of TESTA of TESTA/TESTB, R3c of R2c/R3c and the
+// mitogenome, whose drawing then holds the mix.
+const sharedBlock = path.join(root, 'tests/fixtures/web_comparison_shared_block.gb');
+for (const [name, mix] of [
+  ['the first card placed with TESTB OFF, the second still named', ([first, second]) => ({ off: [`${first}:2`], named: [second] })],
+  ['the first card placed with every record ON, the second still named', ([, second]) => ({ off: [], named: [second] })],
+  ['the first card still named, the second placed with every record ON', ([first]) => ({ off: [], named: [first] })],
+  ['both cards placed, R2c ON again', ([first]) => ({ off: [`${first}:2`], named: [] })]
+]) {
+  await test(`Save then Load draws each card's records: ${name}`, async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-mix-'));
+    try {
+      const { bytes } = await cliSession(directory, ['--gbk', twoRecords, sharedBlock, mito, '--multi_record_canvas']);
+      const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+      const named = withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+        const [testa, , , r3c, mitoRecord] = view.renderRequest.records;
+        view.renderRequest.records = [{ ...testa, selector: { kind: 'recordId', value: 'TESTA' } },
+          { ...r3c, selector: { kind: 'recordId', value: 'R3c' } }, mitoRecord];
+      });
+      assert.equal((await load(await writeSessionFile(named, resourceBytes))).status, 'ok');
+      const recordIdsOf = (records) => records.map(({ selector }) => selector?.value ?? selector?.index ?? null);
+      assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', 'R3c', null]);
+      const drawing = modeDrawing(state, 'circular');
+      const uids = drawing.circularSources.map(({ uid }) => uid);
+      const { off, named: namedCards } = mix(uids);
+      const cards = drawing.recordsNamed.filter(({ uid }) => namedCards.includes(uid));
+      drawing.recordsOff.splice(0, Infinity, ...off);
+      drawing.recordsNamed.splice(0, Infinity, ...cards);
+      const drawn = recordIdsOf(await nextGenerateRecords());
+      const result = await sessionConfig.exportSession('mix', { shownDrawing: state.activeDrawing,
+        readOfDrawing: (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore().readOfDrawing, askChoice: async () => 'download' });
+      assert.equal(result?.status, 'saved', JSON.stringify(result));
+      assert.equal((await load(result.blob)).status, 'ok');
+      assert.deepEqual(recordIdsOf(await nextGenerateRecords()), drawn, 'the Load draws what the drawing drew');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+// The Session a Save writes (`exportSession`) of the shown drawing, with `options` added.
+const saveShown = async (title, options = {}) => sessionConfig.exportSession(title, { shownDrawing: state.activeDrawing,
+  readOfDrawing: (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore().readOfDrawing,
+  askChoice: async () => 'download', ...options });
+const savedConfigOf = async (blob, id) => (await readSessionFile(blob)).document.drawings.find((entry) => entry.id === id).config;
+const recordIdsOf = (records) => records.map(({ selector }) => selector?.value ?? selector?.index ?? null);
+// The CLI Session of a grid of TESTA (of TESTA and TESTB) and the mitogenome, TESTA named by record ID over the shared
+// file, as a CLI records table names it (OV-3531).
+const namedCliSession = async (directory, edit = () => {}) => {
+  const { bytes } = await cliSession(directory, ['--gbk', twoRecords, mito, '--multi_record_canvas']);
+  const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+  return writeSessionFile(withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+    const [first, , mitoRecord] = view.renderRequest.records;
+    view.renderRequest.records = [{ ...first, selector: { kind: 'recordId', value: 'TESTA' } }, mitoRecord];
+    edit(view);
+  }), resourceBytes);
+};
+
+// A drawing saved without a Generate: its request, no Result, no run metadata, no catalog. Load keeps that request as
+// the drawing's, and a Save after a Load writes it again, also after the draft changed.
+const withoutResult = (view) => {
+  view.results = [];
+  delete view.runMetadata;
+  view.editorState = { featureCatalog: null };
+};
+
+// A Session dev and v0.14.5 write: its request draws TESTA alone (TESTB was OFF), then TESTB was turned ON again and
+// the Session saved without Generate, so its draft holds no `recordsOff` (omission = every record ON); the request is
+// a Result's, or one a Load kept and Save wrote again. It loads as it did there: the draft's choice, not the records
+// the request names (CLAUDE.md "Persisted-format compatibility").
+for (const result of [true, false]) {
+  await test(`a Web draft without records off over a request ${result ? 'with' : 'without'} a Result that drew some records of a file loads with every record ON`, async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-dev-draft-'));
+    try {
+      assert.equal((await load(await namedCliSession(directory, result ? () => {} : withoutResult))).status, 'ok');
+      const drawing = modeDrawing(state, 'circular');
+      assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', null]);
+      drawing.recordsOff.splice(0, Infinity);
+      drawing.recordsNamed.splice(0, Infinity);
+      const saved = await saveShown('dev-draft');
+      const { document, bytes: savedBytes } = await readSessionFile(saved.blob);
+      const view = savedDrawingView(document, drawing.id);
+      assert.deepEqual(recordIdsOf(view.renderRequest.records), ['TESTA', null], 'the request draws TESTA alone');
+      // The draft as dev writes it: no `recordsOff` when every record is ON.
+      delete document.drawings.find(({ id }) => id === drawing.id).config.recordsOff;
+      assert.equal((await load(await writeSessionFile(document, savedBytes))).status, 'ok');
+      assert.deepEqual(modeDrawing(state, 'circular').recordsNamed, [], 'the Web draft holds the choice');
+      assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', 'TESTB', null]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+// A Load then a Save with no edit writes the draft's records off as the Session held them: none for a Web Session
+// with every record ON (dev's "an empty recordsOff is omitted").
+await test('a Load then Save of a Web Session with every record ON keeps its records off', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-resave-'));
+  try {
+    const { bytes } = await cliSession(directory, ['--gbk', twoRecords, mito, '--multi_record_canvas']);
+    assert.equal((await load(bytes)).status, 'ok');
+    await nextGenerateRecords();
+    const id = modeDrawing(state, 'circular').id;
+    const first = await saveShown('first');
+    assert.equal(Object.hasOwn(await savedConfigOf(first.blob, id), 'recordsOff'), false);
+    assert.equal((await load(first.blob)).status, 'ok');
+    assert.deepEqual(modeDrawing(state, 'circular').recordsNamed, []);
+    const second = await saveShown('second');
+    assert.deepEqual(await savedConfigOf(second.blob, id), await savedConfigOf(first.blob, id), 'the same draft');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// Save places the records a card names from the drawing as it captured it, not from the drawing after its awaits: a
+// read that settles during the Save (here inside `beforeExport`) and places them changes nothing the Save writes.
+await test('a read that places the named records while a Save runs leaves the Save its captured draft', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-save-capture-'));
+  try {
+    assert.equal((await load(await namedCliSession(directory))).status, 'ok');
+    const drawing = modeDrawing(state, 'circular');
+    const [{ uid }] = drawing.circularSources;
+    const result = await saveShown('captured', { beforeExport: async () => {
+      // What a settled read's placement writes (`placeNamedCardRecords`).
+      drawing.recordsNamed.splice(0, Infinity);
+      drawing.recordsOff.splice(0, Infinity, `${uid}:2`);
+      return {};
+    } });
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    assert.deepEqual((await savedConfigOf(result.blob, drawing.id)).recordsOff, [`${uid}:2`]);
+    assert.equal((await load(result.blob)).status, 'ok');
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA', null], 'the Load draws TESTA alone');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// The CLI Session of a FASTA grid of fa1 and fa3 of three.fa and the one record of one.fa. A FASTA file is listed
+// only by the Python loader (R4), so its read needs the diagram Worker, which Node does not supply: here every read
+// of three.fa fails.
+const fastaCliSession = async (directory, edit = () => {}) => {
+  await writeFile(path.join(directory, 'three.fa'), '>fa1\nACGTACGTAC\n>fa2\nACGTACGTAC\n>fa3\nACGTACGTAC\n');
+  await writeFile(path.join(directory, 'one.fa'), '>solo\nACGTACGTACGT\n');
+  const { bytes } = await cliSession(directory, ['--fasta', 'three.fa', 'one.fa', '--multi_record_canvas']);
+  const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+  return writeSessionFile(withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+    const [fa1, , fa3, solo] = view.renderRequest.records;
+    view.renderRequest.records = [{ ...fa1, selector: { kind: 'recordId', value: 'fa1' } },
+      { ...fa3, selector: { kind: 'recordId', value: 'fa3' } }, solo];
+    edit(view);
+  }), resourceBytes);
+};
+
+// A Save of a drawing whose card still names some records of its file places them in the saved draft, which a Load
+// reads instead of the request (with a Result, or without one: a request the drawing saves as its draft request or
+// kept from a Load). A Save that cannot read that card reports the read's failure (R6) and writes no Session that
+// would draw the card's whole file, nor one that drops another card's records OFF.
+for (const result of [true, false]) {
+  await test(`a Save ${result ? 'with' : 'without'} a Result that cannot read a card whose records it must place fails with the read's error`, async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-save-unread-'));
+    try {
+      assert.equal((await load(await fastaCliSession(directory, result ? () => {} : withoutResult))).status, 'ok');
+      const drawing = modeDrawing(state, 'circular');
+      assert.equal(drawing.recordsNamed.length, 1);
+      drawing.recordsOff.splice(0, Infinity, drawing.circularSources[1].uid);
+      await assert.rejects(saveShown('unread'), /diagram runtime could not start/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+// The CLI expands a FASTA file into one record per entry, each named by its ID, so its plain Session names every
+// record of three.fa. A Save before any read writes them as dev does, no record OFF and no read: the counter that
+// reads no Python (`readFileRecordCount`) says the card names its whole file, so a Save needs no diagram Worker.
+await test('a Save of a plain CLI Session of a multi-record FASTA canvas, with no edit and no Generate, reads no card', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-fasta-all-'));
+  try {
+    await writeFile(path.join(directory, 'three.fa'), '>fa1\nACGTACGTAC\n>fa2\nACGTACGTAC\n>fa3\nACGTACGTAC\n');
+    await writeFile(path.join(directory, 'one.fa'), '>solo\nACGTACGTACGT\n');
+    const { bytes } = await cliSession(directory, ['--fasta', 'three.fa', 'one.fa', '--multi_record_canvas']);
+    assert.equal((await load(bytes)).status, 'ok');
+    const drawing = modeDrawing(state, 'circular');
+    assert.deepEqual(drawing.recordsNamed.map(({ named }) => named.length), [3], 'the CLI names fa1, fa2 and fa3');
+    const result = await saveShown('fasta-all');
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    assert.equal(Object.hasOwn(await savedConfigOf(result.blob, drawing.id), 'recordsOff'), false, 'no record OFF');
+    assert.equal((await load(result.blob)).status, 'ok');
+    const reloaded = modeDrawing(state, 'circular');
+    assert.deepEqual([reloaded.recordsNamed, reloaded.recordsOff], [[], []]);
+    // Before its read each card is its whole file (`circularRecordPlan`), as the saved draft draws it.
+    const filesData = await serializeActiveRenderFiles(state, reloaded);
+    assert.deepEqual(buildCanonicalRenderRequest({ state, drawing: reloaded, filesData }).renderRequest.records
+      .map(({ cardinality, selector }) => [cardinality, selector ?? null]), [['all', null], ['all', null]]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// The edges of a card that names its whole file (`namesWholeFile`), each a Session whose three-record card names the
+// records `selectors` gives: a record named twice counts once, and a place past the file's records is not one of
+// them, so neither card names its whole file and Save reads it (the read needs the Worker, which Node lacks). The
+// CLI names a record whose ID repeats in its file by its place and the others by ID, and that card does name its
+// whole file, so its Save reads nothing.
+const threeRecordCard = async (directory, fasta, selectors) => {
+  await writeFile(path.join(directory, 'three.fa'), fasta);
+  await writeFile(path.join(directory, 'one.fa'), '>solo\nACGTACGTACGT\n');
+  const { bytes } = await cliSession(directory, ['--fasta', 'three.fa', 'one.fa', '--multi_record_canvas']);
+  if (!selectors) return bytes;
+  const { document: session, bytes: resourceBytes } = await readSessionFile(new Blob([bytes]));
+  return writeSessionFile(withSavedDrawingView(session, session.ui.activeDrawingId, (view) => {
+    const records = view.renderRequest.records;
+    view.renderRequest.records = [...selectors.map((selector, index) => ({ ...records[index], selector })), records[3]];
+  }), resourceBytes);
+};
+const FA123 = '>fa1\nACGTACGTAC\n>fa2\nACGTACGTAC\n>fa3\nACGTACGTAC\n';
+for (const [name, fasta, selectors, saves] of [
+  ['names fa1 twice and fa2', FA123, [{ kind: 'recordId', value: 'fa1' }, { kind: 'recordId', value: 'fa1' },
+    { kind: 'recordId', value: 'fa2' }], false],
+  ['names places 1, 2 and 6', FA123, [0, 1, 5].map((index) => ({ kind: 'recordIndex', index })), false],
+  ['is the CLI\'s of a file whose ID x repeats (#1, #2 and y)', '>x\nACGTACGTAC\n>x\nACGTACGTAC\n>y\nACGTACGTAC\n', null, true]
+]) {
+  await test(`a Save with no edit of a three-record card that ${name} ${saves ? 'reads no card' : 'reads it'}`, async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-whole-'));
+    try {
+      assert.equal((await load(await threeRecordCard(directory, fasta, selectors))).status, 'ok');
+      const drawing = modeDrawing(state, 'circular');
+      assert.deepEqual(drawing.recordsNamed.map(({ named }) => named.length), [3]);
+      if (!saves) {
+        await assert.rejects(saveShown('whole'), /diagram runtime could not start/);
+        return;
+      }
+      assert.deepEqual(drawing.recordsNamed[0].named.map(({ selector }) => selector),
+        [{ kind: 'recordIndex', index: 0 }, { kind: 'recordIndex', index: 1 }, { kind: 'recordId', value: 'y' }]);
+      const result = await saveShown('whole');
+      assert.equal(result?.status, 'saved', JSON.stringify(result));
+      assert.equal(Object.hasOwn(await savedConfigOf(result.blob, drawing.id), 'recordsOff'), false, 'no record OFF');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+// A GFF3 + FASTA card is read at Save (its records are those its GFF3 names, which the counter does not read), by the
+// one read, which reads a GFF3 and FASTA pair without Python when the browser reader takes both files: the Save of a
+// plain CLI Session of such a canvas needs no diagram Worker either.
+await test('a Save of a plain CLI Session of a multi-record GFF3 + FASTA canvas, with no edit, needs no Worker', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-gff-all-'));
+  try {
+    await writeFile(path.join(directory, 'a.fa'), '>c1\nACGTACGTAC\n>c2\nACGTACGTAC\n>c3\nACGTACGTAC\n');
+    await writeFile(path.join(directory, 'a.gff3'), `##gff-version 3\n${['c1', 'c2', 'c3']
+      .map((id, index) => `${id}\t.\tCDS\t1\t9\t.\t+\t0\tID=cds${index}\n`).join('')}`);
+    const { bytes } = await cliSession(directory, ['--gff', 'a.gff3', '--fasta', 'a.fa', '--multi_record_canvas']);
+    assert.equal((await load(bytes)).status, 'ok');
+    const drawing = modeDrawing(state, 'circular');
+    assert.deepEqual(drawing.recordsNamed.map(({ named }) => named.length), [3], 'the CLI names c1, c2 and c3');
+    const result = await saveShown('gff-all');
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    assert.equal(Object.hasOwn(await savedConfigOf(result.blob, drawing.id), 'recordsOff'), false, 'no record OFF');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// A Save that fails because the diagram runtime cannot start does not offer Save as the way out (R6): the action it
+// offers must be one that can work.
+await test('a Save that fails because the diagram runtime cannot start offers no Save Session', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-save-init-'));
+  try {
+    assert.equal((await load(await fastaCliSession(directory))).status, 'ok');
+    let model = null;
+    const result = await saveShown('init', { onError: (error) => { model = error; } });
+    assert.equal(result?.status, 'error');
+    assert.equal(model.code, 'WORKER_INIT');
+    assert.equal(model.actions.includes('save-session'), false, JSON.stringify(model.actions));
+    assert.doesNotMatch(model.summary, /Save a Session/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// The same Save of a card the drawing can read writes every record OFF, a one-record card OFF included: the next
+// Load draws what the drawing drew.
+await test('a Save without a Result of a card that names some records writes them OFF beside a one-record card OFF', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-circular-draft-off-'));
+  try {
+    assert.equal((await load(await namedCliSession(directory, withoutResult))).status, 'ok');
+    const drawing = modeDrawing(state, 'circular');
+    const [{ uid }, { uid: solo }] = drawing.circularSources;
+    drawing.recordsOff.splice(0, Infinity, solo);
+    const result = await saveShown('draft-off');
+    assert.equal(result?.status, 'saved', JSON.stringify(result));
+    assert.deepEqual((await savedConfigOf(result.blob, drawing.id)).recordsOff, [solo, `${uid}:2`]);
+    assert.deepEqual(drawing.recordsNamed.length, 1, 'Save changes no drawing');
+    assert.equal((await load(result.blob)).status, 'ok');
+    assert.deepEqual(recordIdsOf(await nextGenerateRecords()), ['TESTA']);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 // The Web side of the cards (DESIGN section 7, failing-first tests 2, 3, 6, 7,
 // 8 and 9): a record's identity is its card's uid with its place in that
@@ -363,7 +699,7 @@ const cardDrawing = (id, cards) => {
   return drawing;
 };
 const { circularAnnotationSourceKey } = createDrawingRecordCatalog({
-  state, readInputRecords: async () => [], linearRecordCatalogStateFor: () => ({ status: 'idle', records: [], error: '' }),
+  readInputRecords: async () => [], linearRecordCatalogStateFor: () => ({ status: 'idle', records: [], error: '' }),
   linearRecordErrorModelFor: () => '', refreshLinearRecords: async () => ({ status: 'ok' })
 });
 
@@ -416,7 +752,8 @@ await test('a Session 51 that holds a kept flat #N keeps its cards as loaded', a
   const drawing = modeDrawing(state, 'circular');
   assert.deepEqual([...drawing.recordsOff], ['#2']);
   assert.ok(drawing.files.c_legacy_record_cards);
-  const result = await sessionConfig.exportSession('flat-selectors', { shownDrawing: state.activeDrawing, askChoice: async () => 'download' });
+  const result = await sessionConfig.exportSession('flat-selectors', { shownDrawing: state.activeDrawing,
+    readOfDrawing: (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore().readOfDrawing, askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result));
   const { document: saved } = await readSessionFile(result.blob);
   assert.deepEqual(saved.drawings.find(({ id }) => id === 'circular').config.recordsOff, ['#2']);

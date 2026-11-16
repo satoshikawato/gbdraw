@@ -34,7 +34,7 @@ const panelOf = ({ selector, named = {}, read = null, files = { [ONE]: 'one.gb',
   const drawing = {
     id: 'circular', mode: 'circular', inputType: { value: 'gb' }, circularSources: sources,
     form: { circular_record_selector: selector, multi_record_canvas: canvas }, adv: { circular_grouping_intent: '' },
-    recordsOff, circularRecordList: { value: read ?? [] },
+    recordsOff, recordsNamed: [], circularRecordList: { value: read ?? [] },
     circularRecordDiscovery: read
       ? { status: 'ready', error: '', inputType: 'gb', sources: sources.map((card) => ({ uid: card.uid, primaryFile: card.gb, pairedFile: null, error: '' })) }
       : { status: 'idle', error: '', inputType: '', sources: [] }

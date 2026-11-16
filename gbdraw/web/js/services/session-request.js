@@ -5,6 +5,7 @@ import {
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
+/** @import { IdentityRequestRecord, NamedCardRecord, NamedCardRecords } from './record-draw-selection.js' */
 /** @import { LosatRequestRing } from './circular-conservation-keys.js' */
 import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
@@ -101,7 +102,8 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordSelectorNumber, sameSelectedRecord
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, namedRecordSelectorOf, placeNamedCardRecords, readNamedCardRecords,
+  recordKeyExpansion, recordSelectorNumber, sameSelectedRecord
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
@@ -303,7 +305,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
  *   WebFileBindings } from './session-resource-backing.js'
  */
-/** @import { CircularRecordDrawing, CircularRegionForm } from './record-options.js' */
+/** @import { CircularRecordDrawing, CircularRecordRange, CircularRegionForm } from './record-options.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { DepthFileSlots, DepthFileSlotsOrRows, DepthSlotFile, DepthSlotRow } from './depth-track-state.js' */
@@ -1378,6 +1380,20 @@ const createResourceBuilder = ({ encode = true } = {}) => {
 };
 
 /**
+ * A table Python wrote as text for a request (a paste's color table), as the descriptor the Web writes for a text
+ * table (`addText`): its kind is its resource ID, as the Web names a table it writes.
+ * @param {string} resourceId
+ * @param {string} name
+ * @param {string} text
+ * @returns {RawSessionResourceDescriptor}
+ */
+export const writtenTextResource = (resourceId, name, text) => {
+  const builder = createResourceBuilder();
+  builder.addText(resourceId, resourceId, name, text);
+  return builder.resources[resourceId];
+};
+
+/**
  * @param {string} resourceId
  * @returns {CanonicalFileRef}
  */
@@ -1938,6 +1954,16 @@ const unreadCircularSelector = (selector, uid) => {
 const cliRecordSelector = (entry, recordCount) => (recordCount === 1 ? null : selectorPayload(entry.fileValue));
 
 /**
+ * The request windows of the range a grid or batch record keeps (PD-OI-044 scenario revision 5), none without one.
+ * @param {CircularRecordRange | null | undefined} range
+ */
+const recordRangeWindows = (range) => (range?.windows ?? []).map((window) => {
+  const span = windowEndpoints(window.start, window.end, {});
+  if (span === null) throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
+  return { ...span, reverseComplement: window.reverseComplement, column: null };
+});
+
+/**
  * The Circular records of the next request, per source card in drawing order,
  * in the form the CLI commits for the same files (circular-multi-file D-08,
  * D-13): each drawn record of a read card is an `exactly_one` record keyed by
@@ -1946,7 +1972,11 @@ const cliRecordSelector = (entry, recordCount) => (recordCount === 1 ? null : se
  * rows and a Web Generate of the CLI's files equals the CLI's request. A card
  * whose records are not read yet is one `all` record keyed by its uid, which
  * Python resolves to the same keys; Generate reads every card before it builds
- * its request (D-13), so only a draft Save writes it.
+ * its request (D-13), so only a draft Save writes it. An unread card that names
+ * some records of its file (`recordsNamed`, OV-3530, OV-3531) is those records,
+ * `exactly_one` each under its request key with its selector, as the request a
+ * Load or a copy installed names them, so every projection before the read
+ * draws what the read card draws.
  * `drawnIdentities`: the identities of the drawn records in drawing order (the
  * Record Order tokens' list); `listedIdentities`: those of every read record.
  * @param {{ drawing: RequestDrawing, sources: readonly RequestCircularSource[], resources: ResourceBuilder }} input
@@ -1956,6 +1986,10 @@ const circularRecordPlan = ({ drawing, sources, resources }) => {
   const inputType = drawing.inputType.value;
   // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
   const recordSet = circularDrawingRecordSet(drawing.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
+  /** @type {readonly NamedCardRecords[]} */
+  const recordsNamed = drawing.recordsNamed;
+  /** @type {readonly CircularRecordRange[]} */
+  const ranges = drawing.form.circular_record_ranges;
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   /** @type {Map<string, typeof recordSet.recordSelectors>} */
   const listedByCard = new Map();
@@ -2002,6 +2036,20 @@ const circularRecordPlan = ({ drawing, sources, resources }) => {
     const drawnHere = (listed || []).filter((entry) => drawn.has(entry.identity));
     if (listed && drawnHere.length === 0) return;
     const source = sourceOf(index);
+    const named = listed ? undefined : recordsNamed.find(({ uid }) => uid === card.uid);
+    if (named) {
+      named.named.forEach(({ recordKey, selector }) => {
+        const text = canonicalRecordSelector({ selector });
+        const range = ranges.find((candidate) => candidate.source === card.uid && candidate.record === text);
+        records.push({
+          recordKey, cardinality: 'exactly_one', source, selector: { ...selector },
+          windows: recordRangeWindows(range), presentation: presentationPayload()
+        });
+        recordSources.push(card.uid);
+        drawnIdentities.push(recordKey);
+      });
+      return;
+    }
     if (!listed) {
       records.push({ recordKey: card.uid, cardinality: 'all', source, selector: null, windows: [], presentation: presentationPayload() });
       recordSources.push(card.uid);
@@ -2013,12 +2061,7 @@ const circularRecordPlan = ({ drawing, sources, resources }) => {
       const range = circularRecordRange(drawing.form.circular_record_ranges, recordSet.recordSelectors, entry);
       records.push({
         recordKey: entry.identity, cardinality: 'exactly_one', source, selector: cliRecordSelector(entry, listed.length),
-        windows: range === null ? [] : range.windows.map((window) => {
-          const span = windowEndpoints(window.start, window.end, {});
-          if (span === null) throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
-          return { ...span, reverseComplement: window.reverseComplement, column: null };
-        }),
-        presentation: presentationPayload()
+        windows: recordRangeWindows(range), presentation: presentationPayload()
       });
       recordSources.push(card.uid);
       drawnIdentities.push(entry.identity);
@@ -2026,7 +2069,9 @@ const circularRecordPlan = ({ drawing, sources, resources }) => {
   });
   return {
     records, recordSources, drawnIdentities, listedIdentities,
-    presentedCount: recordSet.presentedCount + unread.length
+    // An unread card offers its records named, else its file as one.
+    presentedCount: recordSet.presentedCount + unread.reduce((count, card) => count
+      + (recordsNamed.find(({ uid }) => uid === card.uid)?.named.length ?? 1), 0)
   };
 };
 
@@ -2207,15 +2252,20 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
  * record of that ID (`placeCircularRecordChoices`, OV-2906).
  * @param {readonly { recordKey?: unknown, selector?: unknown }[]} records The committed request's records.
  * @param {string} token
+ * @param {(index: number) => string | null} identityAt The identity the reader gives the request's record at that
+ *   index when a File card reads it (`canvasRecordIdentity`), null when it gives none; the record's key names it then.
  */
-const positionRecordIdentity = (records, token) => {
+const positionRecordIdentity = (records, token, identityAt) => {
   const number = recordSelectorNumber(token);
-  const record = number !== null
-    ? records[number - 1]
-    : records.find(({ selector }) => {
+  const index = number !== null
+    ? number - 1
+    : records.findIndex(({ selector }) => {
       const named = /** @type {{ kind?: unknown, value?: unknown } | null} */ (selector && typeof selector === 'object' ? selector : null);
       return named?.kind === 'recordId' && named.value === token;
     });
+  const record = records[index];
+  const identity = record ? identityAt(index) : null;
+  if (identity !== null) return identity;
   return typeof record?.recordKey === 'string' && record.recordKey ? record.recordKey : token;
 };
 // OV-1072: the identity of each record a committed Circular request draws, for
@@ -4533,9 +4583,16 @@ const buildLayout = (state, drawing, records = [], drawnIdentities = []) => {
     };
   }
   if (!drawing.form.multi_record_canvas) return {};
+  // A Record Order row names a record its read card names by request key until the read's placement names it by its
+  // identity; the request places it as the placement does (`placeNamedCardRecords`).
+  const adv = drawing.recordsNamed.length === 0 ? drawing.adv : {
+    ...drawing.adv,
+    multi_record_positions: placeNamedCardRecords({ recordsOff: [], selector: '', positions: drawing.adv.multi_record_positions },
+      drawing.recordsNamed, circularRecordEntries(drawing.circularRecordList.value)).choices.positions
+  };
   return /** @type {CanonicalCircularLayout} */ ({
     ...Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT)
-      .map(([field, project]) => [field, project(drawing.adv, drawnIdentities)])),
+      .map(([field, project]) => [field, project(adv, drawnIdentities)])),
     ...oneCircleRequestLayout(drawing.adv)
   });
 };
@@ -4568,7 +4625,7 @@ const publicationClone = (value) => value === undefined ? undefined : JSON.parse
  * @returns {ExportRef<T>}
  */
 const publicationRef = (value) => ({ value });
-/** @param {RequestRecordView | null | undefined} record */
+/** @param {Pick<RequestRecordView, 'selector'> | null | undefined} record */
 const canonicalRecordSelector = (record) => {
   const selector = record?.selector;
   if (selector?.kind === 'recordId') return String(selector.value || '');
@@ -4657,7 +4714,10 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan),
     annotationSets: publicationClone(config.annotationSets || []),
     recordDisplayDrafts: publicationClone(config.recordDisplayDrafts || []),
-    featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {})
+    featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {}),
+    // The records File cards name of their files, as the projection reads them from the request (OV-3531): the
+    // rebuild draws the records the request draws. The published draft does not hold them (`publicationConfig`).
+    recordsNamed: readNamedCardRecords(projection.config?.recordsNamed)
   } };
 };
 // PD-OI-104 rev 5, D-199 (PQ-1 B): the GC, skew and Depth parts the last
@@ -6226,6 +6286,25 @@ const readCanonicalResourceFileBytes = async (resources, resourceId) => {
   return readFile ? expandInputBytes(String(/** @type {{ name?: unknown }} */ (descriptor).name ?? ''), await readFile()) : null;
 };
 
+/** @param {string} text @returns {{ genbank: number, fasta: number }} */
+const recordCountsOf = (text) => ({ genbank: countGenBankRecords(text), fasta: (text.match(/^>/gm) || []).length });
+/**
+ * The record count of a File or a Session resource view read as a GenBank or a FASTA file, without the Python
+ * loader: the one counter of a source's records (the Source recipe, Run Info, a Save's named card records).
+ * @param {FileLike} file
+ * @param {'genbank' | 'fasta'} kind
+ * @returns {Promise<number>}
+ */
+export const readFileRecordCount = async (file, kind) => {
+  let counts = sourceRecordCounts.get(file);
+  if (!counts) {
+    counts = recordCountsOf(await readFileText(file));
+    // Immutable File/view identity outlives transferred bytes. Retain only counts;
+    // a replacement source gets its own entry.
+    sourceRecordCounts.set(file, counts);
+  }
+  return counts[kind];
+};
 /**
  * The bytes a File holds for a committed Session resource as they are stored (`readStoredBytes`: a gzip input as
  * chosen, which Generate sends and Python expands under its cap), or the bytes the reader of its file-backed descriptor
@@ -6250,18 +6329,9 @@ export const readCanonicalResourceStoredBytes = async (resources, resourceId) =>
  */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
   const fileOwner = resourceFileOwner(resources?.[resourceId]);
-  let counts = fileOwner ? sourceRecordCounts.get(fileOwner) : undefined;
-  if (!counts) {
-    const text = await readCanonicalResourceText(resources, resourceId);
-    counts = {
-      genbank: countGenBankRecords(text),
-      fasta: (text.match(/^>/gm) || []).length
-    };
-    // Immutable File/view identity outlives transferred bytes. Retain only counts;
-    // a replacement source gets its own entry, and ownerless descriptors stay uncached.
-    if (fileOwner) sourceRecordCounts.set(fileOwner, counts);
-  }
-  return counts[kind];
+  // An ownerless descriptor stays uncached.
+  if (fileOwner) return readFileRecordCount(/** @type {FileLike} */ (fileOwner), kind);
+  return recordCountsOf(await readCanonicalResourceText(resources, resourceId))[kind];
 };
 
 /**
@@ -6845,6 +6915,68 @@ const projectQuantitativeTrackDraft = (overrides, depthColor) => ({
   depth_tick_font_size: overrides.depth_tick_font_size ?? null,
   depth_share_axis: Boolean(overrides.depth_share_axis)
 });
+
+/**
+ * The identity the reader gives a record its File card `uid` reads, for a Multi-Record Canvas place
+ * (`adv.multi_record_positions`): the card itself for a record that names no record of its file and draws one record;
+ * else null, and the record's key names the place until the card's first settled read names it by identity
+ * (`placeNamedCardRecords`, OV-3534), so Load and a paste (`installPastedRecords`, which gives the cards new uids)
+ * read the places one way.
+ * @param {IdentityRequestRecord | undefined} record
+ * @param {ReadonlyMap<unknown, string>} cardOfRecord The card uid each request record reads.
+ * @returns {string | null}
+ */
+const canvasRecordIdentity = (record, cardOfRecord) => {
+  const uid = record === undefined ? undefined : cardOfRecord.get(record);
+  return record !== undefined && uid !== undefined && !record.selector && record.cardinality === 'exactly_one' ? uid : null;
+};
+/**
+ * The Multi-Record Canvas places of a request (`layout.multiRecordPositions`, `#k@row` tokens) as the draft holds them
+ * (`adv.multi_record_positions`): each names its record by the identity the reader gives it (`canvasRecordIdentity`),
+ * else as `positionRecordIdentity` reads the token.
+ * @param {unknown} tokens
+ * @param {readonly { recordKey?: unknown, selector?: unknown }[]} sourceRecords The request's records, in its order.
+ * @param {{ records: readonly IdentityRequestRecord[], projectedIndexBySourceIndex: ReadonlyMap<number, number>,
+ *   cardOfRecord: ReadonlyMap<unknown, string> }} reading `records`: the projected records the card of each is read
+ *   for (`projectedIndexBySourceIndex` places a request record among them).
+ * @returns {{ selector: string, row: number }[]}
+ */
+const canvasRecordPositions = (tokens, sourceRecords, { records, projectedIndexBySourceIndex, cardOfRecord }) => {
+  /** @param {number} index */
+  const identityAt = (index) => canvasRecordIdentity(records[projectedIndexBySourceIndex.get(index) ?? -1], cardOfRecord);
+  return (Array.isArray(tokens) ? tokens : []).map((/** @type {unknown} */ token) => {
+    const split = String(token).lastIndexOf('@');
+    return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split), identityAt), row: Number(String(token).slice(split + 1)) };
+  });
+};
+/**
+ * The records each File card of a Circular canvas or batch names (`NamedCardRecords`), when every request record of
+ * the card names one record of its file by its place or ID (OV-3530: Python's copy of some records of a file; OV-3531:
+ * a CLI records table): the card draws those records alone, before its read and after it
+ * (`namedCardRecordReading`). Load reads no file for it, so a Load leaves the Worker unconstructed. A card with a
+ * record that draws its file whole, or that names no record, draws its file. Only a request without a stored Web
+ * draft names records (a CLI or Python Session, Python's copy or paste reply): a Web draft holds the drawing's own
+ * records off (`overlayModeSliceConfig`), its omission meaning every record ON, as dev and v0.14.5 read it, whatever
+ * request it was saved beside (a Result's, or a request kept from a Load and saved again after the draft changed).
+ * The draft config's `recordsNamed`, when a card names some (never saved).
+ * @param {ReadonlyMap<unknown, string>} cardOfRecord The card uid each request record reads, in request order.
+ * @param {string} grouping The request's grouping.
+ * @param {unknown} storedConfig The stored draft config, if any.
+ * @returns {{ recordsNamed?: NamedCardRecords[] }}
+ */
+const namedCardRecordsConfig = (cardOfRecord, grouping, storedConfig) => {
+  /** @type {Map<string, NamedCardRecord[] | null>} */
+  const named = new Map();
+  if (grouping === 'single' || storedConfig != null) return {};
+  cardOfRecord.forEach((uid, record) => {
+    const { recordKey, cardinality, selector } = /** @type {IdentityRequestRecord} */ (record);
+    const names = namedRecordSelectorOf(selector);
+    const held = named.get(uid);
+    named.set(uid, held === null || cardinality !== 'exactly_one' || !names ? null : [...(held ?? []), { recordKey, selector: names }]);
+  });
+  const recordsNamed = [...named].flatMap(([uid, records]) => (records === null ? [] : [{ uid, named: records }]));
+  return recordsNamed.length ? { recordsNamed } : {};
+};
 
 /**
  * A reader of unvalidated Session data (R14): the input is not typed.
@@ -7802,9 +7934,9 @@ export const projectCanonicalSessionRequest = ({
     linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
     linear_track_slots_axis_index: renderRequest.mode === 'linear' ? linearStack.axisIndex : null,
     linear_track_slots: linearStack.slots,
-    multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
-      const split = String(token).lastIndexOf('@');
-      return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: Number(String(token).slice(split + 1)) };
+    multi_record_positions: canvasRecordPositions(renderRequest.layout?.multiRecordPositions, sourceRecords, {
+      records, projectedIndexBySourceIndex: normalizedRecordOrdering.projectedIndexBySourceIndex,
+      cardOfRecord: circularCardOfRecord
     })
   };
   const storedRows = storedLinearRecordRows(records, renderRequest.layout?.multiRecordPositions);
@@ -7896,6 +8028,8 @@ export const projectCanonicalSessionRequest = ({
         reverseComplementOverride: null,
         anchorIntent: null
       }] : []),
+      // The records each File card names of its file, which it draws alone (never saved).
+      ...namedCardRecordsConfig(circularCardOfRecord, grouping, storedConfig),
       featurePlacementOverrides: featureDraftMap(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode
       )),

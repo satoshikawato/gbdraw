@@ -1030,6 +1030,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     delete globalThis.__GBDRAW_TEST_HOOKS__.maxExpandedSessionBytes;
   }
   assert.equal(state.errorLog.value?.code, 'SESSION_SIZE_LIMIT');
+  // The download's own operation: it keeps each code's sentence where a Save has its own (error-normalization).
+  assert.equal(state.errorLog.value?.operation, 'reproducibility-files');
   assert.equal(downloadedFilename, null);
   state.errorLog.value = null;
   // The exact replay is a Session 49 of the drawn drawing alone, by its ID and name (OV-1806).

@@ -174,6 +174,14 @@ const sessionSlotOf = (bindings, inputType) => (file) => {
 const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
 
 /**
+ * Keeps the items of a reactive list that `keep` accepts, in place; a list that loses none is not written.
+ * @template T @param {T[]} list @param {(item: T) => boolean} keep
+ */
+const keepInPlace = (list, keep) => {
+  const kept = list.filter(keep);
+  if (kept.length !== list.length) list.splice(0, Infinity, ...kept);
+};
+/**
  * The edits of a Circular drawing's source cards (circular-multi-file D-01):
  * add cards with their files, replace or remove one file of a card, remove a
  * card, and move a card, each one History step (R11), as the Linear File edits
@@ -215,14 +223,15 @@ export const createCircularSourceEdits = ({
     form.circular_record_subtitle = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_subtitle;
   };
   /**
-   * The card's records leave the drawing's references: its OFF records, and the
+   * The card's records leave the drawing's references: its OFF records and the
+   * records it names of its file (`recordsNamed`, one value with them), and the
    * Record select (with the presentation when `retirePresentation`) when it
    * names one of them.
    * @param {DrawingState} drawing @param {string} uid @param {boolean} retirePresentation
    */
   const retireCardRecords = (drawing, uid, retirePresentation) => {
-    const kept = drawing.recordsOff.filter((key) => !cardHoldsRecordKey(uid, key));
-    if (kept.length !== drawing.recordsOff.length) drawing.recordsOff.splice(0, drawing.recordsOff.length, ...kept);
+    keepInPlace(drawing.recordsOff, (key) => !cardHoldsRecordKey(uid, key));
+    keepInPlace(drawing.recordsNamed, (card) => card.uid !== uid);
     // The grid or batch crops of the card's records go with their presentation (PD-OI-044 scenario revision 5).
     const ranges = circularRangesWithoutCard(drawing.form.circular_record_ranges, uid);
     if (retirePresentation && ranges.length !== drawing.form.circular_record_ranges.length) {

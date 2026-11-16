@@ -1,5 +1,5 @@
 // @ts-check
-// The settings slice of a drawing: its sixteen draft settings (Session 46
+// The settings slice of a drawing: its seventeen draft settings (Session 46
 // `modes.<m>.config` and the drawing's `ui` values), among them what the
 // Default colors and Blacklist files set (`fileImports`, Session 48, OV-1280;
 // its writers are app/watchers.js, the Blacklist import, and app/results.js,
@@ -21,7 +21,7 @@ import { edgeRetainsUserData } from '../linear-comparison-retained.js';
 
 const SETTINGS_MEMBERS = /** @type {const} */ ([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
-  'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts', 'recordsOff',
+  'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts', 'recordsOff', 'recordsNamed',
   'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked', 'fileImports'
 ]);
 /** @typedef {typeof SETTINGS_MEMBERS[number]} SettingsMember */
@@ -36,12 +36,13 @@ const SETTINGS_MEMBERS = /** @type {const} */ ([
 /** @type {ReadonlySet<SettingsMember>} */
 const REFS = new Set(['losatProgram', 'linearRecordLayoutEnabled', 'linearRecordGap', 'linearTypographyLinked']);
 /** @type {ReadonlySet<SettingsMember>} */
-const LISTS = new Set(['linearRecordRows', 'recordDisplayDrafts', 'recordsOff']);
-// Reset Settings keeps the record gap and rows, which records are OFF, and the
-// imported comparison intent; it returns the others to their defaults.
+const LISTS = new Set(['linearRecordRows', 'recordDisplayDrafts', 'recordsOff', 'recordsNamed']);
+// Reset Settings keeps the record gap and rows, which records are OFF or
+// named alone by their File cards (`recordsNamed`, one value with `recordsOff`),
+// and the imported comparison intent; it returns the others to their defaults.
 /** @type {readonly SettingsMember[]} */
 const RESET_MEMBERS = SETTINGS_MEMBERS.filter((member) => ![
-  'linearRecordGap', 'linearRecordRows', 'recordsOff', 'importedComparisonIntent'
+  'linearRecordGap', 'linearRecordRows', 'recordsOff', 'recordsNamed', 'importedComparisonIntent'
 ].includes(member));
 
 // A settings handle exists only through `create`, which gives it these members.

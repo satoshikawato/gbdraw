@@ -120,6 +120,7 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
  * @property {{ canonicalRequest?: unknown } | null} [projection]
  * @property {unknown} [recordSource]
  * @property {readonly CanonicalRecord['source'][]} [referenceSources]
+ * @property {{ target?: { resourceIds: Readonly<Record<string, string>> } }} [copy]
  */
 
 /**
@@ -137,7 +138,9 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: (payload) => payload.canonicalRequest,
-  [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: (payload) => payload.canonicalRequest,
+  // A paste stages the target drawing's resources too, under the staging IDs of `copy.target.resourceIds`.
+  [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: (payload) => [payload.canonicalRequest,
+    ...Object.values(payload.copy?.target?.resourceIds ?? {}).map((resourceId) => ({ resourceId }))],
   [DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_SEQUENCES]: (payload) => payload.canonicalRequest,
@@ -192,18 +195,29 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
+ * A paste into an existing drawing as the page sends it: Python's `ExistingDrawingCopy`, whose target names each of its
+ * resources by the staging ID it travels under in the payload's one resource table (`resourceIds`); the Worker gives
+ * Python the staged path of each (`PasteTarget.resourcePaths`).
+ * @typedef {object} PageExistingDrawingCopy
+ * @property {'existing'} into
+ * @property {{ renderRequest: CanonicalRenderRequest, resourceIds: Readonly<Record<string, string>> }} target
+ * @property {ExistingDrawingCopy['edits']} edits
+ * @property {ExistingDrawingCopy['duplicates']} duplicates
+ */
+/**
  * The payload of `deriveRegionDrawing`: the source drawing's draft projection
  * (its canonical request as the next Generate would send it), whose resources
  * the page stages, the regions, whether hand-set sizes return to Auto, and where
- * the copy goes (`NewDrawingCopy`, declared in Python).
+ * the copy goes (`NewDrawingCopy`, declared in Python, or a paste into an existing drawing, whose resources travel in
+ * `resources` too).
  * @typedef {object} RegionDrawingHelperPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
  * @property {readonly RegionDrawingRegion[]} regions
  * @property {boolean} adaptSizes
- * @property {NewDrawingCopy} copy
+ * @property {NewDrawingCopy | PageExistingDrawingCopy} copy
  */
-/** @import { NewDrawingCopy } from '../contracts/locate.generated.js' */
+/** @import { ExistingDrawingCopy, NewDrawingCopy } from '../contracts/locate.generated.js' */
 
 /*
  * The derived drawing (`DerivedRegionDrawing`: its mode, its canonical request as a Session stores a committed one,
@@ -428,6 +442,34 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {number} sourceCount
  * @property {string | null} matchSpanReads Null in the other parts and when no match names a span.
  */
+
+/**
+ * The copy Python reads (`CopyChoice`), and the staged paths and prepared-input identities of the source drawing's
+ * resources, from the copy the page sent and the payload's one resource table: a paste's target
+ * (`PageExistingDrawingCopy`) takes the staged path of each of its resources by its own ID
+ * (`PasteTarget.resourcePaths`), and the source's paths and identities leave the target's staging IDs out (Python
+ * reads prepared inputs only under identities of exactly its paths, OV-3535). A new drawing's copy passes as it is.
+ * @template {Readonly<Record<string, unknown>>} Identities
+ * @param {NewDrawingCopy | PageExistingDrawingCopy} copy
+ * @param {Readonly<Record<string, string>>} staged The staged path of each resource ID of the table.
+ * @param {Identities} identities The prepared-input identity of each resource ID of the table.
+ * @returns {{ copy: NewDrawingCopy | ExistingDrawingCopy, sourcePaths: Readonly<Record<string, string>>,
+ *   sourceIdentities: Identities }}
+ */
+export const pasteTargetPaths = (copy, staged, identities) => {
+  if (copy.into !== 'existing') return { copy, sourcePaths: staged, sourceIdentities: identities };
+  const { renderRequest, resourceIds } = copy.target;
+  const stagingIds = new Set(Object.values(resourceIds));
+  /** @template {Readonly<Record<string, unknown>>} T @param {T} table @returns {T} */
+  const ofSource = (table) => /** @type {T} */ (Object.fromEntries(Object.entries(table).filter(([resourceId]) => !stagingIds.has(resourceId))));
+  const resourcePaths = Object.fromEntries(Object.entries(resourceIds)
+    .flatMap(([resourceId, stagingId]) => (Object.hasOwn(staged, stagingId) ? [[resourceId, staged[stagingId]]] : [])));
+  return {
+    copy: { ...copy, target: { renderRequest, resourcePaths } },
+    sourcePaths: ofSource(staged),
+    sourceIdentities: ofSource(identities)
+  };
+};
 
 /** @type {readonly string[]} */
 export const DIAGRAM_HELPER_STAGING_OPERATIONS = Object.freeze(Object.keys(STAGED_HELPER_REFERENCES));

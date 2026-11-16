@@ -260,6 +260,33 @@ def test_a_windowed_row_shows_one_name_and_a_numbered_list_and_no_text_above_its
     assert above and all(_texts(g) == [] for g in above)
 
 
+def test_each_window_line_names_the_record_its_window_draws(tmp_path: Path) -> None:
+    """A windowed row draws its records' names only in its list, so each list line carries the identity (index and
+    ID) of the drawn record of its window, as the record's own heading does: Shift+drag over a line selects that
+    record (PD-OI-115). The attributes change no pixel."""
+
+    root = _windowed_figure(tmp_path)
+    identities = {
+        g.get("data-gbdraw-record-index"): g.get("data-gbdraw-record-id")
+        for g in root.iter(f"{SVG}g")
+        if g.get("data-gbdraw-role") == "record-definition"
+    }
+    headings = [g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-role") == "record-definition-row"]
+    lines = [
+        [
+            (text.get("data-gbdraw-window-number"), text.get("data-gbdraw-record-index"), text.get("data-gbdraw-record-id"))
+            for text in g.iter(f"{SVG}text")
+            if text.get("data-definition-line-kind") == "window"
+        ]
+        for g in headings
+    ]
+    assert lines == [
+        [("1", "0", "LIN"), ("2", "1", "LIN")],
+        [("1", "2", "NC_012920.1"), ("2", "3", "NC_012920.1")],
+    ]
+    assert all(identities[index] == record_id for row in lines for _number, index, record_id in row)
+
+
 def test_a_windowed_row_draws_window_numbers_edge_marks_and_gap_marks(tmp_path: Path) -> None:
     root = _windowed_figure(tmp_path)
     marks = [g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-role") == "row-window-marks"]

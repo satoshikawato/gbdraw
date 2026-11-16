@@ -20,7 +20,7 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-const { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+const { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createDrawingSwitch } = await import('../../gbdraw/web/js/app/drawing-switch.js');
 const { readdir, readFile } = await import('node:fs/promises');
@@ -572,4 +572,34 @@ test('installShownSetLegend is the one writer of the displayed Legend colors out
   assert.match(install?.[0] ?? '', /originalLegendColors\.value = /, 'the slot module\'s write is installShownSetLegend\'s');
   const historySource = await readFile(`${root}/services/history-snapshot.js`, 'utf8');
   assert.match(historySource, /installShownSetLegend\(state, slot\.legend\)/, 'a slot install writes the colors through it');
+});
+
+// R15: the request of a drawing that is not shown reads that drawing's artifact from its slot (Copy to another
+// drawing projects the drawing it pastes into), never the shown drawing's Result, labels or Legend inventory.
+test('the request of a drawing that is not shown reads its kept artifact, or none', () => {
+  const results = [{ name: 'kept', content: '<svg/>' }];
+  const catalog = { schema: 'kept-catalog' };
+  const labels = [{ featureId: 'f1', sourceText: 'kept label' }];
+  const plan = { schema: 'kept-plan' };
+  const translations = [{ recordKey: 'record-1', offset: 5 }];
+  const slot = createArtifactSlot({
+    drawing: { id: 'linear-2', mode: 'linear' },
+    values: { results, selectedResultIndex: 0, featureCatalog: catalog, editableLabels: labels,
+      similarityAlignmentPlan: plan, linearRecordTranslations: translations },
+    legend: { originalOrder: ['CDS'], originalColors: {} }
+  });
+  const kept = keptRequestArtifact(slot);
+  assert.equal(kept.similarityAlignmentPlan.value, plan);
+  assert.equal(kept.linearRecordTranslations.value, translations);
+  assert.equal(kept.results.value, results);
+  assert.equal(kept.featureCatalog.value, catalog);
+  assert.equal(kept.editableLabels.value, labels);
+  assert.equal(kept.selectedResultIndex.value, 0);
+  assert.deepEqual(kept.originalLegendOrder.value, ['CDS']);
+  assert.notEqual(kept.results.value, state.results.value, 'not the shown Results');
+  assert.deepEqual(JSON.parse(JSON.stringify(keptRequestArtifact(undefined))), {
+    similarityAlignmentPlan: { value: null }, linearRecordTranslations: { value: [] },
+    results: { value: [] }, selectedResultIndex: { value: 0 }, featureCatalog: { value: null },
+    editableLabels: { value: [] }, originalLegendOrder: { value: [] }
+  }, 'a drawing without a Result has none');
 });

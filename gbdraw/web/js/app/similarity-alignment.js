@@ -2326,6 +2326,8 @@ export const createSimilarityAlignmentActions = ({
     validateBeforeGenerate,
     resetAlignment,
     clearForMutation: planClearOfDrawing(state, writeArtifactValues, endWorkOf, clearCommittedPlan),
+    // An edit of a drawing's records that keeps its plan (a paste) ends that drawing's alignment work only.
+    endWorkOf,
     notePlanReplaced,
     /**
      * The committed Session with the active plan materialized into the record

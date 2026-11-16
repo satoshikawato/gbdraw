@@ -176,7 +176,7 @@ so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 5. Inspect **Result Preview**, then export a file or select **Save Session**.
 
 **Copy to another drawing…** copies chosen records or regions of the shown
-drawing to a new drawing. It is in the drawing menu (the menu of a drawing tab,
+drawing to a new drawing, or adds them to an existing drawing. It is in the drawing menu (the menu of a drawing tab,
 beside **New Circular drawing** and **New Linear drawing**), in a record's
 popup (that record chosen whole), and in the Region popup of **Select region**
 (that span chosen). Outside **Select region**, Shift+drag also selects the
@@ -197,7 +197,24 @@ length and what is not carried, and **Keep my values** keeps the sizes you
 set. **Start from the Circular defaults** (or Linear) draws only the chosen
 records and regions with that mode's defaults. A start after the end is
 refused. **Copy** adds the drawing as a new tab and shows it, and one Undo
-removes it. Python offers the same through `derive_region_drawing()`; see
+removes it.
+
+Under **Copy to**, **An existing drawing** lists the other drawings of the
+Session. **Copy** adds the chosen records and regions below that drawing's
+records and shows it; the drawing keeps its own settings, palette, color
+rules, label rules, and tables, and draws the records at the next Generate.
+One Undo of that drawing removes them. **Bring the edits of these records
+(colors, labels, hidden features)** (the default) also adds the edits of
+their features inside the regions; **Copy the records only** adds the records
+alone. Annotations, **Feature placement**, Depth, and uploaded comparison
+tables are not copied, and the dialog lists them. When the drawing already has
+a chosen record or the same range, the dialog says so: **Skip it** (the
+default) leaves it out, **Add it again** adds it as another record. A Circular
+drawing takes whole records, and only while it draws whole records; the dialog
+names each range it does not add. The dialog opens on a new drawing at first,
+and after a copy on the drawing that copy went into, until the Session is
+replaced (Load or New Session) or that drawing is deleted. Python offers the
+same through `derive_region_drawing()` and `paste_region_drawing()`; see
 [Typed requests](./typed-requests.md).
 
 ### Drawings

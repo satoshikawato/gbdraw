@@ -18,6 +18,7 @@ globalThis.window = {
 const { createSimilarityAlignmentActions } = await import(
   '../../gbdraw/web/js/app/similarity-alignment.js'
 );
+const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-drawing/paste-into.js');
 
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
@@ -662,6 +663,56 @@ test('Cancel preserves committed diagram, plan, and Result', async () => {
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   assert.equal(fixture.state.results.value, previous);
   assert.equal(fixture.generationCalls.length, 0);
+});
+
+// Delta review B1 of #2047: Copy to another drawing into the drawing of an open review adds records the review did
+// not read; its Apply would draw the committed records only and leave the drawing's plan short of the pasted ones.
+// The paste's History step ends that drawing's alignment work through `endWorkOf`, as a record edit does, and keeps
+// the plan and translations the paste installs (Python's); a review of another drawing stays (D-38).
+test('a paste into the drawing of an open review ends the review and keeps the plan the paste installs', async () => {
+  for (const aligned of [false, true]) {
+    const fixture = create();
+    const own = { schema: 2, groupId: 'og-1', reference: anchor('a', 'clicked', 4),
+      records: [{ recordKey: 'a', status: 'reference', rationale: 'reference', anchor: anchor('a', 'clicked', 4) }] };
+    if (aligned) {
+      fixture.state.similarityAlignmentPlan.value = structuredClone(own);
+      fixture.state.linearRecordTranslations.value = [{ recordKey: 'a', x: 30, y: 0 }];
+    }
+    await startReview(fixture);
+    assert.equal(fixture.actions.status.value, 'reviewing');
+    const installed = aligned
+      ? { similarityAlignmentPlan: { ...own, records: [...own.records,
+        { recordKey: 'pasted', status: 'skipped', rationale: 'skipped_no_candidate', anchor: null }] },
+      linearRecordTranslations: [{ recordKey: 'a', x: 30, y: 0 }, { recordKey: 'pasted', x: 0, y: 0 }] }
+      : { similarityAlignmentPlan: null, linearRecordTranslations: [] };
+    const pasteInto = (drawingId) => createPasteTargets({
+      tabs: () => [], drawingOf: (id) => ({ id }), readRecords: async () => undefined, project: async () => null,
+      show: () => ({ status: 'ok' }), runUndoable: async (_label, run) => run(), prepare: async () => ({}),
+      install: () => structuredClone(installed),
+      // Only the review's drawing (linear-1) is this fixture's state; a write for another drawing goes elsewhere.
+      writeArtifactValues: (writtenId, values) => Object.entries(values).forEach(([key, value]) => {
+        if (writtenId === 'linear-1') fixture.state[key].value = value;
+      }),
+      endAlignmentWorkOf: fixture.actions.endWorkOf
+    }).pasteInto(drawingId, {});
+    const notice = fixture.actions.notice.value;
+    assert.equal((await pasteInto('linear-2')).status, 'ok');
+    assert.equal(fixture.actions.status.value, 'reviewing', 'a paste into another drawing keeps this review');
+    if (aligned) {
+      assert.notDeepEqual(fixture.state.similarityAlignmentPlan.value, installed.similarityAlignmentPlan,
+        'a paste into another drawing writes nothing here');
+    }
+    assert.equal((await pasteInto('linear-1')).status, 'ok');
+    assert.equal(fixture.actions.status.value, 'idle', 'the review of the pasted drawing ends');
+    assert.equal(fixture.actions.draft.value, null);
+    assert.equal(fixture.actions.dialogOpen.value, false);
+    assert.equal(fixture.actions.canApply.value, false);
+    assert.deepEqual(await fixture.actions.applyDraft(), { status: 'rejected' }, 'no Apply of the records it read');
+    assert.equal(fixture.generationCalls.length, 0);
+    assert.deepEqual(fixture.state.similarityAlignmentPlan.value, installed.similarityAlignmentPlan, 'the plan is kept');
+    assert.deepEqual(fixture.state.linearRecordTranslations.value, installed.linearRecordTranslations);
+    assert.equal(fixture.actions.notice.value, notice, 'no plan-cleared notice');
+  }
 });
 
 test('stale initial resolution and canceled Apply cannot publish late completions', async () => {

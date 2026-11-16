@@ -27,6 +27,9 @@ globalThis.File = File;
 const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { createRegionDrawing } = await import('../../gbdraw/web/js/app/region-drawing.js');
+const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-drawing/paste-into.js');
+const { DIAGRAM_HELPER_OPERATIONS, pasteTargetPaths, stagedHelperReferences } = await import(
+  '../../gbdraw/web/js/services/diagram-worker-protocol.js');
 const { createDrawingList } = await import('../../gbdraw/web/js/app/drawing-list.js');
 const { allocateDrawingId, defaultDrawingName } = await import('../../gbdraw/web/js/services/drawing-view.js');
 const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
@@ -34,13 +37,16 @@ const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annot
 const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');
 const { bindCircularSourceFile, createCircularSource, createLinearSeq, replaceCircularSources } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  installShownDrawing, installPreparedDrawing, makeRegionDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
+  installShownDrawing, installPastedRecords, installPreparedDrawing, makeRegionDrawing, preparePastedRecords,
+  prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
 } = await import('../../gbdraw/web/js/services/config.js');
-const { compareCanonicalRenderRequests } = await import('../../gbdraw/web/js/services/session-request.js');
+const { compareCanonicalRenderRequests, writtenTextResource } = await import('../../gbdraw/web/js/services/session-request.js');
 const { annotationSourceKey, buildAnnotationRecordCatalog } = await import(
   '../../gbdraw/web/js/app/annotations/record-catalog.js'
 );
-const { discoverSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { discoverSequenceRecords, readCircularSourceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { recordKeyExpansion } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
 
@@ -99,6 +105,11 @@ result = json.dumps({
 
 /** The copy the dialog sends by default: a new drawing, keeping the settings, of Python's default mode. */
 const NEW_DRAWING = Object.freeze({ into: 'new', settings: 'keep', mode: null });
+/** The existing drawings for a case that copies into a new drawing only. */
+const NO_PASTE = Object.freeze({
+  tabs: () => state.drawingTabs.value, drawingOf: (id) => state.drawingOf(id),
+  projectDrawing: async () => { throw new Error('no paste'); }, pasteInto: async () => { throw new Error('no paste'); }
+});
 
 /** The Worker helper `deriveRegionDrawing`, run by the real Python owner over staged resources. */
 const deriveInPython = async (payload) => ({ result: JSON.parse(await evaluatePython(`${STAGE}
@@ -210,7 +221,7 @@ const assertRoundTrip = async (installed, { leftToLoad = [] } = {}) => {
   assert.equal(comparison.equivalent, true);
 };
 
-createAppSetup();
+const app = createAppSetup();
 const history = window.__GBDRAW_HISTORY__;
 const listView = () => ({
   tabs: state.drawingTabs.value.map(({ id, name }) => ({ id, name })),
@@ -277,7 +288,8 @@ test('(c) a start after the end of a linear record is refused: no drawing, the t
     shownDrawingId: () => state.activeDrawingId.value,
     projectShownRequest: () => projectOf(state.activeDrawing()),
     deriveRegion: deriveInPython,
-    newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; }
+    newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; },
+    pasteTargets: NO_PASTE
   });
   const offer = await regions.deriveFromShown([{ recordKey: 'record-1', start: 900, end: 100 }], true, NEW_DRAWING);
   assert.deepEqual(offer, { status: 'refused', reason: 'START_AFTER_END', recordKey: 'record-1', start: 900, end: 100 });
@@ -325,7 +337,8 @@ const regionDrawingsOf = () => createRegionDrawing({
   shownDrawingId: () => state.activeDrawingId.value,
   projectShownRequest: () => projectOf(state.activeDrawing()),
   deriveRegion: deriveInPython,
-  newDrawingFromRegion: drawingList.newDrawingFromRegion
+  newDrawingFromRegion: drawingList.newDrawingFromRegion,
+  pasteTargets: NO_PASTE
 });
 
 test('(d) the drawing list with makeRegionDrawing: Create adds the region drawing as New does; Undo removes it, Redo brings it back', async () => {
@@ -481,6 +494,25 @@ test('(a) round trip of the Linear region drawing of a Circular source', async (
   const { envelope } = await projectOf(installed.made);
   assert.deepEqual(at(envelope.renderRequest, '$.diagramOptions.output').value,
     { ...at(envelope.renderRequest, '$.diagramOptions.output').value, legend: 'bottom', plotTitlePosition: 'bottom' });
+});
+
+// OV-3583 in Linear: a Linear copy of a Linear drawing keeps its plot title, position and size; a copy into the other
+// mode carries the title's text and size (settings of both modes) and starts at that mode's positions (Owner Q3 above).
+test('OV-3583: a Linear copy keeps the plot title and its position; a copy into the other mode keeps its text and size', async () => {
+  const source = await circularSourceWithLook();
+  Object.assign(source.form, { plot_title: 'Look' });
+  source.adv.plot_title_font_size = 28;
+  const { made: linear } = await deriveAndInstall(source, LOOK_REGION, true, 'linear-85');
+  const titleOf = async (drawing) => {
+    const { plotTitle, plotTitleFontSize, output } = (await projectOf(drawing)).envelope.renderRequest.diagramOptions;
+    return [plotTitle, plotTitleFontSize, output?.plotTitlePosition];
+  };
+  assert.deepEqual(await titleOf(linear), ['Look', 28, 'bottom'], 'into the other mode: its text and size, Linear\'s position');
+  linear.layoutPreferences.linear.plotTitlePosition = 'top';
+  state.addDrawing(linear, 'OV-3583 linear'); history.addMember(linear.id);
+  const { made: again } = await deriveAndInstall(linear, [{ recordKey: linear.linearSeqs[0].uid, start: 1, end: 300 }], true, 'linear-86');
+  assert.deepEqual(await titleOf(again), ['Look', 28, 'top']);
+  app.selectDrawing(source.id);
 });
 
 test('the draft request of a card drawn in two windows writes the unit pairs Generate writes', async () => {
@@ -747,4 +779,679 @@ test('(e) a hand-set size whose Auto differs at the region\'s length returns to 
   const kept = await deriveAndInstall(sizedSource(fileRef), region, false, 'sized-kept');
   assert.deepEqual(kept.derived.returnedToAuto, []);
   assert.equal(kept.made.adv.scale_interval, 500, 'Adapt sizes off keeps the hand-set interval');
+});
+
+/**
+ * The records a Circular drawing draws once it is shown and its records are read (as Generate reads them): the record
+ * ID each request record selects, in drawing order.
+ * @param {object} drawing A drawing added to the project.
+ */
+const drawnCircularRecordIds = async (drawing) => {
+  app.selectDrawing(drawing.id);
+  await app.readShownRecords('circular');
+  const { envelope } = await projectOf(drawing);
+  return envelope.renderRequest.records.map((record) => record.selector?.value ?? record.selector?.index ?? null);
+};
+const threeRecords = ['recA', 'recB', 'recD'].map((name, index) => genbankRecord(name, 900 + index * 100, [[101, 400, `${name}1`]]));
+
+// OV-3530: Python names the records of a Circular canvas by their place in the file; the drawing draws those, not every
+// record of the file once per record.
+test('OV-3530: a new Circular drawing of two whole records of a file of three draws those two', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  const { made, derived } = await deriveAndInstall(source, [
+    { recordKey: 'record-1:1', start: 1, end: 900 }, { recordKey: 'record-1:3', start: 1, end: 1100 }
+  ], true, 'circular-30');
+  assert.equal(derived.mode, 'circular');
+  state.addDrawing(made, 'OV-3530'); history.addMember(made.id);
+  assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  app.selectDrawing(source.id);
+});
+
+/** The row of each drawn record of a Circular canvas drawing, in drawing order, as its draft request places them. */
+const drawnCircularRows = async (drawing) => {
+  const { envelope } = await projectOf(drawing);
+  const positions = at(envelope.renderRequest, '$.layout.multiRecordPositions').value ?? [];
+  return envelope.renderRequest.records.map((_record, index) => {
+    const token = positions.find((position) => position.startsWith(`#${index + 1}@`));
+    return token === undefined ? null : Number(token.split('@')[1]);
+  });
+};
+
+// OV-3533: the whole records of one file copied to a Circular drawing read that one file as one File card, as the
+// source drew them, so each record keeps the row the source drew it on (records #1 and #2 share the first row of a
+// three-record canvas, #3 is on the second).
+for (const [picked, sourceRows] of [[[1, 2], [1, 1]], [[1, 3], [1, 2]]]) {
+  test(`OV-3533: a Circular copy of records #${picked.join(' and #')} of one file draws one card, each record on its source row`, async () => {
+    const source = circularSource(threeRecords, { multi_record_canvas: true });
+    await app.readShownRecords('circular');
+    const all = await drawnCircularRows(source);
+    assert.deepEqual(picked.map((number) => all[number - 1]), sourceRows, 'the source\'s rows');
+    const { made } = await deriveAndInstall(source, picked.map((number) => (
+      { recordKey: `record-1:${number}`, start: 1, end: 800 + number * 100 })), true, `circular-3${picked.join('')}`);
+    state.addDrawing(made, `OV-3533 ${picked}`); history.addMember(made.id);
+    await drawnCircularRecordIds(made);
+    assert.equal(made.circularSources.length, 1, 'one File card');
+    assert.deepEqual(await drawnCircularRows(made), sourceRows);
+    app.selectDrawing(source.id);
+  });
+}
+
+// OV-3583: a copy that keeps the source's settings carries its plot title as every other setting: its text and size
+// (the request's options) and its position (the layout the request sets, which a drawing whose draft holds none takes,
+// as at Load).
+test('OV-3583: a Circular copy that keeps the settings draws the source\'s plot title, position and size', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true, plot_title: '<i>Big</i> title' });
+  source.adv.plot_title_font_size = 32;
+  source.layoutPreferences.circular.multi.plotTitlePosition = 'bottom';
+  const { made } = await deriveAndInstall(source, [
+    { recordKey: 'record-1:1', start: 1, end: 900 }, { recordKey: 'record-1:2', start: 1, end: 1000 }
+  ], true, 'circular-83');
+  state.addDrawing(made, 'OV-3583'); history.addMember(made.id);
+  assert.equal(made.form.plot_title, '<i>Big</i> title');
+  assert.equal(made.layoutPreferences.circular.multi.plotTitlePosition, 'bottom');
+  const { plotTitle, plotTitleFontSize, output } = (await projectOf(made)).envelope.renderRequest.diagramOptions;
+  assert.deepEqual([plotTitle, plotTitleFontSize, output?.plotTitlePosition], ['<i>Big</i> title', 32, 'bottom']);
+  app.selectDrawing(source.id);
+});
+
+// OV-3531: a CLI Session whose Circular canvas draws some records of one file (`--records_table`) names them by record
+// ID over one shared resource; Load draws those records.
+test('OV-3531: a stored Circular canvas of two records of a file of three draws those two at Load', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  const { envelope } = await projectOf(source);
+  const resourceId = Object.keys(envelope.resources).find((id) => envelope.resources[id].kind === 'genbank');
+  const renderRequest = structuredClone(envelope.renderRequest);
+  renderRequest.records = ['recA.1', 'recD.1'].map((recordId, index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index + 1}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordId', value: recordId }, source: { kind: 'genbank', resourceId }
+  }));
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  assert.deepEqual(prepared.repairs, []);
+  const made = createDrawingState('circular-31', prepared.mode);
+  installPreparedDrawing(made, prepared);
+  state.addDrawing(made, 'OV-3531'); history.addMember(made.id);
+  assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  app.selectDrawing(source.id);
+});
+
+// OV-3534: the places of such a canvas (`--multi_record_position '#1@2' --multi_record_position '#2@1'`) name its
+// records by the identity Load gives them (`<card uid>:<k>`, as the records it leaves off), so Load draws each record
+// on the row the CLI drew it on.
+test('OV-3534: a stored Circular canvas of two records of a file of three keeps their places at Load', async () => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  const { envelope } = await projectOf(source);
+  const resourceId = Object.keys(envelope.resources).find((id) => envelope.resources[id].kind === 'genbank');
+  const renderRequest = structuredClone(envelope.renderRequest);
+  renderRequest.records = ['recA.1', 'recD.1'].map((recordId, index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index + 1}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordId', value: recordId }, source: { kind: 'genbank', resourceId }
+  }));
+  renderRequest.layout = { ...renderRequest.layout, multiRecordPositions: ['#1@2', '#2@1'] };
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  assert.deepEqual(prepared.repairs, []);
+  const made = createDrawingState('circular-32', prepared.mode);
+  installPreparedDrawing(made, prepared);
+  state.addDrawing(made, 'OV-3534'); history.addMember(made.id);
+  const [{ uid }] = made.circularSources;
+  assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  // The card's read names the places of its drawn records by identity; Record Order lists its rows by row.
+  assert.deepEqual(made.recordsOff, [`${uid}:2`]);
+  assert.deepEqual(made.adv.multi_record_positions.filter(({ selector }) => !made.recordsOff.includes(selector)),
+    [{ selector: `${uid}:3`, row: 1 }, { selector: `${uid}:1`, row: 2 }]);
+  assert.deepEqual(await drawnCircularRows(made), [2, 1]);
+  app.selectDrawing(source.id);
+});
+
+/**
+ * The OV-3531 canvas (recA and recD of the file of recA, recB and recD, named by record ID, on rows 2 and 1) as a Load
+ * installs it, added to the project and not read; the source drawing is shown again.
+ */
+const loadNamedCanvas = async (id) => {
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  const { envelope } = await projectOf(source);
+  const resourceId = Object.keys(envelope.resources).find((key) => envelope.resources[key].kind === 'genbank');
+  const renderRequest = structuredClone(envelope.renderRequest);
+  renderRequest.records = ['recA.1', 'recD.1'].map((recordId, index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index + 1}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordId', value: recordId }, source: { kind: 'genbank', resourceId }
+  }));
+  renderRequest.layout = { ...renderRequest.layout, multiRecordPositions: ['#1@2', '#2@1'] };
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  assert.deepEqual(prepared.repairs, []);
+  const made = createDrawingState(id, prepared.mode);
+  installPreparedDrawing(made, prepared);
+  state.addDrawing(made, id); history.addMember(made.id);
+  app.selectDrawing(source.id);
+  return made;
+};
+/** The record ID each request record of a drawing's draft request selects, in drawing order, as it is now. */
+const projectedRecordIds = async (drawing) => (await projectOf(drawing)).envelope.renderRequest.records
+  .map((record) => record.selector?.value ?? record.selector?.index ?? record.cardinality);
+/** Reads the drawing's records as a read without its Record Order does (the region dialog's, D-15-205). */
+const readWithoutRecordOrder = async (drawing) => {
+  const inputs = circularSourceInputs(drawing.inputType.value, drawing.circularSources);
+  const reads = await readCircularSourceRecords(inputs, (ref) => state.inputFiles.fileOf(ref));
+  drawing.circularRecordList.value = reads.flatMap((read) => read.records);
+  Object.assign(drawing.circularRecordDiscovery, { status: 'ready', error: '', inputType: drawing.inputType.value,
+    sources: inputs.map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, error: '' })) });
+};
+
+// B1: every projection of the canvas draws what it draws, before any read and after a read that wrote no Record Order.
+test('a Loaded canvas of named records projects only those records, on their rows, before and without its placement', async () => {
+  const made = await loadNamedCanvas('circular-b1');
+  assert.deepEqual(await projectedRecordIds(made), ['recA.1', 'recD.1'], 'before any read');
+  assert.deepEqual(await drawnCircularRows(made), [2, 1]);
+  await readWithoutRecordOrder(made);
+  assert.deepEqual(await projectedRecordIds(made), ['recA.1', 'recD.1'], 'after a read that placed nothing');
+  assert.deepEqual(await drawnCircularRows(made), [2, 1]);
+});
+
+test('the region dialog of a Loaded canvas offers only its named records', async () => {
+  const made = await loadNamedCanvas('circular-b1-dialog');
+  app.selectDrawing(made.id);
+  await app.regionDrawings.open();
+  assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => row.caption), ['recA.1', 'recD.1']);
+  app.regionDrawings.close();
+});
+
+// A Save of a drawing without a Result writes its draft request: its Load draws what the drawing drew.
+test('the draft request of a Loaded canvas, Loaded again, draws its named records', async () => {
+  const made = await loadNamedCanvas('circular-b1-save');
+  const { envelope } = await projectOf(made);
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest: envelope.renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  const again = createDrawingState('circular-b1-again', prepared.mode);
+  installPreparedDrawing(again, prepared);
+  state.addDrawing(again, 'again'); history.addMember(again.id);
+  assert.deepEqual(await drawnCircularRecordIds(again), ['recA.1', 'recD.1']);
+});
+
+// B2: an Undo to a step before the first read brings back the named records with the records off they stand for.
+// The discovery the restore runs writes no setting outside the step (R11): the named records stay, drawn alone.
+test('an Undo of a step made before the read keeps the named records drawn alone, and its discovery places nothing', async () => {
+  const made = await loadNamedCanvas('circular-b2');
+  app.selectDrawing(made.id);
+  const title = made.form.plot_title;
+  await history.runUndoable('Change setting', () => { made.form.plot_title = 'Named'; return true; });
+  await app.readShownRecords('circular');
+  const [{ uid }] = made.circularSources;
+  assert.deepEqual([...made.recordsOff], [`${uid}:2`], 'the read placed them');
+  await history.undo();
+  assert.equal(made.form.plot_title, title);
+  assert.deepEqual(await projectedRecordIds(made), ['recA.1', 'recD.1'], 'the draft the step began with');
+  assert.deepEqual(await drawnCircularRows(made), [2, 1]);
+  // The read is still the drawing's: a Record Order that keeps the read (the discovery a restore runs) writes nothing.
+  await app.refreshCircularRecordOrder({ automatic: true });
+  assert.deepEqual([[...made.recordsOff], made.recordsNamed.map(({ uid: card }) => card)], [[], [uid]], 'nothing placed');
+  assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  assert.deepEqual(await drawnCircularRows(made), [2, 1]);
+});
+
+// The screen shows what the figure draws: after an Undo across the first read, the Records list, the Record Order
+// rows and the drawn count read the records the cards name, as the request does (`circularRecordsOff`).
+test('after an Undo across the first read the Records list shows the records a card leaves out as OFF', async () => {
+  const made = await loadNamedCanvas('circular-undo-list');
+  app.selectDrawing(made.id);
+  await history.runUndoable('Change setting', () => { made.form.plot_title = 'Listed'; return true; });
+  await app.readShownRecords('circular');
+  await history.undo();
+  const [{ uid }] = made.circularSources;
+  assert.deepEqual([...made.recordsOff], [], 'the Undo gave back the draft before the placement');
+  assert.deepEqual([1, 2, 3].map((k) => app.recordSelection.isDrawn('circular', `${uid}:${k}`)), [true, false, true]);
+  assert.equal(app.circularDrawnRecordCount.value, 2);
+  // Turning recB ON there draws all three: the choice names every OFF record, the named records placed first.
+  await app.recordSelection.setRecordsDrawn('circular', 'circular', [`${uid}:2`], true);
+  assert.deepEqual([[...made.recordsOff], made.recordsNamed], [[], []]);
+  assert.deepEqual(await projectedRecordIds(made), ['recA.1', 'recB.1', 'recD.1']);
+});
+
+// S1: Reset this drawing keeps which records are drawn (OV-1249), placed or not.
+for (const readFirst of [false, true]) {
+  test(`Reset this drawing keeps the named records of a Loaded canvas off (${readFirst ? 'after' : 'before'} its read)`, async () => {
+    const made = await loadNamedCanvas(`circular-s1-${readFirst}`);
+    app.selectDrawing(made.id);
+    if (readFirst) await app.readShownRecords('circular');
+    await app.resetShownDrawing();
+    assert.deepEqual(await projectedRecordIds(made), ['recA.1', 'recD.1']);
+    assert.deepEqual(await drawnCircularRecordIds(made), ['recA.1', 'recD.1']);
+  });
+}
+
+// A Load of such a canvas reads no file: the records a card names are drawn alone from the card's own read, so a FASTA
+// source, which only the Python loader lists (R4), leaves the Worker unconstructed (Runtime data flow).
+test('a stored Circular canvas of some records of a FASTA file installs without the Worker', async () => {
+  const drawing = installShownDrawing('circular');
+  drawing.inputType.value = 'fasta';
+  replaceCircularSources(drawing.slices.inputs, [createCircularSource({ uid: 'record-1' })]);
+  bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, 'record-1', 'fasta',
+    new File(['>fa1\nACGTACGTAC\n>fa2\nACGTACGTAC\n>fa3\nACGTACGTAC\n'], 'three.fasta', { type: 'text/plain', lastModified: 1 }));
+  const { envelope } = await projectOf(drawing);
+  const renderRequest = structuredClone(envelope.renderRequest);
+  assert.equal(renderRequest.records[0].source.kind, 'fasta');
+  renderRequest.records = ['fa1', 'fa3'].map((recordId, index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index + 1}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordId', value: recordId }
+  }));
+  renderRequest.grouping = 'grid';
+  const hooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  const helpers = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = { ...hooks, onStructuralMetric: (metric) => {
+    if (metric.name === 'diagramHelperRequest') helpers.push(metric.operation);
+  } };
+  try {
+    const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+    const made = createDrawingState('circular-fasta', prepared.mode);
+    installPreparedDrawing(made, prepared);
+    assert.deepEqual(helpers, [], 'no Worker helper');
+    assert.deepEqual(prepared.repairs, []);
+    const [{ uid }] = made.circularSources;
+    assert.deepEqual(made.recordsNamed.map((card) => [card.uid, card.named.map(({ selector }) => selector.value)]),
+      [[uid, ['fa1', 'fa3']]], 'the card names the records it draws');
+    const { envelope: draft } = await projectOf(made);
+    assert.deepEqual(draft.renderRequest.records.map(({ cardinality, selector }) => [cardinality, selector?.value]),
+      [['exactly_one', 'fa1'], ['exactly_one', 'fa3']], 'before any read, the draft draws those records alone');
+    assert.deepEqual(helpers, [], 'no Worker helper');
+  } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = hooks;
+  }
+});
+
+const { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } = await import(
+  '../../gbdraw/web/js/services/artifact-slot.js');
+// D-24 (R15): Copy to another drawing projects the drawing it pastes into while another drawing is shown. The
+// projection reads that drawing's Result-bound values and its own Similarity alignment from the slot that keeps them,
+// so it is the projection the drawing has while shown, whatever the shown drawing holds (its own plan included).
+/** A Linear plan and record translations for the drawing's one record, `seq-1`, named by its group. */
+const alignmentOf = (groupId, x) => {
+  const anchor = { recordKey: 'seq-1', biologicalFeatureId: `${groupId}-f1`, sourceFeatureIndex: 0, stableFeatureSvgId: null };
+  return {
+    similarityAlignmentPlan: { schema: 2, groupId, reference: anchor,
+      records: [{ recordKey: 'seq-1', status: 'reference', rationale: 'reference', anchor }] },
+    linearRecordTranslations: [{ recordKey: 'seq-1', x, y: 0 }]
+  };
+};
+// A reader under which the projected drawing is the shown one.
+const readAsShown = (_drawingId, _shownDrawingId, readShown) => readShown();
+for (const mode of ['linear', 'circular']) {
+  test(`a ${mode} drawing's draft request while not shown is its draft request while shown`, async () => {
+    const drawing = mode === 'circular' ? circularSource([recordA]) : (() => {
+      const linear = withNewDrawingDefaults(state, createDrawingState('kept-linear', 'linear'));
+      linear.inputType.value = 'gb';
+      linear.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'seq-1', gb: state.inputFiles.registerFile(genbankFile('l.gb', [recordA])) }));
+      return linear;
+    })();
+    drawing.deletedLegendEntries.value = [{ caption: 'tRNA', originalCaption: 'tRNA' }];
+    state.results.value = [{ name: 'shown', content: '<svg xmlns="http://www.w3.org/2000/svg"/>' }];
+    state.selectedResultIndex.value = 0;
+    state.originalLegendOrder.value = ['CDS', 'tRNA'];
+    if (mode === 'linear') Object.entries(alignmentOf('own', 5)).forEach(([key, value]) => { state[key].value = value; });
+    const facts = await factsOf(drawing);
+    const shown = (await projectDraftRequest(state, drawing, { ...facts, readOfDrawing: readAsShown })).envelope;
+    // Another drawing is shown: every slot value of the state is that drawing's, as a switch installs them (an empty
+    // one's, and for a Linear drawing a plan of another group); the drawing's own are kept in its slot.
+    const kept = createArtifactSlot({
+      drawing: { id: drawing.id, mode },
+      values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
+      legend: { originalOrder: [...state.originalLegendOrder.value], originalColors: {} }
+    });
+    ARTIFACT_SLOT_KEYS.forEach((key) => { state[key].value = ARTIFACT_SLOT_EMPTY[key](mode, state[key].value); });
+    state.originalLegendOrder.value = [];
+    if (mode === 'linear') Object.entries(alignmentOf('other', 40)).forEach(([key, value]) => { state[key].value = value; });
+    const slots = createArtifactSlotStore();
+    slots.putSlot(kept);
+    const shownDrawingId = state.activeDrawingId.value;
+    state.activeDrawingId.value = 'another-drawing';
+    const notShown = (await projectDraftRequest(state, drawing, { ...facts, readOfDrawing: slots.readOfDrawing })).envelope;
+    state.activeDrawingId.value = shownDrawingId;
+    const withOtherValues = (await projectDraftRequest(state, drawing, { ...facts, readOfDrawing: readAsShown })).envelope;
+    assert.notDeepEqual(withOtherValues.renderRequest, shown.renderRequest, 'the request reads the Result-bound values');
+    if (mode === 'linear') {
+      assert.equal(shown.renderRequest.layout.similarityAlignment.groupId, 'own');
+      assert.equal(withOtherValues.renderRequest.layout.similarityAlignment.groupId, 'other', 'and the alignment');
+    }
+    assert.deepEqual(notShown.renderRequest, shown.renderRequest);
+    assert.deepEqual(notShown.resources, shown.resources);
+    ARTIFACT_SLOT_KEYS.forEach((key) => { state[key].value = ARTIFACT_SLOT_EMPTY[key](mode, state[key].value); });
+  });
+}
+
+// A paste into an existing drawing (PD-OI-090 〔作成〕(4)): Python pastes the source's regions into the target's draft
+// request; the Web installs only what the paste adds, and the target's draft request is then the one Python returned.
+const STAGE_PASTE = `
+import base64, json, os, tempfile
+def stage(staged):
+    directory = tempfile.mkdtemp()
+    out = {}
+    for index, (resource_id, item) in enumerate(staged.items()):
+        path = os.path.join(directory, f'r{index}_{item["name"]}')
+        with open(path, 'wb') as handle:
+            handle.write(base64.b64decode(item['base64']))
+        out[resource_id] = path
+    return out
+paths = stage(payload['staged'])
+target_paths = stage(payload['targetStaged'])
+directory = tempfile.mkdtemp()
+`;
+/** The Worker helper `deriveRegionDrawing` pasting into `targetSent`'s drawing, run by the real Python owner. */
+const pasteInPython = async ({ sent, targetSent, regions, edits = 'edits', duplicates = 'skip' }) => JSON.parse(await evaluatePython(`${STAGE_PASTE}
+from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+copy = dict(payload['copy'], target={'renderRequest': payload['targetRequest'], 'resourcePaths': target_paths})
+result = derive_web_region_drawing_json(
+    json.dumps(payload['canonicalRequest']), json.dumps(paths), directory,
+    json.dumps(payload['regions']), json.dumps(True), json.dumps(copy))
+`, {
+  canonicalRequest: sent.envelope.renderRequest, targetRequest: targetSent.envelope.renderRequest, regions,
+  copy: { into: 'existing', edits, duplicates },
+  staged: await stagedFiles(sent.envelope.renderRequest, sent.envelope.resources),
+  targetStaged: await stagedFiles(targetSent.envelope.renderRequest, targetSent.envelope.resources)
+}));
+/** The resources of a paste's request: each one the bytes of the sent resource it reads, or the table Python wrote. */
+const pastedResources = ({ pasted, sent, targetSent }) => ({
+  ...Object.fromEntries(Object.entries(pasted.targetResourceSources).map(([id, from]) => [id, targetSent.envelope.resources[from]])),
+  ...Object.fromEntries(Object.entries(pasted.resourceSources).map(([id, from]) => [id, sent.envelope.resources[from]])),
+  ...Object.fromEntries(pasted.addedResources.map(({ resourceId, name, text }) => [resourceId, writtenTextResource(resourceId, name, text)]))
+});
+/** Pastes `regions` of `source` into `target`, installs the paste, and returns the reply and the requests. */
+const pasteAndInstall = async (source, target, regions, choices = {}) => {
+  const sent = await projectOf(source);
+  const targetSent = await projectOf(target);
+  const pasted = await pasteInPython({ sent, targetSent, regions, ...choices });
+  assert.equal(pasted.status, 'pasted', JSON.stringify(pasted));
+  installPastedRecords(target, await preparePastedRecords({ pasted, sent, targetSent }));
+  return { pasted, sent, targetSent };
+};
+/**
+ * `request` with each record named as `named` names the record at its place (its key, everywhere the request names
+ * it, and its selector): a pasted Circular card takes a new uid in the target, so the target names the pasted records
+ * by their identities there and by record ID, Python by keys of its own and by place in the file. The caller checks
+ * that the records drawn are the same ones (`drawnCircularRecordIds`).
+ */
+const namedAs = (request, named) => {
+  const keys = new Map(request.records.map(({ recordKey }, index) => [recordKey, named.records[index]?.recordKey ?? recordKey]));
+  const renamed = JSON.parse(JSON.stringify(request), (_key, value) => (typeof value === 'string' && keys.has(value) ? keys.get(value) : value));
+  renamed.records.forEach((record, index) => { record.selector = named.records[index]?.selector ?? record.selector; });
+  return renamed;
+};
+/**
+ * The target's draft request after the paste is the request Python returned, but at the paths of `open`; with
+ * `sameRecords`, as the pasted records are named aside (`namedAs`).
+ */
+const assertPastedRequest = async (target, paste, open = [], { sameRecords = false } = {}) => {
+  const { envelope } = await projectOf(target);
+  const comparison = await compareCanonicalRenderRequests({
+    expectedRequest: paste.pasted.renderRequest, expectedResources: pastedResources(paste),
+    actualRequest: sameRecords ? namedAs(envelope.renderRequest, paste.pasted.renderRequest) : envelope.renderRequest,
+    actualResources: envelope.resources
+  });
+  assert.deepEqual(comparison.differences.map(({ path }) => path), open, 'the target writes the pasted request');
+};
+
+// B1: a paste into a Loaded canvas sends Python its draft, which draws its named records alone.
+test('a paste into a Loaded canvas that was never read keeps the records it leaves out', async () => {
+  const target = await loadNamedCanvas('circular-b1-paste');
+  const source = circularSource([genbankRecord('recC', 1500, [[101, 400, 'C1']])]);
+  await pasteAndInstall(source, target, [{ recordKey: 'record-1', start: 1, end: 1500 }]);
+  const before = await projectedRecordIds(target);
+  assert.ok(before.includes('recA.1') && before.includes('recD.1') && !before.includes('recB.1'), JSON.stringify(before));
+  const drawn = await drawnCircularRecordIds(target);
+  assert.ok(!drawn.includes('recB.1') && drawn.includes('recA.1') && drawn.includes('recD.1'), JSON.stringify(drawn));
+  app.selectDrawing(source.id);
+});
+
+// A pasted File card whose read failed keeps the records it names, under keys of the target (`<card uid>:<request
+// key>`, which spell no identity): its records and their places collide with none of the target's, whose own named
+// records also have the request keys `record-1` and `record-2`.
+test('a paste whose card was not read names its records and their places apart from the target\'s', async () => {
+  const target = await loadNamedCanvas('circular-c-paste');
+  const pastedFile = circularSource(['recX', 'recY', 'recZ'].map((name, index) => genbankRecord(name, 800 + index * 100, [[101, 400, `${name}1`]])),
+    { multi_record_canvas: true });
+  const { envelope } = await projectOf(pastedFile);
+  const resourceId = Object.keys(envelope.resources).find((key) => envelope.resources[key].kind === 'genbank');
+  const renderRequest = structuredClone(envelope.renderRequest);
+  renderRequest.records = [0, 2].map((index) => ({
+    ...envelope.renderRequest.records[0], recordKey: `record-${index === 0 ? 1 : 2}`, cardinality: 'exactly_one',
+    selector: { kind: 'recordIndex', index }, source: { kind: 'genbank', resourceId }
+  }));
+  renderRequest.layout = { ...renderRequest.layout, multiRecordPositions: ['#1@3', '#2@4'] };
+  const prepared = await prepareStoredDrawing({ mode: 'circular', renderRequest, resources: envelope.resources, sourceFiles: new Map() });
+  assert.deepEqual(prepared.repairs, []);
+  installPastedRecords(target, { prepared, pastedRecordKeys: new Set(['record-1', 'record-2']), pastedCards: 1 });
+  const { uid } = target.circularSources[1];
+  assert.deepEqual(target.recordsNamed.map(({ uid: card, named }) => [card, named.map(({ recordKey }) => recordKey)]),
+    [[target.circularSources[0].uid, ['record-1', 'record-2']], [uid, [`${uid}:record-1`, `${uid}:record-2`]]]);
+  assert.deepEqual(target.adv.multi_record_positions.filter(({ selector }) => selector.startsWith(uid)),
+    [{ selector: `${uid}:record-1`, row: 3 }, { selector: `${uid}:record-2`, row: 4 }]);
+  // No key spells an identity of the card (`<uid>:<k>`) before its read names its records by identity.
+  assert.deepEqual(target.recordsNamed[1].named.map(({ recordKey }) => recordKeyExpansion(recordKey, uid)), [null, null]);
+  const keys = (await projectOf(target)).envelope.renderRequest.records.map(({ recordKey }) => recordKey);
+  assert.equal(new Set(keys).size, keys.length, JSON.stringify(keys));
+  assert.deepEqual(await projectedRecordIds(target), ['recA.1', 'recD.1', 0, 2]);
+  app.selectDrawing(pastedFile.id);
+});
+
+test('a paste into a Linear drawing appends the pasted region with its edits; the target keeps its own', async () => {
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-40');
+  target.manualSpecificRules.splice(0, Infinity, { feat: 'CDS', qual: 'locus_tag', val: 'A1', color: '#00ff00', cap: 'Mine' });
+  for (const key of Object.keys(target.featureOverrides)) delete target.featureOverrides[key];
+  const ownRow = { ...target.linearSeqs[0] };
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1', start: 301, end: 800 }]);
+  assert.deepEqual(paste.pasted.pastedRecordKeys, [target.linearSeqs[1].uid]);
+  assert.deepEqual({ ...target.linearSeqs[0] }, ownRow, 'the target\'s own row');
+  assert.deepEqual(Object.values(target.featureOverrides).map((row) => [row.recordKey, row.labelText]), [[target.linearSeqs[1].uid, 'kept']]);
+  assert.deepEqual(target.manualSpecificRules.map(({ val, cap }) => [val, cap]), [['A1', 'Mine']], 'the target\'s color rules');
+  await assertPastedRequest(target, paste);
+});
+
+test('a paste of records only brings no edit of the source', async () => {
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-41');
+  for (const key of Object.keys(target.featureOverrides)) delete target.featureOverrides[key];
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1', start: 301, end: 800 }], { edits: 'records' });
+  assert.deepEqual(target.featureOverrides, {});
+  await assertPastedRequest(target, paste);
+});
+
+test('a paste of whole records into a Circular drawing draws them after its own on a Multi-Record Canvas', async () => {
+  const { made: target } = await deriveAndInstall(circularSource([genbankRecord('recC', 1500, [[101, 400, 'C1']])]),
+    [{ recordKey: 'record-1', start: 1, end: 1500 }], true, 'circular-42');
+  state.addDrawing(target, 'paste target'); history.addMember(target.id);
+  await drawnCircularRecordIds(target);
+  const source = circularSource(threeRecords, { multi_record_canvas: true });
+  app.selectDrawing(source.id);
+  const ownCard = { ...target.circularSources[0] };
+  const paste = await pasteAndInstall(source, target, [
+    { recordKey: 'record-1:1', start: 1, end: 900 }, { recordKey: 'record-1:3', start: 1, end: 1100 }
+  ]);
+  assert.deepEqual({ ...target.circularSources[0] }, ownCard, 'the target\'s own card');
+  // The pasted records of one file are one File card (OV-3533), under a uid of its own.
+  assert.equal(new Set(target.circularSources.map(({ uid }) => uid)).size, 2, 'the target\'s card and the pasted card');
+  assert.equal(target.form.multi_record_canvas, true);
+  // The target's own card reads a file of one record, which its request names without a selector.
+  assert.deepEqual(await drawnCircularRecordIds(target), [null, 'recA.1', 'recD.1']);
+  // Python places the pasted records on one new row after the target's own (#1@1, #2@2, #3@2); the request reader
+  // names each place by the identity it gives the record, so the install keeps them (OV-3534).
+  assert.deepEqual(await drawnCircularRows(target), [1, 2, 2]);
+  await assertPastedRequest(target, paste, [], { sameRecords: true });
+  app.selectDrawing(source.id);
+});
+
+// Review finding 1 of #2047: a paste keeps the target's own records of one file on the one resource its request names,
+// so its File card, the records it leaves off and their places stay as they are; the pasted records of that file are
+// a card of their own after it.
+test('a paste into a Circular copy of records of a file keeps the target\'s card, its records off and its places', async () => {
+  const sixRecords = [1, 2, 3, 4, 5, 6].map((number) => genbankRecord(`six${number}`, 800 + number * 100, [[101, 400, `S${number}`]]));
+  const source = circularSource(sixRecords, { multi_record_canvas: true });
+  const { made: target } = await deriveAndInstall(source, [1, 2].map((number) => (
+    { recordKey: `record-1:${number}`, start: 1, end: 800 + number * 100 })), true, 'circular-46');
+  state.addDrawing(target, 'paste six'); history.addMember(target.id);
+  assert.deepEqual(await drawnCircularRecordIds(target), ['six1.1', 'six2.1']);
+  const own = {
+    cards: target.circularSources.map((card) => ({ ...card })), off: [...target.recordsOff],
+    places: target.adv.multi_record_positions.map((place) => ({ ...place }))
+  };
+  assert.equal(own.cards.length, 1);
+  app.selectDrawing(source.id);
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1:3', start: 1, end: 1100 }]);
+  assert.deepEqual(target.circularSources.slice(0, 1).map((card) => ({ ...card })), own.cards, 'the target\'s own card');
+  assert.equal(target.circularSources.length, 2, 'the pasted record\'s card after it');
+  assert.deepEqual(target.recordsOff.filter((key) => key.startsWith(`${own.cards[0].uid}:`)), own.off, 'its records off');
+  const ownSelectors = new Set(own.places.map(({ selector }) => selector));
+  assert.deepEqual(target.adv.multi_record_positions.filter(({ selector }) => ownSelectors.has(selector)), own.places, 'its places');
+  assert.deepEqual(await drawnCircularRecordIds(target), ['six1.1', 'six2.1', 'six3.1']);
+  assert.deepEqual(await drawnCircularRows(target), [1, 1, 2]);
+  await assertPastedRequest(target, paste, [], { sameRecords: true });
+  app.selectDrawing(source.id);
+});
+
+test('a paste with the records\' edits brings the colors of the pasted features into the target\'s color rules', async () => {
+  const source = await circularSourceWithLook();
+  const ids = await featureIdsInPython((await projectOf(source)).envelope);
+  const only = JSON.parse(await evaluatePython(`
+import json
+from gbdraw.features.ids import exact_value_pattern, feature_instance
+result = json.dumps(exact_value_pattern(feature_instance(payload['id'], 'record-1')))
+`, { id: ids['400'] }));
+  source.manualSpecificRules.splice(0, Infinity, { feat: 'CDS', qual: 'hash', val: only, color: '#ff0000', cap: 'Only this' });
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-43');
+  const own = { feat: 'CDS', qual: 'locus_tag', val: 'A1', color: '#00ff00', cap: 'Mine' };
+  target.manualSpecificRules.splice(0, Infinity, own);
+  const paste = await pasteAndInstall(source, target, [{ recordKey: 'record-1', start: 301, end: 800 }]);
+  assert.equal(paste.pasted.addedResources.length, 1, 'Python wrote the merged color table');
+  assert.deepEqual(target.manualSpecificRules.map(({ color, cap }) => [color, cap]), [['#00ff00', 'Mine'], ['#ff0000', 'Only this']]);
+  assert.deepEqual({ ...target.manualSpecificRules[0] }, own, 'the target\'s rule as it was (not read from the table)');
+  await assertPastedRequest(target, paste);
+  const recordsOnly = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-44');
+  recordsOnly.made.manualSpecificRules.splice(0, Infinity, own);
+  await pasteAndInstall(source, recordsOnly.made, [{ recordKey: 'record-1', start: 301, end: 800 }], { edits: 'records' });
+  assert.deepEqual(recordsOnly.made.manualSpecificRules.map(({ cap }) => cap), ['Mine']);
+});
+
+// The Worker's `deriveRegionDrawing`: it stages the payload's one resource table and gives Python the copy with the
+// target's staged paths (`pasteTargetPaths`); here the real Python owner runs it.
+/** History's writer of a drawing's artifact values (`writeArtifactValues`) for the drawing a paste shows: the page's. */
+const writeShownArtifact = (drawingId, values) => {
+  assert.equal(drawingId, state.activeDrawingId.value, 'the target is shown when the paste writes');
+  Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
+};
+const deriveAsWorker = async (payload) => {
+  const references = stagedHelperReferences(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, payload);
+  const staged = JSON.parse(await evaluatePython(`${STAGE}
+result = json.dumps(paths)
+`, { staged: await stagedFiles(references, payload.resources) }));
+  const { copy, sourcePaths } = pasteTargetPaths(payload.copy, staged, {});
+  return { result: JSON.parse(await evaluatePython(`
+import json, tempfile
+from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+result = derive_web_region_drawing_json(
+    json.dumps(payload['canonicalRequest']), json.dumps(payload['paths']), tempfile.mkdtemp(),
+    json.dumps(payload['regions']), json.dumps(payload['adaptSizes']), json.dumps(payload['copy']))
+`, { canonicalRequest: payload.canonicalRequest, paths: sourcePaths, regions: payload.regions, adaptSizes: payload.adaptSizes, copy })) };
+};
+
+test('Copy into an existing drawing: one History step of that drawing, shown; its Undo restores it; the source is unchanged', async () => {
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-45');
+  state.addDrawing(target, 'paste here'); history.addMember(target.id);
+  app.selectDrawing(source.id);
+  const sourceHash = hashOf(source.id);
+  const targetHash = hashOf(target.id);
+  const rowsBefore = target.linearSeqs.length;
+  const owner = createRegionDrawing({
+    shownDrawingId: () => state.activeDrawingId.value,
+    projectShownRequest: () => projectOf(state.activeDrawing()),
+    deriveRegion: deriveAsWorker,
+    newDrawingFromRegion: drawingList.newDrawingFromRegion,
+    readRecordSources: async () => ({ mode: 'circular', cards: new Map([['record-1', [
+      { sourceIndex: 0, selector: '#1', recordId: 'recA', recordLength: 1200 }]]]) }),
+    resultFeatures: () => null,
+    committedRecordKeyOf: () => null,
+    pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
+      readRecords: async () => undefined, project: projectOf, show: app.selectDrawing, runUndoable: history.runUndoable,
+      prepare: preparePastedRecords, install: installPastedRecords, writeArtifactValues: writeShownArtifact,
+      endAlignmentWorkOf: () => {} })
+  });
+  await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'coordinates', start: '301', end: '800' } });
+  await owner.setChoice({ target: target.id });
+  assert.equal(owner.dialog.status, 'derived', owner.dialog.message);
+  assert.deepEqual(owner.dialog.notCarried, ['Annotations of these records (1)']);
+  await owner.confirm();
+  assert.equal(state.activeDrawingId.value, target.id, 'the target drawing is shown');
+  assert.equal(target.linearSeqs.length, rowsBefore + 1, 'the region is appended');
+  assert.equal(history.managerOf(target.id).getUndoCount(), 1, 'one step of the target drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Copy to another drawing');
+  assert.equal(hashOf(source.id), sourceHash, 'the source drawing is unchanged');
+  await history.undo();
+  assert.equal(hashOf(target.id), targetHash, 'Undo restores the drawing as it was');
+  app.selectDrawing(source.id);
+});
+
+// Review finding 2 of #2047: a paste into a Linear drawing with a Similarity alignment installs the plan and record
+// translations Python returns for the drawing (they name the pasted records too), through the per-drawing writer, in
+// the drawing's History step; the shown drawing's own refs are never the target's before the switch (OV-3532).
+test('a paste into an aligned Linear drawing installs the alignment Python extends to the pasted records', async () => {
+  const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+  const source = await circularSourceWithLook();
+  const { made: target } = await deriveAndInstall(source, [{ recordKey: 'record-1', start: 1, end: 300 }], true, 'linear-47');
+  state.addDrawing(target, 'aligned target'); history.addMember(target.id);
+  app.selectDrawing(target.id);
+  const [{ uid: ownKey }] = target.linearSeqs;
+  const anchor = { recordKey: ownKey, biologicalFeatureId: 'og-own-f1', sourceFeatureIndex: 0, stableFeatureSvgId: null };
+  const own = {
+    similarityAlignmentPlan: { schema: 2, groupId: 'og-own', reference: anchor,
+      records: [{ recordKey: ownKey, status: 'reference', rationale: 'reference', anchor }] },
+    linearRecordTranslations: [{ recordKey: ownKey, x: 30, y: 0 }]
+  };
+  await history.runUndoableArtifactReplacement('Align', () => {
+    state.similarityAlignmentPlan.value = structuredClone(own.similarityAlignmentPlan);
+    state.linearRecordTranslations.value = structuredClone(own.linearRecordTranslations);
+    return true;
+  });
+  app.selectDrawing(source.id);
+  assert.equal(state.similarityAlignmentPlan.value, null, 'the source shows no alignment');
+  // The app keeps the target's alignment in its slot; the projection reads it there.
+  const keptTarget = createArtifactSlot({ drawing: target, values: structuredClone(own) });
+  const project = async (drawing) => projectDraftRequest(state, drawing, { ...(await factsOf(drawing)),
+    readOfDrawing: (drawingId, shownId, readShown, readKept) => (drawingId === shownId ? readShown()
+      : drawingId === target.id ? readKept(keptTarget) : undefined) });
+  /** @type {[string, Record<string, unknown>][]} */
+  const written = [];
+  /** @type {string[]} */
+  const ended = [];
+  const owner = createRegionDrawing({
+    shownDrawingId: () => state.activeDrawingId.value,
+    projectShownRequest: () => projectOf(state.activeDrawing()),
+    deriveRegion: deriveAsWorker,
+    newDrawingFromRegion: drawingList.newDrawingFromRegion,
+    readRecordSources: async () => ({ mode: 'circular', cards: new Map([['record-1', [
+      { sourceIndex: 0, selector: '#1', recordId: 'recA', recordLength: 1200 }]]]) }),
+    resultFeatures: () => null,
+    committedRecordKeyOf: () => null,
+    pasteTargets: createPasteTargets({ tabs: () => state.drawingTabs.value, drawingOf: state.drawingOf,
+      readRecords: async () => undefined, project, show: app.selectDrawing, runUndoable: history.runUndoable,
+      prepare: preparePastedRecords, install: installPastedRecords,
+      writeArtifactValues: (drawingId, values) => {
+        written.push([drawingId, values]);
+        writeShownArtifact(drawingId, values);
+      },
+      endAlignmentWorkOf: (drawingId) => ended.push(drawingId) })
+  });
+  await owner.open({ keys: ['record-1'], edit: { checked: true, kind: 'coordinates', start: '301', end: '800' } });
+  await owner.setChoice({ target: target.id });
+  assert.equal(owner.dialog.status, 'derived', owner.dialog.message);
+  await owner.confirm();
+  assert.equal(state.activeDrawingId.value, target.id);
+  const pastedKey = target.linearSeqs[1].uid;
+  assert.deepEqual(written.map(([drawingId]) => drawingId), [target.id], 'one write, of the target');
+  assert.deepEqual(ended, [target.id], 'the target\'s alignment work ends; its plan stays (delta review B1)');
+  assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-own', 'the target keeps its group');
+  assert.deepEqual(state.similarityAlignmentPlan.value.records.map(({ recordKey, status }) => [recordKey, status]),
+    [[ownKey, 'reference'], [pastedKey, 'skipped']], 'the plan names the pasted record, drawn where it is');
+  assert.deepEqual(state.linearRecordTranslations.value, [{ recordKey: ownKey, x: 30, y: 0 }, { recordKey: pastedKey, x: 0, y: 0 }]);
+  // Generate and Save project the target: the plan covers every record it draws.
+  const { layout } = (await projectOf(target)).envelope.renderRequest;
+  assert.deepEqual(layout.similarityAlignment.records.map(({ recordKey }) => recordKey), [ownKey, pastedKey]);
+  await history.undo();
+  assert.deepEqual(state.similarityAlignmentPlan.value, own.similarityAlignmentPlan, 'Undo gives the target its plan back');
+  assert.deepEqual(state.linearRecordTranslations.value, own.linearRecordTranslations);
+  app.selectDrawing(source.id);
 });

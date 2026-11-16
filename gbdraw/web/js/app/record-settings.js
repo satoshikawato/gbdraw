@@ -18,10 +18,12 @@ import { circularSourceInputs } from '../services/input-types.js';
 import { groupLinearSourceRecords, planLinearSourceRemoval } from '../services/linear-sources.js';
 import {
   circularRecordDrawKey,
+  circularRecordsOff,
   heldCardPrefix,
   legacyCircularRecordKeys,
   linearCardHasSettings,
   placeFlatRecordSelectors,
+  placeNamedCardRecords,
   RECORD_SETTINGS_DEFAULTS,
   recordsWithEdits,
   removeRecordEdits
@@ -69,7 +71,11 @@ import { fileCardLine } from './file-card.js';
  * After a settled read of a Circular drawing's cards, the one place its
  * record choices are named by identity (OV-2869, OV-2903): each flat `#N`
  * an older Session kept goes to its record over the cards as loaded
- * (`placeFlatRecordSelectors`), and a Record select value or a Record
+ * (`placeFlatRecordSelectors`); the records a File card names of its file
+ * (`recordsNamed`, which a Load or a copy installed) are placed: the other
+ * records of its file OFF, and the places that named them by request key name
+ * their identities (`placeNamedCardRecords`, OV-3530, OV-3531, OV-3534), which
+ * changes no drawn record; and a Record select value or a Record
  * Order row that names one record otherwise (a record ID, as a CLI Session
  * of one-record files names its rows, OV-2906; a card's `#k`) becomes that
  * record's identity, which the Record select lists and the Record Order
@@ -83,7 +89,9 @@ const placeRecordChoices = (drawing, entries, identitySources) => {
   /** @type {MultiRecordPosition[]} */
   const positions = drawing.adv.multi_record_positions;
   const choices = { recordsOff: [...drawing.recordsOff], selector: drawing.form.circular_record_selector, positions };
-  const placed = drawing.files.c_legacy_record_cards ? placeFlatRecordSelectors(choices, identitySources()) : choices;
+  const flatPlaced = drawing.files.c_legacy_record_cards ? placeFlatRecordSelectors(choices, identitySources()) : choices;
+  const { choices: placed, cards } = placeNamedCardRecords(flatPlaced, drawing.recordsNamed, entries);
+  if (cards.length !== drawing.recordsNamed.length) drawing.recordsNamed.splice(0, Infinity, ...cards);
   /** @param {string} key */
   const identityOf = (key) => circularRecordSelection(entries, key).record?.value ?? key;
   const selector = identityOf(placed.selector);
@@ -167,6 +175,26 @@ export const createRecordSettingsSources = ({
   });
   /** OV-2869, OV-2906: see `placeRecordChoices`. @param {DrawingState} drawing */
   const placeCircularRecordChoices = (drawing) => placeRecordChoices(drawing, circularEntriesOf(drawing), () => circularIdentitySources(drawing));
+  /**
+   * The records a drawing leaves OFF as its request draws them, which the Records list and its checkboxes show: a
+   * Circular drawing's also name the records its File cards leave out of their files (`circularRecordsOff`); none
+   * without a drawing.
+   * @param {DrawingState | null} drawing
+   * @returns {readonly string[]}
+   */
+  const drawnRecordsOff = (drawing) => (!drawing ? []
+    : drawing.mode === 'circular' ? circularRecordsOff(drawing, circularEntriesOf(drawing)) : drawing.recordsOff);
+  /**
+   * Writes a drawing's OFF list from a choice of the user, which names every OFF record (`drawnRecordsOff`): a
+   * Circular drawing places the records its cards name first, so none of them comes back ON.
+   * Writes nothing without a drawing.
+   * @param {DrawingState | null} drawing @param {readonly string[]} next
+   */
+  const writeRecordsOff = (drawing, next) => {
+    if (!drawing) return;
+    if (drawing.mode === 'circular') placeCircularRecordChoices(drawing);
+    drawing.recordsOff.splice(0, Infinity, ...next);
+  };
   /** @param {DrawingState} drawing @returns {RecordSettingsOwner[]} */
   const circularRecordSettingsOwners = (drawing) => {
     const discovery = getCircularRecordDiscoveryState(drawing);
@@ -250,7 +278,9 @@ export const createRecordSettingsSources = ({
       })
     };
   };
-  return { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf };
+  return {
+    circularIdentitySources, drawnRecordsOff, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf, writeRecordsOff
+  };
 };
 
 /**

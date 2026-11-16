@@ -24,10 +24,13 @@ import { msg } from '../utils/i18n.js';
  *   order: a Circular list of several File cards; none for a list of one file.
  * @typedef {{ key: string, name: string, keys: readonly RecordDrawKey[] }} RecordListGroup One file of a list (its card's
  *   uid) and its records.
- * @typedef {(mode: RecordSelectionMode) => RecordDrawKey[]} RecordsOffPort
- *   The reactive OFF list of the shown drawing when it is of `mode`, which this owner rewrites; an
- *   empty list when another mode's drawing is shown (the lists and checkboxes are in the shown
- *   drawing's panel, and every other port acts on the shown drawing).
+ * @typedef {(mode: RecordSelectionMode) => readonly RecordDrawKey[]} RecordsOffPort
+ *   The records the shown drawing leaves OFF as it draws them, when it is of `mode` (a Circular drawing's
+ *   `circularRecordsOff`: also the records its File cards leave out of their files); an empty list when another
+ *   mode's drawing is shown (the lists and checkboxes are in the shown drawing's panel, and every other port acts
+ *   on the shown drawing).
+ * @typedef {(mode: RecordSelectionMode, next: readonly RecordDrawKey[]) => void} WriteRecordsOffPort
+ *   Writes the shown drawing's OFF list, inside the open History step.
  * @typedef {(mode: RecordSelectionMode, sourceKey: string) => RecordSource | null} RecordSourcePort
  *   One source of the mode with its records, or null when it is gone.
  * @typedef {(label: string, change: () => unknown) => Promise<unknown>} RunUndoablePort History's one step.
@@ -51,6 +54,7 @@ import { msg } from '../utils/i18n.js';
  * @property {<T extends object>(value: T) => T} reactive Vue `reactive`.
  * @property {<T>(getter: () => T) => { readonly value: T }} computed Vue `computed`.
  * @property {RecordsOffPort} recordsOff
+ * @property {WriteRecordsOffPort} writeRecordsOff
  * @property {RecordSourcePort} source
  * @property {RunUndoablePort} runUndoable
  * @property {DialogChoicePort} withDialogChoice
@@ -93,7 +97,7 @@ const recordListGroups = (source, view) => {
 
 /** @param {RecordSelectionOptions} options */
 export const createRecordSelection = ({
-  reactive, computed, recordsOff, source, runUndoable, withDialogChoice, closeAfterDialogChoice,
+  reactive, computed, recordsOff, writeRecordsOff, source, runUndoable, withDialogChoice, closeAfterDialogChoice,
   afterRecordSetChange, removeSource, askRemoveSource, deleteRecordSettings, prepareRecords, autoOpenRequests
 }) => {
   /** @param {RecordSelectionMode} mode A failed read leaves the records unread; the list shows what is known. */
@@ -165,7 +169,7 @@ export const createRecordSelection = ({
     const next = nextRecordsOff(current, keys, drawn);
     if (next.length === current.length && next.every((key, index) => key === current[index])) return false;
     return runUndoable(drawn ? msg('Draw records') : msg('Leave out records'), () => {
-      recordsOff(mode).splice(0, Infinity, ...next);
+      writeRecordsOff(mode, next);
       afterRecordSetChange(mode);
       return true;
     });

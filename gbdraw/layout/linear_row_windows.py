@@ -67,11 +67,13 @@ def omitted_length_text(length_bp: int) -> str:
 
 @dataclass(frozen=True)
 class RowWindowLine:
-    """One line of a windowed row's list: its number, the record's own label when it differs from the row
-    name (else empty), and the window text (record ID, span, and the reverse mark)."""
+    """One line of a windowed row's list: its number, the drawn record of its window (index and ID), the record's
+    own label when it differs from the row name (else empty), and the window text (record ID, span, and the reverse
+    mark)."""
 
     number: int
     record_index: int
+    record_id: str
     label: str
     text: str
 
@@ -181,6 +183,7 @@ def plan_row_windows(units: Sequence[RecordUnit], labels: Sequence[str]) -> Line
         RowWindowLine(
             number=number,
             record_index=unit.record_index,
+            record_id=unit.record_id,
             label=label if label and label != name else "",
             text=f"{unit.record_id}:{window_span_text(*unit.span)}{REVERSE_MARK if unit.reverse else ''}",
         )

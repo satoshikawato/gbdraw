@@ -1112,6 +1112,20 @@ def _in_drawn_order(values: Sequence[_RecordValue] | None, ordered_indices: Sequ
     return None if values is None else [values[index] for index in ordered_indices]
 
 
+def circular_record_rows(records: Sequence[SeqRecord], positions: Sequence[str] | None) -> tuple[int, ...]:
+    """The zero-based row a Circular Multi-Record Canvas draws each of ``records`` on, in request order: its
+    ``positions`` when it names them, else the default grid (``_circular_drawn_order``)."""
+
+    ordered, row_counts = _circular_drawn_order(records, positions)
+    rows = [0] * len(records)
+    start = 0
+    for row, count in enumerate(row_counts):
+        for index in ordered[start:start + count]:
+            rows[index] = row
+        start += count
+    return tuple(rows)
+
+
 def _resolve_multi_record_default_row_counts(record_count: int) -> list[int]:
     """Resolve default near-square row counts for multi-record canvas layout."""
     if record_count <= 0:

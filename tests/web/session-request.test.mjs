@@ -400,6 +400,7 @@ assert.throws(
 const ref = (value) => ({ value });
 const state = {
   mode: 'circular',
+  recordsNamed: [],
   inputType: ref('gb'),
   // The list a fixture assigns holds the records of the one card `record-1` (`CircularListRecord`).
   circularRecordList: (() => {

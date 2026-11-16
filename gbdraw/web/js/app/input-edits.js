@@ -104,8 +104,9 @@ export const createInputTypeEdits = ({
     const next = normalizeInputType(value);
     if (drawing.inputType.value === next) return { status: 'ok' };
     changeRecordSources(drawing, () => { drawing.inputType.value = next; });
-    // The other input's records are not the ones the OFF list names.
+    // The other input's records are not the ones the OFF list and the cards' named records name.
     if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
+    if (drawing.recordsNamed.length) drawing.recordsNamed.splice(0);
     void discoverDrawingRecords(drawing);
     return { status: 'ok' };
   };

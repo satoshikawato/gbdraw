@@ -23,6 +23,7 @@ from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 import pandas as pd
+from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.analysis.origin_arcs import location_origin_arc
@@ -33,6 +34,7 @@ from gbdraw.annotations.models import (
     RegionAnnotation,
 )
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.diagram import circular_record_rows
 from gbdraw.api.options import (
     DEPTH_COMPATIBILITY_FIELDS,
     CircularDiagramOptions,
@@ -443,10 +445,10 @@ def _derive_selected(
         raise CopyRefused("CIRCULAR_WHOLE_RECORDS")
     defaults = settings == "defaults"
     records = tuple(_record_input(source, region, reverse_complement, defaults=defaults) for region in selected)
-    # A Circular drawing of several records is a Multi-Record Canvas: the source canvas's layout without its
-    # placements (each record of the new drawing takes its place in order), else the canvas defaults.
+    # A Circular drawing of several records is a Multi-Record Canvas: the source canvas's layout with each record on
+    # the row the source draws it on, its empty rows left out (OV-3533), else the canvas defaults.
     layout = (
-        replace(source.layout, multi_record_positions=None)
+        replace(source.layout, multi_record_positions=_source_rows(source, collection, selected))
         if not defaults and isinstance(source, CircularDiagramRequest) and source.layout is not None
         else CircularMultiRecordOptions()
     ) if target_mode == "circular" and len(records) > 1 else None
@@ -1292,7 +1294,7 @@ def paste_region_request(
         request = _pasted_diagrams(target, added, [collection.records[r.item.resolved_index].id for r in kept])
         request = replace(request, options=pasted_options)
     elif isinstance(target, LinearDiagramRequest):
-        records, placed = _placed(target, added, kept, unit_count=len(target_collection.records))
+        records, placed = _placed(target, added, kept, target_records=target_collection.records)
         assert isinstance(placed, LinearMultiRecordOptions) or placed is None
         assert isinstance(pasted_options, LinearDiagramOptions)
         layout, alignment = _unmoved(placed, target.similarity_alignment, keys)
@@ -1300,7 +1302,7 @@ def paste_region_request(
             target, records=records, layout=layout, options=pasted_options, similarity_alignment=alignment
         )
     else:
-        records, canvas = _placed(target, added, kept, unit_count=len(target_collection.records))
+        records, canvas = _placed(target, added, kept, target_records=target_collection.records)
         assert isinstance(canvas, CircularMultiRecordOptions) and isinstance(pasted_options, CircularDiagramOptions)
         request = replace(target, records=records, layout=canvas, grouping="grid", options=pasted_options)
     not_carried = _paste_not_carried(source, collection, kept, target_mode, compares_by_rows=_compares_by_rows(target))
@@ -1600,20 +1602,38 @@ def _pasted_diagrams(
     return replace(target, records=records, outputs=tuple(outputs))
 
 
+def _source_rows(
+    source: CircularDiagramRequest, collection: ResolvedRecordCollection, selected: Sequence[SourceRegion]
+) -> tuple[str, ...]:
+    """The places of the whole records ``selected`` of a Circular canvas: each on the row ``source`` draws it on
+    (``circular_record_rows``), in order, the rows without a chosen record left out."""
+    positions = source.layout.multi_record_positions if source.layout is not None else None
+    drawn = circular_record_rows(collection.records, positions)
+    rows = [drawn[region.item.resolved_index] for region in selected]
+    kept = sorted(set(rows))
+    return tuple(f"#{unit}@{kept.index(row) + 1}" for unit, row in enumerate(rows, 1))
+
+
 def _placed(
     target: CircularDiagramRequest | LinearDiagramRequest,
     added: Sequence[RecordInput],
     regions: Sequence[SourceRegion],
     *,
-    unit_count: int,
+    target_records: Sequence[SeqRecord],
 ) -> tuple[tuple[RecordInput, ...], LinearMultiRecordOptions | CircularMultiRecordOptions | None]:
     """The target's records with ``added`` after them, and its layout: where the target places its records by row,
-    a Linear record takes a new row of its own and the Circular records one new row together; otherwise they follow
-    in order. A Circular target becomes, or stays, a Multi-Record Canvas."""
+    a Linear record takes a new row of its own and the Circular records one new row together; otherwise Linear
+    records follow in order. A Circular target becomes, or stays, a Multi-Record Canvas; one that names no places
+    keeps the rows the drawer gives its records (``circular_record_rows``), and the pasted records take one new
+    row after them, so they are added below its records."""
     linear = isinstance(target, LinearDiagramRequest)
     layout = target.layout if linear or target.layout is not None else CircularMultiRecordOptions()
     rows = [record.presentation.grid_row for record in target.records]
     positions = layout.multi_record_positions if layout is not None else None
+    unit_count = len(target_records)
+    if not linear and not positions and all(row is None for row in rows):
+        drawn = circular_record_rows(target_records, None)
+        positions = tuple(f"#{unit}@{row + 1}" for unit, row in enumerate(drawn, 1))
     new_rows = [index + 1 if linear else 1 for index in range(len(added))]
     if any(row is not None for row in rows):
         top = max(row for row in rows if row is not None)

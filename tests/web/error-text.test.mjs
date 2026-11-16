@@ -25,6 +25,8 @@ const corpus = () => {
   const models = [];
   for (const code of vocabulary.codes) {
     models.push(normalizeUserFacingError({ code }));
+    // An operation's own sentence of a code (a failed Save's, a shown Result's sequence read) is a key too.
+    for (const operation of vocabulary.definedOperations) models.push(normalizeUserFacingError({ code }, { operation }));
     for (const reason of vocabulary.reasons) models.push(normalizeUserFacingError({ code, context: { reason } }));
   }
   const contexts = [

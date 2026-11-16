@@ -1786,7 +1786,7 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   shown drawing's committed request, by binding key (`resultRecordBindings`); none by default.
  * @property {((discovered: CircularRecordsDiscovered) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of a Circular drawing's input settled (success or error).
- * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
+ * @property {((drawing: DrawingState) => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {((drawing: DrawingState) => void) | null} [placeCircularRecordChoices] Names a Circular drawing's record
  *   choices by identity once its cards are read (record-settings.js), before its Record Order is merged.
  * @property {(drawing: DrawingState, card: LinearSeq) => CardRecordFacts} linearCardRecord What a Linear card's
@@ -2234,7 +2234,7 @@ export const createRunAnalysis = ({
     }
     // A refused replay Session (or an input unreadable now) is shown where Save shows its errors.
     const materializedFiles = await materializeCliHelperFiles(latestCliHelperFiles)
-      .catch((error) => { errorLog.value = formatError(error, 'session-save', 'write'); return null; });
+      .catch((error) => { errorLog.value = formatError(error, 'reproducibility-files', 'write'); return null; });
     if (!materializedFiles) return;
     const archiveNames = new Set();
     materializedFiles.forEach((file) => {
@@ -2711,7 +2711,11 @@ export const createRunAnalysis = ({
    * `generation` once, while that read is the drawing's latest: the list's
    * records keep their rows, and a read without records empties it. A read
    * that settled names the record choices by identity first
-   * (`placeCircularRecordChoices`, OV-2869, OV-2903).
+   * (`placeCircularRecordChoices`, OV-2869, OV-2903). A read already applied
+   * writes nothing: the records File cards name (`recordsNamed`, which an Undo
+   * to a step before that read brings back, OV-3530, OV-3531) draw alone
+   * through the one reading of the drawing's records (`circularRecordsOff`),
+   * and a History restore that runs a discovery writes no setting (R11).
    * @param {DrawingState} drawing
    * @param {number | null} generation
    */
@@ -3022,7 +3026,7 @@ export const createRunAnalysis = ({
       processingStatus.value = t('Reading input records...');
       let prepared;
       try {
-        prepared = await prepareLinearRecordCatalog();
+        prepared = await prepareLinearRecordCatalog(drawing);
       } catch (error) {
         prepared = {
           catalog: null,
