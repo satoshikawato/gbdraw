@@ -4,6 +4,8 @@ import {
   annotationRecordSelectorFromTarget,
   resolveAnnotationRecord
 } from './record-selector.js';
+import { msg } from '../../utils/i18n.js';
+/** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
 
 /**
  * @import { AnnotationCatalogIssue, AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
@@ -16,11 +18,11 @@ const cleanText = (value) => String(value ?? '').trim();
 
 /**
  * @param {{ start?: unknown, end?: unknown }} span A coordinate target or a table row.
- * @returns {string} The message of a failed span, or ''.
+ * @returns {ErrorTextPart | null} Why the span fails, worded where it shows, or null.
  */
 export const validateAnnotationCoordinates = ({ start, end }) => (
   [start, end].every((value) => cleanText(value) !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 1)
-    ? '' : 'start and end must be positive integers (1-based coordinates).'
+    ? null : { text: msg('start and end must be positive integers (1-based coordinates).') }
 );
 // A failed target is a producer diagnostic; the annotation ID stays private.
 /** @param {string} reason @returns {AnnotationCatalogIssue} */

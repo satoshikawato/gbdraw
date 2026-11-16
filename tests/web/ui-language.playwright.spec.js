@@ -34,7 +34,7 @@
 //   section open, the color rule hint shown) or of the footer is split over
 //   two lines (OV-2448);
 // - a notice shown before a choice (Session loaded; the Region Annotations panel notice) shows in the chosen
-//   language (OV-2796, OV-3674);
+//   language (OV-2796, OV-3674); so do an open feature popup's Details rows and its record rotation section (OV-3676);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // - in every language, the "Suggest a translation fix" link beside the menu is
 //   named in that language (English where the catalog has no entry), opens a
@@ -48,7 +48,8 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 const { offerTab } = require('./helpers/drawing-bar.cjs');
 
 test.use({ actionTimeout: 20_000, locale: 'ja-JP', viewport: { width: 1280, height: 800 } });
@@ -333,6 +334,62 @@ test('the annotation panel notice shown before a language choice rewords in the 
   await expect.poll(() => pageLanguage(page)).toBe('ja');
   await expect(notice).toHaveText(ja['Set id "{text}" is used by another set, so it was saved as "{stored}".']
     .replace('{text}', used).replace('{stored}', second));
+});
+
+// OV-3676: a popup open while the language changes (a keyboard choice in the menu leaves it open) shows its rows,
+// choices and preview in the chosen language.
+test('an open feature popup rewords its Details rows and record rotation section in the chosen language', async ({ page }) => {
+  test.setTimeout(240_000);
+  const ja = await catalogOf('ja');
+  await openApp(page);
+  await circularFileInput(page, 'gb').setInputFiles(join(process.cwd(), 'tests/fixtures/feature_location_search.gb'));
+  await generateAndWaitForResult(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.locus_tag === 'LOC_0001'), null);
+  });
+  const popup = page.locator('.feature-popup');
+  await popup.locator('#feature-record-actions-toggle').click();
+  const preview = popup.locator('#feature-record-rotation-preview');
+  await expect(preview).toHaveText(/^LOCTEST will start at [\d,]+ · orientation unchanged$/);
+  const start = (await preview.textContent()).match(/at ([\d,]+)/)[1];
+  const startChoice = popup.locator('label').filter({ has: page.locator('input[name="feature-record-rotation-position"][value="start"]') });
+  await expect(startChoice).toHaveText('Start of the record');
+  await menu(page).selectOption('ja');
+  await expect.poll(() => pageLanguage(page)).toBe('ja');
+  await expect(preview).toHaveText(`${ja['{record} will start at {start}'].replace('{record}', 'LOCTEST').replace('{start}', start)} · ${ja['orientation unchanged']}`);
+  await expect(startChoice).toHaveText(ja['Start of the record']);
+  await popup.locator('button').filter({ hasText: new RegExp(`^${ja.Details}$`) }).click();
+  await expect(popup.locator('dt').first()).toHaveText(ja['Feature type']);
+});
+
+// OV-3676: a match popup opened before a language choice shows its texts in the chosen language: the menu's keyboard
+// path leaves the popup open.
+test('a match popup opened before a language choice rewords in the chosen language', async ({ page }) => {
+  test.setTimeout(300_000);
+  const ja = await catalogOf('ja');
+  const file = 'hepatoplasmataceae_collinear.gbdraw';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', file));
+  await expect(page.locator('[data-app-notice] p').first()).toHaveText(`Session loaded: ${file}.`, { timeout: 180_000 });
+  const match = page.locator('.shadow-xl.origin-top > svg [data-gbdraw-match-id][data-match-kind="collinear"]').first();
+  await match.focus();
+  await match.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
+  // Found by its class: its accessible name is worded too.
+  const dialog = page.locator('.pairwise-match-popup');
+  const title = dialog.locator('[data-match-popup-title]');
+  await expect(title).toHaveText('Collinear block');
+  const pairs = dialog.locator('[data-collinear-gene-pairs] > summary');
+  const pairsText = (await pairs.innerText()).trim();
+  const count = pairsText.match(/^(\d+) gene pairs?$/)?.[1];
+  expect(count, pairsText).toBeTruthy();
+  await menu(page).selectOption('ja');
+  await expect.poll(() => pageLanguage(page)).toBe('ja');
+  await expect(page.getByRole('dialog', { name: ja['Pairwise match details'] })).toBeVisible();
+  await expect(title).toHaveText(ja['Collinear block']);
+  await expect(pairs).toHaveText(ja['{count} gene pairs'].replace('{count}', count));
 });
 
 test('French and Korean show their catalogs and plural forms, and French changes no Session or Source recipe', async ({ page }, testInfo) => {

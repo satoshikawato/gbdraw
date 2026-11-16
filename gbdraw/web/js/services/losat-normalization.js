@@ -2,6 +2,7 @@
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readSpelling } from '../utils/contract-shape.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { msg } from '../utils/i18n.js';
 /** @import { CanonicalCollinearityParameters, CanonicalLosslessCollinearityParameters, CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @import { FieldReader } from '../utils/field-reading.js' */
 /** @import { LiteralShape, ObjectShape } from '../utils/contract-shape.js' */
@@ -143,11 +144,15 @@ export const normalizeGroupMetadataScope = (value) => {
   return 'global';
 };
 
-/** @param {unknown} value */
+/**
+ * The English key of a group scope's name; the place that shows it words it with `tm`.
+ * @param {unknown} value
+ * @returns {string}
+ */
 export const groupMetadataScopeLabel = (value) => {
   const scope = normalizeGroupMetadataScope(value);
-  if (scope === 'global_collinear') return 'Collinearity-backed global evidence';
-  if (scope === 'adjacent_local') return 'Local collinear group';
-  if (scope === 'record_local') return 'Record-specific similarity group';
-  return 'Cross-record similarity group';
+  if (scope === 'global_collinear') return msg('Collinearity-backed global evidence');
+  if (scope === 'adjacent_local') return msg('Local collinear group');
+  if (scope === 'record_local') return msg('Record-specific similarity group');
+  return msg('Cross-record similarity group');
 };

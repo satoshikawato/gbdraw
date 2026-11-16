@@ -7,11 +7,12 @@ import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.j
 import { bindAnnotationRecords } from '../../services/drawing/annotation-sets.js';
 import { bindingKeyOfRequestRecord } from '../../services/record-draw-selection.js';
 import { withRecordSelectors } from './record-catalog.js';
-import { t } from '../../utils/i18n.js';
+import { msg, t } from '../../utils/i18n.js';
 
 /**
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
+ * @import { ErrorTextPart } from '../../utils/error-normalization.js'
  * @import { AnnotationRecordBinding, AnnotationRow, AnnotationSetsSlice, AnnotationSetsView } from '../../services/drawing/annotation-sets.js'
  * @import { RecordSettingsOwner } from '../../services/record-draw-selection.js'
  * @import { RegionAxisRecord } from '../../services/region-axis.js'
@@ -29,27 +30,30 @@ const cleanText = (value) => String(value ?? '').trim();
 const bindingFor = (annotation) => cleanText(annotation?.metadata?.[ANNOTATION_RECORD_BINDING_KEY]);
 export const annotationRecordBinding = bindingFor;
 
+// A stored target whose record is no selector: a record index that is no position, a reserved record ID, or no kind.
+/** @type {ErrorTextPart} */
+const UNSUPPORTED_SELECTOR = Object.freeze({ text: msg('Unsupported record selector.') });
 /**
  * @param {AnnotationRow | null | undefined} annotation
- * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
+ * @returns {{ selector: AnnotationRecordSelector | null, error: ErrorTextPart | null }}
  */
 const selectorFromTarget = (annotation) => {
   const raw = annotation?.target?.record;
-  if (raw == null) return { selector: null, error: '' };
+  if (raw == null) return { selector: null, error: null };
   if (raw?.kind === 'recordIndex') {
     const index = Number(raw.index);
     return Number.isInteger(index) && index >= 0
-      ? { selector: { kind: 'recordIndex', index }, error: '' }
-      : { selector: null, error: 'Record index must be a non-negative integer.' };
+      ? { selector: { kind: 'recordIndex', index }, error: null }
+      : { selector: null, error: UNSUPPORTED_SELECTOR };
   }
   if (raw?.kind === 'recordId') {
     const parsed = parseAnnotationRecordSelectorValue(raw.value);
     if (parsed.error || parsed.selector?.kind !== 'recordId') {
-      return { selector: null, error: parsed.error || 'Record ID is reserved as an unspecified selector.' };
+      return { selector: null, error: parsed.error || UNSUPPORTED_SELECTOR };
     }
     return parsed;
   }
-  return { selector: null, error: 'Unsupported record selector.' };
+  return { selector: null, error: UNSUPPORTED_SELECTOR };
 };
 export const annotationRecordSelectorFromTarget = selectorFromTarget;
 

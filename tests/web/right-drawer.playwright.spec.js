@@ -386,17 +386,16 @@ test('zoom controls do not overlap the Editor toggle or drawer at each size; hid
     await expect(row('s05_row_1')).toContainText('1 gene · 2 records');
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      state.orthogroups.value[0].member_count = { legacyCount: 7 };
-      state.orthogroups.value[0].record_coverage_count = { legacyCount: 4 };
+      state.orthogroups.value[0].member_count = 7;
+      state.orthogroups.value[0].record_coverage_count = 4;
     });
-    await expect(row('s05_row_1')).toContainText('"legacyCount": 7');
+    await expect(row('s05_row_1')).toContainText('7 genes · 4 records');
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      state.orthogroups.value[0].member_count.legacyCount = 8;
-      state.orthogroups.value[0].record_coverage_count.legacyCount = 5;
+      state.orthogroups.value[0].member_count = 8;
+      state.orthogroups.value[0].record_coverage_count = 5;
     });
-    await expect(row('s05_row_1')).toContainText('"legacyCount": 8');
-    await expect(row('s05_row_1')).toContainText('"legacyCount": 5');
+    await expect(row('s05_row_1')).toContainText('8 genes · 5 records');
     await row('s05_row_2').click();
     await expect(row('s05_row_2')).toHaveClass(/bg-emerald-50/);
     await expect(row('s05_row_1')).toHaveClass(/bg-white/);

@@ -348,7 +348,8 @@ assert.equal(group.orthologPathCount, '18014398509481985');
 for (const kind of ['orthogroup', 'collinear']) {
   const attrs = {'data-match-kind': kind, 'data-orthogroup-id': group.id};
   const popup = buildMatchPopupPayload({getAttribute: name => attrs[name] ?? ''}, {orthogroups: groups});
-  assert.ok(JSON.stringify(popup).includes('18014398509481985'));
+  // The popup keeps its texts as wordings; word them as the popup shows them.
+  assert.ok(JSON.stringify(popup, (_key, value) => (typeof value === 'function' ? value() : value)).includes('18014398509481985'));
 }
 """
     subprocess.run(["node", "--input-type=module", "-e", script, str(ROOT), str(payload)], check=True)

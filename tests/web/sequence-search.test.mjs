@@ -632,6 +632,11 @@ test('a Search that did not run keeps its reason in English for the panel to wor
   try {
     const busy = await runPanelSearch({ runLosatJobs: async () => ({ status: 'busy', reason }) });
     assert.equal(busy.panel.panel.busy, reason);
+    // The panel line as index.html words it.
+    const { templateBinding } = await import('./helpers/template-binding.mjs');
+    const { tm } = await import('../../gbdraw/web/js/utils/i18n.js');
+    const line = templateBinding(/<p v-if="sequenceSearch\.panel\.busy"[^>]*>\{\{ (.+?) \}\}<\/p>/);
+    assert.equal(line({ sequenceSearch: busy.panel, tm }), '図を生成しています。');
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }

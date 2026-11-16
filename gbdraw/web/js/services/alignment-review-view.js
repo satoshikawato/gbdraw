@@ -9,6 +9,8 @@ import { joinSentences, listText, msg, numberText, t, tm, tn, tx } from '../util
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 /** @import { CanonicalRecordOrientation } from './record-display-model.js' */
 /** @import { AlignmentResetReceipt } from './session-active-config-contract.js' */
+/** @import { Wording } from '../utils/i18n.js' */
+/** @import { AliasSource } from './feature-identity.js' */
 
 /**
  * A horizontal span in figure units (SVG user units of the mounted Result,
@@ -131,6 +133,62 @@ export const layoutAlignmentStrips = ({ geometry, records, width }) => {
 /** The key of the reference feature among a record's drawn candidates. */
 export const ALIGNMENT_REFERENCE_KEY = 'reference';
 
+/**
+ * A record's name in the alignment review, the active-plan inspector and the Reset preview, as data: what its words
+ * are made of, worded by `alignmentRecordName` where it shows, so it follows the shown language (OV-3676).
+ * @typedef {object} RecordNameEntry
+ * @property {string} label Its definition and accession, else its file name; '' when it has none.
+ * @property {string} name Its definition, else its accession, else `label`.
+ * @property {string} accession The accession shown beside a definition; '' when it is the name or there is none.
+ * @property {number} ordinal Its position among the records (1-based): it names a record without a label, and tells
+ *   apart the records that share one.
+ * @property {boolean} duplicate Whether another record has the same `label`.
+ */
+
+/**
+ * A record's name in words: the joined label for accessible names, and its parts for layout.
+ * @typedef {{ label: string, name: string, detail: string }} RecordNameText
+ */
+
+/**
+ * The one wording of a record's name. A record the names do not hold has none ('').
+ * @param {RecordNameEntry | undefined} entry
+ * @returns {RecordNameText}
+ */
+export const alignmentRecordName = (entry) => {
+  if (!entry) return { label: '', name: '', detail: '' };
+  const position = t('Record {n}', { n: entry.ordinal });
+  const label = entry.label || position;
+  const duplicate = entry.duplicate ? position : '';
+  return {
+    label: duplicate ? `${label} · ${duplicate}` : label,
+    name: entry.name || label,
+    detail: [entry.accession, duplicate].filter(Boolean).join(' · ')
+  };
+};
+
+/**
+ * A feature's name in the alignment review and the inspector, as data, worded by `alignmentFeatureName` where it
+ * shows (OV-3676).
+ * @typedef {object} FeatureNameEntry
+ * @property {string} name Its gene, product, locus tag or protein id; '' when it has none.
+ * @property {readonly string[]} ids Its locus tag and protein id, beside a name.
+ * @property {string} type Its feature type; '' when it has none. With `coordinates` it names a feature without a name.
+ * @property {string} coordinates Its source coordinates, '' when unknown.
+ */
+
+/**
+ * The one wording of a feature's name: a feature without a name is named by its type (else "Feature") and its
+ * coordinates. `label` adds the ids, for accessible names.
+ * @param {FeatureNameEntry} entry
+ * @returns {{ name: string, label: string }}
+ */
+export const alignmentFeatureName = ({ name, ids, type, coordinates }) => {
+  if (name) return { name, label: [name, ...ids].join(' · ') };
+  const typeName = [type || t('Feature'), coordinates].filter(Boolean).join(' ');
+  return { name: typeName, label: typeName };
+};
+
 /** @typedef {'reference' | 'choose' | 'several' | 'single' | 'none'} AlignmentReviewGroupId */
 
 // The reference card comes first, without a heading; then the sections.
@@ -156,8 +214,8 @@ const GROUPS = Object.freeze([
  * @typedef {object} AlignmentOverlayCandidate
  * @property {string} key
  * @property {Record<string, unknown>} anchor The feature identity the preview's owner finds the block by.
- * @property {string} name Shown in the tag above the ring.
- * @property {string} accessibleName The ring button's name.
+ * @property {Wording} name Shown in the tag above the ring.
+ * @property {Wording} accessibleName The ring button's name.
  */
 
 /**
@@ -170,6 +228,16 @@ const GROUPS = Object.freeze([
  * @property {AlignmentOverlayCandidate[]} candidates
  */
 
+/**
+ * What the figure overlay draws: the reference and each record's candidates. The preview's owner
+ * (`app/feature-editor/svg-actions.js`) draws it; the review (`app/similarity-alignment-review.js`) asks for it.
+ * @typedef {object} AlignmentOverlayRequest
+ * @property {{ key: string, recordKey: string, anchor: AliasSource, name: Wording }} reference
+ * @property {AlignmentOverlayRecord[]} records
+ * @property {(recordKey: string, anchor: AliasSource) => void} onSelect
+ * @property {(recordKey: string, candidateKey: string) => void} onHover
+ */
+
 /** A record needs a choice until the user selects a candidate or skips it. @param {{ choice: unknown }} row */
 const needsChoice = ({ choice }) => choice === null;
 
@@ -177,9 +245,10 @@ const needsChoice = ({ choice }) => choice === null;
 const chosenKeyOf = (choice) => (choice?.kind === 'select' ? String(choice.candidateKey ?? '') : '');
 
 /**
- * The draft rows as the figure overlay marks them.
- * @param {readonly { recordKey: string, recordLabel: string, choice: ReviewRowLike['choice'], candidates: readonly {
- *   key: string, anchor: Record<string, unknown>, name: string, label: string, coordinates: string }[] }[]} rows
+ * The draft rows as the figure overlay marks them. The names are worded where the overlay writes them.
+ * @param {readonly { recordKey: string, recordNames: RecordNameEntry | undefined, choice: ReviewRowLike['choice'],
+ *   candidates: readonly { key: string, anchor: Record<string, unknown>, feature: FeatureNameEntry, coordinates: string }[]
+ * }[]} rows
  * @returns {AlignmentOverlayRecord[]}
  */
 export const alignmentOverlayRecords = (rows) => rows.map((row) => ({
@@ -187,8 +256,10 @@ export const alignmentOverlayRecords = (rows) => rows.map((row) => ({
   chosenKey: chosenKeyOf(row.choice),
   needsChoice: needsChoice(row),
   skipped: row.choice?.kind === 'skip',
-  candidates: row.candidates.map(({ key, anchor, name, label, coordinates }) => ({
-    key, anchor, name, accessibleName: t('Select {label}, {coordinates} for {record}', { label, coordinates, record: row.recordLabel })
+  candidates: row.candidates.map(({ key, anchor, feature, coordinates }) => ({
+    key, anchor, name: () => alignmentFeatureName(feature).name,
+    accessibleName: () => t('Select {label}, {coordinates} for {record}',
+      { label: alignmentFeatureName(feature).label, coordinates, record: alignmentRecordName(row.recordNames).label })
   }))
 }));
 
@@ -332,8 +403,8 @@ export const buildAlignmentReviewView = ({ rows, directions, geometry, openedWit
  */
 
 /**
- * The names of a record of the draft: its label, its accession, its definition.
- * @typedef {{ recordLabel?: string, recordName?: string, recordDetail?: string }} DraftRecordNames
+ * The names of a record of the draft.
+ * @typedef {{ recordNames: RecordNameEntry | undefined }} DraftRecordNames
  */
 
 /** @param {unknown} arrow */
@@ -356,13 +427,14 @@ const exclusionReason = (code) => tm(directionExclusionLabels[code] || code);
  * One record of the direction preview: its names and its before/after statement.
  * @template {ProjectedDirectionLike} R
  * @param {R} record
- * @param {DraftRecordNames & { recordLabel: string }} reference The exact reference's record.
+ * @param {DraftRecordNames} reference The exact reference's record.
  * @param {readonly (DraftRecordNames & { recordKey: string })[]} rows
  */
 const directionRecordView = (record, reference, rows) => {
   const row = rows.find((entry) => entry.recordKey === record.recordKey);
   const isReference = record.status === 'reference';
-  const label = isReference ? reference.recordLabel : row?.recordLabel || record.recordKey;
+  const names = alignmentRecordName((isReference ? reference : row)?.recordNames);
+  const label = names.label || record.recordKey;
   const beforeDirection = arrowLabel(record.beforeArrow);
   const afterDirection = arrowLabel(record.afterArrow);
   // An anchor of unknown strand still moves its record; only the direction stays (PD-OI-027).
@@ -372,7 +444,7 @@ const directionRecordView = (record, reference, rows) => {
       : t('Unchanged: {reason}', { reason: exclusionReason(record.exclusion) }))
     : '';
   return { ...record, label, beforeDirection, afterDirection, exclusionLabel,
-    shortLabel: (isReference ? reference.recordDetail || reference.recordName : row?.recordDetail || row?.recordName) || label,
+    shortLabel: names.detail || names.name || label,
     reversed: record.beforeReverseComplement !== record.afterReverseComplement,
     // The accessible before/after statement each card and its Custom select describe.
     description: (isReference
@@ -446,7 +518,7 @@ const referenceShiftText = (name, deltaX) => {
  * @template {{ records: readonly ProjectedDirectionLike[], reference: { deltaX: number } }} P
  * @param {object} options
  * @param {P} options.projected The alignment owner's projection of the draft.
- * @param {DraftRecordNames & { recordLabel: string, name: string }} options.reference The draft's exact reference.
+ * @param {DraftRecordNames & { feature: FeatureNameEntry }} options.reference The draft's exact reference.
  * @param {readonly (DraftRecordNames & { recordKey: string })[]} options.rows The draft's rows.
  * @param {{ mode: string }} options.intent The Review panel's direction choice.
  */
@@ -454,7 +526,7 @@ export const describeDirectionPreview = ({ projected, reference, rows, intent })
   /** @type {DirectionPreviewRecord[]} */
   const records = projected.records.map((record) => directionRecordView(record, reference, rows));
   return { ...projected, effect: directionEffectText(records, intent),
-    referenceShift: referenceShiftText(reference.name, projected.reference.deltaX), records };
+    referenceShift: referenceShiftText(alignmentFeatureName(reference.feature).name, projected.reference.deltaX), records };
 };
 
 /** @param {boolean} reversed Whether a record reads opposite to its source file. */
@@ -462,9 +534,12 @@ const recordDirectionWord = (reversed) => reversed ? tx('record direction', 'rev
 
 /**
  * A record's name for one-line summaries: its accession, else its definition.
- * @param {{ name?: string, detail?: string } | undefined} names
+ * @param {RecordNameEntry | undefined} entry
  */
-export const shortRecordName = (names) => names?.detail || names?.name || '';
+export const shortRecordName = (entry) => {
+  const { name, detail } = alignmentRecordName(entry);
+  return detail || name;
+};
 
 /**
  * The Reset alignment dialog's direction option: the records the latest Align reversed, each
@@ -473,7 +548,7 @@ export const shortRecordName = (names) => names?.detail || names?.name || '';
  * @param {AlignmentResetReceipt | null} options.receipt
  * @param {{ records: readonly (CanonicalRecordOrientation & { recordKey: string })[] } | null} options.request
  *   The committed render request.
- * @param {ReadonlyMap<string, { label: string, name: string, detail: string }>} options.names Record names by record key.
+ * @param {ReadonlyMap<string, RecordNameEntry>} options.names Record names by record key.
  */
 export const resetPreviewView = ({ receipt, request, names }) => {
   const targets = (receipt?.directions || []).map((delta) => {
@@ -482,7 +557,7 @@ export const resetPreviewView = ({ receipt, request, names }) => {
       request?.records.find(({ recordKey }) => recordKey === delta.recordKey));
     const recordName = names.get(delta.recordKey);
     const current = canonicalRecordReverseComplement(record);
-    return { recordKey: delta.recordKey, label: recordName?.label || t('Unavailable record'),
+    return { recordKey: delta.recordKey, label: alignmentRecordName(recordName).label || t('Unavailable record'),
       name: shortRecordName(recordName) || t('Unavailable record'),
       current, restored: delta.before,
       currentWord: recordDirectionWord(current), restoredWord: recordDirectionWord(delta.before),

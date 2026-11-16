@@ -210,16 +210,21 @@ test('the cards carry the strips of one layout, and a reversed record its mirror
 });
 
 test('the figure overlay marks each row by its choice and names a ring without a number', () => {
+  const names = (label, ordinal) => ({ label, name: label, accession: '', ordinal, duplicate: false });
+  const feature = (name, ids = []) => ({ name, ids, type: '', coordinates: '' });
   const rows = [
-    { recordKey: 'two', recordLabel: 'Record two', choice: null, candidates: [
-      { key: 'left', anchor: { recordKey: 'two', biologicalFeatureId: 'f1' }, name: 'geneA', label: 'geneA (P1)', coordinates: '1..300 bp' }] },
-    { recordKey: 'one', recordLabel: 'Record one', choice: { kind: 'select', candidateKey: 'only' }, candidates: [
-      { key: 'only', anchor: { recordKey: 'one', biologicalFeatureId: 'f2' }, name: 'geneB', label: 'geneB', coordinates: '5..90 bp' }] },
-    { recordKey: 'still', recordLabel: 'Record still', choice: { kind: 'skip', candidateKey: null }, candidates: [] }
+    { recordKey: 'two', recordNames: names('Record two', 1), choice: null, candidates: [
+      { key: 'left', anchor: { recordKey: 'two', biologicalFeatureId: 'f1' }, feature: feature('geneA', ['P1']), coordinates: '1..300 bp' }] },
+    { recordKey: 'one', recordNames: names('Record one', 2), choice: { kind: 'select', candidateKey: 'only' }, candidates: [
+      { key: 'only', anchor: { recordKey: 'one', biologicalFeatureId: 'f2' }, feature: feature('geneB'), coordinates: '5..90 bp' }] },
+    { recordKey: 'still', recordNames: names('Record still', 3), choice: { kind: 'skip', candidateKey: null }, candidates: [] }
   ];
-  assert.deepEqual(alignmentOverlayRecords(rows), [
+  // The names are worded where the overlay writes them.
+  const worded = alignmentOverlayRecords(rows).map((record) => ({ ...record, candidates: record.candidates.map(
+    (candidate) => ({ ...candidate, name: candidate.name(), accessibleName: candidate.accessibleName() })) }));
+  assert.deepEqual(worded, [
     { recordKey: 'two', chosenKey: '', needsChoice: true, skipped: false, candidates: [
-      { key: 'left', anchor: rows[0].candidates[0].anchor, name: 'geneA', accessibleName: 'Select geneA (P1), 1..300 bp for Record two' }] },
+      { key: 'left', anchor: rows[0].candidates[0].anchor, name: 'geneA', accessibleName: 'Select geneA · P1, 1..300 bp for Record two' }] },
     { recordKey: 'one', chosenKey: 'only', needsChoice: false, skipped: false, candidates: [
       { key: 'only', anchor: rows[1].candidates[0].anchor, name: 'geneB', accessibleName: 'Select geneB, 5..90 bp for Record one' }] },
     { recordKey: 'still', chosenKey: '', needsChoice: false, skipped: true, candidates: [] }
@@ -231,10 +236,13 @@ const projectedRecord = (recordKey, overrides = {}) => ({
   recordKey, status: 'aligned', exclusion: null, beforeArrow: 1, afterArrow: 1,
   beforeReverseComplement: false, afterReverseComplement: false, ...overrides
 });
-const draftReference = { recordLabel: 'Ref label', recordName: 'REF1', recordDetail: 'Ref detail', name: 'dnaA' };
+const draftReference = {
+  recordNames: { label: 'Ref label', name: 'REF1', accession: 'Ref detail', ordinal: 1, duplicate: false },
+  feature: { name: 'dnaA', ids: [], type: '', coordinates: '' }
+};
 const draftRows = [
-  { recordKey: 'b', recordLabel: 'B label', recordName: 'B1', recordDetail: '' },
-  { recordKey: 'c', recordLabel: 'C label', recordName: 'C1', recordDetail: 'C detail' }
+  { recordKey: 'b', recordNames: { label: 'B label', name: 'B1', accession: '', ordinal: 2, duplicate: false } },
+  { recordKey: 'c', recordNames: { label: 'C label', name: 'C1', accession: 'C detail', ordinal: 3, duplicate: false } }
 ];
 
 test('the direction preview names each record and states what Apply reverses', () => {
@@ -277,7 +285,7 @@ test('the direction preview effect follows the intent when nothing is reversed',
 test('the Reset dialog lists the directions the latest Align changed', () => {
   const record = (recordKey, reverseComplement) => ({ recordKey, windows: [], presentation: { reverseComplement } });
   const request = { records: [record('a', false), record('b', true)] };
-  const names = new Map([['b', { label: 'B label', name: 'B1', detail: '' }]]);
+  const names = new Map([['b', { label: 'B label', name: 'B1', accession: '', ordinal: 2, duplicate: false }]]);
   const receipt = { binding: 'x', referenceDeltaX: null, directions: [
     { recordKey: 'b', before: false, after: false }, { recordKey: 'a', before: true, after: false }] };
   const preview = resetPreviewView({ receipt, request, names });

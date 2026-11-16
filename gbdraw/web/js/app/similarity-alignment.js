@@ -4,8 +4,9 @@
  * @import { CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalRecordWindow,
  *   CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js'
  */
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
-/** @import { UserFacingError } from '../utils/error-normalization.js' */
+import { normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
+/** @import { ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { Wording } from '../utils/i18n.js' */
 /** @import { DrawnFeatureIdsOf } from './legend-layout/composition-actions.js' */
 import { msg, numberText, t, tm, tn } from '../utils/i18n.js';
@@ -22,7 +23,9 @@ import {
 } from '../services/feature-identity.js';
 import { CompositionMetadataError, materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId, locationPartBound } from '../services/feature-utils.js';
-import { describeDirectionPreview, recordsNeedingChoice, resetPreviewView, shortRecordName } from '../services/alignment-review-view.js';
+import {
+  alignmentFeatureName, alignmentRecordName, describeDirectionPreview, recordsNeedingChoice, resetPreviewView, shortRecordName
+} from '../services/alignment-review-view.js';
 import {
   anchorsAgree, classifyPlanAgainstCatalog, resetSourceMembers, restoredAxisTranslations, restoredPlacement
 } from '../services/alignment-plan-facts.js';
@@ -48,7 +51,8 @@ const { computed, ref, watch } = window.Vue;
  *   end?: unknown, strand?: unknown, type?: unknown, qualifiers?: Record<string, unknown> | null,
  *   sequenceFeature?: FeatureFacts | null
  * }} FeatureFacts
- * @typedef {{ label: string, name: string, detail: string }} RecordNameEntry A record's name for the Review panel and the Reset preview.
+ * @typedef {import('../services/alignment-review-view.js').RecordNameEntry} RecordNameEntry
+ * @typedef {import('../services/alignment-review-view.js').FeatureNameEntry} FeatureNameEntry
  * @typedef {import('../services/alignment-review-view.js').DisplayedStrand} DisplayedStrand
  * @typedef {{ groupId?: unknown, reference?: AliasSource | null, source?: string, mode?: string }} AlignmentStartOptions
  * @typedef {ReturnType<typeof reviewRows>[number]} ReviewRow One record of the Review panel.
@@ -239,10 +243,16 @@ const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 /** @param {unknown} anchor */
 const anchorKey = (anchor) => JSON.stringify(anchor);
 
-/** @param {unknown} strand */
-const strandLabel = (strand) => (
-  strand === 1 ? '+' : strand === -1 ? '-' : t('unknown')
+/**
+ * A displayed strand as the Review panel keeps it: `+`, `-`, or the English key of "unknown", worded with `tm` where it
+ * shows (OV-3676).
+ * @param {unknown} strand
+ */
+const strandKey = (strand) => (
+  strand === 1 ? '+' : strand === -1 ? '-' : msg('unknown')
 );
+/** @param {unknown} strand */
+const strandLabel = (strand) => tm(strandKey(strand));
 
 /** @type {Readonly<Record<string, string>>} */
 const rationaleLabels = Object.freeze({
@@ -299,11 +309,13 @@ const displayText = (...values) => values
 const sourceFeature = (facts) => facts.sequenceFeature || facts;
 
 // Human-readable names shared by Review, the direction and Reset previews, and
-// the active-plan inspector. Record keys and feature hashes stay binding-only.
+// the active-plan inspector, as data that `alignmentFeatureName` words where they show (OV-3676).
+// Record keys and feature hashes stay binding-only.
 /**
  * @param {{ biologicalFeatureId?: string }} anchor
  * @param {FeatureFacts} [facts]
  * @param {string} [fallback]
+ * @returns {FeatureNameEntry}
  */
 export const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const feature = sourceFeature(facts);
@@ -317,30 +329,29 @@ export const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const name = gene || product || locusTag || proteinId
     || (fallback === anchor.biologicalFeatureId ? '' : displayText(fallback));
   if (name) {
-    const ids = [locusTag, proteinId].filter((value) => value && value !== name);
-    return { name, ids, label: [name, ...ids].join(' · ') };
+    return { name, ids: [locusTag, proteinId].filter((value) => value && value !== name), type: '', coordinates: '' };
   }
   const start = locationPartBound(feature.start == null ? facts : feature, 'start');
   const end = locationPartBound(feature.end == null ? facts : feature, 'end');
   const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
     ? `${numberText(start + 1)}..${numberText(end)} bp` : '';
-  const typeName = [displayText(feature.type, facts.type) || t('Feature'), coordinates].filter(Boolean).join(' ');
-  return { name: typeName, ids: [], label: typeName };
+  return { name: '', ids: [], type: displayText(feature.type, facts.type), coordinates };
 };
 
-// The joined label names a feature in accessible names; the parts lay it out.
+// The name's parts, worded where they show; the ids are values, shown beside the name.
 /**
  * @param {{ biologicalFeatureId?: string }} anchor
  * @param {Map<string, FeatureFacts>} displayFacts
  * @param {string} [fallback]
  */
 const featureView = (anchor, displayFacts, fallback = '') => {
-  const parts = featureNameParts(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback);
-  return { label: parts.label, name: parts.name, ids: parts.ids.join(' · ') };
+  const feature = featureNameParts(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback);
+  return { feature, ids: feature.ids.join(' · ') };
 };
 
 // Presentation label or definition plus accession; the display position is
-// appended only to tell otherwise identical records apart.
+// appended only to tell otherwise identical records apart. The position stays a number,
+// worded by `alignmentRecordName` where the name shows (OV-3676).
 /**
  * @param {{
  *   recordKeys: string[],
@@ -348,6 +359,7 @@ const featureView = (anchor, displayFacts, fallback = '') => {
  *   linearSeqs?: readonly LinearSeq[],
  *   catalog?: FeatureCatalog | null
  * }} options
+ * @returns {Map<string, RecordNameEntry>}
  */
 const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = null }) => {
   const { rowsByRecord } = catalogNameIndex(catalog);
@@ -363,7 +375,7 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
   // A record without its own Definition takes its File's (OV-436). The accession and
   // the label stay this panel's own: the accession is always added and is the short name.
   const fileNames = linearRecordNames(Array.isArray(linearSeqs) ? linearSeqs : []);
-  const parts = recordKeys.map((recordKey, index) => {
+  const parts = recordKeys.map((recordKey) => {
     const record = request?.records?.find((/** @type {{ recordKey?: unknown, presentation?: { label?: unknown } | null } | null} */ entry) => entry?.recordKey === recordKey);
     const sequence = (Array.isArray(linearSeqs) ? linearSeqs : [])
       .find((entry) => String(entry?.uid || '') === recordKey);
@@ -373,24 +385,18 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const accession = displayText(sequence?.accession) || catalogAccession(recordKey);
     const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);
     const label = [...new Set([name, accession].filter(Boolean))].join(' · ')
-      || (fileName ? plainTextLinearRecordLabel(fileName) : '')
-      || t('Record {n}', { n: index + 1 });
+      || (fileName ? plainTextLinearRecordLabel(fileName) : '');
     return { label, name: name || accession || label, accession: name && accession !== name ? accession : '' };
   });
   /** @type {Map<string, number>} */
   const counts = new Map();
   parts.forEach(({ label }) => counts.set(label, (counts.get(label) || 0) + 1));
-  // Each entry keeps the joined label for accessible names and its parts for layout.
-  return new Map(recordKeys.map((recordKey, index) => {
-    const { label, name, accession } = parts[index];
+  // A record without a label is named by its position, so it shares no label.
+  return new Map(recordKeys.map((recordKey, index) => [recordKey, {
+    ...parts[index], ordinal: index + 1,
     // Every label was counted above.
-    const duplicate = /** @type {number} */ (counts.get(label)) > 1 ? t('Record {n}', { n: index + 1 }) : '';
-    return [recordKey, {
-      label: duplicate ? `${label} · ${duplicate}` : label,
-      name,
-      detail: [accession, duplicate].filter(Boolean).join(' · ')
-    }];
-  }));
+    duplicate: Boolean(parts[index].label) && /** @type {number} */ (counts.get(parts[index].label)) > 1
+  }]));
 };
 
 /**
@@ -403,17 +409,17 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
   const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
   if (!member) throw new Error('Alignment candidate has no current member facts.');
   const coordinates = `${numberText(candidate.sourceStart + 1)}..${numberText(candidate.sourceEnd)} bp`;
-  const feature = featureView(candidate.anchor, displayFacts, candidate.displayName);
+  const { feature, ids } = featureView(candidate.anchor, displayFacts, candidate.displayName);
   return {
     key,
     anchor: candidate.anchor,
-    label: feature.label,
-    name: feature.name,
-    ids: feature.ids,
-    // A kind is helper text: one the table does not hold is shown as written (OV-573).
-    evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? tm(evidenceLabels[kind]) : kind),
+    feature,
+    ids,
+    // The English keys of the evidence kinds, worded with `tm` where the panel shows them (OV-3676). A kind is helper
+    // text: one the table does not hold is kept, and shown, as written (OV-573).
+    evidence: candidate.directEvidence.map((kind) => Object.hasOwn(evidenceLabels, kind) ? evidenceLabels[kind] : kind),
     coordinates,
-    displayedStrand: strandLabel(candidate.displayedStrand),
+    displayedStrand: strandKey(candidate.displayedStrand),
     representative: candidate.representative,
     role: candidate.role || 'member',
     directEvidence: candidate.directEvidence.length ? candidate.directEvidence : ['None'],
@@ -432,20 +438,16 @@ const referenceView = (response, request, displayFacts, recordLabels) => {
   if (!request.members.some(({ anchor }) => sameJson(anchor, response.reference))) {
     throw new Error('Alignment reference has no current member facts.');
   }
-  const feature = featureView(response.reference, displayFacts);
-  const record = recordLabels.get(response.reference.recordKey);
+  const { feature, ids } = featureView(response.reference, displayFacts);
   return {
-    label: feature.label,
-    name: feature.name,
-    ids: feature.ids,
-    recordLabel: record?.label,
-    recordName: record?.name,
-    recordDetail: record?.detail,
+    feature,
+    ids,
+    recordNames: recordLabels.get(response.reference.recordKey),
     recordKey: response.reference.recordKey,
     // Python's source coordinates of the reference, read from the committed request.
     coordinates: numberText(response.referenceSourceStart + 1) + '..'
       + numberText(response.referenceSourceEnd) + ' bp',
-    displayedStrand: strandLabel(response.referenceDisplayedStrand)
+    displayedStrand: strandKey(response.referenceDisplayedStrand)
   };
 };
 
@@ -466,21 +468,17 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       : record.status === 'skipped' ? record.rationale : record.reviewReason;
     const recommendedKey = selectedAnchor && REVIEW_REASONS.has(reason)
       ? anchorKey(selectedAnchor) : null;
-    const names = recordLabels.get(record.recordKey);
     return {
       recordKey: record.recordKey,
-      recordLabel: names?.label,
-      recordName: names?.name,
-      recordDetail: names?.detail,
+      recordNames: recordLabels.get(record.recordKey),
       candidates: record.candidates.filter(({ usable }) => usable)
         .map((candidate) => candidateView(candidate, request, displayFacts)),
       reason,
-      reasonLabel: reason
-        ? tm(reviewReasonLabels[reason] || rationaleLabels[reason]) : t('Unchanged'),
       recommendedKey,
+      // The English key of why the candidate is recommended, worded with `tm` where the panel shows it (OV-3676).
       recommendationReasonLabel: recommendedKey
         // `recommendedKey` is set only when `REVIEW_REASONS` has the reason, so it is text.
-        ? tm(reviewReasonLabels[/** @type {string} */ (reason)]) : null,
+        ? reviewReasonLabels[/** @type {string} */ (reason)] : null,
       choice: record.kind === 'ambiguous' ? null : selectedAnchor
         ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
         : { kind: 'skip', candidateKey: null },
@@ -530,7 +528,7 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
       .map((record) => [record.uid, cropFormReverseComplement(linearCardCropForm(record))])
   );
   const factsOf = catalogNameIndex(catalog).featureOf;
-  const nameOf = (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => featureNameParts(anchor, factsOf(anchor) || {});
+  const nameOf = (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => alignmentFeatureName(featureNameParts(anchor, factsOf(anchor) || {}));
   const names = recordNames({ recordKeys: plan.records.map(({ recordKey }) => recordKey),
     request, linearSeqs, catalog });
   const reference = nameOf(plan.reference);
@@ -542,15 +540,15 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
     reference: {
       ...plan.reference,
       label: reference.label,
-      recordLabel: referenceRecord?.label
+      recordLabel: alignmentRecordName(referenceRecord).label
     },
     records: plan.records.map((decision) => {
-      const recordName = names.get(decision.recordKey);
+      const recordName = alignmentRecordName(names.get(decision.recordKey));
       return {
         recordKey: decision.recordKey,
-        recordLabel: recordName?.label,
-        recordName: recordName?.name,
-        recordDetail: recordName?.detail,
+        recordLabel: recordName.label,
+        recordName: recordName.name,
+        recordDetail: recordName.detail,
         anchorLabel: decision.anchor ? nameOf(decision.anchor).label : t('Skip'),
         status: decision.status,
         rationale: decision.rationale,
@@ -1192,9 +1190,9 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
 
 /**
  * What the alignment owner says of a plan that needs repair (the drawer's note and the notice): its kind, the plan's
- * group, and why (`reason`: an English sentence marked with `msg`, worded with `tm` where it shows, so a UI language
- * change rewords it, OV-3676).
- * @typedef {{ kind: 'reference' | 'targets', groupId: string, reason: string }} AlignmentRepairNote
+ * group, and why (`reason`: error text parts, worded with `errorText` where they show, so a UI language change
+ * rewords them, OV-3676; a failure's normalized parts, never its raw text, OV-3682).
+ * @typedef {{ kind: 'reference' | 'targets', groupId: string, reason: readonly ErrorTextPart[] }} AlignmentRepairNote
  */
 
 /**
@@ -1377,7 +1375,7 @@ const referenceOptionsOf = ({ records, factsOf }, members) => {
         anchor,
         canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
         key: anchorKey(anchor),
-        label: `${record} · ${featureNameParts(anchor, facts).name}`,
+        label: `${record} · ${alignmentFeatureName(featureNameParts(anchor, facts)).name}`,
         location: sourceLocationText(facts)
       };
     } catch (_error) {
@@ -1636,7 +1634,7 @@ export const createSimilarityAlignmentActions = ({
   /** @param {AlignmentRepairNote} note The shown drawing's plan needs repair: the drawer's note and the notice. */
   const showRepair = (note) => {
     repair.value = deepFreeze(note);
-    publishNotice(() => t('Alignment needs repair: {reason}', { reason: tm(note.reason) }));
+    publishNotice(() => t('Alignment needs repair: {reason}', { reason: errorText(note.reason) }));
   };
 
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
@@ -1854,12 +1852,12 @@ export const createSimilarityAlignmentActions = ({
       const candidate = row.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor));
       if (!candidate) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'select', candidateKey: candidate.key },
-        reason: 'user_selected', reasonLabel: t('Selected by user'),
+        reason: 'user_selected',
         unchanged: false, repairRequired: false };
     } else if (update.kind === 'skip') {
       if (!row.candidates.length) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'skip', candidateKey: null },
-        reason: 'skipped_by_user', reasonLabel: t('Skipped by user'),
+        reason: 'skipped_by_user',
         unchanged: true, repairRequired: false };
     } else return { status: 'rejected' };
     draft.value = deepFreeze({
@@ -2104,16 +2102,23 @@ export const createSimilarityAlignmentActions = ({
   };
 
   // The shown drawing's plan has a stale reference: its own review ends, another drawing's stays.
-  /** @param {unknown} reason */
+  /** @param {readonly ErrorTextPart[]} reason */
   const markStaleReference = (reason) => {
     if (workIsShown()) {
       clearDraft();
       status.value = 'idle';
     }
-    showRepair({ kind: 'reference', groupId: state.similarityAlignmentPlan.value?.groupId || '',
-      reason: String(reason || msg('The exact reference is no longer available.')) });
+    showRepair({ kind: 'reference', groupId: state.similarityAlignmentPlan.value?.groupId || '', reason });
     return { status: 'blocked', reason: 'stale-reference' };
   };
+  /**
+   * The reason of a reference that a failure made unusable: what failed, then the failure's normalized parts (OV-3682).
+   * @param {unknown} cause
+   * @param {{ operation: string, stage: string }} where
+   * @returns {ErrorTextPart[]}
+   */
+  const unusableReference = (cause, where) => [{ text: msg('The exact reference is no longer available.') },
+    ...normalizeCaughtError(cause, where).summaryParts];
 
   /**
    * The shown drawing's plan has stale targets: its repair review opens. While another drawing's review is open, that
@@ -2134,7 +2139,7 @@ export const createSimilarityAlignmentActions = ({
   ) => {
     /** @type {AlignmentRepairNote} */
     const note = { kind: 'targets', groupId: plan.groupId,
-      reason: msg('One or more saved target anchors are no longer usable. Select or Skip each target.') };
+      reason: [{ text: msg('One or more saved target anchors are no longer usable. Select or Skip each target.') }] };
     if (!workIsShown()) {
       // The repair review opens after the open review ends: the notice says so, and names that review's drawing.
       repair.value = deepFreeze(note);
@@ -2156,7 +2161,7 @@ export const createSimilarityAlignmentActions = ({
       response = validateSimilarityAlignmentResolution(helper?.result, repairRequest);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
-      return markStaleReference(cause?.message || cause);
+      return markStaleReference(unusableReference(cause, { operation: resolveOperation, stage: 'helper' }));
     }
     activeRequest = repairRequest;
     artifactStamp = captureArtifact(repairRequest.groupId);
@@ -2189,7 +2194,7 @@ export const createSimilarityAlignmentActions = ({
       groupAnchors: members.flatMap((member) => {
         try { return [anchorFromSource(member, 'Current Similarity Group member')]; } catch (_error) { return []; }
       }) });
-    if (check.kind === 'stale-reference') return markStaleReference(check.reason);
+    if (check.kind === 'stale-reference') return markStaleReference([{ text: check.reason }]);
     if (check.kind === 'current') {
       repair.value = null;
       return { status: 'ok' };
@@ -2205,7 +2210,7 @@ export const createSimilarityAlignmentActions = ({
         choices: planChoices(plan)
       });
     } catch (cause) {
-      return markStaleReference(cause?.message || cause);
+      return markStaleReference(unusableReference(cause, { operation: 'align', stage: 'request-validation' }));
     }
     if (goneRecordKeys.size > 0) {
       return prepareStaleTargetRepair(plan, request, members, goneRecordKeys, expectedActionId);
@@ -2226,7 +2231,7 @@ export const createSimilarityAlignmentActions = ({
       if (alignedKeys.size > 0) {
         return prepareStaleTargetRepair(plan, request, members, alignedKeys, expectedActionId);
       }
-      return markStaleReference(msg('The exact reference is no longer usable with current facts.'));
+      return markStaleReference([{ text: msg('The exact reference is no longer usable with current facts.') }]);
     }
     repair.value = null;
     return { status: 'ok' };

@@ -281,7 +281,7 @@ export const createClickedFeatureCopy = ({ clickedFeature }) => {
     const cf = clickedFeature.value;
     if (!cf) return;
     const { title, product } = clickedFeatureHeading.value;
-    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((row) => `${row.label}: ${row.value}`)]
+    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((row) => `${tm(row.label)}: ${row.value}`)]
       .filter(Boolean).join('\n'));
   };
   const copyClickedFeatureQualifiers = () => {

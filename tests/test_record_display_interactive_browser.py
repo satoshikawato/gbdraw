@@ -196,9 +196,9 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
             # The highlight comes once the pointer has rested (HOVER_HIGHLIGHT_DWELL_MS).
             page.wait_for_function(HIGHLIGHTED_MATCH_COUNT, arg=expected_count)
             paths.nth(index).dispatch_event("click")
-            payload = page.evaluate("fixtureState.clickedPairwiseMatch.value")
-            assert payload is not None
-            bundle = payload["sequenceBundle"]
+            # The bundle only: the payload's texts are wordings (functions), which a page evaluation does not return.
+            bundle = page.evaluate("fixtureState.clickedPairwiseMatch.value && fixtureState.clickedPairwiseMatch.value.sequenceBundle")
+            assert bundle is not None
             assert len(bundle["entries"]) == 2
             assert all(entry["available"] for entry in bundle["entries"])
             # The popup opens without reading a base: it names the spans' reads, and no FASTA.
@@ -440,9 +440,9 @@ def test_standalone_collinear_cluster_block_span_actions(tmp_path, member, sync_
 PREVIEW_BLOCK_ROWS = """() => {
   // UX-B01: the Preview block popup lists one gene pair per row (query gene | subject gene | group).
   const pairs = fixtureState.clickedPairwiseMatch.value.block.genePairs;
-  const feature = role => pairs.map(p => p[role]).filter(Boolean).map(r => [r.label, r.record, r.location]);
+  const feature = role => pairs.map(p => p[role]).filter(Boolean).map(r => [r.label(), r.record, r.location]);
   return {
-    groups: pairs.filter(p => p.group).map(p => [p.group.id, p.query?.label, p.subject?.label]),
+    groups: pairs.filter(p => p.group).map(p => [p.group.id, p.query?.label(), p.subject?.label()]),
     features: [feature('query'), feature('subject')],
   };
 }"""

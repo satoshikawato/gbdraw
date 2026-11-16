@@ -7470,7 +7470,7 @@
                                     </button>
                                 </div>
                                 <p v-if="clickedFeatureLabelHint" data-label-visibility-hint class="feature-popup-note">{{ clickedFeatureLabelHint }}</p>
-                                <p v-else-if="!clickedFeature.hasEditableLabel" class="feature-popup-note">{{ clickedFeature.labelUnavailableReason }}</p>
+                                <p v-else-if="!clickedFeature.hasEditableLabel" class="feature-popup-note">{{ tm(clickedFeature.labelUnavailableReason) }}</p>
                             </fieldset>
                             <div class="feature-popup-grid mt-3">
                         <div>
@@ -7650,10 +7650,10 @@
                                                    @change="setFeatureRecordRotationPosition(choice.value)"
                                                    :disabled="!semanticMutationAvailable || !choice.enabled || featureRecordRotationDraft.pending"
                                                    :aria-describedby="!choice.enabled && choice.message ? `feature-record-rotation-${choice.value}-reason` : null">
-                                            <span>{{ choice.label }}</span>
+                                            <span>{{ tm(choice.label) }}</span>
                                         </label>
                                         <span v-if="!choice.enabled && choice.message" :id="`feature-record-rotation-${choice.value}-reason`"
-                                              class="text-[10px] text-amber-700">{{ choice.message }}</span>
+                                              class="text-[10px] text-amber-700">{{ tm(choice.message) }}</span>
                                     </div>
                                     <div v-if="featureRecordRotationDraft.position === 'custom'"
                                          class="mt-1 ml-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
@@ -7666,7 +7666,7 @@
                                             <option v-for="choice in featureRecordRotationDraft.referenceChoices"
                                                     :key="choice.value"
                                                     :value="choice.value"
-                                                    :disabled="!choice.enabled">{{ choice.label }}{{ choice.message ? ' — ' + choice.message : '' }}</option>
+                                                    :disabled="!choice.enabled">{{ tm(choice.label) }}{{ choice.message ? ' — ' + tm(choice.message) : '' }}</option>
                                         </select>
                                         <span class="inline-flex items-center gap-1">
                                             <label for="feature-record-rotation-offset">{{ t('shifted by') }}</label>
@@ -7686,7 +7686,7 @@
                                         </span>
                                         <span id="feature-record-rotation-offset-error"
                                               v-if="featureRecordRotationDraft.offsetError"
-                                              class="basis-full text-[10px] text-red-700">{{ featureRecordRotationDraft.offsetError }}</span>
+                                              class="basis-full text-[10px] text-red-700">{{ tm(featureRecordRotationDraft.offsetError) }}</span>
                                     </div>
                                 </fieldset>
                                 <div class="mt-3">
@@ -7700,23 +7700,23 @@
                                         <span>{{ t('Show this feature on the forward strand') }}</span>
                                     </label>
                                     <p id="feature-record-rotation-orient-note" class="ml-5 text-[10px]"
-                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : featureRecordRotationDraft.orientCapability.message }}</p>
+                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : tm(featureRecordRotationDraft.orientCapability.message) }}</p>
                                 </div>
                                 <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
-                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview }}</p>
+                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview() }}</p>
                                 <p v-if="featureRecordRotationDraft.preview" data-record-rotation-preview
                                    class="mt-3 flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview }}</span>
+                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview() }}</span>
                                     <help-tip id="feature-record-rotation-coordinate-note" :label="t('About these coordinates')"
                                               :text="t('Coordinates refer to the original record.')"></help-tip>
                                 </p>
                                 </template>
                                 <p id="feature-record-rotation-reason"
-                                   v-if="featureRecordRotationDraft.disabledReason"
-                                   class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ featureRecordRotationDraft.disabledReason }}</p>
+                                   v-if="featureRecordRotationDraft.disabledReason.length"
+                                   class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ errorText(featureRecordRotationDraft.disabledReason) }}</p>
                                 <p aria-live="polite"
                                    class="mt-2 min-h-4 text-[10px]"
-                                   :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ featureRecordRotationDraft.status }}</p>
+                                   :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ errorText(featureRecordRotationDraft.status) }}</p>
                                 <div class="mt-3 flex flex-wrap justify-end gap-2">
                                     <button type="button"
                                             @click.stop="cancelRecordActions"
@@ -7750,7 +7750,7 @@
                             </div>
                             <dl class="feature-popup-fields" data-feature-popup-details>
                                 <template v-for="row in clickedFeature.detailRows" :key="`feature-detail-${row.key}`">
-                                    <dt>{{ row.label }}</dt>
+                                    <dt>{{ tm(row.label) }}</dt>
                                     <dd>{{ row.value }}</dd>
                                 </template>
                             </dl>
@@ -7872,7 +7872,7 @@
                                 <div v-if="previewItemView.subtitle" class="text-xs text-slate-500 mt-0.5 break-words" data-preview-item-subtitle>{{ previewItemView.subtitle }}</div>
                             </div>
                             <div v-else class="min-w-0">
-                                <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group ? clickedPairwiseMatch.group.title : clickedPairwiseMatch.title }}</div>
+                                <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group ? clickedPairwiseMatch.group.title() : clickedPairwiseMatch.title() }}</div>
                                 <span v-if="clickedPairwiseMatch.matchKind === 'orthogroup' && clickedPairwiseMatch.group?.badge"
                                       class="match-popup-badge mt-0.5">{{ clickedPairwiseMatch.group.badge }}</span>
                                 <div v-if="clickedPairwiseMatch.subtitle && !clickedPairwiseMatch.block" class="text-xs text-slate-500 mt-0.5 font-mono break-all">
@@ -8024,17 +8024,17 @@
                                     <div v-if="clickedPairwiseMatch.block.query.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.query.tableInterval }) }}</div>
                                     <div><i18n-text :text="t('vs {record}')" text-class="match-muted"><template #record><span class="font-semibold">{{ clickedPairwiseMatch.block.subject.recordId }}</span></template></i18n-text> {{ clickedPairwiseMatch.block.subject.intervalText }}<span v-if="clickedPairwiseMatch.block.subject.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.subject.lengthText }})</span></div>
                                     <div v-if="clickedPairwiseMatch.block.subject.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.subject.tableInterval }) }}</div>
-                                    <div class="match-lead-facts">{{ clickedPairwiseMatch.block.facts.join(' · ') }}</div>
+                                    <div class="match-lead-facts">{{ clickedPairwiseMatch.block.facts.map((fact) => fact()).join(' · ') }}</div>
                                     <div class="match-actions">
-                                        <button type="button" class="match-action" @click="copyText(clickedPairwiseMatch.block.summaryText)" :title="t('Copy this summary')">
+                                        <button type="button" class="match-action" @click="copyText(clickedPairwiseMatch.block.summaryText())" :title="t('Copy this summary')">
                                             <i class="ph ph-copy" aria-hidden="true"></i><span>{{ t('Copy') }}</span>
                                         </button>
                                         <action-menu v-if="clickedPairwiseMatch.sequenceBundle"
                                                      label="FASTA" icon="ph-download-simple" :title="t('Copy or download the block span sequences')"
                                                      :items="[
                                                        ...clickedPairwiseMatch.sequenceBundle.entries.flatMap((entry) => [
-                                                         { label: t('Copy {role} span', { role: entry.span.displayRole.toLowerCase() }), title: entry.available ? t('Copy {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason, icon: 'ph-copy', disabled: !entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'copy') },
-                                                         { label: t('Download {role} span', { role: entry.span.displayRole.toLowerCase() }), title: entry.available ? t('Download {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason, icon: 'ph-download-simple', disabled: !entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'download') }
+                                                         { label: t('Copy {role} span', { role: tm(entry.span.displayRole).toLowerCase() }), title: entry.available ? t('Copy {role} span FASTA', { role: tm(entry.span.displayRole).toLowerCase() }) : errorText(entry.unavailableReason), icon: 'ph-copy', disabled: !entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'copy') },
+                                                         { label: t('Download {role} span', { role: tm(entry.span.displayRole).toLowerCase() }), title: entry.available ? t('Download {role} span FASTA', { role: tm(entry.span.displayRole).toLowerCase() }) : errorText(entry.unavailableReason), icon: 'ph-download-simple', disabled: !entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'download') }
                                                        ]),
                                                        ...(clickedPairwiseMatch.sequenceBundle.entries.length > 1 ? [
                                                          { label: t('Copy both spans'), title: t('Copy both spans FASTA'), icon: 'ph-copy', disabled: !sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'copy') },
@@ -8044,11 +8044,11 @@
                                     </div>
                                     <div v-for="entry in (clickedPairwiseMatch.sequenceBundle?.entries || []).filter((item) => !item.available)"
                                          :key="`match-sequence-unavailable-${entry.span.role}`"
-                                         class="mt-1 text-[11px] text-amber-800">{{ t('{role} span: {reason}', { role: entry.span.displayRole, reason: entry.unavailableReason }) }}</div>
+                                         class="mt-1 text-[11px] text-amber-800">{{ t('{role} span: {reason}', { role: tm(entry.span.displayRole), reason: errorText(entry.unavailableReason) }) }}</div>
                                     <sequence-read-line :read="clickedPairwiseMatch.sequenceBundle?.read"></sequence-read-line>
                                 </section>
                                 <details class="match-disclosure" data-collinear-gene-pairs>
-                                    <summary>{{ clickedPairwiseMatch.block.pairsLabel }}</summary>
+                                    <summary>{{ clickedPairwiseMatch.block.pairsLabel() }}</summary>
                                     <div class="match-disclosure-body">
                                         <div class="flex justify-end mb-1">
                                             <button type="button" class="match-action" @click="copyText(clickedPairwiseMatch.block.pairsCopyText)" :title="t('Copy the gene-pair table')">
@@ -8061,7 +8061,7 @@
                                                     <tr>
                                                         <th>{{ clickedPairwiseMatch.block.query.recordId || t('Query') }}</th>
                                                         <th>{{ clickedPairwiseMatch.block.subject.recordId || t('Subject') }}</th>
-                                                        <th>{{ clickedPairwiseMatch.block.groupHeading }}</th>
+                                                        <th>{{ tm(clickedPairwiseMatch.block.groupHeading) }}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -8069,9 +8069,9 @@
                                                         <td v-for="(gene, side) in [pair.query, pair.subject]" :key="side">
                                                             <button v-if="gene" type="button" class="match-cell-button"
                                                                     :disabled="!gene.canOpen"
-                                                                    :title="gene.canOpen ? (gene.product ? t('Open {label} ({product})', { label: gene.label, product: gene.product }) : t('Open {label}', { label: gene.label })) : gene.product"
+                                                                    :title="gene.canOpen ? (gene.product ? t('Open {label} ({product})', { label: gene.label(), product: gene.product }) : t('Open {label}', { label: gene.label() })) : gene.product"
                                                                     @click="openPairwiseFeatureRow(gene, $event)">
-                                                                <span class="match-cell-main">{{ gene.label }}</span>
+                                                                <span class="match-cell-main">{{ gene.label() }}</span>
                                                                 <span class="match-cell-sub">{{ gene.location }}</span>
                                                             </button>
                                                         </td>
@@ -8094,13 +8094,13 @@
                             <template v-else-if="clickedPairwiseMatch.matchKind !== 'orthogroup'">
                                 <div v-if="clickedPairwiseMatch.sequenceBundle"
                                      class="pairwise-match-popup-section">
-                                    <div class="pairwise-match-popup-section-title">{{ clickedPairwiseMatch.sequenceTitle }}</div>
+                                    <div class="pairwise-match-popup-section-title">{{ tm(clickedPairwiseMatch.sequenceTitle) }}</div>
                                     <div v-for="entry in clickedPairwiseMatch.sequenceBundle.entries"
                                          :key="`match-sequence-${entry.span.role}`"
                                          class="rounded-lg border border-slate-100 px-3 py-2 mb-2">
                                         <div class="flex items-center gap-2">
                                             <div class="min-w-0 flex-1">
-                                                <div class="text-xs font-semibold text-slate-700">{{ t('{role} span', { role: entry.span.displayRole }) }}</div>
+                                                <div class="text-xs font-semibold text-slate-700">{{ t('{role} span', { role: tm(entry.span.displayRole) }) }}</div>
                                                 <!-- OV-1264: a long record ID may break; a span or length stays whole. -->
                                                 <div class="text-[10px] font-mono text-slate-500 break-words" data-match-span-line>
                                                     {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available && entry.sequenceLength"> · <span class="whitespace-nowrap">{{ numberText(entry.sequenceLength) }} bp</span></template>
@@ -8110,19 +8110,19 @@
                                                     @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'copy')"
                                                     :disabled="!entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
                                                     :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
-                                                    :title="entry.available ? t('Copy {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason">
+                                                    :title="entry.available ? t('Copy {role} span FASTA', { role: tm(entry.span.displayRole).toLowerCase() }) : errorText(entry.unavailableReason)">
                                                 <i class="ph ph-copy" aria-hidden="true"></i><span>{{ t('Copy') }}</span>
                                             </button>
                                             <button type="button"
                                                     @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'download')"
                                                     :disabled="!entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
                                                     :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
-                                                    :title="entry.available ? t('Download {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason">
+                                                    :title="entry.available ? t('Download {role} span FASTA', { role: tm(entry.span.displayRole).toLowerCase() }) : errorText(entry.unavailableReason)">
                                                 <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
                                             </button>
                                         </div>
                                         <div v-if="!entry.available" class="mt-1 text-[10px] text-amber-700">
-                                            {{ entry.unavailableReason }}
+                                            {{ errorText(entry.unavailableReason) }}
                                         </div>
                                     </div>
                                     <div v-if="clickedPairwiseMatch.sequenceBundle.entries.length > 1"
@@ -8146,15 +8146,15 @@
                                 <div v-for="section in clickedPairwiseMatch.sections"
                                      :key="`match-section-${section.id}`"
                                      class="pairwise-match-popup-section">
-                                    <div class="pairwise-match-popup-section-title">{{ section.title }}</div>
+                                    <div class="pairwise-match-popup-section-title">{{ tm(section.title) }}</div>
                                     <template v-if="!section.featureRows || !section.featureRows.length">
                                         <div v-for="row in section.rows"
-                                             :key="`match-row-${section.id}-${row.id}-${row.value}`"
+                                             :key="`match-row-${section.id}-${row.id}`"
                                              class="pairwise-match-popup-row">
-                                            <div class="pairwise-match-popup-key">{{ row.label }}</div>
-                                            <div class="pairwise-match-popup-value">{{ row.value }}</div>
+                                            <div class="pairwise-match-popup-key">{{ row.label() }}</div>
+                                            <div class="pairwise-match-popup-value">{{ row.value() }}</div>
                                             <button :aria-label="t('Copy')" type="button"
-                                                    @click="copyText(row.value)"
+                                                    @click="copyText(row.value())"
                                                     class="w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
                                                     :title="t('Copy')">
                                                 <i class="ph ph-copy" aria-hidden="true"></i>
@@ -8182,7 +8182,7 @@
                                                       featureRow.canOpen ? '' : 'is-disabled'
                                                     ]">
                                                     <td>
-                                                        <div class="pairwise-match-feature-main">{{ featureRow.label }}</div>
+                                                        <div class="pairwise-match-feature-main">{{ featureRow.label() }}</div>
                                                         <div v-if="featureRow.subLabel"
                                                              class="pairwise-match-feature-sub">
                                                             {{ featureRow.subLabel }}
@@ -8208,12 +8208,12 @@
                             <!-- UX-B02: one similarity group. The member table is the main content; one menu copies the group. -->
                             <section v-if="pairwiseGroupView" class="mb-3" data-match-group>
                                 <div v-if="clickedPairwiseMatch.matchKind !== 'orthogroup'" class="flex flex-wrap items-baseline gap-x-2 mb-1">
-                                    <span class="text-sm font-semibold text-slate-700">{{ pairwiseGroupView.title }}</span>
+                                    <span class="text-sm font-semibold text-slate-700">{{ pairwiseGroupView.title() }}</span>
                                     <span v-if="pairwiseGroupView.badge" class="match-popup-badge">{{ pairwiseGroupView.badge }}</span>
                                 </div>
                                 <p v-if="pairwiseGroupView.description" class="mb-1 text-xs text-slate-600">{{ pairwiseGroupView.description }}</p>
                                 <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
-                                    <span class="pt-1 text-xs font-semibold text-slate-700" data-match-group-count>{{ pairwiseGroupView.countText }}</span>
+                                    <span class="pt-1 text-xs font-semibold text-slate-700" data-match-group-count>{{ pairwiseGroupView.countText() }}</span>
                                     <action-menu :label="t('Copy')" icon="ph-copy" :title="t('Copy or download the members')"
                                                  :items="[
                                                    { label: t('Copy nt FASTA'), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', disabled: !pairwiseGroupView.memberSequenceCount || pairwiseGroupView.memberRead.status === 'reading', run: () => sequenceReads.memberAction(pairwiseGroupView.memberRead, pairwiseGroupView.memberRows, 'nt', 'copy', pairwiseGroupView.memberNtFilename) },
@@ -8240,7 +8240,7 @@
                                                 <td class="match-mono whitespace-nowrap">{{ member.coordinates }}</td>
                                                 <td>
                                                     <div class="text-slate-800">{{ member.productOrNote }}</div>
-                                                    <div class="match-cell-sub" :title="member.assignmentReason">{{ member.proteinId }}<span v-if="member.roleNote"> · {{ member.roleNote }}</span></div>
+                                                    <div class="match-cell-sub" :title="member.assignmentReason">{{ member.proteinId }}<span v-if="member.roleNote()"> · {{ member.roleNote() }}</span></div>
                                                 </td>
                                                 <td>
                                                     <action-menu label="FASTA" :title="t('FASTA of {name}', { name: member.proteinId || member.record })" :aria-label="t('FASTA of {name}', { name: member.proteinId || member.record })"
@@ -8260,8 +8260,8 @@
                                     <summary>{{ t('Technical details') }}</summary>
                                     <dl class="match-disclosure-body match-detail-rows">
                                         <template v-for="row in pairwiseGroupView.technicalRows" :key="`match-group-row-${row.id}`">
-                                            <dt>{{ row.label }}</dt>
-                                            <dd>{{ row.value }}</dd>
+                                            <dt>{{ row.label() }}</dt>
+                                            <dd>{{ row.value() }}</dd>
                                         </template>
                                     </dl>
                                 </details>
@@ -8269,11 +8269,11 @@
                             <details v-if="clickedPairwiseMatch.block" class="match-disclosure" data-collinear-details>
                                 <summary>{{ t('Details') }}</summary>
                                 <div class="match-disclosure-body">
-                                    <p class="mb-2 match-muted">{{ clickedPairwiseMatch.block.note }}</p>
+                                    <p class="mb-2 match-muted">{{ tm(clickedPairwiseMatch.block.note) }}</p>
                                     <dl class="match-detail-rows">
                                         <template v-for="row in clickedPairwiseMatch.block.detailRows" :key="`collinear-detail-${row.id}`">
-                                            <dt>{{ row.label }}</dt>
-                                            <dd>{{ row.value }}</dd>
+                                            <dt>{{ row.label() }}</dt>
+                                            <dd>{{ row.value() }}</dd>
                                         </template>
                                     </dl>
                                 </div>
@@ -8765,7 +8765,7 @@
                                 <i class="ph ph-x text-lg" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <p class="alignment-review-lead"><i18n-text :text="t('Records slide until the chosen genes line up with {reference}.')"><template #reference><b>{{ similarityAlignmentDraft?.reference.name }}</b></template></i18n-text></p>
+                        <p class="alignment-review-lead"><i18n-text :text="t('Records slide until the chosen genes line up with {reference}.')"><template #reference><b>{{ similarityAlignmentDraft && alignmentFeatureName(similarityAlignmentDraft.reference.feature).name }}</b></template></i18n-text></p>
                         <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="sr-only">{{ t('Similarity group {id}: {summary}', { id: similarityAlignmentDraft?.response.groupId, summary: similarityAlignmentReview?.summary }) }}</p>
                     </header>
 
@@ -8793,11 +8793,11 @@
                                            :aria-label="card.kind === 'reference' ? t('Exact alignment reference') : null"
                                            class="alignment-review-card"
                                            :class="{ 'is-reference': card.kind === 'reference', 'is-need': card.needsChoice, 'is-skipped': card.skipped }">
-                                    <legend v-if="card.kind !== 'reference'" class="sr-only">{{ record.recordLabel }}</legend>
+                                    <legend v-if="card.kind !== 'reference'" class="sr-only">{{ alignmentRecordName(record.recordNames).label }}</legend>
                                     <div class="alignment-review-head">
                                         <span v-if="card.kind === 'reference'" class="alignment-review-chip is-reference">{{ t('Reference') }}</span>
-                                        <span class="alignment-review-record">{{ record.recordName }}</span>
-                                        <span v-if="record.recordDetail" class="alignment-review-detail">{{ record.recordDetail }}</span>
+                                        <span class="alignment-review-record">{{ alignmentRecordName(record.recordNames).name }}</span>
+                                        <span v-if="alignmentRecordName(record.recordNames).detail" class="alignment-review-detail">{{ alignmentRecordName(record.recordNames).detail }}</span>
                                         <span class="alignment-review-direction" data-similarity-alignment-direction>
                                             <span :id="'alignment-direction-' + card.recordKey" class="sr-only">{{ card.direction.description }}</span>
                                             <span v-if="card.direction.reversed" aria-hidden="true" class="flex items-center gap-1">
@@ -8831,8 +8831,8 @@
                                               :x="box.x" y="3" :width="box.width" height="11" rx="2"></rect>
                                     </svg>
                                     <template v-if="card.kind === 'reference'">
-                                        <p class="alignment-review-gene"><b>{{ record.name }}</b> <code v-if="record.ids">{{ record.ids }}</code>
-                                            <span class="alignment-review-place">{{ record.coordinates }} ({{ record.displayedStrand }})</span></p>
+                                        <p class="alignment-review-gene"><b>{{ alignmentFeatureName(record.feature).name }}</b> <code v-if="record.ids">{{ record.ids }}</code>
+                                            <span class="alignment-review-place">{{ record.coordinates }} ({{ tm(record.displayedStrand) }})</span></p>
                                         <p v-if="similarityAlignmentDirectionPreview.referenceShift" class="alignment-review-note" data-similarity-alignment-reference-correction>
                                             {{ similarityAlignmentDirectionPreview.referenceShift }}
                                         </p>
@@ -8842,17 +8842,17 @@
                                          :class="{ 'is-hover': similarityAlignmentCanvasHover?.recordKey === card.recordKey }"
                                          @mouseenter="previewSimilarityAlignmentCandidate(card.candidates[0].anchor)"
                                          @mouseleave="clearSimilarityAlignmentCandidatePreview">
-                                        <b>{{ card.candidates[0].name }}</b>
+                                        <b>{{ alignmentFeatureName(card.candidates[0].feature).name }}</b>
                                         <code v-if="card.candidates[0].ids">{{ card.candidates[0].ids }}</code>
-                                        <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ card.candidates[0].displayedStrand }})</span>
+                                        <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ tm(card.candidates[0].displayedStrand) }})</span>
                                         <span class="alignment-review-evidence">
-                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || t('no direct hit') }}</span>
+                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.map((text) => tm(text)).join(', ') || t('no direct hit') }}</span>
                                             <span v-if="card.candidates[0].representative" class="alignment-review-chip is-evidence">{{ t('group representative') }}</span>
                                             <label class="alignment-review-skip">
                                                 <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
                                                        :checked="card.skipped"
                                                        :disabled="similarityAlignmentBusy"
-                                                       :aria-label="t('Skip {record}', { record: record.recordLabel })"
+                                                       :aria-label="t('Skip {record}', { record: alignmentRecordName(record.recordNames).label })"
                                                        @change="$event.target.checked ? skipSimilarityAlignmentRecord(card.recordKey) : selectSimilarityAlignmentCandidate(card.recordKey, card.candidates[0].anchor)">
                                                 {{ t('Skip') }}
                                             </label>
@@ -8862,7 +8862,7 @@
                                         <!-- One line: what to do in a record that still needs a choice, and why a candidate is recommended. -->
                                         <p v-if="card.needsChoice || record.recommendedKey" class="alignment-review-note" data-similarity-alignment-reason>
                                             <b v-if="card.needsChoice">{{ t('Choose the gene to line up, or skip this record.') }}{{ sentenceSeparator() }}</b>
-                                            <template v-if="record.recommendedKey">{{ t('Recommended: {name}, {reason}.', { name: record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name, reason: record.recommendationReasonLabel }) }}</template>
+                                            <template v-if="record.recommendedKey">{{ t('Recommended: {name}, {reason}.', { name: alignmentFeatureName(record.candidates.find(candidate => candidate.key === record.recommendedKey).feature).name, reason: tm(record.recommendationReasonLabel) }) }}</template>
                                         </p>
                                         <div class="alignment-review-candidates">
                                             <label v-for="candidate in card.candidates"
@@ -8880,13 +8880,13 @@
                                                        :checked="card.chosenKey === candidate.key"
                                                        :disabled="similarityAlignmentBusy"
                                                        @change="selectSimilarityAlignmentCandidate(card.recordKey, candidate.anchor)"
-                                                       :aria-label="t('Select {label}, {coordinates}, strand {strand} for {record}', { label: candidate.label, coordinates: candidate.coordinates, strand: candidate.displayedStrand, record: record.recordLabel })">
+                                                       :aria-label="t('Select {label}, {coordinates}, strand {strand} for {record}', { label: alignmentFeatureName(candidate.feature).label, coordinates: candidate.coordinates, strand: tm(candidate.displayedStrand), record: alignmentRecordName(record.recordNames).label })">
                                                 <span class="min-w-0 flex-1">
                                                     <span class="alignment-review-name">
-                                                        <b>{{ candidate.name }}</b>
+                                                        <b>{{ alignmentFeatureName(candidate.feature).name }}</b>
                                                         <span v-if="record.recommendedKey === candidate.key" class="alignment-review-chip is-recommended">{{ t('Recommended') }}</span>
                                                     </span>
-                                                    <span class="alignment-review-facts">{{ candidate.evidence.join(', ') || t('no direct hit') }}{{ candidate.representative ? ' · ' + t('group representative') : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ candidate.displayedStrand }})</span>
+                                                    <span class="alignment-review-facts">{{ candidate.evidence.map((text) => tm(text)).join(', ') || t('no direct hit') }}{{ candidate.representative ? ' · ' + t('group representative') : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ tm(candidate.displayedStrand) }})</span>
                                                 </span>
                                             </label>
                                             <label class="alignment-review-candidate is-skip" :class="{ 'is-chosen': card.skipped, 'is-busy': similarityAlignmentBusy }">
@@ -8895,7 +8895,7 @@
                                                        :checked="card.skipped"
                                                        :disabled="similarityAlignmentBusy"
                                                        @change="skipSimilarityAlignmentRecord(card.recordKey)"
-                                                       :aria-label="t('Skip {record}', { record: record.recordLabel })">
+                                                       :aria-label="t('Skip {record}', { record: alignmentRecordName(record.recordNames).label })">
                                                 {{ t('Skip this record') }}
                                             </label>
                                         </div>
@@ -9099,7 +9099,7 @@
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
                                 <p class="text-xs font-semibold text-slate-600 flex items-center gap-1" data-setting="features-editor"><span>{{ t('Features ({count})', { count: filteredFeatures.length }) }}</span><help-tip id="features-tab-help" :label="t('About the Features tab')" :text="settingApplicationHelp('features-editor') + ' ' + t('Select a row to edit its label or open its details.')"></help-tip></p>
-                                <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
+                                <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error ? errorText(featureEditorStatus.error) : featureEditorStatusText">{{ featureEditorStatusText }}</span>
                             </div>
                         </div>
                         <div v-if="featureRecordPickerVisible" class="px-4 py-2 border-b border-slate-100 shrink-0">
@@ -9253,7 +9253,7 @@
                                  role="alert"
                                  class="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
                                 <p class="font-semibold">{{ t('Saved alignment needs repair.') }}</p>
-                                <p class="mt-1">{{ tm(similarityAlignmentRepair.reason) }}</p>
+                                <p class="mt-1">{{ errorText(similarityAlignmentRepair.reason) }}</p>
                                 <div v-if="similarityAlignmentRepair.kind === 'reference'" class="mt-2 flex gap-2">
                                     <button type="button"
                                             @click="reselectSimilarityAlignmentReference"

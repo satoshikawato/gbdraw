@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
 import { linearDrawingWindowsOf } from '../../gbdraw/web/js/services/session-request.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import {
   bindRecordDisplayDrafts, buildRecordDisplayRows, parseRecordDisplayStart, reconcileRecordDisplayDrafts, effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface, requestedRecordTransform, readRecordDisplayDrafts, validateAnchorIntent, validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/services/record-display-model.js';
@@ -226,7 +227,7 @@ const circularControls = ({ linear = false, discovered = true, oneCard = false, 
       reads.linearRecords += 1;
       return discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [];
     },
-    linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
+    linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorModelFor: () => linearDiscovery.error,
     runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
   withSourceDrawings(withDrawings(state));
@@ -331,10 +332,13 @@ test('explicit popup target and its draft checkpoint stay record-bound', () => {
   assert.equal(model.state.recordDisplayDrafts.length, 1);
   model.controls.restoreTargetDraft(before);
   assert.deepEqual(model.state.recordDisplayDrafts, []);
-  assert.throws(
-    () => model.controls.targetForFeature({ ...model.feature, record_key: 'missing' }),
-    /stale or ambiguous/
-  );
+  // A stale target keeps its sentence as a part, so the popup words it in the shown language.
+  assert.throws(() => model.controls.targetForFeature({ ...model.feature, record_key: 'missing' }), (error) => {
+    assert.equal(error.kind, 'unavailable');
+    assert.deepEqual(error.parts, [{ text: 'The popup feature target is stale or ambiguous.' }]);
+    assert.equal(error.message, 'The popup feature target is stale or ambiguous.');
+    return true;
+  });
 });
 
 test('a popup target whose records are not read yet is not stale (Session Load, 776a2f93)', () => {
@@ -348,10 +352,13 @@ test('a popup target whose records are not read yet is not stale (Session Load, 
   }
   const failed = circularControls({ linear: true, discovered: false });
   failed.linearDiscovery.status = 'error';
-  failed.linearDiscovery.error = 'Records could not be loaded: malformed LOCUS line.';
+  const readFailure = normalizeUserFacingError({ code: 'INPUT_UNREADABLE' }, { operation: 'listSequenceRecords', stage: 'helper' });
+  failed.linearDiscovery.error = readFailure;
   assert.throws(() => failed.controls.targetForFeature(failed.feature), (error) => {
     assert.notEqual(error.kind, RECORD_TARGET_NOT_DISCOVERED);
-    assert.equal(error.message, 'Records could not be loaded: malformed LOCUS line.');
+    // The read's own sentences, kept as parts so the popup words them where it shows them.
+    assert.deepEqual(error.parts, readFailure.summaryParts);
+    assert.equal(error.message, readFailure.summary);
     return true;
   });
   const discovered = circularControls({ linear: true });

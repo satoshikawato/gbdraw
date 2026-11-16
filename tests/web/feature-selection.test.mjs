@@ -267,10 +267,22 @@ assert.equal(interactivePairwise.getAttribute('role'), 'button');
   const selection = createFeatureSelection({ state });
   const modifiers = { ctrlKey: false, metaKey: false, shiftKey: false };
   selection.selectFeatureByClick('a1', { ...modifiers, ctrlKey: true });
-  await setUiLocale('ja', async () => ({ default: { 'Range selection is limited to one record.': '範囲選択は1つのレコードの中だけです。' } }));
+  await setUiLocale('ja', async () => ({ default: { 'Range selection is limited to one record.': '範囲選択は1つのレコードの中だけです。',
+    '{count} features selected.': '{count}個のフィーチャーを選択しました。',
+    'No rendered features in selection.': '選択範囲に描画されたフィーチャーはありません。' } }));
+  // A Shift+drag box from (x0, y0) to (x1, y1); its status line is the one the toolbar shows for 2.2 s.
+  const box = (x0, y0, x1, y1) => {
+    const pointer = { shiftKey: true, button: 0, pointerId: 1 };
+    assert.equal(selection.startMarqueePointer({ ...pointer, clientX: x0, clientY: y0 }, svg), true);
+    selection.moveMarqueePointer({ ...pointer, clientX: x1, clientY: y1 });
+    assert.equal(selection.commitMarqueePointer({ ...pointer, clientX: x1, clientY: y1 }), true);
+    return state.featureSelectionStatus.value;
+  };
   try {
     assert.equal(selection.selectFeatureByClick('b1', { ...modifiers, shiftKey: true }), false);
     assert.equal(state.featureSelectionStatus.value, '範囲選択は1つのレコードの中だけです。');
+    assert.equal(box(-5, -5, 20, 20), '2個のフィーチャーを選択しました。');
+    assert.equal(box(30, 30, 60, 60), '選択範囲に描画されたフィーチャーはありません。');
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }

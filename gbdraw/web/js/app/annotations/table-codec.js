@@ -13,6 +13,29 @@ import {
   featureTarget,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
+import { renderErrorText } from '../../utils/error-normalization.js';
+import { msg } from '../../utils/i18n.js';
+/** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
+
+/**
+ * An annotation TSV that the import refuses: a table this codec refuses, or a read that the diagnostic model refuses
+ * (a gzip file past the expanded cap, PD-OI-116; a file the browser refuses). Its words are kept as error text parts,
+ * which name the row, the column and the cell's value as values (OV-2948), for the panel notice to word where it shows
+ * (OV-3674, OV-3683); `message` is their English text.
+ */
+export class AnnotationTableRefusal extends Error {
+  /** @param {ErrorTextPart[]} parts */
+  constructor(parts) {
+    super(renderErrorText(parts));
+    this.parts = parts;
+  }
+}
+/** @param {number} row @param {ErrorTextPart} reason */
+const rowRefusal = (row, reason) => new AnnotationTableRefusal([
+  { text: msg('Annotation table row {row}: {reason}'), params: { row, reason } }]);
+/** @param {number} row @param {string} column @param {ErrorTextPart} reason */
+const cellRefusal = (row, column, reason) => new AnnotationTableRefusal([
+  { text: msg("Annotation table row {row}, column '{column}': {reason}"), params: { row, column, reason } }]);
 
 /** @typedef {NonNullable<AnnotationTarget['selectors']>} FeatureSelectors */
 /**
@@ -56,11 +79,11 @@ const SVG_COLOR_NAMES = new Set(`
 `.trim().split(/\s+/));
 /** @param {AnnotationTableRow} row @param {number} rowNumber */
 const validateStyle = (row, rowNumber) => {
-  /** @param {string} column @param {string} message @returns {never} */
-  const fail = (column, message) => { throw new Error(`Annotation table row ${rowNumber}, column '${column}': ${message}`); };
+  /** @param {string} column @param {string} reason A `msg`-marked English sentence. @returns {never} */
+  const fail = (column, reason) => { throw cellRefusal(rowNumber, column, { text: reason }); };
   for (const column of ['stroke', 'fill', 'hatch_color', 'label_color']) {
     if (row[column] && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(row[column]) && !SVG_COLOR_NAMES.has(row[column].toLowerCase())) {
-      fail(column, 'expected an SVG color name, #RGB or #RRGGBB.');
+      fail(column, msg('expected an SVG color name, #RGB or #RRGGBB.'));
     }
   }
   for (const column of ['stroke_width', 'fill_opacity', 'hatch_angle', 'hatch_spacing', 'hatch_width', 'label_font_size', 'label_offset', 'stroke_dasharray']) {
@@ -68,10 +91,10 @@ const validateStyle = (row, rowNumber) => {
     const values = column === 'stroke_dasharray' ? row[column].split(/[ ,]+/).filter(Boolean) : [row[column]];
     for (const value of values) {
       const number = Number(value);
-      if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value) || !Number.isFinite(number)) fail(column, 'expected a finite number.');
-      if (['stroke_width', 'hatch_spacing', 'hatch_width', 'label_font_size', 'stroke_dasharray'].includes(column) && number <= 0) fail(column, 'expected a positive number.');
-      if (column === 'label_offset' && number < 0) fail(column, 'expected a non-negative number.');
-      if (column === 'fill_opacity' && (number < 0 || number > 1)) fail(column, 'expected a number between 0 and 1.');
+      if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value) || !Number.isFinite(number)) fail(column, msg('expected a finite number.'));
+      if (['stroke_width', 'hatch_spacing', 'hatch_width', 'label_font_size', 'stroke_dasharray'].includes(column) && number <= 0) fail(column, msg('expected a positive number.'));
+      if (column === 'label_offset' && number < 0) fail(column, msg('expected a non-negative number.'));
+      if (column === 'fill_opacity' && (number < 0 || number > 1)) fail(column, msg('expected a number between 0 and 1.'));
     }
   }
 };
@@ -83,7 +106,7 @@ const boolValue = (value, fallback = false) => {
   const text = String(value).toLowerCase();
   if (['true', '1', 'yes', 'on'].includes(text)) return true;
   if (['false', '0', 'no', 'off'].includes(text)) return false;
-  throw new Error(`Invalid boolean value: ${value}`);
+  throw new AnnotationTableRefusal([{ text: msg('Invalid boolean value: {value}'), params: { value: String(value) } }]);
 };
 /** @param {AnnotationTableRow} row */
 const styleFromRow = (row) => {
@@ -121,8 +144,10 @@ export const parseAnnotationTableWithNotice = (text) => {
   const lines = String(text || '').split(/\r?\n/).filter((line) => line.trim() && !line.trimStart().startsWith('#'));
   if (lines.length === 0) return { sets: [], notice: null };
   const header = splitTsv(lines[0]).map((name) => name.replace(/^\uFEFF/, '').trim());
-  REQUIRED.forEach((name) => { if (!header.includes(name)) throw new Error(`Annotation table is missing required column: ${name}`); });
-  if (new Set(header).size !== header.length) throw new Error('Annotation table has duplicate columns.');
+  REQUIRED.forEach((name) => {
+    if (!header.includes(name)) throw new AnnotationTableRefusal([{ text: msg('Annotation table is missing required column: {name}'), params: { name } }]);
+  });
+  if (new Set(header).size !== header.length) throw new AnnotationTableRefusal([{ text: msg('Annotation table has duplicate columns.') }]);
   const unknown = header.filter((name) => !COLUMNS.includes(name));
   const known = header.map((name, index) => ({ name, index })).filter(({ name }) => COLUMNS.includes(name));
   /** @type {Map<string, AnnotationSet>} */
@@ -130,34 +155,34 @@ export const parseAnnotationTableWithNotice = (text) => {
   lines.slice(1).forEach((line, index) => {
     const values = splitTsv(line);
     const rowNumber = index + 2;
-    if (values.length !== header.length) throw new Error(`Annotation table row ${rowNumber}: expected ${header.length} columns, got ${values.length}.`);
+    if (values.length !== header.length) {
+      throw rowRefusal(rowNumber, { text: msg('expected {expected} columns, got {count}.'), params: { expected: header.length, count: values.length } });
+    }
     /** @type {AnnotationTableRow} */
     const row = Object.fromEntries(known.map(({ name, index }) => [name, values[index]]));
-    if (!row.set_id || !row.id || !row.mark) throw new Error(`Annotation table row ${rowNumber}: set_id, id, and mark are required.`);
+    if (!row.set_id || !row.id || !row.mark) throw rowRefusal(rowNumber, { text: msg('set_id, id, and mark are required.') });
     for (const [column, choices] of Object.entries(ENUM_COLUMNS)) {
       if (!row[column]) continue;
       row[column] = row[column].toLowerCase();
-      if (!choices.includes(row[column])) throw new Error(`Annotation table row ${rowNumber}, column '${column}': expected ${choices.join(', ')}.`);
+      if (!choices.includes(row[column])) throw cellRefusal(rowNumber, column, { text: msg('expected {choices}.'), params: { choices: choices.join(', ') } });
     }
     validateStyle(row, rowNumber);
     if (row.hatch_cross) boolValue(row.hatch_cross);
     const parsedRecord = parseAnnotationRecordSelectorValue(row.record);
-    if (parsedRecord.error) {
-      throw new Error(`Annotation table row ${rowNumber}, column 'record': ${parsedRecord.error}`);
-    }
+    if (parsedRecord.error) throw cellRefusal(rowNumber, 'record', parsedRecord.error);
     const recordSelector = parsedRecord.selector;
     const record = recordSelector?.kind === 'recordIndex'
       ? { recordId: null, recordIndex: recordSelector.index }
       : { recordId: recordSelector?.value || null, recordIndex: null };
     const hasCoordinates = Boolean(row.start || row.end);
     const hasFeature = Boolean(row.feature_selector);
-    if (hasCoordinates === hasFeature) throw new Error(`Annotation table row ${rowNumber}: provide exactly one coordinate or feature target.`);
+    if (hasCoordinates === hasFeature) throw rowRefusal(rowNumber, { text: msg('provide exactly one coordinate or feature target.') });
     if (hasCoordinates) {
       const error = validateAnnotationCoordinates(row);
-      if (error) throw new Error(`Annotation table row ${rowNumber}: ${error}`);
+      if (error) throw rowRefusal(rowNumber, error);
     }
     if (row.lane && (!Number.isSafeInteger(Number(row.lane)) || Number(row.lane) < 0)) {
-      throw new Error(`Annotation table row ${rowNumber}: lane must be a non-negative integer.`);
+      throw rowRefusal(rowNumber, { text: msg('lane must be a non-negative integer.') });
     }
     /** @type {AnnotationTarget} */
     const target = hasCoordinates
@@ -166,7 +191,7 @@ export const parseAnnotationTableWithNotice = (text) => {
     // `featureTarget` always sets `selectors`, and `hasFeature` selected it.
     if (hasFeature && (!/** @type {FeatureSelectors} */ (target.selectors).length
       || /** @type {FeatureSelectors} */ (target.selectors).some((selector) => !selector.value))) {
-      throw new Error(`Annotation table row ${rowNumber}: feature_selector requires a nonempty feature value.`);
+      throw rowRefusal(rowNumber, { text: msg('feature_selector requires a nonempty feature value.') });
     }
     if (hasCoordinates) {
       target.wrapsOrigin = boolValue(row.wraps_origin, Number(row.start) > Number(row.end));
@@ -174,7 +199,9 @@ export const parseAnnotationTableWithNotice = (text) => {
     }
     if (!sets.has(row.set_id)) sets.set(row.set_id, createAnnotationSet({ id: row.set_id }));
     // Set just above when absent.
-    if (/** @type {AnnotationSet} */ (sets.get(row.set_id)).annotations.some((item) => item.id === row.id)) throw new Error(`Annotation table row ${rowNumber}: duplicate annotation id in set '${row.set_id}'.`);
+    if (/** @type {AnnotationSet} */ (sets.get(row.set_id)).annotations.some((item) => item.id === row.id)) {
+      throw rowRefusal(rowNumber, { text: msg("duplicate annotation id in set '{set}'."), params: { set: row.set_id } });
+    }
     /** @type {AnnotationSet} */ (sets.get(row.set_id)).annotations.push({
       id: row.id, target, label: row.label || '', mark: row.mark || 'bracket',
       lane: row.lane === '' || row.lane == null ? null : Number(row.lane), style: styleFromRow(row),

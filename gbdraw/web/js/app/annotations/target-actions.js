@@ -2,6 +2,9 @@
 import { isUnspecifiedRecordSelectorValue } from '../../services/record-options.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { recordIndexNumber } from '../../services/record-draw-selection.js';
+import { renderErrorText } from '../../utils/error-normalization.js';
+import { msg } from '../../utils/i18n.js';
+/** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
 
 /**
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
@@ -17,32 +20,33 @@ const cleanNullable = (value) => {
 
 /**
  * @param {unknown} value A table cell, a record ID, or `#<n>`.
- * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
+ * @returns {{ selector: AnnotationRecordSelector | null, error: ErrorTextPart | null }} `error`: why the value is no
+ *   selector, worded where it shows (the cell's value stays a value), or null.
  */
 export const parseAnnotationRecordSelectorValue = (value) => {
   const text = cleanNullable(value);
   if (text === null || isUnspecifiedRecordSelectorValue(text)) {
-    return { selector: null, error: '' };
+    return { selector: null, error: null };
   }
   if (!text.startsWith('#')) {
-    return { selector: { kind: 'recordId', value: text }, error: '' };
+    return { selector: { kind: 'recordId', value: text }, error: null };
   }
   // The number as Python's `parse_record_selector` reads it (`recordIndexNumber`).
   const number = recordIndexNumber(text);
   if (number === null) {
     return {
       selector: null,
-      error: `Invalid record selector ${JSON.stringify(text)}. Use #<number> or record_id.`
+      error: { text: msg('Invalid record selector {selector}. Use #<number> or record_id.'), params: { selector: JSON.stringify(text) } }
     };
   }
   const index = number - 1;
   if (!Number.isSafeInteger(index) || index < 0) {
     return {
       selector: null,
-      error: `Record index must be >= 1 in selector ${JSON.stringify(text)}.`
+      error: { text: msg('Record index must be >= 1 in selector {selector}.'), params: { selector: JSON.stringify(text) } }
     };
   }
-  return { selector: { kind: 'recordIndex', index }, error: '' };
+  return { selector: { kind: 'recordIndex', index }, error: null };
 };
 
 /** @param {unknown} value */
@@ -78,7 +82,7 @@ export const annotationRecordSelectorValue = (selector) => {
 /** @param {unknown} value */
 export const annotationRecordSelectorFromValue = (value) => {
   const parsed = parseAnnotationRecordSelectorValue(value);
-  if (parsed.error) throw new Error(parsed.error);
+  if (parsed.error) throw new Error(renderErrorText([parsed.error]));
   return parsed.selector;
 };
 

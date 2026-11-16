@@ -1,6 +1,6 @@
 // @ts-check
 import { locationPartBound } from '../../services/feature-utils.js';
-import { t } from '../../utils/i18n.js';
+import { msg } from '../../utils/i18n.js';
 
 /**
  * One capability verdict of the anchor resolver. `basis` is set on the offset
@@ -8,7 +8,8 @@ import { t } from '../../utils/i18n.js';
  * @typedef {object} AnchorCapability
  * @property {boolean} enabled
  * @property {string | null} code
- * @property {string} message
+ * @property {string} message Why it is unavailable: an English catalog key (`msg`) that the popup words with `tm`
+ *   where it shows it, '' when it is available.
  * @property {string} [basis]
  */
 
@@ -111,16 +112,16 @@ const displayedStrand = (sourceStrand, reverseComplement) => {
  */
 const recordCapability = ({ recordLength, effectiveCircular, cropped, currentReverseComplement }) => {
   if (!Number.isSafeInteger(recordLength) || recordLength <= 0) {
-    return unavailable('record-length-unavailable', t('Record length must be a positive integer.'));
+    return unavailable('record-length-unavailable', msg('Record length must be a positive integer.'));
   }
   if (effectiveCircular !== true) {
-    return unavailable('record-not-circular', t('Record rotation requires an effectively circular record.'));
+    return unavailable('record-not-circular', msg('Record rotation requires an effectively circular record.'));
   }
   if (cropped === true) {
-    return unavailable('record-cropped', t('Record rotation is unavailable for a cropped record.'));
+    return unavailable('record-cropped', msg('Record rotation is unavailable for a cropped record.'));
   }
   if (currentReverseComplement !== true && currentReverseComplement !== false) {
-    return unavailable('orientation-state-invalid', t('Current record orientation is unavailable.'));
+    return unavailable('orientation-state-invalid', msg('Current record orientation is unavailable.'));
   }
   return available();
 };
@@ -134,12 +135,12 @@ const profileCapability = (profile) => {
     || !['single', 'join', 'order', 'unknown'].includes(profile.operator)
     || !['biological', 'source-forward', 'ambiguous'].includes(profile.partOrder)
     || !['+', '-', 'unstranded', 'mixed'].includes(profile.strand)) {
-    return unavailable('location-profile-invalid', t('Cannot determine which operations the feature\'s location in the source record allows.'));
+    return unavailable('location-profile-invalid', msg('Cannot determine which operations the feature\'s location in the source record allows.'));
   }
   if (profile.precision === 'unavailable') {
     return unavailable(
       'feature-metadata-refresh-required',
-      t('Generate again to refresh feature location metadata before rotating this record.')
+      msg('Generate again to refresh feature location metadata before rotating this record.')
     );
   }
   return available();
@@ -179,28 +180,28 @@ const readAnchorParts = (parts) => (Array.isArray(parts)
  */
 const partsCapability = (parts, profile, recordLength) => {
   if (!Array.isArray(parts) || parts.length === 0) {
-    return unavailable('location-parts-unavailable', t('Feature source-location parts are unavailable.'));
+    return unavailable('location-parts-unavailable', msg('Feature source-location parts are unavailable.'));
   }
   for (const part of parts) {
     if (!part || !Number.isSafeInteger(part.start) || !Number.isSafeInteger(part.end)
       || part.start < 0 || part.end <= part.start || part.end > recordLength) {
-      return unavailable('location-parts-invalid', t('Feature-part coordinates are invalid or outside the source record.'));
+      return unavailable('location-parts-invalid', msg('Feature-part coordinates are invalid or outside the source record.'));
     }
     if (!partStrandMatches(part.strand, profile.strand)) {
-      return unavailable('location-strand-mismatch', t('A part of this feature is on a different strand from the feature.'));
+      return unavailable('location-strand-mismatch', msg('A part of this feature is on a different strand from the feature.'));
     }
   }
   // The loop above returned for every missing part.
   const readParts = /** @type {AnchorPart[]} */ (parts);
   const sourceOrder = [...readParts].sort((left, right) => left.start - right.start || left.end - right.end);
   if (sourceOrder.some((part, index) => index > 0 && part.start < sourceOrder[index - 1].end)) {
-    return unavailable('location-parts-overlap', t('Overlapping feature parts cannot be traversed safely.'));
+    return unavailable('location-parts-overlap', msg('Overlapping feature parts cannot be traversed safely.'));
   }
   if (profile.partOrder === 'source-forward') {
     const wraps = readParts.reduce((count, part, index) => count
       + (index > 0 && part.start < readParts[index - 1].start ? 1 : 0), 0);
     if (wraps > 1) {
-      return unavailable('location-source-order-invalid', t('Feature parts do not form one source-forward circular path.'));
+      return unavailable('location-source-order-invalid', msg('Feature parts do not form one source-forward circular path.'));
     }
   }
   return available();
@@ -218,16 +219,16 @@ const positionalCapability = (record, profileState, partsState, profile) => {
   const common = firstUnavailable(record, profileState, partsState);
   if (common) return common;
   if (profile.precision !== 'exact') {
-    return unavailable('location-fuzzy', t('This operation requires exact feature coordinates.'));
+    return unavailable('location-fuzzy', msg('This operation requires exact feature coordinates.'));
   }
   if (profile.operator === 'order') {
-    return unavailable('location-order-ambiguous', t('Feature parts joined with order() do not define an exact path.'));
+    return unavailable('location-order-ambiguous', msg('Feature parts joined with order() do not define an exact path.'));
   }
   if (profile.operator === 'unknown') {
-    return unavailable('location-operator-unknown', t('Cannot determine how the feature parts are connected.'));
+    return unavailable('location-operator-unknown', msg('Cannot determine how the feature parts are connected.'));
   }
   if (profile.partOrder === 'ambiguous' || profile.strand === 'mixed') {
-    return unavailable('location-traversal-ambiguous', t('Feature part order or strand is ambiguous.'));
+    return unavailable('location-traversal-ambiguous', msg('Feature part order or strand is ambiguous.'));
   }
   return available();
 };
@@ -256,23 +257,23 @@ const baseAtCoveredOffset = (parts, offset, direction) => {
  */
 const intentCapability = (intent) => {
   if (!intent || !['feature-start', 'anchor', 'feature-end'].includes(intent.placement)) {
-    return unavailable('placement-invalid', t('Choose a feature-start, anchor, or feature-end placement.'));
+    return unavailable('placement-invalid', msg('Choose a feature-start, anchor, or feature-end placement.'));
   }
   if (intent.placement === 'anchor'
     && !(/** @type {(string | null)[]} */ (['five-prime', 'midpoint', 'three-prime'])).includes(intent.anchor)) {
-    return unavailable('anchor-invalid', t('Choose a supported feature anchor.'));
+    return unavailable('anchor-invalid', msg('Choose a supported feature anchor.'));
   }
   if (intent.placement !== 'anchor' && intent.anchor !== null) {
-    return unavailable('anchor-not-applicable', t('Feature-start and feature-end placements do not use an anchor.'));
+    return unavailable('anchor-not-applicable', msg('Feature-start and feature-end placements do not use an anchor.'));
   }
   if (!Number.isSafeInteger(intent.offsetBp)) {
-    return unavailable('offset-invalid', t('Offset must be a whole number of base pairs within the supported range.'));
+    return unavailable('offset-invalid', msg('Offset must be a whole number of base pairs within the supported range.'));
   }
   if (intent.placement === 'feature-start' && intent.offsetBp !== 0) {
-    return unavailable('offset-not-applicable', t('Feature-start placement does not use an offset.'));
+    return unavailable('offset-not-applicable', msg('Feature-start placement does not use an offset.'));
   }
   if (intent.orientForward !== true && intent.orientForward !== false) {
-    return unavailable('orient-forward-invalid', t('The "Show this feature on the forward strand" setting must be true or false.'));
+    return unavailable('orient-forward-invalid', msg('The "Show this feature on the forward strand" setting must be true or false.'));
   }
   return available();
 };
@@ -285,7 +286,7 @@ const identityCapability = (identity) => {
   if (!identity || typeof identity.recordKey !== 'string' || !identity.recordKey
     || identity.recordKey.includes('\0') || typeof identity.biologicalFeatureId !== 'string'
     || !identity.biologicalFeatureId || identity.biologicalFeatureId.includes('\0')) {
-    return unavailable('feature-identity-unavailable', t('Feature rotation requires a stable record and feature identity.'));
+    return unavailable('feature-identity-unavailable', msg('Feature rotation requires a stable record and feature identity.'));
   }
   return available();
 };
@@ -317,7 +318,7 @@ export const resolveFeatureAnchor = ({
   const midpoint = positional;
   const biologicalEnds = !positional.enabled ? positional
     : !['+', '-'].includes(located.strand)
-      ? unavailable('biological-direction-unavailable', t('Biological 5′ and 3′ ends require a known strand.'))
+      ? unavailable('biological-direction-unavailable', msg('Biological 5′ and 3′ ends require a known strand.'))
       : available();
   const offsetBasis = profile?.strand === 'unstranded' ? 'source-forward' : 'strand';
   const offset = !positional.enabled ? { ...positional, basis: offsetBasis }
@@ -325,17 +326,17 @@ export const resolveFeatureAnchor = ({
   const orientForward = !record.enabled ? record
     : !profileState.enabled ? profileState
       : !['+', '-'].includes(located.strand)
-        ? unavailable('orientation-strand-unavailable', t('Show this feature on the forward strand needs a feature on the + or − strand.'))
+        ? unavailable('orientation-strand-unavailable', msg('Show this feature on the forward strand needs a feature on the + or − strand.'))
         : available();
   const featureEnd = !positional.enabled ? positional
     : located.strand === 'unstranded' && located.partOrder !== 'source-forward'
-      ? unavailable('feature-end-direction-unavailable', t('Feature-end placement requires a known strand or parts listed in forward order in the file.'))
+      ? unavailable('feature-end-direction-unavailable', msg('Feature-end placement requires a known strand or parts listed in forward order in the file.'))
       : available();
   // The feature's first base in display order is its 5-prime or 3-prime base,
   // so placing it at the start needs a known strand.
   const featureStart = !positional.enabled ? positional
     : !['+', '-'].includes(located.strand)
-      ? unavailable('feature-start-direction-unavailable', t('Needs a known feature strand.'))
+      ? unavailable('feature-start-direction-unavailable', msg('Needs a known feature strand.'))
       : available();
   const capabilities = {
     featureStart,

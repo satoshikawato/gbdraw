@@ -21,7 +21,9 @@ const { createSimilarityAlignmentActions } = await import(
 
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
-const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+const { SOURCE_LOCALE, setUiLocale, t, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
+const { templateBinding } = await import('./helpers/template-binding.mjs');
+const reviewView = await import('../../gbdraw/web/js/services/alignment-review-view.js');
 const { writeCanonicalRecordReverseComplement } = await import('../../gbdraw/web/js/services/record-display-model.js');
 const { CompositionMetadataError } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 
@@ -530,7 +532,7 @@ test('explicit review opens an applicable Python-selected draft for either respo
     assert.equal(fixture.actions.draft.value.rows[0].reason,
       ambiguous ? 'user_selected' : 'only_usable_candidate');
     // Names come from biological metadata; the feature hash stays binding-only.
-    assert.equal(fixture.actions.draft.value.reference.label, 'gene-clicked · clicked');
+    assert.equal(reviewView.alignmentFeatureName(fixture.actions.draft.value.reference.feature).label, 'gene-clicked · clicked');
     assert.equal(Object.hasOwn(fixture.actions.draft.value.reference, 'featureIdentifier'), false);
     assert.equal(fixture.actions.draft.value.reference.coordinates, '51..70 bp');
     assert.equal(fixture.actions.draft.value.rows[0].recommendedKey,
@@ -1064,7 +1066,7 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
     'Alignment needs repair: The alignment reference feature is no longer found in its record.');
 });
 
-// OV-3676: the notice is worded where it shows, and the repair note keeps its reason as an English sentence that the
+// OV-3676: the notice is worded where it shows, and the repair note keeps its reason as error text parts that the
 // drawer words where it shows, so a UI language change rewords both.
 test('the repair notice rewords after a UI language change, and the note keeps its English reason', async () => {
   const fixture = create();
@@ -1078,7 +1080,113 @@ test('the repair notice rewords after a UI language change, and the note keeps i
   } }));
   try {
     assert.equal(fixture.actions.notice.value, '整列の修復が必要です：参照フィーチャーが見つかりません。');
-    assert.equal(fixture.actions.repair.value.reason, reason);
+    assert.deepEqual(fixture.actions.repair.value.reason, [{ text: reason }]);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// OV-3676: the review's candidate line keeps what its words are made of (the English keys of the evidence kinds, the
+// strand and the recommendation reason), so the panel words them in the language it shows, also after a change.
+test('the review draft keeps the candidate line\'s English keys when it opens in another language', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => {
+      const response = responseFor(request, { ambiguous: true });
+      response.records[1].candidates[0].directEvidence = ['rbh', 'helper_kind'];
+      return { result: response };
+    } });
+  await setUiLocale('ja', async () => ({ default: {
+    'reciprocal best hit': '相互ベストヒット',
+    'the only group representative among the candidates': 'グループの代表である唯一の候補',
+    unknown: '不明', Unchanged: '変更なし'
+  } }));
+  try {
+    await startReview(fixture);
+    const [row] = fixture.actions.draft.value.rows;
+    assert.deepEqual(row.candidates[0].evidence, ['reciprocal best hit', 'helper_kind']);
+    assert.equal(row.recommendationReasonLabel, 'the only group representative among the candidates');
+    assert.equal(Object.hasOwn(row, 'reasonLabel'), false, 'no stored label that nothing shows');
+    // The candidate line and the recommendation as index.html words them.
+    const facts = templateBinding(/<span class="alignment-review-facts">\{\{ (.+?) \}\}/);
+    const strand = templateBinding(/<span class="alignment-review-facts">.*? · \{\{ candidate\.coordinates \}\} \(\{\{ (.+?) \}\}\)<\/span>/);
+    const recommended = templateBinding(/<template v-if="record\.recommendedKey">\{\{ (.+?) \}\}<\/template>/);
+    const [candidate] = row.candidates;
+    assert.equal(facts({ candidate, t, tm }), '相互ベストヒット, helper_kind');
+    assert.equal(strand({ candidate, tm }), candidate.displayedStrand);
+    assert.match(recommended({ record: row, t, tm, alignmentFeatureName: reviewView.alignmentFeatureName }), /グループの代表である唯一の候補/);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// OV-3676: a record with no name of its own is named by its position ("Record {n}", also beside two records with one
+// name), and a feature without a type "Feature". The draft keeps the position and the missing type as data, so the
+// panel, the direction preview and the figure overlay word them in the shown language, also after a change.
+test('the review words record and feature name fallbacks in the language shown, also after a change', async () => {
+  const untyped = { ...targetC, gene: undefined, proteinId: undefined, sourceProteinId: undefined, type: undefined };
+  const fixture = create({ members: [reference, targetA, untyped] });
+  // Record a has no name of its own; b and c have one definition.
+  fixture.state.activeDrawing().linearSeqs[1].definition = 'Genome B';
+  fixture.state.activeDrawing().linearSeqs[2].definition = 'Genome B';
+  assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
+  const draft = fixture.actions.draft.value;
+  // The overlay is drawn while the review opens in English.
+  const overlay = reviewView.alignmentOverlayRecords(draft.rows);
+  await setUiLocale('ja', async () => ({ default: {
+    'Record {n}': 'レコード{n}', Feature: 'フィーチャー',
+    'Select {label}, {coordinates} for {record}': '{record}の{label}（{coordinates}）を選択'
+  } }));
+  try {
+    const names = { alignmentRecordName: reviewView.alignmentRecordName, alignmentFeatureName: reviewView.alignmentFeatureName };
+    // The card's record name and its accessible name, as index.html words them.
+    const legend = templateBinding(/<legend v-if="card\.kind !== 'reference'" class="sr-only">\{\{ (.+?) \}\}<\/legend>/);
+    const shownName = templateBinding(/<span class="alignment-review-record">\{\{ (.+?) \}\}<\/span>/);
+    const single = templateBinding(/^\s*<b>\{\{ (.*?card\.candidates\[0\].*?) \}\}<\/b>$/m);
+    assert.deepEqual(draft.rows.map((record) => legend({ record, ...names })), ['Genome B · レコード2', 'Genome B · レコード3']);
+    assert.equal(shownName({ record: draft.reference, ...names }), 'レコード1');
+    const untypedCandidate = draft.rows[1].candidates[0];
+    assert.equal(single({ card: { candidates: [untypedCandidate] }, ...names }), 'フィーチャー 41..60 bp');
+    // The direction preview, a computed of the draft.
+    assert.deepEqual(fixture.actions.directionPreview.value.records.map(({ label }) => label),
+      ['レコード1', 'Genome B · レコード2', 'Genome B · レコード3']);
+    // The overlay's ring names, worded where the overlay writes them.
+    assert.equal(overlay[1].candidates[0].accessibleName(), 'Genome B · レコード3のフィーチャー 41..60 bp（41..60 bp）を選択');
+    assert.equal(overlay[1].candidates[0].name(), 'フィーチャー 41..60 bp');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// OV-3682: a repair whose helper run fails keeps the normalized parts of the failure, never its raw text, and the
+// drawer and the notice word them in the shown language.
+test('a failed repair run keeps the failure\'s normalized parts in the repair note', async () => {
+  let fail = false;
+  const fixture = create({ helper: (_operation, { request }) => {
+    if (fail) throw new Error('PRIVATE helper text');
+    return { result: responseFor(request) };
+  } });
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  fixture.currentGroup.members.splice(1, 1, targetB);
+  fail = true;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'blocked', reason: 'stale-reference' });
+  const { reason } = fixture.actions.repair.value;
+  assert.ok(Array.isArray(reason), 'the note keeps error text parts');
+  assert.equal(JSON.stringify(reason).includes('PRIVATE'), false, 'no raw exception text');
+  assert.equal(fixture.actions.notice.value.includes('PRIVATE'), false);
+  const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
+  const english = errorText(reason);
+  assert.match(english, /^The exact reference is no longer available\. /);
+  await setUiLocale('ja', async () => ({ default: {
+    'Alignment needs repair: {reason}': '整列の修復が必要です：{reason}',
+    'The exact reference is no longer available.': '参照フィーチャーは利用できなくなりました。'
+  } }));
+  try {
+    assert.ok(errorText(reason).startsWith('参照フィーチャーは利用できなくなりました。'), errorText(reason));
+    const note = templateBinding(/<p class="mt-1">\{\{ (.+?similarityAlignmentRepair\.reason.*?) \}\}<\/p>/);
+    assert.equal(note({ similarityAlignmentRepair: fixture.actions.repair.value, errorText, tm }), errorText(reason));
+    assert.ok(fixture.actions.notice.value.startsWith('整列の修復が必要です：参照フィーチャーは利用できなくなりました。'),
+      fixture.actions.notice.value);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }
@@ -1203,8 +1311,8 @@ test('candidate labels retain biological metadata and displayed record names', a
   fixture.state.activeDrawing().linearSeqs[1].definition = 'Genome B';
   await startReview(fixture);
   const row = fixture.actions.draft.value.rows[0];
-  assert.equal(row.recordLabel, 'Genome B');
-  assert.equal(row.candidates[0].label, 'gene-target-a · target-a');
+  assert.equal(reviewView.alignmentRecordName(row.recordNames).label, 'Genome B');
+  assert.equal(reviewView.alignmentFeatureName(row.candidates[0].feature).label, 'gene-target-a · target-a');
   assert.equal(row.candidates[0].coordinates, '21..40 bp');
   assert.equal(row.candidates[0].displayedStrand, '-');
 });
@@ -1363,10 +1471,10 @@ test('Review and the active-plan inspector use names, never internal keys or has
   fixture.state.activeDrawing().linearSeqs[2].definition = 'Genome B';
   assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
   const draft = fixture.actions.draft.value;
-  assert.equal(draft.reference.recordLabel, 'Genome A · ACC-A');
-  assert.deepEqual(draft.rows.map(({ recordLabel }) => recordLabel),
+  assert.equal(reviewView.alignmentRecordName(draft.reference.recordNames).label, 'Genome A · ACC-A');
+  assert.deepEqual(draft.rows.map(({ recordNames }) => reviewView.alignmentRecordName(recordNames).label),
     ['Genome B · Record 2', 'Genome B · Record 3']);
-  assert.equal(draft.rows[1].candidates[0].label, 'CDS 41..60 bp');
+  assert.equal(reviewView.alignmentFeatureName(draft.rows[1].candidates[0].feature).label, 'CDS 41..60 bp');
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
   const inspector = fixture.actions.activePlanInspector.value;
   assert.equal(inspector.reference.recordLabel, 'Genome A · ACC-A');

@@ -13,7 +13,7 @@
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from '../services/annotation-state.js';
 import { nextCopyId } from '../services/track-slot-validation.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
-import { encodeAnnotationTableWithNotice, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
+import { AnnotationTableRefusal, encodeAnnotationTableWithNotice, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
 import {
   boundAnnotation,
   createAnnotationRecordSelector,
@@ -27,44 +27,34 @@ import {
 } from '../services/drawing/annotation-sets.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
-import { normalizeUserFacingError, renderErrorText } from '../utils/error-normalization.js';
+import { normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { joinSentences, t, tn } from '../utils/i18n.js';
 
 /**
- * A read of an annotation TSV that the diagnostic model refuses (a gzip file past the expanded cap, PD-OI-116; a file
- * the browser refuses): its words, which name the file (OV-2948), kept as error text parts for the panel notice to word
- * where it shows (OV-3674); `message` is their English text.
- */
-class AnnotationReadRefusal extends Error {
-  /** @param {ErrorTextPart[]} parts */
-  constructor(parts) {
-    super(renderErrorText(parts));
-    this.parts = parts;
-  }
-}
-
-/**
  * The text of an annotation TSV. A failed read rejects as the panel notice tells it: a refusal the diagnostic model
- * knows as an `AnnotationReadRefusal`; any other error as it is, as the notice tells a table the import refuses
- * (FL-14). A falsy rejection has no words.
+ * knows as an `AnnotationTableRefusal`, in its words, which name the file (OV-2948); any other error as it is, which
+ * the notice normalizes (FL-14). A falsy rejection has no words.
  * @param {unknown} file
  * @returns {Promise<string>}
  */
 const readAnnotationTableText = (file) => readFileText(file).catch((error) => {
   const shown = normalizeUserFacingError(/** @type {Record<string, unknown> | null} */ (error || null), { stage: 'read' });
-  throw shown?.code === 'UNKNOWN' && error instanceof Error ? error : new AnnotationReadRefusal(shown?.summaryParts ?? []);
+  throw shown?.code === 'UNKNOWN' && error instanceof Error ? error : new AnnotationTableRefusal(shown?.summaryParts ?? []);
 });
 
 /**
- * The panel notice of a failed import: a read refusal in its own words, any other error as it is.
- * @param {Error} error
+ * The panel notice of a failed import: a refused read or table in its own words, any other failure in its normalized
+ * parts, never its raw text; worded where the panel shows it (OV-3683).
+ * @param {unknown} error
  * @returns {Wording}
  */
-const importFailureNotice = (error) => () => t('Could not import annotations: {reason}', {
-  reason: error instanceof AnnotationReadRefusal ? errorText(error.parts) : error.message
-});
+const importFailureNotice = (error) => {
+  /** @type {readonly ErrorTextPart[]} */
+  const parts = error instanceof AnnotationTableRefusal ? error.parts : normalizeCaughtError(error, { stage: 'parse' }).summaryParts;
+  return () => t('Could not import annotations: {reason}', { reason: errorText(parts) });
+};
 
 /** The panel notice of Add selected features on a Result without feature identities. @type {Wording} */
 const REGENERATE_TO_ANNOTATE_NOTICE = () => t('Generate the diagram again to annotate the selected features.');

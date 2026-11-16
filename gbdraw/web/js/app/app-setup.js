@@ -182,6 +182,7 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions, featureNameParts } from './similarity-alignment.js';
+import { alignmentFeatureName, alignmentRecordName } from '../services/alignment-review-view.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createRecordPositionReset } from './record-position-reset.js';
@@ -480,7 +481,7 @@ const shownResultFeatures = (recordKey) => {
     const featureId = String(row.biologicalFeatureId ?? '');
     if (!featureId || seen.has(featureId)) return [];
     seen.add(featureId);
-    return [{ featureId, label: featureNameParts({ biologicalFeatureId: featureId }, row).label }];
+    return [{ featureId, label: alignmentFeatureName(featureNameParts({ biologicalFeatureId: featureId }, row)).label }];
   });
 };
 
@@ -997,7 +998,7 @@ export const createAppSetup = () => {
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor, linearWindowsOf: linearDrawingWindowsOf,
     linearRecordStatusFor: linearRecordSelector.statusFor,
-    linearRecordErrorFor: linearRecordSelector.errorFor,
+    linearRecordErrorModelFor: linearRecordSelector.errorModelFor,
     runUndoable: history.runUndoable,
     getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   // Every write of a record source (a Circular file, an input type, the Linear
@@ -2035,7 +2036,7 @@ export const createAppSetup = () => {
   const featureRecordRotationUnavailable = computed(() => {
     const { targetFailure, disabledReason } = featureRecordRotation.draft;
     return targetFailure && targetFailure !== RECORD_TARGET_NOT_DISCOVERED && !recordActionsExpanded.value
-      ? disabledReason : '';
+      ? errorText(disabledReason) : '';
   });
   // Cancel discards the draft and starts a fresh one for the open popup, as
   // opening the popup does, so a record found unusable stays explained.
@@ -3985,6 +3986,9 @@ export const createAppSetup = () => {
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,
     similarityAlignmentReview,
+    // The Review panel words the draft's record and feature names where it shows them (OV-3676).
+    alignmentRecordName,
+    alignmentFeatureName,
     similarityAlignmentEditorDisabledReason,
     similarityAlignmentCanvasHover,
     previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,

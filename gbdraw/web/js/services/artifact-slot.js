@@ -5,6 +5,7 @@
 // Session Save writes it and Session Load builds it (`services/config.js`).
 import { emptyProteinIdentityManifest } from './losat-cache.js';
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
+/** @import { ErrorTextPart } from '../utils/error-normalization.js' */
 /** @import { PythonLegendKey } from './legend-svg.js' */
 
 /**
@@ -12,7 +13,8 @@ import { emptyProteinIdentityManifest } from './losat-cache.js';
  * `state.setFeatureEditorStatus` writes it; the Editor header reads it (`featureEditorStatusText`).
  * @typedef {object} FeatureEditorStatus
  * @property {'idle' | 'summary-ready' | 'failed'} status `failed`: Load could not recover the feature metadata.
- * @property {string | null} error The failure, or the warning of a recovered Load (the Editor header's title).
+ * @property {readonly ErrorTextPart[] | null} error The failure, or the warning of a recovered Load, as error text parts:
+ *   data that History and the slot keep, worded with `errorText` where the Editor header's title shows it (OV-3676).
  */
 /** @type {Readonly<FeatureEditorStatus>} */
 export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error: null });

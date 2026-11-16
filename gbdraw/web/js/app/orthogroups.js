@@ -35,7 +35,7 @@ import {
   uniqueOrthogroupEntries,
   withLegacyCanonicalIdentity
 } from '../services/feature-identity.js';
-import { msg, t, tm } from '../utils/i18n.js';
+import { msg, t, tm, tn } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureSvgRoot } from '../services/feature-dom.js' */
@@ -47,7 +47,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
 
-const { computed, nextTick, reactive, watch, toDisplayString } = window.Vue;
+const { computed, nextTick, reactive, watch } = window.Vue;
 
 const COPY_FEEDBACK_DURATION_MS = 1500;
 /** What a Copy button says for a moment after its text was copied. */
@@ -597,7 +597,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   };
 
   /** @param {GroupOrId} groupOrId */
-  const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
+  const orthogroupScopeLabel = (groupOrId) => tm(groupMetadataScopeLabel(orthogroupScope(groupOrId)));
 
   // The ids the rename tables hold. `Object.keys` is the Vue dependency: it
   // follows a key that is added or removed, and not a change of its text, so
@@ -671,8 +671,6 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   });
 
   const orthogroupRows = computed(() => {
-    /** @type {(count: string, noun: string) => string} */
-    const counted = (count, noun) => `${count} ${count === '1' ? noun : `${noun}s`}`;
     const drawing = shownLinearDrawing();
     return filteredOrthogroups.value.map((group) => ({
       group, id: group.id,
@@ -680,8 +678,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       // Only a scope other than the usual cross-record group is worth a word on the row.
       scopeLabel: orthogroupScope(group) === 'global' ? '' : orthogroupScopeLabel(group),
       countsLabel: [
-        counted(toDisplayString(group.member_count || getGroupMembers(group).length), 'gene'),
-        counted(toDisplayString(group.record_coverage_count || 0), 'record')
+        tn(Number(group.member_count || getGroupMembers(group).length), '{count} gene', '{count} genes'),
+        tn(Number(group.record_coverage_count || 0), '{count} record', '{count} records')
       ].join(' · '),
       renamed: isOrthogroupRenamed(group)
     }));

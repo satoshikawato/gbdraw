@@ -53,6 +53,7 @@ await writeFile(
     .replace("../contracts/request-shape.generated.js", new URL("../contracts/request-shape.generated.js", sourceRoot).href)
     .replace("../utils/contract-shape.js", new URL("../utils/contract-shape.js", sourceRoot).href)
     .replace("../utils/error-normalization.js", new URL("../utils/error-normalization.js", sourceRoot).href)
+    .replace("../utils/i18n.js", new URL("../utils/i18n.js", sourceRoot).href)
 );
 
 const { createLosatSettings } = await import(pathToFileURL(tempModulePath));

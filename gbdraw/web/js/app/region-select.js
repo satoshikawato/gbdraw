@@ -16,11 +16,12 @@ import {
 } from '../services/region-axis.js';
 import { copyPendingTextToClipboard } from '../utils/clipboard.js';
 import { normalizeCaughtError } from '../utils/error-normalization.js';
+/** @import { ErrorTextPart } from '../utils/error-normalization.js' */
 import { errorText } from '../utils/error-text.js';
 import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 import { isClickAtPress } from '../utils/popup-bounds.js';
 import { computed, reactive, ref, shallowRef } from '../utils/reactivity.js';
-import { t, tn } from '../utils/i18n.js';
+import { msg, t, tn } from '../utils/i18n.js';
 
 /** How far beside the feature tracks, in screen pixels, a press still starts a drag. */
 const BAND_SLACK_PX = 6;
@@ -416,11 +417,11 @@ export const createRegionSelect = ({
   };
 
   /**
-   * The open selection's action that waits on Python (Copy FASTA, Add to annotation set): busy while it runs, then its
-   * outcome text or the failure's.
-   * @type {{ selection: RegionSelection | null, name: RegionAction | '', busy: boolean, status: string, failed: boolean }}
+   * The open selection's action that waits on Python (Copy FASTA, Add to annotation set): busy while it runs, then the
+   * sentences of its outcome or of the failure, worded by the popup (`popup`), so a language change rewords them.
+   * @type {{ selection: RegionSelection | null, name: RegionAction | '', busy: boolean, status: ErrorTextPart[], failed: boolean }}
    */
-  const action = reactive({ selection: null, name: '', busy: false, status: '', failed: false });
+  const action = reactive({ selection: null, name: '', busy: false, status: [], failed: false });
   /**
    * Whether an action of this selection runs: the one state that disables every action button of its popup and that
    * makes every action refuse a click until it ends (OV-2561).
@@ -430,7 +431,7 @@ export const createRegionSelect = ({
   /** @param {RegionSelection} chosen @param {RegionAction} name The state of one action of this selection. */
   const actionView = (chosen, name) => {
     const own = action.selection === chosen && action.name === name;
-    return { busy: own && action.busy, status: own ? action.status : '', failed: own && action.failed };
+    return { busy: own && action.busy, status: own ? errorText(action.status) : '', failed: own && action.failed };
   };
 
   /** The Region popup's body: the feature count and the actions. */
@@ -461,21 +462,21 @@ export const createRegionSelect = ({
    * button is disabled (`popup.busy`), so a second click is never dropped behind an enabled button.
    * @param {RegionAction} name
    * @param {(chosen: RegionSelection) => Promise<unknown>} run
-   * @param {string} doneText
+   * @param {string} doneText The English catalog key of the outcome (`msg`), or '' for none.
    * @param {string} operation The operation a failure names.
    */
   const runAction = async (name, run, doneText, operation) => {
     const chosen = openSelection();
     if (!chosen || selectionBusy(chosen)) return false;
-    Object.assign(action, { selection: chosen, name, busy: true, status: '', failed: false });
+    Object.assign(action, { selection: chosen, name, busy: true, status: [], failed: false });
     try {
       await run(chosen);
-      if (action.selection === chosen) Object.assign(action, { busy: false, status: doneText, failed: false });
+      if (action.selection === chosen) Object.assign(action, { busy: false, status: doneText ? [{ text: doneText }] : [], failed: false });
       return true;
     } catch (error) {
       if (action.selection === chosen) {
         const failure = normalizeCaughtError(error, { operation, stage: 'helper' });
-        Object.assign(action, { busy: false, status: errorText(failure.summaryParts), failed: true });
+        Object.assign(action, { busy: false, status: failure.summaryParts, failed: true });
       }
       return false;
     }
@@ -495,7 +496,7 @@ export const createRegionSelect = ({
    * is allowed when the bases arrive.
    */
   const copyFasta = () => runAction(
-    'copy', (chosen) => copyPendingTextToClipboard(readRegionFasta(targetOf(chosen))), t('Copied FASTA'), 'readRecordSpanSequences'
+    'copy', (chosen) => copyPendingTextToClipboard(readRegionFasta(targetOf(chosen))), msg('Copied FASTA'), 'readRecordSpanSequences'
   );
 
   /**

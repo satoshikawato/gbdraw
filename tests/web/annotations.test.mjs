@@ -847,6 +847,46 @@ test('the panel notice rewords after a UI language change', async () => {
   }
 });
 
+// OV-3683: a table the import refuses is told in the refusal's own words, kept as error text parts, so the panel
+// notice words them in the shown language; the row, the column and the cell's value stay values.
+test('a refused table rewords inside the panel notice after a UI language change', async () => {
+  const { SOURCE_LOCALE, setUiLocale } = await load('utils/i18n.js');
+  const state = { annotationSets: [createAnnotationSet({ id: 'x' })], results: { value: [] },
+    adv: { circular_track_slots: [], linear_track_slots: [] } };
+  const notices = [];
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  /** @param {string} table */
+  const refusalOf = async (table) => {
+    await editor.importAnnotationTableFile({ target: { files: [{ name: 'a.tsv', text: async () => table }], value: 'a.tsv' } });
+    return notices.at(-1);
+  };
+  const span = await refusalOf('set_id\tid\tmark\tstart\tend\ns\ta\tband\t0\t30\n');
+  const cell = await refusalOf('set_id\tid\tmark\tstart\tend\tfill\ns\ta\tband\t1\t30\tnot-a-color\n');
+  const selector = await refusalOf('set_id\tid\tmark\trecord\tstart\tend\ns\ta\tband\t#x\t1\t30\n');
+  assert.equal(span(), 'Could not import annotations: Annotation table row 2: start and end must be positive integers (1-based coordinates).');
+  assert.equal(cell(), "Could not import annotations: Annotation table row 2, column 'fill': expected an SVG color name, #RGB or #RRGGBB.");
+  assert.equal(selector(), 'Could not import annotations: Annotation table row 2, column \'record\': Invalid record selector "#x". Use #<number> or record_id.');
+  // A failure the diagnostic model does not know shows its normalized sentence, never the exception's text (OV-3683).
+  await editor.importAnnotationTableFile({ target: { files: [{ name: 'a.tsv', text: async () => { throw new Error('internal read detail'); } }], value: 'a.tsv' } });
+  assert.match(notices.at(-1)(), /^Could not import annotations: The operation failed without recognized diagnostic information\./);
+  assert.doesNotMatch(notices.at(-1)(), /internal read detail/);
+  await setUiLocale('ja', async () => ({ default: {
+    'Could not import annotations: {reason}': '注釈を読み込めませんでした：{reason}',
+    'Annotation table row {row}: {reason}': '注釈表の{row}行目：{reason}',
+    "Annotation table row {row}, column '{column}': {reason}": '注釈表の{row}行目、列「{column}」：{reason}',
+    'start and end must be positive integers (1-based coordinates).': 'startとendは1以上の整数にしてください。',
+    'expected an SVG color name, #RGB or #RRGGBB.': 'SVGの色名、#RGB、#RRGGBBのいずれかにしてください。',
+    'Invalid record selector {selector}. Use #<number> or record_id.': 'レコードの指定{selector}は使えません。'
+  } }));
+  try {
+    assert.equal(span(), '注釈を読み込めませんでした：注釈表の2行目：startとendは1以上の整数にしてください。');
+    assert.equal(cell(), '注釈を読み込めませんでした：注釈表の2行目、列「fill」：SVGの色名、#RGB、#RRGGBBのいずれかにしてください。');
+    assert.equal(selector(), '注釈を読み込めませんでした：注釈表の2行目、列「record」：レコードの指定"#x"は使えません。');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
 // FL-14: a table without rows would remove every set, so the import asks.
 test('an import that would remove every set asks first, and Cancel keeps the sets', async () => {
   const state = { annotationSets: [createAnnotationSet({ id: 'kept', annotations: [

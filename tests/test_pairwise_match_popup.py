@@ -86,7 +86,8 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .read_text(encoding="utf-8")
         .replace("../contracts/request-shape.generated.js", "./request-shape.generated.mjs")
         .replace("../utils/contract-shape.js", "./contract-shape.mjs")
-        .replace("../utils/error-normalization.js", "./error-normalization.mjs"),
+        .replace("../utils/error-normalization.js", "./error-normalization.mjs")
+        .replace("../utils/i18n.js", "./i18n.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "contract-shape.mjs").write_text(
@@ -154,6 +155,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           orthogroupInIndex
         }} from {module_path.as_uri()!r};
         import {{ featureSequenceKey, readRowsFasta }} from {catalog_sequences_path.as_uri()!r};
+        import {{ renderErrorText }} from {(tmp_path / "error-normalization.mjs").as_uri()!r};
 
         const getOrthogroupById = (groups, id, scope = '') => (
           orthogroupInIndex(orthogroupIndexFor(groups), id, scope)
@@ -202,8 +204,8 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           if (!condition) throw new Error(message);
         }};
         const rowValue = (section, label) => {{
-          const row = section.rows.find((entry) => entry.label === label || entry.label === `${{label}}s`);
-          return row ? row.value : '';
+          const row = section.rows.find((entry) => entry.id === label || entry.id === `${{label}}s`);
+          return row ? row.value() : '';
         }};
 
         const attrs = new Map(Object.entries({{
@@ -448,7 +450,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         const invalidEntry = invalidSequencePayload.sequenceBundle.entries[0];
         assert(
           invalidEntry.available === false && invalidEntry.read === null
-            && invalidEntry.unavailableReason === 'The sequence identifier metadata for this match is invalid.',
+            && renderErrorText(invalidEntry.unavailableReason) === 'The sequence identifier metadata for this match is invalid.',
           JSON.stringify(invalidEntry)
         );
         assert(
@@ -479,7 +481,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           style: {{}},
           getAttribute: (name) => invalidSequenceAttrs.get(name) || ''
         }}, {{ matchSequenceRecords: null }}).sequenceBundle.entries[0];
-        assert(noRecordsEntry.read === null && noRecordsEntry.unavailableReason, JSON.stringify(noRecordsEntry));
+        assert(noRecordsEntry.read === null && renderErrorText(noRecordsEntry.unavailableReason), JSON.stringify(noRecordsEntry));
         invalidSequenceAttrs.set('data-query-record-index', '-1');
 
         const endpointPayload = (role, overrides = {{}}) => {{
@@ -720,25 +722,25 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(!payload.group, `Single-group view leaked: ${{JSON.stringify(payload.group)}}`);
         const block = payload.block;
         assert(block, 'Collinear block view missing');
-        const detailLabels = block.detailRows.map((row) => row.label);
+        const detailLabels = block.detailRows.map((row) => row.label());
         for (const forbidden of ['Match ID', 'Unit ID', 'Query unit', 'Subject unit', 'Similarity group ID']) {{
           assert(!detailLabels.includes(forbidden), `${{forbidden}} leaked: ${{JSON.stringify(detailLabels)}}`);
         }}
-        assert(block.pairCount === 2 && block.pairsLabel === '2 gene pairs', JSON.stringify(block));
-        assert(block.summaryText.startsWith('Collinear block: '), block.summaryText);
-        assert(block.summaryText.includes(' vs '), block.summaryText);
+        assert(block.pairCount === 2 && block.pairsLabel() === '2 gene pairs', JSON.stringify(block));
+        assert(block.summaryText().startsWith('Collinear block: '), block.summaryText());
+        assert(block.summaryText().includes(' vs '), block.summaryText());
         const queryRows = block.genePairs.map((pair) => pair.query);
         const subjectRows = block.genePairs.map((pair) => pair.subject);
         assert(queryRows.length === 2, JSON.stringify(queryRows));
         assert(queryRows.every((row) => row.canOpen), JSON.stringify(queryRows));
-        assert(queryRows.map((row) => row.label).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(queryRows));
-        assert(queryRows.every((row) => !`${{row.label}} ${{row.proteinId}} ${{row.copyText}}`.includes('p_record_a_')), JSON.stringify(queryRows));
+        assert(queryRows.map((row) => row.label()).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(queryRows));
+        assert(queryRows.every((row) => !`${{row.label()}} ${{row.proteinId}} ${{row.copyText}}`.includes('p_record_a_')), JSON.stringify(queryRows));
         assert(queryRows[0].subLabel === 'qlocus1 / qgene1', JSON.stringify(queryRows[0]));
         assert(queryRows[0].record === 'record_a', JSON.stringify(queryRows[0]));
         assert(queryRows[0].product === 'query product 1', JSON.stringify(queryRows[0]));
         assert(subjectRows.length === 2, JSON.stringify(subjectRows));
-        assert(subjectRows.map((row) => row.label).join(',') === 'SLOCUS_001,SLOCUS_002', JSON.stringify(subjectRows));
-        assert(subjectRows.every((row) => !`${{row.label}} ${{row.proteinId}} ${{row.copyText}}`.includes('gbd_r0002_cds000001')), JSON.stringify(subjectRows));
+        assert(subjectRows.map((row) => row.label()).join(',') === 'SLOCUS_001,SLOCUS_002', JSON.stringify(subjectRows));
+        assert(subjectRows.every((row) => !`${{row.label()}} ${{row.proteinId}} ${{row.copyText}}`.includes('gbd_r0002_cds000001')), JSON.stringify(subjectRows));
         assert(subjectRows[0].subLabel === 'subject display 1', JSON.stringify(subjectRows[0]));
         assert(subjectRows[0].feature.svg_id === 'fs1', JSON.stringify(subjectRows[0]));
         assert(block.genePairs.map((pair) => pair.group.id).join(',') === 'og_1,og_2', JSON.stringify(block.genePairs));
@@ -781,7 +783,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           }}]])
         }});
         const duplicateQuery = duplicatePayload.block.genePairs[0].query;
-        assert(duplicateQuery.label === 'BDV02135.1', JSON.stringify(duplicateQuery));
+        assert(duplicateQuery.label() === 'BDV02135.1', JSON.stringify(duplicateQuery));
         assert(duplicateQuery.subLabel === 'HPAVJP_0240', JSON.stringify(duplicateQuery));
         assert(!duplicateQuery.subLabel.includes(' / HPAVJP_0240'), JSON.stringify(duplicateQuery));
 
@@ -806,7 +808,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(payload.blockOrthogroups.length === 2, JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[0].id === 'og_1', JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[0].displayName === 'orthogroup display', JSON.stringify(payload.blockOrthogroups[0]));
-        assert(payload.blockOrthogroups[0].technicalRows.some((row) => row.label === 'Similarity group ID' && row.value === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].technicalRows));
+        assert(payload.blockOrthogroups[0].technicalRows.some((row) => row.id === 'Similarity group ID' && row.value() === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].technicalRows));
         const reverseMember = payload.blockOrthogroups[0].memberRows.find((row) => row.proteinId === 'CAG34720.1');
         // A member row names the read of its sequences by its catalog identity; the popup builds no FASTA when it
         // opens, and the FASTA built from Python's reply carries the member's header (D5).

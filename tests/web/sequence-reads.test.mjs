@@ -9,6 +9,7 @@ import { createCatalogSequences, featureSequenceKey } from '../../gbdraw/web/js/
 import { buildFeaturePopup } from '../../gbdraw/web/js/services/feature-popup.js';
 import { matchSpanUnavailableReason } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { MATCH_SPAN_REASONS } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { renderErrorText } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const feat = {
   id: 'rec-1\u0000kinase', recordKey: 'rec-1', biologicalFeatureId: 'kinase', record_id: 'REC', type: 'CDS',
@@ -107,7 +108,7 @@ test('a discarded tab read stops reading when its popup is no longer shown', asy
 
 const entryOf = (role, read) => ({
   span: { role, recordId: 'REC', start: 1, end: 4, displayRole: role === 'query' ? 'Query' : 'Subject' },
-  orientation: '+', sequenceLength: 4, read, available: Boolean(read), unavailableReason: read ? '' : 'never supplied',
+  orientation: '+', sequenceLength: 4, read, available: Boolean(read), unavailableReason: read ? [] : [{ text: 'never supplied', verbatim: true }],
   matchId: 'm1', filename: `m1_${role}.fna`
 });
 const bundleOf = (entries) => ({ entries, combinedFilename: 'm1_both.fna', read: { status: '', error: null, retry: null } });
@@ -143,7 +144,7 @@ test('both spans are offered only when every span can be read, and a span unread
   assert.equal(reads.spansReadable(partial.entries), false);
   assert.equal(await reads.spanAction(partial, partial.entries, 'download'), false);
   assert.deepEqual(downloaded, [], 'no file holds the query span alone');
-  assert.equal(partial.entries[1].unavailableReason, 'never supplied');
+  assert.equal(renderErrorText(partial.entries[1].unavailableReason), 'never supplied');
 
   const both = bundleOf([
     entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }),
@@ -154,7 +155,7 @@ test('both spans are offered only when every span can be read, and a span unread
     : { status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8 })));
   assert.equal(await reads.spanAction(both, both.entries, 'copy'), false);
   assert.deepEqual(copied, [], 'the clipboard gets no part of the pair');
-  assert.deepEqual(both.entries.map((entry) => [entry.available, entry.unavailableReason]), [
+  assert.deepEqual(both.entries.map((entry) => [entry.available, renderErrorText(entry.unavailableReason)]), [
     [true, ''], [false, 'Coordinates exceed the sequence length (8 bp).']
   ]);
   assert.equal(both.read.status, '', 'the reason shows in the span\'s row');
@@ -168,7 +169,7 @@ test('a span Python cannot read shows its reason in its row and copies nothing',
   const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 })]);
   assert.equal(await reads.spanAction(bundle, bundle.entries, 'copy'), false);
   assert.equal(bundle.entries[0].available, false);
-  assert.equal(bundle.entries[0].unavailableReason, 'Coordinates exceed the sequence length (8 bp).');
+  assert.equal(renderErrorText(bundle.entries[0].unavailableReason), 'Coordinates exceed the sequence length (8 bp).');
   assert.equal(bundle.read.status, '', 'the reason shows in the span\'s row');
   assert.deepEqual(copied, []);
 });
@@ -177,9 +178,9 @@ test('a span Python cannot read shows its reason in its row and copies nothing',
 test('each reason a span cannot be read shows the match popup\'s text from before D5', () => {
   const entry = entryOf('query', { kind: 'reference', recordId: 'NC_1', recordKey: null, start: 1, end: 4 });
   entry.span.recordId = 'NC_1';
-  const textOf = (reason) => matchSpanUnavailableReason(entry, {
+  const textOf = (reason) => renderErrorText(matchSpanUnavailableReason(entry, {
     status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '', sourceLength: 12345
-  });
+  }));
   assert.deepEqual(Object.fromEntries(MATCH_SPAN_REASONS.map((reason) => [reason, textOf(reason)])), {
     NEVER_SUPPLIED: 'Comparison sequence was not supplied for this BLAST source.',
     SOURCE_UNAVAILABLE: 'The sequence source for this match is unavailable.',
