@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -532,7 +533,8 @@ def test_a_web_saved_record_is_named_by_its_file_by_the_cli_replay_and_the_web(t
 _SESSIONS = ROOT / "tests" / "fixtures" / "sessions"
 # OV-3660: each fixture and the names Web Load gives its record files (logs of origin/dev 3377d9a7e, through
 # config.js importSession and Python's upgrade). The rule that names each: a binding name (Session 41), a CLI file
-# binding's slot (Sessions 31-33, CLI 42), the "<resource ID>-" prefix (Session 33), and a stored name (Session 50).
+# binding's slot (Sessions 31-33, CLI 42, and a Circular composite's components of CLI 44), the "<resource ID>-"
+# prefix (Session 33), and a stored name (Session 50).
 _LOADED_RECORD_NAMES = {
     "single.v41-bindings1.json": ["original.gb"],
     "lambda_basic_linear.v31-schema1.gbdraw-session.json.gz": ["NC_001416.gb"],
@@ -542,6 +544,9 @@ _LOADED_RECORD_NAMES = {
         "BGC0000708.gbk", "BGC0000709.gbk", "BGC0000711.gbk", "BGC0000712.gbk", "BGC0000713.gbk",
     ],
     "HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz": ["HmmtDNA.gbk"],
+    "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz": [
+        "SARS-CoV-1.gbk", "SARS-CoV-2.gbk", "MERS-CoV.gbk",
+    ],
 }
 
 
@@ -554,6 +559,45 @@ def test_the_cli_replay_names_an_older_sessions_records_as_web_load_does(tmp_pat
     assert completed.returncode == 0, completed.stderr[-2000:]
     lines = [line.removeprefix("INFO: ") for line in completed.stderr.splitlines() if line.startswith("INFO: Record ")]
     assert _record_names(lines) == _LOADED_RECORD_NAMES[fixture]
+
+
+_RESOURCE_ID_PREFIX_VECTORS = json.loads(
+    (ROOT / "tests" / "fixtures" / "resource-id-prefix-vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", _RESOURCE_ID_PREFIX_VECTORS, ids=lambda case: case["case"])
+def test_python_names_a_resource_that_stores_no_name_as_the_shared_vector_says(case: dict[str, str]) -> None:
+    """OV-3660: Python's prefix strip gives each case the name the Web's ``withoutResourceIdPrefix`` gives it
+    (tests/web/resource-id-prefix.test.mjs reads the same vector; tools/twins.json registers the twin)."""
+
+    from gbdraw.session_migration import _without_resource_id_prefix
+
+    assert _without_resource_id_prefix(case["resourceId"], case["name"]) == case["shown"]
+
+
+@pytest.mark.parametrize(
+    ("binding_name", "stored", "shown"),
+    [
+        # A binding's name comes first, as in Web Load (``resolveResourceFile``), then the stored name.
+        ("a.gb", {"resource-0001": "b.gb"}, "a.gb"),
+        (None, {"resource-0001": "b.gb"}, "b.gb"),
+        # A schema 1 binding without a name: the file is named as a resource that stores none.
+        ("", {}, "x.gb"),
+        (None, {}, "x.gb"),
+    ],
+)
+def test_loaded_names_follow_web_loads_order(binding_name: str | None, stored: dict[str, str], shown: str) -> None:
+    """OV-3660, review r1 LOW 2: Python names a loaded file in the order Web Load does."""
+
+    from gbdraw.session_migration import loaded_resource_display_names
+
+    binding = {"resourceId": "resource-0001", **({} if binding_name is None else {"name": binding_name})}
+    session = {
+        "resources": {"resource-0001": {"kind": "web-file", "name": "resource-0001-x.gb"}},
+        "webFiles": {"bindings": {"c_gb": binding}, "resourceOriginalNames": stored},
+    }
+    assert loaded_resource_display_names(session, cli_file_bindings=False) == {"resource-0001": shown}
 
 
 def test_the_cli_replay_names_two_files_of_one_name_as_its_fresh_render(tmp_path: Path) -> None:

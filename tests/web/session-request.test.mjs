@@ -6093,8 +6093,9 @@ assert.deepEqual(
 // gbdraw made (`sourceName: null`, a LOSAT result) or names no file for (an older writer: no `sourceName`) is written
 // as the request stored it, so a Generate or Save after Load names it as the search, as the CLI replay does.
 // OV-3592: what the request stored is the comparison's, not its table's: Load gives each draft row the stored name
-// (`loadedSourceName`), which the pair's edge keeps while it holds that file (as Save's `serializeActiveRenderFiles`
-// writes it), so two comparisons of one table keep their own names.
+// (`loadedSourceName`), which the pair's edge keeps while it holds that file; here the Save row is written by hand
+// (`rowOf`), so two comparisons of one table keep their own names. tests/web/loaded-comparison-names.test.mjs runs the
+// shipped chain (Load, the draft request a Save or a Generate writes, Undo and Redo).
 {
   const { adoptCurrentSessionResources, sessionResourceSource } = await import(
     pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))

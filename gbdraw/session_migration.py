@@ -183,23 +183,23 @@ _RECORD_SOURCE_SLOT_FIELDS: Mapping[str, Mapping[str, str]] = {
     "gffFasta": {"gff": "gffResourceId", "fasta": "fastaResourceId"},
     "fasta": {"fasta": "fastaResourceId"},
 }
-# The slots of a CLI file binding (``cliInvocation.fileBindings``) of Sessions 31-44: a Linear record's file and
-# the Circular record's file.
+# The slots of a CLI file binding (``cliInvocation.fileBindings``) of Sessions 31-44: a Linear record's file, the
+# Circular record's file, and the file of the i-th record of a Circular composite (``c_gb.components[i]``).
 _LINEAR_FILE_BINDING_SLOT = re.compile(r"(?:files\.)?linearSeqs\[(\d+)\]\.(gb|gff|fasta)")
-_CIRCULAR_FILE_BINDING_SLOT = re.compile(r"(?:files\.)?c_(gb|gff|fasta)")
+_CIRCULAR_FILE_BINDING_SLOT = re.compile(r"(?:files\.)?c_(gb|gff|fasta)(?:\.components\[(\d+)\])?")
 
 
 def _binding_names(value: object, names: dict[str, str]) -> None:
-    """Each name a Web file binding (schema 1 or 2, composites included) gives a resource, the first one first;
-    "" for a schema 1 binding without one, which names the file by its resource's name."""
+    """Each name a Web file binding (schema 1 or 2, composites included) gives a resource, the first one first. A
+    binding without a name (schema 1) gives none: Web Load names its file as a resource that stores no name."""
 
     if isinstance(value, list):
         for item in value:
             _binding_names(item, names)
     elif isinstance(value, Mapping):
         resource_id, name = value.get("resourceId"), value.get("name")
-        if isinstance(resource_id, str):
-            names.setdefault(resource_id, name if isinstance(name, str) else "")
+        if isinstance(resource_id, str) and isinstance(name, str) and name:
+            names.setdefault(resource_id, name)
         for item in value.values():
             if isinstance(item, (list, Mapping)):
                 _binding_names(item, names)
@@ -223,7 +223,7 @@ def _cli_binding_names(session: Mapping[str, object]) -> dict[str, str]:
         if linear := _LINEAR_FILE_BINDING_SLOT.fullmatch(slot):
             index, field_name = int(linear.group(1)), linear.group(2)
         elif circular := _CIRCULAR_FILE_BINDING_SLOT.fullmatch(slot):
-            index, field_name = 0, circular.group(1)
+            index, field_name = int(circular.group(2) or 0), circular.group(1)
         else:
             continue
         record = records[index] if index < len(records) else None
@@ -238,9 +238,10 @@ def _cli_binding_names(session: Mapping[str, object]) -> dict[str, str]:
 
 
 def _without_resource_id_prefix(resource_id: str, name: str) -> str:
-    """``name`` without each leading "<resource ID>-": the Web writer names a resource "<ID>-<file>". Web Load
-    shows a resource that stores no name so (``resolveResourceFile`` in ``services/session-request.js``), also in a
-    Session 45-51, which it reads without Python."""
+    """``name`` without each leading "<resource ID>-" while a name remains: the Web writer names a resource
+    "<ID>-<file>". Web Load shows a resource that stores no name so: ``withoutResourceIdPrefix`` in
+    ``services/session-request.js``, which also serves the Sessions 46-51 the Web reads without Python. The vector of
+    the tools/twins.json row ``vector:tests/fixtures/twins/resource-id-prefix.json`` pins both."""
 
     prefix = f"{resource_id}-"
     while name.startswith(prefix) and len(name) > len(prefix):
@@ -252,10 +253,13 @@ def loaded_resource_display_names(session: Mapping[str, object], *, cli_file_bin
     """The name each file of ``session`` (a document or one drawing's view) is shown by, as
     ``webFiles.resourceOriginalNames``: what `gbdraw render --session` and Web Load read (OV-3660, OV-3686).
 
-    A stored name stays. A resource without one is named by its Web file binding, else (``cli_file_bindings``: a
-    Session 31-44, which Python moves to the current writer for Web Load) by the CLI file binding of its record
-    slot, else by its name without the "<resource ID>-" prefix its writer gave it (Sessions 31-33 stored no name:
-    06e131414 added them for Session 34); a resource whose own name is the one shown gets no entry.
+    Each resource is named in the order Web Load names it (``resolveResourceFile`` in
+    ``services/session-request.js``): by the name its Web file binding gives it, else by its stored name, else
+    (``cli_file_bindings``: a Session 31-45, which Python moves to the current writer for Web Load) by the CLI file
+    binding of its record slot, else by its name without the "<resource ID>-" prefix its writer gave it (Sessions
+    31-33 stored no name: 06e131414 added them for Session 34). A resource whose own name is the one shown gets no
+    entry unless it stored one. The Web also takes the base name of each name and drops control characters
+    (``normalizeOriginalResourceName``); its writer stores names so, and this function returns them as stored.
     """
 
     web_files, resources = session.get("webFiles"), session.get("resources")
@@ -266,19 +270,23 @@ def loaded_resource_display_names(session: Mapping[str, object], *, cli_file_bin
         resource_id: name for resource_id, name in (stored_value.items() if isinstance(stored_value, Mapping) else ())
         if isinstance(resource_id, str)
     }
-    hints: dict[str, str] = {}
-    _binding_names(web_files.get("bindings") if isinstance(web_files, Mapping) else None, hints)
-    for resource_id, name in (_cli_binding_names(session) if cli_file_bindings else {}).items():
-        hints.setdefault(resource_id, name)
-    names: dict[str, object] = {}
+    bound: dict[str, str] = {}
+    _binding_names(web_files.get("bindings") if isinstance(web_files, Mapping) else None, bound)
+    cli = _cli_binding_names(session) if cli_file_bindings else {}
+    names: dict[str, object] = dict(stored)
     for resource_id, descriptor in resources.items():
-        if resource_id in stored or not isinstance(descriptor, Mapping):
+        if not isinstance(resource_id, str) or not isinstance(descriptor, Mapping):
             continue
-        own = str(descriptor.get("name") or "")
-        shown = (hints[resource_id] or own) if resource_id in hints else _without_resource_id_prefix(resource_id, own)
-        if shown and shown != own:
+        own, stored_name = str(descriptor.get("name") or ""), stored.get(resource_id)
+        shown = (
+            bound.get(resource_id)
+            or (stored_name if isinstance(stored_name, str) else "")
+            or cli.get(resource_id)
+            or _without_resource_id_prefix(resource_id, own)
+        )
+        if shown and (shown != own or resource_id in stored):
             names[resource_id] = shown
-    return {**names, **stored}
+    return names
 
 
 # Similarity-alignment flags a projected source session drops from its argv:

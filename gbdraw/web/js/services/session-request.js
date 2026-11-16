@@ -277,7 +277,8 @@ import {
   webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import {
-  LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, normalizeLinearComparisonPlan
+  LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, linearComparisonEdgeKey, loadedSourceNameField,
+  normalizeLinearComparisonPlan
 } from './linear-comparisons.js';
 import { createDefaultAdv, createDefaultForm, createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
@@ -1241,6 +1242,23 @@ const normalizeOriginalResourceName = (name) => {
     .trim();
   if (!basename || basename === '.' || basename === '..') return '';
   return basename.slice(0, 1024);
+};
+
+/**
+ * `name` without each leading "<resource ID>-" while a name remains: the Web writer names a resource "<ID>-<file>"
+ * (`normalizeResourceName`), so Load shows a resource that stores no name of its own by what follows. Python's
+ * `_without_resource_id_prefix` (gbdraw/session_migration.py) does the same for the CLI and for the Sessions it moves
+ * to the current writer; the vector of tools/twins.json row `vector:tests/fixtures/twins/resource-id-prefix.json`
+ * pins both.
+ * @param {string} resourceId
+ * @param {string} name
+ * @returns {string}
+ */
+export const withoutResourceIdPrefix = (resourceId, name) => {
+  const prefix = `${resourceId}-`;
+  let shown = name;
+  while (shown.startsWith(prefix) && shown.length > prefix.length) shown = shown.slice(prefix.length);
+  return shown;
 };
 
 /**
@@ -5545,13 +5563,8 @@ const resourcesWithOriginalNames = (resources, originalNameHints) => {
     : {};
   return Object.fromEntries(Object.entries(resources || {}).map(([resourceId, entry]) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [resourceId, entry];
-    const storedName = normalizeOriginalResourceName(entry.name);
-    const prefix = `${resourceId}-`;
-    let inferredName = storedName;
-    while (inferredName.startsWith(prefix) && inferredName.length > prefix.length) {
-      inferredName = inferredName.slice(prefix.length);
-    }
-    const originalName = normalizeOriginalResourceName(hints[resourceId]) || inferredName;
+    const originalName = normalizeOriginalResourceName(hints[resourceId])
+      || withoutResourceIdPrefix(resourceId, normalizeOriginalResourceName(entry.name));
     return [resourceId, originalName && originalName !== entry.name ? { ...entry, name: originalName } : entry];
   }));
 };
@@ -5604,6 +5617,30 @@ const storedComparisonFileName = (comparison) => (
 const loadedComparisonSourceName = (comparison) => {
   if (typeof comparison.sourceName === 'string') return { sourceName: comparison.sourceName };
   return Object.hasOwn(comparison, 'sourceName') ? { sourceName: null } : {};
+};
+
+/**
+ * The name a stored request holds for the table a Web file binding binds to a comparison-plan edge (`LoadedSourceName`),
+ * by the edge's ID and the resource the binding names; none when the request stores no comparison of that pair and
+ * table (the binding then holds a file the user chose after the request was written).
+ * @typedef {(edgeId: string, resourceId: string) => LoadedSourceName | undefined} LoadedSourceNameOf
+ */
+/**
+ * `LoadedSourceNameOf` for a Session: a Web Save binds a pair's table by the plan edge (`webFiles.bindings`), the
+ * request names it by the pair's records (`loadedComparisonSourceName`), and the stored plan gives each edge its pair.
+ * @param {readonly { queryUid: string, subjectUid: string, resourceId: string, loadedSourceName: LoadedSourceName }[]} stored
+ *   The request's nucleotide comparisons, by the uids of their records.
+ * @param {unknown} plan The stored draft's comparison plan (unvalidated).
+ * @returns {LoadedSourceNameOf}
+ */
+const storedComparisonSourceNames = (stored, plan) => {
+  const byTable = new Map(stored.map((comparison) => [
+    `${linearComparisonEdgeKey(comparison.queryUid, comparison.subjectUid)}\u0000${comparison.resourceId}`,
+    comparison.loadedSourceName
+  ]));
+  const pairs = new Map(normalizeLinearComparisonPlan(plan).edges
+    .map((edge) => [edge.id, linearComparisonEdgeKey(edge.queryUid, edge.subjectUid)]));
+  return (edgeId, resourceId) => (pairs.has(edgeId) ? byTable.get(`${pairs.get(edgeId)}\u0000${resourceId}`) : undefined);
 };
 
 /**
@@ -5665,14 +5702,15 @@ const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = nul
  * @param {{
  *   resolveResourceFile?: ResourceFileResolver | null,
  *   sessionResourceTable?: SessionResourceTable | null,
- *   adoptCanonicalPayloads?: boolean
+ *   adoptCanonicalPayloads?: boolean,
+ *   loadedSourceNameOf?: LoadedSourceNameOf
  * }} [options]
  */
 const applyWebFileBindings = (
   files,
   webMetadata,
   resources,
-  { resolveResourceFile = null, sessionResourceTable = null, adoptCanonicalPayloads = false } = {}
+  { resolveResourceFile = null, sessionResourceTable = null, adoptCanonicalPayloads = false, loadedSourceNameOf = () => undefined } = {}
 ) => {
   const bindings = webMetadata?.bindings;
   if (bindings === undefined) return files;
@@ -5733,7 +5771,11 @@ const applyWebFileBindings = (
       queryUid: String(comparison?.queryUid || ''),
       subjectUid: String(comparison?.subjectUid || ''),
       source: String(comparison?.source || 'upload'),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
+      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema),
+      // The name the request stored for the table this edge binds (OV-3592).
+      ...loadedSourceNameField(loadedSourceNameOf(
+        String(comparison?.id || ''), String(/** @type {UnvalidatedFields<'resourceId'>} */ (comparison?.file)?.resourceId || '')
+      ))
     }));
   }
   if (Array.isArray(bindings.linearCanonicalComparisons)) {
@@ -7062,7 +7104,9 @@ export const projectCanonicalSessionRequest = ({
     webMetadata = { ...webMetadata, bindings: explicitBindings };
   }
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
-  // The names a Session stored: a Web Save's, or those Python's move of a Session 31-44 to the current writer
+  /** @type {Parameters<typeof storedComparisonSourceNames>[0][number][]} The request's nucleotide comparisons (Linear). */
+  const storedComparisons = [];
+  // The names a Session stored: a Web Save's, or those Python's move of a Session 31-45 to the current writer
   // stores (`loaded_resource_display_names`, OV-3660).
   /** @type {Readonly<Record<string, unknown>>} */
   const originalNameHints = storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
@@ -7077,16 +7121,10 @@ export const projectCanonicalSessionRequest = ({
           sessionResourceTable,
           resourceId
         );
-        const storedName = normalizeOriginalResourceName(descriptor.name);
-        const prefix = `${resourceId}-`;
-        let inferredName = storedName;
-        while (inferredName.startsWith(prefix) && inferredName.length > prefix.length) {
-          inferredName = inferredName.slice(prefix.length);
-        }
+        // `String` is the property key the read used before: an id is text or a JSON value.
         const displayName = normalizeOriginalResourceName(metadata.name)
-          // `String` is the property key the read used before: an id is text or a JSON value.
           || normalizeOriginalResourceName(originalNameHints[String(resourceId)])
-          || inferredName;
+          || withoutResourceIdPrefix(String(resourceId), normalizeOriginalResourceName(descriptor.name));
         return createSessionResourceFileView(
           sessionResourceTable,
           resourceId,
@@ -7234,13 +7272,18 @@ export const projectCanonicalSessionRequest = ({
           files.linearSeqs[queryIndex].blast = file;
         }
         if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
+        const loadedSourceName = loadedComparisonSourceName(comparison);
         files.linearComparisons.push({
           id: `linear-comparison-canonical-${index + 1}`,
           queryUid: files.linearSeqs[queryIndex].uid,
           subjectUid: files.linearSeqs[subjectIndex].uid,
           source: 'upload',
           file,
-          loadedSourceName: loadedComparisonSourceName(comparison)
+          loadedSourceName
+        });
+        storedComparisons.push({
+          queryUid: files.linearSeqs[queryIndex].uid, subjectUid: files.linearSeqs[subjectIndex].uid,
+          resourceId: String(comparison.resourceId || ''), loadedSourceName
         });
       });
     (renderRequest.comparisons || []).forEach((/** @type {CanonicalComparison} */ comparison) => {
@@ -7526,7 +7569,10 @@ export const projectCanonicalSessionRequest = ({
     files,
     webMetadata,
     resources,
-    { resolveResourceFile, sessionResourceTable, adoptCanonicalPayloads }
+    {
+      resolveResourceFile, sessionResourceTable, adoptCanonicalPayloads,
+      loadedSourceNameOf: storedComparisonSourceNames(storedComparisons, storedConfig?.linearComparisonPlan)
+    }
   ));
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(

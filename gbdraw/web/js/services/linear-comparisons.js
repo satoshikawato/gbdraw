@@ -344,6 +344,20 @@ export const swapComparisonEdgeFile = (edge, file) => {
   delete edge.loadedSourceName;
 };
 
+/**
+ * Gives an edge back the file it held, with the name its loaded request stored for the file (`LoadedSourceName`,
+ * OV-3592): Load binds a stored table so, and Undo and Redo restore a step's file so. The edge's source, inclusion
+ * and file state stay as they are; no file leaves no name.
+ * @param {LinearComparisonEdge} edge Changed in place.
+ * @param {InputFileRef | null} file The ref of the file.
+ * @param {unknown} loadedSourceName The name the file's row holds (`loadedSourceNameField` reads it).
+ */
+export const restoreComparisonEdgeFile = (edge, file, loadedSourceName) => {
+  edge.file = file || null;
+  delete edge.loadedSourceName;
+  if (edge.file) Object.assign(edge, loadedSourceNameField(loadedSourceName));
+};
+
 /** @param {unknown} value */
 const isStored = (value) => value !== undefined && value !== null;
 /**

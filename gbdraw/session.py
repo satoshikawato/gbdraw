@@ -1038,7 +1038,7 @@ def _with_stored_file_names(
 
     fields = drawing.artifacts.fields
     version = fields.get("version")
-    # A Session 31-44 is read as Web Load reads Python's move of it to the current writer (OV-3660).
+    # A Session 31-45 is read as Web Load reads Python's move of it to the current writer (OV-3660).
     shown = loaded_resource_display_names(
         fields, cli_file_bindings=isinstance(version, int) and version < MODE_SCOPED_SESSION_MIN_VERSION,
     )
@@ -2340,7 +2340,7 @@ def mode_scoped_saved_protein_results(
 
 
 def _with_loaded_resource_names(document: SessionDocument) -> SessionDocument:
-    """``document`` (a Session 31-44 moved to the current writer) storing the name each of its files is shown by
+    """``document`` (a Session 31-45 moved to the current writer) storing the name each of its files is shown by
     (:func:`gbdraw.session_migration.loaded_resource_display_names`): the CLI replay and Web Load read it."""
 
     from gbdraw.session_migration import loaded_resource_display_names
