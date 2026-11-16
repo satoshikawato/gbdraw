@@ -171,8 +171,9 @@ nothing states that they are reviewed.
 ### 1.5 Length
 
 - CJK glyphs are about twice as wide as Latin letters at the same size, and
-  the CJK CSS raises 10–11 px text to 12 px. Count width, not characters.
-- Rail short names (52 px entries; 10 px, CJK 12 px, Thai 12 px): prefer a
+  CJK text keeps the English sizes (no CJK rule raises 10–11 px text). Count
+  width, not characters.
+- Rail short names (52 px entries; 10 px, CJK too, Thai 12 px): prefer a
   name that fits on one line (CJK at most 4 full-width glyphs, 5 at most;
   Latin about nine letters). A name never breaks inside a word in any
   locale: CJK words keep their glyphs together (`keep-all`) and Latin words
