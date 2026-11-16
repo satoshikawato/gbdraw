@@ -568,6 +568,30 @@ _PROTEIN_SETTINGS_WIRE: tuple[tuple[str, str, str], ...] = (
         "collinear_max_paralog_links_per_orthogroup",
     ),
 )
+# The command-line option of each setting (``describe_protein_comparison_flags``):
+# (wire key, key in its value or None, option or None when the command has
+# none), in ``_PROTEIN_SETTINGS_WIRE`` order. Words: a true or false value is
+# written "on" or "off", no value "none".
+_PROTEIN_SETTING_FLAGS: tuple[tuple[str, str | None, str | None], ...] = (
+    ("collinearityParams", "minAnchors", "--collinear_min_anchors"),
+    ("collinearityParams", "maxUnitGap", "--collinear_max_unit_gap"),
+    ("collinearityParams", "maxDiagonalDrift", "--collinear_max_diagonal_drift"),
+    ("collinearityParams", "maxConflicts", "--collinear_max_conflicts_in_merge_gap"),
+    ("collinearityParams", "mergeOrientation", "--collinear_merge_orientation"),
+    ("collinearityUnitMode", None, "--collinear_unit_mode"),
+    ("collinearityAnchorMode", None, "--collinear_anchor_mode"),
+    ("collinearitySearchScope", None, "--collinear_search_scope"),
+    ("collinearityColorMode", None, "--collinear_color_mode"),
+    ("losatpBin", None, "--losat_bin"),
+    ("ncbiBlastpBin", None, "--ncbi_blast_bin"),
+    ("losatpThreads", None, "--losat_threads"),
+    ("proteinBlastpMaxHits", None, "--losatp_max_hits"),
+    ("proteinBlastpCandidateLimit", None, "--losatp_max_target_seqs"),
+    ("orthogroupMembershipMode", None, None),
+    ("orthogroupMemberMaxHits", None, "--losatp_member_max_hits"),
+    ("collinearInferOrthogroups", None, "--collinear_infer_orthogroups"),
+    ("collinearMaxParalogLinksPerOrthogroup", None, "--collinear_max_paralog_links_per_orthogroup"),
+)
 # From this schema a comparison mode setting holds one of its names; older
 # schemas hold any spelling the option's normalizer reads (OV-651).
 _SETTING_NAMES_SCHEMA = 9
@@ -6238,6 +6262,56 @@ def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:
             "candidateLimit": _UNSET_LOSAT_SEARCH.losatp_max_target_seqs,
             "orthogroupMemberMaxHits": _UNSET_LOSAT_SEARCH.losatp_member_max_hits,
         },
+    }
+
+
+class ProteinSettingFlag(TypedDict):
+    """One command-line option of a ``generatedProteinComparison`` setting."""
+
+    setting: str
+    # The key in the setting's value (``collinearityParams``), else None.
+    parameter: str | None
+    # None: the command has no option for it.
+    flag: str | None
+    # What the command writes without the option.
+    cliDefault: object
+
+
+class ProteinComparisonFlags(TypedDict):
+    """``--losat losatp``: its ``--losatp_mode`` word per wire mode, each setting's option, and the word of a
+    setting value that is no number or text (true, false, no value)."""
+
+    program: str
+    modes: dict[str, str]
+    settings: list[ProteinSettingFlag]
+    words: dict[str, str]
+
+
+def describe_protein_comparison_flags() -> ProteinComparisonFlags:
+    """The command line of a ``generatedProteinComparison``, which the Web's Source recipe writes.
+
+    A setting's ``cliDefault`` is what ``gbdraw linear --losat losatp`` writes without its option: the settings
+    of the Linear option defaults with a LOSATP search of the search defaults.
+    """
+
+    defaults = _encode_protein_settings(
+        replace(_DEFAULT_LINEAR_OPTIONS, losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise"))
+    )
+    return {
+        "program": "losatp",
+        "modes": {wire: typed for typed, wire in LOSATP_MODE_WIRE.items() if wire != LOSATP_NO_SEARCH_MODE},
+        "settings": [
+            {
+                "setting": setting,
+                "parameter": parameter,
+                "flag": flag,
+                "cliDefault": (
+                    defaults[setting] if parameter is None else defaults[setting]["parameters"][parameter]
+                ),
+            }
+            for setting, parameter, flag in _PROTEIN_SETTING_FLAGS
+        ],
+        "words": {"true": "on", "false": "off", "null": "none"},
     }
 
 

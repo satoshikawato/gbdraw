@@ -134,7 +134,8 @@ const assertCliParserAccepts = async (recipe) => {
   assert.equal(parsed.status, 0, parsed.stderr);
 };
 
-const materializeAndRunRecipe = async (session, recipe, info, fixture) => {
+// The recipe's files in a new folder: the generated ones and the session's resources under their recipe names.
+const materializeRecipe = async (session, recipe, info, fixture) => {
   const runDir = await mkdtemp(join(tmpdir(), 'gbdraw-source-recipe-'));
   const generatedFiles = Array.isArray(info.sourceRecipe.generatedFiles)
     ? info.sourceRecipe.generatedFiles
@@ -157,6 +158,11 @@ const materializeAndRunRecipe = async (session, recipe, info, fixture) => {
       : descriptor.data;
     await writeFile(join(runDir, name), data);
   }
+  return runDir;
+};
+
+const materializeAndRunRecipe = async (session, recipe, info, fixture) => {
+  const runDir = await materializeRecipe(session, recipe, info, fixture);
   const args = info.sourceRecipe.commandArgs.slice(2);
   const executed = spawnSync(
     process.env.PYTHON || 'python',
@@ -1074,8 +1080,9 @@ for (const sourceName of ['alpha_vs_beta.tsv', null]) {
   }];
   const sourceRecipe = await buildSourceRecipe(unboundGeneratedProtein);
 
+  // A protein search is projected (OV-3590); one without its settings is malformed.
   assert.equal(sourceRecipe.available, false);
-  assert.match(sourceRecipe.unavailableReason, /comparison.*lossless|binding/i);
+  assert.match(sourceRecipe.unavailableReason, /comparisons\[0\]\.settings\.collinearityParams" is malformed/);
 }
 
 {
@@ -2500,4 +2507,162 @@ test('the Source recipe names a window of a record without a selector by its pla
   const cropped = [...output.matchAll(/<g [^>]*data-gbdraw-record-source-start="2"[^>]*>/g)]
     .map(([tag]) => tag.match(/data-gbdraw-record-id="([^"]*)"/)?.[1]);
   assert.deepEqual(cropped, ['recc']);
+});
+
+// OV-3590: a Linear request with a protein comparison, or a CLI comparison Session (whose request holds the protein
+// pipeline marker of mode none), has a Source recipe, and the request the CLI builds from it compares what the Web's
+// compares. The CLI's request is read without running LOSAT: its arguments, read by the CLI, planned and encoded.
+const cliComparisonsOf = async (session, recipe, fixture) => {
+  const info = buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe });
+  const runDir = await materializeRecipe(session, recipe, info, fixture);
+  return evaluatePython([
+    'import os',
+    'from gbdraw.api.request_render import plan_linear_request',
+    'from gbdraw.linear import _get_args, _linear_request, _read_linear_inputs',
+    'from gbdraw.session_request_codec import encode_canonical_request',
+    'here = os.getcwd()',
+    'os.chdir(payload["dir"])',
+    'try:',
+    '    args = _get_args(payload["args"])',
+    '    request = plan_linear_request(_linear_request(args, _read_linear_inputs(args), None)).request',
+    '    result = encode_canonical_request(request).payload["comparisons"]',
+    'finally:',
+    '    os.chdir(here)'
+  ].join('\n'), { dir: runDir, args: info.sourceRecipe.commandArgs.slice(2) });
+};
+// Each comparison of `comparisons` with only the fields `fields` keeps.
+const comparisonFields = (comparisons, kind, fields) => comparisons
+  .filter((comparison) => comparison.kind === kind)
+  .map((comparison) => Object.fromEntries(fields.map((field) => [field, comparison[field]])));
+const proteinRecords = (names) => names.map((name, index) => ({
+  recordKey: name, cardinality: 'all', source: { kind: 'genbank', resourceId: `genome-${index + 1}` },
+  selector: null, windows: [], presentation: presentation()
+}));
+const proteinResources = async (names) => Object.fromEntries(await Promise.all(names.map(async (name, index) => [
+  `genome-${index + 1}`,
+  resource('genbank', `${name}.gbk`, await readFile(join(repoRoot, 'tests', 'test_inputs', `${name}.gbk`), 'utf8'))
+])));
+// The settings the CLI writes for `--losat losatp` without other options, as the Web writes them.
+const defaultProteinSettings = () => evaluatePython([
+  'from gbdraw.session_request_codec import describe_protein_comparison_flags',
+  'result = {}',
+  'for row in describe_protein_comparison_flags()["settings"]:',
+  '    if row["parameter"] is None:',
+  '        result[row["setting"]] = row["cliDefault"]',
+  '    else:',
+  '        result.setdefault(row["setting"], {"kind": "lossless", "parameters": {}})["parameters"][row["parameter"]] = row["cliDefault"]'
+].join('\n'), {});
+const proteinSession = async ({ names, comparisons, extraResources = {} }) => canonical({
+  mode: 'linear',
+  records: proteinRecords(names),
+  resources: { ...(await proteinResources(names)), ...extraResources },
+  comparisons,
+  webFiles: { resourceOriginalNames: Object.fromEntries(names.map((name, index) => [`genome-${index + 1}`, `${name}.gbk`])) }
+});
+const BLAST_ROW = 'BGC0000708\tBGC0000709\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n';
+
+test('the Source recipe of a LOSATP Pairwise Generate runs the search with its changed setting', async () => {
+  const settings = { ...(await defaultProteinSettings()), proteinBlastpMaxHits: 3 };
+  // What a Web Generate commits: the search's tables and the marker of mode none with the search's settings.
+  const session = await proteinSession({
+    names: ['BGC0000708', 'BGC0000709'],
+    extraResources: { 'comparison-protein-1': resource('canonical-tsv', 'comparison-protein-1.tsv', 'query\n') },
+    comparisons: [
+      { kind: 'precomputedProteinComparison', resourceId: 'comparison-protein-1', encoding: 'canonicalTsv',
+        queryRecordIndex: 0, subjectRecordIndex: 1 },
+      { kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings }
+    ]
+  });
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  await assertCliParserAccepts(recipe);
+  const cli = await cliComparisonsOf(session, recipe, 'losatp pairwise');
+  assert.deepEqual(comparisonFields(cli, 'generatedProteinComparison', ['mode', 'pairs', 'settings']), [
+    { mode: 'pairwise', pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }], settings }
+  ]);
+});
+
+test('the Source recipe of a loaded CLI -b Session gives its BLAST table', async () => {
+  const runDir = await mkdtemp(join(tmpdir(), 'gbdraw-cli-blast-session-'));
+  for (const name of ['BGC0000708', 'BGC0000709']) {
+    await cp(join(repoRoot, 'tests', 'test_inputs', `${name}.gbk`), join(runDir, `${name}.gbk`));
+  }
+  await writeFile(join(runDir, 'pair.tsv'), BLAST_ROW);
+  const made = spawnSync(process.env.PYTHON || 'python', ['-m', 'gbdraw.cli', 'linear', '--gbk', 'BGC0000708.gbk',
+    'BGC0000709.gbk', '-b', 'pair.tsv', '-o', 'cli-blast', '-f', 'svg', '--session_output', 'cli-blast.gbdraw'], {
+    cwd: runDir, encoding: 'utf8', timeout: 120_000,
+    env: { ...process.env, PYTHONPATH: [repoRoot, process.env.PYTHONPATH].filter(Boolean).join(delimiter) }
+  });
+  assert.equal(made.status, 0, made.stderr);
+  const saved = await readSavedSession(new Blob([await readFile(join(runDir, 'cli-blast.gbdraw'))]));
+  const cliSession = savedDrawingView(saved, saved.ui.activeDrawingId);
+  // The stored request holds the CLI's whole config, which Load reads into the controls; a Generate after Load writes
+  // the controls' options and keeps the stored comparisons as they are (services/session-request.js).
+  const stored = cliSession.renderRequest.comparisons;
+  assert.deepEqual(stored.map(({ kind, mode }) => [kind, mode ?? null]),
+    [['nucleotideBlast', null], ['generatedProteinComparison', 'none']]);
+  const session = canonical({
+    mode: 'linear',
+    records: cliSession.renderRequest.records,
+    resources: cliSession.resources,
+    comparisons: stored,
+    webFiles: { resourceOriginalNames: Object.fromEntries(Object.entries(cliSession.resources)
+      .map(([id, descriptor]) => [id, descriptor.name.replace(`${id}-`, '')])) }
+  });
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  assert.equal(recipe.args.includes('--losat'), false);
+  await assertCliParserAccepts(recipe);
+  const cli = await cliComparisonsOf(session, recipe, 'cli -b session');
+  const kept = ['kind', 'queryRecordIndex', 'subjectRecordIndex', 'mode', 'pairs', 'settings'];
+  const view = (comparisons) => comparisons.map((comparison) => Object.fromEntries(
+    kept.filter((field) => Object.hasOwn(comparison, field)).map((field) => [field, comparison[field]])));
+  assert.deepEqual(view(cli), view(stored));
+});
+
+test('the Source recipe of a Similarity groups Generate runs the search with its changed setting', async () => {
+  const settings = { ...(await defaultProteinSettings()), collinearMaxParalogLinksPerOrthogroup: 3 };
+  const session = await proteinSession({
+    names: ['BGC0000708', 'BGC0000709'],
+    extraResources: {
+      'comparison-protein-1': resource('canonical-tsv', 'comparison-protein-1.tsv', 'query\n'),
+      'comparison-orthogroups': resource('orthogroup-result', 'comparison-orthogroups.json', '{}')
+    },
+    comparisons: [
+      { kind: 'precomputedProteinComparison', resourceId: 'comparison-protein-1', encoding: 'canonicalTsv',
+        queryRecordIndex: 0, subjectRecordIndex: 1 },
+      { kind: 'orthogroupResult', resourceId: 'comparison-orthogroups', encoding: 'canonicalJson' },
+      { kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings }
+    ]
+  });
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  assert.equal(recipe.args.includes('--comparisons_table'), false);
+  await assertCliParserAccepts(recipe);
+  const cli = await cliComparisonsOf(session, recipe, 'losatp similarity groups');
+  assert.deepEqual(comparisonFields(cli, 'generatedProteinComparison', ['mode', 'pairs', 'settings']), [
+    { mode: 'orthogroup', pairs: [], settings }
+  ]);
+});
+
+test('the Source recipe lists a selected LOSATP pair and a BLAST table in one comparisons table', async () => {
+  const settings = await defaultProteinSettings();
+  const session = await proteinSession({
+    names: ['BGC0000708', 'BGC0000709', 'BGC0000711'],
+    extraResources: { 'comparison-nucleotide-1': resource('nucleotide-blast', 'pair.tsv', BLAST_ROW) },
+    comparisons: [
+      { kind: 'nucleotideBlast', resourceId: 'comparison-nucleotide-1', queryRecordIndex: 0, subjectRecordIndex: 1,
+        sourceName: 'pair.tsv' },
+      { kind: 'generatedProteinComparison', mode: 'pairwise', pairs: [{ queryRecordIndex: 1, subjectRecordIndex: 2 }],
+        settings }
+    ]
+  });
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  await assertCliParserAccepts(recipe);
+  const cli = await cliComparisonsOf(session, recipe, 'selected losatp pair');
+  assert.deepEqual(comparisonFields(cli, 'nucleotideBlast', ['queryRecordIndex', 'subjectRecordIndex']),
+    [{ queryRecordIndex: 0, subjectRecordIndex: 1 }]);
+  assert.deepEqual(comparisonFields(cli, 'generatedProteinComparison', ['mode', 'pairs', 'settings']),
+    [{ mode: 'pairwise', pairs: [{ queryRecordIndex: 1, subjectRecordIndex: 2 }], settings }]);
 });
