@@ -14,10 +14,17 @@ export const writtenResourcesWith = ({ fileBackedReaderOf, storedResourceBytes }
 );
 
 /**
+ * A Session document as a test reads and edits it: its drawing entries and
+ * its app UI, each other field as the file holds it.
+ * @typedef {{ id: string, mode: 'circular' | 'linear', config: Record<string, unknown>, cliOptions?: unknown }} SessionDrawingEntry
+ * @typedef {{ drawings: SessionDrawingEntry[], ui: Record<string, unknown>, [field: string]: unknown }} SessionDocument
+ */
+
+/**
  * A Gallery Session as a Session file container, its document changed by
  * `edit` first.
  * @param {string} id
- * @param {(document: Record<string, any>) => void} [edit]
+ * @param {(document: SessionDocument) => void} [edit]
  * @returns {Promise<Blob>}
  */
 export const gallerySessionFile = async (id, edit = () => {}) => {
@@ -30,7 +37,7 @@ export const gallerySessionFile = async (id, edit = () => {}) => {
  * The Session file `blob` with its document changed by `edit`, its resource
  * entries as they are.
  * @param {Blob} blob
- * @param {(document: Record<string, any>) => void} edit
+ * @param {(document: SessionDocument) => void} edit
  * @returns {Promise<Blob>}
  */
 export const editedSessionFile = async (blob, edit) => {
@@ -42,7 +49,7 @@ export const editedSessionFile = async (blob, edit) => {
 /**
  * A Session file container's document and the bytes of each resource entry.
  * @param {Blob} blob
- * @returns {Promise<{ document: Record<string, any>, bytes: Record<string, Uint8Array> }>}
+ * @returns {Promise<{ document: SessionDocument, bytes: Record<string, Uint8Array> }>}
  */
 export const readSessionFile = async (blob) => {
   const { openSessionContainerEntry, readSessionContainer } = await import('../../../gbdraw/web/js/services/session-container.js');
@@ -52,12 +59,12 @@ export const readSessionFile = async (blob) => {
   for (const [resourceId, entry] of Object.entries(read.resources)) {
     bytes[resourceId] = new Uint8Array(await new Response(openSessionContainerEntry(blob, entry)).arrayBuffer());
   }
-  return { document: /** @type {Record<string, any>} */ (read.document), bytes };
+  return { document: /** @type {SessionDocument} */ (read.document), bytes };
 };
 
 /**
  * A Session file container of `document` whose resource entries hold `bytes`.
- * @param {Record<string, any>} document
+ * @param {SessionDocument} document
  * @param {Record<string, Uint8Array>} bytes
  * @returns {Promise<Blob>}
  */

@@ -9,13 +9,16 @@
 // A sample is a function of (mode, drawing, context):
 // - `mode` is the drawing's mode ('circular' or 'linear');
 // - `drawing` is the drawing the sample goes into, read for the member's
-//   current value (a sample of an object member changes one field of it) and
-//   for the records it binds;
+//   current value (a sample of an object member changes every leaf of it,
+//   `variedLeaves`) and for the records, rows, and ring tables it binds;
 // - `context` holds `registerFile(file)`, which registers a File in the
 //   project's file store (`state.inputFiles`) and returns its binding.
 // A member whose sample needs more than a new drawing holds lists it in
 // `needs`: 'records' (the drawing binds a GenBank file of two records, whose
-// cards or rows the sample names), 'groups' (the drawing holds a Result with
+// cards or rows the sample names), 'rings' (a Circular drawing binds a ring
+// table, whose ring row the sample changes), 'rows' (a Linear drawing has two
+// record rows, each with its own file, which the sample's comparison edge
+// pairs), 'groups' (the drawing holds a Result with
 // Similarity groups, whose ids the sample names), or 'comparison' (the
 // drawing holds a Result with a comparison read from a CLI table). A context
 // inside the drawing's own slices is `prepare(drawing)` (the queued palette a
@@ -57,15 +60,16 @@ import { LINEAR_LABEL_VISIBILITY_MODES } from '../../../gbdraw/web/js/services/l
 import { GC_CONTENT_MODES } from '../../../gbdraw/web/js/mode-profiles.js';
 import { CIRCULAR_RECORD_LAYOUTS } from '../../../gbdraw/web/js/services/one-circle-layout.js';
 import { CONSERVATION_COLOR_SCHEMES } from '../../../gbdraw/web/js/utils/conservation-colors.generated.js';
-import { LINEAR_COMPARISON_MODES } from '../../../gbdraw/web/js/services/linear-comparisons.js';
+import { LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, createLinearComparisonEdge } from '../../../gbdraw/web/js/services/linear-comparisons.js';
 
 /** @typedef {'circular' | 'linear'} Mode */
 /** @typedef {import('../../../gbdraw/web/js/state.js').DrawingState} DrawingState */
 /** @typedef {{ registerFile: (file: File) => unknown }} SampleContext */
+/** @typedef {'records' | 'rings' | 'rows' | 'groups' | 'comparison'} SampleNeed */
 /**
  * @typedef {object} MemberSample
  * @property {(mode: Mode, drawing: DrawingState, context: SampleContext) => unknown} value
- * @property {readonly string[]} [needs]
+ * @property {readonly SampleNeed[]} [needs]
  * @property {(drawing: DrawingState) => void} [prepare]
  * @property {readonly Mode[]} [modes]
  * @property {'default'} [otherModeLoad]
@@ -100,16 +104,21 @@ export const genbankFile = (name, ids) => new File([ids.map((id) => [
 // The leaves are the member's own, read from the drawing; a leaf takes the
 // first of its candidates that the member's Load reader, given that change
 // alone, keeps as a change, in the form the reader gives it (Load resolves a
-// track stack's sides, for one). The candidates: the values `LEAF_CHOICES`
-// names, then a boolean's negation, an integer one more or one less, another
-// number's half, 7 for null, and for a text the other mode's default or
-// 'sample'. `UNVARIED_LEAVES` lists, with the reason, each leaf that keeps the
-// drawing's value; tests/web/drawing-member-paths.test.mjs checks that no
-// other leaf does and that the reader keeps the whole sample.
+// track stack's sides, for one). The candidates: the values of the app's own
+// lists (`APP_LEAF_CHOICES`), then the values `OTHER_LEAF_CHOICES` names, then
+// a boolean's negation, an integer one more or one less, another number's
+// half, 7 for null, and for a text the other mode's default or 'sample'. The
+// reader must keep every value of an app list (`variedLeaves` reports each one
+// it does not, `refused`), so a reader that starts to refuse one valid value
+// fails even when another value still varies the leaf. `UNVARIED_LEAVES`
+// lists, with the reason, each leaf that keeps the drawing's value;
+// tests/web/drawing-member-paths.test.mjs checks that no other leaf does and
+// that the reader keeps the whole sample.
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-const leafPaths = (value, path = []) => (isPlainObject(value) && Object.keys(value).length
+/** The paths of the leaves of `value`. @param {unknown} value @param {string[]} [path] @returns {string[][]} */
+export const leafPaths = (value, path = []) => (isPlainObject(value) && Object.keys(value).length
   ? Object.entries(value).flatMap(([key, entry]) => leafPaths(entry, [...path, key])) : [path]);
-const leafAt = (value, path) => path.reduce((entry, key) => (isPlainObject(entry) ? entry[key] : undefined), value);
+export const leafAt = (value, path) => path.reduce((entry, key) => (isPlainObject(entry) ? entry[key] : undefined), value);
 const withLeaf = (value, [key, ...rest], leaf) => (key === undefined ? leaf : { ...value, [key]: withLeaf(value[key], rest, leaf) });
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const otherMode = (mode) => (mode === 'linear' ? 'circular' : 'linear');
@@ -137,68 +146,99 @@ const LOAD_READERS = {
 };
 /** The object members whose sample changes every leaf. */
 export const LEAF_VARIED_MEMBERS = Object.freeze(Object.keys(LOAD_READERS));
-// A sample window (`readLinearSeqWindows` form) and the choices of the
-// leaves whose reader takes a value only from a list, or whose type the
-// default (null, a list) does not show; `*` matches any one key.
-const SAMPLE_WINDOW = { start: 5, end: 25, reverseComplement: false, column: null, acrossOrigin: false };
+// The choices of the leaves whose reader takes a value only from a list, or
+// whose type the default (null, a list) does not show; `*` matches any one key.
 const COMPARISON_SETTINGS = CANONICAL_REQUEST_DESCRIPTION.types.CanonicalProteinComparisonSettings.fields;
-const COLOR = ['#123456'];
-const LEAF_CHOICES = {
+// A request literal's values, but its alias spellings (a reader reads an
+// alias as the value it spells: `either` is `strand`).
+const literalValues = (field) => field.values.filter((value) => !Object.hasOwn(field.spellings?.aliases ?? {}, value));
+// The values of a list the app exports (its option lists and generated contracts).
+const APP_LEAF_CHOICES = {
   form: {
-    track_type: ['spreadout', 'middle'], linear_track_layout: LINEAR_TRACK_LAYOUTS, scale_style: ['ruler'],
-    labels_mode: ['out'], show_labels_linear: ['all'], circular_record_selector: ['#2'], circular_range_fields_record: ['REC_A'],
-    circular_region_start: [10], circular_region_end: [30], linear_wrap_length: [5000],
-    circular_windows: [[SAMPLE_WINDOW]],
-    circular_record_ranges: [[{ source: 'sample-card', record: 'REC_A', windows: [SAMPLE_WINDOW] }]],
+    linear_track_layout: LINEAR_TRACK_LAYOUTS,
     figure_width: FIGURE_LENGTH_UNITS.map((unit) => `180${unit}`), figure_height: FIGURE_LENGTH_UNITS.map((unit) => `120${unit}`)
   },
   adv: {
-    features: (leaf) => [leaf.slice(0, -1)], 'feature_shapes.*': FEATURE_RENDERING_VALUES, arrow_shaft_width_ratio: [0.5],
+    'feature_shapes.*': FEATURE_RENDERING_VALUES, label_placement: LINEAR_LABEL_PLACEMENTS,
+    linear_accession_visibility: LINEAR_LABEL_VISIBILITY_MODES, linear_length_visibility: LINEAR_LABEL_VISIBILITY_MODES,
+    depth_axis_labels: SCALAR_AXIS_LABELS.values, gc_content_axis_labels: SCALAR_AXIS_LABELS.values, gc_content_mode: GC_CONTENT_MODES,
+    multi_record_size_mode: CIRCULAR_MULTI_RECORD_SIZE_MODES, circular_record_layout: CIRCULAR_RECORD_LAYOUTS
+  },
+  losat: {
+    'blastp.mode': PROTEIN_BLASTP_MODES,
+    'blastp.orthogroupMembershipMode': literalValues(COMPARISON_SETTINGS.orthogroupMembershipMode),
+    'blastp.collinearColorMode': literalValues(COMPARISON_SETTINGS.collinearityColorMode),
+    'blastp.collinearUnitMode': literalValues(COMPARISON_SETTINGS.collinearityUnitMode),
+    'blastp.collinearAnchorMode': literalValues(COMPARISON_SETTINGS.collinearityAnchorMode),
+    'blastp.collinearMergeOrientation': literalValues(CANONICAL_REQUEST_DESCRIPTION.types.CanonicalLosslessCollinearityParameters.fields.mergeOrientation),
+    'blastp.collinearSearchScope': literalValues(COMPARISON_SETTINGS.collinearitySearchScope)
+  },
+  layoutPreferences: { 'circular.*.legend': LEGEND_POSITIONS.circular, 'linear.legend': LEGEND_POSITIONS.linear },
+  circularConservation: { colorScheme: Object.keys(CONSERVATION_COLOR_SCHEMES) },
+  linearComparisonPlan: { mode: Object.values(LINEAR_COMPARISON_MODES), defaultSource: Object.values(LINEAR_COMPARISON_SOURCES) }
+};
+// Literals where the app exports no list, and values built from the leaf or
+// the drawing (a function of `(leaf, drawing)`).
+const SAMPLE_WINDOW = { start: 5, end: 25, reverseComplement: false, column: null, acrossOrigin: false };
+const COLOR = ['#123456'];
+const OTHER_LEAF_CHOICES = {
+  form: {
+    // literals: the app exports no list of these
+    track_type: ['spreadout', 'middle'], scale_style: ['ruler'], labels_mode: ['out'], show_labels_linear: ['all'],
+    circular_record_selector: ['#2'], circular_range_fields_record: ['REC_A'],
+    circular_region_start: [10], circular_region_end: [30], linear_wrap_length: [5000],
+    // a window as `readLinearSeqWindows` gives it
+    circular_windows: [[SAMPLE_WINDOW]],
+    circular_record_ranges: [[{ source: 'sample-card', record: 'REC_A', windows: [SAMPLE_WINDOW] }]]
+  },
+  adv: {
+    features: (leaf) => [leaf.slice(0, -1)], arrow_shaft_width_ratio: [0.5],
+    // literals: the app exports no list of these
     font_family: ['serif'], nt: ['AT'], evalue: ['1e-10'], label_rendering: ['embedded_only'], circular_label_placement: ['radial'],
-    label_placement: LINEAR_LABEL_PLACEMENTS, linear_accession_visibility: LINEAR_LABEL_VISIBILITY_MODES,
-    linear_length_visibility: LINEAR_LABEL_VISIBILITY_MODES,
+    circular_grouping_intent: ['circular'],
     'linear_definition_line_styles.*.font_weight': ['bold'], 'linear_definition_line_styles.*.fill': COLOR,
     block_stroke_color: COLOR, line_stroke_color: COLOR, axis_stroke_color: COLOR, scale_stroke_color: COLOR,
     ruler_label_color: COLOR, depth_color: COLOR,
     depth_tracks: [[{ label: 'Sample depth', color: '#123456', height: 9, large_tick_interval: 9, small_tick_interval: 3, tick_font_size: 9 }]],
-    depth_axis_labels: SCALAR_AXIS_LABELS.values, gc_content_axis_labels: SCALAR_AXIS_LABELS.values, gc_content_mode: GC_CONTENT_MODES,
     feature_density_tracks: [[{ id: 'density-1', query: { featureType: 'CDS', qualifier: null, value: null, minLength: null, maxLength: null },
       metric: 'count', style: 'heatmap', window: 1000, step: 500, color: null, caption: 'Sample density' }]],
-    identity_scale: [[40, 90]], multi_record_size_mode: CIRCULAR_MULTI_RECORD_SIZE_MODES,
-    multi_record_positions: [[{ selector: '#1', row: 2 }]], circular_record_layout: CIRCULAR_RECORD_LAYOUTS,
-    circular_grouping_intent: ['circular'], circular_track_slots_axis_index: [1], linear_track_slots_axis_index: [0],
+    identity_scale: [[40, 90]], multi_record_positions: [[{ selector: '#1', row: 2 }]],
+    // What choosing one circle keeps of the layout it leaves (`chooseRecordLayout`).
+    one_circle_left: () => [{ layout: 'separate', gc_content_mode: GC_CONTENT_MODES.at(-1), suppress_skew: true }],
+    circular_track_slots_axis_index: [1], linear_track_slots_axis_index: [0],
     // A row of each stack changed: the Features row's size.
     linear_track_slots: (slots) => [slots.map((slot) => (slot.id === 'features' ? { ...slot, height: '12' } : slot))],
     circular_track_slots: (slots) => [slots.map((slot) => (slot.id === 'features' ? { ...slot, width: 12 } : slot))]
   },
-  losat: {
-    outfmt: ['7'], 'blastn.task': ['blastn'], 'blastp.mode': PROTEIN_BLASTP_MODES,
-    'blastp.orthogroupMembershipMode': COMPARISON_SETTINGS.orthogroupMembershipMode.values,
-    'blastp.collinearColorMode': COMPARISON_SETTINGS.collinearityColorMode.values,
-    'blastp.collinearUnitMode': COMPARISON_SETTINGS.collinearityUnitMode.values,
-    'blastp.collinearAnchorMode': COMPARISON_SETTINGS.collinearityAnchorMode.values,
-    'blastp.collinearMergeOrientation': CANONICAL_REQUEST_DESCRIPTION.types.CanonicalLosslessCollinearityParameters.fields.mergeOrientation.values,
-    'blastp.collinearSearchScope': COMPARISON_SETTINGS.collinearitySearchScope.values
-  },
-  layoutPreferences: {
-    'circular.*.legend': LEGEND_POSITIONS.circular, 'linear.legend': LEGEND_POSITIONS.linear,
-    'circular.*.plotTitlePosition': ['top', 'bottom', 'none'], 'linear.plotTitlePosition': ['center', 'top', 'bottom']
-  },
+  // literals: the app exports no list of these
+  losat: { outfmt: ['7'], 'blastn.task': ['blastn'] },
+  // literals: the app exports no list of the title positions
+  layoutPreferences: { 'circular.*.plotTitlePosition': ['top', 'bottom', 'none'], 'linear.plotTitlePosition': ['center', 'top', 'bottom'] },
   circularConservation: {
-    source: ['upload'], losat_program: ['tblastx'], reference: ['query', 'subject'], colorScheme: Object.keys(CONSERVATION_COLOR_SCHEMES)
+    // literals: the app exports no list of these (the reader's `textChoice` lists, config-field-readers.js)
+    source: ['upload'], losat_program: ['tblastx'], reference: ['query', 'subject'],
+    // Each ring row of the drawing's ring tables (the 'rings' context) renamed and colored.
+    series: (rows) => (rows.length ? [rows.map((row) => ({ ...row, label: 'Sample ring', color: '#123456' }))] : [])
   },
-  linearComparisonPlan: { mode: Object.values(LINEAR_COMPARISON_MODES), defaultSource: ['upload'] }
+  linearComparisonPlan: {
+    // An edge that pairs the drawing's first two record rows (the 'rows' context), as the pair card makes one.
+    edges: (edges, drawing) => {
+      const [query, subject] = boundUids(drawing, 'linear');
+      return subject ? [[createLinearComparisonEdge({ id: 'sample-edge', queryUid: query, subjectUid: subject, included: true,
+        source: LINEAR_COMPARISON_SOURCES.LOSAT, losatFilename: 'sample-pair.tsv', losatFilenameActive: true })]] : [];
+    }
+  }
 };
-const namedChoices = (member, path, leaf) => {
-  const key = Object.keys(LEAF_CHOICES[member] ?? {}).find((name) => {
+const choicesAt = (table, member, path, leaf, drawing) => {
+  const key = Object.keys(table[member] ?? {}).find((name) => {
     const parts = name.split('.');
     return parts.length === path.length && parts.every((part, index) => part === '*' || part === path[index]);
   });
-  const choices = key === undefined ? [] : LEAF_CHOICES[member][key];
-  return typeof choices === 'function' ? choices(leaf) : [...choices];
+  const choices = key === undefined ? [] : table[member][key];
+  return typeof choices === 'function' ? choices(leaf, drawing) : [...choices];
 };
-const leafCandidates = (member, mode, path, leaf) => {
-  const named = namedChoices(member, path, leaf);
+const leafCandidates = (member, mode, path, leaf, drawing) => {
+  const named = [...choicesAt(APP_LEAF_CHOICES, member, path, leaf, drawing), ...choicesAt(OTHER_LEAF_CHOICES, member, path, leaf, drawing)];
   if (typeof leaf === 'boolean') return [...named, !leaf];
   if (typeof leaf === 'number') return [...named, ...(Number.isInteger(leaf) ? [leaf + 1, leaf - 1] : [leaf / 2])];
   if (leaf === null) return [...named, 7];
@@ -208,28 +248,31 @@ const leafCandidates = (member, mode, path, leaf) => {
 
 /**
  * The leaves of an object member that keep the drawing's value, by member, with
- * their reason; a function of the mode lists the leaves of that mode.
+ * their reason; a function of the mode lists the leaves of that mode. A leaf is
+ * here only when it cannot vary alone.
  * @type {Record<string, Record<string, string> | ((mode: Mode) => Record<string, string>)>}
  */
 export const UNVARIED_LEAVES = {
   adv: {
     // Load writes the current version of each stack's rows (`applyConfigData`).
     linear_track_slots_schema_version: 'the current version of the stack rows',
-    circular_track_slots_schema_version: 'the current version of the stack rows',
-    // OV-3705: Undo (a History restore) leaves the object that one circle
-    // left when the step it undoes set it from null: the merge keeps an object
-    // under a null (`mergeStoredSettings`, config-field-readers.js). The fix
-    // removes this entry and the known-defect case in drawing-member-paths.
-    one_circle_left: 'OV-3705'
+    circular_track_slots_schema_version: 'the current version of the stack rows'
   },
-  // The one membership mode the request schema has.
-  losat: { 'blastp.orthogroupMembershipMode': 'one choice' },
-  // A ring's row and the label text of its ring name a ring table of the
-  // drawing's files, which another member holds; Load leaves out the rows
-  // whose table it does not read (`withoutUnreadConservationSeries`).
-  circularConservation: { series: 'names a ring table of files', labels: 'names a ring table of files' },
-  // An edge pairs two record rows of the drawing, which another member holds.
-  linearComparisonPlan: { edges: 'pairs two record rows' },
+  // The request schema's membership modes: while it has one, the leaf has no other value.
+  losat: literalValues(COMPARISON_SETTINGS.orthogroupMembershipMode).length === 1
+    ? { 'blastp.orthogroupMembershipMode': 'the request schema has one membership mode' } : {},
+  circularConservation: (mode) => ({
+    // The label list an older Session stored for rings past its series: Load
+    // reads it into the series (`withoutUnreadConservationSeries`), every ring
+    // reconcile clears it (OV-3166), and the settings reader keeps none.
+    labels: 'an older Session\'s label list, which Load reads into the series',
+    // A ring row names a table of the rings' source: a change of the source
+    // alone derives the rows again (`changeCircularConservationSource`), so
+    // the sample keeps the source of its ring table ('upload', no default).
+    ...(mode === 'circular' ? { source: 'the source of the ring table the rows name' }
+      : { series: 'a Linear drawing has no comparison rings' })
+  }),
+  linearComparisonPlan: (mode) => (mode === 'circular' ? { edges: 'a Circular drawing has no Linear record rows to pair' } : {}),
   // A drawing's mode never changes, and its Session holds the layout slot of
   // its own mode only.
   layoutPreferences: (mode) => Object.fromEntries(leafPaths(createDefaultLayoutPreferences())
@@ -241,22 +284,28 @@ export const unvariedOf = (member, mode) => {
 };
 
 /**
- * `value` (an object member of a drawing of `mode`) with every leaf changed as
- * above; the paths of the leaves no candidate changes; and what the member's
- * Load reader makes of the result.
+ * `value` (an object member of `drawing`, of `mode`) with every leaf changed as
+ * above; the paths of the leaves no candidate changes; the values of an app
+ * list the Load reader does not keep (`refused`); and what the reader makes of
+ * the result.
  * @param {string} member
  * @param {Mode} mode
  * @param {unknown} value
+ * @param {DrawingState} drawing
  */
-export const variedLeaves = (member, mode, value) => {
+export const variedLeaves = (member, mode, value, drawing) => {
   const read = LOAD_READERS[member];
   const kept = unvariedOf(member, mode);
+  const readingAt = (path, candidate) => leafAt(read(mode, withLeaf(value, path, candidate)), path);
   let varied = value;
   const unchanged = [];
+  const refused = [];
   for (const path of leafPaths(value)) {
     const leaf = leafAt(value, path);
-    const changed = Object.hasOwn(kept, path.join('.')) ? undefined : leafCandidates(member, mode, path, leaf)
-      .map((candidate) => leafAt(read(mode, withLeaf(value, path, candidate)), path))
+    choicesAt(APP_LEAF_CHOICES, member, path, leaf, drawing).filter((candidate) => !sameJson(readingAt(path, candidate), candidate))
+      .forEach((candidate) => refused.push(`${path.join('.')} = ${JSON.stringify(candidate)}`));
+    const changed = Object.hasOwn(kept, path.join('.')) ? undefined : leafCandidates(member, mode, path, leaf, drawing)
+      .map((candidate) => readingAt(path, candidate))
       .find((reading) => reading !== undefined && !sameJson(reading, leaf));
     if (changed === undefined) unchanged.push(path.join('.'));
     else varied = withLeaf(varied, path, changed);
@@ -271,7 +320,7 @@ export const variedLeaves = (member, mode, value) => {
     if (!follows.length) break;
     follows.forEach((path) => { varied = withLeaf(varied, path, leafAt(whole, path)); });
   }
-  return { varied, unchanged, read: read(mode, varied) };
+  return { varied, unchanged, refused, read: read(mode, varied) };
 };
 
 // Every file slot of a drawing (the slots its `files` capture holds) is
@@ -365,14 +414,17 @@ export const MEMBER_SAMPLES = {
   legendColorOverrides: { value: () => ({ CDS: '#abcdef' }) },
   legendStrokeOverrides: { value: () => ({ CDS: { strokeColor: '#222222', strokeWidth: 1.5 } }) },
   addedLegendCaptions: { value: () => ['Kinase'] },
-  // settings, each with one field no default holds
   // settings: an object member changes every leaf (`variedLeaves`)
-  form: { value: (mode, drawing) => variedLeaves('form', mode, captureMember(drawing, 'form')).varied },
-  adv: { value: (mode, drawing) => variedLeaves('adv', mode, captureMember(drawing, 'adv')).varied },
-  losat: { value: (mode, drawing) => variedLeaves('losat', mode, captureMember(drawing, 'losat')).varied },
+  form: { value: (mode, drawing) => variedLeaves('form', mode, captureMember(drawing, 'form'), drawing).varied },
+  adv: { value: (mode, drawing) => variedLeaves('adv', mode, captureMember(drawing, 'adv'), drawing).varied },
+  losat: { value: (mode, drawing) => variedLeaves('losat', mode, captureMember(drawing, 'losat'), drawing).varied },
   losatProgram: { modes: ['linear'], value: () => 'tblastx' },
-  circularConservation: { modes: ['circular'], value: (mode, drawing) => variedLeaves('circularConservation', mode, captureMember(drawing, 'circularConservation')).varied },
-  linearComparisonPlan: { modes: ['linear'], value: (mode, drawing) => variedLeaves('linearComparisonPlan', mode, captureMember(drawing, 'linearComparisonPlan')).varied },
+  // The ring rows of the drawing's ring table change with the other leaves.
+  circularConservation: { modes: ['circular'], needs: ['rings'],
+    value: (mode, drawing) => variedLeaves('circularConservation', mode, captureMember(drawing, 'circularConservation'), drawing).varied },
+  // An edge pairs the drawing's two record rows.
+  linearComparisonPlan: { modes: ['linear'], needs: ['rows'],
+    value: (mode, drawing) => variedLeaves('linearComparisonPlan', mode, captureMember(drawing, 'linearComparisonPlan'), drawing).varied },
   linearRecordLayoutEnabled: { modes: ['linear'], value: (mode, drawing) => !captureMember(drawing, 'linearRecordLayoutEnabled') },
   linearRecordGap: { modes: ['linear'], value: () => 40 },
   linearRecordRows: { modes: ['linear'], needs: ['records'], value: (mode, drawing) => boundUids(drawing, mode).slice(0, 1).map((uid) => ({ uid, row: 2 })) },
@@ -391,7 +443,7 @@ export const MEMBER_SAMPLES = {
   importedComparisonIntent: { modes: ['linear'], needs: ['comparison'], byContext: true,
     value: (mode, drawing) => captureMember(drawing, 'importedComparisonIntent') },
   // A drawing keeps the layout preferences of its own mode.
-  layoutPreferences: { value: (mode, drawing) => variedLeaves('layoutPreferences', mode, captureMember(drawing, 'layoutPreferences')).varied },
+  layoutPreferences: { value: (mode, drawing) => variedLeaves('layoutPreferences', mode, captureMember(drawing, 'layoutPreferences'), drawing).varied },
   linearTypographyLinked: { modes: ['linear'], value: (mode, drawing) => !captureMember(drawing, 'linearTypographyLinked') },
   fileImports: { value: () => ({ blacklist: { words: ['sample'], before: 'putative' } }) },
   // inputs: a file bound in the drawing's own input fields, which the store
@@ -422,6 +474,9 @@ export const MEMBER_SAMPLES = {
     value: (mode, drawing) => captureMember(drawing, 'circularRecordDiscovery') }
 };
 
+// The contexts a test builds in the drawing itself; a sample of 'rings' or
+// 'rows' changes the leaves the drawing's tables and rows allow.
+export const DRAWING_NEEDS = Object.freeze(['records', 'rings', 'rows']);
 // A slice's sample: the merge of its members' samples, after their contexts
 // (`prepare`). A member keeps the drawing's value when its sample needs a
 // fixture's Result, or bound records the drawing does not have, when only an
@@ -430,7 +485,7 @@ export const MEMBER_SAMPLES = {
 export const sliceSample = (name, mode, drawing, context) => Object.fromEntries(DRAWING_SLICES[name].members.map((member) => {
   const sample = MEMBER_SAMPLES[member];
   const needs = sample.needs ?? [];
-  const kept = sample.byContext || needs.some((need) => need !== 'records')
+  const kept = sample.byContext || needs.some((need) => !DRAWING_NEEDS.includes(need))
     || (needs.includes('records') && boundUids(drawing, mode).length === 0)
     || (!(sample.modes ?? ['circular', 'linear']).includes(mode) && sample.otherModeLoad === 'default');
   if (!kept) sample.prepare?.(drawing);

@@ -603,6 +603,7 @@ under "Cited ids without a record".
   - `tests/web/drawing-bar.playwright.spec.js`
   - `tests/web/drawing-inputs.test.mjs`
   - `tests/web/drawing-list.test.mjs`
+  - `tests/web/drawing-member-paths.test.mjs`
   - `tests/web/feature-label-visual-unit.test.mjs`
   - `tests/web/helpers/app-lifecycle.cjs`
   - `tests/web/helpers/drawing-bar.cjs`
