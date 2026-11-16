@@ -34,6 +34,21 @@ SCRIPT_MARKER = "<!-- GOOGLE_ANALYTICS_SCRIPT -->"
 # (gbdraw/web/js/utils/hosted-build.js reads it by this name).
 HOSTED_ANALYTICS_META_NAME = "gbdraw-hosted-analytics"
 HOSTED_ANALYTICS_FLAG = f'<meta name="{HOSTED_ANALYTICS_META_NAME}" content="google-analytics-4">'
+# The hosted pages that load Google Analytics, each with SCRIPT_MARKER in its
+# head, and the same-origin script, written only into the bundle, that
+# configures the tag for all of them (the Gallery's CSP allows no inline script).
+GOOGLE_ANALYTICS_PAGES = ("index.html", "gallery/index.html", "gallery/palettes/index.html")
+GOOGLE_ANALYTICS_BOOTSTRAP = "hosted-analytics.js"
+# The hosts the Google tag needs, by CSP directive.
+GOOGLE_ANALYTICS_CSP_SOURCES = {
+    "script-src": "https://*.googletagmanager.com",
+    "img-src": "https://*.google-analytics.com https://*.googletagmanager.com",
+    "connect-src": (
+        "https://*.google-analytics.com https://*.analytics.google.com "
+        "https://*.googletagmanager.com"
+    ),
+}
+_CSP_META_RE = re.compile(r'<meta http-equiv="Content-Security-Policy" content="([^"]*)"')
 FULL_COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 ISOLATION_HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
@@ -166,16 +181,39 @@ def _replace_once(source: str, old: str, new: str) -> str:
     return source.replace(old, new, 1)
 
 
-def _render_google_analytics_script(measurement_id: str) -> str:
+def _render_google_analytics_bootstrap(measurement_id: str) -> str:
+    return f"""// The Google tag's configuration on the hosted site (tools/prepare_cloudflare_pages.py).
+window.dataLayer = window.dataLayer || [];
+function gtag(){{dataLayer.push(arguments);}}
+gtag('js', new Date());
+gtag('config', '{measurement_id}');
+"""
+
+
+def _render_google_analytics_script(measurement_id: str, page: str) -> str:
+    bootstrap = posixpath.relpath(GOOGLE_ANALYTICS_BOOTSTRAP, posixpath.dirname(page) or ".")
     return f"""    {HOSTED_ANALYTICS_FLAG}
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id={measurement_id}"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){{dataLayer.push(arguments);}}
-      gtag('js', new Date());
-      gtag('config', '{measurement_id}');
-    </script>"""
+    <script async src="{bootstrap}"></script>"""
+
+
+def _allow_google_analytics_in_csp(page_html: str) -> str:
+    """Add the Google tag's hosts to the page's CSP; a missing directive starts from default-src."""
+    match = _CSP_META_RE.search(page_html)
+    if match is None:
+        raise RuntimeError("Expected a Content-Security-Policy meta element while preparing Cloudflare bundle")
+    policy = match.group(1)
+    for directive, hosts in GOOGLE_ANALYTICS_CSP_SOURCES.items():
+        found = re.search(rf"(?<![\w-]){directive}\s([^;]*);", policy)
+        if found is not None:
+            policy = f"{policy[:found.end(1)]} {hosts}{policy[found.end(1):]}"
+            continue
+        default = re.search(r"(?<![\w-])default-src\s([^;]*);", policy)
+        if default is None:
+            raise RuntimeError(f"The page's CSP has neither {directive} nor default-src")
+        policy = f"{policy[:default.end()]} {directive} {default.group(1)} {hosts};{policy[default.end():]}"
+    return page_html[: match.start(1)] + policy + page_html[match.end(1) :]
 
 
 def _default_gallery_remote_base(*, commit_sha: str | None = None) -> str:
@@ -234,30 +272,21 @@ def build_cloudflare_pages_bundle(
         shutil.rmtree(output_root)
     shutil.copytree(WEB_ROOT, output_root)
 
+    (output_root / GOOGLE_ANALYTICS_BOOTSTRAP).write_text(
+        _render_google_analytics_bootstrap(google_analytics_measurement_id), encoding="utf-8"
+    )
+    for page in GOOGLE_ANALYTICS_PAGES:
+        page_path = output_root / page
+        page_html = _replace_once(
+            page_path.read_text(encoding="utf-8"),
+            SCRIPT_MARKER,
+            _render_google_analytics_script(google_analytics_measurement_id, page),
+        )
+        page_path.write_text(_allow_google_analytics_in_csp(page_html), encoding="utf-8")
     index_path = output_root / "index.html"
-    index_html = index_path.read_text(encoding="utf-8")
-    index_html = _replace_once(
-        index_html,
-        SCRIPT_MARKER,
-        _render_google_analytics_script(google_analytics_measurement_id),
+    index_path.write_text(
+        add_module_preloads(index_path.read_text(encoding="utf-8"), output_root), encoding="utf-8"
     )
-    index_html = _replace_once(
-        index_html,
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;",
-    )
-    index_html = _replace_once(
-        index_html,
-        "img-src 'self' data: blob:;",
-        "img-src 'self' data: blob: https://*.google-analytics.com https://*.googletagmanager.com;",
-    )
-    index_html = _replace_once(
-        index_html,
-        "connect-src 'self';",
-        "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com;",
-    )
-    index_html = add_module_preloads(index_html, output_root)
-    index_path.write_text(index_html, encoding="utf-8")
     stamp_web_build_module = _load_stamp_web_build_module()
     resolved_commit_sha = str(commit_sha or stamp_web_build_module.resolve_commit_sha()).strip()
     stamp_web_build_module.stamp_web_build(
