@@ -422,17 +422,17 @@ const visualBox = () => {
 const fakeSvg = { getBoundingClientRect: visualBox };
 let probes = 0;
 // OV-3588: the control over the canvas edge (the Editor toggle) beside the canvas in its workspace,
-// measured through a copy of it without its transition.
+// measured through a copy of it placed beside it.
 /** @type {{ left: number, top: number, width: number, height: number } | null} */
 let edgeControl = null;
 const controlCopies = [];
 const control = {
-  style: { transition: '' },
+  style: { transition: 'transform 0.3s' },
   cloneNode: (deep) => {
     const copy = {
-      deep, placed: false, style: { transition: '', visibility: '' },
+      deep, placed: false, style: {},
       getBoundingClientRect: () => {
-        assert.equal(copy.placed && copy.style.transition, 'none', 'the copy is measured in place, without its transition');
+        assert.equal(copy.placed, true, 'the copy is measured in place');
         return { ...edgeControl, right: edgeControl.left + edgeControl.width, bottom: edgeControl.top + edgeControl.height };
       },
       remove: () => { copy.placed = false; }
@@ -515,7 +515,7 @@ assert.equal(Math.abs((besideControl.top - 50) - (436 - besideControl.bottom)) <
 // Only the copies were measured, each one removed, and the control keeps its transition.
 assert.equal(JSON.stringify(controlCopies.map(({ deep, placed }) => ({ deep, placed }))),
   JSON.stringify([{ deep: true, placed: false }, { deep: true, placed: false }]));
-assert.equal(control.style.transition, '');
+assert.equal(control.style.transition, 'transform 0.3s');
 edgeControl = { left: 0, top: 0, width: 0, height: 0 };
 panZoom.fitPreviewToViewport();
 expectFitted(0.88);

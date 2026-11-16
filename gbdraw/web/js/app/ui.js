@@ -40,9 +40,10 @@ const editorReserveWidth = (container) => {
 const EDGE_CONTROL = '[data-preview-edge-control]';
 
 /**
- * The box of the control over the canvas edge where it settles, or null when none is shown. A copy of it
- * without its transition is measured in its place, so a Fit made while the control slides (the Editor
- * opening or closing) neither reads a frame of the slide nor cuts it short.
+ * The box of the control over the canvas edge where it settles, or null when none is shown. A copy of it is
+ * measured in its place: an element just inserted starts no transition and the copy is removed before any
+ * paint, so a Fit made while the control slides (the Editor opening or closing) neither reads a frame of the
+ * slide nor cuts it short.
  * @param {HTMLElement} container The preview canvas.
  * @returns {DOMRect | null}
  */
@@ -55,8 +56,6 @@ const edgeControlBox = (container) => {
   }
   if (!control) return null;
   const probe = /** @type {HTMLElement} */ (control.cloneNode(true));
-  probe.style.transition = 'none';
-  probe.style.visibility = 'hidden';
   control.after(probe);
   const box = probe.getBoundingClientRect();
   probe.remove();
