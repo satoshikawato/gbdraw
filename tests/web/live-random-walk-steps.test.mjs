@@ -22,7 +22,8 @@ const walkState = ({ legend, deletedLegend }) => ({
   palettes: ['default'],
   depth: false,
   undoDepth: 0,
-  canUndo: false
+  canUndo: false,
+  settingControls: []
 });
 // Draws of `kind` that name a Legend row (a stroke draws the popup target half the time).
 const legendRowSteps = (kind, state) => Array.from({ length: 40 }, (_, seed) => nextStep(createRandom(seed + 1), state, kind, context))
@@ -79,4 +80,23 @@ test('a step shows unplaced labels only from a text edit with Auto Reflow off an
   assert.equal(unplacedLabels({ kind: 'undo' }, true, undefined), null);
   assert.equal(unplacedLabels({ kind: 'undoRedo' }, true, { unplaced: edited }), null);
   assert.equal(unplacedLabels({ kind: 'fill' }, true, { unplaced: edited }), null);
+});
+
+// A setting step names a live row and one of its controls the page shows, by
+// the control's name; a replay refuses it when that control is not shown.
+test('a setting step names a shown control of a live row, and a replay needs that control', () => {
+  const settingControls = [
+    { row: 'legend', control: 'Legend font size' }, { row: 'legend', control: 'Legend position' }, { row: 'species', control: 'Species' }
+  ];
+  const state = { ...walkState({ legend: ['CDS'], deletedLegend: [] }), settingControls };
+  const steps = Array.from({ length: 40 }, (_, seed) => nextStep(createRandom(seed + 1), state, 'setting', context));
+  for (const step of steps) {
+    assert.ok(settingControls.some(({ row, control }) => row === step.row && control === step.control), JSON.stringify(step));
+    assert.ok(Number.isInteger(step.pick));
+    assert.equal(whyNotApplicable(step, state, context), '');
+  }
+  assert.deepEqual(new Set(steps.map(({ row }) => row)), new Set(['legend', 'species']), 'each row is drawn');
+  assert.equal(whyNotApplicable(steps[0], { ...state, settingControls: [] }, context),
+    `no control "${steps[0].control}" of the ${steps[0].row} row is shown`);
+  assert.throws(() => nextStep(createRandom(1), { ...state, settingControls: [] }, 'setting', context), /the page shows none/);
 });

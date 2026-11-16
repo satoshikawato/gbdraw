@@ -341,6 +341,7 @@ under "Cited ids without a record".
   - `tests/web/circular-record-ranges.test.mjs`
   - `tests/web/drawing-list.test.mjs`
   - `tests/web/helpers/app-lifecycle.cjs`
+  - `tests/web/helpers/live-random-walk.mjs`
   - `tests/web/helpers/session-regeneration-contract.cjs`
   - `tests/web/hepatoplasmataceae-session-regeneration.performance.playwright.spec.js`
   - `tests/web/large-preview-transform-interaction.performance.playwright.spec.js`
@@ -841,6 +842,7 @@ under "Cited ids without a record".
 
 - [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search): Sequence search. ACCEPTED, concern `web.sequence-search`, scenario revision 1.
   - `tests/test_sequence_search_hits.py`
+  - `tests/web/helpers/live-setting-rows.mjs`
   - `tests/web/helpers/live-work-allowlist.mjs`
   - `tests/web/helpers/sequence-search.cjs`
   - `tests/web/live-generate-parity.playwright.spec.js`

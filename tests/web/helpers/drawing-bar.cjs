@@ -73,21 +73,23 @@ const newDrawingFromMenu = async (page, kind) => {
 
 /**
  * Show a drawing and wait until the app shows it. `kind` names the first
- * drawing of that kind in tab order, `name` the drawing with that stored name.
- * A `kind` the project has no drawing of is made the way a user makes it: a
+ * drawing of that kind in tab order, `name` the drawing with that stored name,
+ * `id` the drawing with that DrawingId. A `kind` the project has no drawing of is made the way a user makes it: a
  * Linear drawing through the offer tab (a new Session), a Circular drawing
  * through the drawing menu (after a Linear-only Session Load).
  * @param {import('@playwright/test').Page} page
- * @param {{ kind?: 'circular' | 'linear', name?: string }} target
+ * @param {{ kind?: 'circular' | 'linear', name?: string, id?: string }} target
  * @returns {Promise<string>} the shown DrawingId
  */
-const showDrawing = async (page, { kind, name }) => {
-  const drawingId = await page.evaluate(async ({ wantedKind, wantedName }) => {
+const showDrawing = async (page, { kind, name, id }) => {
+  const drawingId = await page.evaluate(async ({ wantedKind, wantedName, wantedId }) => {
     const { state } = await import('./js/state.js');
     const tab = state.drawingTabs.value.find((item) => (
-      wantedName === undefined ? state.drawingOf(item.id).mode === wantedKind : item.name === wantedName));
+      wantedId !== null ? item.id === wantedId
+        : wantedName === undefined ? state.drawingOf(item.id).mode === wantedKind : item.name === wantedName));
     return tab ? tab.id : null;
-  }, { wantedKind: kind, wantedName: name });
+  }, { wantedKind: kind, wantedName: name, wantedId: id ?? null });
+  if (!drawingId && id !== undefined) throw new Error(`showDrawing: no drawing ${id}`);
   if (!drawingId && name === undefined && kind === 'linear') return takeLinearOffer(page);
   if (!drawingId && name === undefined && kind === 'circular') return newDrawingFromMenu(page, 'circular');
   if (!drawingId) throw new Error(`showDrawing: no drawing of kind ${kind} or named ${name}`);

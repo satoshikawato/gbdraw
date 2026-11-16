@@ -31,6 +31,16 @@ const collect = (page) => {
   return log;
 };
 
+// The health problems the operations since the last check left
+// (`takeOperationHealthProblems` of tests/web/helpers/app-lifecycle.cjs, the
+// check the random walk runs after each step), under the operation's name. The
+// first call on a page starts collecting its errors; read the alert's signature
+// (`readErrorSignature`) before an operation and pass it, so an alert an
+// earlier operation left is not counted again.
+const operationHealth = async (page, operation, errorSignatureBefore) => (
+  await helpers().takeOperationHealthProblems(page, { errorSignatureBefore })
+).map((problem) => `${operation}: ${problem}`);
+
 // Adds one Circular File card holding this GenBank file.
 const addCircularGenbank = (page, path, name) => page.evaluate(async ({ content, name }) => {
   const app = window.__GBDRAW_APP__;
@@ -159,6 +169,7 @@ module.exports = {
   helpers,
   loadSession,
   measureOverflow,
+  operationHealth,
   outDir,
   readSession,
   runGenerate,

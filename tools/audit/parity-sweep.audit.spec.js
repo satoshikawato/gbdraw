@@ -2,8 +2,13 @@
 // Each probe resets the form, applies one option family, Generates, and saves the Result SVG,
 // the Source recipe command, and its helper files. Replay the commands with parity_replay.py.
 // Filter probes with AUDIT_ONLY=name1,name2; choose the Circular input with AUDIT_INPUT.
-const { test } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+// Each operation (open and input, the option, Generate) must leave no UNKNOWN or
+// VALIDATION_UNCLASSIFIED alert, page or console error, or NaN or undefined in Run Info (the
+// check the random walk runs after each step); the problems go to each probe's manifest row.
+// Every probe is an option a user can Generate with (options both surfaces reject are left
+// out), so its Generate must end with status ok, as the baseline's must. The test fails after
+// the whole sweep when any row has a health problem or did not end ok.
+const { expect, test } = require('@playwright/test');
 const { join } = require('node:path');
 const A = require('./helpers/audit-common.cjs');
 
@@ -84,28 +89,47 @@ const LINEAR_PROBES = [
 // from one probe into the next.
 const sweep = async (page, outdir, probes, setup) => {
   const log = A.collect(page);
-  await setup();
-  const base = await A.runGenerate(page);
+  const { readErrorSignature } = A.helpers();
+  // Each operation's health problems, checked once it has ended.
+  const checked = async (operation, run) => {
+    const signature = await readErrorSignature(page);
+    const value = await run();
+    return { value, health: await A.operationHealth(page, operation, signature) };
+  };
+  const opened = async () => {
+    await setup();
+    return A.operationHealth(page, 'open and input');
+  };
+  const baseOpen = await opened();
+  const { value: base, health: baseGenerate } = await checked('Generate', () => A.runGenerate(page));
   A.writeEvidence(outdir, 'baseline.svg', base.svg);
   const baseHelpers = base.status === 'ok' ? await A.captureHelpers(page, join(outdir, 'helpers_baseline')) : [];
   const manifest = [{
     name: 'baseline', status: base.status, command: base.command, exact: base.exactReplay,
-    err: base.errorSummary, details: base.errorDetails, helpers: baseHelpers
+    err: base.errorSummary, details: base.errorDetails, helpers: baseHelpers, health: [...baseOpen, ...baseGenerate]
   }];
   for (const [name, body] of probes) {
-    await setup();
-    await page.evaluate(new Function(`const a = window.__GBDRAW_APP__; ${body}`));
-    await page.waitForTimeout(300);
-    const out = await A.runGenerate(page);
+    const open = await opened();
+    const { health: option } = await checked('the option', async () => {
+      await page.evaluate(new Function(`const a = window.__GBDRAW_APP__; ${body}`));
+      await page.waitForTimeout(300);
+    });
+    const { value: out, health: generated } = await checked('Generate', () => A.runGenerate(page));
     A.writeEvidence(outdir, `${name}.svg`, out.svg);
     const helperFiles = out.status === 'ok' ? await A.captureHelpers(page, join(outdir, `helpers_${name}`)) : [];
     manifest.push({
       name, status: out.status, command: out.command, exact: out.exactReplay, recipe: out.sourceRecipe,
-      err: out.errorSummary, details: out.errorDetails, sameAsBaseline: out.svg === base.svg, helpers: helperFiles
+      err: out.errorSummary, details: out.errorDetails, sameAsBaseline: out.svg === base.svg, helpers: helperFiles,
+      health: [...open, ...option, ...generated]
     });
   }
   manifest.push({ log });
   A.writeEvidence(outdir, 'manifest.json', manifest);
+  const failed = [
+    ...manifest.filter((row) => row.name && row.status !== 'ok').map((row) => `${row.name}: Generate ended ${row.status}: ${row.err || "(no alert)"}`),
+    ...manifest.filter((row) => row.health?.length).map((row) => `${row.name}:\n  ${row.health.join('\n  ')}`)
+  ];
+  expect(failed, failed.join('\n')).toEqual([]);
 };
 
 test('Circular GUI Generate vs. Source recipe sweep', async ({ page }) => {
@@ -123,30 +147,23 @@ test('Linear GUI Generate vs. Source recipe sweep', async ({ page }) => {
   test.setTimeout(1_800_000);
   const outdir = A.outDir('parity', 'linear-MJNV');
   const examples = join(A.REPO_ROOT, 'examples');
-  const inputs = {
-    a1: readFileSync(join(examples, 'MjeNMV.gb'), 'utf8'),
-    a2: readFileSync(join(examples, 'MelaMJNV.gb'), 'utf8'),
-    b: readFileSync(join(examples, 'MjeNMV.MelaMJNV.tblastx.out'), 'utf8')
-  };
   page.on('dialog', (d) => d.dismiss());
+  // A new Session holds one Circular drawing; the Linear one is made, and its records and the
+  // BLAST table attached, as a user does: through the drawing bar, the Add sequence button and
+  // the file inputs. The
+  // table goes in through the pair's file input, which registers it in the Session's file
+  // store; a plan edge written by hand holds a bare File the plan does not accept.
+  const { showDrawing } = require(join(A.REPO_ROOT, 'tests/web/helpers/drawing-bar.cjs'));
   await sweep(page, outdir, select(LINEAR_PROBES), async () => {
     await A.helpers().openApp(page);
-    await page.evaluate(async ({ a1, a2, b }) => {
-      const app = window.__GBDRAW_APP__;
-      app.selectDrawing('linear');
-      await window.Vue.nextTick();
-      if (app.linearSeqs.length < 2) app.addLinearSeq();
-      app.setLinearSeqPrimaryFile(0, 'gb', new File([a1], 'MjeNMV.gb', { type: 'text/plain' }));
-      app.setLinearSeqPrimaryFile(1, 'gb', new File([a2], 'MelaMJNV.gb', { type: 'text/plain' }));
-      app.losatProgram = 'blastn';
-      app.linearComparisonPlan.mode = 'adjacent';
-      app.linearComparisonPlan.defaultSource = 'upload';
-      app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
-        id: 'audit-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
-        included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
-        file: new File([b], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' }), losatFilename: ''
-      });
-      await window.Vue.nextTick();
-    }, inputs);
+    await showDrawing(page, { kind: 'linear' });
+    await page.getByTestId('linear-genbank-1').setInputFiles(join(examples, 'MjeNMV.gb'));
+    await page.getByRole('button', { name: 'Add sequence', exact: true }).click();
+    await page.getByTestId('linear-genbank-2').setInputFiles(join(examples, 'MelaMJNV.gb'));
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name)))
+      .toEqual(['MjeNMV.gb', 'MelaMJNV.gb']);
+    await page.getByRole('button', { name: 'Use uploaded BLAST TSV for all adjacent pairs', exact: true }).click();
+    await page.locator('input[type="file"][aria-label="BLAST TSV for #1 to #2"]')
+      .setInputFiles(join(examples, 'MjeNMV.MelaMJNV.tblastx.out'));
   });
 });

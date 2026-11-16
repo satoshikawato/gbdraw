@@ -19,6 +19,9 @@ const PROMOTION_SEEDS = [...Array.from({ length: 94 }, (_, offset) => offset + 1
 
 test('the pull-request plan covers every pull-request target and holds the replaced matrix cases', () => {
   const plan = planWalk(PR_SEED, { level: 'pr', required: REPLACED_MATRIX_CASES });
+  // The size the pull-request tier's time was measured at (4 walks, 124 steps): a plan that grows past it needs a new measurement.
+  assert.equal(plan.walks.length, 4);
+  assert.ok(stepCount(plan) <= 124, `${stepCount(plan)} steps`);
   assert.deepEqual(coverageOf(plan, 'pr', { required: REPLACED_MATRIX_CASES }).missing, []);
   for (const { fixture, kind, popup, reflow } of REPLACED_MATRIX_CASES) {
     const fixtureIndex = FIXTURES.findIndex(({ name }) => name === fixture);
@@ -81,7 +84,9 @@ test('the targets leave out the pairs no fixture can run', () => {
   assert.ok(!sequence.has('resultSwitch>reset'));
   assert.ok(!sequence.has('drawingSwitch>resultSwitch'));
   assert.ok(sequence.has('resultSwitch>load'));
+  // Every kind's pairs are pull-request targets, a setting step's too (R3: every ordered pair on every run).
   assert.equal(sequence.size, WALK_KINDS.length ** 2 - 4);
+  assert.ok(sequence.has('setting>fill') && sequence.has('fill>setting') && sequence.has('setting>setting'));
   assert.deepEqual([...BARRIER_KINDS].sort(), ['load', 'reset']);
 });
 
@@ -121,10 +126,10 @@ test('the targets of each level are every feasible pair, kind state, and fixture
     for (const group of Object.keys(expected)) assert.deepEqual([...actual[group]].sort(), [...expected[group]].sort(), `${level} ${group}`);
   }
   const promotion = coverageTargets('promotion');
-  // 28 kinds: 28 x 28 ordered pairs less the 4 no fixture runs; 28 kinds x 4
-  // states; (27 + 27 + 26) kinds that the three fixtures run x 4 states.
+  // 29 kinds: 29 x 29 ordered pairs less the 4 no fixture runs; 29 kinds x 4
+  // states; (28 + 28 + 27) kinds that the three fixtures run x 4 states.
   assert.deepEqual(Object.fromEntries(Object.entries(promotion).map(([group, keys]) => [group, keys.size])),
-    { fixtures: 3, sequence: 780, flags: 112, required: 0, adjacent: 780, fixtureFlags: 320 });
+    { fixtures: 3, sequence: 837, flags: 116, required: 0, adjacent: 837, fixtureFlags: 332 });
   // A pair with a barrier is a target in both pair groups: a barrier may be A or B.
   for (const barrier of BARRIER_KINDS) {
     for (const kind of ['fill', barrier]) {
