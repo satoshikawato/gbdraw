@@ -4,8 +4,10 @@
 // Filter probes with AUDIT_ONLY=name1,name2; choose the Circular input with AUDIT_INPUT.
 // Each operation (open and input, the option, Generate) must leave no UNKNOWN or
 // VALIDATION_UNCLASSIFIED alert, page or console error, or NaN or undefined in Run Info (the
-// check the random walk runs after each step); the problems go to each probe's manifest row,
-// and the test fails after the whole sweep when any probe has one.
+// check the random walk runs after each step); the problems go to each probe's manifest row.
+// Every probe is an option a user can Generate with (options both surfaces reject are left
+// out), so its Generate must end with status ok, as the baseline's must. The test fails after
+// the whole sweep when any row has a health problem or did not end ok.
 const { expect, test } = require('@playwright/test');
 const { join } = require('node:path');
 const A = require('./helpers/audit-common.cjs');
@@ -123,8 +125,11 @@ const sweep = async (page, outdir, probes, setup) => {
   }
   manifest.push({ log });
   A.writeEvidence(outdir, 'manifest.json', manifest);
-  const unhealthy = manifest.filter((row) => row.health?.length).map((row) => `${row.name}:\n  ${row.health.join('\n  ')}`);
-  expect(unhealthy, unhealthy.join('\n')).toEqual([]);
+  const failed = [
+    ...manifest.filter((row) => row.name && row.status !== 'ok').map((row) => `${row.name}: Generate ended ${row.status}: ${row.err || "(no alert)"}`),
+    ...manifest.filter((row) => row.health?.length).map((row) => `${row.name}:\n  ${row.health.join('\n  ')}`)
+  ];
+  expect(failed, failed.join('\n')).toEqual([]);
 };
 
 test('Circular GUI Generate vs. Source recipe sweep', async ({ page }) => {
@@ -144,7 +149,8 @@ test('Linear GUI Generate vs. Source recipe sweep', async ({ page }) => {
   const examples = join(A.REPO_ROOT, 'examples');
   page.on('dialog', (d) => d.dismiss());
   // A new Session holds one Circular drawing; the Linear one is made, and its records and the
-  // BLAST table attached, as a user does: through the drawing bar and the file inputs. The
+  // BLAST table attached, as a user does: through the drawing bar, the Add sequence button and
+  // the file inputs. The
   // table goes in through the pair's file input, which registers it in the Session's file
   // store; a plan edge written by hand holds a bare File the plan does not accept.
   const { showDrawing } = require(join(A.REPO_ROOT, 'tests/web/helpers/drawing-bar.cjs'));
@@ -152,7 +158,7 @@ test('Linear GUI Generate vs. Source recipe sweep', async ({ page }) => {
     await A.helpers().openApp(page);
     await showDrawing(page, { kind: 'linear' });
     await page.getByTestId('linear-genbank-1').setInputFiles(join(examples, 'MjeNMV.gb'));
-    await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+    await page.getByRole('button', { name: 'Add sequence', exact: true }).click();
     await page.getByTestId('linear-genbank-2').setInputFiles(join(examples, 'MelaMJNV.gb'));
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name)))
       .toEqual(['MjeNMV.gb', 'MelaMJNV.gb']);

@@ -4,7 +4,7 @@
 // feasible ordered pair of edit kinds, and every kind in each popup and Auto Reflow
 // state (4 walks, 124 steps). Every step compares the live Result with a fresh Generate from the
 // same draft and checks that the drawing it did not edit keeps its slices
-// (M6), that an Undo then Redo gives back every drawing, and that the step and
+// (M6), that an Undo then Redo and a Save then Load give back every drawing, and that the step and
 // its Generate leave no unclassified alert, page or console error, or invalid
 // Run Info. A failing walk is shrunk to a minimal reproduction within
 // GBDRAW_RANDOM_WALK_SHRINK_REPLAYS replays (default 10 here), for the first

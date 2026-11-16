@@ -341,6 +341,7 @@ under "Cited ids without a record".
   - `tests/web/circular-record-ranges.test.mjs`
   - `tests/web/drawing-list.test.mjs`
   - `tests/web/helpers/app-lifecycle.cjs`
+  - `tests/web/helpers/live-random-walk.mjs`
   - `tests/web/helpers/session-regeneration-contract.cjs`
   - `tests/web/hepatoplasmataceae-session-regeneration.performance.playwright.spec.js`
   - `tests/web/large-preview-transform-interaction.performance.playwright.spec.js`

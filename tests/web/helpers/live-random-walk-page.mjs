@@ -8,7 +8,7 @@
 // this module (`/tests/web/helpers/live-random-walk-page.mjs`), so every
 // reader of the identity uses this one derivation. It also finds the controls
 // a `setting` step sets (`walkSettingControls`) and the value it gives one.
-import { ROWS_DRIVEN_BY_KIND, liveRequestRows, settingControlAction } from './live-setting-rows.mjs';
+import { ROWS_DRIVEN_BY_KIND, isSettableControl, liveRequestRows, settingControlAction } from './live-setting-rows.mjs';
 
 /**
  * A feature row of the displayed Result as the identity reads it.
@@ -80,10 +80,11 @@ export const walkSettingControls = async () => {
   for (const element of /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-setting] input, [data-setting] select, [data-setting] textarea')])) {
     const row = element.closest('[data-setting]')?.getAttribute('data-setting') ?? '';
     const action = settingControlAction(element.tagName, element.getAttribute('type'));
-    if (!ids.has(row) || !action || element.matches(':disabled') || isIgnored(element) || !displayed(element)) continue;
-    if (action === 'choose' && ![.../** @type {HTMLSelectElement} */ (element).options].some((option) => !option.disabled && !option.selected)) continue;
+    if (!ids.has(row) || element.matches(':disabled') || isIgnored(element) || !displayed(element)) continue;
     const name = nameOf(element);
-    if (!name) continue;
+    const otherOption = element.tagName === 'SELECT'
+      && [.../** @type {HTMLSelectElement} */ (element).options].some((option) => !option.disabled && !option.selected);
+    if (!isSettableControl({ action, name, otherOption }) || !action) continue;
     const same = controls.filter((control) => control.row === row && control.control.replace(/ #\d+$/, '') === name).length;
     controls.push({ row, control: same ? `${name} #${same + 1}` : name, action, element });
   }

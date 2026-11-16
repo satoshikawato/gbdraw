@@ -52,3 +52,13 @@ export const settingControlAction = (tag, type) => {
   if (name === 'input') return INPUT_ACTIONS[String(type || 'text').toLowerCase()] ?? null;
   return null;
 };
+
+/**
+ * Whether a `setting` step can set a control: a type it sets (`action`), a
+ * name, and for a select another option to pick. The one requirement that
+ * the page reader (`walkSettingControls`, the name `describeControl` gives)
+ * and the index.html scan (tests/web/live-random-walk-settings.test.mjs, the
+ * name the markup declares) both apply.
+ * @param {{ action: SettingControlAction | null, name: string, otherOption: boolean }} control
+ */
+export const isSettableControl = ({ action, name, otherOption }) => action !== null && name !== '' && (action !== 'choose' || otherOption);

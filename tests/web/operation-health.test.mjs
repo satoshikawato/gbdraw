@@ -6,7 +6,7 @@ import test from 'node:test';
 // on an UNKNOWN diagnostic, an uncaught page error, or NaN/undefined in Run
 // Info, and accept an opt-out only when it names an audit ID.
 const require = createRequire(import.meta.url);
-const { assertOperationHealth, assertOperationHealthStrict, takeOperationHealthProblems } = require('./helpers/app-lifecycle.cjs');
+const { assertOperationHealth, takeOperationHealthProblems } = require('./helpers/app-lifecycle.cjs');
 
 const fakePage = (app) => {
   const listeners = new Map();
@@ -14,10 +14,10 @@ const fakePage = (app) => {
     app,
     on: (type, listener) => listeners.set(type, listener),
     emit: (type, value) => listeners.get(type)?.(value),
-    evaluate: async (callback) => {
+    evaluate: async (callback, arg) => {
       globalThis.window = { __GBDRAW_APP__: app };
       try {
-        return callback();
+        return callback(arg);
       } finally {
         delete globalThis.window;
       }
@@ -72,11 +72,10 @@ test('an alert left by an earlier operation is not attributed to Save', async ()
 // The check the random walk runs after every step and the audit sweeps after
 // every Load and operation: no opt-out, VALIDATION_UNCLASSIFIED fails as
 // UNKNOWN does, console errors fail, and each call reports only the errors
-// raised since the call before it.
+// raised and the Run Info written since the call before it.
 test('the strict check reports every problem once and has no opt-out', async () => {
   const page = fakePage({ errorLog: null, lastRunInfo: null });
   assert.deepEqual(await takeOperationHealthProblems(page), []);
-  await assertOperationHealthStrict(page, { operation: 'step 1' });
 
   page.app.errorLog = { code: 'VALIDATION_UNCLASSIFIED', operation: 'generate', stage: 'request-validation', summary: 'Input validation failed.' };
   page.app.lastRunInfo = { windowSize: Number.NaN };
@@ -89,16 +88,24 @@ test('the strict check reports every problem once and has no opt-out', async () 
     'console error: Failed to load resource',
     'NaN or undefined in Run Info: lastRunInfo.windowSize=NaN'
   ]);
-  // The errors were taken; the alert and Run Info are still there.
+  // The errors were taken and the Run Info read; the alert is still there.
+  assert.deepEqual(await takeOperationHealthProblems(page), [
+    'VALIDATION_UNCLASSIFIED diagnostic: Input validation failed.'
+  ]);
+  // A later Generate writes a new Run Info: it is read again.
+  page.app.lastRunInfo = { windowSize: Number.NaN, stepSize: 10 };
   assert.deepEqual(await takeOperationHealthProblems(page), [
     'VALIDATION_UNCLASSIFIED diagnostic: Input validation failed.',
     'NaN or undefined in Run Info: lastRunInfo.windowSize=NaN'
   ]);
+  // The lenient check still reads the Run Info on every call.
+  assert.deepEqual((await assertOperationHealth(page, { allowUnknown: 'IN-08', allowInvalidRunInfo: 'TR-04' })).invalidRunInfo,
+    ['lastRunInfo.windowSize=NaN']);
   page.app.lastRunInfo = null;
   const errorSignatureBefore = JSON.stringify(['VALIDATION_UNCLASSIFIED', 'generate', 'request-validation', 'Input validation failed.']);
   assert.deepEqual(await takeOperationHealthProblems(page, { errorSignatureBefore }), [], 'an alert an earlier operation left');
   page.app.errorLog = { code: 'UNKNOWN', operation: 'generate', stage: 'render', summary: 'failed' };
-  await assert.rejects(assertOperationHealthStrict(page, { operation: 'step 2', errorSignatureBefore }), /step 2 must leave no UNKNOWN/);
+  assert.deepEqual(await takeOperationHealthProblems(page, { errorSignatureBefore }), ['UNKNOWN diagnostic: failed']);
   page.app.errorLog = { code: 'LABELS_DO_NOT_FIT', operation: 'generate', stage: 'render', summary: 'Labels do not fit' };
   assert.deepEqual(await takeOperationHealthProblems(page), [], 'a classified alert is the operation\'s answer, not a health problem');
 });

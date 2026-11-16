@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { SETTING_APPLICATION } from '../../gbdraw/web/js/services/setting-application.js';
 import { isIgnoredTarget } from '../../gbdraw/web/js/app/history-inputs.js';
-import { ROWS_DRIVEN_BY_KIND, liveRequestRows, settingControlAction } from './helpers/live-setting-rows.mjs';
+import { ROWS_DRIVEN_BY_KIND, isSettableControl, liveRequestRows, settingControlAction } from './helpers/live-setting-rows.mjs';
 import { WALK_KINDS } from './helpers/live-random-walk-plan.mjs';
 import { descendants, parseElementTree } from './helpers/html-element-tree.mjs';
 
@@ -51,12 +51,35 @@ const nearestSetting = (element) => {
   return '';
 };
 
-/** The controls of each row that a `setting` step can set, by row id. */
-const settableControls = () => {
+// The name the markup gives a control, as `describeControl` reads it on the
+// page: its `aria-label` (static or bound), the elements `aria-labelledby`
+// names, or a label around it or naming its id; '' for none.
+/** @param {ScannedElement} element @param {ScannedElement[]} all */
+const declaredName = (element, all) => {
+  const { attributes } = element;
+  const named = attributes.get('aria-label')?.trim() || (attributes.get(':aria-label') ? '(bound aria-label)' : '')
+    || attributes.get('aria-labelledby')?.trim() || '';
+  if (named) return named;
+  for (let node = element.parent; node; node = node.parent) if (node.tag === 'label') return '(label)';
+  const id = attributes.get('id');
+  return id && all.some((other) => other.tag === 'label' && other.attributes.get('for') === id) ? '(label)' : '';
+};
+// Whether a select declares another option to pick: two options, or options a `v-for` makes.
+/** @param {ScannedElement} element */
+const declaresOtherOption = (element) => {
+  const options = [...descendants(element)].filter((node) => node !== element && node.tag === 'option');
+  return options.length > 1 || [...descendants(element)].some((node) => node !== element && node.attributes.has('v-for'));
+};
+
+/** The controls of each row that a `setting` step can set (`isSettableControl`), by row id. @param {string} html */
+const settableControls = (html = readFileSync(INDEX_HTML, 'utf8')) => {
   /** @type {Map<string, ScannedElement[]>} */
   const byRow = new Map();
-  for (const element of scanElements(readFileSync(INDEX_HTML, 'utf8'))) {
-    if (!settingControlAction(element.tag, element.attributes.get('type'))) continue;
+  const all = scanElements(html);
+  for (const element of all) {
+    const action = settingControlAction(element.tag, element.attributes.get('type'));
+    const otherOption = element.tag === 'select' && declaresOtherOption(element);
+    if (!isSettableControl({ action, name: declaredName(element, all), otherOption })) continue;
     if (isIgnoredTarget(/** @type {Element} */ (/** @type {unknown} */ (asClosestTarget(element))))) continue;
     const row = nearestSetting(element);
     if (row) byRow.set(row, [...(byRow.get(row) ?? []), element]);
@@ -91,4 +114,15 @@ test('the scan finds the controls by their nearest scope and leaves out those th
   assert.equal(settingControlAction('INPUT', null), 'fill');
   assert.equal(settingControlAction('input', 'checkbox'), 'toggle');
   assert.equal(settingControlAction('select', undefined), 'choose');
+});
+
+test('a control counts only with a name, and a select only with another option to pick', () => {
+  const rows = (html) => [...settableControls(html).entries()].map(([row, controls]) => [row, controls.map(({ tag }) => tag)]);
+  assert.deepEqual(rows([
+    '<div data-setting="named"><input type="number" aria-label="a"><input type="text" :aria-label="t(\'b\')"></div>',
+    '<div data-setting="labelled"><label>Size <input type="number"></label><input id="w" type="text"><label for="w">W</label></div>',
+    '<div data-setting="unnamed"><input type="number"><select><option>a</option><option>b</option></select></div>',
+    '<div data-setting="one-option"><select aria-label="c"><option>a</option></select></div>',
+    '<div data-setting="options"><select aria-label="d"><option v-for="o in list">{{ o }}</option></select></div>'
+  ].join('')), [['named', ['input', 'input']], ['labelled', ['input', 'input']], ['options', ['select']]]);
 });

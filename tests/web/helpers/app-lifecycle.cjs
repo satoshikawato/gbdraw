@@ -473,21 +473,28 @@ const readErrorSignature = (page) => page.evaluate(() => {
  * @typedef {{ errorCode: string | null, errorSummary: string, pageErrors: string[], invalidRunInfo: string[] }} OperationHealth
  */
 /**
+ * `newRunInfoOnly`: read Run Info only when it is another object than at the
+ * previous such read of the page (each Generate or Load writes a new one,
+ * services/config.js), so one Run Info is reported by the operation that
+ * wrote it and not again by every later one.
  * @param {import('@playwright/test').Page} page
- * @param {{ errorSignatureBefore?: string | null }} [options]
+ * @param {{ errorSignatureBefore?: string | null, newRunInfoOnly?: boolean }} [options]
  * @returns {Promise<OperationHealth>}
  */
-const readOperationHealth = async (page, { errorSignatureBefore = undefined } = {}) => {
-  const observed = await page.evaluate(() => {
+const readOperationHealth = async (page, { errorSignatureBefore = undefined, newRunInfoOnly = false } = {}) => {
+  const observed = await page.evaluate(({ newRunInfoOnly }) => {
     const app = window.__GBDRAW_APP__;
     const error = app?.errorLog;
+    const runInfo = app?.lastRunInfo ?? null;
+    const read = globalThis.__GBDRAW_HEALTH_RUN_INFO_READ__;
+    if (newRunInfoOnly) globalThis.__GBDRAW_HEALTH_RUN_INFO_READ__ = runInfo;
     return {
       errorCode: error?.code ?? null,
       errorSummary: String(error?.summary || ''),
       errorSignature: error ? JSON.stringify([error.code, error.operation, error.stage, error.summary]) : null,
-      lastRunInfo: app?.lastRunInfo ?? null
+      lastRunInfo: newRunInfoOnly && read === runInfo ? null : runInfo
     };
-  });
+  }, { newRunInfoOnly });
   const inheritedError = errorSignatureBefore !== undefined
     && observed.errorSignature !== null
     && observed.errorSignature === errorSignatureBefore;
@@ -535,7 +542,8 @@ const UNCLASSIFIED_ERROR_CODES = Object.freeze(['UNKNOWN', 'VALIDATION_UNCLASSIF
  * taken, one line each, with no opt-out: an UNKNOWN or VALIDATION_UNCLASSIFIED
  * alert that `errorSignatureBefore` does not name, an uncaught page error, a
  * console error, and NaN or undefined in Run Info. It takes the page and
- * console errors (`takePageErrors`), so each call reports only its own. The
+ * console errors (`takePageErrors`) and reads a Run Info once
+ * (`newRunInfoOnly`), so each call reports only its own. The
  * random walk checks every step with it, and the audit sweeps every Load and
  * operation; `assertOperationHealth`, which the shared Generate and Save
  * helpers call, keeps its opt-outs and does not read console errors.
@@ -544,7 +552,7 @@ const UNCLASSIFIED_ERROR_CODES = Object.freeze(['UNKNOWN', 'VALIDATION_UNCLASSIF
  * @returns {Promise<string[]>}
  */
 const takeOperationHealthProblems = async (page, { errorSignatureBefore = undefined } = {}) => {
-  const health = await readOperationHealth(page, { errorSignatureBefore });
+  const health = await readOperationHealth(page, { errorSignatureBefore, newRunInfoOnly: true });
   const { pageErrors, consoleErrors } = takePageErrors(page);
   return [
     ...(UNCLASSIFIED_ERROR_CODES.includes(String(health.errorCode)) ? [`${health.errorCode} diagnostic: ${health.errorSummary}`] : []),
@@ -553,17 +561,6 @@ const takeOperationHealthProblems = async (page, { errorSignatureBefore = undefi
     ...health.invalidRunInfo.map((value) => `NaN or undefined in Run Info: ${value}`)
   ];
 };
-/**
- * Fails when `takeOperationHealthProblems` finds a problem.
- * @param {import('@playwright/test').Page} page
- * @param {{ operation: string, errorSignatureBefore?: string | null }} options
- */
-const assertOperationHealthStrict = async (page, { operation, errorSignatureBefore = undefined }) => {
-  const problems = await takeOperationHealthProblems(page, { errorSignatureBefore });
-  expect(problems, `${operation} must leave no UNKNOWN or VALIDATION_UNCLASSIFIED alert, page or console error, `
-    + 'or NaN or undefined in Run Info').toEqual([]);
-};
-
 const generateAndWaitForResult = async (
   page,
   {
@@ -1128,7 +1125,6 @@ module.exports = {
   CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
   assertOperationHealth,
-  assertOperationHealthStrict,
   readErrorSignature,
   assertSessionLoadLeftWorkerIdle,
   assertLegacyLoadConvertedOnce,
