@@ -283,6 +283,25 @@ test('Undo and Redo are disabled with the reason while the drawing list step the
   assert.equal(app.canRedoHistory.value, true);
 });
 
+// D-44 (S-3, N-1): the Load rollback port's commit member replaces the History router's members only; the alignment
+// review of a drawing the Load did not keep ends through its own member, which the Load calls once it succeeds.
+test('the Load rollback port ends the review only on a Load that succeeded', async () => {
+  const { createSessionImportRollbackState } = await import('../../gbdraw/web/js/app/app-setup.js');
+  const replaced = [];
+  const ended = [];
+  const port = createSessionImportRollbackState({
+    artifactSlots: /** @type {any} */ ({}), captureHistoryMembers: () => ({}), restoreHistoryMembers: () => {},
+    replaceHistoryMembers: (ids) => replaced.push([...ids]),
+    captureDisplayedArtifact: () => /** @type {any} */ ({}), installDisplayedArtifact: () => {},
+    featureListScrollTop: { value: 0 }, featureListScrollRef: { value: null }, selectedPairwiseBlockOrthogroupId: { value: '' },
+    alignment: { endReviewOutside: (ids) => ended.push([...ids]) }
+  });
+  port.replaceHistoryMembers(['linear-2']);
+  assert.deepEqual({ replaced, ended }, { replaced: [['linear-2']], ended: [] }, 'the commit ends no review');
+  port.endWorkOutside(['linear-2']);
+  assert.deepEqual(ended, [['linear-2']]);
+});
+
 // D-41 (B1, OV-3618): a text that names a drawing reads its tab's name without throwing for an ID that has no tab.
 test('the drawing bar names a drawing by its tab and has no name for an ID without one', () => {
   const app = createAppSetup();
