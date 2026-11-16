@@ -2481,8 +2481,9 @@ def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> 
     from gbdraw.session_drawings import _drawings_document
 
     view = {"createdAt": "2026-01-02T00:00:00Z", **_staged_geometry_session(mode="linear", records=None)}
+    # The last drawing is open, so the shown drawing has one answer and the count rule speaks.
     two_drawn = _drawings_document(
-        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=0, project_views=[view, view]
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=1, project_views=[view, view]
     )
 
     with pytest.raises(ValueError, match="shows 1 drawn drawing; this one has 2"):
@@ -2555,6 +2556,68 @@ def test_refreshed_gallery_session_keeps_the_drawing_its_tutorial_starts_in() ->
     assert shown["runMetadata"] == {"tool": "gbdraw", "refreshed": True}
     one = _drawings_document([view], ids=["linear"], names=["Linear"], active=0, project_views=[view])
     assert refresh_gallery_sessions_module._with_source_drawings(finalized, one) is finalized
+
+
+def test_refreshed_gallery_session_keeps_the_resources_only_a_kept_drawing_names(tmp_path: Path) -> None:
+    """The publication writes the shown drawing's resources alone; the refresh
+    brings back, by resource ID, those only the kept reference drawing names,
+    and keeps no resource that no drawing names."""
+
+    from gbdraw.session_drawings import _drawing_view, write_session_drawings
+    from gbdraw.session_resources import drawing_resource_ids
+
+    read = refresh_gallery_sessions_module._read_session_file
+    source = read(_session_path("vibrio_parahaemolyticus_pva1"))
+    reference, shown = source["drawings"]
+    # The reference drawing's File 1 reads a file the created drawing does not use.
+    source["resources"]["record-9-genbank"] = copy.deepcopy(source["resources"]["record-1-genbank"])
+    source["webFiles"]["resourceOriginalNames"]["record-9-genbank"] = "reference-only.gbk"
+    reference["webFiles"]["bindings"]["linearSeqs"][0]["gb"]["resourceId"] = "record-9-genbank"
+    finalized_view = _drawing_view(source, shown)
+    refresh_gallery_sessions_module._keep_resources(finalized_view, drawing_resource_ids(finalized_view))
+    finalized = write_session_drawings([finalized_view], ids=[shown["id"]], names=[shown["name"]])
+    assert "record-9-genbank" not in finalized["resources"]
+
+    refreshed = refresh_gallery_sessions_module._with_source_drawings(finalized, source)
+
+    assert refreshed["webFiles"]["resourceOriginalNames"]["record-9-genbank"] == "reference-only.gbk"
+    named = set().union(*(drawing_resource_ids(_drawing_view(refreshed, drawing)) for drawing in refreshed["drawings"]))
+    assert set(refreshed["resources"]) == named
+    assert set(refreshed["webFiles"]["resourceOriginalNames"]) <= named
+    refresh_gallery_sessions_module._write_session_file(tmp_path / "refreshed.gbdraw", refreshed)
+
+
+@pytest.mark.parametrize(
+    ("active", "drawn", "message"),
+    [
+        # Both drawn and the reference open: the Gallery would show the whole reference.
+        (0, ("linear", "linear-2"), "linear-2 after it is drawn too"),
+        # The opened drawing has no render; another one has.
+        (1, ("linear",), "but it has no render"),
+    ],
+    ids=["reference-open-both-drawn", "opened-drawing-undrawn"],
+)
+def test_gallery_refresh_refuses_a_session_without_one_shown_drawing(
+    active: int, drawn: tuple[str, ...], message: str
+) -> None:
+    """One rule names the drawing a refresh shows and keeps drawn: the drawing
+    the Web app opens, with a render and no drawn drawing after it."""
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = _staged_geometry_session(mode="linear", records=None)
+    undrawn = {**view, "renderRequest": None, "results": [], "ui": {**view.get("ui", {}), "mode": "linear"}}
+    views = [view if drawing_id in drawn else undrawn for drawing_id in ("linear", "linear-2")]
+    document = _drawings_document(
+        views, ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=active, project_views=views
+    )
+
+    for reader in (
+        refresh_gallery_sessions_module._keep_render_of_shown_drawing,
+        refresh_gallery_sessions_module._gallery_view,
+    ):
+        with pytest.raises(ValueError, match=message):
+            reader(copy.deepcopy(document))
 
 
 def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_validate_session(
