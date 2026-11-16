@@ -866,6 +866,10 @@ test('a refused table rewords inside the panel notice after a UI language change
   assert.equal(span(), 'Could not import annotations: Annotation table row 2: start and end must be positive integers (1-based coordinates).');
   assert.equal(cell(), "Could not import annotations: Annotation table row 2, column 'fill': expected an SVG color name, #RGB or #RRGGBB.");
   assert.equal(selector(), 'Could not import annotations: Annotation table row 2, column \'record\': Invalid record selector "#x". Use #<number> or record_id.');
+  // A failure the diagnostic model does not know shows its normalized sentence, never the exception's text (OV-3683).
+  await editor.importAnnotationTableFile({ target: { files: [{ name: 'a.tsv', text: async () => { throw new Error('internal read detail'); } }], value: 'a.tsv' } });
+  assert.match(notices.at(-1)(), /^Could not import annotations: The operation failed without recognized diagnostic information\./);
+  assert.doesNotMatch(notices.at(-1)(), /internal read detail/);
   await setUiLocale('ja', async () => ({ default: {
     'Could not import annotations: {reason}': '注釈を読み込めませんでした：{reason}',
     'Annotation table row {row}: {reason}': '注釈表の{row}行目：{reason}',

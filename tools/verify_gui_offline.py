@@ -938,7 +938,8 @@ def _run_browser_contract(contract: str) -> None:
             """
             () => ({
               featureEditorFailure: window.__GBDRAW_APP__.featureEditorStatus.status === 'failed'
-                ? window.__GBDRAW_APP__.featureEditorStatus.error || 'Feature editor unavailable'
+                ? (window.__GBDRAW_APP__.featureEditorStatus.error || []).map((part) => part.text).join(' ')
+                  || 'Feature editor unavailable'
                 : null,
               extractedFeatureCount: Array.isArray(window.__GBDRAW_APP__.extractedFeatures)
                 ? window.__GBDRAW_APP__.extractedFeatures.length

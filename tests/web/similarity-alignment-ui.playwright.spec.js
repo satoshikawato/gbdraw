@@ -77,11 +77,13 @@ const loadedPlan = async (page) => {
 
 // The review is docked in the Result. Rings mark the candidates on the figure, and a
 // card lists its candidates in figure order (left to right, undrawn ones last).
-const reviewCard = (page, recordKey) => page.evaluate((key) => {
+const reviewCard = (page, recordKey) => page.evaluate(async (key) => {
+  const { alignmentFeatureName } = await import('./js/services/alignment-review-view.js');
   const card = window.__GBDRAW_APP__.similarityAlignmentReview.groups
     .flatMap((group) => group.cards).find((item) => item.recordKey === key);
+  // A candidate keeps its name as data; the panel and the figure word it with the same helper.
   return { chosenKey: card.chosenKey,
-    candidates: card.candidates.map(({ key, anchor, name }) => ({ key, anchor, name })) };
+    candidates: card.candidates.map(({ key, anchor, feature }) => ({ key, anchor, name: alignmentFeatureName(feature).name })) };
 }, recordKey);
 const candidateRing = (page, candidateKey) => page.locator(
   `button.gbdraw-alignment-ring[data-alignment-candidate-key=${JSON.stringify(candidateKey)}]`);

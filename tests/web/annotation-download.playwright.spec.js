@@ -273,11 +273,13 @@ for (const width of [1440, 390]) {
     const beforeFailure = await importSnapshot(page);
     await page.evaluate(() => {
       window.__annotationReadOriginal = File.prototype.arrayBuffer;
-      File.prototype.arrayBuffer = function () { return Promise.reject(new Error('S01 file-read failure')); };
+      File.prototype.arrayBuffer = function () { return Promise.reject(new DOMException('S01 file-read failure', 'NotReadableError')); };
     });
     await upload(good.table);
     expect(await importSnapshot(page)).toEqual(beforeFailure);
-    await expect(status).toContainText('Could not import annotations: S01 file-read failure');
+    // The browser's refusal says what the user can do, never the exception's own text.
+    await expect(status).toContainText('Could not import annotations: An input could not be read. Replace or reselect it.');
+    await expect(status).not.toContainText('S01 file-read failure');
     expect(dialogs.length).toBe(alertCount);
     await page.evaluate(() => {
       File.prototype.arrayBuffer = function () { return new Promise((resolve) => { window.__finishAnnotationRead = () => resolve(window.__annotationReadOriginal.call(this)); }); };
