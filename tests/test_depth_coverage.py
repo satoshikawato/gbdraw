@@ -36,12 +36,16 @@ def _reference_validate(table: pd.DataFrame) -> None:
         raise ValidationError("Depth table contains missing reference names.", diagnostic=_invalid("REFERENCE_REQUIRED"))
     if (table["position"] <= 0).any():
         raise ValidationError("Depth positions must be 1-based positive integers.", diagnostic=_invalid("POSITIVE_INTEGER"))
+    if not np.isfinite(table["depth"].to_numpy()).all():
+        raise ValidationError("Depth values must be finite numbers.", diagnostic=_invalid("FINITE"))
     if (table["depth"] < 0).any():
         raise ValidationError("Depth values must be non-negative.", diagnostic=_invalid("NONNEGATIVE"))
 
 
 def _reference_parse(path: Path) -> pd.DataFrame:
-    skiprows = 1 if depth_module._first_line_has_header(path) else 0
+    form = depth_module._depth_form(path)
+    assert list(form.columns) == _COLUMNS
+    skiprows = form.skiprows
     try:
         table = pd.read_csv(
             path, sep="\t", header=None, names=_COLUMNS, usecols=[0, 1, 2], skiprows=skiprows,
@@ -234,10 +238,11 @@ def test_a_whole_genome_table_takes_about_two_bytes_per_base(tmp_path: Path) -> 
         "chr\t1\t5\n\t2\t5\n",
         "chr\t1\t5\nchr\t0\t5\n",
         "chr\t1\t5\nchr\t2\t-1\n",
+        "chr\t1\t5\nchr\t2\tnan\n",
+        "chr\t1\t-1\nchr\t2\tinf\n",
         # Every check fails in a later chunk than the next: the first check still names the file.
         "chr\t1\t-1\nchr\t2\t5\nchr\t0\t5\nchr\t3\t5\n\t4\t5\n",
         "chr\t1\t-1\nchr\t2\t5\nchr\t3\t5\nchr\tx\t5\n",
-        "chr\t1\n",
     ],
 )
 def test_a_damaged_file_reports_what_the_row_table_reported(

@@ -1,10 +1,19 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""Depth coverage parsing and binning helpers."""
+"""Depth coverage parsing and binning helpers.
+
+A depth file is a table of numbers along a reference, in one of three forms told
+apart by the column count of its first data line (never by the file's name,
+which the Web does not keep): two columns are a 1-based position and a value,
+three are a reference name, a 1-based position and a value (``samtools depth``),
+and four or more are a reference name, a 0-based start, an exclusive end and a
+value (bedGraph). Every form is read into one parsed form, :class:`DepthCoverage`.
+"""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -22,12 +31,32 @@ from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
+# The columns of each form, by the column count of the first data line (four or more: bedGraph).
+_POSITION_VALUE_COLUMNS = ("position", "depth")
+_INTERVAL_COLUMNS = ("reference_name", "start", "end", "depth")
+_FORM_COLUMNS = {2: _POSITION_VALUE_COLUMNS, 3: tuple(DEPTH_COLUMNS), 4: _INTERVAL_COLUMNS}
+_COLUMN_DTYPES = {
+    # A few names repeat on every row: codes, not one string per row.
+    "reference_name": "category",
+    "position": "int64",
+    "start": "int64",
+    "end": "int64",
+    "depth": "float64",
+}
+# A line before the rows that is not one: a comment, or a UCSC track or browser line.
+_PREAMBLE_LINE = re.compile(r"#|(?:track|browser)(?: |\r?$)")
+# The header line ``samtools depth -H`` writes: the rows are samtools depth rows, one value column per sample.
+_SAMTOOLS_HEADER = "#CHROM\tPOS\t"
+# The reference of a file without reference names (two columns): every record that reads the file takes it.
+_UNNAMED_REFERENCE = ""
 _DEPTH_TSV_CACHE_MAXSIZE = 8
 # Rows per chunk read: a chunk's transient columns stay small beside the stored depths.
 _CHUNK_ROWS = 1 << 20
 # Bases summed per chunk when binning: the running sums stay small beside the stored depths.
 _SUM_CHUNK_BASES = 1 << 20
-_EMPTY_DEPTH_DTYPES = {"reference_name": "category", "position": "int64", "depth": "float64"}
+# Bases of bedGraph rows spread per chunk: a spread base holds about four times the transient bytes of a read
+# row (its position, row and value arrays and the store's copies), so a quarter of a read chunk.
+_SPREAD_BASES = 1 << 18
 # Whole depths take the first of these that holds the largest; others are float64.
 _WHOLE_DEPTH_DTYPES = (np.dtype(np.uint8), np.dtype(np.uint16), np.dtype(np.uint32))
 DepthArray: TypeAlias = NDArray[np.uint8] | NDArray[np.uint16] | NDArray[np.uint32] | NDArray[np.float64]
@@ -54,24 +83,74 @@ def _is_float_like(value: str) -> bool:
     return True
 
 
-def _first_line_has_header(path: Path) -> bool:
+@dataclass(frozen=True)
+class _DepthForm:
+    """How the rows of one depth file read: the columns of its form, and the lines before its first row."""
+
+    columns: tuple[str, ...]
+    skiprows: int
+
+
+def _is_header(fields: list[str], columns: tuple[str, ...]) -> bool:
+    """Whether the first data line names its columns: a number column of it is not a number."""
+
+    return not all(
+        _is_float_like(field) if column == "depth" else _is_int_like(field)
+        for field, column in zip(fields, columns)
+        if column != "reference_name"
+    )
+
+
+def _fields(line: str) -> list[str]:
+    """The tab-separated fields of a line without its line ending: a trailing tab starts an empty field."""
+
+    return line.rstrip("\r\n").split("\t")
+
+
+def _form_columns(fields: list[str]) -> tuple[str, ...]:
+    return _FORM_COLUMNS[min(len(fields), 4)]
+
+
+def _depth_form(path: Path) -> _DepthForm:
+    """The form of a depth file from its first data line, after any comment, track and browser lines.
+
+    That line has two columns, three, or four or more. A comment line that reads
+    as a row is one (a reference may be named ``#1``). The rows after the header
+    ``samtools depth -H`` writes are samtools depth rows, however many samples
+    they hold, and their first sample is read. The first data line is a header
+    line, skipped too, when one of its number columns is not a number. An empty
+    file reads as three columns, as before.
+    """
+
+    skipped = 0
+    samtools = False
     try:
         with open_input_text(path, encoding="utf-8") as handle:
-            first_line = handle.readline()
+            for line in handle:
+                fields = _fields(line)
+                if not _PREAMBLE_LINE.match(line) or (
+                    len(fields) >= 2 and not _is_header(fields, _form_columns(fields))
+                ):
+                    break
+                samtools = samtools or line.startswith(_SAMTOOLS_HEADER)
+                skipped += 1
+            else:
+                line = ""
     except (OSError, *GZIP_ERRORS) as exc:
         raise ParseError(
             f"Unable to read depth file '{path}': {exc}", diagnostic=_UNREADABLE
         ) from exc
 
-    if not first_line:
-        return False
-    fields = first_line.rstrip("\n\r").split("\t")
-    if len(fields) < 3:
+    if not line:
+        return _DepthForm(tuple(DEPTH_COLUMNS), skipped)
+    if len(fields) < 2:
         raise ParseError(
-            f"Depth file '{path}' must contain at least 3 tab-separated columns.",
-            diagnostic={"code": "TABLE_INVALID", "reason": "THREE_COLUMNS"},
+            f"Depth file '{path}' must have two tab-separated columns (position, value), three "
+            "(reference, position, value) or four (reference, start, end, value).",
+            diagnostic={"code": "TABLE_INVALID", "reason": "DEPTH_COLUMNS"},
         )
-    return not (_is_int_like(fields[1]) and _is_float_like(fields[2]))
+    columns = tuple(DEPTH_COLUMNS) if samtools else _form_columns(fields)
+    return _DepthForm(columns, skipped + int(_is_header(fields, columns)))
 
 
 def _depth_tsv_cache_key(path: str) -> tuple[str, int, int]:
@@ -104,7 +183,9 @@ class DepthCoverage:
 
     ``depths[name][position - 1]`` is the mean of the rows for that position
     (their sum, in row order, divided by their count) and 0 where no row names
-    it. Names keep the order of their first row. Each array is read-only and
+    it; a bedGraph row names the positions ``start + 1`` to ``end``. Names keep
+    the order of their first row; a file without reference names (two columns)
+    has one reference named ``""``. Each array is read-only and
     has the smallest dtype that holds every value exactly: ``uint8``,
     ``uint16`` or ``uint32`` for whole depths, ``float64`` otherwise.
     ``extents[name]`` is the first and the last position the rows name: the
@@ -189,6 +270,9 @@ class _SummedDepths:
         np.add.at(self.counts, indexes, 1)
 
     def finish(self) -> tuple[DepthArray, tuple[int, int]]:
+        # Up to the last position, as the sorted store keeps: the length never depends on how the rows were chunked.
+        self.sums.resize(self.last, refcheck=False)
+        self.counts.resize(self.last, refcheck=False)
         present = self.counts > 0
         means = self.sums
         means[present] /= self.counts[present]
@@ -240,8 +324,79 @@ def _sorted_coverage(chunks: Iterable[DataFrame]) -> DepthCoverage | None:
     return _coverage({name: stored.finish() for name, stored in references.items()})
 
 
+def _named_rows(chunk: DataFrame) -> DataFrame:
+    """A chunk of rows with its reference names: a file without them names its one reference ``""``."""
+
+    if "reference_name" not in chunk:
+        codes = np.zeros(len(chunk), dtype=np.int8)
+        chunk.insert(0, "reference_name", pd.Categorical.from_codes(codes, categories=[_UNNAMED_REFERENCE]))
+    return chunk
+
+
+def _interval_bases(rows: DataFrame) -> Iterator[DataFrame]:
+    """The per-base rows of bedGraph rows: bases ``start + 1`` to ``end`` of a row take its value.
+
+    The bases are spread in row order, ``_SPREAD_BASES`` at a time, so a long row
+    spans several chunks and each chunk stays small beside the stored depths.
+    """
+
+    names = rows["reference_name"]
+    codes = names.cat.codes.to_numpy()
+    values = rows["depth"].to_numpy(dtype=np.float64)
+    starts = rows["start"].to_numpy(dtype=np.int64)
+    lengths = rows["end"].to_numpy(dtype=np.int64) - starts
+    # Row i spreads bases spread_ends[i] - lengths[i] .. spread_ends[i] - 1 of all the chunk's bases.
+    spread_ends = np.cumsum(lengths)
+    spread_starts = spread_ends - lengths
+    # Base k of all the bases, spread from row i, is position k + offsets[i].
+    offsets = starts - spread_starts + 1
+    total = int(spread_ends[-1]) if spread_ends.size else 0
+    for first in range(0, total, _SPREAD_BASES):
+        last = min(first + _SPREAD_BASES, total)
+        low = int(np.searchsorted(spread_ends, first, side="right"))
+        high = int(np.searchsorted(spread_starts, last, side="left"))
+        # Repeat counts are the platform's index type: int32 in the Web app's Pyodide, where int64 counts raise.
+        taken = (np.minimum(spread_ends[low:high], last) - np.maximum(spread_starts[low:high], first)).astype(np.intp)
+        row_of_base = np.repeat(np.arange(low, high), taken)
+        positions = np.arange(first, last, dtype=np.int64)
+        positions += offsets[row_of_base]
+        yield DataFrame(
+            {
+                "reference_name": pd.Categorical.from_codes(codes[row_of_base], dtype=names.dtype),
+                "position": positions,
+                "depth": values[row_of_base],
+            },
+            copy=False,
+        )
+
+
+def _intervals_overlap_or_go_back(rows: DataFrame, last_ends: dict[str, int]) -> bool:
+    """Whether a reference's bedGraph rows overlap or go back, in these rows or after the earlier ones.
+
+    ``last_ends`` holds each reference's last end so far and is updated. Rows of
+    a reference must come in increasing order without overlapping, as
+    ``bedtools genomecov`` writes them and ``bedGraphToBigWig`` requires: then
+    no base is named twice.
+    """
+
+    names = rows["reference_name"]
+    order = np.argsort(names.cat.codes.to_numpy(), kind="stable")
+    codes = names.cat.codes.to_numpy()[order]
+    starts = rows["start"].to_numpy(dtype=np.int64)[order]
+    ends = rows["end"].to_numpy(dtype=np.int64)[order]
+    same_reference = codes[1:] == codes[:-1]
+    failed = bool((same_reference & (starts[1:] < ends[:-1])).any())
+    firsts = np.flatnonzero(np.concatenate(([True], ~same_reference)))
+    lasts = np.flatnonzero(np.concatenate((~same_reference, [True])))
+    for first, last in zip(firsts.tolist(), lasts.tolist()):
+        name = str(names.cat.categories[codes[first]])
+        failed = failed or int(starts[first]) < last_ends.get(name, 0)
+        last_ends[name] = int(ends[last])
+    return failed
+
+
 def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
-    """The rows of one depth file in file order, a chunk at a time, each one valid.
+    """The per-base rows of one depth file in file order, a chunk at a time, each one valid.
 
     A file with an invalid row raises once it is read to the end, so a value
     that does not parse anywhere in it is reported first, and then the first
@@ -249,30 +404,33 @@ def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
     """
 
     depth_path = Path(resolved_path)
-    skiprows = 1 if _first_line_has_header(depth_path) else 0
+    form = _depth_form(depth_path)
     failed: set[str] = set()
+    last_ends: dict[str, int] = {}
     try:
         with open_input_text(depth_path, encoding="utf-8") as handle:
             reader = pd.read_csv(
                 handle,
                 sep="\t",
                 header=None,
-                names=DEPTH_COLUMNS,
-                usecols=[0, 1, 2],
-                skiprows=skiprows,
-                dtype={
-                    # A few names repeat on every row: codes, not one string per row.
-                    "reference_name": "category",
-                    "position": "int64",
-                    "depth": "float64",
-                },
+                names=list(form.columns),
+                usecols=list(range(len(form.columns))),
+                skiprows=form.skiprows,
+                dtype={column: _COLUMN_DTYPES[column] for column in form.columns},
                 chunksize=_CHUNK_ROWS,
                 **EXACT_FLOAT_READ_OPTIONS,
             )
             with reader:
-                for chunk in reader:
+                for read in reader:
+                    chunk = _named_rows(read)
                     failed.update(_failed_depth_checks(chunk))
-                    if not failed:
+                    if not failed and "start" in chunk and _intervals_overlap_or_go_back(chunk, last_ends):
+                        failed.add("INTERVAL")
+                    if failed:
+                        continue
+                    if "start" in chunk:
+                        yield from _interval_bases(chunk)
+                    else:
                         yield chunk
     except (ValueError, *GZIP_ERRORS) as exc:
         raise ParseError(
@@ -324,12 +482,15 @@ def read_cached_depth_coverage(path: str) -> DepthCoverage:
 
 
 def read_depth_tsv(path: str) -> DataFrame:
-    """Read a samtools-depth-like TSV file as a table of its rows.
+    """Read a depth file as a table of its per-base rows: reference name, 1-based position, depth.
 
-    The expected columns are reference name, 1-based position, and non-negative
-    depth. Headerless files are expected; a single header line is tolerated when
-    the position/depth fields on the first line are non-numeric. Reference names
-    are a ``string`` column. Each call reads the file and returns a new table.
+    The file is in any form of this module: two columns (position, value),
+    three (reference, position, value) or four or more (bedGraph, whose rows
+    give one row per base they cover). Headerless files are expected; comment,
+    track and browser lines before the rows are skipped, and a single header
+    line is tolerated when one of its number fields is non-numeric. Reference
+    names are a ``string`` column. Each call reads the file and returns a new
+    table.
     """
 
     resolved_path, _mtime_ns, _size = _depth_tsv_cache_key(path)
@@ -337,7 +498,7 @@ def read_depth_tsv(path: str) -> DataFrame:
     table = (
         pd.concat(chunks, ignore_index=True)
         if chunks
-        else pd.DataFrame({column: pd.Series(dtype=dtype) for column, dtype in _EMPTY_DEPTH_DTYPES.items()})
+        else pd.DataFrame({column: pd.Series(dtype=_COLUMN_DTYPES[column]) for column in DEPTH_COLUMNS})
     )
     table["reference_name"] = table["reference_name"].astype("string")
     return table
@@ -380,7 +541,21 @@ _DEPTH_CHECKS: tuple[tuple[str, str, Callable[[DataFrame], bool]], ...] = (
     (
         "POSITIVE_INTEGER",
         "Depth positions must be 1-based positive integers.",
-        lambda rows: bool((rows["position"] <= 0).any()),
+        lambda rows: "position" in rows and bool((rows["position"] <= 0).any()),
+    ),
+    (
+        "INTERVAL",
+        "Depth rows of four or more columns are bedGraph rows (reference, 0-based start, end, value): "
+        "each start must be 0 or more and each end greater than its start, and the rows of a reference must "
+        "come in increasing order without overlapping (sort -k1,1 -k2,2n). A samtools depth file of several "
+        "samples has one value column per sample: keep the reference, position and one sample's column, or "
+        "write it with samtools depth -H, whose header line marks its rows.",
+        lambda rows: "start" in rows and bool(((rows["start"] < 0) | (rows["end"] <= rows["start"])).any()),
+    ),
+    (
+        "FINITE",
+        "Depth values must be finite numbers.",
+        lambda rows: not bool(np.isfinite(rows["depth"].to_numpy(dtype=np.float64)).all()),
     ),
     (
         "NONNEGATIVE",

@@ -194,6 +194,9 @@ const REASONS = Object.freeze({
   // OV-1262: gbdraw/annotations/layout.py, an explicit lane under Overflow "Error on overflow".
   ANNOTATION_LANE_CONFLICT: 'Two region annotations overlap in the same lane of the annotation table, counting their labels and padding. Give one of them another lane in Region Annotations, or set the Annotations row\'s Overflow behavior to Compress or Clip in Custom Track Slots (Use custom stack).',
   THREE_COLUMNS: 'Supply at least three tab-separated columns.',
+  // A depth file's form comes from its column count (gbdraw/analysis/depth.py).
+  DEPTH_COLUMNS: 'Supply two tab-separated columns (position, value), three (reference, position, value, as samtools depth writes), or four (reference, start, end, value, as bedGraph).',
+  INTERVAL: 'A file of four or more columns is read as bedGraph: reference, 0-based start, end and value, each end greater than its start, and the rows of a reference in increasing order without overlaps. For samtools depth of several samples, keep the reference, position and one sample\'s column, or write the file with samtools depth -H.',
   POSITIVE_INTEGER_OR_AUTO: 'Use Auto or an integer greater than zero.',
   DINUCLEOTIDE: 'Use two letters from A, C, G, T, and U, for example GC.',
   DEPTH_VALUES: 'Use integer positions and numeric depth values.',
