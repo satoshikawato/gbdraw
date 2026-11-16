@@ -336,7 +336,8 @@ def _interval_bases(rows: DataFrame) -> Iterator[DataFrame]:
         last = min(first + _SPREAD_BASES, total)
         low = int(np.searchsorted(spread_ends, first, side="right"))
         high = int(np.searchsorted(spread_starts, last, side="left"))
-        taken = np.minimum(spread_ends[low:high], last) - np.maximum(spread_starts[low:high], first)
+        # Repeat counts are the platform's index type: int32 in the Web app's Pyodide, where int64 counts raise.
+        taken = (np.minimum(spread_ends[low:high], last) - np.maximum(spread_starts[low:high], first)).astype(np.intp)
         row_of_base = np.repeat(np.arange(low, high), taken)
         positions = np.arange(first, last, dtype=np.int64)
         positions += offsets[row_of_base]

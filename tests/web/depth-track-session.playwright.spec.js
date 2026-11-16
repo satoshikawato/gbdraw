@@ -3457,6 +3457,56 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   ]);
 });
 
+// The Web app's Python is 32-bit (Pyodide), where an index array of int64
+// raises; a bedGraph failed every Generate there and nowhere else (OV-3741).
+test('a bedGraph and a two-column Depth file draw as the per-base file of the same values', async ({ page }) => {
+  test.setTimeout(240000);
+  const genbank = readFileSync(sparseGenbankAPath, 'utf8');
+  const length = 40579;
+  const runs = [];
+  for (let start = 0, index = 0; start < length; index += 1) {
+    const end = Math.min(length, start + 1 + ((index * 37) % 400));
+    runs.push([start, end, (index * 13) % 90]);
+    start = end;
+  }
+  const perBase = runs.flatMap(([start, end, value]) => Array.from(
+    { length: end - start }, (_, offset) => `BGC0000708\t${start + offset + 1}\t${value}`
+  ));
+  const forms = {
+    perBase: perBase.join('\n'),
+    bedGraph: ['track type=bedGraph', ...runs.map(([start, end, value]) => `BGC0000708\t${start}\t${end}\t${value}`)].join('\n'),
+    twoColumns: perBase.map((line) => line.slice(line.indexOf('\t') + 1)).join('\n')
+  };
+
+  await openApp(page, { waitForPalette: false });
+  const depthGroups = await evaluateWithRetainedPromise(page, async ({ genbankText, texts }) => {
+    const app = window.__GBDRAW_APP__;
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
+    app.selectDrawing('circular');
+    app.setCircularInputType('gb');
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
+    Object.assign(app.form, { show_depth: true, labels_mode: 'none', legend: 'none' });
+    const drawn = {};
+    for (const [form, text] of Object.entries(texts)) {
+      // One name for every form: the reader tells them apart by their columns.
+      app.files.c_depth = bound([new File([text], 'coverage.txt', { type: 'text/plain', lastModified: 2 })]);
+      const result = await app.runAnalysis();
+      const svg = new DOMParser().parseFromString(app.currentResults()[0]?.content || '', 'image/svg+xml');
+      const group = svg.querySelector('g[data-gbdraw-slot-renderer="depth"]');
+      drawn[form] = { status: result?.status, error: app.errorLog ? String(app.errorLog.summary || '') : null, group: group ? group.outerHTML : '' };
+    }
+    return drawn;
+  }, { genbankText: genbank, texts: forms });
+
+  for (const drawn of Object.values(depthGroups)) {
+    expect(drawn.error).toBeNull();
+    expect(drawn.status).toBe('ok');
+  }
+  expect(depthGroups.perBase.group).toContain('<path');
+  expect(depthGroups.bedGraph.group).toBe(depthGroups.perBase.group);
+  expect(depthGroups.twoColumns.group).toBe(depthGroups.perBase.group);
+});
+
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
