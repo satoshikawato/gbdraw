@@ -2511,12 +2511,16 @@ test('the Source recipe names a window of a record without a selector by its pla
 
 // OV-3590: a Linear request with a protein comparison, or a CLI comparison Session (whose request holds the protein
 // pipeline marker of mode none), has a Source recipe, and the request the CLI builds from it compares what the Web's
-// compares. The CLI's request is read without running LOSAT: its arguments, read by the CLI, planned and encoded.
+// compares. The CLI's request is read without running LOSAT: its arguments, read by the CLI, planned, put through the
+// checks Linear assembly makes of its comparisons first (where the CLI refuses a mode or a mix), and encoded.
 const cliComparisonsOf = async (session, recipe, fixture) => {
   const info = buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe });
   const runDir = await materializeRecipe(session, recipe, info, fixture);
   return evaluatePython([
     'import os',
+    'from dataclasses import fields',
+    'from types import SimpleNamespace',
+    'from gbdraw.api.diagram import _linear_comparison_modes, _refuse_linear_comparison_conflicts',
     'from gbdraw.api.request_render import plan_linear_request',
     'from gbdraw.linear import _get_args, _linear_request, _read_linear_inputs',
     'from gbdraw.session_request_codec import encode_canonical_request',
@@ -2524,8 +2528,13 @@ const cliComparisonsOf = async (session, recipe, fixture) => {
     'os.chdir(payload["dir"])',
     'try:',
     '    args = _get_args(payload["args"])',
-    '    request = plan_linear_request(_linear_request(args, _read_linear_inputs(args), None)).request',
-    '    result = encode_canonical_request(request).payload["comparisons"]',
+    '    plan = plan_linear_request(_linear_request(args, _read_linear_inputs(args), None))',
+    // The assembly inputs of these checks are the drawn options; a Similarity alignment the build gives besides.
+    '    options = plan._drawn_options',
+    '    drawn = SimpleNamespace(**{f.name: getattr(options, f.name) for f in fields(options)}, similarity_alignment=None)',
+    '    modes = _linear_comparison_modes(plan.records, drawn, plan.layout)',
+    '    _refuse_linear_comparison_conflicts(plan.records, drawn, modes.protein_blastp_mode)',
+    '    result = encode_canonical_request(plan.request).payload["comparisons"]',
     'finally:',
     '    os.chdir(here)'
   ].join('\n'), { dir: runDir, args: info.sourceRecipe.commandArgs.slice(2) });
@@ -2544,7 +2553,7 @@ const proteinResources = async (names) => Object.fromEntries(await Promise.all(n
 ])));
 // The settings the CLI writes for `--losat losatp` without other options, as the Web writes them.
 const defaultProteinSettings = () => evaluatePython([
-  'from gbdraw.session_request_codec import describe_protein_comparison_flags',
+  'from gbdraw.linear import describe_protein_comparison_flags',
   'result = {}',
   'for row in describe_protein_comparison_flags()["settings"]:',
   '    if row["parameter"] is None:',
@@ -2645,26 +2654,53 @@ test('the Source recipe of a Similarity groups Generate runs the search with its
   ]);
 });
 
-test('the Source recipe lists a selected LOSATP pair and a BLAST table in one comparisons table', async () => {
+test('the Source recipe of a Pairwise search of some record pairs lists them as source=losat rows', async () => {
   const settings = await defaultProteinSettings();
+  // Three records, a Selected plan that searches #2-#3 only: the Generate stores that pair's table.
   const session = await proteinSession({
     names: ['BGC0000708', 'BGC0000709', 'BGC0000711'],
-    extraResources: { 'comparison-nucleotide-1': resource('nucleotide-blast', 'pair.tsv', BLAST_ROW) },
+    extraResources: { 'comparison-protein-1': resource('canonical-tsv', 'comparison-protein-1.tsv', 'query\n') },
     comparisons: [
-      { kind: 'nucleotideBlast', resourceId: 'comparison-nucleotide-1', queryRecordIndex: 0, subjectRecordIndex: 1,
-        sourceName: 'pair.tsv' },
-      { kind: 'generatedProteinComparison', mode: 'pairwise', pairs: [{ queryRecordIndex: 1, subjectRecordIndex: 2 }],
-        settings }
+      { kind: 'precomputedProteinComparison', resourceId: 'comparison-protein-1', encoding: 'canonicalTsv',
+        queryRecordIndex: 1, subjectRecordIndex: 2 },
+      { kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings }
     ]
   });
   const recipe = await buildSourceRecipe(session);
   assert.equal(recipe.available, true, recipe.unavailableReason);
   await assertCliParserAccepts(recipe);
-  const cli = await cliComparisonsOf(session, recipe, 'selected losatp pair');
-  assert.deepEqual(comparisonFields(cli, 'nucleotideBlast', ['queryRecordIndex', 'subjectRecordIndex']),
-    [{ queryRecordIndex: 0, subjectRecordIndex: 1 }]);
+  const cli = await cliComparisonsOf(session, recipe, 'losatp some pairs');
+  assert.deepEqual(comparisonFields(cli, 'nucleotideBlast', ['queryRecordIndex']), []);
   assert.deepEqual(comparisonFields(cli, 'generatedProteinComparison', ['mode', 'pairs', 'settings']),
     [{ mode: 'pairwise', pairs: [{ queryRecordIndex: 1, subjectRecordIndex: 2 }], settings }]);
+});
+
+test('a BLAST table beside a protein search stays without a Source recipe, with a reason in words (OV-3688)', async () => {
+  const settings = await defaultProteinSettings();
+  // A Selected plan with an uploaded table for #1-#2 and LOSATP Pairwise for #2-#3, as a Generate commits it, and
+  // a BLAST table beside a Pairwise search of adjacent rows: the CLI refuses a table beside the pairs a search lists.
+  const committed = [
+    { kind: 'nucleotideBlast', resourceId: 'comparison-nucleotide-1', queryRecordIndex: 0, subjectRecordIndex: 1,
+      sourceName: 'pair.tsv' },
+    { kind: 'precomputedProteinComparison', resourceId: 'comparison-protein-1', encoding: 'canonicalTsv',
+      queryRecordIndex: 1, subjectRecordIndex: 2 },
+    { kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings }
+  ];
+  const adjacent = [committed[0], { kind: 'generatedProteinComparison', mode: 'pairwise', pairs: [], settings }];
+  for (const comparisons of [committed, adjacent]) {
+    const session = await proteinSession({
+      names: ['BGC0000708', 'BGC0000709', 'BGC0000711'],
+      extraResources: {
+        'comparison-nucleotide-1': resource('nucleotide-blast', 'pair.tsv', BLAST_ROW),
+        'comparison-protein-1': resource('canonical-tsv', 'comparison-protein-1.tsv', 'query\n')
+      },
+      comparisons
+    });
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, false);
+    assert.equal(recipe.unavailableReason,
+      'Source recipe unavailable: the command line takes no BLAST table beside a protein search.');
+  }
 });
 
 test('a protein result without its search stays without a Source recipe, with a reason in words', async () => {

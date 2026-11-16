@@ -34,6 +34,8 @@ from .api.options import (
     LinearWrapDefaults,
     LinearWrapTrackOrder,
     LINEAR_DEFAULT_PLOT_TITLE_POSITION,
+    LOSATP_MODE_WIRE,
+    LOSATP_NO_SEARCH_MODE,
     LosatRuntimeOptions,
     LosatSearchOptions,
 )
@@ -164,6 +166,7 @@ from .session import (
 )
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
+from .session_request_codec import protein_setting_defaults
 from .cli_utils.losat_output import (
     add_losat_runtime_args,
     add_losatn_task_arg,
@@ -199,6 +202,50 @@ _CLI_LOSAT_FIELD_FLAGS = {
     "losatp_max_target_seqs": "--losatp_max_target_seqs",
     "losatp_member_max_hits": "--losatp_member_max_hits",
 }
+# The ``gbdraw linear`` option of each ``generatedProteinComparison`` setting (``protein_setting_defaults``), by the
+# destination the parser gives it; None: the command has no option for it (OV-3590).
+_PROTEIN_SETTING_DESTS: dict[tuple[str, str | None], str | None] = {
+    ("collinearityParams", "minAnchors"): "collinear_min_anchors",
+    ("collinearityParams", "maxUnitGap"): "collinear_max_unit_gap",
+    ("collinearityParams", "maxDiagonalDrift"): "collinear_max_diagonal_drift",
+    ("collinearityParams", "maxConflicts"): "collinear_max_conflicts_in_merge_gap",
+    ("collinearityParams", "mergeOrientation"): "collinear_merge_orientation",
+    ("collinearityUnitMode", None): "collinear_unit_mode",
+    ("collinearityAnchorMode", None): "collinear_anchor_mode",
+    ("collinearitySearchScope", None): "collinear_search_scope",
+    ("collinearityColorMode", None): "collinear_color_mode",
+    ("losatpBin", None): "losat_bin",
+    ("ncbiBlastpBin", None): "ncbi_blast_bin",
+    ("losatpThreads", None): "losat_threads",
+    ("proteinBlastpMaxHits", None): "losatp_max_hits",
+    ("proteinBlastpCandidateLimit", None): "losatp_max_target_seqs",
+    ("orthogroupMembershipMode", None): None,
+    ("orthogroupMemberMaxHits", None): "losatp_member_max_hits",
+    ("collinearInferOrthogroups", None): "collinear_infer_orthogroups",
+    ("collinearMaxParalogLinksPerOrthogroup", None): "collinear_max_paralog_links_per_orthogroup",
+}
+
+
+class ProteinSettingFlag(TypedDict):
+    """One command-line option of a ``generatedProteinComparison`` setting."""
+
+    setting: str
+    # The key in the setting's value (``collinearityParams``), else None.
+    parameter: str | None
+    # None: the command has no option for it.
+    flag: str | None
+    # What the command writes without the option.
+    cliDefault: object
+
+
+class ProteinComparisonFlags(TypedDict):
+    """``--losat losatp``: its ``--losatp_mode`` word per wire mode, each setting's option, and the word of a
+    setting value that is no number or text (true, false, no value)."""
+
+    program: str
+    modes: dict[str, str]
+    settings: list[ProteinSettingFlag]
+    words: dict[str, str]
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -1183,6 +1230,30 @@ def _validate_collinear_args(parser: argparse.ArgumentParser, args: argparse.Nam
         parser.error("--collinear_max_conflicts_in_merge_gap must be >= 0")
     if args.collinear_max_paralog_links_per_orthogroup <= 0:
         parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
+
+
+def describe_protein_comparison_flags() -> ProteinComparisonFlags:
+    """The command line of a ``generatedProteinComparison``, which the Web's Source recipe writes: each setting's
+    option as this command's parser spells it, and its ``cliDefault`` (``protein_setting_defaults``)."""
+
+    options = {action.dest: action.option_strings[0] for action in _linear_parser()._actions if action.option_strings}
+    defaults = protein_setting_defaults()
+    if [(row["setting"], row["parameter"]) for row in defaults] != list(_PROTEIN_SETTING_DESTS):
+        raise RuntimeError("_PROTEIN_SETTING_DESTS must name each protein comparison setting once, in wire order")
+    return {
+        "program": "losatp",
+        "modes": {wire: typed for typed, wire in LOSATP_MODE_WIRE.items() if wire != LOSATP_NO_SEARCH_MODE},
+        "settings": [
+            {
+                "setting": row["setting"],
+                "parameter": row["parameter"],
+                "flag": None if dest is None else options[dest],
+                "cliDefault": row["cliDefault"],
+            }
+            for row, dest in zip(defaults, _PROTEIN_SETTING_DESTS.values())
+        ],
+        "words": {"true": "on", "false": "off", "null": "none"},
+    }
 
 
 def _get_args(args: Sequence[str] | None, *, _legacy_session: bool = False) -> argparse.Namespace:

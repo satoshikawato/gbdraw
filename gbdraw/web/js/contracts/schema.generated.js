@@ -778,7 +778,7 @@ export const DRAFT_ANNOTATION_STYLE = Object.freeze({
   labelOffset: 4
 });
 
-// gbdraw/session_request_codec.py: describe_protein_comparison_flags()
+// gbdraw/linear.py: describe_protein_comparison_flags()
 export const PROTEIN_COMPARISON_FLAGS = Object.freeze({
   program: 'losatp',
   modes: Object.freeze({

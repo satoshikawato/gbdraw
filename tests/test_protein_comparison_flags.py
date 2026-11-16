@@ -11,12 +11,14 @@ from typing import Any
 
 import pytest
 
-from gbdraw.linear import _LOSATP_MODES, _get_args, _linear_request, _read_linear_inputs
-from gbdraw.session_request_codec import (
-    _PROTEIN_SETTINGS_WIRE,
+from gbdraw.linear import (
+    _LOSATP_MODES,
+    _get_args,
+    _linear_request,
+    _read_linear_inputs,
     describe_protein_comparison_flags,
-    encode_canonical_request,
 )
+from gbdraw.session_request_codec import _PROTEIN_SETTINGS_WIRE, encode_canonical_request
 
 ROOT = Path(__file__).resolve().parents[1]
 INPUTS = [str(ROOT / "tests" / "test_inputs" / f"{name}.gbk") for name in ("BGC0000708", "BGC0000709")]

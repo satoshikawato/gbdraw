@@ -32,6 +32,7 @@ import {
   PROTEIN_COMPARISON_FLAGS,
   RECORD_SOURCE_FILES
 } from '../contracts/schema.generated.js';
+import { isResourceBackedCanonicalComparison } from '../services/canonical-comparisons.js';
 import { storedProteinResultMode } from '../services/imported-comparison-intent.js';
 import { inputSequenceSource, inputTypeOfSourceKind, recordSourceFilesOf } from '../services/input-types.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
@@ -725,11 +726,6 @@ const coverConservationFiles = (coverage, options) => {
       coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)))));
 };
 
-// The comparisons a protein search writes as its results after a render, the CLI's and the Web's alike: beside the
-// search's marker they are what the search computes again.
-/** @type {ReadonlySet<CanonicalComparison['kind']>} */
-const PROTEIN_RESULT_KINDS = new Set(['precomputedProteinComparison', 'orthogroupResult', 'collinearityResult']);
-
 /**
  * @typedef {{ queryRecordIndex: number, subjectRecordIndex: number }} UnitPair A compared pair by drawn unit.
  * @typedef {object} ProteinSearchProjection The LOSATP search the recipe runs.
@@ -755,9 +751,9 @@ const PROTEIN_RESULT_KINDS = new Set(['precomputedProteinComparison', 'orthogrou
  */
 const projectComparisons = (comparisons) => {
   const markers = comparisons.filter((comparison) => comparison?.kind === 'generatedProteinComparison');
-  const results = comparisons.filter((comparison) => PROTEIN_RESULT_KINDS.has(comparison?.kind));
+  const results = comparisons.filter(isResourceBackedCanonicalComparison);
   if (comparisons.some((comparison) => comparison?.kind !== 'nucleotideBlast' && comparison?.kind !== 'generatedProteinComparison'
-    && !PROTEIN_RESULT_KINDS.has(comparison?.kind))) {
+    && !isResourceBackedCanonicalComparison(comparison))) {
     throw recipeUnavailable(msg('a comparison of an unknown kind has no current CLI projection.'));
   }
   if (markers.length > 1) throw recipeUnavailable(msg('more than one protein search has no current CLI projection.'));
@@ -2212,12 +2208,14 @@ const appendComparisonOptions = (args, request, files, units) => {
   const records = recordPairs(drawable);
   const losatRows = recordPairs(searched);
   if (search !== null) {
-    // `-b` takes no LOSAT search, and only a Pairwise search lists its pairs in a comparisons table.
-    if (search.mode !== 'pairwise' && (comparisons.length > 0 || losatRows.length > 0)) {
-      throw recipeUnavailable(msg('the command line lists no comparison table rows for this protein search mode.'));
+    // `-b` takes no LOSAT search, and Linear assembly takes no comparison table row beside the pairs a search lists
+    // (`_linear_comparison_modes`, OV-3688).
+    if (comparisons.length > 0) {
+      throw recipeUnavailable(msg('the command line takes no BLAST table beside a protein search.'));
     }
-    if (losatRows.length === 0 && comparisons.length > 0) {
-      throw recipeUnavailable(msg('the command line takes no BLAST table beside a protein search of adjacent rows.'));
+    // Only a Pairwise search lists its pairs, as `source=losat` rows of a comparisons table.
+    if (search.mode !== 'pairwise' && losatRows.length > 0) {
+      throw recipeUnavailable(msg('the command line lists no comparison table rows for this protein search mode.'));
     }
     args.push(...proteinSearchArgs(search));
     if (losatRows.length === 0) return;
@@ -2243,7 +2241,7 @@ const appendComparisonOptions = (args, request, files, units) => {
     });
     return { blastPath: path, query: `#${records[index].query + 1}`, subject: `#${records[index].subject + 1}` };
   });
-  // The pairs the search compares are `source=losat` rows, without a file.
+  // The pairs the search compares are `source=losat` rows, without a file; a search comes with no BLAST table row.
   const searchRows = losatRows.map(({ query, subject }) => ({ query: `#${query + 1}`, subject: `#${subject + 1}`, source: 'losat' }));
   appendOption(
     args,
@@ -2252,10 +2250,9 @@ const appendComparisonOptions = (args, request, files, units) => {
       'comparisons.tsv',
       (finalNameForPath) => tsv(
         searchRows.length > 0 ? ['blast', 'query', 'subject', 'source'] : ['blast', 'query', 'subject'],
-        [
-          ...rows.map(({ blastPath, ...row }) => ({ ...row, blast: finalNameForPath(blastPath), source: 'table' })),
-          ...searchRows.map((row) => ({ ...row, blast: '' }))
-        ]
+        searchRows.length > 0
+          ? searchRows.map((row) => ({ ...row, blast: '' }))
+          : rows.map(({ blastPath, ...row }) => ({ ...row, blast: finalNameForPath(blastPath) }))
       ),
       'generatedFiles.source_recipe.comparisons_table'
     )
