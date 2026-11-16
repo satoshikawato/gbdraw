@@ -35,10 +35,8 @@ from ....svg.circular_tracks import (
     generate_circle_path_desc,
 )
 from ....svg.ids import stable_svg_id
-from ...numeric_series import NumericSeriesPlot, SeriesBandFrame
+from ...numeric_series import AXIS_STROKE, NumericSeriesPlot, SeriesBandFrame
 from .scalar_axis import circular_range_label_elements, circular_scalar_axis_group
-
-AXIS_STROKE = "#4b5563"
 
 
 def _band_radii(place: CircularTrackPlace) -> tuple[float, float]:

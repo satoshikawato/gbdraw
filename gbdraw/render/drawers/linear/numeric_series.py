@@ -21,9 +21,8 @@ from ....layout.scalar_axis import (
 from ....svg.ids import stable_svg_id
 from ....svg.linear_tracks import LinearTrackFrame, linear_series_path_desc
 from ....svg.path_data import path_point
-from ...numeric_series import NumericSeriesPlot, SeriesBandFrame
+from ...numeric_series import AXIS_STROKE, NumericSeriesPlot, SeriesBandFrame
 
-AXIS_STROKE = "#4b5563"
 SMALL_TICK_PX = 2.0
 
 

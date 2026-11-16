@@ -34,6 +34,8 @@ DiagramMode = Literal["circular", "linear"]
 # never serves another.
 NumericSeriesStage = Literal["gc_content_content", "gc_skew_content", "depth_content"]
 NumericSeriesConfig = GcContentConfigurator | GcSkewConfigurator | DepthConfigurator
+# The colour of a series axis, its ticks and its labels, in both modes.
+AXIS_STROKE = "#4b5563"
 
 
 @dataclass(frozen=True)
@@ -239,6 +241,7 @@ def numeric_series_plot(config: NumericSeriesConfig, frame: DataFrame) -> Numeri
 
 
 __all__ = [
+    "AXIS_STROKE",
     "NumericSeriesConfig",
     "NumericSeriesPlot",
     "NumericSeriesStage",
