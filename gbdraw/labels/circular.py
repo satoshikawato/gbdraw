@@ -981,7 +981,20 @@ def _packer_side_rules(total_length: int, spacing_px: float, *, is_outer: bool, 
         max_crossings=max_crossings,
         box_offsets=box_offsets,
         leader_starts=partial(_assign_leader_start_points, total_length=total_length),
+        arc_point=_arc_point,
     )
+
+
+def _arc_point(arc: LabelArc) -> Callable[[float], tuple[float, float]]:
+    """The point at an angle on ``arc`` for the packer (radians from 12 o'clock, clockwise): where today's placement
+    puts a start at that angle less 90 degrees (``_LabelEllipse.start_at``)."""
+
+    ellipse = _LabelEllipse.on_arc(arc, 0)
+
+    def point(psi: float) -> tuple[float, float]:
+        return ellipse.start_at(math.degrees(psi) - 90.0, 0.0)
+
+    return point
 
 
 def _leader_length_px(label: CircularLabel, total_length: int | None = None) -> float:

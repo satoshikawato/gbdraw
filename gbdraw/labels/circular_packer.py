@@ -28,9 +28,12 @@ Two looks, named by what the reader sees, tried in this order (CP-D05):
 A packing's crossing leaders are counted with the fit check's own test
 (:func:`~gbdraw.labels.circular_leaders.leader_crossing_count`).
 
-The label boxes, the leader starts and the row gaps stay the placement's
-(``gbdraw.labels.circular``); it passes them in as :class:`SideRules`, since it
-imports this module.
+The label boxes, the leader starts, the row gaps and the point at an angle on
+the ellipse stay the placement's (``gbdraw.labels.circular``); it passes them in
+as :class:`SideRules`, since it imports this module. The packer inverts that
+point only where it needs an angle: where a feature's ray meets the ellipse
+(``_item``) and where an anchor is half the line gap from the vertical axis
+(``_side_limits``).
 """
 
 from __future__ import annotations
@@ -65,6 +68,7 @@ _TWO_PI = 2.0 * math.pi
 
 Box: TypeAlias = tuple[float, float, float, float]
 Span: TypeAlias = tuple[float, float]
+Point: TypeAlias = tuple[float, float]
 # A label's box from its anchor: rows (top, bottom) below the anchor's y, then the text (left, right) from the
 # anchor's x for an anchor right of the vertical axis, and the same for an anchor left of it.
 BoxOffsets: TypeAlias = tuple[Span, Span, Span]
@@ -79,6 +83,8 @@ class SideRules:
     max_crossings: int  # a packing with more crossing leader pairs is no placement
     box_offsets: Callable[[CircularLabel], BoxOffsets]
     leader_starts: Callable[[list[CircularLabel]], list[CircularLabel]]  # sets each label's leader start
+    # The point at psi (radians, 0 at 12 o'clock, clockwise) on an arc: (center_x + x_radius sin psi, -y_radius cos psi).
+    arc_point: Callable[[LabelArc], Callable[[float], Point]]
 
 
 @dataclass(frozen=True)
@@ -97,13 +103,10 @@ class _PackItem:
 class _Ring:
     """The label ellipse of one side with the gaps two neighbouring boxes keep."""
 
-    def __init__(self, arc: LabelArc, row_gap: float, line_gap: float) -> None:
-        self.arc = arc
+    def __init__(self, anchor: Callable[[float], Point], row_gap: float, line_gap: float) -> None:
+        self.anchor = anchor  # the point at psi on the side's arc (``SideRules.arc_point``)
         self.row_gap = row_gap
         self.line_gap = line_gap
-
-    def anchor(self, psi: float) -> tuple[float, float]:
-        return self.arc.center_x + self.arc.x_radius * math.sin(psi), -self.arc.y_radius * math.cos(psi)
 
     def box(self, item: _PackItem, psi: float) -> Box:
         x, y = self.anchor(psi)
@@ -438,8 +441,9 @@ def _half_placements(
 
     line_gap = line_gap_px(item.label for item in items)
     look = _HalfLook(items, arc, rules.total_length, line_gap)
+    anchor = rules.arc_point(arc)
     for row_gap in rules.row_gaps:
-        ring = _Ring(arc, row_gap, line_gap)
+        ring = _Ring(anchor, row_gap, line_gap)
         packing = look.packed(ring, _ON_HALVES)
         if packing is not None:
             yield _placed(ring, packing[0], packing[1], rules)
@@ -452,8 +456,9 @@ def _run_placements(
 
     line_gap = line_gap_px(item.label for item in items)
     look = _HalfLook(items, arc, rules.total_length, line_gap)
+    anchor = rules.arc_point(arc)
     for row_gap in rules.row_gaps:
-        ring = _Ring(arc, row_gap, line_gap)
+        ring = _Ring(anchor, row_gap, line_gap)
         fallback = look.greedy(ring)
         if fallback is None:
             continue
@@ -466,12 +471,11 @@ def _run_placements(
             yield _placed(ring, seq, psis, rules)
 
 
-def _cone(arc: LabelArc, item: _PackItem, target: float, scale: float) -> Span:
+def _cone(anchor: Callable[[float], Point], item: _PackItem, target: float, scale: float) -> Span:
     """The angles around ``target`` at which the label's straight leader from its elbow still runs outward."""
 
     def outward(psi: float) -> bool:
-        x = arc.center_x + arc.x_radius * math.sin(psi)
-        y = -arc.y_radius * math.cos(psi)
+        x, y = anchor(psi)
         radius = math.hypot(x, y)
         if radius <= item.elbow_radius:
             return False
@@ -504,12 +508,13 @@ def _cycle_placements(
         while targets[k] < targets[k - 1]:
             targets[k] += _TWO_PI
     line_gap = line_gap_px(item.label for item in items)
+    anchor = rules.arc_point(arc)
     for scale in CONE_SCALES:
-        cones = [_cone(arc, item, target, scale) for item, target in zip(order, targets)]
+        cones = [_cone(anchor, item, target, scale) for item, target in zip(order, targets)]
         lower = [cone[0] for cone in cones]
         upper = [cone[1] for cone in cones]
         for row_gap in rules.row_gaps:
-            ring = _Ring(arc, row_gap, line_gap)
+            ring = _Ring(anchor, row_gap, line_gap)
             psis = ring.pack(order, targets, lower, upper)
             if psis is not None:
                 yield _placed(ring, order, psis, rules)

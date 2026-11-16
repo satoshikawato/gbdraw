@@ -39,6 +39,7 @@ import gbdraw.labels.circular as circular_module
 from gbdraw.labels.circular import (
     _count_label_overlaps,
     _packer_side_rules,
+    calculate_coordinates,
     circular_label_fits,
     todays_label_placement,
 )
@@ -284,7 +285,7 @@ def test_the_run_splits_are_the_splits_whose_both_sides_fit() -> None:
     items = [packer_module._item(label, arc, _outer_rules(total_length, spacing)) for label in labels]
     line_gap = packer_module.line_gap_px(item.label for item in items)
     look = packer_module._HalfLook(items, arc, total_length, line_gap)
-    ring = packer_module._Ring(arc, 0.1, line_gap)
+    ring = packer_module._Ring(_outer_rules(total_length, spacing).arc_point(arc), 0.1, line_gap)
     shifts = [shift for shift in range(-packer_module.MAX_RUN_SHIFT, packer_module.MAX_RUN_SHIFT + 1) if look.valid(shift)]
     every_split: list[tuple[int, int]] = []
     for top in shifts:
@@ -293,6 +294,26 @@ def test_the_run_splits_are_the_splits_whose_both_sides_fit() -> None:
             every_split.append((top, bottom))
     every_split.sort(key=lambda state: abs(state[0]) + abs(state[1]))
     assert look.states(ring) == every_split and every_split
+
+
+def test_the_packers_point_on_the_ellipse_is_the_placements_and_the_packer_inverts_it() -> None:
+    """The packer's anchor at an angle is today's start point (``calculate_coordinates``) at that angle less 90
+    degrees; its two inverses, the side limits and a label's target, give angles whose points are where they say."""
+
+    labels, total_length, arc, spacing = _packer_fixture("p1_f13")
+    rules = _outer_rules(total_length, spacing)
+    point = rules.arc_point(arc)
+    for degrees in (-90.0, -30.0, 0.0, 45.0, 90.0, 180.0, 250.0):
+        today = calculate_coordinates(arc.center_x, 0, arc.x_radius, arc.y_radius, degrees, 0.0, total_length)
+        assert point(math.radians(degrees + 90.0)) == pytest.approx(today, abs=1e-9)
+    line_gap = 14.0
+    (right_low, right_high), (left_low, left_high) = packer_module._side_limits(arc, line_gap)
+    for psi, x in ((right_low, 7.0), (right_high, 7.0), (left_low, -7.0), (left_high, -7.0)):
+        assert point(psi)[0] == pytest.approx(x, abs=1e-9)
+    for label in labels:
+        x, y = point(packer_module._item(label, arc, rules).target)
+        feature_x, feature_y = float(label["feature_middle_x"]), float(label["feature_middle_y"])
+        assert x * feature_y - y * feature_x == pytest.approx(0.0, abs=1e-6) and x * feature_x + y * feature_y > 0
 
 
 def test_the_packer_is_deterministic() -> None:
