@@ -85,10 +85,9 @@ from ...io.comparisons import comparison_row_tally, read_comparison_resource
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     ComparisonLegendSource,
-    DepthLegendSource,
+    SeriesLegendSource,
     LegendSlotSource,
     LegendSources,
-    NumericLegendSource,
     depth_legend_sources,
     feature_legend_presence,
     legend_slot_sources,
@@ -563,9 +562,9 @@ def _sync_legend_table_for_linear_slots(
     legend_table: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: NumericLegendSource,
-    skew: NumericLegendSource,
-    depth_tracks: Sequence[DepthLegendSource] | None,
+    gc: SeriesLegendSource,
+    skew: SeriesLegendSource,
+    depth_tracks: Sequence[SeriesLegendSource] | None,
 ) -> LegendTable:
     """Replace singleton numeric legends with slot-authoritative entries.
 
@@ -2160,11 +2159,11 @@ def build_linear_legend_table(
     sources: LegendSources,
     comparison: ComparisonLegendSource | None,
     pairwise_identity_legend: PairwiseIdentityLegend,
-    depth: DepthLegendSource | None,
+    depth: SeriesLegendSource | None,
     show_gc: bool,
     show_skew: bool,
     slots: tuple[LegendSlotSource, ...] | None,
-    depth_tracks: tuple[DepthLegendSource, ...] | None,
+    depth_tracks: tuple[SeriesLegendSource, ...] | None,
     annotations: ResolvedAnnotationBundle,
     edits: LegendRowEdits = LegendRowEdits(),
 ) -> LegendTable:
@@ -3244,7 +3243,7 @@ def _linear_legend_table(
                 or PairwiseIdentityLegend()
             ),
             depth=(
-                DepthLegendSource.of_config(depth_config)
+                SeriesLegendSource.of_depth(depth_config)
                 if singleton_depth and depth_config is not None
                 else None
             ),

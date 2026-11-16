@@ -20,10 +20,9 @@ from gbdraw.features.colors import build_default_color_map, feature_type_color
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
-    DepthLegendSource,
+    SeriesLegendSource,
     FeatureDensityLegendSource,
     FeatureLegendSource,
-    NumericLegendSource,
 )
 from gbdraw.tracks.parsing import SlotView, feature_density_slot_track_id, slot_legend_label
 
@@ -188,14 +187,14 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
 
         self._add(name, entry, _unique_legend_key([*self._rows, *self._shared_keys], name))
 
-    def add_numeric_source(self, name: str, swatch: NumericLegendSource) -> None:
+    def add_numeric_source(self, name: str, swatch: SeriesLegendSource) -> None:
         """Add a content or skew slot's rows: one when its fills are equal, else ``(+)`` and ``(-)``."""
 
         stroke = {"stroke": swatch.stroke_color, "width": swatch.stroke_width}
-        if swatch.high_fill_color == swatch.low_fill_color:
-            self.add_source(name, {"type": "solid", "fill": swatch.high_fill_color, **stroke})
+        if swatch.fill_color == swatch.low_fill_color:
+            self.add_source(name, {"type": "solid", "fill": swatch.fill_color, **stroke})
         else:
-            self.add_source(f"{name} (+)", {"type": "solid", "fill": swatch.high_fill_color, **stroke})
+            self.add_source(f"{name} (+)", {"type": "solid", "fill": swatch.fill_color, **stroke})
             self.add_source(f"{name} (-)", {"type": "solid", "fill": swatch.low_fill_color, **stroke})
 
     def add_default_track(self, name: str, entry: LegendEntry) -> None:
@@ -701,9 +700,9 @@ def _generated_legend_rows(
     *,
     used_color_rules: Optional[Set[Tuple[str, str]]],
     default_used_features: Set[str],
-    gc: NumericLegendSource,
-    skew: NumericLegendSource,
-    depth: DepthLegendSource | None,
+    gc: SeriesLegendSource,
+    skew: SeriesLegendSource,
+    depth: SeriesLegendSource | None,
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
@@ -726,24 +725,24 @@ def _generated_legend_rows(
         if not show:
             continue
         stroke = (source.stroke_color, source.stroke_width)
-        if source.high_fill_color == source.low_fill_color:
-            rows[f"{dinucleotide} {name}"] = _solid_legend_entry(source.high_fill_color, *stroke)
+        if source.fill_color == source.low_fill_color:
+            rows[f"{dinucleotide} {name}"] = _solid_legend_entry(source.fill_color, *stroke)
         else:
-            rows[f"{dinucleotide} {name} (+)"] = _solid_legend_entry(source.high_fill_color, *stroke)
+            rows[f"{dinucleotide} {name} (+)"] = _solid_legend_entry(source.fill_color, *stroke)
             rows[f"{dinucleotide} {name} (-)"] = _solid_legend_entry(source.low_fill_color, *stroke)
     return rows
 
 
 def prepare_legend_table(
-    gc: NumericLegendSource,
-    skew: NumericLegendSource,
+    gc: SeriesLegendSource,
+    skew: SeriesLegendSource,
     features: FeatureLegendSource,
     features_present: List[str],
     *,
     comparison: ComparisonLegendSource | None = None,
     used_color_rules: Optional[Set[Tuple[str, str]]] = None,
     default_used_features: Optional[Set[str]] = None,
-    depth: DepthLegendSource | None = None,
+    depth: SeriesLegendSource | None = None,
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,

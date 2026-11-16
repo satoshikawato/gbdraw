@@ -19,7 +19,7 @@ from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import bind_record_transforms
-from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
+from gbdraw.legend.sources import SeriesLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import depth_slot_track_index, slot_legend_label
 
@@ -80,7 +80,7 @@ class DepthTrackData:
 DepthDfBuilder = Callable[..., DataFrame]
 # Record-major normalized specs a builder read once (``freeze_depth_tracks``).
 ResolvedDepthTracks = tuple[tuple[DepthTrackSpec, ...], ...]
-DepthTrack = TypeVar("DepthTrack", DepthTrackSpec, DepthTrackData, DepthLegendSource)
+DepthTrack = TypeVar("DepthTrack", DepthTrackSpec, DepthTrackData, SeriesLegendSource)
 
 
 def _has_any(values: Sequence[object | None]) -> bool:
@@ -797,7 +797,7 @@ def build_depth_track_dataframes(
     ]
 
 
-def depth_track_legend_name(track: DepthLegendSource, track_count: int) -> str:
+def depth_track_legend_name(track: SeriesLegendSource, track_count: int) -> str:
     """The Legend row name of a Depth series without a slot ``legend_label``: its label, else ``Depth`` (one
     series) or ``Depth N``."""
 
@@ -806,7 +806,7 @@ def depth_track_legend_name(track: DepthLegendSource, track_count: int) -> str:
 
 def sync_depth_track_legend_entries(
     out: LegendTable,
-    depth_tracks: Sequence[DepthLegendSource] | None,
+    depth_tracks: Sequence[SeriesLegendSource] | None,
     *,
     slots: Sequence[LegendSlotSource],
 ) -> LegendTable:

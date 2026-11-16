@@ -1,5 +1,8 @@
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
+from types import ModuleType
 from typing import Any
+
+import pytest
 
 
 def make_feature_draw_ratio_capture(captured: list[float]):
@@ -82,3 +85,38 @@ def make_numeric_slot_geometry_capture(captured: MutableMapping[str, Any]):
         )
 
     return capture
+
+# The render stage of each kind, as the Circular assembly names it.
+STAGE_KINDS = {"gc_content_content": "gc_content", "gc_skew_content": "gc_skew", "depth_content": "depth"}
+
+
+def patch_circular_series_builders(
+    monkeypatch: pytest.MonkeyPatch, module: ModuleType, **fakes: Callable[..., object]
+) -> None:
+    """Replace ``add_numeric_series_group_on_canvas`` in ``module`` so each kind named in ``fakes`` (``gc_content``,
+    ``gc_skew``, ``depth``) is drawn by its fake, called with the record's frame, the canvas config and the track's
+    configurator, and the slot's fields as keywords; the other kinds draw as before."""
+
+    real = module.add_numeric_series_group_on_canvas
+
+    def dispatch(canvas, stage, gb_record, frame, canvas_config, config, slot):
+        fake = fakes.get(STAGE_KINDS[stage])
+        if fake is None:
+            return real(canvas, stage, gb_record, frame, canvas_config, config, slot)
+        return fake(
+            canvas,
+            gb_record,
+            frame,
+            canvas_config,
+            config,
+            group_key=slot.group_key,
+            track_width_override=slot.track_width,
+            norm_factor_override=slot.norm_factor,
+            group_id=slot.group_id,
+            slot_group_id=slot.slot_group_id,
+            slot_id=slot.slot_id,
+            slot_renderer=slot.slot_renderer,
+            record_transform=slot.record_transform,
+        )
+
+    monkeypatch.setattr(module, "add_numeric_series_group_on_canvas", dispatch)

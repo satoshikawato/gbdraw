@@ -45,6 +45,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.scalar_axis import _prepare_depth_plot_dataframe
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
+from tests.utils.circular_drawer_fakes import patch_circular_series_builders
 
 
 # These tests read the numbered tick labels; the default draws one range label per axis (D-16).
@@ -835,20 +836,12 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         captured["depth_center"] = float(norm_factor_override) * float(canvas_config.radius)
         return canvas
 
-    monkeypatch.setattr(
+    patch_circular_series_builders(
+        monkeypatch,
         circular_assemble_module,
-        "add_depth_group_on_canvas",
-        fake_add_depth_group_on_canvas,
-    )
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_gc_content_group_on_canvas",
-        fake_add_gc_content_group_on_canvas,
-    )
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_gc_skew_group_on_canvas",
-        fake_add_gc_skew_group_on_canvas,
+        depth=fake_add_depth_group_on_canvas,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -931,15 +924,11 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         captured["skew_norm"] = float(norm_factor_override)
         return canvas
 
-    monkeypatch.setattr(
+    patch_circular_series_builders(
+        monkeypatch,
         circular_assemble_module,
-        "add_gc_content_group_on_canvas",
-        fake_add_gc_content_group_on_canvas,
-    )
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_gc_skew_group_on_canvas",
-        fake_add_gc_skew_group_on_canvas,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
     )
 
     assemble_circular_diagram_from_record(

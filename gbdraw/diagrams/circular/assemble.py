@@ -140,10 +140,9 @@ from ...layout.spatial import Aabb, BoxedLetters, bounding_aabb, union_aabbs
 from ...comparisons.identity_scale import IdentityColorDomain, identity_color_domain
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
-    DepthLegendSource,
+    SeriesLegendSource,
     LegendSlotSource,
     LegendSources,
-    NumericLegendSource,
     depth_legend_sources,
     feature_legend_presence,
     legend_slot_sources,
@@ -234,10 +233,9 @@ from ...tracks.parsing import depth_slot_track_index, slot_dinucleotide, slot_le
 from .builders import (
     add_axis_group_on_canvas,
     add_conservation_group_on_canvas,
-    add_depth_group_on_canvas,
+    CircularSeriesSlot,
     add_feature_density_heatmap_on_canvas,
-    add_gc_content_group_on_canvas,
-    add_gc_skew_group_on_canvas,
+    add_numeric_series_group_on_canvas,
     add_labels_group_on_canvas,
     add_record_definition_group_on_canvas,
     add_record_group_on_canvas,
@@ -2635,10 +2633,10 @@ def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: NumericLegendSource,
-    skew: NumericLegendSource,
-    depth: DepthLegendSource | None,
-    depth_tracks: Sequence[DepthLegendSource] | None = None,
+    gc: SeriesLegendSource,
+    skew: SeriesLegendSource,
+    depth: SeriesLegendSource | None,
+    depth_tracks: Sequence[SeriesLegendSource] | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_colors: tuple[str, str] = ("", ""),
     conservation_domain: IdentityColorDomain | None = None,
@@ -2735,6 +2733,30 @@ def _add_conservation_ring_rows(
         })
 
 
+def _circular_series_slot(
+    resolved_slot: CircularResolvedSlot,
+    renderer: str,
+    kind: GroupKind,
+    *,
+    record_key: str,
+    norm_factor_override: float,
+    record_transform: RecordDisplayTransform | None,
+) -> CircularSeriesSlot:
+    """Where one record's numeric series track of a slot goes, and the ids that tag it."""
+
+    slot_id = str(resolved_slot.id)
+    return CircularSeriesSlot(
+        group_key=GroupKey(record_key, kind, slot_id),
+        track_width=float(resolved_slot.draw_width_px),
+        norm_factor=norm_factor_override,
+        group_id=slot_id,
+        slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
+        slot_id=slot_id,
+        slot_renderer=renderer,
+        record_transform=record_transform,
+    )
+
+
 def _draw_circular_feature_density_slot(
     canvas: Drawing,
     resolved_slot: CircularResolvedSlot,
@@ -2758,20 +2780,12 @@ def _draw_circular_feature_density_slot(
     slot_id = str(resolved_slot.id)
     if layer.track.style == "histogram":
         frame, histogram_config = feature_density_histogram_source(layer, render_context.profile)
-        return add_depth_group_on_canvas(
-            canvas,
-            gb_record,
-            frame,
-            canvas_config,
-            histogram_config,
-            group_key=slot_key,
-            track_width_override=float(resolved_slot.draw_width_px),
-            norm_factor_override=norm_factor_override,
-            group_id=str(resolved_slot.id),
-            slot_group_id=slot_group_id,
-            slot_id=slot_id,
-            slot_renderer=renderer,
-            record_transform=record_transform,
+        slot = _circular_series_slot(
+            resolved_slot, renderer, GroupKind.DEPTH, record_key=record_key,
+            norm_factor_override=norm_factor_override, record_transform=record_transform,
+        )
+        return add_numeric_series_group_on_canvas(
+            canvas, "depth_content", gb_record, frame, canvas_config, histogram_config, slot
         )
     heatmap = FeatureDensityHeatmapGroup(
         layer,
@@ -3017,20 +3031,12 @@ def _draw_resolved_circular_slot(
         if selected_depth_config is None or selected_depth_df is None:
             logger.warning("Skipping circular depth slot '%s' because depth data are unavailable.", resolved_slot.id)
             return canvas
-        return add_depth_group_on_canvas(
-            canvas,
-            gb_record,
-            selected_depth_df,
-            canvas_config,
-            selected_depth_config,
-            group_key=GroupKey(record_key, GroupKind.DEPTH, str(resolved_slot.id)),
-            track_width_override=float(resolved_slot.draw_width_px),
-            norm_factor_override=norm_factor_override,
-            group_id=str(resolved_slot.id),
-            slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
-            slot_id=str(resolved_slot.id),
-            slot_renderer=renderer,
-            record_transform=record_transform,
+        return add_numeric_series_group_on_canvas(
+            canvas, "depth_content", gb_record, selected_depth_df, canvas_config, selected_depth_config,
+            _circular_series_slot(
+                resolved_slot, renderer, GroupKind.DEPTH, record_key=record_key,
+                norm_factor_override=norm_factor_override, record_transform=record_transform,
+            ),
         )
 
     if renderer == "feature_density":
@@ -3078,20 +3084,12 @@ def _draw_resolved_circular_slot(
                 nt,
             )
             return canvas
-        return add_gc_content_group_on_canvas(
-            canvas,
-            gb_record,
-            slot_df,
-            canvas_config,
-            slot_gc_config,
-            group_key=GroupKey(record_key, GroupKind.GC_CONTENT, str(resolved_slot.id)),
-            track_width_override=float(resolved_slot.draw_width_px),
-            norm_factor_override=norm_factor_override,
-            slot_id=str(resolved_slot.id),
-            slot_renderer=renderer,
-            group_id=str(resolved_slot.id),
-            slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
-            record_transform=record_transform,
+        return add_numeric_series_group_on_canvas(
+            canvas, "gc_content_content", gb_record, slot_df, canvas_config, slot_gc_config,
+            _circular_series_slot(
+                resolved_slot, renderer, GroupKind.GC_CONTENT, record_key=record_key,
+                norm_factor_override=norm_factor_override, record_transform=record_transform,
+            ),
         )
 
     if renderer == "dinucleotide_skew":
@@ -3109,20 +3107,12 @@ def _draw_resolved_circular_slot(
                 nt,
             )
             return canvas
-        return add_gc_skew_group_on_canvas(
-            canvas,
-            gb_record,
-            slot_df,
-            canvas_config,
-            slot_skew_config,
-            group_key=GroupKey(record_key, GroupKind.GC_SKEW, str(resolved_slot.id)),
-            track_width_override=float(resolved_slot.draw_width_px),
-            norm_factor_override=norm_factor_override,
-            slot_id=str(resolved_slot.id),
-            slot_renderer=renderer,
-            group_id=str(resolved_slot.id),
-            slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
-            record_transform=record_transform,
+        return add_numeric_series_group_on_canvas(
+            canvas, "gc_skew_content", gb_record, slot_df, canvas_config, slot_skew_config,
+            _circular_series_slot(
+                resolved_slot, renderer, GroupKind.GC_SKEW, record_key=record_key,
+                norm_factor_override=norm_factor_override, record_transform=record_transform,
+            ),
         )
 
     logger.warning("Skipping unsupported circular track slot renderer '%s'.", renderer)
@@ -4666,11 +4656,11 @@ def _compose_circular_plot(
 
 def _circular_legend_slots(
     slots: tuple[LegendSlotSource, ...] | None,
-    depth_tracks: tuple[DepthLegendSource, ...] | None,
+    depth_tracks: tuple[SeriesLegendSource, ...] | None,
     *,
     show_gc: bool,
     show_skew: bool,
-    gc: NumericLegendSource,
+    gc: SeriesLegendSource,
 ) -> tuple[LegendSlotSource, ...] | None:
     """The slots whose order the legend's track rows follow: the explicit ones, else, with Depth series, the
     default stack the rings are drawn in (``default_circular_track_slots``), so the Depth rows stand between
@@ -4699,9 +4689,9 @@ def build_circular_legend_table(
     show_gc: bool,
     show_skew: bool,
     show_depth: bool,
-    depth: DepthLegendSource | None = None,
+    depth: SeriesLegendSource | None = None,
     has_depth_frame: bool = False,
-    depth_tracks: tuple[DepthLegendSource, ...] | None = None,
+    depth_tracks: tuple[SeriesLegendSource, ...] | None = None,
     depth_track_count_value: int = 0,
     slots: tuple[LegendSlotSource, ...] | None = None,
     annotation_slots: tuple[LegendSlotSource, ...] | None = None,
@@ -4794,7 +4784,7 @@ def circular_legend_table(
         show_gc=profile.show_gc,
         show_skew=profile.show_skew,
         show_depth=profile.show_depth,
-        depth=DepthLegendSource.of_config(depth_config) if depth_config is not None else None,
+        depth=SeriesLegendSource.of_depth(depth_config) if depth_config is not None else None,
         has_depth_frame=depth_df is not None,
         depth_tracks=depth_legend_sources(depth_tracks) if depth_tracks is not None else None,
         depth_track_count_value=depth_track_count_value,

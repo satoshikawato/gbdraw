@@ -20,12 +20,7 @@ from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGrou
 from ...features.factory import FeatureBuildResult
 from ...labels.circular_types import CircularLabel
 from ...layout.circular import CircularFeatureRenderContext
-from ...configurators import (
-    FeatureDrawingConfigurator,
-    DepthConfigurator,
-    GcContentConfigurator,
-    GcSkewConfigurator,
-)
+from ...configurators import FeatureDrawingConfigurator
 from ...render.groups.circular import (
     AxisGroup,
     CircularDefinitionStyle,
@@ -240,70 +235,6 @@ def add_numeric_series_group_on_canvas(
     return _add_track_content(
         canvas, content, canvas_config, slot.group_key, slot_id=slot.slot_id, slot_renderer=slot.slot_renderer
     )
-
-
-# The three tracks' entry points keep the names the Circular assembly calls; each names its render stage.
-def add_depth_group_on_canvas(
-    canvas: Drawing,
-    gb_record: SeqRecord,
-    depth_df: DataFrame,
-    canvas_config: CircularCanvasConfigurator,
-    depth_config: DepthConfigurator,
-    *,
-    group_key: GroupKey,
-    track_width_override: float,
-    norm_factor_override: float,
-    group_id: str,
-    slot_group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-) -> Drawing:
-    slot = CircularSeriesSlot(group_key, float(track_width_override), norm_factor_override, group_id, slot_group_id,
-                              slot_id, slot_renderer, record_transform)
-    return add_numeric_series_group_on_canvas(canvas, "depth_content", gb_record, depth_df, canvas_config, depth_config, slot)
-
-
-def add_gc_skew_group_on_canvas(
-    canvas: Drawing,
-    gb_record: SeqRecord,
-    gc_df: DataFrame,
-    canvas_config: CircularCanvasConfigurator,
-    skew_config: GcSkewConfigurator,
-    *,
-    group_key: GroupKey,
-    track_width_override: float,
-    norm_factor_override: float,
-    group_id: str,
-    slot_group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-) -> Drawing:
-    slot = CircularSeriesSlot(group_key, float(track_width_override), norm_factor_override, group_id, slot_group_id,
-                              slot_id, slot_renderer, record_transform)
-    return add_numeric_series_group_on_canvas(canvas, "gc_skew_content", gb_record, gc_df, canvas_config, skew_config, slot)
-
-
-def add_gc_content_group_on_canvas(
-    canvas: Drawing,
-    gb_record: SeqRecord,
-    gc_df: DataFrame,
-    canvas_config: CircularCanvasConfigurator,
-    gc_config: GcContentConfigurator,
-    *,
-    group_key: GroupKey,
-    track_width_override: float,
-    norm_factor_override: float,
-    group_id: str,
-    slot_group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-) -> Drawing:
-    slot = CircularSeriesSlot(group_key, float(track_width_override), norm_factor_override, group_id, slot_group_id,
-                              slot_id, slot_renderer, record_transform)
-    return add_numeric_series_group_on_canvas(canvas, "gc_content_content", gb_record, gc_df, canvas_config, gc_config, slot)
 
 
 def add_record_definition_group_on_canvas(
@@ -531,10 +462,7 @@ def add_labels_group_on_canvas(
 
 __all__ = [
     "CircularSeriesSlot",
-    "add_depth_group_on_canvas",
     "add_feature_density_heatmap_on_canvas",
-    "add_gc_skew_group_on_canvas",
-    "add_gc_content_group_on_canvas",
     "add_numeric_series_group_on_canvas",
     "add_record_definition_group_on_canvas",
     "add_record_group_on_canvas",

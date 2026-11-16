@@ -34,6 +34,7 @@ from gbdraw.tracks import (
 )
 from tests.utils.svg_compare import assert_nested_approx
 from tests.utils.circular_drawer_fakes import (
+    patch_circular_series_builders,
     make_numeric_slot_capture,
     make_numeric_slot_geometry_capture,
 )
@@ -337,9 +338,13 @@ def _capture_circular_core_geometry(
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_depth_group_on_canvas", fake_add_depth_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        depth=fake_add_depth_group_on_canvas,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     slots = custom_slots if custom_slots is not None else (
         default_circular_track_slots(show_depth=show_depth, show_gc=True, show_skew=True)
@@ -1409,8 +1414,12 @@ def test_default_custom_slots_tuckin_inherit_preset_when_inside_numeric_tracks_a
 
     fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -1449,8 +1458,12 @@ def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot
     )
     default_colors = load_default_colors("", palette="default")
 
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", lambda *args, **kwargs: args[0])
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", lambda *args, **kwargs: args[0])
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=lambda *args, **kwargs: args[0],
+        gc_skew=lambda *args, **kwargs: args[0],
+    )
 
     with pytest.raises(Exception, match="cannot fit inside"):
         assemble_circular_diagram_from_record(
@@ -1502,8 +1515,12 @@ def test_default_custom_slots_use_ordered_legacy_numeric_lanes(
 
     fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -1537,8 +1554,12 @@ def test_reordered_builtin_numeric_slots_follow_slot_order(
 
     fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -1653,8 +1674,12 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "_definition_reserved_radius_px", lambda *args, **kwargs: 0.0)
 
@@ -1716,8 +1741,12 @@ def test_inside_order_places_axis_side_tracks_before_features(
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", capture_record_layout)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", lambda *args, **kwargs: args[0])
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", lambda *args, **kwargs: args[0])
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", lambda *args, **kwargs: args[0])
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=lambda *args, **kwargs: args[0],
+        gc_skew=lambda *args, **kwargs: args[0],
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -1770,8 +1799,12 @@ def test_order_only_gc_content_moves_feature_inward_instead_of_falling_back_outs
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", capture_record_layout)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", lambda *args, **kwargs: args[0])
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", lambda *args, **kwargs: args[0])
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", lambda *args, **kwargs: args[0])
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=lambda *args, **kwargs: args[0],
+        gc_skew=lambda *args, **kwargs: args[0],
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -1825,8 +1858,7 @@ def test_order_only_numeric_before_ticks_reserves_inner_numeric_space(
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", capture_layout)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", capture_layout)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", passthrough)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", passthrough)
+    patch_circular_series_builders(monkeypatch, circular_assemble_module, gc_content=passthrough, gc_skew=passthrough)
 
     assemble_circular_diagram_from_record(
         record,
@@ -1936,9 +1968,13 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
 
     fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
-    monkeypatch.setattr(circular_assemble_module, "add_depth_group_on_canvas", fake_add_depth_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        depth=fake_add_depth_group_on_canvas,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -2007,9 +2043,13 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
             )
         return canvas
 
-    monkeypatch.setattr(circular_assemble_module, "add_depth_group_on_canvas", fake_add_depth_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        depth=fake_add_depth_group_on_canvas,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -2168,8 +2208,12 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
 
     fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -2253,8 +2297,12 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    patch_circular_series_builders(
+        monkeypatch,
+        circular_assemble_module,
+        gc_content=fake_add_gc_content_group_on_canvas,
+        gc_skew=fake_add_gc_skew_group_on_canvas,
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -2328,7 +2376,7 @@ def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
         )
         return canvas
 
-    monkeypatch.setattr(circular_assemble_module, "add_depth_group_on_canvas", fake_add_depth_group_on_canvas)
+    patch_circular_series_builders(monkeypatch, circular_assemble_module, depth=fake_add_depth_group_on_canvas)
 
     assemble_circular_diagram_from_record(
         record,
