@@ -19,6 +19,7 @@ import { createArtifactSlot } from '../services/artifact-slot.js';
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { PythonLegendKey } from '../services/legend-svg.js' */
 /** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
+/** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 
 const { computed } = window.Vue;
 
@@ -51,7 +52,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
- * @property {{ arriveAtDrawing: () => void, refreshCanvas: () => void, busy: () => HistoryBusy | null }} alignment The
+ * @property {Pick<SimilarityAlignmentPorts, 'arriveAtDrawing' | 'refreshCanvas' | 'busy'>} alignment The
  *   Similarity alignment owner's ports: on arrival, its summary and notice were the departing drawing's, an open review
  *   stays with its own drawing, and the arriving drawing's plan selects its group; the review's marks are measured
  *   again on the arriving figure; `busy`, why a switch waits for its work in flight.
