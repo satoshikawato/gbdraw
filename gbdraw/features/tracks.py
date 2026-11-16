@@ -13,12 +13,12 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
     """
     Get feature start/end positions and the strand the feature is drawn on (``FeatureObject.strand``).
 
-    A feature takes the shortest arc that covers what it draws, its blocks and connector lines, with half-open,
-    0-based bounds (a part at the first base starts at 0). Where that arc runs over the record's origin
-    (``uncovered_gap``), returns start > end: the feature occupies [start, length) and [0, end). Its connector
-    lines say whether its parts connect over the origin (``connector_gaps``). Parts that reach both ends of the
-    record are read by their blocks alone: the Circular drawer joins them over the origin and draws no line
-    between them.
+    A feature's lane covers what it draws from its first drawn base to its last, with half-open, 0-based
+    bounds (a part at the first base starts at 0). Only a feature whose drawn parts reach both ends of the
+    record runs over its origin: a connector line over the origin is drawn in two pieces that reach them, and
+    parts that reach them are joined over the origin by the Circular drawer. Such a feature takes the shortest
+    arc that covers its blocks and lines (``uncovered_gap``), or its blocks alone where its lines fill that
+    arc (a join in order over both ends), and start > end says it occupies [start, length) and [0, end).
 
     Args:
         feature: FeatureObject with location/coordinates
@@ -36,9 +36,9 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
     if not genome_length:
         return start, end, strand
     length = int(genome_length)
-    gap = uncovered_gap(drawn, length)
-    if gap is None and start == 0 and end >= length:
-        gap = uncovered_gap(blocks, length)
+    gap = None
+    if start == 0 and end >= length:
+        gap = uncovered_gap(drawn, length) or uncovered_gap(blocks, length)
     return (gap[1], gap[0], strand) if gap is not None else (start, end, strand)
 
 

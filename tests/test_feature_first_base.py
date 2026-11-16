@@ -27,7 +27,7 @@ from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.request_render import plan_request
 from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, LinearDiagramRequest, RecordInput
 from gbdraw.features.coordinates import get_exon_and_intron_coordinates
-from gbdraw.features.objects import FeatureLocationPart, FeatureObject
+from gbdraw.features.objects import FeatureObject
 from gbdraw.features.tracks import arrange_feature_tracks, get_feature_ends
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.layout.spatial import Interval, split_circular_interval
@@ -178,14 +178,15 @@ def test_parts_of_one_strand_over_the_origin_connect_over_it_on_a_circular_recor
     assert _lines([SimpleLocation(9500, 9990, 1), SimpleLocation(10, 500, -1)], _LENGTH) == []
 
 
-def _feature(feature_id: str, *parts: tuple[int, int]) -> FeatureObject:
-    location = [
-        FeatureLocationPart("block", str(i).zfill(3), "positive", start, end, i == len(parts))
-        for i, (start, end) in enumerate(parts, start=1)
-    ]
+def _feature(feature_id: str, *parts: tuple[int, int], trans_spliced: bool = False) -> FeatureObject:
+    """A plus-strand feature on a circular record of ``_LENGTH`` bp, its blocks and lines built as the factory builds them."""
+    location = get_exon_and_intron_coordinates(
+        [SimpleLocation(start, end, 1) for start, end in parts], trans_spliced, origin_length=_LENGTH
+    )
     return FeatureObject(
         feature_id=feature_id, location=location, is_directional=True, color="#54bcf8",
-        note="", label_text="", coordinates=location, type="CDS", qualifiers={},
+        note="", label_text="", coordinates=location, type="CDS",
+        qualifiers={"trans_splicing": [""]} if trans_spliced else {},
     )
 
 
@@ -193,7 +194,7 @@ def test_lane_placement_reads_a_part_at_the_first_base_from_that_base() -> None:
     assert get_feature_ends(_feature("a", (0, 1000)), _LENGTH) == (0, 1000, "positive")
     # Only a part at the first base touches the origin; one at base 2 does not.
     assert get_feature_ends(_feature("o", (9989, _LENGTH), (0, 20)), _LENGTH) == (9989, 20, "positive")
-    # A part at base 2 after one that runs to the end still crosses the origin, by the order of the parts.
+    # A part at base 2 after one that runs to the end still crosses the origin: the line over base 1 reaches it.
     assert get_feature_ends(_feature("n", (9989, _LENGTH), (1, 20)), _LENGTH) == (9989, 20, "positive")
     assert split_circular_interval(9989, 20, _LENGTH) == [Interval(9989, _LENGTH), Interval(0, 20)]
 
@@ -222,12 +223,10 @@ def test_a_join_over_the_origin_with_a_gap_at_the_first_base_keeps_its_lane() ->
 
 def test_the_part_order_of_a_trans_spliced_feature_does_not_cross_the_origin() -> None:
     # A trans-spliced rps12: its 5' part lies after its 3' parts, which is not a path over the origin.
-    rps12 = _feature("r", (7000, 7100), (3000, 3200), (3500, 3600))
-    rps12.qualifiers = {"trans_splicing": [""]}
+    rps12 = _feature("r", (7000, 7100), (3000, 3200), (3500, 3600), trans_spliced=True)
     assert get_feature_ends(rps12, _LENGTH) == (3000, 7100, "positive")
     # Its parts still cross the origin where they reach both ends of the record.
-    rps12_origin = _feature("o", (9900, _LENGTH), (0, 100))
-    rps12_origin.qualifiers = {"trans_splicing": [""]}
+    rps12_origin = _feature("o", (9900, _LENGTH), (0, 100), trans_spliced=True)
     assert get_feature_ends(rps12_origin, _LENGTH) == (9900, 100, "positive")
 
 
@@ -331,3 +330,38 @@ def test_a_join_listed_low_to_high_on_the_minus_strand_does_not_cross_the_origin
     # The connector lines span the three gaps, 400 of 3,000 bp (48 degrees), and none runs round the ring.
     sweep = sum(abs(s) for d in _block_paths(svg, "connector") for s in _arc_sweeps(d))
     assert sweep == pytest.approx(48.0, abs=0.5)
+
+
+def _ends_record(topology: str, *, trans_spliced: bool) -> RecordInput:
+    """3,000 bp: a join over 201..500 and 2501..2800 that draws nothing over the record's ends, and CDSs at both ends."""
+    record = SeqRecord(
+        Seq("ACGT" * 750), id="ends", name="ends", description="ends",
+        annotations={"molecule_type": "DNA", "topology": topology},
+    )
+    parts = [SimpleLocation(200, 500, 1), SimpleLocation(2500, 2800, 1)]
+    join = SeqFeature(parts[0] + parts[1] if trans_spliced else parts[1] + parts[0], type="CDS")
+    if trans_spliced:
+        join.qualifiers["trans_splicing"] = [""]
+    record.features = [join, SeqFeature(SimpleLocation(20, 150, 1), type="CDS"),
+                       SeqFeature(SimpleLocation(2850, 2980, 1), type="CDS")]
+    return RecordInput(InMemoryRecordSource(record))
+
+
+@pytest.mark.parametrize("topology", ["linear", "circular"])
+@pytest.mark.parametrize("trans_spliced", [True, False], ids=["trans_spliced", "other_order"])
+def test_a_join_that_draws_nothing_over_the_record_ends_leaves_them_to_other_features(
+    topology: str, trans_spliced: bool
+) -> None:
+    options = LinearDiagramOptions(config=apply_config_overrides(None, {"canvas.resolve_overlaps": True}))
+    request = LinearDiagramRequest(records=(_ends_record(topology, trans_spliced=trans_spliced),), options=options)
+    svg = plan_request(request).build().drawing.tostring()
+    lanes = {min(y for _, y in _points(d)) for d in _block_paths(svg)}
+    # A trans-spliced join draws no line; parts in the other order connect over the origin only on a circular record.
+    assert lanes == ({-20.0, -72.0} if topology == "circular" and not trans_spliced else {-20.0})
+
+
+def test_a_trans_spliced_join_on_a_circular_record_leaves_the_origin_to_other_features() -> None:
+    options = CircularDiagramOptions(config=apply_config_overrides(None, {"canvas.resolve_overlaps": True}))
+    request = CircularDiagramRequest(records=(_ends_record("circular", trans_spliced=True),), options=options)
+    svg = plan_request(request).build().tostring()
+    assert len({round(min(math.hypot(x, y) for x, y in _points(d)), 1) for d in _block_paths(svg)}) == 1
