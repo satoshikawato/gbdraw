@@ -2811,14 +2811,13 @@ export const createAppSetup = () => {
   // E1 (PD-OI-079): an error about another drawing's Result (Save of a
   // legacy Result kept in that drawing) offers Generate there: the action
   // shows that drawing first. The drawing exists: its removal took the error
-  // with it (R17-29), and a Load clears every error.
+  // with it (R17-29), and a Load clears every error. Reached while alignment
+  // work runs, it shows no drawing and returns the work's reason (D-57).
   const generateFromError = () => {
     const target = errorDrawingId();
-    if (target !== undefined && target !== state.activeDrawingId.value) {
-      const switched = selectDrawing(target);
-      if (switched && switched.status === 'busy') return switched;
-    }
-    return runAnalysis();
+    const waiting = similarityAlignmentPorts.busy()
+      ?? (target !== undefined && target !== state.activeDrawingId.value ? selectDrawing(target) : null);
+    return waiting && waiting.status === 'busy' ? waiting : runAnalysis();
   };
 
   const cancelGeneration = () => cancelRunAnalysis();
