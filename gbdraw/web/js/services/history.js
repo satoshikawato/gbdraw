@@ -2385,11 +2385,6 @@ const listenToShownSteps = (manager, drawingId, activeDrawingId, listener) => {
   manager.setSettingsStepListener((changes, direction, undrawn) => { if (drawingId === activeDrawingId()) listener(changes, direction, undrawn); });
 };
 
-// The files a project step keeps: those its held Histories name and those of
-// its drawing parts. The shown drawing's part may join `parts` after the step
-// is recorded, and a part's files may change, so they are read each time
-// (OV-2761).
-/** @param {readonly ProjectPart[]} parts @param {Iterable<string>} heldFileIds */
 /**
  * Why a project step waits now, or null: a drawing list step waits while work outside History runs (its `busy`).
  * Undo and Redo, their enabled state and their titles read it of the step they would take (R11).
@@ -2400,6 +2395,11 @@ const projectStepWait = (project) => project?.list?.busy?.() ?? null;
 /** @param {{ restoring: { readonly value: boolean }, historyAvailability: () => unknown }} manager */
 const managerIdle = (manager) => !manager.restoring.value && !manager.historyAvailability();
 
+// The files a project step keeps: those its held Histories name and those of
+// its drawing parts. The shown drawing's part may join `parts` after the step
+// is recorded, and a part's files may change, so they are read each time
+// (OV-2761).
+/** @param {readonly ProjectPart[]} parts @param {Iterable<string>} heldFileIds */
 const projectStepFileIds = (parts, heldFileIds) => {
   const fileIds = new Set(heldFileIds);
   parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
