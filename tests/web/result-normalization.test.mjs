@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {
   keepResultNames,
-  normalizeLogicalResults
+  normalizeLogicalResults,
+  redrawsEachResult
 } from '../../gbdraw/web/js/services/result-normalization.js';
 
 assert.deepEqual(
@@ -78,3 +79,11 @@ for (const names of [['HmmtDNA_1'], ['HmmtDNA_1', ' '], null]) {
   keepResultNames(reply, names);
   assert.deepEqual(reply, rerenderReply());
 }
+
+// A rerender draws each Result again only when it returns as many; its
+// Results then keep their names (OV-136) and continue their lines (OV-2437).
+assert.equal(redrawsEachResult(['a', 'b'], [{}, {}]), true);
+assert.equal(redrawsEachResult(['a', 'b'], [{}]), false);
+assert.equal(redrawsEachResult(['a'], [{}, {}]), false);
+assert.equal(redrawsEachResult(null, [{}]), false);
+assert.equal(redrawsEachResult(['a'], { error: 'engine' }), false);

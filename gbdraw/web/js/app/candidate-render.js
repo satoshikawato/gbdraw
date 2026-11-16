@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
+/** @import { GenerationResponse } from '../services/diagram-generation.js' */
 /** @import { LegendStrokeOperation, SavedFeatureColorEdit, SavedStrokeEdit, SvgAdmissionRuntime, SvgResultEntry, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
@@ -93,7 +94,7 @@ import { draftLegendRows, normalizedLegendEntries } from '../services/legend-dra
 /**
  * `replacedResults`: the Results a label rerender draws again; its Results continue their lines (composition offsets).
  * @typedef {EditorPlanOptions & SvgAdmissionRuntime & {
- *   generationResponse: any, catalogAdmission: FeatureCatalogAdmission, replacedResults?: readonly SvgResultEntry[] | null
+ *   generationResponse: GenerationResponse, catalogAdmission: FeatureCatalogAdmission, replacedResults?: readonly SvgResultEntry[] | null
  * }} CandidateCommitOptions
  */
 

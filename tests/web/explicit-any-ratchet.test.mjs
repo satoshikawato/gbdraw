@@ -34,7 +34,6 @@ const EXPLICIT_ANY_BASELINE = {
   'app/annotations.js': 3,
   'app/annotations/record-catalog.js': 2,
   'app/app-setup.js': 7,
-  'app/candidate-render.js': 1,
   'app/circular-track-slots.js': 4,
   'app/feature-editor.js': 16,
   'app/feature-editor/feature-edit-table.js': 7,

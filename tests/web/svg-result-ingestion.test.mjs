@@ -26,7 +26,9 @@ import {
   createLegacyImportResultSource,
   createSavedResultPlan,
   getCommittedSvgContent,
+  getCommittedSvgResultLineage,
   getCommittedSvgResultMetadata,
+  getCommittedSvgResultRuntimeIdentity,
   isCommittedSvgResult,
   markCommittedSvgResultMounted,
   markCommittedSvgResultUnmounted,
@@ -485,6 +487,29 @@ test('the held snapshot reads Results through toRaw and is fixed when the reques
   });
   assert.equal(Object.getOwnPropertySymbols(whole).includes(SEGMENTS), false);
   assert.equal(selectHeldRenderState(null, [whole, null, { content: '<svg/>' }], null).segments.size, 0);
+});
+
+// OV-2437: a rerender's Result continues the line of the Result it draws
+// again (the key of the Legend and title moves History records), under a new
+// identity; a Result admitted without one starts its own line.
+test('a Result drawn again continues the line of the Result it replaces under a new identity', () => {
+  const admit = (replacedResults) => {
+    const { response, admission } = currentFixture();
+    return admitCurrentGeneratedResults(response, {
+      catalogAdmission: admission, mutationPlan: createEmptySvgMutationPlan(1),
+      sanitizer: sanitizer({ calls: 0 }), parser: FakeDomParser, replacedResults
+    });
+  };
+  const [first] = admit(null);
+  const [redrawn] = admit([first]);
+  const [again] = admit([redrawn]);
+  const [fresh] = admit(null);
+  assert.equal(getCommittedSvgResultLineage(first), getCommittedSvgResultRuntimeIdentity(first));
+  assert.notEqual(getCommittedSvgResultRuntimeIdentity(redrawn), getCommittedSvgResultRuntimeIdentity(first));
+  assert.equal(getCommittedSvgResultLineage(redrawn), getCommittedSvgResultLineage(first));
+  assert.equal(getCommittedSvgResultLineage(again), getCommittedSvgResultLineage(first));
+  assert.equal(getCommittedSvgResultLineage(fresh), getCommittedSvgResultRuntimeIdentity(fresh));
+  assert.notEqual(getCommittedSvgResultLineage(fresh), getCommittedSvgResultLineage(first));
 });
 
 test('JSON cannot forge current-worker provenance and malformed envelopes fail closed', () => {

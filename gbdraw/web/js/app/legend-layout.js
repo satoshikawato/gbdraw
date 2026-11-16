@@ -23,7 +23,7 @@ import {
  * @typedef {object} LegendLayoutPreviewPort
  * @property {(reason: string) => boolean} commitActiveResultEdit
  * @property {(result: SvgResultEntry) => string} getResultLineageKey The key of a Result's line (OV-2437).
- * @property {() => { svg?: Element | null, result?: SvgResultEntry | null } | null} getActiveRuntime
+ * @property {() => { svg: Element, result: SvgResultEntry } | null} getActiveRuntime The bound Result and its root, or null.
  * @property {(
  *   resultIndex: number,
  *   edit: (svg: SVGSVGElement, context: { mounted: boolean }) => boolean,
@@ -114,11 +114,11 @@ export const createLegendLayout = ({
       [...map.keys()].forEach((identity) => { if (!keep.has(identity)) map.delete(identity); });
     }
   };
-  /** @param {SvgResultEntry | null | undefined} result */
-  const resultLineageKey = (result) => (result && previewRuntime?.getResultLineageKey?.(result)) || '';
+  /** @param {SvgResultEntry} result */
+  const resultLineageKey = (result) => (previewRuntime ? previewRuntime.getResultLineageKey(result) : '');
   /** @param {readonly string[]} identities The line keys of the Results of the drawing whose History captures. */
   const captureCompositionIntent = (identities) => {
-    const runtime = previewRuntime?.getActiveRuntime?.() || null;
+    const runtime = previewRuntime ? previewRuntime.getActiveRuntime() : null;
     const svg = state.svgContainer.value?.querySelector('svg') || null;
     if (svg && runtime?.svg === svg && resultLineageKey(runtime.result)) {
       /** @type {CompositionRecordDeltas | null} */

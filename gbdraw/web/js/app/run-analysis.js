@@ -23,7 +23,7 @@ import { drawnInputSummaries, validateInputSummaries } from '../services/input-s
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { trackHidesOn } from '../services/setting-application.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
-import { keepResultNames } from '../services/result-normalization.js';
+import { keepResultNames, redrawsEachResult } from '../services/result-normalization.js';
 import { regionWithinRecord } from '../services/record-options.js';
 import {
   nameFeaturePlacementFailure,
@@ -1580,6 +1580,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {any[]} [timingEntries]
  * @property {readonly string[] | null} [resultNames] The names of the Results a rerender draws again,
  *   which they keep (OV-136); Generate's Results take the names the engine gives them.
+ * @property {readonly SvgResultEntry[] | null} [replacedResults] The Results a rerender draws again, whose
+ *   lines the new Results continue when the reply draws each again (`redrawsEachResult`, OV-2437).
  * @property {FeatureCatalog | null} [heldFeatureCatalog] The catalog the page holds for the drawing it
  *   renders; when this render reuses its build, the reply says so and the page keeps it.
  * @property {readonly unknown[] | null} [heldResults] The drawing's committed Results; Python
@@ -1602,6 +1604,7 @@ export const executeCanonicalRenderCandidate = async ({
   decorationContinuity = null,
   timingEntries = [],
   resultNames = null,
+  replacedResults = null,
   heldFeatureCatalog = null,
   heldResults = null,
   drawingId = null
@@ -1672,6 +1675,7 @@ export const executeCanonicalRenderCandidate = async ({
       // The Results carry the feature types of the request that drew them (R13).
       selectedFeatureTypes: canonical.renderRequest.diagramOptions?.selectedFeaturesSet ?? null,
       ...prepareCommitInput,
+      replacedResults: redrawsEachResult(replacedResults, results) ? replacedResults : null,
       resultTransforms: decorationContinuity?.(canonical, catalogState) || []
     })
   );
@@ -6273,11 +6277,11 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: candidateRules,
-          replacedResults: results.value
+          manualSpecificRules: candidateRules
         },
         timingEntries,
-        resultNames: committedResultNames
+        resultNames: committedResultNames,
+        replacedResults: results.value
       });
       console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
       if (execution.status === 'superseded' || !isCurrent()) return notAdmitted();

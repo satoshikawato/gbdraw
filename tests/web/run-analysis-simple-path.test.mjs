@@ -741,6 +741,34 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
   assert.equal(outcome.annotationWarnings[0].resultName, 'HmmtDNA_basic_circular');
 });
 
+// OV-2437: a rerender's Results continue the lines of the Results they draw
+// again only when the reply draws each again, by the rule that keeps their
+// names (`redrawsEachResult`); a reply with another number of Results starts
+// a line for each.
+test('a rerender continues the lines of the Results it replaces only when it draws as many', async () => {
+  const replacedResults = [{ name: 'a.svg', content: '<svg/>' }, { name: 'b.svg', content: '<svg/>' }];
+  const replacedFor = async (count) => {
+    let replaced;
+    await executeCanonicalRenderCandidate({
+      canonical: { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} },
+      mode: 'circular',
+      kind: 'reflow',
+      resultNames: replacedResults.map((result) => result.name),
+      replacedResults,
+      generationExecutor: async () => ({
+        results: Array.from({ length: count }, (_, index) => ({ name: `out_${index + 1}.svg`, content: '<svg/>' })),
+        metadata: {}
+      }),
+      catalogAdmission: (catalog) => ({ catalog }),
+      prepareCommit: (input) => { replaced = input.replacedResults; return { results: [] }; }
+    });
+    return replaced;
+  };
+  assert.equal(await replacedFor(2), replacedResults);
+  assert.equal(await replacedFor(1), null, 'fewer Results start their own lines');
+  assert.equal(await replacedFor(3), null, 'more Results start their own lines');
+});
+
 // One Circular GenBank input whose other slots hold files no run may read.
 /** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
 const installSimpleCircularInput = (primary, inactive) => {

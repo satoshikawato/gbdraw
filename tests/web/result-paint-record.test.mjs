@@ -325,3 +325,55 @@ test('the Label visibility the displayed Result was drawn with follows a Generat
   assert.equal(record.displayedDrawnLabelVisibility(), null, 'the Result left');
 });
 
+
+// OV-3730: the editor intent's commit reads from the bind's phase whether
+// Python drew the Results it records (`drawsResult`). A checkpoint restore
+// keeps a batch Result's bytes, drawn with the state of the drawing holding it
+// and shown unknown; a label rerender drew every Result from its request.
+test('the committed editor state records a Result as drawn only in a phase that draws (OV-3730)', async () => {
+  // app/editor-intent.js reads `window.Vue.watch` when it loads.
+  globalThis.window ??= {};
+  globalThis.window.Vue ??= { watch() {} };
+  const { createDisplayedResultProjection } = await import('../../gbdraw/web/js/app/editor-intent.js');
+  const [a, b] = ['a', 'b'].map(resultNamed);
+  const [first, second] = [{ id: 'd1', step: 'current' }, { id: 'd2', step: 'second drawing' }];
+  const drawnPaint = paint('drawn');
+  const commitIn = (phase) => {
+    const record = createResultPaintRecord();
+    const unused = () => { throw new Error('not read by a commit'); };
+    const { rememberCommittedEditorState } = createDisplayedResultProjection({
+      liveResults: () => [a, b],
+      drawingList: () => [first, second],
+      resultsOf: (drawingId) => (drawingId === 'd1' ? [a] : [b]),
+      resultIdentity: (result) => result.name,
+      currentEditorProjectionState: (drawing) => paint(drawing.step),
+      displayedIntentSignature: unused,
+      resultDrawsFeature: unused,
+      compileDisplayedResultOperations: unused,
+      projectMountedEditorIntent: unused,
+      showEditorIntent: unused,
+      displayBlocked: unused,
+      showDeclinedPaint: unused,
+      LEGEND_STRUCTURE_DOMAINS: [],
+      STROKE_DOMAINS: [],
+      resultPaintCommit: record.commit,
+      resultPaintTakeLeft: record.takeLeft,
+      resultPaintRebind: record.rebind,
+      resultPaintDisplay: record.display,
+      resultPaintDrawn: record.drawn,
+      resultPaintShown: record.shown
+    });
+    rememberCommittedEditorState(first, {
+      root: null, result: a, resultIndex: 0, resultIdentity: 'a', rootGeneration: 1, phase, bindingOptions: { drawnPaint }
+    });
+    return record;
+  };
+  const current = paint('current');
+  const restored = commitIn('passive-preview');
+  assert.equal(restored.drawn(b)?.visibility, paint('second drawing').visibility, 'drawn with its own drawing\'s state');
+  assert.deepEqual(changed(restored.display(b, current), current), EVERY_PAINT_DOMAIN, 'shown unknown');
+  assert.equal(restored.drawn(a)?.visibility, current.visibility, 'the displayed Result shows the restored state');
+  const redrawn = commitIn('label-reflow');
+  assert.equal(redrawn.drawn(b)?.visibility, drawnPaint.visibility, 'drawn from the rerender\'s request');
+  assert.equal(redrawn.drawn(a)?.visibility, drawnPaint.visibility);
+});
