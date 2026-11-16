@@ -15,7 +15,11 @@ const importSession = (page, bytes, name) => evaluateWithRetainedPromise(page, a
   const data = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) data[index] = binary.charCodeAt(index);
   const result = await window.__GBDRAW_APP__.importSession({ target: { files: [new File([data], name)], value: 'selected' } });
-  if (result.status !== 'ok') throw new Error(result.error?.stack || result.status);
+  // A failed Load returns its user-facing error (no stack): the message names its status, code, stage and summary.
+  if (result.status !== 'ok') {
+    const { code, stage, summary, details } = result.error ?? {};
+    throw new Error(`Load ${result.status}: ${JSON.stringify({ code, stage, summary, details })}`);
+  }
   return result.status;
 }, { base64: bytes.toString('base64'), name });
 
