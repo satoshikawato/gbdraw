@@ -488,7 +488,7 @@ const legendSwitch = () => {
     resetModeTransientUi: () => {}, alignment: { arriveAtDrawing: () => {}, refreshCanvas: () => {}, busy: () => null }, installShownDrawing, dismissNotice: () => {},
     switchDrawingSearch: () => {},
     rebindAnnotationRecords: () => {}, clearActiveRuntime: () => {}, getResultIdentity: (result) => result.name,
-    presentSelectedResult: () => {}, showArrivingFigure: () => {},
+    presentSelectedResult: () => {}, showArrivingFigure: async () => {},
     rememberResultInventory: (identity, inventory) => remembered.set(identity, inventory),
     artifactSlotsSwap: store.swap, captureArtifactSlot: snapshots.captureArtifactSlot,
     installArtifactSlot: (slot, options) => {

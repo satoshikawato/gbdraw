@@ -200,39 +200,63 @@ test('a Load that drops the drawing of an open review ends the review and the ap
   expect(pageErrors).toEqual([]);
 });
 
-// OV-3620, OV-3621: a drawing switch shows the arriving figure whole in the room the preview has, whether or not a
-// review is open: the copy a Duplicate shows, each drawing shown again, and, while the review of one drawing is open
-// (its docked panel narrows the room), its copy and the review's own drawing.
+// OV-3620, OV-3621 (D-57): a drawing switch keeps the zoom and shows the arriving figure centred in the free room
+// (the canvas left of the Editor reserve, and left of the control over its edge when the figure would meet it),
+// whether or not a review is open: the copy a Duplicate shows, each drawing shown again, and, while the review of one
+// drawing is open (its docked panel narrows the room), its copy and the review's own drawing. A switch never fits.
 // Measured once the view settled: two frames after the step, past any transition of the surface's transform.
-const figureInRoom = (page) => evaluateWithRetainedPromise(page, async () => {
+const figureView = (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   await Promise.all((app.svgContainer?.getAnimations?.() ?? []).map((animation) => animation.finished));
-  const room = app.canvasContainerRef.getBoundingClientRect();
+  const canvas = app.canvasContainerRef;
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:0;width:var(--preview-editor-reserve,0px)';
+  canvas.appendChild(probe);
+  const reserve = probe.getBoundingClientRect().width;
+  probe.remove();
+  const box = canvas.getBoundingClientRect();
+  const room = { left: box.left + canvas.clientLeft, top: box.top + canvas.clientTop };
+  Object.assign(room, { right: room.left + canvas.clientWidth - reserve, bottom: room.top + canvas.clientHeight });
   const figure = app.svgContainer?.querySelector('svg')?.getBoundingClientRect();
-  return Boolean(figure?.width) && figure.left >= room.left && figure.right <= room.right
-    && figure.top >= room.top && figure.bottom <= room.bottom;
+  const control = document.querySelector('[data-preview-edge-control]')?.getBoundingClientRect();
+  const besideControl = Boolean(control?.width) && control.top < figure.bottom && control.bottom > figure.top
+    && control.left < room.right;
+  const frameRight = besideControl ? control.left : room.right;
+  return {
+    zoom: app.zoom,
+    inRoom: Boolean(figure?.width) && figure.left >= room.left && figure.right <= frameRight
+      && figure.top >= room.top && figure.bottom <= room.bottom,
+    centred: Boolean(figure?.width) && Math.abs((figure.left - room.left) - (frameRight - figure.right)) < 1
+  };
 });
-test('a drawing switch shows the arriving figure inside the preview, with or without an open review', async ({ page }) => {
+test('a drawing switch keeps the zoom and centres the arriving figure in the free room, with or without an open review', async ({ page }) => {
   test.setTimeout(900000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, readFileSync(GALLERY_SESSION), 'BGC0000708-BGC0000713.gbdraw');
-  expect(await figureInRoom(page), 'the loaded figure').toBe(true);
+  const loaded = await figureView(page);
+  expect(loaded.inRoom, 'the loaded figure').toBe(true);
+  /** @param {string} step @param {number} zoom */
+  const expectCentredAt = async (step, zoom) => {
+    const view = await figureView(page);
+    expect(view, step).toEqual({ zoom, inRoom: true, centred: true });
+  };
   const source = await shownDrawingId(page);
   const copy = await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(id).drawingId, source);
   await expect.poll(() => shownDrawingId(page)).toBe(copy);
-  expect(await figureInRoom(page), 'the copy its Duplicate shows').toBe(true);
+  await expectCentredAt('the copy its Duplicate shows', loaded.zoom);
   await show(page, source);
-  expect(await figureInRoom(page), 'the source shown again').toBe(true);
+  await expectCentredAt('the source shown again', loaded.zoom);
   const dialog = await openReview(page, 'CAG38712.1');
-  expect(await figureInRoom(page), 'the review fits its own drawing').toBe(true);
+  const reviewed = await figureView(page);
+  expect(reviewed.inRoom, 'the review fits its own drawing').toBe(true);
   await show(page, copy);
   await expect(dialog).toBeVisible();
-  expect(await figureInRoom(page), 'the copy shown while the review is open').toBe(true);
+  await expectCentredAt('the copy shown while the review is open', reviewed.zoom);
   await show(page, source);
-  expect(await figureInRoom(page), 'the review\'s drawing shown again').toBe(true);
+  await expectCentredAt('the review\'s drawing shown again', reviewed.zoom);
 });
 
 // D-44 (S-1, R11): the header's Undo is disabled, with the reason as its title, while the step it would take (a

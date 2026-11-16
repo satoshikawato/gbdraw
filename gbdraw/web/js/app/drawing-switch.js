@@ -62,8 +62,9 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {() => void} clearActiveRuntime Releases the displayed Result.
  * @property {(result: SvgResultEntry) => string} getResultIdentity
  * @property {(bindingOptions?: { modeArrival?: boolean }) => unknown} presentSelectedResult
- * @property {() => void} showArrivingFigure The pan and zoom owner's: the arriving figure shows fitted from its
- *   first frame, in the room the preview has (an open review's docked panel narrows it).
+ * @property {() => Promise<void>} showArrivingFigure The pan and zoom owner's: the arriving figure shows from its
+ *   first frame at the current zoom, its top where pan y 0 puts it, centred in the free room the Fit measures (an
+ *   open review's docked panel narrows it); it is not fitted (D-57).
  * @property {(identity: string | undefined, inventory: readonly PythonLegendKey[]) => void} rememberResultInventory
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} artifactSlotsSwap
  *   Keeps the departing slot and takes the arriving drawing's, or null.
@@ -123,9 +124,9 @@ export const createDrawingSwitch = ({
   //      kept per drawing. The feature panel tab it resets is no Session
   //      change (D-15-53). The arriving Similarity alignment plan selects
   //      its group (`arriveAtDrawing`).
-  //   5. Show the arriving Result as a selection, fitted: the view of the
-  //      departing figure (its zoom, its pan, an open review's fit) is no
-  //      view of the arriving one (OV-3620).
+  //   5. Show the arriving Result as a selection, at the zoom shown and
+  //      centred in the free room: the departing figure's pan is no pan of
+  //      the arriving one, and a switch never fits (OV-3620, D-57).
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own drawing's slot (OIPC-C07), and for a History
   // restore or an open History transaction.
@@ -184,9 +185,9 @@ export const createDrawingSwitch = ({
     if (arrivingCardFailure !== null && errorLog.value === null) errorLog.value = arrivingCardFailure;
     // The arriving drawing's annotations, over its mode's record catalog.
     rebindAnnotationRecords();
-    // 5. Presentation: the arriving Result is shown as a selection, fitted.
+    // 5. Presentation: the arriving Result is shown as a selection, centred.
     presentSelectedResult({ modeArrival: true });
-    showArrivingFigure();
+    void showArrivingFigure();
   };
   // `false` when the drawing is already shown, the busy reason when a switch
   // waits, else `{ status: 'ok' }`. An unknown ID throws (`state.drawingOf`):

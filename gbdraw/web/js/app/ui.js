@@ -108,40 +108,47 @@ const isSvgEditingTarget = (target) =>
  * Load that withdraws it shows the view from before it (OV-2703). A figure to show fitted while its canvas
  * has no room (a phone shows the Settings pane) stays hidden until the canvas gets one, and is then fitted
  * and shown; hiding a figure again, or showing it without the Fit, drops that wait. The figure a drawing
- * switch shows in place of the shown one is hidden and shown fitted in the same way, once Vue mounts it
- * (`showArrivingFigure`, OV-3620): whatever the view of the departing figure was, the arriving one shows whole
- * in the room the preview has.
+ * switch shows in place of the shown one is hidden until Vue mounts it, then placed at once and shown
+ * (`showArrivingFigure`, OV-3620, D-57): it keeps the zoom, its top stays where pan y 0 puts it, and it is
+ * centred in the free room the Fit measures; it is not fitted. It waits for room in the same way. A placement
+ * that throws still shows the figure.
  * @param {{ hidden: { value: boolean }, canvas: { value: HTMLElement | null }, fitAtOnce: () => void,
- *   setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The pan and zoom
- *   owner's hold, canvas, Fit shown at once, and whole-view setter.
+ *   centerAtOnce: () => void, setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }}
+ *   owner The pan and zoom owner's hold, canvas, Fit and centring shown at once, and whole-view setter.
  */
-const createHiddenPreview = ({ hidden, canvas, fitAtOnce, setPreviewViewport }) => {
+const createHiddenPreview = ({ hidden, canvas, fitAtOnce, centerAtOnce, setPreviewViewport }) => {
   /** @param {HTMLElement | null} container */
   const hasRoom = (container) => Boolean(container?.offsetWidth && container.offsetHeight);
+  // The placement that waits for room.
+  /** @type {() => void} */
+  let waiting = fitAtOnce;
   const roomObserver = typeof ResizeObserver === 'function'
-    ? new ResizeObserver(() => { if (hasRoom(canvas.value)) showHiddenPreview({ fit: true }); }) : null;
+    ? new ResizeObserver(() => { if (hasRoom(canvas.value)) showPlaced(waiting); }) : null;
   const hidePreviewUntilShown = () => {
     roomObserver?.disconnect();
     hidden.value = true;
   };
-  /** @param {{ fit: boolean }} options `fit` shows the figure fitted, with no transition to the fitted view. */
-  const showHiddenPreview = ({ fit }) => {
+  /** @param {(() => void) | null} place The placement shown at once, or null to show the figure as it is. */
+  const showPlaced = (place) => {
     roomObserver?.disconnect();
-    if (fit && roomObserver && canvas.value && !hasRoom(canvas.value)) {
+    if (place && roomObserver && canvas.value && !hasRoom(canvas.value)) {
+      waiting = place;
       roomObserver.observe(canvas.value);
       return;
     }
-    if (fit) fitAtOnce();
-    hidden.value = false;
+    try { place?.(); } finally { hidden.value = false; }
   };
+  /** @param {{ fit: boolean }} options `fit` shows the figure fitted, with no transition to the fitted view. */
+  const showHiddenPreview = ({ fit }) => showPlaced(fit ? fitAtOnce : null);
   /** @type {StoredFigurePreview} */
   const storedFigurePreview = Object.freeze({
     hide: hidePreviewUntilShown, show: showHiddenPreview,
     restore: (/** @type {PersistedPreviewViewport} */ view) => setPreviewViewport(view.canvasPan, view.zoom)
   });
+  /** @returns {Promise<void>} Settles once the arriving figure is placed (or waits for room). */
   const showArrivingFigure = () => {
     hidePreviewUntilShown();
-    void nextTick().then(() => showHiddenPreview({ fit: true }));
+    return nextTick().then(() => showPlaced(centerAtOnce));
   };
   return {
     hidePreviewUntilShown, showHiddenPreview, showArrivingFigure, storedFigurePreview,
@@ -450,72 +457,145 @@ const createPanGesture = (state, { beginInteraction, endInteraction }) => {
 };
 
 /**
+ * The free room of the figure: the canvas frame left of an open Editor drawer (its reserve), and the control
+ * over the canvas edge where it settles (null when none is shown). Fit and a drawing switch read it.
+ * @typedef {object} PreviewFreeRoom
+ * @property {number} left The frame's left edge in the page.
+ * @property {number} width The frame's width, left of the Editor reserve.
+ * @property {number} height
+ * @property {number} middle The frame's vertical middle in the page.
+ * @property {DOMRect | null} control
+ */
+
+/**
+ * The shown figure without the current transform: its size at zoom 1, the transform origin (the surface's top
+ * centre) without the pan, and the figure centre's unscaled offset from that origin.
+ * @typedef {object} PreviewFigure
+ * @property {number} width
+ * @property {number} height
+ * @property {number} originX
+ * @property {number} originY
+ * @property {number} centerX
+ * @property {number} centerY
+ */
+
+/** @param {HTMLElement} container The preview canvas. @returns {PreviewFreeRoom} */
+const measureFreeRoom = (container) => {
+  const frameBox = container.getBoundingClientRect();
+  return {
+    left: frameBox.left + container.clientLeft,
+    width: container.clientWidth - editorReserveWidth(container),
+    height: container.clientHeight,
+    middle: frameBox.top + container.clientTop + container.clientHeight / 2,
+    control: edgeControlBox(container)
+  };
+};
+
+/**
+ * The width of the frame a figure shown at `zoomLevel`, its middle at page y `middle`, is centred in: the free
+ * room, or the part of it left of the edge control when the figure centred in the whole room would meet the
+ * control (OV-3588).
+ * @param {PreviewFreeRoom} room
+ * @param {PreviewFigure} figure
+ * @param {number} zoomLevel
+ * @param {number} middle
+ */
+const centeringFrameWidth = (room, figure, zoomLevel, middle) => {
+  const { control } = room;
+  return control
+    && Math.abs(room.left + room.width / 2 - (control.left + control.right) / 2) < (zoomLevel * figure.width + control.width) / 2
+    && Math.abs(middle - (control.top + control.bottom) / 2) < (zoomLevel * figure.height + control.height) / 2
+    ? control.left - room.left : room.width;
+};
+
+/**
+ * The pan x that centres the figure at `zoomLevel` in the frame of `frameWidth` from the room's left edge.
+ * @param {PreviewFreeRoom} room
+ * @param {number} frameWidth
+ * @param {PreviewFigure} figure
+ * @param {number} zoomLevel
+ */
+const centeringPanX = (room, frameWidth, figure, zoomLevel) =>
+  room.left + frameWidth / 2 - figure.originX - zoomLevel * figure.centerX;
+
+/**
  * Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in the visible preview frame (the
  * canvas left of an open Editor drawer), and the pan that centres it under the top-center origin. A diagram
  * so fitted that would lie under the control over the canvas edge (the Editor toggle) is fitted to the frame
  * left of that control instead (OV-3588); any other Fit stays as it is. It keeps the room it measured, which
- * the held view reads.
+ * the held view reads. The centring at a given zoom is one computation that a drawing switch shares
+ * (`centerPreviewAtZoom`, D-57): the switch keeps the zoom and the top where pan y 0 puts it.
  * @param {Pick<WebState, 'zoom' | 'canvasPan' | 'canvasContainerRef' | 'svgContainer' | 'previewTransitionHeld'>
  *   & { setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The view, the
  *   canvas and surface, and the whole-view setter.
- * @returns {{ fitPreviewToViewport: () => void, inFittedRoom: (container: HTMLElement) => boolean,
- *   forgetFittedRoom: () => void }}
+ * @returns {{ fitPreviewToViewport: () => void, centerPreviewAtZoom: () => void,
+ *   inFittedRoom: (container: HTMLElement) => boolean, forgetFittedRoom: () => void }}
  */
 const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, previewTransitionHeld, setPreviewViewport }) => {
   // The room the last Fit measured.
   let fittedRoom = '';
 
-  const fitPreviewToViewport = () => {
+  /**
+   * Measures the shown figure and its room, and places it with `place`. The transition is held meanwhile, so
+   * the measure reads the current transform itself, not a frame of its transition.
+   * @param {(shown: { container: HTMLElement, room: PreviewFreeRoom, figure: PreviewFigure }) => void} place
+   */
+  const placeShown = (place) => {
     const container = canvasContainerRef.value;
     const surface = svgContainer.value;
     const svg = surface?.querySelector?.('svg');
     if (!container || !surface || !svg) return;
-    // Measure the current transform itself, not a frame of its transition.
     previewTransitionHeld.value = true;
-    const surfaceBox = surface.getBoundingClientRect();
-    const svgBox = svg.getBoundingClientRect();
-    const frameBox = container.getBoundingClientRect();
-    const width = svgBox.width / zoom.value;
-    const height = svgBox.height / zoom.value;
-    if (!(width > 0 && height > 0)) {
+    try {
+      const surfaceBox = surface.getBoundingClientRect();
+      const svgBox = svg.getBoundingClientRect();
+      const width = svgBox.width / zoom.value;
+      const height = svgBox.height / zoom.value;
+      if (!(width > 0 && height > 0)) return;
+      place({
+        container,
+        room: measureFreeRoom(container),
+        figure: {
+          width, height,
+          originX: surfaceBox.left + surfaceBox.width / 2 - canvasPan.x,
+          originY: surfaceBox.top - canvasPan.y,
+          centerX: (svgBox.left + svgBox.width / 2 - surfaceBox.left - surfaceBox.width / 2) / zoom.value,
+          centerY: (svgBox.top + svgBox.height / 2 - surfaceBox.top) / zoom.value
+        }
+      });
+    } finally {
       previewTransitionHeld.value = false;
-      return;
     }
+  };
+
+  const fitPreviewToViewport = () => placeShown(({ container, room, figure }) => {
     fittedRoom = previewRoom(container);
-    const frameLeft = frameBox.left + container.clientLeft;
-    const frameMiddle = frameBox.top + container.clientTop + container.clientHeight / 2;
     // Round down to a whole percent so the diagram fills a frame of this width without
     // overflowing it; the wheel and buttons step by 0.1 from there.
     /** @param {number} frameWidth */
     const zoomToFill = (frameWidth) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(Math.min(
-      (frameWidth - 2 * FIT_MARGIN_PX) / width,
-      (container.clientHeight - 2 * FIT_MARGIN_PX) / height
+      (frameWidth - 2 * FIT_MARGIN_PX) / figure.width,
+      (room.height - 2 * FIT_MARGIN_PX) / figure.height
     ) * 100 + 1e-9) / 100));
-    let frameWidth = container.clientWidth - editorReserveWidth(container);
-    let nextZoom = zoomToFill(frameWidth);
-    // The fitted diagram, centred in the frame, meets the control's box: the frame ends at the control.
-    const control = edgeControlBox(container);
-    if (control
-      && Math.abs(frameLeft + frameWidth / 2 - (control.left + control.right) / 2) < (nextZoom * width + control.width) / 2
-      && Math.abs(frameMiddle - (control.top + control.bottom) / 2) < (nextZoom * height + control.height) / 2) {
-      frameWidth = control.left - frameLeft;
-      nextZoom = zoomToFill(frameWidth);
-    }
-    // The transform origin without the current pan, and the diagram centre's
-    // unscaled offset from it.
-    const originX = surfaceBox.left + surfaceBox.width / 2 - canvasPan.x;
-    const originY = surfaceBox.top - canvasPan.y;
-    const centerX = (svgBox.left + svgBox.width / 2 - surfaceBox.left - surfaceBox.width / 2) / zoom.value;
-    const centerY = (svgBox.top + svgBox.height / 2 - surfaceBox.top) / zoom.value;
+    const roomZoom = zoomToFill(room.width);
+    const frameWidth = centeringFrameWidth(room, figure, roomZoom, room.middle);
+    const nextZoom = frameWidth === room.width ? roomZoom : zoomToFill(frameWidth);
     setPreviewViewport({
-      x: frameLeft + frameWidth / 2 - originX - nextZoom * centerX,
-      y: frameMiddle - originY - nextZoom * centerY
+      x: centeringPanX(room, frameWidth, figure, nextZoom),
+      y: room.middle - figure.originY - nextZoom * figure.centerY
     }, nextZoom);
-    previewTransitionHeld.value = false;
-  };
+  });
+
+  // A drawing switch's placement: the zoom kept, the top where pan y 0 puts it, centred in the free room.
+  const centerPreviewAtZoom = () => placeShown(({ room, figure }) => {
+    const zoomLevel = zoom.value;
+    const frameWidth = centeringFrameWidth(room, figure, zoomLevel, figure.originY + zoomLevel * figure.centerY);
+    setPreviewViewport({ x: centeringPanX(room, frameWidth, figure, zoomLevel), y: 0 }, zoomLevel);
+  });
 
   return {
     fitPreviewToViewport,
+    centerPreviewAtZoom,
     inFittedRoom: (container) => previewRoom(container) === fittedRoom,
     forgetFittedRoom: () => { fittedRoom = ''; }
   };
@@ -619,24 +699,26 @@ export const createPanZoom = (state, { showCanvas = () => {} } = {}) => {
     zoom.value = clampZoom(zoom.value + (event.deltaY > 0 ? -0.1 : 0.1));
   };
 
-  const { fitPreviewToViewport, inFittedRoom, forgetFittedRoom } = createPreviewFit({
+  const { fitPreviewToViewport, centerPreviewAtZoom, inFittedRoom, forgetFittedRoom } = createPreviewFit({
     zoom, canvasPan, canvasContainerRef, svgContainer, previewTransitionHeld, setPreviewViewport
   });
   const { holdPreviewViewport, releasePreviewViewport, heldPreviewViewport, disposeHeldPreviewView } = createHeldPreviewView({
     zoom, canvasPan, canvasContainerRef, fit: fitPreviewToViewport, inFittedRoom, forgetFittedRoom, setPreviewViewport
   });
 
-  // The Fit shown at once: no transition runs to the fitted view, and the browser takes that view
-  // as shown before the transition comes back.
-  const fitAtOnce = () => {
+  // A placement shown at once (the Fit, a drawing switch's centring): no transition runs to the placed
+  // view, and the browser takes that view as shown before the transition comes back.
+  /** @param {() => void} place */
+  const atOnce = (place) => () => {
     if (!svgContainer.value) return;
-    fitPreviewToViewport();
+    place();
     previewTransitionHeld.value = true;
     void getComputedStyle(svgContainer.value).transform;
     previewTransitionHeld.value = false;
   };
   const { hidePreviewUntilShown, showHiddenPreview, showArrivingFigure, storedFigurePreview, disposeHiddenPreview } = createHiddenPreview({
-    hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce, setPreviewViewport
+    hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce: atOnce(fitPreviewToViewport),
+    centerAtOnce: atOnce(centerPreviewAtZoom), setPreviewViewport
   });
 
   // The Fit button: its result shows. On a phone its toolbar lies below an open Editor, so the canvas
