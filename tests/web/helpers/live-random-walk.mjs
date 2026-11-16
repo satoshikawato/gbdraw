@@ -791,23 +791,24 @@ const isolationChanges = (phase, before, after, drawings) => drawings
 // the Load left unread: a Load of a preview reads no records (Product
 // Contract PD-OI-044, preview-only Load starts no Python Worker), so the
 // record list and its status come back with this read, as the same reader
-// (`readCircularRecords`) made them before. The shown drawing stays shown.
+// (`readCircularRecords`) made them before. Each drawing is shown by its
+// drawing ID; the shown drawing stays shown.
 /** @param {import('@playwright/test').Page} page */
 const readDeferredCircularRecords = async (page) => {
   const unread = () => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { circularDiscoveryForInput } = await import('/gbdraw/web/js/services/record-discovery.js');
     return {
-      shown: state.activeDrawing().mode,
-      kinds: state.drawingList().filter((drawing) => drawing.mode === 'circular' && circularDiscoveryForInput(drawing).status === 'deferred')
-        .map((drawing) => drawing.mode)
+      shown: state.activeDrawing().id,
+      drawingIds: state.drawingList().filter((drawing) => drawing.mode === 'circular' && circularDiscoveryForInput(drawing).status === 'deferred')
+        .map((drawing) => drawing.id)
     };
   });
-  const { shown, kinds } = await unread();
+  const { shown, drawingIds } = await unread();
   let current = shown;
-  for (const kind of kinds) {
-    if (kind !== current) await switchDrawing(page, kind);
-    current = kind;
+  for (const drawingId of drawingIds) {
+    if (drawingId !== current) await switchDrawing(page, { id: drawingId });
+    current = drawingId;
     const outcome = await evaluateWithRetainedPromise(page, async () => {
       const result = await window.__GBDRAW_APP__.inspectCircularSourceRecords();
       return result?.status === 'unavailable' ? result.reason : '';
@@ -815,28 +816,35 @@ const readDeferredCircularRecords = async (page) => {
     if (outcome) throw new Error(`Reload Records after the Load: ${outcome}`);
     await settleLive(page);
   }
-  if (current !== shown) await switchDrawing(page, shown);
-  const left = (await unread()).kinds;
-  if (left.length) throw new Error(`the ${left.join(', ')} drawing's records stay unread after Reload Records`);
+  if (current !== shown) await switchDrawing(page, { id: shown });
+  const left = (await unread()).drawingIds;
+  if (left.length) throw new Error(`the records of drawing ${left.join(', ')} stay unread after Reload Records`);
 };
 
 // The kinds that must give back every drawing as it was before the step,
 // with the name a report gives the check, the hashes it compares
-// (SliceHashes), what a user does before reading the state (`settle`), and the
-// fields a logged defect keeps out of the comparison until it is fixed
-// (`off`: slice name -> the defect's id and the fields it names; the slice's
-// other fields stay compared, so a report still names any other loss). The
-// isolation check of the other kinds is the part of this check for the
-// drawings they did not edit.
+// (SliceHashes), what a user does before reading the state (`settle`), the
+// fields that read leaves to itself to write back (`unread`), and the fields
+// a logged defect keeps out of the comparison until it is fixed (`off`: slice
+// name -> the defect's id and the fields it names, each left out only where
+// the state before the step holds the value the defect turns; the slice's
+// other fields stay compared, so a report still names any other loss). A kind
+// with `unread` is checked twice: before the read, without those fields, and
+// after it, with them. The isolation check of the other kinds is the part of
+// this check for the drawings they did not edit.
 // - Undo then Redo, by the hashes as they are.
 // - Save then Load, by the renamed hashes (a Load names files, records and
-//   file sources anew and builds maps in another order), after the record
-//   read the Load leaves to the user. Off:
+//   file sources anew and builds maps in another order); before the record
+//   read the Load leaves to the user, without the record list and its status
+//   (the read makes them, Product Contract PD-OI-044), so a Load that loses a
+//   value the read would rewrite (`adv.multi_record_positions`,
+//   `form.circular_record_selector`) fails; and after it. Off:
 //   - OV-3696, `settings`: Load places the track stacks it does not draw
 //     (`adv.*_track_slots_axis_index` null -> 0, `adv.circular_track_slots.*.side`
-//     null -> 'inside' and `params.lane_direction` set; services/config.js
-//     `applyConfigData` and `reconcileDepthTrackStateAfterSessionFiles`). When
-//     it is fixed these four fields are compared again: remove the entry.
+//     unset -> 'inside' and `params.lane_direction` set where unset;
+//     services/config.js `applyConfigData` and
+//     `reconcileDepthTrackStateAfterSessionFiles`). When it is fixed these
+//     four fields are compared again: remove the entry.
 //   - OV-3702, `paint`: a Legend row or feature stroke edit stores the drawn
 //     stroke Python wrote, "none", as `originalStrokeColor`, which a Load
 //     reads as null (services/style-overrides.js `normalizeStrokeOverride`):
@@ -848,28 +856,46 @@ const readDeferredCircularRecords = async (page) => {
 //     record read of the same cards leaves the marks (record-discovery.js
 //     `circularDepthRowsAfterRead` returns null when the cards did not
 //     change). When the two states agree, remove the entry.
+const UNSET = Object.freeze([null]);
 const RESTORING_KINDS = Object.freeze({
-  undoRedo: { phase: 'Undo then Redo', by: 'drawings', settle: async () => {}, off: {} },
+  undoRedo: { phase: 'Undo then Redo', by: 'drawings', settle: async () => {}, unread: {}, off: {} },
   load: {
     phase: 'Save then Load',
     by: 'renamed',
     settle: readDeferredCircularRecords,
+    unread: { inputs: [{ path: 'circularRecordList' }, { path: 'circularRecordDiscovery' }] },
     off: {
-      settings: { id: 'OV-3696', fields: ['adv.circular_track_slots_axis_index', 'adv.linear_track_slots_axis_index',
-        'adv.circular_track_slots.*.side', 'adv.circular_track_slots.*.params.lane_direction'] },
-      paint: { id: 'OV-3702', fields: ['legendStrokeOverrides.*.originalStrokeColor', 'featureStrokeOverrides.*.originalStrokeColor'] },
-      inputs: { id: 'OV-3706', fields: ['files.c_depth_rows'] }
+      settings: { id: 'OV-3696', fields: [
+        { path: 'adv.circular_track_slots_axis_index', when: UNSET }, { path: 'adv.linear_track_slots_axis_index', when: UNSET },
+        { path: 'adv.circular_track_slots.*.side', when: UNSET }, { path: 'adv.circular_track_slots.*.params.lane_direction', when: UNSET }
+      ] },
+      paint: { id: 'OV-3702', fields: [
+        { path: 'legendStrokeOverrides.*.originalStrokeColor', when: ['none'] }, { path: 'featureStrokeOverrides.*.originalStrokeColor', when: ['none'] }
+      ] },
+      inputs: { id: 'OV-3706', fields: [{ path: 'files.c_depth_rows', when: UNSET }] }
     }
   }
 });
-/** @typedef {{ off: Readonly<Record<string, { id: string, fields: readonly string[] }>> }} RestoringOff */
-/** @param {RestoringOff | undefined} restoring */
-const fieldsOff = (restoring) => Object.fromEntries(Object.entries(restoring?.off || {}).map(([slice, { fields }]) => [slice, fields]));
+/** @typedef {import('./drawing-slice-hashes.mjs').FieldOff} FieldOff */
+/**
+ * @typedef {{ unread: Readonly<Record<string, readonly FieldOff[]>>,
+ *   off: Readonly<Record<string, { id: string, fields: readonly FieldOff[] }>> }} RestoringOff
+ */
+// The fields a restoring kind's check leaves out, the `unread` ones too when `withUnread`.
+/** @param {RestoringOff | undefined} restoring @param {{ withUnread?: boolean }} [options] */
+const fieldsOff = (restoring, { withUnread = false } = {}) => {
+  /** @type {Record<string, FieldOff[]>} */
+  const fields = {};
+  for (const [slice, { fields: off }] of Object.entries(restoring?.off || {})) fields[slice] = [...off];
+  for (const [slice, unread] of Object.entries(withUnread ? restoring?.unread || {} : {})) fields[slice] = [...(fields[slice] || []), ...unread];
+  return fields;
+};
 // The check's name in a report, with the defects whose fields it leaves out.
 /** @param {RestoringOff & { phase: string }} restoring */
-const restoringPhase = ({ phase, off }) => {
+const restoringPhase = ({ phase, off }, when = '') => {
   const ids = Object.entries(off).map(([slice, { id }]) => `${id} ${slice}`);
-  return ids.length ? `${phase} (fields left out: ${ids.join(', ')})` : phase;
+  const named = when ? `${phase}, ${when}` : phase;
+  return ids.length ? `${named} (fields left out: ${ids.join(', ')})` : named;
 };
 const healthOf = async (page, phase, errorSignatureBefore) => (await takeOperationHealthProblems(page, { errorSignatureBefore }))
   .map((problem) => ({ phase, problem }));
@@ -916,6 +942,8 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     let before;
     let afterStep;
     /** @type {IsolationChange[]} */
+    const restoredUnread = [];
+    /** @type {IsolationChange[]} */
     const prepareIsolation = [];
     /** @type {HealthProblem[]} */
     const health = [];
@@ -949,12 +977,18 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
           Object.keys(beforePrepare.drawings).filter((drawingId) => drawingId !== beforePrepare.active)));
         runnable = rest;
       }
-      const omit = fieldsOff(RESTORING_KINDS[step.kind]);
-      before = await sliceHashes(page, { omit });
+      const checked = RESTORING_KINDS[step.kind];
+      before = await sliceHashes(page, { omit: fieldsOff(checked) });
+      const unread = checked && Object.keys(checked.unread).length;
+      const beforeUnread = unread ? await sliceHashes(page, { omit: fieldsOff(checked, { withUnread: true }) }) : null;
       record.notes = [...prepared, ...await runStep(page, runnable, sessionPath(index))];
       await settleLive(page);
-      await RESTORING_KINDS[step.kind]?.settle(page);
-      afterStep = await sliceHashes(page, { omit });
+      if (beforeUnread) {
+        restoredUnread.push(...restoredChanges(restoringPhase(checked, 'before the record read'), beforeUnread,
+          await sliceHashes(page, { leftOut: beforeUnread.leftOut }), { by: checked.by }));
+      }
+      await checked?.settle(page);
+      afterStep = await sliceHashes(page, { leftOut: before.leftOut });
       health.push(...await healthOf(page, 'the step', signature));
     } catch (error) {
       records.push(record);
@@ -963,7 +997,10 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     records.push(record);
     log(record);
     const restoring = RESTORING_KINDS[record.step.kind];
-    const restored = restoring ? restoredChanges(restoringPhase(restoring), before, afterStep, { by: restoring.by }) : [];
+    const restored = restoring
+      ? [...restoredUnread, ...restoredChanges(restoringPhase(restoring, Object.keys(restoring.unread).length ? 'after the record read' : ''),
+        before, afterStep, { by: restoring.by })]
+      : [];
     const isolation = restoring || BARRIER_KINDS.includes(record.step.kind) ? [...prepareIsolation] : isolationChanges('the step', before, afterStep,
       Object.keys(before.drawings).filter((drawingId) => record.step.kind === 'drawingSwitch' || drawingId !== before.active));
     if (record.step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];

@@ -59,11 +59,15 @@ const generate = async (page) => {
 // binds the labels.
 const otherMode = (mode) => (mode === 'circular' ? 'linear' : 'circular');
 
-// One drawing switch as a user makes it (a tab, or the Linear offer when the project holds no Linear drawing), settled.
-const switchDrawing = async (page, kind) => {
+// One drawing switch as a user makes it (a tab, or the Linear offer when the
+// project holds no Linear drawing), settled. `target` is a kind or `{ id }`, a
+// DrawingId; the switch waits until the Circular drawing (or that drawing) has
+// read its records.
+const switchDrawing = async (page, target) => {
   await settleLive(page);
-  await showDrawing(page, { kind });
-  await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.drawingOf('circular').circularRecordDiscovery.status))
+  await showDrawing(page, typeof target === 'string' ? { kind: target } : target);
+  const waited = typeof target === 'string' ? 'circular' : target.id;
+  await expect.poll(() => page.evaluate(async (drawing) => (await import('/gbdraw/web/js/state.js')).state.drawingOf(drawing).circularRecordDiscovery.status, waited))
     .not.toBe('loading');
   await page.evaluate(async () => { await window.Vue.nextTick(); });
   await settleLive(page);
