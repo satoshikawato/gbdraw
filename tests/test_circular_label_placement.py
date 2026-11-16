@@ -1117,7 +1117,9 @@ def mjenmv_inner_tuckin_labels() -> tuple[list[dict], int, GbdrawConfig, int]:
 
 @pytest.mark.parametrize(
     ("head_length_ratio", "shaft_width_ratio", "expected_short"),
-    [(1.0, 1.0, False), (2.0, 1.0, True), ("auto", 0.5, True)],
+    # The 1 kb record's Auto head is capped at half the thickness, so only a narrow shaft's extension makes it
+    # longer than the 20 bp segment (1.4 x the thickness, where ratio 1.0 is 1.0 x).
+    [(1.0, 1.0, False), (2.0, 1.0, True), ("auto", 0.1, True)],
 )
 def test_circular_label_fit_uses_drawer_head_span_and_anchors_on_its_outline(
     monkeypatch: pytest.MonkeyPatch,

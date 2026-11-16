@@ -866,6 +866,8 @@ Fresh configurations render `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, and `misc_R
 
 Use `--arrow_head_length_ratio auto` for a head that starts from the existing
 mode-specific length and grows by the thickness removed from a narrowed shaft.
+In Circular mode that starting length is at most half the full feature
+thickness, so a short record gets short arrow tips.
 A positive finite ratio sets an explicit head length relative to the full
 rendered feature thickness and does not depend on shaft width.
 `--arrow_shaft_width_ratio` accepts a finite value in `(0, 1]` and applies to

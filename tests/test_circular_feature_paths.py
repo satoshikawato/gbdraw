@@ -56,12 +56,13 @@ def _make_generator(
     total_length: int,
     *,
     shaft_width_ratio: float = 1.0,
+    cds_ratio: float = TEST_CDS_RATIO,
 ) -> FeaturePathGenerator:
     return FeaturePathGenerator(
         radius=TEST_RADIUS,
         total_length=total_length,
         track_ratio=TEST_TRACK_RATIO,
-        cds_ratio=TEST_CDS_RATIO,
+        cds_ratio=cds_ratio,
         offset=TEST_OFFSET,
         track_type=TEST_TRACK_TYPE,
         strandedness=TEST_STRANDEDNESS,
@@ -680,33 +681,76 @@ def test_circular_numeric_head_ratio_is_independent_of_shaft_width() -> None:
     assert not float(resolved).is_integer()
 
 
-def test_circular_auto_head_length_keeps_legacy_bp_value_exactly() -> None:
-    generator = _make_generator(total_length=1000)
+def _head_px(generator: FeaturePathGenerator, head_bp: float) -> float:
+    _inner, center_radius, _outer = generator._feature_radii("positive", None)
+    return 2.0 * math.pi * center_radius * head_bp / generator.total_length
+
+
+def _thickness_px(generator: FeaturePathGenerator) -> float:
+    inner_radius, _center, outer_radius = generator._feature_radii("positive", None)
+    return abs(outer_radius - inner_radius)
+
+
+# A feature as thick, relative to the radius, as a 100 kb record's at default sizes (18.5 px at radius 390).
+DEFAULT_LONG_CDS_RATIO = 0.075
+
+
+def test_circular_auto_head_length_keeps_legacy_bp_value_on_a_large_record() -> None:
+    """Where the legacy head is shorter than the cap it is returned unchanged, bit for bit."""
+    generator = _make_generator(total_length=100_000, cds_ratio=DEFAULT_LONG_CDS_RATIO)
+    assert _head_px(generator, calculate_circular_arrow_length(100_000)) < 0.5 * _thickness_px(generator)
 
     assert generator._resolved_arrow_length(
         "positive", None
-    ) == calculate_circular_arrow_length(1000)
+    ) == calculate_circular_arrow_length(100_000)
+
+
+@pytest.mark.parametrize("shaft_width_ratio", [1.0, 0.5])
+def test_circular_auto_head_on_a_short_record_spans_at_most_half_the_thickness(
+    shaft_width_ratio: float,
+) -> None:
+    """OV-3563: the 30 bp Auto floor made a 240 bp record's head span 45 degrees (about 8 x the thickness)."""
+    generator = _make_generator(total_length=240, shaft_width_ratio=shaft_width_ratio)
+    thickness_px = _thickness_px(generator)
+
+    head_px = _head_px(generator, generator._resolved_arrow_length("positive", None))
+
+    assert _head_px(generator, calculate_circular_arrow_length(240)) > 4.0 * thickness_px
+    # The cap bounds the automatic head; a narrowed shaft still adds its extension.
+    expected_px = 0.5 * thickness_px + thickness_px * (1.0 - shaft_width_ratio)
+    assert head_px == pytest.approx(expected_px)
 
 
 def test_circular_auto_head_length_grows_as_shaft_narrows() -> None:
-    generator = _make_generator(total_length=1000, shaft_width_ratio=0.5)
-    inner_radius, center_radius, outer_radius = generator._feature_radii(
-        "positive", None
+    generator = _make_generator(
+        total_length=100_000, shaft_width_ratio=0.5, cds_ratio=DEFAULT_LONG_CDS_RATIO
     )
+    _inner, center_radius, _outer = generator._feature_radii("positive", None)
 
     resolved = generator._resolved_arrow_length("positive", None)
 
-    automatic_head_bp = calculate_circular_arrow_length(1000)
-    automatic_head_px = (
-        2.0 * math.pi * center_radius * automatic_head_bp / 1000.0
-    )
-    expected_head_px = automatic_head_px + 0.5 * abs(
-        outer_radius - inner_radius
-    )
-    expected_head_bp = expected_head_px * 1000.0 / (
-        2.0 * math.pi * center_radius
-    )
+    automatic_head_px = _head_px(generator, calculate_circular_arrow_length(100_000))
+    expected_head_px = automatic_head_px + 0.5 * _thickness_px(generator)
+    expected_head_bp = expected_head_px * 100_000 / (2.0 * math.pi * center_radius)
     assert resolved == pytest.approx(expected_head_bp)
+
+
+def test_circular_explicit_head_ratio_is_not_capped_on_a_short_record() -> None:
+    generator = FeaturePathGenerator(
+        radius=TEST_RADIUS,
+        total_length=240,
+        track_ratio=TEST_TRACK_RATIO,
+        cds_ratio=TEST_CDS_RATIO,
+        offset=TEST_OFFSET,
+        track_type=TEST_TRACK_TYPE,
+        strandedness=TEST_STRANDEDNESS,
+        track_id=TEST_TRACK_ID,
+        head_length_ratio=2.0,
+    )
+
+    head_px = _head_px(generator, generator._resolved_arrow_length("positive", None))
+
+    assert head_px == pytest.approx(2.0 * _thickness_px(generator))
 
 
 @pytest.mark.parametrize(
