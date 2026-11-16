@@ -71,10 +71,11 @@ def test_a_two_column_file_draws_as_the_three_column_file_of_the_record(tmp_path
 
 
 def _bedgraph_rows(rng: np.random.Generator) -> list[tuple[str, int, int, str]]:
-    """bedGraph rows: zero runs as genomecov -bga writes them, gaps, fractions; sometimes unsorted or overlapping."""
+    """bedGraph rows: zero runs as genomecov -bga writes them, gaps, fractions; references sometimes interleaved."""
 
-    rows: list[tuple[str, int, int, str]] = []
-    for name in rng.choice(["chr", "plasmid", "2"], size=int(rng.integers(1, 3)), replace=False):
+    references: list[list[tuple[str, int, int, str]]] = []
+    for name in rng.choice(["chr", "plasmid", "2"], size=int(rng.integers(1, 4)), replace=False):
+        rows: list[tuple[str, int, int, str]] = []
         start = int(rng.integers(0, 30))
         for _ in range(int(rng.integers(1, 40))):
             length = int(rng.integers(1, 25))
@@ -82,20 +83,23 @@ def _bedgraph_rows(rng: np.random.Generator) -> list[tuple[str, int, int, str]]:
             value = "0" if kind < 0.2 else repr(float(rng.random() * 40)) if kind < 0.4 else str(int(rng.integers(0, 300)))
             rows.append((str(name), start, start + length, value))
             start += length + (int(rng.integers(1, 10)) if rng.random() < 0.3 else 0)
-    if rng.random() < 0.3:
-        first = rows[int(rng.integers(0, len(rows)))]
-        rows.append((first[0], first[1], first[2] + 5, "11"))
-    if rng.random() < 0.3:
-        rng.shuffle(rows)
-    return rows
+        references.append(rows)
+    if rng.random() < 0.7:
+        return [row for rows in references for row in rows]
+    # Interleaved: each reference keeps its order.
+    merged: list[tuple[str, int, int, str]] = []
+    while any(references):
+        merged.append(references[int(rng.choice([i for i, rows in enumerate(references) if rows]))].pop(0))
+    return merged
 
 
 @pytest.mark.parametrize("seed", range(40))
 def test_a_bedgraph_reads_as_its_per_base_rows(seed: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each row gives its value to bases ``start + 1 .. end``; a base under several rows takes their mean."""
+    """Each row gives its value to bases ``start + 1 .. end``, however the rows are read and spread in batches."""
 
     rng = np.random.default_rng(seed)
     monkeypatch.setattr(depth_module, "_CHUNK_ROWS", int(rng.choice([2, 7, 1 << 20])))
+    monkeypatch.setattr(depth_module, "_SPREAD_BASES", int(rng.choice([1, 3, 64, 1 << 18])))
     rows = _bedgraph_rows(rng)
     lead = "track type=bedGraph name=x\n" if rng.random() < 0.5 else ""
     suffix = ".bedgraph.gz" if rng.random() < 0.3 else ".bedgraph"
@@ -136,9 +140,14 @@ def test_a_bedgraph_of_zero_runs_covers_the_whole_reference(tmp_path: Path) -> N
         ("browser position chr:1-3\ntrack type=bedGraph\n# note\nchr\t1\t3\t4\n", {"chr": [0, 4, 4]}),
         ("chrom\tstart\tend\tvalue\nchr\t1\t3\t4\n", {"chr": [0, 4, 4]}),
         ("chr\t1\t3\t4\textra\tcolumns\n", {"chr": [0, 4, 4]}),
-        # Trailing white space adds no column; a reference named "track" is a row.
-        ("chr\t2\t4\t\n", {"chr": [0, 4]}),
+        # A reference named "track" or "#1" is a row.
         ("track\t2\t4\n", {"track": [0, 4]}),
+        ("#1\t1\t5\n#1\t2\t6\n", {"#1": [5, 6]}),
+        # The header of samtools depth -H marks samtools rows of any number of samples: the first is read.
+        ("#CHROM\tPOS\ta.bam\tb.bam\nchr\t1\t6001\t5001\nchr\t2\t6002\t5002\n", {"chr": [6001, 6002]}),
+        # A first line whose value is empty is a header line, as on dev.
+        ("chr\t1\t\nchr\t2\t5\n", {"chr": [0, 5]}),
+        ("chr\t10\t20\t\nchr\t20\t30\t5\n", {"chr": [0] * 20 + [5] * 10}),
     ],
 )
 def test_comment_track_and_header_lines_before_the_rows_are_skipped(
@@ -161,11 +170,22 @@ def test_comment_track_and_header_lines_before_the_rows_are_skipped(
         ("chr\t1\t5\t-3\n", {"code": "DEPTH_INVALID", "reason": "NONNEGATIVE"}),
         ("\t1\t5\t3\n", {"code": "DEPTH_INVALID", "reason": "REFERENCE_REQUIRED"}),
         ("0\t3\n", {"code": "DEPTH_INVALID", "reason": "POSITIVE_INTEGER"}),
-        # samtools depth of two samples: reference, position, then one column per sample.
+        # bedGraph rows of a reference come in increasing order without overlapping.
+        ("chr\t0\t5\t3\nchr\t4\t8\t2\n", {"code": "DEPTH_INVALID", "reason": "INTERVAL"}),
+        ("chr\t5\t8\t3\nchr\t0\t5\t2\n", {"code": "DEPTH_INVALID", "reason": "INTERVAL"}),
+        ("a\t0\t5\t3\nb\t0\t5\t3\na\t2\t9\t2\n", {"code": "DEPTH_INVALID", "reason": "INTERVAL"}),
+        # samtools depth of two samples without its -H header: reference, position, then one column per sample.
+        # Low depths end before they start; high depths overlap the next row.
         (
             "".join(f"chr\t{p}\t{30 + p % 3}\t{28 + p % 5}\n" for p in range(1, 200)),
             {"code": "DEPTH_INVALID", "reason": "INTERVAL"},
         ),
+        (
+            "".join(f"chr\t{p}\t{6000 + p % 7}\t{5000 + p % 5}\n" for p in range(1, 5001)),
+            {"code": "DEPTH_INVALID", "reason": "INTERVAL"},
+        ),
+        # A tab at the end of a line starts an empty column.
+        ("chr\t2\t4\t\nchr\t3\t5\t\n", {"code": "DEPTH_INVALID", "reason": "FINITE"}),
         # OV-3740: a value that is not a finite number stopped the track silently.
         ("chr\t1\t5\nchr\t2\tnan\n", {"code": "DEPTH_INVALID", "reason": "FINITE"}),
         ("chr\t1\t5\nchr\t2\tinf\n", {"code": "DEPTH_INVALID", "reason": "FINITE"}),
@@ -184,6 +204,18 @@ def test_a_file_that_does_not_read_is_refused_with_its_reason(
         parse_depth_tsv(str(path))
 
     assert caught.value.diagnostic == diagnostic
+
+
+@pytest.mark.parametrize("text", ["chr\t0\t5\t3\nchr\t5\t9\t2\nchr\t3\t4\t1\n", "chr\t0\t5\t3\nchr\t0\t5\t3\n"])
+def test_bedgraph_rows_that_go_back_are_refused_across_read_chunks(
+    text: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(depth_module, "_CHUNK_ROWS", 1)
+
+    with pytest.raises(GbdrawError) as caught:
+        parse_depth_tsv(str(_write(tmp_path / "depth.bedgraph", text)))
+
+    assert caught.value.diagnostic == {"code": "DEPTH_INVALID", "reason": "INTERVAL"}
 
 
 def test_a_nan_value_no_longer_ends_the_track(tmp_path: Path) -> None:

@@ -45,6 +45,8 @@ _COLUMN_DTYPES = {
 }
 # A line before the rows that is not one: a comment, or a UCSC track or browser line.
 _PREAMBLE_LINE = re.compile(r"#|(?:track|browser)(?: |\r?$)")
+# The header line ``samtools depth -H`` writes: the rows are samtools depth rows, one value column per sample.
+_SAMTOOLS_HEADER = "#CHROM\tPOS\t"
 # The reference of a file without reference names (two columns): every record that reads the file takes it.
 _UNNAMED_REFERENCE = ""
 _DEPTH_TSV_CACHE_MAXSIZE = 8
@@ -99,20 +101,38 @@ def _is_header(fields: list[str], columns: tuple[str, ...]) -> bool:
     )
 
 
+def _fields(line: str) -> list[str]:
+    """The tab-separated fields of a line without its line ending: a trailing tab starts an empty field."""
+
+    return line.rstrip("\r\n").split("\t")
+
+
+def _form_columns(fields: list[str]) -> tuple[str, ...]:
+    return _FORM_COLUMNS[min(len(fields), 4)]
+
+
 def _depth_form(path: Path) -> _DepthForm:
     """The form of a depth file from its first data line, after any comment, track and browser lines.
 
-    That line has two columns, three, or four or more; trailing white space adds
-    none. It is a header line, skipped too, when one of its number columns is not
-    a number. An empty file reads as three columns, as before.
+    That line has two columns, three, or four or more. A comment line that reads
+    as a row is one (a reference may be named ``#1``). The rows after the header
+    ``samtools depth -H`` writes are samtools depth rows, however many samples
+    they hold, and their first sample is read. The first data line is a header
+    line, skipped too, when one of its number columns is not a number. An empty
+    file reads as three columns, as before.
     """
 
     skipped = 0
+    samtools = False
     try:
         with open_input_text(path, encoding="utf-8") as handle:
             for line in handle:
-                if not _PREAMBLE_LINE.match(line):
+                fields = _fields(line)
+                if not _PREAMBLE_LINE.match(line) or (
+                    len(fields) >= 2 and not _is_header(fields, _form_columns(fields))
+                ):
                     break
+                samtools = samtools or line.startswith(_SAMTOOLS_HEADER)
                 skipped += 1
             else:
                 line = ""
@@ -123,14 +143,13 @@ def _depth_form(path: Path) -> _DepthForm:
 
     if not line:
         return _DepthForm(tuple(DEPTH_COLUMNS), skipped)
-    fields = line.rstrip().split("\t")
     if len(fields) < 2:
         raise ParseError(
             f"Depth file '{path}' must have two tab-separated columns (position, value), three "
             "(reference, position, value) or four (reference, start, end, value).",
             diagnostic={"code": "TABLE_INVALID", "reason": "DEPTH_COLUMNS"},
         )
-    columns = _FORM_COLUMNS[min(len(fields), 4)]
+    columns = tuple(DEPTH_COLUMNS) if samtools else _form_columns(fields)
     return _DepthForm(columns, skipped + int(_is_header(fields, columns)))
 
 
@@ -351,6 +370,31 @@ def _interval_bases(rows: DataFrame) -> Iterator[DataFrame]:
         )
 
 
+def _intervals_overlap_or_go_back(rows: DataFrame, last_ends: dict[str, int]) -> bool:
+    """Whether a reference's bedGraph rows overlap or go back, in these rows or after the earlier ones.
+
+    ``last_ends`` holds each reference's last end so far and is updated. Rows of
+    a reference must come in increasing order without overlapping, as
+    ``bedtools genomecov`` writes them and ``bedGraphToBigWig`` requires: then
+    no base is named twice.
+    """
+
+    names = rows["reference_name"]
+    order = np.argsort(names.cat.codes.to_numpy(), kind="stable")
+    codes = names.cat.codes.to_numpy()[order]
+    starts = rows["start"].to_numpy(dtype=np.int64)[order]
+    ends = rows["end"].to_numpy(dtype=np.int64)[order]
+    same_reference = codes[1:] == codes[:-1]
+    failed = bool((same_reference & (starts[1:] < ends[:-1])).any())
+    firsts = np.flatnonzero(np.concatenate(([True], ~same_reference)))
+    lasts = np.flatnonzero(np.concatenate((~same_reference, [True])))
+    for first, last in zip(firsts.tolist(), lasts.tolist()):
+        name = str(names.cat.categories[codes[first]])
+        failed = failed or int(starts[first]) < last_ends.get(name, 0)
+        last_ends[name] = int(ends[last])
+    return failed
+
+
 def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
     """The per-base rows of one depth file in file order, a chunk at a time, each one valid.
 
@@ -362,6 +406,7 @@ def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
     depth_path = Path(resolved_path)
     form = _depth_form(depth_path)
     failed: set[str] = set()
+    last_ends: dict[str, int] = {}
     try:
         with open_input_text(depth_path, encoding="utf-8") as handle:
             reader = pd.read_csv(
@@ -379,6 +424,8 @@ def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
                 for read in reader:
                     chunk = _named_rows(read)
                     failed.update(_failed_depth_checks(chunk))
+                    if not failed and "start" in chunk and _intervals_overlap_or_go_back(chunk, last_ends):
+                        failed.add("INTERVAL")
                     if failed:
                         continue
                     if "start" in chunk:
@@ -499,8 +546,10 @@ _DEPTH_CHECKS: tuple[tuple[str, str, Callable[[DataFrame], bool]], ...] = (
     (
         "INTERVAL",
         "Depth rows of four or more columns are bedGraph rows (reference, 0-based start, end, value): "
-        "each start must be 0 or more and each end greater than its start. A samtools depth file of "
-        "several samples has one value column per sample: keep the reference, position and one sample's column.",
+        "each start must be 0 or more and each end greater than its start, and the rows of a reference must "
+        "come in increasing order without overlapping (sort -k1,1 -k2,2n). A samtools depth file of several "
+        "samples has one value column per sample: keep the reference, position and one sample's column, or "
+        "write it with samtools depth -H, whose header line marks its rows.",
         lambda rows: "start" in rows and bool(((rows["start"] < 0) | (rows["end"] <= rows["start"])).any()),
     ),
     (
