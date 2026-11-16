@@ -561,7 +561,9 @@ const expectCentred = (zoom, right) => {
   const box = visualBox();
   assert.equal(uiState.zoom.value, zoom);
   assert.equal(uiState.canvasPan.y, 0);
-  assert.equal(Math.abs((box.left - 100) - (right - box.right)) < 1e-9, true);
+  // Centred to the whole pixel: the pan is a whole pixel.
+  assert.equal(Number.isInteger(uiState.canvasPan.x), true);
+  assert.equal(Math.abs((box.left - 100) - (right - box.right)) <= 1 + 1e-9, true);
   assert.equal(uiState.previewHiddenUntilShown.value, false);
   assert.equal(wrapper.style.visibility, '');
   assert.equal(wrapper.style.transition, 'transform 0.2s');

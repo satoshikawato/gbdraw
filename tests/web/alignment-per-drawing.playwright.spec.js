@@ -234,7 +234,8 @@ const figureView = (page) => evaluateWithRetainedPromise(page, async () => {
     zoom: app.zoom,
     inRoom: Boolean(figure?.width) && figure.left >= room.left && figure.right <= frameRight
       && figure.top >= room.top && figure.bottom <= room.bottom,
-    centred: Boolean(figure?.width) && Math.abs((figure.left - room.left) - (frameRight - figure.right)) < 1,
+    // Centred to the whole pixel (the switch's pan is a whole pixel).
+    centred: Boolean(figure?.width) && Math.abs((figure.left - room.left) - (frameRight - figure.right)) <= 1.01,
     measured: { room, frameRight, figure: figure && [figure.left, figure.top, figure.right, figure.bottom] }
   };
 });

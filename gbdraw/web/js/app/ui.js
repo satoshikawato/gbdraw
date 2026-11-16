@@ -586,11 +586,12 @@ const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, p
     }, nextZoom);
   });
 
-  // A drawing switch's placement: the zoom kept, the top where pan y 0 puts it, centred in the free room.
+  // A drawing switch's placement: the zoom kept, the top where pan y 0 puts it, centred in the free room. The pan
+  // is a whole pixel, so a figure the layout centres already keeps pan 0 and is drawn as before, pixel for pixel.
   const centerPreviewAtZoom = () => placeShown(({ room, figure }) => {
     const zoomLevel = zoom.value;
     const frameWidth = centeringFrameWidth(room, figure, zoomLevel, figure.originY + zoomLevel * figure.centerY);
-    setPreviewViewport({ x: centeringPanX(room, frameWidth, figure, zoomLevel), y: 0 }, zoomLevel);
+    setPreviewViewport({ x: Math.round(centeringPanX(room, frameWidth, figure, zoomLevel)), y: 0 }, zoomLevel);
   });
 
   return {
