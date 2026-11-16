@@ -6,17 +6,35 @@ import copy
 import functools
 import json
 import math
+import warnings
 from pathlib import Path
 from typing import cast
 
 import pytest
+from Bio import SeqIO
 
 import gbdraw.labels.circular_packer as packer_module
 import gbdraw.labels.fit as fit_module
+from gbdraw.api import (
+    CircularDiagramOptions,
+    CircularDiagramRequest,
+    InMemoryRecordSource,
+    RecordInput,
+    RenderOutputRequest,
+)
+from gbdraw.circular import circular_main
+from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from gbdraw.layout.spatial import Aabb
+from gbdraw.session import build_session_document
+from gbdraw.session_io import materialize_embedded_file
+from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import embedded_session
+from gbdraw.web_support.request_render import render_canonical_web_request
+import gbdraw.labels.circular as circular_module
 from gbdraw.labels.circular import _count_label_overlaps, _packer_side_rules, circular_label_fits
 from gbdraw.labels.circular_capacity import LabelArc
 from gbdraw.labels.circular_packer import PackerLook, SideRules, pack_side
-from gbdraw.labels.circular_repair import MAX_DEFECTS
+from gbdraw.labels.circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels
 from gbdraw.labels.circular_leaders import leader_crossing_count, leader_polyline
 from gbdraw.labels.circular_types import CircularLabel
 from gbdraw.labels.fit import Polyline, crossing_pairs, iter_crossing_pairs, polylines_cross
@@ -241,3 +259,132 @@ def test_a_look_without_a_packing_under_the_crossing_limit_gives_none() -> None:
 
     labels, total_length, arc, spacing = _packer_fixture("p1_f14")
     assert pack_side(labels, arc, "pole", _outer_rules(total_length, spacing, 2)) is None
+
+
+# ---- a record that does not fit today tries the packer (CP-D04, CP-D05) -----------------------------------
+
+
+DENSE = ["--separate_strands", "--track_type", "tuckin", "--labels", "out", "--legend", "right"]
+P1 = ["--gbk", str(TEST_INPUTS / "NC_005856.1.gb"), *DENSE]
+TOBACCO = ["--gbk", str(TEST_INPUTS / "NC_001879.gbk"), *DENSE]
+T5 = ["--gbk", str(TEST_INPUTS / "NC_005859.1.gb"), *DENSE]
+
+
+@pytest.fixture
+def looks(monkeypatch: pytest.MonkeyPatch) -> list[tuple[PackerLook, bool]]:
+    """The looks the packer tried, each with whether it gave a placement."""
+
+    tried: list[tuple[PackerLook, bool]] = []
+
+    def spy(labels: list[CircularLabel], arc: LabelArc, look: PackerLook, rules: SideRules) -> list[CircularLabel] | None:
+        packed = pack_side(labels, arc, look, rules)
+        if labels:  # an empty side (no inner labels) is packed as it is
+            tried.append((look, packed is not None))
+        return packed
+
+    monkeypatch.setattr(circular_module, "pack_side", spy)
+    return tried
+
+
+def _draw(tmp_path: Path, args: list[str]) -> Path:
+    """Draw with a leader-crossing warning turned into an error (a figure that does not fit stops)."""
+
+    output = tmp_path / "out"
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        circular_main([*args, "-o", str(output), "-f", "svg"])
+    return output.with_suffix(".svg")
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param([*P1, "--label_font_size", "14"], id="p1_14pt_stopped_today"),
+        pytest.param([*P1, "--label_font_size", "13"], id="p1_13pt_one_crossing_today"),
+        pytest.param([*TOBACCO, "--label_font_size", "12"], id="tobacco_12pt_68_crossings_today"),
+    ],
+)
+def test_a_record_that_does_not_fit_today_is_drawn_packed_in_look_1(
+    tmp_path: Path, args: list[str], looks: list[tuple[PackerLook, bool]]
+) -> None:
+    """Today P1 14 pt stops (5 overlaps, 12 crossings) and P1 13 pt and tobacco 12 pt warn of crossings.
+
+    Look 2 is tried first and has no placement (no packing keeps every label on its genome half); look 1
+    then packs them without overlaps or crossings.
+    """
+
+    assert _draw(tmp_path, args).is_file()
+    assert looks == [("half", False), ("pole", True)]
+
+
+@pytest.mark.slow
+@pytest.mark.circular
+def test_t5_keeps_todays_placement_and_warning_when_no_look_packs(
+    tmp_path: Path, looks: list[tuple[PackerLook, bool]]
+) -> None:
+    """T5 at the Auto size: no look packs under the crossing limit, so it is drawn as today, with today's counts."""
+
+    with pytest.warns(LabelLeadersCrossWarning, match=r"0 label pairs overlap, 1713 leader pairs cross"):
+        circular_main([*T5, "-o", str(tmp_path / "out"), "-f", "svg"])
+    assert looks == [("half", False), ("pole", False)]
+
+
+@pytest.mark.slow
+@pytest.mark.circular
+def test_t5_at_12pt_needs_more_room_than_its_ellipse_so_the_packer_is_not_tried(
+    tmp_path: Path, looks: list[tuple[PackerLook, bool]]
+) -> None:
+    with pytest.raises(LabelsDoNotFitError):
+        _draw(tmp_path, [*T5, "--label_font_size", "12"])
+    assert looks == []
+
+
+def test_the_repair_takes_the_callers_defect_count() -> None:
+    data = json.loads((TEST_INPUTS / "label_repair" / "o_plasmid37_f14.json").read_text())
+    # Recorded before a label carried its font style (as in test_circular_label_repair.py); drawn upright.
+    labels = [{"font_style": "normal", **label} for label in data["labels"]]
+    total_length = int(data["total_length"])
+    definition = tuple(Aabb(*box) for box in data["definition_text"])
+    defects = defect_count(labels, total_length, definition)
+    assert defects == 1
+    assert repair_circular_labels(labels, total_length, definition_text=definition, defects=defects) == (
+        repair_circular_labels(labels, total_length, definition_text=definition)
+    )
+
+
+@pytest.mark.circular
+def test_the_web_render_draws_p1_at_13pt_packed_without_a_fit_report(
+    tmp_path: Path, looks: list[tuple[PackerLook, bool]]
+) -> None:
+    """Generate in the Web runs the same placement: P1 13 pt (one crossing today) is drawn with no label fit report."""
+
+    record = SeqIO.read(str(TEST_INPUTS / "NC_005856.1.gb"), "genbank")
+    overrides: dict[str, object] = {
+        "canvas.strandedness": True,
+        "canvas.circular.track_type": "tuckin",
+        "labels.circular.scope": "outer",
+        "labels.font_size.short": 13.0,
+        "labels.font_size.long": 13.0,
+    }
+    built = build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(config_overrides=overrides),
+            output=RenderOutputRequest(output_prefix="p1", formats=("svg",)),
+        )
+    )
+    document = drawing_view(embedded_session(built.to_dict(), built.resources.sources))
+    resources = tmp_path / "resources"
+    resources.mkdir()
+    resource_paths = {
+        resource_id: materialize_embedded_file(entry, temp_dir=resources, role=resource_id, prefix_role=False)
+        for resource_id, entry in document["resources"].items()
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        response = render_canonical_web_request(
+            document["renderRequest"], resource_paths=resource_paths, output_directory=tmp_path / "out"
+        )
+    assert response["results"] and not response["metadata"].get("labelFitReports")
+    assert looks == [("half", False), ("pole", True)]

@@ -1362,12 +1362,13 @@ LAMBDA_ARGS = [
 
 
 @pytest.mark.circular
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_cli_draws_crossing_leaders_and_prints_the_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """LP-D46 CROSS-WARN: lambda at 15 pt has 2 crossing leader pairs and no overlaps (with the repair off).
+    """LP-D46 CROSS-WARN: lambda at 15 pt has 2 crossing leader pairs and no overlaps (with the repair and packer off).
 
     14 pt had them while labels were laid out in point-mode boxes; in their drawn boxes 14 pt fits (OV-165)."""
 
@@ -1393,10 +1394,12 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
 
 
 @pytest.mark.circular
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Web reads the report from the success result and asks for one row at a time.
 
-    The local repair (LP-D57) clears lambda's 2 crossings; it is off here, as for crossings it cannot clear.
+    The local repair (LP-D57) and the packer clear lambda's 2 crossings; both are off here, as for crossings
+    they cannot clear.
     Lambda at 15 pt (14 pt while labels were laid out in point-mode boxes; OV-165).
     """
 
@@ -1439,7 +1442,7 @@ def _lambda_band_rows(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, start: int, end: int, label: str
 ) -> tuple[LabelFitReport, list[dict[str, object]], str]:
     """Lambda at 17 pt with outer labels and one region band: the drawn report, every full assembly of its rows in
-    order, and the CLI warning text."""
+    order, and the CLI warning text. Its callers turn the packer off: it fits this map."""
 
     from gbdraw.annotations import AnnotationOptions
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report
@@ -1484,6 +1487,7 @@ def _lambda_band_rows(
 
 
 @pytest.mark.circular
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_region_label_among_outer_labels_lets_each_row_walk_on_to_a_value_that_fits(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1529,6 +1533,7 @@ def test_a_region_label_among_outer_labels_lets_each_row_walk_on_to_a_value_that
 
 
 @pytest.mark.circular
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_outer_rows_walk_past_values_that_put_a_region_label_over_a_leader(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

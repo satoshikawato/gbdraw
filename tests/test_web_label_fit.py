@@ -419,7 +419,7 @@ def _sars_request(overrides: dict[str, object]) -> dict:
 
 
 # Lambda with outer labels at 17 pt and no blacklist: 10 leader pairs cross and no labels overlap, so
-# the figure is drawn with the notice. (16 pt did while labels were laid out in point-mode boxes, OV-165.
+# the figure is drawn with the notice (tests that draw it turn the packer off: it fits this map). (16 pt did while labels were laid out in point-mode boxes, OV-165.
 # SARS-CoV-2 with external labels only at 14 pt crossed only because labels next to the origin could wrap
 # past their neighbours, OV-1366; it fits now.)
 CROSSING_OVERRIDES: dict[str, object] = {
@@ -485,6 +485,7 @@ def test_overprinted_embedded_labels_offer_only_the_resolve_overlaps_control(tmp
     assert {record["labelKind"] for record in entry["report"]["records"]} == {"circular_definition"}
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_draws_with_the_notice(tmp_path) -> None:
     """LP-D57 (OV-724): with the Web's Separate Strands on, Resolve Overlaps removes the
     overlap but leaders still cross; the row is offered, says so, and draws with the notice."""
@@ -582,6 +583,7 @@ def test_an_explicit_center_reserved_radius_leaves_out_the_narrow_row(tmp_path, 
     assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font"]
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_later(tmp_path) -> None:
     searches = LabelFitRowSearches()
     response = _web_render(_crossing_request(), tmp_path, searches)
@@ -611,6 +613,7 @@ def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_la
         searches.row(token, "sideways")
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_render_without_searches_keeps_no_token(tmp_path) -> None:
     document = _crossing_request()
     from gbdraw.web_support.request_render import render_embedded_canonical_web_request
@@ -624,6 +627,7 @@ def test_a_render_without_searches_keeps_no_token(tmp_path) -> None:
     assert entry["rowToken"] is None
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_row_computed_after_the_conservation_file_is_gone_reads_no_file(tmp_path, monkeypatch, caplog) -> None:
     """OV-720: the kept figure reassembles from the conservation rows read once."""
 
@@ -705,6 +709,7 @@ def _crossing_options_with_files(
     )
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_rows_computed_after_every_input_file_is_gone_match_the_rows_with_the_files(tmp_path) -> None:
     """OV-732: the builder reads each file input once; a row reassembles the figure without them."""
 
@@ -738,6 +743,7 @@ def test_rows_computed_after_every_input_file_is_gone_match_the_rows_with_the_fi
 NO_ROW_BOUND = math.inf
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_with_it(tmp_path) -> None:
     """OV-732: the Web deletes the staged files after Generate; "Choose a fix" rows still compute."""
 
@@ -794,6 +800,7 @@ def _two_records_with_files(directory: Path) -> tuple[list[Any], dict[str, Path]
     return records, paths
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_rows_of_two_circular_records_computed_after_every_input_file_is_gone(tmp_path) -> None:
     """OV-732: the multi-record builder reads the Depth, color, visibility, and annotation files once."""
 
@@ -822,6 +829,7 @@ def test_rows_of_two_circular_records_computed_after_every_input_file_is_gone(tm
             assert label_fit_row(drawings["gone"], row.kind) == label_fit_row(drawings["kept"], row.kind)
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_gone(tmp_path) -> None:
     """OV-732: on the Web, a multi-record figure's rows compute after the staged files are deleted."""
 
@@ -858,6 +866,7 @@ def _default_config():
     return GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() -> None:
     """OV-733: only a label setting the engine cannot draw counts as "does not fit"."""
 
@@ -886,6 +895,7 @@ def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() ->
     assert row is not None and row.status == "not_found"
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
     """OV-1266: a row's settings that leave the tracks no room (TRACK_LAYOUT) do not fit; Generate goes on."""
 
@@ -921,6 +931,7 @@ def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
     assert unfit.reason == PlainReason("tracks_do_not_fit")
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_failed_render_keeps_the_shown_results_rows_computable() -> None:
     """OV-737: a failure of a mode keeps its last drawn figure; a newer drawn render releases both."""
 
@@ -984,6 +995,7 @@ def test_record_counts_and_the_notice_reach_the_web_as_counts_by_field_not_engli
     assert set(NOTICE_FIELDS) == set(LABEL_FIT_FIELDS) - {"overlap_pairs"}
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
     """LP-D60: the Web searches each row for at most 30 s; a row that finds nothing says so."""
 
@@ -1015,6 +1027,7 @@ def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
     assert deadline is not None and before + WEB_ROW_SEARCH_SECONDS <= deadline <= time.monotonic() + WEB_ROW_SEARCH_SECONDS
 
 
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_a_web_row_of_a_figure_whose_first_assembly_took_the_whole_bound_still_verifies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
