@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { createRecordDisplayControls } from '../../gbdraw/web/js/app/record-display-options.js';
 import { linearDrawingWindowsOf } from '../../gbdraw/web/js/services/session-request.js';
 import { createRecordAutoOrientation } from '../../gbdraw/web/js/app/record-auto-orientation.js';
+import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { adoptCurrentSessionResources, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { withModeDrawings } from './helpers/drawing-state.mjs';
@@ -119,4 +120,22 @@ test('the status line follows the writer: a refused write never reads as changed
     'Saving session. Retry after saving finishes.');
   assert.match(await statusAfter({ status: 'notLinear' }), /shown drawing changed/);
   assert.match(await statusAfter({ status: 'unchanged' }), /current orientation/);
+});
+
+// OV-3676: the status line is worded where it shows, so a UI language change rewords it.
+test('the status line rewords after a UI language change', async () => {
+  const orientation = createRecordAutoOrientation({
+    computed: (fn) => ({ get value() { return fn(); } }), ref: (value) => ({ value }),
+    getCommittedSession: () => committed, readCommittedRevision: () => 1, busy: () => null,
+    decideOrientation: async () => ({ result: { records: DECISIONS } }),
+    writeDecidedOrientations: async () => ({ status: 'unchanged' }), errorMessage: () => 'failed'
+  });
+  await orientation.orient();
+  assert.equal(orientation.status.value, 'The comparisons give every record its current orientation.');
+  await setUiLocale('ja', async () => ({ default: { 'The comparisons give every record its current orientation.': '向きは変わりません。' } }));
+  try {
+    assert.equal(orientation.status.value, '向きは変わりません。');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });

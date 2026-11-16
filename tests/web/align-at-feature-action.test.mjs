@@ -8,6 +8,7 @@ import test from 'node:test';
 const { createFeatureAnchorAction, validateFeatureAnchorReply } = await import('../../gbdraw/web/js/app/align-at-feature.js');
 const { ref } = await import('../../gbdraw/web/js/utils/reactivity.js');
 const { diagnosticError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
 
 const KEYS = ['record-1', 'record-2'];
 const RECORDS = KEYS.map((recordKey) => ({ recordKey, cardinality: 'exactly_one' }));
@@ -197,6 +198,21 @@ test('Apply over an active Similarity alignment writes the translations and star
   // Undo puts the earlier Session back: the notice goes with it.
   undo();
   assert.equal(action.notice.value, '');
+});
+
+// OV-3676: the notice is worded where it shows, so a UI language change rewords it.
+test('the notice rewords after a UI language change', async () => {
+  const { action } = fixture();
+  action.selector.value = 'gene=COX1';
+  await action.resolve();
+  await action.apply();
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
+  await setUiLocale('ja', async () => ({ default: { 'Records aligned at {selector}.': '{selector} でレコードを揃えました。' } }));
+  try {
+    assert.equal(action.notice.value, 'gene=COX1 でレコードを揃えました。');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 test('the notice holds while the records keep the positions Apply wrote', async () => {

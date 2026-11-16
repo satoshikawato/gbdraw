@@ -9,6 +9,7 @@ import {
 } from '../../gbdraw/web/js/services/label-import-plan.js';
 import { parseLabelOverrideTsv } from '../../gbdraw/web/js/services/label-override-table.js';
 import { normalizeTsvCell } from '../../gbdraw/web/js/utils/tsv-cell.js';
+import { wordedNotice } from './helpers/worded-notice.mjs';
 
 // The pure middles of Load and Export Label TSV (app/feature-editor/label-table.js).
 const tracked = (featureId, sourceText) => ({
@@ -31,10 +32,7 @@ test('a global label row edits a label by its source text, any other row only a 
 
 test('each outcome of a load names its row count and why it applied or not (OV-131, OV-447, OV-449)', () => {
   // The notice keeps its wordings (OV-2796); these words are the English ones.
-  const notice = (rowCount, outcome) => {
-    const { text, items, ...rest } = labelImportNotice(rowCount, outcome);
-    return { text: text(), ...(items ? { items: items.map((item) => item()) } : {}), ...rest };
-  };
+  const notice = (rowCount, outcome) => wordedNotice(labelImportNotice(rowCount, outcome));
   const plan = (applicable, skippedNonTrackableCount = 0) => ({ plan: { applicable, skippedNonTrackableCount } });
   const edit = { entry: tracked('fa', 'alpha'), matchedRow: parseLabelOverrideTsv('*\t*\tlabel\t^alpha$\tA\n')[0], tracked: true };
   assert.deepEqual(notice(1, { declined: 'label-intent' }), {

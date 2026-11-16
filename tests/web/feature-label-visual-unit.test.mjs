@@ -9,13 +9,12 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 import zhHans from '../../gbdraw/web/js/utils/i18n-catalogs/zh-Hans.js';
+import { wordedNotice } from './helpers/worded-notice.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
 const ref = (value) => ({ value });
-// A notice as the banner shows it in the shown UI language: its wordings worded (OV-2796).
-const wordedNotice = ({ text, items, ...rest }) => ({ text: text(), ...(items ? { items: items.map((item) => item()) } : {}), ...rest });
 
 // Per-feature label and visibility edits are identity rows of the drawing of
 // the Result's mode (design Q4, R2; PR-1: the drawing is the mode, so a row

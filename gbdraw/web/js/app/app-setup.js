@@ -9,6 +9,7 @@
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { NoticeLink } from './app-messages.js' */
+/** @import { Wording } from '../utils/i18n.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -1452,10 +1453,11 @@ export const createAppSetup = () => {
     normalizeStack: (drawing) => (drawing.mode === 'circular'
       ? circularTrackSlotEditor.normalizeCircularTrackSlots(drawing) : linearTrackSlotEditor.normalizeLinearTrackSlots())
   });
-  const annotationImportNotice = ref('');
+  // The panel notice's wording; the panel shows `annotationImportNotice`, worded in the shown language (OV-3674).
+  const annotationNotice = ref(/** @type {Wording | null} */ (null));
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions: retireShownLegendStyles, askChoice,
-    onImportNotice: (notice) => { annotationImportNotice.value = notice; }
+    onImportNotice: (notice) => { annotationNotice.value = notice; }
   });
   // The Show Depth, and Linear Show GC Content and Show GC Skew, checkboxes:
   // the drawn tracks and their Legend rows leave and return together through
@@ -2255,7 +2257,7 @@ export const createAppSetup = () => {
           throw new Error('Session loading canceled.');
         }
         featureActions.clearSpecificRulePatternDrafts();
-        annotationImportNotice.value = '';
+        annotationNotice.value = null;
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
         closeLegendStrokeOptions();
@@ -3594,7 +3596,7 @@ export const createAppSetup = () => {
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
     setAnnotationField: annotationEditor.setAnnotationField,
-    annotationImportNotice,
+    annotationImportNotice: computed(() => (annotationNotice.value ? annotationNotice.value() : '')),
     importAnnotationTableFile: undoableAction(msg('Import annotations'), annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,

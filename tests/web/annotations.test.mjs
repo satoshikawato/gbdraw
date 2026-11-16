@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { shownWording } from './helpers/worded-notice.mjs';
 
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-annotations-'));
 await cp(join(process.cwd(), 'gbdraw', 'web', 'js'), join(tempRoot, 'js'), { recursive: true });
@@ -233,11 +234,11 @@ test('selected annotations name each feature by its source identity', () => {
   ]);
   // A Result without a feature catalog (a Session before 40) has no identities.
   assert.equal(featureTargetsFromSelection([{ selector: { hash: 'f1234' }, locus_tag: 'A_1' }]), null);
-  // The panel notice says why, not a native alert.
+  // The panel notice says why, not a native alert; the notices are collected as shown.
   const notices = [];
   const legacy = createAnnotationEditor({
     state: withDrawings({ annotationSets: [], selectedFeatures: { value: [{ locus_tag: 'A_1' }] } }),
-    onImportNotice: (notice) => notices.push(notice)
+    onImportNotice: (notice) => notices.push(shownWording(notice))
   });
   const set = legacy.addAnnotationSet();
   assert.deepEqual(legacy.addSelectedFeatures(set), []);
@@ -650,13 +651,14 @@ for (const entry of importCases) {
       return;
     }
     const parsed = parseAnnotationTableWithNotice(entry.table);
+    const notice = shownWording(parsed.notice);
     assert.deepEqual(parsed.sets, parseAnnotationTable(entry.control));
     assert.deepEqual(parseAnnotationTable(entry.table), parsed.sets);
     assert.equal(Array.isArray(parsed.sets), true);
     if (entry.ignored.length) {
-      for (const name of entry.ignored) assert.ok(parsed.notice.includes(name));
-      assert.match(parsed.notice, /not saved in Sessions or TSV re-export/);
-    } else assert.equal(parsed.notice, '');
+      for (const name of entry.ignored) assert.ok(notice.includes(name));
+      assert.match(notice, /not saved in Sessions or TSV re-export/);
+    } else assert.equal(parsed.notice, null);
     assert.ok(!JSON.stringify(parsed).includes('PRIVATE-CELL'));
     const encoded = encodeAnnotationTable(parsed.sets);
     for (const name of entry.ignored) assert.ok(!encoded.split('\n')[0].split('\t').includes(name));
@@ -680,7 +682,7 @@ test('file import commits once, separates notices, and preserves draft/Result on
     { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
   ] })], results: { value: [{ content: '<svg/>', warnings: ['resolved warning'] }] } };
   const notices = [];
-  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(shownWording(notice)) });
   const alerts = [];
   const oldAlert = globalThis.alert;
   globalThis.alert = (message) => alerts.push(message);
@@ -756,7 +758,7 @@ test('a gzip annotation TSV past the expanded cap is refused with its name and t
   const { gzipSync } = await import('node:zlib');
   const state = { annotationSets: [createAnnotationSet({ id: 'before' })], results: { value: [] } };
   const notices = [];
-  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(shownWording(notice)) });
   const before = JSON.stringify(state);
   const cap = 1024 * 1024;
   globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: cap };
@@ -792,7 +794,7 @@ test('an id edit that the editor changes names the stored id in the panel notice
     createAnnotationSet({ id: 'second' })
   ], adv: { circular_track_slots: [], linear_track_slots: [] } };
   const notices = [];
-  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(shownWording(notice)) });
   const [first, second] = state.annotationSets;
   editor.renameAnnotation(first, first.annotations[1], 'region_1');
   assert.equal(first.annotations[1].id, 'region_1_2');
@@ -808,6 +810,39 @@ test('an id edit that the editor changes names the stored id in the panel notice
   editor.renameAnnotationSet(second, '');
   assert.equal(second.id, 'annotations_2');
   assert.equal(notices.at(-1), 'Set id cannot be empty, so it was saved as "annotations_2".');
+});
+
+// OV-3674: the panel notice is worded where the panel shows it, so a UI language change rewords it, the words of a
+// read refusal and the ignored columns included.
+test('the panel notice rewords after a UI language change', async () => {
+  const { SOURCE_LOCALE, setUiLocale } = await load('utils/i18n.js');
+  const state = { annotationSets: [createAnnotationSet({ id: 'x' }), createAnnotationSet({ id: 'y' })], results: { value: [] },
+    adv: { circular_track_slots: [], linear_track_slots: [] } };
+  const notices = [];
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  editor.renameAnnotationSet(state.annotationSets[1], 'x');
+  const renamed = notices.at(-1);
+  const refusedFile = { name: 'a.tsv', arrayBuffer: async () => { throw new DOMException('read failure', 'NotReadableError'); } };
+  await editor.importAnnotationTableFile({ target: { files: [refusedFile], value: 'a.tsv' } });
+  const refused = notices.at(-1);
+  const ignoring = importCases.find((entry) => entry.valid && entry.ignored.length);
+  await editor.importAnnotationTable(ignoring.table);
+  const ignored = notices.at(-1);
+  assert.equal(renamed(), 'Set id "x" is used by another set, so it was saved as "x_2".');
+  assert.match(refused(), /^Could not import annotations: An input could not be read\. Replace or reselect it\./);
+  assert.match(ignored(), /^Ignored annotation table columns: /);
+  const { default: ja } = await load('utils/i18n-catalogs/ja.js');
+  await setUiLocale('ja', async () => ({ default: ja }));
+  try {
+    assert.equal(renamed(), ja['Set id "{text}" is used by another set, so it was saved as "{stored}".']
+      .replace('{text}', 'x').replace('{stored}', 'x_2'));
+    assert.ok(refused().startsWith(ja['Could not import annotations: {reason}'].replace('{reason}', '')
+      + ja['An input could not be read. Replace or reselect it.']), refused());
+    assert.ok(ignored().startsWith(ja['Ignored annotation table columns: {columns}. These columns are not saved in Sessions or TSV re-export.']
+      .split('{columns}')[0]), ignored());
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 // FL-14: a table without rows would remove every set, so the import asks.

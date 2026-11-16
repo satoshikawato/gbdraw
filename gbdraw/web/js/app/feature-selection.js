@@ -1,7 +1,7 @@
 // @ts-check
 import { setClassToken } from '../services/preview-affordances.js';
 import { featureParts, onTheWay, partsMidpoint } from '../services/region-axis.js';
-import { numberText } from '../utils/i18n.js';
+import { numberText, t, tn } from '../utils/i18n.js';
 import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 
 // createFeatureSelection reads `window.Vue` when it runs, not when the module loads: other modules import this
@@ -618,7 +618,7 @@ export const createFeatureSelection = ({
     const anchorScope = getFeatureSelectionScope(anchor);
     const clickedScope = getFeatureSelectionScope(clicked);
     if (anchorScope !== clickedScope) {
-      setStatus('Range selection is limited to one record.');
+      setStatus(t('Range selection is limited to one record.'));
       closePreviewPopups();
       return false;
     }
@@ -709,7 +709,9 @@ export const createFeatureSelection = ({
     const firstNewId = Array.from(nextIds).find(Boolean) || '';
     replaceSelectedFeatureIds(nextIds, {
       anchorId: firstNewId || selectedFeatureAnchorId.value,
-      status: nextIds.size > 0 || records.list.length > 0 ? `${numberText(nextIds.size)} features selected.` : 'No rendered features in selection.'
+      status: nextIds.size > 0 || records.list.length > 0
+        ? tn(nextIds.size, '{count} feature selected.', '{count} features selected.', { count: numberText(nextIds.size) })
+        : t('No rendered features in selection.')
     });
     closePreviewPopups();
   };

@@ -623,6 +623,20 @@ test('a search a Session Load overtakes adds nothing and leaves the emptied pane
   assert.equal(busy.panel.panel.searchError, null);
 });
 
+// OV-3676: why a Search did not run stays shown while the UI language may change, so the panel keeps the English
+// reason (marked with `msg`) and the template words it with `tm` where it shows.
+test('a Search that did not run keeps its reason in English for the panel to word', async () => {
+  const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+  const reason = 'Generating diagram. Retry after generation finishes.';
+  await setUiLocale('ja', async () => ({ default: { [reason]: '図を生成しています。' } }));
+  try {
+    const busy = await runPanelSearch({ runLosatJobs: async () => ({ status: 'busy', reason }) });
+    assert.equal(busy.panel.panel.busy, reason);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
 // Review r2 N-r2-2 (N5): the hit set reply is checked in full, its threshold tallies and unmatched subject IDs too.
 test('a hit set reply with a malformed threshold tally or unmatched subject ID is refused', () => {
   const good = {

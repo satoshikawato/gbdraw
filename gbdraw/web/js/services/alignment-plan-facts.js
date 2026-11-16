@@ -3,7 +3,7 @@
 // anchors still name one feature of the shown Result's catalog and of their Similarity Group (the
 // check before Generate), and the placement that Reset alignment restores. The alignment owner
 // (`app/similarity-alignment.js`) runs the helper, writes the plan and publishes the notices.
-import { t } from '../utils/i18n.js';
+import { msg } from '../utils/i18n.js';
 import { cloneJsonData } from './json-clone.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 /**
@@ -63,7 +63,8 @@ const uniqueCatalogFeature = (features, anchor) => {
  *   catalog, and every anchor still resolves; the typed render validates every anchor.
  * - `stale-reference`: the reference is gone, or a target is gone from a regrouped group (target
  *   repair offers this group's members and keeps the other choices, so it needs the reference and
- *   every remaining target in the group).
+ *   every remaining target in the group); `reason` is an English sentence marked with `msg`, worded with `tm`
+ *   where it shows.
  * - `resolve`: the helper checks the plan; `goneRecordKeys` are the aligned targets to repair.
  * @typedef {{ kind: 'current' }
  *   | { kind: 'stale-reference', reason: string }
@@ -84,7 +85,7 @@ export const classifyPlanAgainstCatalog = ({ plan, catalogFeatures, groupAnchors
   const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (
     !catalogFeatures.length || uniqueCatalogFeature(catalogFeatures, anchor) !== null);
   if (!resolves(plan.reference)) {
-    return { kind: 'stale-reference', reason: t('The alignment reference feature is no longer found in its record.') };
+    return { kind: 'stale-reference', reason: msg('The alignment reference feature is no longer found in its record.') };
   }
   const goneRecordKeys = new Set(plan.records
     .filter(({ status, anchor }) => status === 'aligned' && !resolves(anchor))
@@ -95,7 +96,7 @@ export const classifyPlanAgainstCatalog = ({ plan, catalogFeatures, groupAnchors
     status === 'aligned' && !goneRecordKeys.has(recordKey) && !inGroup(anchor)));
   if (!regrouped) return { kind: 'resolve', goneRecordKeys };
   return goneRecordKeys.size === 0 ? { kind: 'current' }
-    : { kind: 'stale-reference', reason: t('An aligned target feature is no longer found in its record.') };
+    : { kind: 'stale-reference', reason: msg('An aligned target feature is no longer found in its record.') };
 };
 
 /**

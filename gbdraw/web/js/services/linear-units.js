@@ -220,7 +220,7 @@ export const perFileWarningNotice = (show) => {
   const shown = new Map();
   return (warning) => {
     if (!warning) return;
-    const identity = JSON.stringify([warning.text, Object.entries(warning.params).sort(([a], [b]) => a.localeCompare(b))]);
+    const identity = JSON.stringify([warning.text, WARNING_PARAMS.map((name) => warning.params[name])]);
     if (shown.has(identity)) return;
     shown.set(identity, warning);
     const warnings = [...shown.values()];

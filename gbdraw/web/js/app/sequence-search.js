@@ -10,7 +10,7 @@
 // The queries (`sequence-search/queries.js`) and the hit table with its outline
 // (`sequence-search/hit-table.js`) are owners of their own.
 import { computed, reactive } from '../utils/reactivity.js';
-import { t, tm } from '../utils/i18n.js';
+import { t } from '../utils/i18n.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { comparisonStateForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
@@ -91,7 +91,10 @@ const initialPanel = () => ({
   running: false,
   /** @type {SearchError | null} */
   searchError: null,
-  /** Why the latest Search did not run (a Generate or a Session load is in progress); '' otherwise. */
+  /**
+   * Why the latest Search did not run (a Generate or a Session load is in progress), English marked with `msg` and
+   * worded with `tm` where it shows, so a UI language change rewords it (OV-3676); '' otherwise.
+   */
   busy: '',
   /** @type {SearchOutcome | null} */
   outcome: null,
@@ -152,7 +155,7 @@ export const createSequenceSearch = ({
       const run = await runLosatJobs(searchLosatPlan({ queries: listed, subjectFasta: read.fasta, task: panel.task }));
       // A cancelled search, or one a Generate or a Session load kept from running, adds nothing and keeps the Result.
       if (load !== loads) return;
-      if (run.status === 'busy') panel.busy = tm(run.reason);
+      if (run.status === 'busy') panel.busy = run.reason;
       if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id) return;
       const text = searchRawText(run.results);
       /** @type {SequenceSearchInput} */
