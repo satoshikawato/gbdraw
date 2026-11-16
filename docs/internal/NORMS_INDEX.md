@@ -497,6 +497,7 @@ under "Cited ids without a record".
 - [PD-OI-070](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-070-reset-settings-scope-for-linear-record-display): Reset Settings scope for Linear record display. ACCEPTED, concern `web.reset.linear-record-display`, scenario revision 1.
   - `tests/fixtures/sessions/mode-scoped-settings-registry-v46.tsv`
   - `tests/web/drawing-inputs.test.mjs`
+  - `tests/web/drawing-member-paths.test.mjs`
   - `tests/web/drawing-slices.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`
 
