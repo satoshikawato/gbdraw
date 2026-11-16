@@ -842,7 +842,7 @@ const readDeferredCircularRecords = async (page) => {
 //     reads as null (services/style-overrides.js `normalizeStrokeOverride`):
 //     one value in two forms. When the edit stores the normalized form,
 //     remove the entry.
-//   - S2-F1 (no OV id yet; the lane assigns one), `inputs`: a Load marks the
+//   - OV-3706, `inputs`: a Load marks the
 //     cards a record-major Depth matrix stands for (`files.c_depth_rows`,
 //     services/config.js, OV-2868) where the page before held null, and a
 //     record read of the same cards leaves the marks (record-discovery.js
@@ -858,7 +858,7 @@ const RESTORING_KINDS = Object.freeze({
       settings: { id: 'OV-3696', fields: ['adv.circular_track_slots_axis_index', 'adv.linear_track_slots_axis_index',
         'adv.circular_track_slots.*.side', 'adv.circular_track_slots.*.params.lane_direction'] },
       paint: { id: 'OV-3702', fields: ['legendStrokeOverrides.*.originalStrokeColor', 'featureStrokeOverrides.*.originalStrokeColor'] },
-      inputs: { id: 'S2-F1', fields: ['files.c_depth_rows'] }
+      inputs: { id: 'OV-3706', fields: ['files.c_depth_rows'] }
     }
   }
 });
