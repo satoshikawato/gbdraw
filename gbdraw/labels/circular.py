@@ -6228,7 +6228,8 @@ def _drawn_placement(
     The defects are counted once. When the repair cannot clear them and every side may fit on its ellipse
     (`sides_packable`), each packer look in turn (CP-D05: "half" first) packs the sides (``pack``) and the
     placement places them (``place``); a look's placement is drawn only when the fit check then finds no
-    defect, or the repair clears them. Otherwise ``labels`` are drawn as placed, with their warning.
+    defect, or the repair clears them; both count a packed pair on one text line closer than its line gap as a
+    defect (`defect_count`, OV-2037). Otherwise ``labels`` are drawn as placed, with their warning.
     """
     from .circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels
 

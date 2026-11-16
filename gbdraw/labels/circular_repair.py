@@ -40,7 +40,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Literal, NamedTuple, TypeAlias
 
 from ..layout.spatial import (
     Aabb,
@@ -71,8 +71,17 @@ from .circular import (
     circular_label_shape,
 )
 from .circular_leaders import arrival_contact, contact_end, label_ink_box
+from .circular_packer import Box, boxes_apart
 from .circular_types import CircularLabel
-from .fit import LabelShape, Polygon, box_covers_definition_text, covers_definition_text, polylines_cross, shapes_overlap
+from .fit import (
+    LabelDefect,
+    LabelShape,
+    Polygon,
+    box_covers_definition_text,
+    covers_definition_text,
+    polylines_cross,
+    shapes_overlap,
+)
 
 # LP-D57: repair records with up to this many defects, within this many evaluations.
 MAX_DEFECTS = 100
@@ -119,8 +128,9 @@ _EPS = 1e-9
 
 Side: TypeAlias = Literal["out", "in"]
 # "box": a label over the letters of the region label it makes way for; "region": over another region label's
-# letters (CIR-RGN-YIELD).
-DefectKind: TypeAlias = Literal["overlap", "crossing", "definition", "box", "region"]
+# letters (CIR-RGN-YIELD); "line": two packed labels of one side on one text line closer than their line gap
+# (``line_gap_px``, OV-2037).
+DefectKind: TypeAlias = Literal["overlap", "crossing", "definition", "box", "region", "line"]
 Defect: TypeAlias = tuple[DefectKind, int, int]
 Moved: TypeAlias = dict[int, CircularLabel]
 # (leader of, text of): a leader drawn through another label's text.
@@ -131,6 +141,51 @@ FeatureLabelDrawnParts: TypeAlias = Callable[[CircularLabel], tuple[Polygon, ...
 # places and the region labels of these indices drawn where the feature labels made way for them: the labels its
 # warning counts, by their index (``CircularAnnotationLabels.overlapped``), in the order of the region labels.
 RegionLabelOverlaps: TypeAlias = Callable[[Sequence[CircularLabel], Sequence[int]], tuple[frozenset[int], ...]]
+
+
+class _LineBox(NamedTuple):
+    """A packed label as the line gap sees it: the packer's box (the laid-out text, no margin), its gap, its side."""
+
+    box: Box
+    gap: float
+    inner: bool
+
+
+def _line_box(label: CircularLabel, total_length: int) -> _LineBox | None:
+    """The label's line box; None for a label the packer did not place (no ``line_gap_px``) and an embedded one."""
+
+    gap = float(label.get("line_gap_px", 0.0))
+    if gap <= 0.0 or label.get("is_embedded"):
+        return None
+    return _LineBox(_label_bbox_rect(label, total_length, 0.0), gap, bool(label.get("is_inner")))
+
+
+def _too_close(first: _LineBox, second: _LineBox) -> bool:
+    """Two packed labels of one side on one text line (their boxes overlap vertically) closer than their line gap,
+    the packer's rule (``boxes_apart``); 1e-6 px because the packer puts an anchor half the gap from the vertical axis,
+    up to rounding."""
+
+    gap = max(first.gap, second.gap) - 1e-6
+    return first.inner == second.inner and not boxes_apart(first.box, second.box, 0.0, gap)
+
+
+def too_close_on_one_line(first: CircularLabel, second: CircularLabel, total_length: int) -> bool:
+    """Whether two labels are a packed pair on one text line closer than their line gap (a ``line`` defect)."""
+
+    first_box, second_box = _line_box(first, total_length), _line_box(second, total_length)
+    return first_box is not None and second_box is not None and _too_close(first_box, second_box)
+
+
+def _line_defects(labels: Sequence[CircularLabel], total_length: int) -> list[Defect]:
+    """Every ``line`` defect of a record's labels, by their indices."""
+
+    boxes = [(index, box) for index, label in enumerate(labels) if (box := _line_box(label, total_length)) is not None]
+    return [
+        ("line", first, second)
+        for at, (first, first_box) in enumerate(boxes)
+        for second, second_box in boxes[at + 1 :]
+        if _too_close(first_box, second_box)
+    ]
 
 
 def _no_drawn_parts(_label: CircularLabel) -> tuple[Polygon, ...]:
@@ -153,6 +208,8 @@ class _Geometry:
     # what a region label's letters may not meet (``boxed_parts_meet``); empty when no region label is made way for.
     drawn: tuple[BoxedPart, ...] = ()
     drawn_box: Aabb | None = None
+    # A packed label's line box (``_line_box``): kept a line gap from the side's others on one text line.
+    line: _LineBox | None = None
 
     def covers(self, boxes: Sequence[Aabb]) -> bool:
         """:func:`~gbdraw.labels.fit.covers_definition_text` from the text box measured already (a repair tests
@@ -265,7 +322,8 @@ class _Repair:
         self._refresh()
         # Pairs that a move within the bounds can bring together.
         tallest = max((float(self.labels[index]["height_px"]) for index in self.external), default=0.0)
-        expand = 2.0 * max(self.text_shift_px, default=0.0) + 2.0 * tallest + 4.0
+        widest_gap = max((float(self.labels[index].get("line_gap_px", 0.0)) for index in self.external), default=0.0)
+        expand = 2.0 * max(self.text_shift_px, default=0.0) + 2.0 * tallest + 4.0 + widest_gap
         reaches = [geometry.reach for geometry in self.geometry]
         self.peers: list[list[int]] = [
             [
@@ -286,20 +344,23 @@ class _Repair:
     def _geometry_of(self, label: CircularLabel) -> _Geometry:
         shape = circular_label_shape(label, self.total_length)
         text = [point for part in shape.parts for point in part]
+        line_box = _line_box(label, self.total_length)
         if not shape.leader:
             box = bounding_aabb(text)
-            return _Geometry(shape, box, None, box)
+            return _Geometry(shape, box, None, box, line=line_box)
         box = bounding_aabb(text)
         leader_box = bounding_aabb(shape.leader)
         reach = union_aabbs((box, leader_box)) if box is not None and leader_box is not None else None
         if not (self.target or self.others):
-            return _Geometry(shape, box, leader_box, reach)
+            return _Geometry(shape, box, leader_box, reach, line=line_box)
         drawn = tuple(
             (part_box, part)
             for part in (*shape.parts, *self.drawn_parts(label))
             if (part_box := bounding_aabb(part)) is not None
         )
-        return _Geometry(shape, box, leader_box, reach, drawn, union_aabbs(part_box for part_box, _part in drawn))
+        return _Geometry(
+            shape, box, leader_box, reach, drawn, union_aabbs(part_box for part_box, _part in drawn), line_box
+        )
 
     def _region_defects(self, index: int, geometry: _Geometry) -> list[Defect]:
         """A label over the letters of the region label it makes way for (``box``), and over another one's
@@ -342,10 +403,14 @@ class _Repair:
 
     # ---- counts (the fit check's predicates) ------------------------------
     def _pair_defects(self, first: int, first_geometry: _Geometry, second: int, second_geometry: _Geometry) -> list[Defect]:
-        if not aabbs_touch(first_geometry.reach, second_geometry.reach):
-            return []
         low, high = (first, second) if first < second else (second, first)
         found: list[Defect] = []
+        if first_geometry.line is not None and second_geometry.line is not None and _too_close(
+            first_geometry.line, second_geometry.line
+        ):
+            found.append(("line", low, high))
+        if not aabbs_touch(first_geometry.reach, second_geometry.reach):
+            return found
         if (
             first_geometry.shape.parts
             and second_geometry.shape.parts
@@ -687,7 +752,10 @@ class _Repair:
         remaining defects would need more than ``MAX_EVALUATIONS``. With
         ``boxes_only`` it repairs only the clusters with a label over a box and
         succeeds once no label is over one; a move still counts every defect it
-        clears or makes, so it never trades a box for another defect.
+        clears or makes, so it never trades a box for another defect. A
+        ``line`` defect ranks below the others: a move never adds one of those,
+        clears the most of them first, and then the fewest line defects added
+        (or most cleared); the search succeeds only with none left.
         """
 
         def targets(defects: set[Defect]) -> set[Defect]:
@@ -704,10 +772,10 @@ class _Repair:
             )
             if not any(self.movable[index] for index in cluster):
                 return False
-            best: tuple[tuple[int, int, float, int], Moved, bool] | None = None
+            best: tuple[tuple[int, int, int, float, int], Moved, bool] | None = None
             tier_done = 0
             for tier, _kind, moved in self._candidates(cluster):
-                if tier != tier_done and best is not None and best[2] and best[0][2] <= CLEAN_STOP_PX:
+                if tier != tier_done and best is not None and best[2] and best[0][3] <= CLEAN_STOP_PX:
                     break  # a small clean fix of one label: runs are not tried
                 tier_done = tier
                 if self.evaluations >= MAX_EVALUATIONS:
@@ -722,12 +790,12 @@ class _Repair:
                 geometry = {index: self._geometry_of(label) for index, label in moved.items()}
                 before = self._current_local(list(moved))
                 after = self._local(geometry)
-                gain = len(before) - len(after)
-                if gain <= 0:
+                gain, line_gain = _gains(before, after)
+                if gain < 0 or (gain, line_gain) <= (0, 0):
                     continue
                 through = max(0, len(self._through(moved, geometry)) - len(self._current_through(list(moved))))
                 shift = max(max(self._displacement(index, label)) for index, label in moved.items())
-                key = (-gain, through, shift, len(moved))
+                key = (-gain, -line_gain, through, shift, len(moved))
                 if best is None or key < best[0]:
                     best = (key, moved, not after)
             if best is None:
@@ -735,7 +803,7 @@ class _Repair:
             for index, label in best[1].items():
                 self.labels[index] = label
             self._refresh()
-            cleared = -best[0][0]
+            cleared = -best[0][0] or -best[0][1]
             found = self.defects()
             spent = self.evaluations - last_evaluations
             last_evaluations = self.evaluations
@@ -971,6 +1039,14 @@ class _Repair:
         return not self.defects() and self._current_through(self.external) <= allowed
 
 
+def _gains(before: frozenset[Defect], after: frozenset[Defect]) -> tuple[int, int]:
+    """The defects a move clears (negative: adds): the fit check's, then the ``line`` defects."""
+
+    lines_before = sum(1 for kind, _first, _second in before if kind == "line")
+    lines_after = sum(1 for kind, _first, _second in after if kind == "line")
+    return (len(before) - lines_before) - (len(after) - lines_after), lines_before - lines_after
+
+
 def _clusters(defects: set[Defect]) -> list[set[int]]:
     parent: dict[int, int] = {}
 
@@ -989,9 +1065,18 @@ def _clusters(defects: set[Defect]) -> list[set[int]]:
 
 
 def defect_count(labels: Sequence[CircularLabel], total_length: int, definition_text: Sequence[Aabb] = ()) -> int:
-    """Overlapping pairs, crossing pairs and labels over the definition text of one record, as the fit check counts them."""
+    """Overlapping pairs, crossing pairs and labels over the definition text of one record, as the fit check counts them,
+    and packed pairs on one text line closer than their line gap (``line`` defects, OV-2037)."""
 
-    return len(circular_label_defects(labels, total_length, definition_text=definition_text))
+    return len(_record_defects(labels, total_length, definition_text))
+
+
+def _record_defects(
+    labels: Sequence[CircularLabel], total_length: int, definition_text: Sequence[Aabb]
+) -> set[LabelDefect | Defect]:
+    """The fit check's defects of one record (``circular_label_defects``) and its ``line`` defects."""
+
+    return {*circular_label_defects(labels, total_length, definition_text=definition_text), *_line_defects(labels, total_length)}
 
 
 def repair_circular_labels(
@@ -1008,7 +1093,8 @@ def repair_circular_labels(
     no defect, more than ``MAX_DEFECTS``, radial labels, or defects the repair
     cannot clear completely. A repaired record then yields room around its
     repaired defects (LP-D59). ``defects``: the caller's :func:`defect_count`
-    of ``labels``, when it has one.
+    of ``labels``, when it has one. Packed labels keep their line gap
+    (``line`` defects, OV-2037).
     """
 
     if any(label.get("placement") == "radial" or label.get("oriented_corners") for label in labels):
@@ -1059,7 +1145,8 @@ def make_way_for_region_labels(
     let a region label through. A region label is skipped when the labels
     cannot clear it, or clear it only by adding a defect of their own that
     they did not have (an overlapping or crossing pair, a label over the
-    definition text, ``circular_label_defects``), or a label to what any
+    definition text, ``circular_label_defects``, or a packed pair closer
+    than its line gap, OV-2037), or a label to what any
     region label overlaps where it is drawn then (its letters, or leader
     lines behind them), even where another goes. The labels that made way do
     not yield room afterwards (LP-D59): only they and the neighbours the
@@ -1070,7 +1157,7 @@ def make_way_for_region_labels(
         return None
     cleared: list[int] = []
     current = [label.copy() for label in labels]
-    own, overlaps = set(circular_label_defects(current, total_length, definition_text=definition_text)), tuple(overlapped)
+    own, overlaps = _record_defects(current, total_length, definition_text), tuple(overlapped)
     # The height of the tallest region label each label made way for, by the label's index.
     made_way_for = [0.0] * len(current)
     for index in blocked:
@@ -1090,7 +1177,7 @@ def make_way_for_region_labels(
         if not repair.run(boxes_only=True):
             continue
         moved = [label.copy() for label in repair.labels]
-        moved_defects = set(circular_label_defects(moved, total_length, definition_text=definition_text))
+        moved_defects = _record_defects(moved, total_length, definition_text)
         moved_overlaps = region_overlaps(moved, (*cleared, index))
         if not moved_defects <= own or any(not after <= before for after, before in zip(moved_overlaps, overlaps)):
             continue
@@ -1112,4 +1199,5 @@ __all__ = [
     "defect_count",
     "make_way_for_region_labels",
     "repair_circular_labels",
+    "too_close_on_one_line",
 ]

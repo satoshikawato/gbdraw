@@ -111,12 +111,7 @@ class _Ring:
         return x + left, y + item.rows[0], x + right, y + item.rows[1]
 
     def boxes_apart(self, a: Box, b: Box) -> bool:
-        return (
-            b[1] - a[3] >= self.row_gap
-            or a[1] - b[3] >= self.row_gap
-            or b[0] - a[2] >= self.line_gap
-            or a[0] - b[2] >= self.line_gap
-        )
+        return boxes_apart(a, b, self.row_gap, self.line_gap)
 
     def apart(self, first: _PackItem, first_psi: float, second: _PackItem, second_psi: float) -> bool:
         return self.boxes_apart(self.box(first, first_psi), self.box(second, second_psi))
@@ -250,21 +245,29 @@ def _item(label: CircularLabel, arc: LabelArc, rules: SideRules) -> _PackItem:
 
 
 def _placed(ring: _Ring, items: Sequence[_PackItem], psis: Sequence[float], rules: SideRules) -> list[CircularLabel]:
-    """Copies of the labels at these angles, in genome order, with their leader starts."""
+    """Copies of the labels at these angles, in genome order, with their leader starts and the line gap they keep."""
 
     placed: list[CircularLabel] = []
     for item, psi in zip(items, psis):
         label = item.label.copy()
         label["start_x"], label["start_y"] = ring.anchor(psi)
+        label["line_gap_px"] = ring.line_gap
         placed.append(label)
     placed.sort(key=lambda label: float(label["middle"]))
     return rules.leader_starts(placed)
 
 
-def _line_gap(items: Sequence[_PackItem]) -> float:
-    """The side gap of two boxes on one text line, in px: ``LINE_GAP_EM`` of the largest label font size."""
+def line_gap_px(labels: Iterable[CircularLabel]) -> float:
+    """The side gap of two boxes of one side on one text line, in px: ``LINE_GAP_EM`` of the side's largest label font
+    size (0 for no labels)."""
 
-    return LINE_GAP_EM * max(float(item.label["font_size"]) for item in items)
+    return LINE_GAP_EM * max((float(label["font_size"]) for label in labels), default=0.0)
+
+
+def boxes_apart(a: Box, b: Box, row_gap: float, line_gap: float) -> bool:
+    """Whether two boxes are ``row_gap`` apart vertically or, on one text line, ``line_gap`` apart side by side."""
+
+    return b[1] - a[3] >= row_gap or a[1] - b[3] >= row_gap or b[0] - a[2] >= line_gap or a[0] - b[2] >= line_gap
 
 
 def _side_limits(arc: LabelArc, line_gap: float) -> tuple[Span, Span]:
@@ -433,7 +436,7 @@ def _half_placements(
 ) -> Iterator[list[CircularLabel]]:
     """Look 2: per row gap, the split at the genome halves (no label passes a pole), when it packs."""
 
-    line_gap = _line_gap(items)
+    line_gap = line_gap_px(item.label for item in items)
     look = _HalfLook(items, arc, rules.total_length, line_gap)
     for row_gap in rules.row_gaps:
         ring = _Ring(arc, row_gap, line_gap)
@@ -447,7 +450,7 @@ def _run_placements(
 ) -> Iterator[list[CircularLabel]]:
     """Look 1, first family: per row gap, the splits whose end runs pass a pole, by least squared displacement."""
 
-    line_gap = _line_gap(items)
+    line_gap = line_gap_px(item.label for item in items)
     look = _HalfLook(items, arc, rules.total_length, line_gap)
     for row_gap in rules.row_gaps:
         ring = _Ring(arc, row_gap, line_gap)
@@ -500,7 +503,7 @@ def _cycle_placements(
     for k in range(1, count):
         while targets[k] < targets[k - 1]:
             targets[k] += _TWO_PI
-    line_gap = _line_gap(items)
+    line_gap = line_gap_px(item.label for item in items)
     for scale in CONE_SCALES:
         cones = [_cone(arc, item, target, scale) for item, target in zip(order, targets)]
         lower = [cone[0] for cone in cones]
@@ -539,4 +542,4 @@ def pack_side(
     return None
 
 
-__all__ = ["PACKER_LOOKS", "BoxOffsets", "PackerLook", "SideRules", "pack_side"]
+__all__ = ["PACKER_LOOKS", "Box", "BoxOffsets", "PackerLook", "SideRules", "boxes_apart", "line_gap_px", "pack_side"]

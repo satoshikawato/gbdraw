@@ -13,6 +13,7 @@ from typing import cast
 import pytest
 from Bio import SeqIO
 
+import gbdraw.diagrams.circular.assemble as assemble_module
 import gbdraw.labels.circular_packer as packer_module
 import gbdraw.labels.fit as fit_module
 from gbdraw.api import (
@@ -34,7 +35,7 @@ import gbdraw.labels.circular as circular_module
 from gbdraw.labels.circular import _count_label_overlaps, _packer_side_rules, circular_label_fits
 from gbdraw.labels.circular_capacity import LabelArc
 from gbdraw.labels.circular_packer import PackerLook, SideRules, pack_side
-from gbdraw.labels.circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels
+from gbdraw.labels.circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels, too_close_on_one_line
 from gbdraw.labels.circular_leaders import leader_crossing_count, leader_polyline
 from gbdraw.labels.circular_types import CircularLabel
 from gbdraw.labels.fit import Polyline, crossing_pairs, iter_crossing_pairs, polylines_cross
@@ -272,7 +273,7 @@ def test_the_run_splits_are_the_splits_whose_both_sides_fit() -> None:
 
     labels, total_length, arc, spacing = _packer_fixture("p1_f13")
     items = [packer_module._item(label, arc, _outer_rules(total_length, spacing)) for label in labels]
-    line_gap = packer_module._line_gap(items)
+    line_gap = packer_module.line_gap_px(item.label for item in items)
     look = packer_module._HalfLook(items, arc, total_length, line_gap)
     ring = packer_module._Ring(arc, 0.1, line_gap)
     shifts = [shift for shift in range(-packer_module.MAX_RUN_SHIFT, packer_module.MAX_RUN_SHIFT + 1) if look.valid(shift)]
@@ -354,6 +355,45 @@ def test_a_record_that_does_not_fit_today_is_drawn_packed_in_look_1(
 
     assert _draw(tmp_path, args).is_file()
     assert looks == [("half", False), ("pole", True)]
+
+
+def test_a_packed_pair_on_one_text_line_closer_than_its_line_gap_is_too_close() -> None:
+    """The rule every pass after the packer reads from the labels (``line_gap_px``): the repair and the defect count of
+    a packed placement, region labels' make-way and the overlay legend's shift (OV-2037). Today's labels carry no gap."""
+
+    packed = {"line_gap_px": 14.0}
+    first = _box_label(100.0, 0.0, 40.0, **packed)
+    assert too_close_on_one_line(first, _box_label(150.0, 0.0, 40.0, **packed), 1000)  # 10 px apart
+    assert not too_close_on_one_line(first, _box_label(154.0, 0.0, 40.0, **packed), 1000)  # 14 px apart
+    assert not too_close_on_one_line(first, _box_label(150.0, 10.0, 40.0, **packed), 1000)  # the next text line
+    assert not too_close_on_one_line(first, _box_label(150.0, 0.0, 40.0, is_inner=True, **packed), 1000)
+    assert not too_close_on_one_line(_box_label(100.0, 0.0, 40.0), _box_label(150.0, 0.0, 40.0), 1000)
+
+
+@pytest.mark.circular
+def test_the_repair_of_a_packed_record_keeps_the_line_gap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """P1 14 pt is packed with 7 crossing pairs and repaired; two drawn labels on one line stay ``LINE_GAP_EM`` apart.
+
+    With the repair's 1 px side gap, two "anti-repressor" labels at 6 o'clock ended 0.58 em apart (OV-2037).
+    """
+
+    drawn: list[tuple[int, list[CircularLabel]]] = []
+    prepare = assemble_module.prepare_label_list
+
+    def recording(feature_dict: object, total_length: int, *args: object, **kwargs: object) -> list[CircularLabel]:
+        labels = prepare(feature_dict, total_length, *args, **kwargs)  # type: ignore[arg-type]
+        if not kwargs.get("probe"):
+            drawn.append((int(total_length), labels))
+        return labels
+
+    monkeypatch.setattr(assemble_module, "prepare_label_list", recording)
+    assert _draw(tmp_path, [*P1, "--label_font_size", "14"]).is_file()
+    total_length, labels = drawn[-1]
+    external = [label for label in labels if not label.get("is_embedded")]
+    font_size = float(external[0]["font_size"])
+    assert {float(label["font_size"]) for label in external} == {font_size}
+    gap, i, j = min(_same_line_gaps(external, total_length))
+    assert gap >= packer_module.LINE_GAP_EM * font_size - 1e-6, (gap, external[i]["label_text"], external[j]["label_text"])
 
 
 @pytest.mark.slow

@@ -84,7 +84,7 @@ from ...labels.circular import (
     x_overlap,
     y_overlap,
 )
-from ...labels.circular_repair import make_way_for_region_labels
+from ...labels.circular_repair import make_way_for_region_labels, too_close_on_one_line
 from ...labels.circular_capacity import CircularLabelCapacity, CircularLabelCapacityExceeded
 from ...labels.circular_fit import CircularDefinitionFitProbe, CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
@@ -2030,9 +2030,11 @@ def _try_shift_labels_away_from_legend(
                                 continue
                             peer = candidate_labels.get(peer_idx, peer_label)
                             min_gap_px = minimum_bbox_gap_px(candidate, peer)
-                            if y_overlap(candidate, peer, total_length, min_gap_px) and x_overlap(
-                                candidate, peer, minimum_margin=min_gap_px
-                            ):
+                            # A packed pair also keeps its line gap on one text line (OV-2037).
+                            if (
+                                y_overlap(candidate, peer, total_length, min_gap_px)
+                                and x_overlap(candidate, peer, minimum_margin=min_gap_px)
+                            ) or too_close_on_one_line(candidate, peer, total_length):
                                 candidate_valid = False
                                 break
                         if not candidate_valid:

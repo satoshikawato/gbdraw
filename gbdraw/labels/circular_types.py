@@ -110,6 +110,9 @@ class CircularLabel(_CircularLabelRequired, total=False):
       ``target_angle_unwrapped``;
     - placement stage only: ``_spacing_px``, ``_enforce_spacing_px``,
       ``_opt_original_idx``;
+    - packed label (``circular_packer``): ``line_gap_px``, the side gap it
+      keeps from a label of its side on one text line, which every later pass
+      that moves it keeps too;
     - leader: ``leader_start_x``, ``leader_start_y``, ``leader_contact`` (a
       contact as fractions of the ink box);
     - radial placement: ``placement``, ``placed_angle_deg``, ``text_x``,
@@ -131,6 +134,7 @@ class CircularLabel(_CircularLabelRequired, total=False):
     _spacing_px: float
     _enforce_spacing_px: bool
     _opt_original_idx: int
+    line_gap_px: float
     leader_start_x: float
     leader_start_y: float
     leader_contact: tuple[float, float]
