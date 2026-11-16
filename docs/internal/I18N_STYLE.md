@@ -2853,8 +2853,8 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
   prototype the Owner saw; خطی is the older textbook form), ٹریک, ٹریک سلاٹ, ٹریک قطار (Track row), لین (Lane), حلقہ (Ring;
   رنگ is Color), بینڈ, ربن, منحنی, تیر, لیبل, عنوان, ذیلی عنوان, لیجنڈ, ٹک مارک (Tick; ٹک alone reads "until"), محور, پیمانہ,
   رولر, پیلیٹ, رنگ کا نمونہ (Swatch), بھرنا (Fill), آؤٹ لائن (Stroke; لکیر is Line), فونٹ, لے آؤٹ, کینوس, پیڈنگ, فاصلہ (Gap and
-  Spacing; alignment gaps are گیپ), وقفہ (Interval), رینج, رداس, آفسیٹ, گھماؤ (Rotation), اوور لے, انڈر لے, پیش زمینہ
-  (Foreground), پس منظر, اوور فلو, کلپ, سکیڑنا, اسٹیک, قاعدہ (pl. قواعد), پیٹرن, فلٹر, ہالہ (Halo), باکس, لیڈر لائن.
+  Spacing; alignment gaps are گیپ), وقفہ (Interval), رینج, رداس, آفسیٹ, گھماؤ (Rotation), اوور لے, انڈر لے, پیش منظر
+  (Foreground; the same word as Preview), پس منظر, اوور فلو, کلپ, سکیڑنا, اسٹیک, قاعدہ (pl. قواعد), پیٹرن, فلٹر, ہالہ (Halo), باکس, لیڈر لائن.
 - **Commands** (polite imperative, 22.2): شامل کریں, ہٹائیں (Remove), حذف کریں (Delete), صاف کریں (Clear), کاپی کریں,
   چسپاں کریں, ترمیم کریں, محفوظ کریں, لوڈ کریں, اپ لوڈ کریں, ڈاؤن لوڈ کریں, کھولیں, بند کریں, درآمد کریں, برآمد کریں,
   کالعدم کریں / دوبارہ کریں (Undo / Redo), ری سیٹ کریں, بحال کریں (Restore), واپس لائیں (Revert), دوبارہ کوشش کریں, نام تبدیل
