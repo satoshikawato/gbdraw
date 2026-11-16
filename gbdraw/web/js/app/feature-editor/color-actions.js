@@ -30,7 +30,7 @@ import {
 } from '../../services/drawing/paint.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys } from '../../services/specific-color-rules.js';
-import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
+import { firstDrawnFeatureBlock } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
   featureOverrideKey,
@@ -471,11 +471,11 @@ export const createFeatureColorActions = ({
     if (key) setFeatureStroke(drawing.slices.paint, key, null);
   };
 
-  // The stroke Python drew on a feature's block (its first part that is not
-  // an automatic underlay), which a Session 46 stroke edit keeps.
+  // The stroke Python drew on a feature's block (`firstDrawnFeatureBlock`),
+  // which a Session 46 stroke edit keeps.
   /** @param {Element[]} elements */
   const drawnFeatureStroke = (elements) => {
-    const block = elements.find((element) => !isAutoFeatureUnderlay(element)) || elements[0] || null;
+    const block = firstDrawnFeatureBlock(elements) || elements[0] || null;
     return {
       originalStrokeColor: pythonDrawnAttribute(block, 'stroke'),
       originalStrokeWidth: pythonDrawnAttribute(block, 'stroke-width')

@@ -69,6 +69,14 @@ const isFeatureFillTarget = (element) => (
 export const filterFeatureFillTargets = (elements) =>
   Array.from(elements || []).filter(isFeatureFillTarget);
 
+// The first of these elements that is a feature block, found by part (not a
+// connector line or an outline) and not an automatic underlay: the element
+// whose stroke is the block stroke Python drew. Connector lines come before
+// their blocks in document order, so no reader takes the first element.
+/** @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements */
+export const firstDrawnFeatureBlock = (elements) =>
+  filterFeatureFillTargets(elements).find((element) => !isAutoFeatureUnderlay(element)) || null;
+
 /**
  * @param {FeatureSvgRoot | null | undefined} svg
  * @returns {FeatureElementIndex}
