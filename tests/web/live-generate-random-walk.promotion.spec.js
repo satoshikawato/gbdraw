@@ -3,7 +3,7 @@
 // tests/web/helpers/live-random-walk.mjs at the promotion level of
 // tests/web/helpers/live-random-walk-plan.mjs (every feasible ordered pair
 // of edit kinds as adjacent steps and within a walk, every fixture x kind x popup x
-// Auto Reflow; about 800 steps in about 17 walks).
+// Auto Reflow; about 900 steps in about 19 walks).
 //
 // Run (one browser, fixed seed):
 //   GBDRAW_RANDOM_WALK_SEED=20261006 npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1

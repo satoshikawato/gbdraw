@@ -1,8 +1,10 @@
 // Session load timing: load Gallery sessions and record when each Worker starts, each Worker
 // message is posted and answered, and each session lifecycle event fires, relative to the load.
 // Choose sessions with AUDIT_SESSIONS=name1,name2 (default: the tobacco plastome and HmmtDNA).
+// The Load must leave no UNKNOWN or VALIDATION_UNCLASSIFIED alert, page or console error, or NaN
+// or undefined in Run Info (the check the random walk runs after each step).
 const { join } = require('node:path');
-const { test } = require('@playwright/test');
+const { expect, test } = require('@playwright/test');
 const A = require('./helpers/audit-common.cjs');
 
 const SESSION_DIR = join(A.REPO_ROOT, 'gbdraw/web/gallery/sessions');
@@ -40,13 +42,19 @@ for (const name of names) {
     test.setTimeout(600_000);
     const outdir = A.outDir('session-load-timing');
     await page.addInitScript(INIT);
-    await A.helpers().openApp(page);
+    const { openApp, readErrorSignature } = A.helpers();
+    await openApp(page);
+    // Starts collecting the page's errors; openApp has checked those of its own open.
+    await A.operationHealth(page, 'open');
+    const signature = await readErrorSignature(page);
     const start = await page.evaluate(() => performance.now());
     const load = await A.loadSession(page, join(SESSION_DIR, name));
+    const health = await A.operationHealth(page, 'Load', signature);
     const events = await page.evaluate((t0) => window.__AUDIT_EVENTS__
       .filter(([at]) => at >= t0)
       .map(([at, label]) => [Math.round(at - t0), label]), start);
-    A.writeEvidence(outdir, `${name}.json`, { name, ms: load.ms, error: load.error, events });
+    A.writeEvidence(outdir, `${name}.json`, { name, ms: load.ms, error: load.error, health, events });
     console.log(name, `${load.ms} ms`, `${events.length} events`);
+    expect(health, health.join('\n')).toEqual([]);
   });
 }

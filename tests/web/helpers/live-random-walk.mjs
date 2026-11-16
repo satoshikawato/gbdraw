@@ -3,9 +3,15 @@
 // Generate draws from the same draft (expectLiveEqualsGenerate, minus
 // tests/web/contracts/live-generate-parity-allowed.json), and the step must
 // leave the slices of the drawing it did not edit as they were (M6 isolation:
-// the sha256 of each slice's `capture`, as tests/web/per-mode-drawings.test.mjs
-// hashes them in node). Reset Settings and Session Load change every drawing
-// by design (PD-OI-090), so the isolation check skips those steps.
+// the sha256 of each slice's `capture`, `sliceHashes` of
+// tests/web/helpers/drawing-slice-hashes.mjs). Reset Settings and Session Load
+// change every drawing by design (PD-OI-090), so the isolation check skips
+// those steps. An Undo then Redo must give back every drawing's slices. Each
+// step, and the Generate after it, must leave no UNKNOWN or
+// VALIDATION_UNCLASSIFIED alert, page or console error, or NaN or undefined in
+// Run Info (`takeOperationHealthProblems` of app-lifecycle.cjs). A `setting`
+// step sets a control of a live row of SETTING_APPLICATION, read from its module
+// (tests/web/helpers/live-setting-rows.mjs).
 //
 // The kind schedule is the plan of tests/web/helpers/live-random-walk-plan.mjs
 // (its targets: every feasible ordered pair of kinds, and every kind in each popup and
@@ -30,7 +36,7 @@
 import { expect, test } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { evaluateWithRetainedPromise, takePageErrors } from './app-lifecycle.cjs';
+import { evaluateWithRetainedPromise, readErrorSignature, reveal, takeOperationHealthProblems, takePageErrors } from './app-lifecycle.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
 import { BATCH_FIXTURE } from './audit-browser.cjs';
@@ -38,6 +44,7 @@ import { SINGLE_FIXTURE, generate, openBothDrawings, otherMode, switchDrawing } 
 import { fasta, genbankBases, reverseComplement, span } from './sequence-search.cjs';
 import { BARRIER_KINDS, FIXTURES, createRandom, planWalk } from './live-random-walk-plan.mjs';
 import { shrinkWalk } from './live-random-walk-shrink.mjs';
+import { changedSlices, restoredChanges, sliceHashes } from './drawing-slice-hashes.mjs';
 
 // The step kind that walks the path of each row of the R3 work allowlist
 // (tests/web/helpers/live-work-allowlist.mjs), or null for a row whose path
@@ -142,39 +149,23 @@ const openFixture = async (page, fixture, reflow) => ({
 // The file each drawing draws.
 const fileOf = (fixture, drawingId) => (drawingId === 'circular' && fixture.mode === 'circular' ? fixture.results : 'single');
 
-// The sha256 of each slice capture of each drawing, and the shown drawing.
-const sliceHashes = (page) => page.evaluate(async () => {
-  const { state } = await import('/gbdraw/web/js/state.js');
-  const { DRAWING_SLICES } = await import('/tests/web/helpers/drawing-state.mjs');
-  const hex = async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))]
-    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  const drawings = {};
-  for (const drawing of state.drawingList()) {
-    const slices = {};
-    for (const [name, slice] of Object.entries(DRAWING_SLICES)) slices[name] = await hex(JSON.stringify(slice.capture(drawing.slices[name])));
-    drawings[drawing.id] = slices;
-  }
-  return { active: state.activeDrawing().id, drawings };
-});
-// The slices of `drawingId` whose captures differ between two hash sets.
-const changedSlices = (before, after, drawingId) => Object.keys(before.drawings[drawingId])
-  .filter((name) => before.drawings[drawingId][name] !== after.drawings[drawingId][name]);
-
 // What the next step may use: the features of the displayed Result, each by
 // an identity that survives a reboot (`key`: `walkFeatureKey`, the record's
 // position and the biological feature ID; two features with the same span and
 // qualifiers have two), sorted by a readable `label`; the listed and the deleted
 // Legend rows by their key (`legendEntryKey`, Python's key of the row); the
-// editor lists; and the
+// editor lists; the controls of the live setting rows the page shows
+// (`walkSettingControls`: row and control name); and the
 // History and Result state. Undo is
 // available above the drawing's floor, its History depth after its first
 // Generate (or after a Load): Undo of that Generate leaves no Result to compare.
 const readState = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const { legendEntryKey } = await import('/gbdraw/web/js/services/drawing/paint.js');
-  const { walkFeatureKey } = await import('/tests/web/helpers/live-random-walk-page.mjs');
+  const { walkFeatureKey, walkSettingControls } = await import('/tests/web/helpers/live-random-walk-page.mjs');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
+  const settingControls = (await walkSettingControls()).map(({ row, control }) => ({ row, control }));
   const features = app.filteredFeatures.map((feature) => ({
     key: walkFeatureKey(feature),
     label: [feature.type, feature.start, feature.end, feature.locus_tag || '', feature.product || ''].join('|'),
@@ -197,7 +188,8 @@ const readState = (page) => page.evaluate(async () => {
     palettes: app.paletteNames.filter((name) => name !== app.selectedPalette),
     depth: app.mode === 'linear' ? Boolean(app.linearSeqs[0]?.depth?.[0]) : Boolean(app.files.c_depth?.[0]?.[0]),
     undoDepth: history.getUndoCount(),
-    canUndo: Boolean(history.canUndo())
+    canUndo: Boolean(history.canUndo()),
+    settingControls
   };
 });
 
@@ -305,6 +297,13 @@ export const nextStep = (random, state, kind, { fixture, canUndo }) => {
       return { kind, index: random.pick(others) };
     }
     case 'drawingSwitch': return { kind, mode: otherMode(state.mode) };
+    case 'setting': {
+      // A live row first, then one of its controls, so a row with many controls is drawn as often as one with one.
+      const rows = [...new Set(state.settingControls.map(({ row }) => row))];
+      if (!rows.length) throw new Error('a setting step needs a control of a live setting row; the page shows none');
+      const row = random.pick(rows);
+      return { kind, row, control: random.pick(state.settingControls.filter((control) => control.row === row)).control, pick: random.int(1000) };
+    }
     case 'reset':
     case 'load':
       return { kind };
@@ -627,6 +626,42 @@ const resetKeepingGenerateSettings = async (page) => {
   return [...notes, 'the settings that apply on Generate written back'];
 };
 
+// A `setting` step: the control of a live setting row that the step names,
+// set as a user sets it (a value typed and the field left, a click, an option
+// picked), which records the control's History step and lets the automatic
+// rerender apply the change (R1 (c)). A control that records no step fails
+// the step: its change could neither be undone nor reach the Result live.
+const applySetting = async (page, step) => {
+  const target = await page.evaluate(async ({ row, control, pick }) => {
+    const { walkSettingControls, walkSettingValue } = await import('/tests/web/helpers/live-random-walk-page.mjs');
+    const found = (await walkSettingControls()).find((candidate) => candidate.row === row && candidate.control === control);
+    if (!found) throw new Error(`no control "${control}" of the ${row} row is shown`);
+    found.element.setAttribute('data-walk-setting-control', '');
+    const newest = Math.max(-1, ...window.__GBDRAW_HISTORY__.timeline().undo.map(({ sequence }) => sequence));
+    return { action: found.action, value: walkSettingValue(found.element, found.action, pick), newest };
+  }, step);
+  const control = page.locator('[data-walk-setting-control]');
+  try {
+    await reveal(control);
+    if (target.action === 'toggle') await control.click();
+    else if (target.action === 'choose') await control.selectOption(target.value);
+    else {
+      await control.fill(target.value);
+      await control.blur();
+    }
+  } finally {
+    await page.evaluate(() => document.querySelector('[data-walk-setting-control]')?.removeAttribute('data-walk-setting-control'));
+  }
+  await settleLive(page);
+  // The History keeps 30 steps, so the new step is the one above the newest before it, not a count.
+  const recorded = await page.evaluate((newest) => window.__GBDRAW_HISTORY__.timeline().undo
+    .filter(({ sequence }) => sequence > newest).map(({ label }) => label), target.newest);
+  if (recorded.length !== 1) {
+    throw new Error(`the ${step.row} control "${step.control}" recorded ${recorded.length} History steps, not one: [${recorded}]`);
+  }
+  return [`${target.action === 'toggle' ? 'clicked' : `set to ${JSON.stringify(target.value)}`}`];
+};
+
 // One step: the kinds that need the test runner (a Result or drawing switch,
 // Save and Load, Reset Settings, a Generate inside the step) run here, the
 // others in the page.
@@ -637,6 +672,7 @@ const runStep = async (page, step, sessionPath) => {
     // A click on Save Session behind an open dialog has no timeout of its own.
     case 'load': await withinStepTimeout(page, () => saveAndLoad(page, sessionPath)); return [];
     case 'reset': return resetKeepingGenerateSettings(page);
+    case 'setting': return withinStepTimeout(page, () => applySetting(page, step));
     case 'trackData':
       if (!step.prepare) return applyStepWithin(page, step);
       await applyStepWithin(page, step.prepare);
@@ -674,8 +710,17 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
  * The steps of one run, as `walk-steps.json` and `walk-shrunk.json` hold them.
  * @typedef {{ seed: number, title: string, fixture: string, reflow: boolean, steps: RecordedStep[], shrink?: object }} WalkRecord
  */
-/** @typedef {{ phase: string, drawing: string, slices: string[] }} IsolationChange */
-/** @typedef {{ index: number, kind: string, unplaced: { id: string } | null, differences: string[], isolation: IsolationChange[] }} StepResult */
+/** @typedef {import('./drawing-slice-hashes.mjs').SliceChange} IsolationChange */
+/** A health problem a phase of a step left (`takeOperationHealthProblems`). @typedef {{ phase: string, problem: string }} HealthProblem */
+/**
+ * What the checks after a step found: `differences` from Generate, `isolation`
+ * (slices of a drawing the step did not edit that changed), `restored` (slices
+ * of any drawing that a step of RESTORING_KINDS did not give back),
+ * and `health` (a phase's UNKNOWN or VALIDATION_UNCLASSIFIED alert, page or
+ * console error, or NaN or undefined in Run Info).
+ * @typedef {{ index: number, kind: string, unplaced: { id: string } | null, differences: string[], isolation: IsolationChange[],
+ *   restored: IsolationChange[], health: HealthProblem[] }} StepResult
+ */
 /**
  * Where the steps of a run come from: the walk draws them, a replay reads
  * them. Each returns null when the step cannot apply in `state`.
@@ -715,6 +760,9 @@ export const whyNotApplicable = (step, state, { canUndo }) => {
     case 'resultSwitch':
       return step.index < state.resultCount && step.index !== state.resultIndex ? '' : `Result ${step.index} is shown or absent`;
     case 'drawingSwitch': return step.mode !== state.mode ? '' : `the ${step.mode} drawing is shown`;
+    case 'setting':
+      return state.settingControls.some(({ row, control }) => row === step.row && control === step.control) ? ''
+        : `no control "${step.control}" of the ${step.row} row is shown`;
     default: return '';
   }
 };
@@ -735,6 +783,25 @@ const recordedSource = (recorded) => ({
 const isolationChanges = (phase, before, after, drawings) => drawings
   .map((drawing) => ({ phase, drawing, slices: changedSlices(before, after, drawing) }))
   .filter(({ slices }) => slices.length);
+
+// The kinds that must give back every drawing as it was before the step, with
+// the name a report gives the check and the hashes it compares (SliceHashes):
+// an Undo then Redo. The isolation check of the other kinds is the part of
+// this check for the drawings they did not edit.
+// The same check of a Save then Load (`load: { phase: 'Save then Load', by:
+// 'renamed' }`: Load names files and records anew) is off: every Load of a
+// fixture gives back the track-slot fields that were unset as resolved values
+// (`adv.*_track_slots_axis_index` null -> 0, `adv.circular_track_slots.*.side`
+// null -> 'inside'), the Circular record list as deferred (`inputs`
+// `circularRecordDiscovery.status` 'ready' -> 'deferred', `circularRecordList`
+// gone), and the Linear genome file's `sourceId` as the content source both
+// drawings share. It goes on when those are fixed or the check is told to
+// compare them otherwise.
+const RESTORING_KINDS = Object.freeze({
+  undoRedo: { phase: 'Undo then Redo', by: 'drawings' }
+});
+const healthOf = async (page, phase, errorSignatureBefore) => (await takeOperationHealthProblems(page, { errorSignatureBefore }))
+  .map((problem) => ({ phase, problem }));
 
 /**
  * @typedef {{ fixture: typeof FIXTURES[number], reflow: boolean, planned: readonly { kind: string, popup: boolean, reflow: boolean }[],
@@ -777,7 +844,10 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const record = { index, kind, popup, reflow: stepReflow, drawing: '', popupFeature: null, step: { kind }, notes: [] };
     let before;
     let afterStep;
+    /** @type {HealthProblem[]} */
+    const health = [];
     try {
+      const signature = await readErrorSignature(page);
       await page.evaluate((enabled) => { window.__GBDRAW_APP__.autoLabelReflowEnabled = enabled; }, stepReflow);
       await settleLive(page);
       let state = await readState(page);
@@ -792,21 +862,34 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
       const { step, reason } = source.step(offset, state, { fixture, canUndo: state.canUndo && state.undoDepth > floors[state.drawing] });
       if (!step) return { records, results, inapplicable: { index, reason } };
       record.step = step;
+      // A restoring step's prepare (an edit to Undo) runs before the state it must give back is read.
+      let runnable = step;
+      const prepared = [];
+      if (RESTORING_KINDS[step.kind] && step.prepare) {
+        const { prepare, ...rest } = step;
+        prepared.push(`prepare ${prepare.kind}`, ...await runStep(page, prepare, sessionPath(index)));
+        await settleLive(page);
+        runnable = rest;
+      }
       before = await sliceHashes(page);
-      record.notes = await runStep(page, step, sessionPath(index));
+      record.notes = [...prepared, ...await runStep(page, runnable, sessionPath(index))];
       await settleLive(page);
       afterStep = await sliceHashes(page);
+      health.push(...await healthOf(page, 'the step', signature));
     } catch (error) {
       records.push(record);
       return { records, results, error: { index, message: error?.message || String(error) } };
     }
     records.push(record);
     log(record);
-    const isolation = BARRIER_KINDS.includes(record.step.kind) ? [] : isolationChanges('the step', before, afterStep,
+    const restoring = RESTORING_KINDS[record.step.kind];
+    const restored = restoring ? restoredChanges(restoring.phase, before, afterStep, { by: restoring.by }) : [];
+    const isolation = restoring || BARRIER_KINDS.includes(record.step.kind) ? [] : isolationChanges('the step', before, afterStep,
       Object.keys(before.drawings).filter((drawingId) => record.step.kind === 'drawingSwitch' || drawingId !== before.active));
     if (record.step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];
     const unplaced = unplacedLabels(record.step, stepReflow, results.at(-1));
     let differences = [];
+    const generateSignature = await readErrorSignature(page);
     try {
       await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})`, unplaced });
     } catch (error) {
@@ -821,7 +904,8 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const afterGenerate = await sliceHashes(page);
     isolation.push(...isolationChanges('Generate', afterStep, afterGenerate,
       Object.keys(afterStep.drawings).filter((drawingId) => drawingId !== afterStep.active)));
-    results.push({ index, kind: record.step.kind, unplaced, differences, isolation });
+    health.push(...await healthOf(page, 'Generate', generateSignature));
+    results.push({ index, kind: record.step.kind, unplaced, differences, isolation, restored, health });
   }
   return { records, results };
 };
@@ -853,7 +937,9 @@ const unknownDifferences = (result) => {
 /** @param {StepResult} result @param {{ withStaleMark: boolean }} options */
 const failureLines = (result, { withStaleMark }) => [
   ...unknownDifferences(result).filter((line) => withStaleMark || line !== staleMark(result)).map((line) => `difference: ${line}`),
-  ...result.isolation.flatMap(({ phase, drawing, slices }) => slices.map((slice) => `isolation: ${phase} changed ${drawing}.${slice}`))
+  ...result.isolation.flatMap(({ phase, drawing, slices }) => slices.map((slice) => `isolation: ${phase} changed ${drawing}.${slice}`)),
+  ...result.restored.flatMap(({ phase, drawing, slices }) => slices.map((slice) => `restored: ${phase} did not give back ${drawing}.${slice}`)),
+  ...result.health.map(({ phase, problem }) => `health: ${phase}: ${problem}`)
 ];
 
 const attachJson = async (name, value) => {
@@ -931,12 +1017,18 @@ const reportRun = async (page, walk, run, { header, shrink, stepsPath }) => {
     .map((result) => report(result.index, `differences:\n${unknownDifferences(result).map((line) => `  ${line}`).join('\n')}`));
   const isolation = failing.flatMap((result) => result.isolation.map(({ phase, drawing, slices }) => (
     report(result.index, `${phase} changed the ${drawing} drawing's slices: ${slices.join(', ')}`))));
+  const restored = failing.flatMap((result) => result.restored.map(({ phase, drawing, slices }) => (
+    report(result.index, `${phase} did not give back the ${drawing} drawing's slices: ${slices.join(', ')}`))));
+  const health = failing.filter((result) => result.health.length).map((result) => (
+    report(result.index, `health:\n${result.health.map(({ phase, problem }) => `  ${phase}: ${problem}`).join('\n')}`)));
   if (run.error || run.inapplicable) {
     const { index } = run.error || run.inapplicable;
     const cause = run.error ? `the step failed: ${run.error.message}` : `the recorded step cannot apply: ${run.inapplicable.reason}`;
     throw new Error(`${report(index, cause)}`
       + `${mismatches.length ? `\nmismatches before it:\n${mismatches.join('\n')}` : ''}`
-      + `${isolation.length ? `\nisolation failures before it:\n${isolation.join('\n')}` : ''}${logged}`);
+      + `${isolation.length ? `\nisolation failures before it:\n${isolation.join('\n')}` : ''}`
+      + `${restored.length ? `\nstate not given back before it:\n${restored.join('\n')}` : ''}`
+      + `${health.length ? `\nhealth failures before it:\n${health.join('\n')}` : ''}${logged}`);
   }
   for (const result of run.results) {
     const known = KNOWN_MISMATCHES[result.kind];
@@ -994,7 +1086,9 @@ const reportRun = async (page, walk, run, { header, shrink, stepsPath }) => {
   }
   const failures = [
     ...(mismatches.length ? [`${mismatches.length} of ${run.results.length} steps differ from Generate:\n\n${mismatches.join('\n\n')}`] : []),
-    ...(isolation.length ? [`${isolation.length} changes of a drawing a step did not edit:\n\n${isolation.join('\n\n')}`] : [])
+    ...(isolation.length ? [`${isolation.length} changes of a drawing a step did not edit:\n\n${isolation.join('\n\n')}`] : []),
+    ...(restored.length ? [`${restored.length} drawings a step that must give them back did not:\n\n${restored.join('\n\n')}`] : []),
+    ...(health.length ? [`${health.length} steps left a health problem:\n\n${health.join('\n\n')}`] : [])
   ];
   expect(failures.length, `${shrinkReport}${failures.join('\n\n')}${logged}\n`).toBe(0);
 };

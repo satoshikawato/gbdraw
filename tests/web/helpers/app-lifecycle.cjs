@@ -465,16 +465,19 @@ const readErrorSignature = (page) => page.evaluate(() => {
   return error ? JSON.stringify([error.code, error.operation, error.stage, error.summary]) : null;
 });
 
-const assertOperationHealth = async (page, {
-  operation = 'operation',
-  allowUnknown = false,
-  allowPageErrors = false,
-  allowInvalidRunInfo = false,
-  errorSignatureBefore = undefined
-} = {}) => {
-  const unknownDefect = knownDefectOptOut(allowUnknown, 'allowUnknown');
-  const pageErrorDefect = knownDefectOptOut(allowPageErrors, 'allowPageErrors');
-  const runInfoDefect = knownDefectOptOut(allowInvalidRunInfo, 'allowInvalidRunInfo');
+/**
+ * What an operation left in the page: the alert's code and summary (null when
+ * the alert is the one `errorSignatureBefore` names, which an earlier
+ * operation left), the uncaught page errors collected so far, and the NaN or
+ * undefined values of Run Info.
+ * @typedef {{ errorCode: string | null, errorSummary: string, pageErrors: string[], invalidRunInfo: string[] }} OperationHealth
+ */
+/**
+ * @param {import('@playwright/test').Page} page
+ * @param {{ errorSignatureBefore?: string | null }} [options]
+ * @returns {Promise<OperationHealth>}
+ */
+const readOperationHealth = async (page, { errorSignatureBefore = undefined } = {}) => {
   const observed = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const error = app?.errorLog;
@@ -489,12 +492,26 @@ const assertOperationHealth = async (page, {
     && observed.errorSignature !== null
     && observed.errorSignature === errorSignatureBefore;
   const collected = installPageErrorCollection(page);
-  const health = {
+  return {
     errorCode: inheritedError ? null : observed.errorCode,
+    errorSummary: inheritedError ? '' : observed.errorSummary,
     pageErrors: [...collected.pageErrors],
     invalidRunInfo: findInvalidRunInfoValues(observed.lastRunInfo)
   };
-  const rendered = compactJson({ operation, ...health, errorSummary: observed.errorSummary });
+};
+
+const assertOperationHealth = async (page, {
+  operation = 'operation',
+  allowUnknown = false,
+  allowPageErrors = false,
+  allowInvalidRunInfo = false,
+  errorSignatureBefore = undefined
+} = {}) => {
+  const unknownDefect = knownDefectOptOut(allowUnknown, 'allowUnknown');
+  const pageErrorDefect = knownDefectOptOut(allowPageErrors, 'allowPageErrors');
+  const runInfoDefect = knownDefectOptOut(allowInvalidRunInfo, 'allowInvalidRunInfo');
+  const { errorSummary, ...health } = await readOperationHealth(page, { errorSignatureBefore });
+  const rendered = compactJson({ operation, ...health, errorSummary });
   if (!unknownDefect) {
     expect(health.errorCode, `${operation} must not report an UNKNOWN diagnostic:\n${rendered}`)
       .not.toBe('UNKNOWN');
@@ -508,6 +525,43 @@ const assertOperationHealth = async (page, {
       .toEqual([]);
   }
   return health;
+};
+
+// The diagnostic codes that say no producer classified a failure (R6): each
+// is a defect wherever it appears.
+const UNCLASSIFIED_ERROR_CODES = Object.freeze(['UNKNOWN', 'VALIDATION_UNCLASSIFIED']);
+/**
+ * The health problems of the operations since the page's errors were last
+ * taken, one line each, with no opt-out: an UNKNOWN or VALIDATION_UNCLASSIFIED
+ * alert that `errorSignatureBefore` does not name, an uncaught page error, a
+ * console error, and NaN or undefined in Run Info. It takes the page and
+ * console errors (`takePageErrors`), so each call reports only its own. The
+ * random walk checks every step with it, and the audit sweeps every Load and
+ * operation; `assertOperationHealth`, which the shared Generate and Save
+ * helpers call, keeps its opt-outs and does not read console errors.
+ * @param {import('@playwright/test').Page} page
+ * @param {{ errorSignatureBefore?: string | null }} [options]
+ * @returns {Promise<string[]>}
+ */
+const takeOperationHealthProblems = async (page, { errorSignatureBefore = undefined } = {}) => {
+  const health = await readOperationHealth(page, { errorSignatureBefore });
+  const { pageErrors, consoleErrors } = takePageErrors(page);
+  return [
+    ...(UNCLASSIFIED_ERROR_CODES.includes(String(health.errorCode)) ? [`${health.errorCode} diagnostic: ${health.errorSummary}`] : []),
+    ...pageErrors.map((message) => `uncaught page error: ${message}`),
+    ...consoleErrors.map((message) => `console error: ${message}`),
+    ...health.invalidRunInfo.map((value) => `NaN or undefined in Run Info: ${value}`)
+  ];
+};
+/**
+ * Fails when `takeOperationHealthProblems` finds a problem.
+ * @param {import('@playwright/test').Page} page
+ * @param {{ operation: string, errorSignatureBefore?: string | null }} options
+ */
+const assertOperationHealthStrict = async (page, { operation, errorSignatureBefore = undefined }) => {
+  const problems = await takeOperationHealthProblems(page, { errorSignatureBefore });
+  expect(problems, `${operation} must leave no UNKNOWN or VALIDATION_UNCLASSIFIED alert, page or console error, `
+    + 'or NaN or undefined in Run Info').toEqual([]);
 };
 
 const generateAndWaitForResult = async (
@@ -1074,6 +1128,7 @@ module.exports = {
   CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
   assertOperationHealth,
+  assertOperationHealthStrict,
   readErrorSignature,
   assertSessionLoadLeftWorkerIdle,
   assertLegacyLoadConvertedOnce,
@@ -1093,6 +1148,7 @@ module.exports = {
   routeCrossOriginIsolated,
   settleLive,
   snapshotUserOwnedState,
+  takeOperationHealthProblems,
   takePageErrors,
   waitForAppShell,
   waitForPreviewAtRest,

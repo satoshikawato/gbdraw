@@ -26,12 +26,16 @@ export const WALK_KINDS = Object.freeze([
   'fill', 'stroke', 'featureVisibility', 'labelText', 'labelVisibility',
   'visibilityRuleAdd', 'visibilityRuleEdit', 'visibilityRuleRemove', 'colorRuleAdd', 'colorRuleEdit', 'colorRuleRemove',
   'reflow', 'legendRename', 'legendColor', 'legendSort', 'legendSortDefault', 'legendDelete', 'legendRestore', 'legendAdd',
-  'trackData', 'palette', 'undo', 'undoRedo', 'resultSwitch', 'reset', 'load', 'drawingSwitch', 'sequenceSearch'
+  'trackData', 'palette', 'undo', 'undoRedo', 'resultSwitch', 'reset', 'load', 'drawingSwitch', 'sequenceSearch', 'setting'
 ]);
 
 // The kinds that change every drawing by design (PD-OI-090 Reset, Save and
 // Load): a pair across one of them is not an interaction.
 export const BARRIER_KINDS = Object.freeze(['reset', 'load']);
+
+// The kinds whose ordered pairs are targets only at the promotion level; the
+// pull-request level covers them in each popup and Auto Reflow state.
+export const PROMOTION_PAIR_KINDS = Object.freeze(['setting']);
 
 // The fixtures: the shown drawing with its Result, and the other drawing's
 // Result (Linear always draws the one-record file). The name is the fixture's
@@ -121,7 +125,8 @@ export const coverageTargets = (level, required = []) => {
   const pairs = new Set();
   for (const first of WALK_KINDS) {
     for (const second of WALK_KINDS) {
-      if (FIXTURES.some((_, fixtureIndex) => pairFeasibleIn(fixtureIndex, first, second))) pairs.add(pairKey(first, second));
+      if (FIXTURES.some((_, fixtureIndex) => pairFeasibleIn(fixtureIndex, first, second))
+        && (level === 'promotion' || !(PROMOTION_PAIR_KINDS.includes(first) || PROMOTION_PAIR_KINDS.includes(second)))) pairs.add(pairKey(first, second));
     }
   }
   const flags = new Set(WALK_KINDS.flatMap((kind) => FLAG_STATES.map(([popup, reflow]) => flagKey(kind, popup, reflow))));
