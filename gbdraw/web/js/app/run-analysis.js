@@ -238,7 +238,7 @@ import {
 } from '../services/runtime-test-hooks.js';
 import { GROUP_NAMES_SLICE } from '../services/drawing/group-names.js';
 import { FEATURE_EDITS_SLICE } from '../services/drawing/feature-edits.js';
-import { replaceDormantLegendRows, replaceFeatureFills } from '../services/drawing/paint.js';
+import { replaceFeatureFills } from '../services/drawing/paint.js';
 import { ANNOTATION_SETS_SLICE } from '../services/drawing/annotation-sets.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -5515,9 +5515,6 @@ export const createRunAnalysis = ({
         moves: recordMoves
       });
       moveDrawnPaint(candidateCommit.results, withKeptFills(movedPaint, candidateCommit.featureColorOverrides));
-      // OV-120: a source replacement also retires the renames of the Legend
-      // rows the new Result does not draw (as the OV-84 strokes).
-      if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results

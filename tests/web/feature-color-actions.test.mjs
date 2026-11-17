@@ -1062,7 +1062,10 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       ]))
     });
     const stateDormantEntries = ref(dormant.map((entry) => ({ featureIds: [], ...entry })));
-    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf,
+    // History's checkpoint steps the owner runs, by label.
+    const checkpoints = [];
+    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [],
+      runUndoableCheckpoint: (label, fn) => { checkpoints.push(label); return fn(); }, writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
@@ -1098,7 +1101,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       getFeatureElements: () => [],
       getFeatureFillElements: () => []
     });
-    return { renameActions, committed, commitOptions, errorLog, scopeDialog, legendRenameDialog, stateLegendEntries, stateDormantEntries, originalOrder, legendColorOverrides, deleted, derivations };
+    return { renameActions, committed, commitOptions, errorLog, scopeDialog, legendRenameDialog, stateLegendEntries, stateDormantEntries, originalOrder, legendColorOverrides, deleted, derivations, checkpoints };
   };
 
   // A row's name field shows the name the Legend draws (`Shared (1)`), not the
@@ -1264,6 +1267,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual(renamedPalette.committed, [], 'a palette row rename writes no rule');
   assert.deepEqual(namesOf(renamedPalette), [['Coding', 'CDS'], ['GC content', 'GC content']], 'the row is renamed in its place');
   assert.deepEqual(rowNames(renamedPalette), { 'objects.legends.row_names': [['CDS', 'Coding']] }, 'Python draws the name');
+  // The rename is a History step of its own, as the rule commit it replaces was: called without an open step (or in
+  // the Legend tab field's), it is "Rename legend item", and a sized figure's refit and its Undo come from it.
+  assert.deepEqual(renamedPalette.checkpoints, ['Rename legend item'], 'one checkpoint step of the rename');
   // Its key names it back: the name leaf goes.
   await renamedPalette.renameActions.renameLegendEntry(0, 'CDS');
   assert.deepEqual(renamedPalette.committed, [], 'naming it back writes no rule');
@@ -1728,7 +1734,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     if (!renamed) continue;
     // A row without features renames in the Legend only: no rule commit, one
     // rename that Generate replays, and nothing that reaches the target row.
+    // It never wrote rules, so it stays in its caller's History step.
     assert.equal(keptBoth.committed.length, 0, name);
+    assert.deepEqual(keptBoth.checkpoints, [], `${name}: no History step of its own`);
     assert.deepEqual(keptBoth.stateLegendEntries.value.map((entry) => entry.caption),
       captions.map((caption, index) => (index === source ? target : caption)), `${name}: the renamed row keeps its place`);
     const plan = compileDirectEditorMutationPlan({

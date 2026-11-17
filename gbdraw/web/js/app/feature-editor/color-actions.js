@@ -189,6 +189,8 @@ import { msg } from '../../utils/i18n.js';
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureElements The mounted elements of a feature.
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
  * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
+ * @property {(label: string, fn: () => unknown) => unknown} [runUndoableCheckpoint]
+ *   History's checkpoint step (services/history.js): a step of its own, after the open step of a control settles.
  *   Runs a dialog's close at once, or once the History step of the dialog's
  *   choice in flight ends (D-12, OIC-028).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
@@ -293,6 +295,10 @@ const typeDefaultRowRename = ({ listed, dormant }, row, type, name, keepDormant)
   return /** @type {LegendCaption} */ (namesType ? key : name);
 };
 
+// Without History (a test of this owner, a rename in its caller's step), a step's function runs alone.
+/** @param {string} _label @param {() => unknown} fn */
+const WITHOUT_HISTORY = (_label, fn) => fn();
+
 /** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
@@ -304,6 +310,7 @@ export const createFeatureColorActions = ({
   getFeatureElements,
   getFeatureFillElements,
   closeAfterDialogChoice = (close) => { close(); },
+  runUndoableCheckpoint = WITHOUT_HISTORY,
   // R13, D-15: the palette owner's user default colors.
   readUserDefaultColor,
   setDefaultColor,
@@ -942,7 +949,11 @@ export const createFeatureColorActions = ({
         afterCommit: () => updateClickedFeatureLegendState(features, color)
       });
     }
-    return renameLegendRow(drawing, request.sourceKey, caption, features);
+    // A whole palette row's rename is a History step of its own, as the rule commit it replaces was: a Legend tab
+    // rename, its refit on a sized figure, and its Undo come from it. A row without features never wrote rules: its
+    // rename stays in its caller's step.
+    return (namesRowOnly && features.length > 0 ? runUndoableCheckpoint : WITHOUT_HISTORY)(msg('Rename legend item'),
+      renameLegendRow.bind(null, drawing, request.sourceKey, caption, features));
   };
 
   /** @param {LegendRenameRequest} request @param {number} siblingCount */
