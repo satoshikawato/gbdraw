@@ -1576,6 +1576,90 @@ test.describe('Undo and Redo', () => {
         await expectLiveEqualsGenerate(page, { label: `Undo, Redo, and Undo again of ${domain}, Auto Reflow on` });
       });
     }
+    // A label rerender of step R that installs while a Legend drag (step F,
+    // open from the press to the commit after the release) holds the pointer
+    // down: the figure R's rerender replaced is the one from before the drag,
+    // so the Undo of R shows it without the drag's feedback (its
+    // translucency, its moving transform), as Generate draws it.
+    test(`Undo of a Label Off whose rerender installed during a Legend drag shows the figure from before the drag (${mode})`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await open(page, { mode, results: 'single', reflow: 'on' });
+      const id = await featureIdOf(page, 'FL2');
+      const legend = () => page.evaluate(() => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+        .querySelectorAll('[data-gbdraw-composition-role="legend"]')]
+        .map((element) => ({
+          id: element.id, transform: element.getAttribute('transform'),
+          opacity: getComputedStyle(element).opacity, willChange: element.style.willChange
+        })));
+      const start = { moved: await movedLegend(page), legend: await legend() };
+      expect(start.legend.length, 'the figure has a Legend').toBeGreaterThan(0);
+      const steps = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+      const opened = await steps();
+      await holdRerenders(page);
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.locus_tag === 'FL2'), null);
+        await window.Vue.nextTick();
+        app.clickedFeature.labelVisibility = 'off';
+        window.__labelOff = Promise.resolve(app.updateClickedFeatureLabelText());
+      });
+      await rerenderHeld(page);
+      await expect.poll(steps, 'the Label Off is a step before its rerender draws').toBe(opened + 1);
+      await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+      // Press on the Legend and move it; the pointer stays down (`dragLegend` without its release).
+      const mouse = (type, at, buttons) => page.evaluate(({ eventType, x, y, pressed }) => {
+        const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+        const parts = [...svg.querySelectorAll('[data-gbdraw-composition-role="legend"]')];
+        const target = eventType === 'mousedown' ? (parts.find((element) => element.id !== 'length_bar') || parts[0]) : document;
+        target.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, clientX: x, clientY: y, buttons: pressed, view: window }));
+        return new Promise((resolve) => { requestAnimationFrame(resolve); });
+      }, { eventType: type, ...at, pressed: buttons });
+      const point = await page.evaluate(async () => {
+        const app = window.__GBDRAW_APP__;
+        app.layoutRepositionMode = true;
+        await window.Vue.nextTick();
+        const parts = [...app.svgContainer.querySelector('svg').querySelectorAll('[data-gbdraw-composition-role="legend"]')];
+        const box = (parts.find((element) => element.id !== 'length_bar') || parts[0]).getBoundingClientRect();
+        return { x: box.left + Math.min(box.width / 2, 8), y: box.top + Math.min(box.height / 2, 8) };
+      });
+      const moved = { x: point.x + 30, y: point.y + 20 };
+      await mouse('mousedown', point, 1);
+      await mouse('mousemove', moved, 1);
+      const dragFeedback = () => page.evaluate(() => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg').querySelectorAll('*')]
+        .filter((element) => element.style?.opacity === '0.8' || element.style?.willChange === 'transform').length);
+      expect(await dragFeedback(), 'the drag shows on the Legend').toBeGreaterThan(0);
+      // The rerender installs and binds while the pointer is down.
+      await page.evaluate(() => {
+        window.__heldRerenderReplaces = window.__GBDRAW_APP__.results;
+        delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+        window.__heldRerenders.forEach((resolve) => resolve());
+      });
+      await page.waitForFunction(() => window.__GBDRAW_APP__.results !== window.__heldRerenderReplaces
+        && !window.__GBDRAW_APP__.labelReflowProcessing);
+      await page.evaluate(() => new Promise((resolve) => { requestAnimationFrame(() => requestAnimationFrame(resolve)); }));
+      await mouse('mouseup', moved, 0);
+      await evaluateWithRetainedPromise(page, () => window.__labelOff);
+      await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
+      await settleLive(page);
+      expect(await stepAndRead(page, null, id), 'the rerender drew the Label Off').toEqual({ feature: true, labels: [] });
+      // The install replaced the elements the drag moved, so its release moves
+      // nothing and its step records nothing; the Label Off is the last step.
+      expect(await steps(), 'the drag records no step').toBe(opened + 1);
+      const requests = await rerenderRequests(page);
+      await holdRerenders(page);
+      const undo = await stepAndRead(page, 'undo', id);
+      const feedback = await dragFeedback();
+      const atOnce = { moved: await movedLegend(page), legend: await legend() };
+      await releaseRerenders(page);
+      expect(undo, 'Undo of the Label Off').toEqual(SHOWN);
+      expect(await rerenderRequests(page), 'the Undo shows the held figure and asks for no rerender').toBe(requests);
+      expect(feedback, 'no drag feedback on the held figure').toBe(0);
+      expect(atOnce, 'the held figure is the one from before the drag').toEqual(start);
+      expect(await dragFeedback(), 'no drag feedback').toBe(0);
+      expect(await legend(), 'the Legend as it was before the drag').toEqual(start.legend);
+      expect(await movedLegend(page), 'at the place it had').toEqual(start.moved);
+      await expectLiveEqualsGenerate(page, { label: 'the Undo of a Label Off whose rerender installed during a Legend drag' });
+    });
     // A label rerender of step R that installs while a Default colors pick
     // (step F, open from its first `input` to its `change`) has changed the
     // applied palette: the figures R holds carry that palette in their slot.
