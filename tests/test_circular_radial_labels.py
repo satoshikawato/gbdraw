@@ -235,9 +235,12 @@ def test_candidate_extraction_runs_once_across_inner_radius_preflight(
     assert calls == 1
 
 
-# The ribosomal protein cluster under ycf2 in the rotated tobacco plastome (docs recipe H-CLI-14, OV-3648).
-_TOBACCO_SOUTH_CLUSTER = {
-    "rpoA", "rps11", "rpl36", "rps8", "rpl14", "rpl16", "rps3", "rpl22", "rps19", "rpl2", "rpl23", "tRNA-Ile",
+# The ribosomal protein cluster under ycf2 in the rotated tobacco plastome (docs recipe H-CLI-14, OV-3648): rpoA,
+# rps11, rpl36, rps8, rpl14, rpl16, rps3, rpl22, rps19, rpl2, rpl23 and tRNA-Ile, by feature id (the inverted-repeat
+# copies of rpl2, rpl23, rps19 and tRNA-Ile carry other ids).
+_TOBACCO_SOUTH_FEATURE_IDS = {
+    "fab2c2b1d", "f46c497f8", "f7cae9638", "fbaf469e4", "ff70975fb", "f2126f55f",
+    "f7371cc8d", "f33c446c4", "f3d0f7434", "f2c0d3c71", "f4e9aae7d", "fc77059df",
 }
 
 
@@ -305,10 +308,9 @@ def test_rotated_tobacco_plastome_keeps_its_south_inner_labels_over_their_featur
 
     cluster = [
         label for label in results[-1].labels
-        if label.get("is_inner") and label["label_text"] in _TOBACCO_SOUTH_CLUSTER
-        and 170.0 <= float(label["preferred_angle_deg"]) <= 195.0
+        if label["feature_id"] in _TOBACCO_SOUTH_FEATURE_IDS
     ]
-    assert len(cluster) == len(_TOBACCO_SOUTH_CLUSTER)
+    assert len(cluster) == len(_TOBACCO_SOUTH_FEATURE_IDS)
     offsets = [
         ((float(label["placed_angle_deg"]) - float(label["preferred_angle_deg"]) + 180.0) % 360.0) - 180.0
         for label in cluster
