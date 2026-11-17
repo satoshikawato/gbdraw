@@ -1,6 +1,7 @@
-// OV-282 (D-26): a Legend row of Python's holds no color but the user's
-// Legend color; Python's swatch is the Result's (`originalLegendColors`), and
-// the palette, the rules and the slots derive what a row shows. The writer
+// OV-282 (D-26, V-OD22): a Legend row of Python's holds no color; Python's
+// swatch is the Result's (`originalLegendColors`), the user's Legend color is
+// `legendColorOverrides`', and the palette, the rules and the slots derive
+// what a row shows. An editor row holds its own color. The writer
 // (`listLegendRows` through `extractLegendEntries`), Save (`captureLegendPaint`),
 // Load (`normalizeEditorStateData`) and the reader of a drawing that is not
 // shown (`keptLegendRowColors`) keep to that one owner per value.
@@ -41,7 +42,7 @@ const drawnResult = () => {
   return new Node('svg', {}, [legend]);
 };
 
-test('a Generate lists the rows of Python\'s with no color but the user\'s, and Save writes no swatch', () => {
+test('a Generate lists the rows of Python\'s with no color, and Save writes neither a swatch nor a user color', () => {
   const svg = drawnResult();
   const state = withDrawings({
     results: ref([{ name: 'r.svg', content: 'unchanged' }]), selectedResultIndex: ref(0),
@@ -59,11 +60,51 @@ test('a Generate lists the rows of Python\'s with no color but the user\'s, and 
   actions.extractLegendEntries({ replaceGeneratedInventory: true });
   const saved = captureLegendPaint(state.activeDrawing().slices.paint).legendEntries;
   assert.deepEqual(saved.map((entry) => [entry.originalCaption, Object.hasOwn(entry, 'color') ? entry.color : null]), [
-    ['CDS', null], ['tRNA', '#ff8800'], ['Mine', '#123456']
-  ], 'the CDS row holds no swatch; the user-colored row its Legend color; the editor row its own');
+    ['CDS', null], ['tRNA', null], ['Mine', '#123456']
+  ], 'the rows of Python\'s hold no color, the user-colored one neither; the editor row its own');
   assert.deepEqual(state.originalLegendColors.value, { CDS: '#84b9ec', tRNA: '#ddce76' }, 'Python\'s swatches are the Result\'s');
   const shown = displayedLegendRowColors(state, state.activeDrawing(), []);
   assert.deepEqual(state.activeDrawing().legendEntries.value.map((entry) => shown.listed(entry)), ['#84b9ec', '#ff8800', '#123456']);
+});
+
+// V-OD22: the user's Legend color of a row of Python's has one owner, the
+// drawing's `legendColorOverrides`; a recolor writes no copy into the row, and
+// a Session saved after it shows the user's color after Load.
+test('a recolored row of Python\'s holds no color, its override does, and Load shows it', () => {
+  const svg = drawnResult();
+  const state = withDrawings({
+    results: ref([{ name: 'r.svg', content: 'unchanged' }]), selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
+    displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+    legendEntries: ref([{ caption: 'Mine', originalCaption: 'Mine', color: '#123456', featureIds: [] }]),
+    deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+    originalLegendOrder: ref([]), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: {}, manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false), svgContent: ref(null)
+  });
+  const actions = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors(state, drawing, []) });
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  const drawing = state.activeDrawing();
+  assert.equal(actions.updateLegendEntryColor(0, '#00aa00'), true);
+  assert.equal(actions.updateLegendEntryColor(2, '#654321'), true);
+  const colors = (list) => list.map((entry) => [entry.originalCaption, Object.hasOwn(entry, 'color') ? entry.color : null]);
+  assert.deepEqual(colors(captureLegendPaint(drawing.slices.paint).legendEntries), [['CDS', null], ['tRNA', null], ['Mine', '#654321']]);
+  // A deleted row is kept as it was listed: no copy either.
+  assert.notEqual(actions.deleteLegendEntry(1), false);
+  const paint = captureLegendPaint(drawing.slices.paint);
+  assert.deepEqual(colors(paint.legendEntries), [['CDS', null], ['Mine', '#654321']]);
+  assert.deepEqual(colors(paint.deletedLegendEntries), [['tRNA', null]]);
+  assert.deepEqual(paint.legendColorOverrides, { CDS: '#00aa00', Mine: '#654321' });
+  const repairs = [];
+  const { legend } = normalizeEditorStateData({ legend: {
+    entries: paint.legendEntries, deletedEntries: paint.deletedLegendEntries, originalOrder: [...state.originalLegendOrder.value],
+    originalColors: { ...state.originalLegendColors.value }, colorOverrides: paint.legendColorOverrides
+  } }, { repairs });
+  assert.deepEqual(repairs, []);
+  assert.deepEqual(colors(legend.entries), [['CDS', null], ['Mine', '#654321']]);
+  const shown = keptLegendRowColors({ legendColorOverrides: legend.colorOverrides }, legend);
+  assert.deepEqual(legend.entries.map((entry) => shown.listed(entry)), ['#00aa00', '#654321']);
+  assert.deepEqual(legend.deletedEntries.map((entry) => shown.deleted(entry)), ['#ddce76']);
 });
 
 // OV-1725: each extraction writes Python's swatch of every row the Result
@@ -113,11 +154,11 @@ const storedLegend = () => ({
   colorOverrides: { tRNA: '#ff8800' }
 });
 
-test('Load keeps an entry\'s color only for an editor row and a user color, and reads an entry without one', () => {
+test('Load keeps an entry\'s color only for an editor row, and reads an entry without one', () => {
   const repairs = [];
   const { legend } = normalizeEditorStateData({ legend: storedLegend() }, { repairs });
   const colors = (list) => list.map((entry) => [entry.originalCaption, Object.hasOwn(entry, 'color') ? entry.color : null]);
-  assert.deepEqual(colors(legend.entries), [['CDS', null], ['tRNA', '#ff8800'], ['Mine', '#123456'], ['Plain', null]]);
+  assert.deepEqual(colors(legend.entries), [['CDS', null], ['tRNA', null], ['Mine', '#123456'], ['Plain', null]]);
   assert.deepEqual(colors(legend.deletedEntries), [['rRNA', null]]);
   assert.deepEqual(repairs, [], 'a recorded swatch is no loss');
   // An editor row without a color it can draw is still dropped and listed.
@@ -126,14 +167,18 @@ test('Load keeps an entry\'s color only for an editor row and a user color, and 
     { repairs: lost });
   assert.deepEqual(read.legend.entries, []);
   assert.deepEqual(lost.map((repair) => [repair.code, repair.label]), [['legend-color-dropped', 'Bad']]);
-  // A dormant row is a renamed row of Python's (OV-120): its copy is discarded too. A swatch copy Load cannot read
-  // is no loss; a stored color the user's Legend color replaces, which Save writes again, is listed (G2).
+  // A dormant row is a renamed row of Python's (OV-120): its copy is discarded too. A stored color of a row of
+  // Python's is a copy (V-OD22), whatever it holds and whether or not the user colored the row: no loss. A stored
+  // color of an editor row that the user's Legend color replaces, which Save writes again, is listed (G2).
   const kept = [];
   const copies = normalizeEditorStateData({ legend: { ...storedLegend(),
-    entries: [{ caption: 'C', originalCaption: 'CDS', color: 'url(x)' }, { caption: 'Mine', originalCaption: 'Mine', color: 'url(x)' }],
+    entries: [
+      { caption: 'C', originalCaption: 'CDS', color: 'url(x)' }, { caption: 'tRNA', originalCaption: 'tRNA', color: 'url(x)' },
+      { caption: 'rRNA', originalCaption: 'rRNA', color: '#123123' }, { caption: 'Mine', originalCaption: 'Mine', color: 'url(x)' }
+    ],
     dormantEntries: [{ caption: 'Renamed', originalCaption: 'Gone', color: '#999999' }],
-    colorOverrides: { Mine: '#00ff00' } } }, { repairs: kept });
-  assert.deepEqual(colors(copies.legend.entries), [['CDS', null], ['Mine', '#00ff00']]);
+    colorOverrides: { tRNA: '#ff8800', rRNA: '#ff0000', Mine: '#00ff00' } } }, { repairs: kept });
+  assert.deepEqual(colors(copies.legend.entries), [['CDS', null], ['tRNA', null], ['rRNA', null], ['Mine', '#00ff00']]);
   assert.deepEqual(colors(copies.legend.dormantEntries), [['Gone', null]]);
   assert.deepEqual(kept.map((repair) => [repair.code, repair.label]), [['legend-color-dropped', 'Mine']]);
 });

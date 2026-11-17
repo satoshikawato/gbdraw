@@ -33,22 +33,22 @@ import {
   getAllFeatureLegendGroups,
   isLegendOrderEdited,
   legendRowKeys,
+  ownLegendColor,
   recordedLegendOrder,
   rekeyLegendRecords,
   resultLegendRows,
-  shownLegendRowNames
+  shownLegendRowNames,
+  withOwnLegendColor
 } from '../../services/legend-svg.js';
 import {
   deleteLegendRow,
   legendEntryKey,
-  ownLegendColor,
   recolorLegendRows,
   rekeyLegendPaint,
   replaceDormantLegendRows,
   replaceLegendRows,
   restoreLegendRows,
-  setLegendColor,
-  withOwnLegendColor
+  setLegendColor
 } from '../../services/drawing/paint.js';
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
@@ -87,7 +87,7 @@ const withDrawnSwatches = (colors, swatches) => {
   return drawn.length > 0 ? { ...colors, ...Object.fromEntries(drawn) } : colors;
 };
 
-// A deleted row as Restore returns it (OV-282): a row of Python's holding only the user's Legend color, so it
+// A deleted row as Restore returns it (OV-282): a row of Python's holding no color (V-OD22), so it
 // shows the color Generate gives it (`displayedLegendRowColors`); an editor row its rule's current color (a rule
 // commit recolors only the listed rows), else its own.
 /**
@@ -667,9 +667,9 @@ export const createLegendEntryActions = ({
    * under the keys they show (B19 reads the list a Result showed). Also the
    * generated captions: the keys of the listed rows of Python's. A row of a
    * drawn track the intent hides (`hidden`) is not listed, as the live
-   * compile deletes it (OV-1198). A listed row of Python's holds the user's
-   * Legend color of its key (`overrides`) and no other; an editor row, the
-   * color it shows (`ownLegendColor`, OV-282).
+   * compile deletes it (OV-1198). A listed row of Python's holds no color: its
+   * user's Legend color is its key's in `overrides` (V-OD22), which also tells
+   * an edited swatch from Python's; an editor row holds the color it shows (OV-282).
    * @param {SVGSVGElement} svg
    * @param {{ entries: readonly EntryRecord[], dormant?: readonly EntryRecord[], deleted?: readonly EntryRecord[],
    *   inventory?: string[], hidden?: readonly string[], overrides: Readonly<Record<string, string>>, asShown?: boolean }} intent
@@ -723,8 +723,7 @@ export const createLegendEntryActions = ({
         if (!named && !asShown) return;
       } else {
         const key = named ? legendEntryKey(named) : row.key;
-        const own = ownLegendColor(key, { python: true, overrides });
-        swatches.set(key, pythonSwatch(row, own));
+        swatches.set(key, pythonSwatch(row, ownLegendColor(key, { python: true, overrides })));
         if (!asShown && deletedKeys.has(key)) return;
         // Python drew the row of a hidden track: it stays in the inventory.
         if (!asShown && hiddenKeys.has(key)) {
@@ -736,7 +735,7 @@ export const createLegendEntryActions = ({
           || intentEntry((each) => legendEntryKey(each) === key);
         generatedCaptions.add(key);
         const item = {
-          caption, originalCaption: key, ...(own ? { color: own } : {}), xPos: row.xPos, yPos: row.yPos, featureIds: entry?.featureIds || []
+          caption, originalCaption: key, xPos: row.xPos, yPos: row.yPos, featureIds: entry?.featureIds || []
         };
         listed.push(item);
         if (!asShown && !row.shown && !row.merged && known.has(key)) unshown.add(item);
@@ -808,9 +807,8 @@ export const createLegendEntryActions = ({
       if (!caption || !originalCaption || caption === originalCaption || drawnOriginals.has(originalCaption)
         || deleted.has(originalCaption) || seen.has(originalCaption)) return [];
       seen.add(originalCaption);
-      // A dormant row is Python's: it holds only the user's Legend color of its key (OV-282).
-      return [withOwnLegendColor({ caption, originalCaption, color: entry.color, featureIds: [] }, legendEntryKey({ originalCaption }),
-        { python: true, overrides: drawing.legendColorOverrides })];
+      // A dormant row is Python's: it holds no color (V-OD22).
+      return [{ caption, originalCaption, featureIds: [] }];
     });
   };
 
@@ -1007,7 +1005,7 @@ export const createLegendEntryActions = ({
   // stands for, `legendRowKeys`).
   /** @param {DrawingState} drawing @param {readonly PythonLegendKey[]} keys @param {string} color @param {{ inherit?: readonly PythonLegendKey[] }} [options] */
   const writeLegendRowColor = (drawing, keys, color, { inherit = [] } = {}) => {
-    recolorLegendRows(drawing.slices.paint, keys, color);
+    recolorLegendRows(drawing.slices.paint, keys, color, originalLegendOrder.value);
     // The rows of `inherit` follow their type's default color again: no Legend color of their own.
     inherit.forEach((key) => setLegendColor(drawing.slices.paint, key, null));
   };

@@ -929,8 +929,8 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   reconcileMountedResult(mounted, { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [added] });
   const paint = PAINT_SLICE.create();
   PAINT_SLICE.install(paint.handle, { legendEntries: [
-    { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
-    { caption: 'CDS', originalCaption: 'GC content', color: '#aaaaaa' }
+    { caption: 'CDS', originalCaption: 'CDS' },
+    { caption: 'CDS', originalCaption: 'GC content' }
   ] });
   const drawing = { manualSpecificRules: [], ...paint.view, slices: { paint: paint.handle } };
   const strokeOptionsOpen = new Set();
@@ -954,10 +954,12 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   assert.deepEqual([...strokeOptionsOpen], ['GC content']);
   assert.deepEqual(drawing.legendEntries.value.map((entry) => strokes.isLegendStrokeOptionsOpen(entry)), [false, true]);
   owner.deleteLegendEntry(1);
+  // An old copy of its swatch in the kept row is no color of its (V-OD22).
   drawing.deletedLegendEntries.value[0].color = '#aaaaaa';
   owner.restoreDeletedLegendEntries();
-  assert.deepEqual(drawing.legendEntries.value.map(({ originalCaption, color }) => [originalCaption, color]),
-    [['CDS', '#0000ff'], ['GC content', '#ff0000']], 'a row returns in the color stored under its key');
+  const shown = displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []);
+  assert.deepEqual(drawing.legendEntries.value.map((entry) => [entry.originalCaption, Object.hasOwn(entry, 'color'), shown.listed(entry)]),
+    [['CDS', false, '#0000ff'], ['GC content', false, '#ff0000']], 'a row returns in the color stored under its key, which it holds no copy of');
 });
 
 // OV-345: a reconcile says whether it changed the Result, so a display,

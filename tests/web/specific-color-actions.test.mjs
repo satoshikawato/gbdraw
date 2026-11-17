@@ -774,9 +774,10 @@ test('the Legend editor recolors every row a merged row stands for, a rule row t
     svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000', { display: 'none', 'data-legend-merged': 'CDS' }]]),
     displayedResultMetadata: () => null, extractedFeatures: ref([]),
     results: ref([]), selectedResultIndex: ref(0),
+    // Rows of Python's hold no color (V-OD22): CDS's Legend color is its override.
     legendEntries: ref([
-      { caption: 'CDS', originalCaption: 'CDS', color: '#ff0000' },
-      { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }
+      { caption: 'CDS', originalCaption: 'CDS' },
+      { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]' }
     ]),
     originalLegendOrder: ref(['CDS', 'CDS [#ff0000]']), deletedLegendEntries: ref([]), originalLegendColors: ref({}),
     legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#ff0000' }, adv: {}
@@ -791,7 +792,7 @@ test('the Legend editor recolors every row a merged row stands for, a rule row t
   assert.equal(legend.updateLegendEntryColor(0, '#00ff00'), true);
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
   assert.deepEqual(state.legendColorOverrides, { CDS: '#00ff00' }, 'the other key\'s Legend color, in the rule commit');
-  assert.equal(state.legendEntries.value[0].color, '#00ff00');
+  assert.equal(Object.hasOwn(state.legendEntries.value[0], 'color'), false, 'the row holds no copy of it (V-OD22)');
 });
 
 // Review N-1 of #1051 (D-35): the feature popup's "Legend item" scope edits the

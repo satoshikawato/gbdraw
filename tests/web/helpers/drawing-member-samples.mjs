@@ -437,7 +437,8 @@ export const MEMBER_SAMPLES = {
   featureStrokeOverrides: { value: () => ({ 'record-1\u0000CDS_1': { strokeColor: '#654321', strokeWidth: 2 } }) },
   legendEntries: { value: () => [{ caption: 'Renamed CDS', originalCaption: 'CDS', color: '#abcdef', featureIds: [] }] },
   deletedLegendEntries: { value: () => [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#fedcba', featureIds: [] }] },
-  dormantLegendEntries: { value: () => [{ caption: 'Coverage', originalCaption: 'depth', color: '#111111', featureIds: [] }] },
+  // A dormant row is Python's: it holds no color (V-OD22).
+  dormantLegendEntries: { value: () => [{ caption: 'Coverage', originalCaption: 'depth', featureIds: [] }] },
   legendColorOverrides: { value: () => ({ CDS: '#abcdef' }) },
   legendStrokeOverrides: { value: () => ({ CDS: { strokeColor: '#222222', strokeWidth: 1.5 } }) },
   addedLegendCaptions: { value: () => ['Kinase'] },

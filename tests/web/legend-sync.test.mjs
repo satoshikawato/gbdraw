@@ -1210,10 +1210,11 @@ const mockLegendEntry = (caption, color, x) => {
   svg.appendChild(legend);
   merged.children.forEach((child) => child.setAttribute('stroke', '#999999'));
   featureLegend.children[0].querySelector('path').setAttribute('stroke', '#999999');
+  // Rows of Python's, as Session 51 lists them: no color (V-OD22).
   const entries = () => [
-    { caption: 'Alpha', originalCaption: 'Alpha', color: '#112233', featureIds: [] },
-    { caption: 'Alpha', originalCaption: 'Beta', color: '#112233', featureIds: [] },
-    { caption: 'Gamma', originalCaption: 'Gamma', color: '#445566', featureIds: [] }
+    { caption: 'Alpha', originalCaption: 'Alpha', featureIds: [] },
+    { caption: 'Alpha', originalCaption: 'Beta', featureIds: [] },
+    { caption: 'Gamma', originalCaption: 'Gamma', featureIds: [] }
   ];
   const state = {
     results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
@@ -1237,7 +1238,7 @@ const mockLegendEntry = (caption, color, x) => {
   const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
   assert.equal(actions.updateLegendEntryColor(0, '#ff0000'), true);
   assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000' }, 'the color reaches both keys');
-  assert.deepEqual(state.legendEntries.value.map((entry) => entry.color), ['#ff0000', '#ff0000', '#445566']);
+  assert.equal(state.legendEntries.value.some((entry) => Object.hasOwn(entry, 'color')), false, 'the rows hold no copy of it (V-OD22)');
   assert.equal(actions.updateLegendEntryColor(2, '#00ff00'), true);
   assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000', Gamma: '#00ff00' }, 'a row that merges none: its key');
   assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);

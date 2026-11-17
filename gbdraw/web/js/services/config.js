@@ -214,9 +214,9 @@ import { storedLeafKey } from './stored-leaf-readings.js';
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { NO_DRAWN_FEATURES, applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
-import { rekeyLegendRecords } from './legend-svg.js';
+import { recordedLegendColor, rekeyLegendRecords } from './legend-svg.js';
 import { editorStateOfLegendEditLeaves, readLegendEditLeaves } from './legend-draft-rows.js';
-import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, legendEntryKey, ownLegendColor } from './drawing/paint.js';
+import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, legendEntryKey } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { SettingsSlice } from './drawing/settings.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
@@ -740,13 +740,14 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
 /** @param {unknown} value */
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
-// An entry keeps the color it owns (`ownLegendColor`, OV-282): a row of
-// Python's (a key of the stored inventory `inventory`) the user's Legend color
-// of its key (`overrides`, read already) and no other, so the swatch a Session
-// written before Session 51 recorded is not read; an editor row its stored
-// color, read with the Default colors domain (D-41). An entry without a color
-// is read; one whose color lies outside that domain and is no row of Python's
-// is dropped and, when `repairs` is given, listed there for the Load dialog
+// An entry keeps the color its record holds (`recordedLegendColor`, OV-282,
+// V-OD22): a row of Python's (a key of the stored inventory `inventory`) none,
+// so the copy of its swatch or of its user color (`overrides`, read already)
+// that a Session written before Session 51 recorded is not read; an editor row
+// its stored color, read with the Default colors domain (D-41), which the
+// user's Legend color of its key replaces. An entry without a color is read;
+// one whose color lies outside that domain and is no row of Python's is
+// dropped and, when `repairs` is given, listed there for the Load dialog
 // (D-43) under `path`, the stored Legend. A list holds one entry
 // per row key (Session 47: two rows may show one name); a Session 46 or older
 // kept the first entry of each caption (OV-719). A later entry of one row is
@@ -788,11 +789,11 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
     // A dormant row is a renamed row of Python's that the Result does not draw (OV-120).
     const python = from === 'dormantEntries' || inventory.has(legendEntryKey(entry));
     const storedColor = normalizeDefaultColor(entry.color);
-    const color = ownLegendColor(legendEntryKey(entry), { python, overrides, color: storedColor });
+    const color = recordedLegendColor(legendEntryKey(entry), { python, overrides, color: storedColor });
     // An entry without a color is a row of Python's as Session 51 writes it, also where Load reads it without the
     // inventory (a drawing's paint apart from its set's); an editor row whose color Load cannot read is not drawn.
-    // A row of Python's loses no color: its stored one is a copy of its swatch, or of its user color, which replaces
-    // the stored one that Save writes again (listed when Load cannot read it).
+    // A row of Python's loses no color: its stored one is a copy of its swatch or of its user color. An editor row's
+    // unreadable color that its user color replaces, which Save writes again, is listed.
     const readable = python || Boolean(color) || isUnsetValue(entry.color);
     if (!caption && Object.values(entry).some((field) => !isUnsetValue(field))) countUnread(from);
     if (caption && !readable && !keys.has(key)) dropped.push({ list: from, caption, key });
