@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from gbdraw.svg.elements import ClipPath, Group, Line, Path, Rect, Text
 
+from ....auto_sizes import scalar_axis_tick_font_size_px
 from ....layout.linear_coords import normalize_position_to_linear_track
 from ....layout.record_coordinates import RecordDisplayTransform
 from ....layout.scalar_axis import (
@@ -16,7 +17,6 @@ from ....layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_TICK_PX,
     ScalarAxis,
     ScalarRow,
-    linear_scalar_axis_tick_font_size_px,
 )
 from ....svg.ids import stable_svg_id
 from ....svg.linear_tracks import LinearTrackFrame, linear_series_path_desc
@@ -58,7 +58,7 @@ def _axis_group(axis: ScalarAxis, frame: LinearTrackFrame, axis_group_id: str) -
     axis_group = Group(id=axis_group_id)
     axis_group.add(_axis_line((start_x, baseline_y), (_track_end_x(frame), baseline_y)))
     axis_group.add(_axis_line((start_x, start_y), (start_x, baseline_y)))
-    font_size = linear_scalar_axis_tick_font_size_px(axis.style, track_height)
+    font_size = scalar_axis_tick_font_size_px("linear", axis.style, track_height)
     labels = axis.labels(track_height, font_size)
     label_x = start_x - LINEAR_SCALAR_AXIS_TICK_PX - LINEAR_SCALAR_AXIS_LABEL_GAP_PX
     for value in axis.small_tick_values(labels):

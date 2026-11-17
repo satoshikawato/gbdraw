@@ -1715,25 +1715,19 @@ def _primary_radial_half_stroke_px(
     skew_config: GcSkewConfigurator,
     depth_config: DepthConfigurator | None,
 ) -> float:
-    """Return conservative stroke safety for radial record/track geometry."""
+    """Return conservative stroke safety for radial record/track geometry: half the widest stroke, and for a series
+    track half its stroke only when it paints (``stroke_pad_px``, the rule of the series' own room)."""
     cfg = canvas_config.profile.config
-    widths = [
-        float(
-            cfg.objects.axis.circular.stroke_width.for_length_param(
-                canvas_config.length_param
-            )
-        ),
-        float(feature_config.block_stroke_width),
-        float(feature_config.line_stroke_width),
-        float(gc_config.series_paint.stroke_width),
-        float(skew_config.series_paint.stroke_width),
-    ]
+    series = [gc_config.series_paint, skew_config.series_paint]
     if depth_config is not None:
-        widths.append(float(depth_config.series_paint.stroke_width))
-    conservation = getattr(cfg.objects, "conservation", None)
-    if conservation is not None:
-        widths.append(float(getattr(conservation, "stroke_width", 0.0)))
-    return 0.5 * max(widths, default=0.0)
+        series.append(depth_config.series_paint)
+    return max(
+        0.5 * float(cfg.objects.axis.circular.stroke_width.for_length_param(canvas_config.length_param)),
+        0.5 * float(feature_config.block_stroke_width),
+        0.5 * float(feature_config.line_stroke_width),
+        0.5 * float(cfg.objects.conservation.stroke_width),
+        *(stroke_pad_px(paint.stroke, paint.stroke_width) for paint in series),
+    )
 
 
 def _collect_circular_primary_bounds(

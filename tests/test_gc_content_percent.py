@@ -383,6 +383,32 @@ def test_a_linear_series_slot_keeps_room_only_for_a_stroke_it_paints(track, stro
     assert band["bottomPx"] - band["topPx"] == pytest.approx(slots[track]["heightPx"] + stroke_px)
 
 
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_series_stroke_that_paints_nothing_adds_no_figure_room(mode) -> None:
+    # OV-3744: the figure bounds of both modes counted half a series track's stroke width even when its colour is
+    # ``none``; a wide invisible stroke grew the figure. The bounds read ``stroke_pad_px``, as the series' own room does.
+    record = _make_record(length=2000)
+    record.annotations["topology"] = "circular"
+
+    def size(color: str, width: float) -> tuple[str, str]:
+        cfg = apply_config_overrides(
+            None,
+            {"canvas.show_gc": True, "objects.gc_content.stroke_color": color, "objects.gc_content.stroke_width": width},
+        )
+        if mode == "circular":
+            canvas = assemble_circular_diagram_from_record(
+                record, CircularAssemblyInputs(legend="none", cfg=cfg, window=20, step=20)
+            )
+        else:
+            canvas = assemble_linear_diagram_from_records(
+                [record], LinearAssemblyInputs(legend="none", cfg=cfg, window=20, step=20)
+            )
+        return canvas["width"], canvas["height"]
+
+    assert size("none", 40.0) == size("none", 0.0)
+    assert size("#000000", 40.0) != size("none", 0.0)
+
 def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
     circular_svg = assemble_circular_diagram_from_record(
         _make_record(),

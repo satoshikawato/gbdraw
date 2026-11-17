@@ -45,7 +45,7 @@ from ...analysis.depth_tracks import (
     representative_depth_tracks,
     sync_depth_track_legend_entries,
 )
-from ...auto_sizes import gc_axis_takes_depth_font, linear_tick_interval
+from ...auto_sizes import gc_axis_takes_depth_font, linear_tick_interval, scalar_axis_tick_font_size_px
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import (
     GbdrawConfig,
@@ -158,7 +158,6 @@ from ...linear_comparison import (
     search_frame_linear_comparisons,
     validate_linear_comparison_record_ids,
 )
-from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
     LINEAR_SCALAR_AXIS_STROKE_PX,
@@ -859,7 +858,7 @@ def _gc_config_matching_linear_depth_axis_font_size(
         return gc_config
 
     cloned = copy.copy(gc_config)
-    cloned.tick_font_size = linear_scalar_axis_tick_font_size_px(depth_axis_style, depth_height)
+    cloned.tick_font_size = scalar_axis_tick_font_size_px("linear", depth_axis_style, depth_height)
     return cloned
 
 
@@ -943,7 +942,7 @@ def _axis_text_overhang(axis: ScalarAxisStyle | None, track_height: float) -> fl
     axis_stroke = 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX
     if not axis.draws_numbered_labels:
         return axis_stroke
-    return max(axis_stroke, 0.5 * linear_scalar_axis_tick_font_size_px(axis, track_height))
+    return max(axis_stroke, 0.5 * scalar_axis_tick_font_size_px("linear", axis, track_height))
 
 
 def _stroke_overhang(paint: SeriesPaint) -> float:
@@ -1728,7 +1727,7 @@ def _linear_scalar_axis_left_room(
             axis = gc_content_axis(gc_config_of(slot.params, depth_by_index))
         if axis is None:
             continue
-        font_size = linear_scalar_axis_tick_font_size_px(axis.style, float(slot.height))
+        font_size = scalar_axis_tick_font_size_px("linear", axis.style, float(slot.height))
         axis_labels = axis.labels(float(slot.height), font_size)
         axis_px = max(axis_px, 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX)
         texts = [tick.label for tick in axis_labels.ticks] + [axis_labels.range_label]
@@ -1912,13 +1911,13 @@ def _collect_linear_primary_bounds(
     axis_stroke = cfg.objects.axis.linear.stroke_width.for_length_param(
         canvas_config.length_param
     )
-    half_stroke = 0.5 * max(
+    half_stroke = max(
         0.0,
-        float(axis_stroke),
-        float(feature_config.block_stroke_width),
-        float(feature_config.line_stroke_width),
-        float(gc_config.series_paint.stroke_width),
-        float(skew_config.series_paint.stroke_width),
+        0.5 * float(axis_stroke),
+        0.5 * float(feature_config.block_stroke_width),
+        0.5 * float(feature_config.line_stroke_width),
+        _stroke_overhang(gc_config.series_paint),
+        _stroke_overhang(skew_config.series_paint),
     )
     horizontal_offset = float(canvas_config.horizontal_offset)
     bounds: list[Aabb] = []
