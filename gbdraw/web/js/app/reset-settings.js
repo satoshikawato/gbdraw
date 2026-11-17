@@ -110,7 +110,7 @@ export const createDrawingReset = ({
  * @property {(keys: string[]) => void} drawReturningLegendRows
  * @property {readonly string[]} STROKE_DOMAINS The paint domains a stroke edit shows.
  * @property {() => void} resetAllPositions
- * @property {() => void} resetCanvasPadding
+ * @property {() => void} resetCanvasPadding Resets the shown drawing's canvas padding and shows it on the displayed Result.
  * @property {(options?: { resetZoom?: boolean }) => void} resetPreviewViewport
  * @property {() => void} dismissNotice
  * @property {() => void} closeSettingsPopup
@@ -196,6 +196,9 @@ export const createResetSettings = ({
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       resetDrawings();
       if (shown) {
+        // The canvas padding the reset returned to a new drawing's (OV-3707), on the displayed Result; the reset
+        // of the slice it repeats changes nothing. A drawing not shown shows its own when its Result is next shown.
+        resetCanvasPadding();
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({
           colors: paletteColorsEqual(appliedPaletteColors.value, palette),

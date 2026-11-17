@@ -21,6 +21,7 @@ import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { resetPaintEdits } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
 import { INPUTS_SLICE } from './drawing/inputs.js';
+import { CANVAS_SLICE } from './drawing/canvas.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 
@@ -169,6 +170,9 @@ export const resetSettings = (state, drawing) => {
   // (OV-1267, D-15-78): a card that stayed would name a table its rules no
   // longer hold. The drawing's other input bindings stay.
   INPUTS_SLICE.reset(drawing.slices.inputs);
+  // The canvas padding is a setting of the drawing (R15, OV-3707): the caller
+  // shows it on the displayed Result.
+  CANVAS_SLICE.reset(drawing.slices.canvas);
   resetEditorDraftState(drawing);
   return resetPaletteState(state, drawing);
 };
