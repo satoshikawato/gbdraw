@@ -10630,15 +10630,19 @@ approval is quoted in the Revision #2108 entry of `PD-OI-2108`.
 ### PD-OI-089: Default colors a user edits win over the palette
 
 - Concern key: `web.default-colors-over-palette`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-089`, scenario revision `1`
-  (`A / USER_DEFAULT_COLORS_OVER_PALETTE`), only by renaming one option of
-  the Color/Stroke Change Scope dialog; every scenario-1 term stays in force.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-089`, scenario revision `2` (its Revision #2110 entry
+  below). Scenario revision `3` keeps every term of scenario revisions `1`
+  and `2` and adds the outcome of a rename of a Legend row that no Specific
+  color rule draws (`B / TYPE_DEFAULT_ROW_NAME`). Scenario revision `2`
+  superseded scenario revision `1` (`A / USER_DEFAULT_COLORS_OVER_PALETTE`),
+  only by renaming one option of the Color/Stroke Change Scope dialog; every
+  scenario-1 term stays in force.
 - Status: `ACCEPTED`
 - Selected outcomes: `A / USER_DEFAULT_COLORS_OVER_PALETTE` (scenario revision
-  `1`) and the label change of scenario revision `2`, whose receipt names no
-  choice code
-- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  `1`), the label change of scenario revision `2`, whose receipt names no
+  choice code, and `B / TYPE_DEFAULT_ROW_NAME` (scenario revision `3`)
+- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts and
   their nine-field JSON representations below, read together. Where the
   scenario-1 receipt names **Apply to all** on a Legend row, it means the
   option now labelled `Legend item "<legend name>" (N)`.
@@ -10656,6 +10660,12 @@ approval is quoted in the Revision #2108 entry of `PD-OI-2108`.
   Contract co-change).
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `68eb7c40ac71b1363789062e85b82f7171603a9a026a331fc4019d862346c07d`.
+- Decision source (scenario revision `3`): the approval quoted in its Revision
+  #2110 entry below. The third receipt and JSON below reproduce its fields
+  without translation or additional terms. The runtime that implements it
+  merges with it (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `6912e6d05c23155b25a9e47cc9332e351cd6f9d5333d10958b5cb26985bf4d11`.
 - Acceptance contracts: `OIC-029`. These obligations and the complete selected
   outcome are jointly required.
 
@@ -10714,6 +10724,50 @@ Decision date: 2026-10-11
   "decisionDate": "2026-10-11"
 }
 ```
+
+Scenario revision `3` receipt, confirmed by `satoshikawato` on `2026-11-17`:
+
+```text
+PRODUCT_DECISION
+Concern: web.default-colors-over-palette
+Scenario revision: 3
+Choice: B / TYPE_DEFAULT_ROW_NAME: Specific color rule が描かない Legend 行（その feature type の既定の行。例：CDS）の名前を Legend タブか popup の Legend name で変えると、名前だけが変わり、Specific color rule は書かない。名前は Python が描き、その type の既定の行に付く。caption 付きの rule がその type の一部の feature を別の行に描く間は、残りの feature の行（other proteins など）に、rule を外すと元の行に、同じ名前が描かれる。どちらの状態で名前を変えても同じで、入力した名前が描かれ、既定の名前を入力すると既定の名前に戻る。色は今までどおりパレットと Default colors に従う。
+Rationale: R-09（2026-10-10）の「Python が描く type の表示名」。色（scenario revision 1 の Legend item）と同じく、名前でも product ごと・feature ごとの rule を書かない。後から行に加わる feature も同じ名前になり、Generate、コマンドライン（--legend_rows）、--session の再描画で同じ図になる。
+Must preserve: PD-OI-061 の Merge と Keep both（Merge は rule を書く）、複数の feature がある行の「This feature only」と popup の一覧からの選択と行と同じ色の color rule group の名前の入力は rule を書くこと、Specific color rule が描く行の改名は rule を変えること、feature ごとの色の編集がある行の改名は rule を書くこと（OIC-029 の色と同じ条件）、Reset が改名を戻すこと（R-10）、即時の編集と次の Generate の一致（PD-OI-066）、Session の形式、コマンドラインで other 行に付けた名前（--legend_rows）がその行で勝つこと。
+May retire: Specific color rule が描かない Legend 行の改名が product ごと・feature ごとの Specific color rule を書く動作（OV-244）。caption 付きの rule がある間に other 行に付けた名前が、rule を外すと消える動作。
+Accepted residual risk: caption 付きの rule がその type にある間、Legend では rule の行が先、名前を付けた行が後に並ぶ（rule を書いていた今までは名前の行が先）。名前は Legend の行の名前で、Default colors の一覧や -d の TSV には入らない（コマンドラインでは --legend_rows で再現する）。行の全体を別の行に Merge すると名前は消え、後でその rule を消して行が戻ると既定の名前になる。
+Owner: satoshikawato
+Decision date: 2026-11-17
+```
+
+```json
+{
+  "concern": "web.default-colors-over-palette",
+  "scenarioRevision": 3,
+  "choice": "B / TYPE_DEFAULT_ROW_NAME: Specific color rule が描かない Legend 行（その feature type の既定の行。例：CDS）の名前を Legend タブか popup の Legend name で変えると、名前だけが変わり、Specific color rule は書かない。名前は Python が描き、その type の既定の行に付く。caption 付きの rule がその type の一部の feature を別の行に描く間は、残りの feature の行（other proteins など）に、rule を外すと元の行に、同じ名前が描かれる。どちらの状態で名前を変えても同じで、入力した名前が描かれ、既定の名前を入力すると既定の名前に戻る。色は今までどおりパレットと Default colors に従う。",
+  "rationale": "R-09（2026-10-10）の「Python が描く type の表示名」。色（scenario revision 1 の Legend item）と同じく、名前でも product ごと・feature ごとの rule を書かない。後から行に加わる feature も同じ名前になり、Generate、コマンドライン（--legend_rows）、--session の再描画で同じ図になる。",
+  "mustPreserve": "PD-OI-061 の Merge と Keep both（Merge は rule を書く）、複数の feature がある行の「This feature only」と popup の一覧からの選択と行と同じ色の color rule group の名前の入力は rule を書くこと、Specific color rule が描く行の改名は rule を変えること、feature ごとの色の編集がある行の改名は rule を書くこと（OIC-029 の色と同じ条件）、Reset が改名を戻すこと（R-10）、即時の編集と次の Generate の一致（PD-OI-066）、Session の形式、コマンドラインで other 行に付けた名前（--legend_rows）がその行で勝つこと。",
+  "mayRetire": "Specific color rule が描かない Legend 行の改名が product ごと・feature ごとの Specific color rule を書く動作（OV-244）。caption 付きの rule がある間に other 行に付けた名前が、rule を外すと消える動作。",
+  "acceptedResidualRisk": "caption 付きの rule がその type にある間、Legend では rule の行が先、名前を付けた行が後に並ぶ（rule を書いていた今までは名前の行が先）。名前は Legend の行の名前で、Default colors の一覧や -d の TSV には入らない（コマンドラインでは --legend_rows で再現する）。行の全体を別の行に Merge すると名前は消え、後でその rule を消して行が戻ると既定の名前になる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-17"
+}
+```
+
+#### Revision #2110
+
+- On `2026-11-17`, at 21:07 JST, the Product Decision Owner `satoshikawato` answered
+  「PD-OI-089 r3=承認」 to the full receipt text of `PD-OI-089` scenario revision `3`,
+  shown with three Before/After image pairs of this pull request and the answer template
+  「PD-OI-089 r3=承認」 (campaign `v015-residuals-20261024`, `DECISIONS.md`; the same
+  message also answered another session's questions). Scenario revision `3` supersedes
+  scenario revision `2` and keeps every term of scenario revisions `1` and `2`; its
+  receipt above is serialized byte for byte as approved.
+- Receipt SHA-256 of the new scenario revision (UTF-8, excluding the final newline):
+  `6912e6d05c23155b25a9e47cc9332e351cd6f9d5333d10958b5cb26985bf4d11`.
+- `OIC-029` gains one sentence for the rename (Acceptance contracts below).
+- No other record is amended or retired. The runtime that implements it merges with it (static Product Contract
+  co-change); this entry supplies no runtime acceptance evidence.
 
 ### PD-OI-090: Project with drawings
 
@@ -15044,7 +15098,7 @@ Owner `satoshikawato`'s replies to the campaign `ci-review-20261110/D`
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. At every width the review is docked in the Result, closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then reopens an Editor that was open on the same tab; the review cannot be dragged. During the review the feature popup is hidden, a click on the figure neither opens, switches nor closes it, search Open switches its target, and it returns when the review ends. The figure is fitted when the review opens and the earlier zoom and pan return when it ends; a Session saved during the review and the History of its Apply keep the earlier zoom and pan. While the review shows the figure it fitted, the figure is fitted again, as by the Fit button and without a History step, whenever the width or height of its room changes; a zoom and pan changed by hand stay while the room does not change, and outside a review a change of the room keeps the zoom and pan. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066` scenario revision `2`: a live-edited Result, including after Session load and export, agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element when no pending Applies on Generate value changes those elements; otherwise it agrees with a Generate of the committed Session plus the applied live values. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
-| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
+| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. A rename, in the Legend tab or the popup's Legend name, of a Legend row that no Specific color rule draws (a feature type's default row) changes only the row's name and writes no Specific color rule: Python draws the name on the type's row, or, while a rule with a Legend name draws some of the type's features in another row, on the row of the rest (such as `other proteins`); typing the default name gives the default name back. Under the same condition as the color above, the rename of a row that a per-feature color edit draws writes rules. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
 | `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo of a step in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; Reset this drawing keeps the values that are one per Session (LOSAT execution and threads, Rich Feature Popup, Auto Reflow, PNG DPI, Instant Preview), and Reset all drawings resets them as 0.14.0 Reset Settings did; Undo/Redo in any drawing walks the shown drawing's steps and the project steps (drawing add, duplicate, rename, reorder, delete, Reset all drawings, replacing an input file for every drawing that uses it, and edits that change only the Session title, Auto Reflow, PNG DPI, palette Instant Preview, LOSAT execution and threads, or input drafts) newest first, one step per operation; the Undo of a drawing add, duplicate, or delete shows the drawing that was shown before it, and its Redo the drawing shown after it; deleting the shown drawing shows the next tab's drawing, else the previous tab's; the Undo of a delete restores that drawing with its settings, edits, Result, and History; the Default colors, Specific rules, Blacklist, Whitelist, and Priority files change only the shown drawing; an operation that also changes a drawing value is one step of that drawing; turning Instant Preview on applies every drawing's queued palette in that one step; a drawing switch writes no setting and is not an Undo step; a drawing switch is refused while a color rule table edit is being matched, and that edit becomes one History step of its drawing; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown, or, when the shown drawing had no file, changed setting, edit, or Result and was not saved, the saved drawing of the next tab, else of the previous tab; when no drawing qualifies, Save writes the shown drawing; each Session 27-44 fixture and each Session 46, 47, and 48 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a converted Session opens the drawing of the mode shown at Save, or, when that mode has no stored Result and the other mode has one, that Result's drawing, and still creates the shown mode's drawing; the drawing it opens is the first tab and the other drawing the second; a Session 46, 47, 48, or 49 preview-only Load starts no Python Worker, except that a Session 46 or 47 holding protein comparison results stored on a reversed record shows its stored figure first and then starts it once to convert them; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
 | `OIC-031` | `PD-OI-099`: a Load of a file with something it cannot fully restore lists it in one dialog before any setting, Result, input file, History, or screen changes, and Cancel changes none of them. Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. A refusal of the Web Load comes before the dialog, never after [Load]. No file the Web loaded before the dialog existed is refused. The receipt's 〔拒否〕 classes are refused; once the interim of its Accepted residual risk ends, they are the only refusals of the Web Load. |
 
