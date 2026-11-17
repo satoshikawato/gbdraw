@@ -3049,7 +3049,7 @@ Arabic science or software has no word in use, the English word stays in Latin l
   الرسم (Renderer; عرض is Display), سلسلة بيانات (a Depth or comparison series, Microsoft's data series).
 - **Commands** (verbal nouns, 21.2): إضافة, إزالة (Remove), حذف (Delete; Discard of History too, as fr), مسح (Clear),
   نسخ, لصق, تحرير (Edit; a stored change is تعديل), حفظ, تحميل (Load and Upload, as Microsoft), تنزيل, فتح, استيراد,
-  تصدير, تراجع / إعادة (Undo / Redo), إعادة تعيين (Reset), استعادة (Restore), إرجاع (Revert), إعادة المحاولة, إعادة
+  تصدير, تراجع / إعادة (Undo / Redo), إعادة تعيين (Reset), استعادة (Restore), عودة (Revert), إعادة المحاولة, إعادة
   تسمية, استبدال, تكرار (Duplicate), دمج, نقل, تحديد (Select), اختيار (Choose), إظهار / إخفاء, عرض, بحث, إنشاء
   (Generate), تشغيل (Run), تطبيق, إلغاء, إغلاق (Close and Dismiss), تمكين / تعطيل, حل (Resolve), استبعاد (Omit),
   إعادة التوزيع (Reflow), ضبط الاتجاه (Orient).
