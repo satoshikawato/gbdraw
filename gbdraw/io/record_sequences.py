@@ -534,14 +534,13 @@ class _FileIndex:
         self.counts: NDArray[np.uint16] | None = None
         self.row_offsets: NDArray[np.uint16] | None = None
         self._counts = RowCounts()
-        self._row_offsets: list[NDArray[np.uint16]] = []
+        self._row_offsets = bytearray()  # ``uint16`` each, grown in one buffer as the rows are
 
     def finish(self) -> None:
         if self.counts is None:
             self.counts = self._counts.joined()
-            self.row_offsets = (np.concatenate(self._row_offsets) if self._row_offsets
-                                else np.zeros(0, dtype=np.uint16))
-            self._row_offsets = []
+            self.row_offsets = np.frombuffer(self._row_offsets, dtype=np.uint16).copy()
+            self._row_offsets = bytearray()
 
 
 class _SequenceTable:
@@ -575,8 +574,8 @@ class _SequenceTable:
         index._counts.add(counted.rows)
         run = kind in _RUN_MATRICES
         # Where each row's first base lies in its chunk; lines read line by line are decoded whole.
-        index._row_offsets.append(
-            (counted.starts % _CHUNK_BYTES).astype(np.uint16) if run else np.zeros(len(counted.starts), dtype=np.uint16))
+        index._row_offsets += ((counted.starts % _CHUNK_BYTES).astype(np.uint16).tobytes() if run
+                               else bytes(2 * len(counted.starts)))
         totals = counted.histograms @ (_RUN_MATRICES[kind] if run else BASES_MATRIX)
         last = self.stop - 1
         if (not run and last >= self.first and index.kinds[last] == kind

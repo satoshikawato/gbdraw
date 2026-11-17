@@ -495,3 +495,28 @@ def test_small_records_share_their_file_s_index(tmp_path: Path) -> None:
     assert not any(hasattr(table, "__dict__") for table in tables)
     assert [known_base_counts(record.seq).tolist() for record in records[::499]] == [
         [row[0] for row in _oracle(bases[i * 1_000: (i + 1) * 1_000], [1_000])] for i in range(0, 2_000, 499)]
+
+
+def test_count_rows_of_many_small_sequences_grow_in_one_buffer() -> None:
+    """The count rows of a pass over many small sequences grow in one buffer, not one array per sequence, so the
+    pass holds about 8 bytes per row before it joins them (one array per call held about 290 bytes per sequence of
+    two calls; 100,000 small entries peaked about 40 MiB higher in max RSS, finishing round 4)."""
+
+    rows = base_counts.RowCounts()
+    one = np.array([[0, 0, 0, 0], [1, 2, 3, 4]], dtype=np.int64)
+    more = np.array([[1, 1, 1, 1], [1, 2, 3, 4]], dtype=np.int64)
+    tracemalloc.start()
+    try:
+        before = tracemalloc.get_traced_memory()[0]
+        for _ in range(20_000):
+            rows.begin()
+            rows.add(one)
+            rows.add(more)  # a second call ends the row the first began
+        held = (tracemalloc.get_traced_memory()[0] - before) / 20_000
+    finally:
+        tracemalloc.stop()
+    assert held < 40, held
+    joined = rows.joined()
+    assert joined.shape == (40_000, 4) and joined.dtype == np.uint16
+    assert joined[:3].tolist() == [[2, 3, 4, 5], [1, 2, 3, 4], [2, 3, 4, 5]]
+    assert rows.joined() is joined

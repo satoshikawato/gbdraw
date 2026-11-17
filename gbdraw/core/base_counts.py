@@ -153,40 +153,47 @@ def count_rows(data: bytes | memoryview, before: int, deleted: bytes = b"") -> C
 
 
 class RowCounts:
-    """The count rows of sequences counted one after another (:func:`count_rows`), in one list: within a
+    """The count rows of sequences counted one after another (:func:`count_rows`), in one buffer: within a
     sequence a row begun by some bytes is ended by the next, and :meth:`begin` starts the next sequence on a row
-    of its own."""
+    of its own. The rows grow in one buffer, not one array per call, so a pass over many small sequences leaves no
+    small arrays behind when it joins them."""
 
-    __slots__ = ("_rows", "_size", "_fresh")
+    __slots__ = ("_rows", "_joined", "_fresh")
 
     def __init__(self) -> None:
-        self._rows: list[NDArray[np.uint16]] = []
-        self._size = 0  # rows added
+        self._rows = bytearray()  # four ``uint16`` per row
+        self._joined: NDArray[np.uint16] | None = None
         self._fresh = True  # no row of the current sequence added yet
 
     def begin(self) -> int:
         """Start the next sequence, and return the index of its first row."""
 
         self._fresh = True
-        return self._size
+        return len(self._rows) // _ROW_BYTES
 
     def add(self, rows: NDArray[np.int64]) -> None:
+        assert self._joined is None, "rows are added before they are joined"
         if self._fresh:
             assert not rows[0].any()  # bytes before the first base hold no letter
         else:
-            self._rows[-1][-1] += rows[0].astype(np.uint16)
+            last = np.frombuffer(self._rows, dtype=np.uint16, count=4, offset=len(self._rows) - _ROW_BYTES)
+            last += rows[0].astype(np.uint16)
+            del last  # the buffer grows again only once no array views it
         if len(rows) > 1:
-            self._rows.append(rows[1:].astype(np.uint16))
-            self._size += len(rows) - 1
+            self._rows += rows[1:].astype(np.uint16).tobytes()
             self._fresh = False
 
     def joined(self) -> NDArray[np.uint16]:
         """Row ``k``: the counts of A, C, G and T in bases ``k * ROW_BASES`` of its sequence up to the next row
-        (``uint16``)."""
+        (``uint16``), joined once."""
 
-        if len(self._rows) != 1:
-            self._rows = [np.concatenate(self._rows) if self._rows else np.zeros((0, 4), dtype=np.uint16)]
-        return self._rows[0]
+        if self._joined is None:
+            self._joined = np.frombuffer(self._rows, dtype=np.uint16).reshape(-1, 4).copy()
+            self._rows = bytearray()
+        return self._joined
+
+
+_ROW_BYTES = 8  # one row in the buffer of :class:`RowCounts`
 
 
 def byte_counts(data: bytes | memoryview, matrix: NDArray[np.int64] = BASES_MATRIX) -> NDArray[np.int64]:
