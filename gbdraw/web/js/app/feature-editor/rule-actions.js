@@ -2,7 +2,7 @@
 /** @import { DrawingState, WebState } from '../../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
-/** @import { RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { FeatureLegendRows, RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, NoticeRequest, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
@@ -149,6 +149,37 @@ const NO_COLOR_RULES_NOTICE = Object.freeze({ text: () => t('There are no color 
 /** @type {NoticeRequest} */
 const PRESET_UNAVAILABLE_NOTICE = Object.freeze({ text: () => t('That rule preset is not available.'), tone: 'warning' });
 
+/** @param {unknown} caption A row whose key is its caption. */
+const captionKey = (caption) => /** @type {PythonLegendKey} */ (String(caption || '').trim());
+
+/**
+ * The row Generate draws a feature of no captioned rule in: its type's own
+ * row, its type's "other" row, or no row (''), as `featureLegendRows` says; a
+ * feature without a type, the row its label names. The drawn features' rows
+ * are read once, when the first typed feature asks.
+ * @param {Parameters<typeof drawnRuleMatches>[0]} context
+ * @param {(feat: ColorFeature) => string} labelOf
+ */
+const featureRowReader = (context, labelOf) => {
+  /** @type {FeatureLegendRows | null} */
+  let rows = null;
+  /** @param {ColorFeature} feat @param {Parameters<FeatureLegendRows['rowOf']>[1]} rule */
+  return (feat, rule) => {
+    const type = String(feat.type || '').trim();
+    if (!type) return captionKey(labelOf(feat));
+    rows ||= drawnRuleMatches(context).rows;
+    const row = rows.rowOf(type, rule);
+    return captionKey(typeof row === 'string' ? row : '');
+  };
+};
+
+// The drawn type whose "other" row a key is in the displayed Result
+// (`featureLegendRows`), else null: a row the drawing names (D-23).
+/** @param {FeatureRuleActionsOptions['state']} state */
+const otherLegendRowTypeOf = (state) => (/** @type {PythonLegendKey} */ key) => (
+  drawnRuleMatches(displayedLegendRowContext(state, state.activeDrawing())).rows.otherRowType(key)
+);
+
 /** @param {FeatureRuleActionsOptions} options */
 export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, isRuleInputCurrent, snapshotRuleInputs, isRulePrepared, prepareRuleCandidate, synthesizeGroupRules, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
@@ -237,7 +268,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       return Object.hasOwn(overrides, row.caption) && current && resolveColorToHex(current.color) === resolveColorToHex(row.color)
         ? { ...row, color: overrides[row.caption] } : row;
     };
-    const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows).map(shownRow);
+    const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.rows.drawsRow).map(rowOf) : ruleRows).map(shownRow);
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value;
     // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
@@ -767,7 +798,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const getLegendRowRules = (key) => legendRowRules(key, displayedLegendRowContext(state, state.activeDrawing()));
 
   // Resolve the effective legend item label used by current SVG coloring
-  // priority: a rule's feature belongs to the row Generate draws for it (N-06).
+  // priority: a rule's feature belongs to the row Generate draws for it (N-06);
+  // a feature of no captioned rule to its type's own or "other" row, or to no
+  // row, as Generate draws the displayed Result's features (`featureLegendRows`).
   // One reader serves a pass over many features (OV-193). It answers "which
   // row" with the row's key; a caption written from it is the row's name
   // (the Legend owner's `legendRowName`, OV-640).
@@ -775,11 +808,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const effectiveLegendCaptions = () => {
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
-    const legendCaption = ruleLegendCaptions(displayedLegendRowContext(state, drawing));
-    /** @param {unknown} caption A row whose key is its caption. */
-    const rowOf = (caption) => /** @type {PythonLegendKey} */ (normalizeCaption(caption));
+    const context = displayedLegendRowContext(state, drawing);
+    const legendCaption = ruleLegendCaptions(context);
+    const featureRow = featureRowReader(context, getIndividualFeatureLabel);
     return (feat) => {
-      if (!feat) return rowOf('');
+      if (!feat) return captionKey('');
       const rule = ruleMatches.first(feat);
       if (rule && normalizeCaption(rule.cap)) return legendCaption(rule);
 
@@ -790,7 +823,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const overrideCaption = typeof override === 'object' && normalizeCaption(override.caption);
       if (overrideCaption) return legendCaption({ cap: overrideCaption, color: override.color });
 
-      return rowOf(normalizeCaption(feat.type) || getIndividualFeatureLabel(feat));
+      return featureRow(feat, rule);
     };
   };
   /** @param {ColorFeature | null | undefined} feat */
@@ -1272,6 +1305,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLegendRowRules,
+    otherLegendRowType: otherLegendRowTypeOf(state),
     groupColorRules,
     reviseColorRules,
     /** @param {number} index */
