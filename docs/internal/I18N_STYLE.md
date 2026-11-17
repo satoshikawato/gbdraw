@@ -2880,7 +2880,7 @@ The system typeface is used (Nirmala UI on Windows); Devanagari marks need Thai'
 - **Questions**: क्या … ? (Chromium hi: 114 क्या-questions against 13 imperative ones); a
   confirmation asks with a passive subjunctive that agrees with its noun (रंग रखा जाए?).
 - **Controls named in a sentence**: label in “ ” + class noun (“आरेख बनाएँ” बटन, “लेबल दृश्यता”
-  सेटिंग); Generate again is आरेख फिर से बनाएँ, a click “आरेख बनाएँ” पर क्लिक करें.
+  सेटिंग); Generate again is आरेख फिर से बनाएँ, a click “आरेख बनाएँ” बटन पर क्लिक करें.
 - **Drawing mode** attaches to the diagram: रैखिक आरेख का रिकॉर्ड, वृत्ताकार आरेख की तुलना;
   वृत्ताकार रिकॉर्ड is only the topology of the molecule.
 
