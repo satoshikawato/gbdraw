@@ -46,6 +46,7 @@ from gbdraw.analysis.conservation import (
     ConservationLoadResult,
     ConservationReferenceMode,
     ConservationTrack,
+    DrawnConservationRing,
     conservation_legend_sources,
     load_conservation_sources,
     named_conservation_rings,
@@ -955,18 +956,6 @@ def _resolve_depth_window_step(
     )
 
 
-def _cfg_with_depth_scale_max(cfg: GbdrawConfig, max_depth: float | None) -> GbdrawConfig:
-    if max_depth is None:
-        return cfg
-    return replace(
-        cfg,
-        objects=replace(
-            cfg.objects,
-            depth=replace(cfg.objects.depth, max_depth=float(max_depth)),
-        ),
-    )
-
-
 
 
 
@@ -978,14 +967,10 @@ def _cfg_with_depth_scale_max(cfg: GbdrawConfig, max_depth: float | None) -> Gbd
 def _depth_track_count_for_render(
     record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
     precomputed_depth_tracks: Sequence[DepthTrackData] | None,
-    precomputed_depth_df: DataFrame | None = None,
 ) -> int:
     if precomputed_depth_tracks:
         return depth_track_data_count([precomputed_depth_tracks])
-    count = depth_track_count(record_depth_tracks)
-    if count > 0:
-        return count
-    return 1 if precomputed_depth_df is not None else 0
+    return depth_track_count(record_depth_tracks)
 
 
 def _with_circular_density_slots(
@@ -2999,27 +2984,141 @@ def _with_conservation_slots(
     return _insert_conservation_slots(slots, conservation_slots, axis_index=axis_index)
 
 
-def assemble_circular_diagram_from_record(
+class _CircularTracks(NamedTuple):
+    """The track stack of a Circular record, or the one every record of a Multi-Record Canvas draws, and the show
+    flags it resolves."""
+
+    slots: list[CircularTrackSlot] | None
+    implicit: bool
+    axis_index: int | None
+    show_depth: bool
+    show_gc: bool
+    show_skew: bool
+    available_depth_track_count: int
+
+
+def _circular_tracks(
+    cfg: GbdrawConfig,
+    inputs: CircularAssemblyInputs,
+    record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
+    precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
+    precomputed_depth_track_count: int | None = None,
+    *,
+    missing_depth_message: str,
+) -> tuple[GbdrawConfig, _CircularTracks]:
+    """The track stack of one Circular record or of every record of a Multi-Record Canvas; explicit slots override
+    the show flags the canvas sizes by.
+
+    A single record passes the depth data and track count its record context carries (``precomputed_*``: a canvas
+    sets both for its records, a typed request sets the track count); the canvas passes none. A depth slot without
+    depth input is refused with ``missing_depth_message``, which names the depth inputs of the caller.
+    """
+
+    parsed_circular_track_slots = _parse_circular_track_slot_inputs(inputs.circular_track_slots)
+    implicit_track_stack = parsed_circular_track_slots is None or inputs._implicit_track_stack
+    circular_track_axis_index = _validate_circular_track_axis_index(
+        inputs.circular_track_axis_index,
+        parsed_circular_track_slots,
+    )
+    show_depth, show_gc, show_skew = _resolve_circular_track_visibility(
+        cfg,
+        parsed_circular_track_slots,
+    )
+    depth_input = record_depth_tracks is not None or precomputed_depth_tracks is not None
+    if parsed_circular_track_slots is not None and show_depth and not depth_input:
+        raise ValidationError(missing_depth_message)
+    available_depth_track_count = _depth_track_count_for_render(record_depth_tracks, precomputed_depth_tracks)
+    if precomputed_depth_track_count is not None:
+        available_depth_track_count = int(precomputed_depth_track_count)
+    parsed_circular_track_slots = _default_circular_depth_slots_if_needed(
+        parsed_circular_track_slots=parsed_circular_track_slots,
+        show_depth=bool(show_depth and depth_input),
+        depth_track_count_value=available_depth_track_count,
+        show_ticks=bool(cfg.objects.scale.show),
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+        dinucleotide=inputs.dinucleotide,
+    )
+    canvas_cfg = replace(
+        cfg.canvas,
+        show_depth=bool(show_depth and depth_input),
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+    )
+    return replace(cfg, canvas=canvas_cfg), _CircularTracks(
+        parsed_circular_track_slots, implicit_track_stack, circular_track_axis_index, show_depth, show_gc, show_skew,
+        available_depth_track_count,
+    )
+
+
+class _CheckedCircularRecord(NamedTuple):
+    """The checked inputs of one Circular record: its config, whose depth flag the depth input sets, its context,
+    comparison thresholds, resolved feature inputs, and depth tracks."""
+
+    cfg: GbdrawConfig
+    context: CircularRecordContext
+    thresholds: ComparisonThresholds
+    features: ResolvedFeatureInputs
+    depth_tracks: list[list[DepthTrackSpec]] | None
+
+
+class _CircularRecordTitle(NamedTuple):
+    """The plot title of one Circular record and the definition profile it leaves the record."""
+
+    position: str
+    title: str
+    show: bool
+    definition_profile: CircularDefinitionProfile
+
+
+class _CircularRecordStack(NamedTuple):
+    """The config, profile, and finished track stack of one Circular record, with its named similarity rings."""
+
+    cfg: GbdrawConfig
+    profile: CircularRenderProfile
+    tracks: _CircularTracks
+    conservation_rings: tuple[DrawnConservationRing, ...]
+
+
+class _CircularRecordWindows(NamedTuple):
+    """The windows of one Circular record and the GC content, skew, and depth configurators drawn at them."""
+
+    window: int
+    step: int
+    depth_window: int
+    depth_step: int
+    gc: GcContentConfigurator
+    skew: GcSkewConfigurator
+    depth: DepthConfigurator | None
+
+
+class _CircularRecordFrames(NamedTuple):
+    """The data one Circular record draws: its transform, GC frames, one-circle records, and depth tracks."""
+
+    record_transform: RecordDisplayTransform
+    gc_df: DataFrame
+    dinucleotide_dataframes: dict[str, DataFrame]
+    one_circle: CircularOneCircle | None
+    depth_tracks: list[DepthTrackData]
+    depth_df: DataFrame | None
+
+
+def _checked_circular_record(
     gb_record: SeqRecord,
     inputs: CircularAssemblyInputs,
-    *,
-    _record_context: CircularRecordContext | None = None,
-) -> Drawing:
-    """Builds and assembles a circular diagram for a single record.
+    record_context: CircularRecordContext | None,
+) -> _CheckedCircularRecord:
+    """The input checks of one Circular record, in the order the assembly makes them; the depth input sets the
+    config's depth flag."""
 
-    ``DiagramAssemblyInputs`` says how omitted color and feature inputs resolve.
-    ``_record_context`` holds the private per-record values a multi-record
-    canvas or a builder hands this record.
-    """
     cfg = _assembly_config(inputs)
     if inputs.depth_tables is not None or inputs.depth_files is not None:
         raise ValidationError(
             "depth_tables and depth_files hold one entry per record of a multi-record figure; "
             "a single-record circular diagram takes depth_table, depth_file, or depth_tracks."
         )
-    context = CircularRecordContext() if _record_context is None else _record_context
+    context = CircularRecordContext() if record_context is None else record_context
     thresholds = _comparison_thresholds(inputs)
-    identity = thresholds.identity
     _validate_circular_sizes(inputs)
     resolved_feature_inputs = _assembly_feature_inputs(inputs, load_comparison_colors=False)
 
@@ -3030,25 +3129,18 @@ def assemble_circular_diagram_from_record(
         # depth_tables and depth_files are refused above, so None here.
         else _assembly_depth_tracks([gb_record], inputs, depth_track_heights=None)
     )
-    precomputed_depth_tracks_provided = context.precomputed_depth_tracks is not None
-    precomputed_depth_track_list = list(context.precomputed_depth_tracks or [])
-    if (
-        cfg.canvas.show_depth
-        and record_depth_tracks is None
-        and not precomputed_depth_tracks_provided
-        and context.precomputed_depth_df is None
-    ):
+    show_depth_from_input = record_depth_tracks is not None or context.precomputed_depth_tracks is not None
+    if cfg.canvas.show_depth and not show_depth_from_input:
         raise ValidationError("show_depth requires a depth_table, depth_file, or depth_track input.")
-    show_depth_from_input = (
-        record_depth_tracks is not None
-        or precomputed_depth_tracks_provided
-        or context.precomputed_depth_df is not None
-    )
     if show_depth_from_input != bool(cfg.canvas.show_depth):
         cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth_from_input))
-    if cfg.objects.depth.share_axis and cfg.objects.depth.max_depth is None and context.shared_depth_max is not None:
-        cfg = _cfg_with_depth_scale_max(cfg, context.shared_depth_max)
     _validate_track_configs(cfg)
+    return _CheckedCircularRecord(cfg, context, thresholds, resolved_feature_inputs, record_depth_tracks)
+
+
+def _circular_record_title(inputs: CircularAssemblyInputs, context: CircularRecordContext) -> _CircularRecordTitle:
+    """The record's plot title; a record drawn with its full definition draws the title and may shorten the
+    definition for it."""
 
     normalized_plot_title_position = _resolve_circular_plot_title_position(str(inputs.plot_title_position))
     normalized_plot_title = _normalize_plot_title(inputs.plot_title)
@@ -3061,50 +3153,33 @@ def assemble_circular_diagram_from_record(
             show_plot_title=show_plot_title,
             keep_full_definition_with_plot_title=inputs.keep_full_definition_with_plot_title,
         )
-
-    parsed_circular_track_slots = _parse_circular_track_slot_inputs(inputs.circular_track_slots)
-    circular_track_axis_index = _validate_circular_track_axis_index(
-        inputs.circular_track_axis_index,
-        parsed_circular_track_slots,
+    return _CircularRecordTitle(
+        normalized_plot_title_position, normalized_plot_title, show_plot_title, effective_definition_profile
     )
 
-    legend_effective = inputs.legend
 
-    # Explicit slots override high-level show flags used by canvas sizing.
-    show_depth, show_gc, show_skew = _resolve_circular_track_visibility(
-        cfg,
-        parsed_circular_track_slots,
+def _circular_record_stack(
+    gb_record: SeqRecord,
+    inputs: CircularAssemblyInputs,
+    checked: _CheckedCircularRecord,
+) -> _CircularRecordStack:
+    """The record's track stack with its feature density and conservation slots, and the config and profile the
+    stack's show flags set."""
+
+    context = checked.context
+    cfg, tracks = _circular_tracks(
+        checked.cfg,
+        inputs,
+        checked.depth_tracks,
+        context.precomputed_depth_tracks,
+        context.precomputed_depth_track_count,
+        missing_depth_message="A circular depth track slot requires a depth_table, depth_file, or depth_track input.",
     )
-    if (
-        parsed_circular_track_slots is not None
-        and show_depth
-        and not show_depth_from_input
-    ):
-        raise ValidationError("A circular depth track slot requires a depth_table, depth_file, or depth_track input.")
-    available_depth_track_count = _depth_track_count_for_render(
-        record_depth_tracks,
-        precomputed_depth_track_list,
-        context.precomputed_depth_df,
+    slots = _with_circular_density_slots(
+        tracks.slots, inputs, implicit=tracks.implicit, show_ticks=bool(cfg.objects.scale.show),
+        show_depth=cfg.canvas.show_depth, depth_track_count=tracks.available_depth_track_count,
+        show_gc=cfg.canvas.show_gc, show_skew=cfg.canvas.show_skew,
     )
-    if context.precomputed_depth_track_count is not None:
-        available_depth_track_count = int(context.precomputed_depth_track_count)
-    parsed_circular_track_slots = _default_circular_depth_slots_if_needed(
-        parsed_circular_track_slots=parsed_circular_track_slots,
-        show_depth=bool(show_depth and show_depth_from_input),
-        depth_track_count_value=available_depth_track_count,
-        show_ticks=bool(cfg.objects.scale.show),
-        show_gc=bool(show_gc),
-        show_skew=bool(show_skew),
-        dinucleotide=inputs.dinucleotide,
-    )
-    parsed_circular_track_slots = _with_circular_density_slots(
-        parsed_circular_track_slots, inputs, implicit=inputs.circular_track_slots is None or inputs._implicit_track_stack,
-        show_ticks=bool(cfg.objects.scale.show), show_depth=bool(show_depth and show_depth_from_input),
-        depth_track_count=available_depth_track_count, show_gc=bool(show_gc), show_skew=bool(show_skew),
-    )
-    cfg = replace(cfg, canvas=replace(
-        cfg.canvas, show_depth=bool(show_depth and show_depth_from_input), show_gc=bool(show_gc), show_skew=bool(show_skew)
-    ))
     profile = CircularRenderProfile(
         cfg, identity_label_overrides=_shows_identity_labels(inputs._resolved_record_features)
     )
@@ -3118,28 +3193,37 @@ def assemble_circular_diagram_from_record(
             conservation_dataframes=inputs.conservation_dataframes,
             conservation_labels=inputs.conservation_labels,
             conservation_colors=inputs.conservation_colors,
-            thresholds=thresholds,
+            thresholds=checked.thresholds,
         )
         conservation_tracks = _conservation_tracks_for_record(
             conservation_load_result, [gb_record], gb_record, conservation_mode
         )
     if conservation_tracks:
-        parsed_circular_track_slots = _with_conservation_slots(
-            parsed_circular_track_slots, conservation_tracks, inputs, cfg, axis_index=circular_track_axis_index,
-            show_depth=show_depth, depth_track_count=available_depth_track_count, show_gc=show_gc, show_skew=show_skew,
+        slots = _with_conservation_slots(
+            slots, conservation_tracks, inputs, cfg, axis_index=tracks.axis_index, show_depth=tracks.show_depth,
+            depth_track_count=tracks.available_depth_track_count, show_gc=tracks.show_gc, show_skew=tracks.show_skew,
         )
     # A Multi-Record Canvas names the rings from its shared Legend; otherwise the assembly names them from its own.
     conservation_rings = named_conservation_rings(
-        resolve_drawn_conservation_rings(
-            cfg.objects.conservation.color_scheme, parsed_circular_track_slots, conservation_tracks
-        ),
+        resolve_drawn_conservation_rings(cfg.objects.conservation.color_scheme, slots, conservation_tracks),
         context.conservation_ring_names or {},
     )
+    return _CircularRecordStack(cfg, profile, tracks._replace(slots=slots), conservation_rings)
 
+
+def _circular_record_windows(
+    gb_record: SeqRecord,
+    inputs: CircularAssemblyInputs,
+    features: ResolvedFeatureInputs,
+    stack: _CircularRecordStack,
+) -> _CircularRecordWindows:
+    """The record's GC and depth windows and the configurators of its GC content, skew, and depth tracks."""
+
+    cfg, profile = stack.cfg, stack.profile
     window, step = _resolve_circular_window_step(gb_record, cfg, window=inputs.window, step=inputs.step)
     resolved_depth_window, resolved_depth_step = _depth_window_step(inputs, int(window), int(step))
 
-    gc_config, skew_config = _gc_configurators(inputs, profile, resolved_feature_inputs.default_colors, window, step)
+    gc_config, skew_config = _gc_configurators(inputs, profile, features.default_colors, window, step)
     depth_config = (
         DepthConfigurator(
             window=resolved_depth_window,
@@ -3149,11 +3233,27 @@ def assemble_circular_diagram_from_record(
         if cfg.canvas.show_depth
         else None
     )
+    return _CircularRecordWindows(
+        window, step, resolved_depth_window, resolved_depth_step, gc_config, skew_config, depth_config
+    )
 
+
+def _circular_record_frames(
+    gb_record: SeqRecord,
+    inputs: CircularAssemblyInputs,
+    checked: _CheckedCircularRecord,
+    stack: _CircularRecordStack,
+    windows: _CircularRecordWindows,
+) -> _CircularRecordFrames:
+    """The record's GC frames for the dinucleotides its stack draws, its one-circle records, and its depth track
+    data, whose indices the stack's depth slots must name."""
+
+    cfg, context, tracks = stack.cfg, checked.context, stack.tracks
+    window, step = windows.window, windows.step
     # Circular drawing expects precomputed dinucleotide dataframes, but only when needed.
-    if parsed_circular_track_slots is not None:
+    if tracks.slots is not None:
         requested_nts = _dinucleotides_from_circular_slots(
-            parsed_circular_track_slots,
+            tracks.slots,
             default_nt=inputs.dinucleotide,
         )
     else:
@@ -3170,56 +3270,60 @@ def assemble_circular_diagram_from_record(
         circular=record_transform.is_circular,
     )
     one_circle = _one_circle_drawing(
-        context.one_circle, str(inputs.dinucleotide), int(window), int(step), requested_nts, float(identity),
-        inputs.feature_density_tracks,
+        context.one_circle, str(inputs.dinucleotide), int(window), int(step), requested_nts,
+        float(checked.thresholds.identity), inputs.feature_density_tracks,
     )
-    if cfg.canvas.show_depth and depth_config is not None:
+    precomputed_depth_track_list = list(context.precomputed_depth_tracks or [])
+    resolved_depth_tracks: list[DepthTrackData] = []
+    if cfg.canvas.show_depth and windows.depth is not None:
         if precomputed_depth_track_list:
             resolved_depth_tracks = precomputed_depth_track_list
-        elif context.precomputed_depth_df is not None:
-            resolved_depth_tracks = [
-                DepthTrackData(
-                    id="depth",
-                    label="Depth",
-                    df=context.precomputed_depth_df,
-                    config=depth_config,
-                )
-            ]
-        elif record_depth_tracks is not None:
+        elif checked.depth_tracks is not None:
             resolved_depth_tracks = build_depth_track_dataframes(
                 [gb_record],
-                record_depth_tracks,
+                checked.depth_tracks,
                 [record_transform],
-                base_config=depth_config,
+                base_config=windows.depth,
                 depth_df_builder=build_depth_df,
-                window_steps=[(resolved_depth_window, resolved_depth_step)],
+                window_steps=[(windows.depth_window, windows.depth_step)],
             )[0]
-        else:
-            resolved_depth_tracks = []
-    else:
-        resolved_depth_tracks = []
-    resolved_depth_by_index = index_depth_track_row(resolved_depth_tracks)
-    resolved_depth_track_zero = resolved_depth_by_index.get(0)
+    resolved_depth_track_zero = index_depth_track_row(resolved_depth_tracks).get(0)
     resolved_depth_df = resolved_depth_track_zero.df if resolved_depth_track_zero is not None else None
     _validate_depth_track_indices(
-        parsed_circular_track_slots,
-        depth_track_count_value=max(1, available_depth_track_count),
+        tracks.slots,
+        depth_track_count_value=max(1, tracks.available_depth_track_count),
         available_indices=(
             None
             if context.precomputed_depth_track_count is not None
             else depth_track_indices([resolved_depth_tracks])
         ),
     )
+    return _CircularRecordFrames(
+        record_transform, gc_df, dinucleotide_dataframes, one_circle, resolved_depth_tracks, resolved_depth_df
+    )
 
+
+def _compose_circular_record(
+    gb_record: SeqRecord,
+    inputs: CircularAssemblyInputs,
+    checked: _CheckedCircularRecord,
+    title: _CircularRecordTitle,
+    stack: _CircularRecordStack,
+    windows: _CircularRecordWindows,
+    frames: _CircularRecordFrames,
+) -> CircularAssemblyResult:
+    """The record's canvas, feature, and Legend configurators and its plot title, drawn into the record's figure."""
+
+    cfg, profile, context, tracks = stack.cfg, stack.profile, checked.context, stack.tracks
     canvas_config = CircularCanvasConfigurator(
         output_prefix=inputs.output_prefix,
         profile=profile,
-        legend=legend_effective,
+        legend=inputs.legend,
         gb_record=gb_record,
-        axis_length=None if one_circle is None else one_circle.display_length,
+        axis_length=None if frames.one_circle is None else frames.one_circle.display_length,
     )
     feature_config = _feature_configurator(
-        inputs, resolved_feature_inputs, profile, canvas_config, inputs._resolved_record_features
+        inputs, checked.features, profile, canvas_config, inputs._resolved_record_features
     )
     legend_config = LegendDrawingConfigurator(
         profile=profile,
@@ -3234,42 +3338,44 @@ def assemble_circular_diagram_from_record(
             profile=profile,
             species=inputs.species,
             strain=inputs.strain,
-            plot_title=normalized_plot_title or None,
+            plot_title=title.title or None,
             record_presentation=context.record_presentation,
         )
-        if show_plot_title
+        if title.show
         else None
     )
 
-    result = _assemble_circular_diagram_result(
+    return _assemble_circular_diagram_result(
         canvas_config,
         DiagramConfigurators(
-            feature=feature_config, gc=gc_config, skew=skew_config, legend=legend_config, depth=depth_config
+            feature=feature_config, gc=windows.gc, skew=windows.skew, legend=legend_config, depth=windows.depth
         ),
         CircularRecordData(
             gb_record=gb_record,
-            gc_df=gc_df,
-            depth_df=resolved_depth_df,
-            depth_tracks=resolved_depth_tracks,
-            depth_track_count_value=available_depth_track_count,
-            conservation_rings=conservation_rings,
-            conservation_min_identity=float(identity),
-            dinucleotide_dataframes=dinucleotide_dataframes,
-            feature_density=_record_feature_density(context, one_circle, gb_record, inputs, cfg, record_transform),
+            gc_df=frames.gc_df,
+            depth_df=frames.depth_df,
+            depth_tracks=frames.depth_tracks,
+            depth_track_count_value=tracks.available_depth_track_count,
+            conservation_rings=stack.conservation_rings,
+            conservation_min_identity=float(checked.thresholds.identity),
+            dinucleotide_dataframes=frames.dinucleotide_dataframes,
+            feature_density=_record_feature_density(
+                context, frames.one_circle, gb_record, inputs, cfg, frames.record_transform
+            ),
         ),
         CircularTrackInputs(
-            circular_track_slots=parsed_circular_track_slots,
-            implicit_track_stack=inputs.circular_track_slots is None or inputs._implicit_track_stack,
-            circular_track_axis_index=circular_track_axis_index,
+            circular_track_slots=tracks.slots,
+            implicit_track_stack=tracks.implicit,
+            circular_track_axis_index=tracks.axis_index,
             annotations=_assembly_annotations(inputs),
             annotation_record_index=context.annotation_record_index,
         ),
         CircularPresentationInputs(
             species=inputs.species,
             strain=inputs.strain,
-            plot_title=normalized_plot_title or None if effective_definition_profile == "shared_common" else None,
+            plot_title=title.title or None if title.definition_profile == "shared_common" else None,
             definition_position="center",
-            definition_profile=effective_definition_profile,
+            definition_profile=title.definition_profile,
             # The tracks are placed around the definition drawn without the plot title (OV-1710).
             layout_definition_profile=(
                 context.definition_profile if context.layout_definition_profile is None else context.layout_definition_profile
@@ -3281,10 +3387,30 @@ def assemble_circular_diagram_from_record(
         ),
         # A record of a multi-record canvas is composed at its own size; the canvas takes the requested one.
         _composition_inputs(
-            cfg, title_content, normalized_plot_title_position, requested_canvas=context.requested_canvas
+            cfg, title_content, title.position, requested_canvas=context.requested_canvas
         ),
-        one_circle,
+        frames.one_circle,
     )
+
+
+def assemble_circular_diagram_from_record(
+    gb_record: SeqRecord,
+    inputs: CircularAssemblyInputs,
+    *,
+    _record_context: CircularRecordContext | None = None,
+) -> Drawing:
+    """Builds and assembles a circular diagram for a single record.
+
+    ``DiagramAssemblyInputs`` says how omitted color and feature inputs resolve.
+    ``_record_context`` holds the private per-record values a multi-record
+    canvas or a builder hands this record.
+    """
+    checked = _checked_circular_record(gb_record, inputs, _record_context)
+    title = _circular_record_title(inputs, checked.context)
+    stack = _circular_record_stack(gb_record, inputs, checked)
+    windows = _circular_record_windows(gb_record, inputs, checked.features, stack)
+    frames = _circular_record_frames(gb_record, inputs, checked, stack, windows)
+    result = _compose_circular_record(gb_record, inputs, checked, title, stack, windows, frames)
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing
 
@@ -3517,18 +3643,6 @@ class _CircularGridRecords(NamedTuple):
     presentations: list[RecordPresentation] | None
 
 
-class _CircularGridTracks(NamedTuple):
-    """The track stack every record of a Multi-Record Canvas draws, and the show flags it resolves."""
-
-    slots: list[CircularTrackSlot] | None
-    implicit: bool
-    axis_index: int | None
-    show_depth: bool
-    show_gc: bool
-    show_skew: bool
-    available_depth_track_count: int
-
-
 class _CircularGridConservation(NamedTuple):
     """The conservation inputs of a Multi-Record Canvas: each record reads its tracks from them; the Legend draws the
     rings of the first record."""
@@ -3549,7 +3663,7 @@ class _CircularGrid(NamedTuple):
     annotations: ResolvedAnnotationBundle
     features: ResolvedFeatureInputs
     records: _CircularGridRecords
-    tracks: _CircularGridTracks
+    tracks: _CircularTracks
     conservation: _CircularGridConservation
     record_definition_profile: CircularDefinitionProfile
     layout_definition_profile: CircularDefinitionProfile
@@ -3608,56 +3722,11 @@ def _circular_grid_records(
     )
 
 
-def _circular_grid_tracks(
-    cfg: GbdrawConfig,
-    inputs: CircularAssemblyInputs,
-    record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
-) -> tuple[GbdrawConfig, _CircularGridTracks]:
-    """The track stack of the records; explicit slots override the show flags the canvas sizes by."""
-
-    parsed_circular_track_slots = _parse_circular_track_slot_inputs(inputs.circular_track_slots)
-    implicit_track_stack = parsed_circular_track_slots is None
-    circular_track_axis_index = _validate_circular_track_axis_index(
-        inputs.circular_track_axis_index,
-        parsed_circular_track_slots,
-    )
-    show_depth, show_gc, show_skew = _resolve_circular_track_visibility(
-        cfg,
-        parsed_circular_track_slots,
-    )
-    if (
-        parsed_circular_track_slots is not None
-        and show_depth
-        and record_depth_tracks is None
-    ):
-        raise ValidationError("A circular depth track slot requires depth_tables, depth_files, or depth_track input.")
-    available_depth_track_count = depth_track_count(record_depth_tracks)
-    parsed_circular_track_slots = _default_circular_depth_slots_if_needed(
-        parsed_circular_track_slots=parsed_circular_track_slots,
-        show_depth=bool(show_depth and record_depth_tracks is not None),
-        depth_track_count_value=available_depth_track_count,
-        show_ticks=bool(cfg.objects.scale.show),
-        show_gc=bool(show_gc),
-        show_skew=bool(show_skew),
-        dinucleotide=inputs.dinucleotide,
-    )
-    canvas_cfg = replace(
-        cfg.canvas,
-        show_depth=bool(show_depth and record_depth_tracks is not None),
-        show_gc=bool(show_gc),
-        show_skew=bool(show_skew),
-    )
-    return replace(cfg, canvas=canvas_cfg), _CircularGridTracks(
-        parsed_circular_track_slots, implicit_track_stack, circular_track_axis_index, show_depth, show_gc, show_skew,
-        available_depth_track_count,
-    )
-
-
 def _circular_grid_conservation(
     cfg: GbdrawConfig,
     inputs: CircularAssemblyInputs,
     records: _CircularGridRecords,
-    tracks: _CircularGridTracks,
+    tracks: _CircularTracks,
     thresholds: ComparisonThresholds,
 ) -> tuple[_CircularGridConservation, list[CircularTrackSlot] | None]:
     """The conservation inputs, and the stack with the first record's conservation tracks."""
@@ -3678,7 +3747,7 @@ def _circular_grid_conservation(
     if first_record_conservation_tracks:
         slots = _with_conservation_slots(
             slots, first_record_conservation_tracks, inputs, cfg, axis_index=tracks.axis_index,
-            show_depth=tracks.show_depth, depth_track_count=max(1, depth_track_count(records.depth_tracks)),
+            show_depth=tracks.show_depth, depth_track_count=max(1, tracks.available_depth_track_count),
             show_gc=tracks.show_gc, show_skew=tracks.show_skew,
         )
         # The legend's rings; each record's rings are resolved by the record's own assembly, on these slots.
@@ -3764,7 +3833,10 @@ def _plan_circular_grid(
         plot_title_font_size=inputs.plot_title_font_size,
     )
     cfg, grid_records = _circular_grid_records(cfg, records, inputs, layout, record_transforms, record_presentations)
-    cfg, tracks = _circular_grid_tracks(cfg, inputs, grid_records.depth_tracks)
+    cfg, tracks = _circular_tracks(
+        cfg, inputs, grid_records.depth_tracks,
+        missing_depth_message="A circular depth track slot requires depth_tables, depth_files, or depth_track input.",
+    )
     show_plot_title = normalized_plot_title_position != "none"
     record_definition_profile = _circular_record_definition_profile(
         record_count=len(grid_records.records),
@@ -3787,7 +3859,7 @@ def _plan_circular_grid(
     conservation, slots = _circular_grid_conservation(cfg, inputs, grid_records, tracks, thresholds)
     slots = _with_circular_density_slots(
         slots, inputs, implicit=tracks.implicit, show_ticks=bool(cfg.objects.scale.show), show_depth=tracks.show_depth,
-        depth_track_count=depth_track_count(grid_records.depth_tracks), show_gc=tracks.show_gc, show_skew=tracks.show_skew,
+        depth_track_count=tracks.available_depth_track_count, show_gc=tracks.show_gc, show_skew=tracks.show_skew,
     )
     # The records share one Legend, so their feature density tracks share one window and one scale.
     record_feature_density = feature_density_record_layers(
