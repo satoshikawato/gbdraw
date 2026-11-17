@@ -1713,9 +1713,12 @@ so the legend draws the name the dialog showed. Renaming a whole row that no spe
 rule draws, such as `CDS`, changes only the row's name: it writes no specific color rule, its
 features keep their default color, and **Reset** returns the name. This holds from the Legend
 editor and from the popup's Legend name, also on a row of one feature, and for a type's "other"
-row such as `other proteins`. The name follows the type's row: while a color rule with a Legend
-name takes some of the type's features, the rest are drawn in the type's "other" row under this
-name, unless you gave that row a name of its own. These renames still write rules: **Merge into
+row such as `other proteins`. The name is the type's: while a color rule with a Legend name takes
+some of the type's features, the rest are drawn in the type's "other" row under this name, and the
+type's row keeps it when the rule goes. Renaming the "other" row renames the type the same way, so
+the name stays the same in both states whichever row you renamed. Typing the row's default name
+(`CDS`, or `other proteins` while the rule holds) gives the default name back. These renames still
+write rules: **Merge into
 "<name>"**, a pick from the popup's list, a typed name of a color rule group in the row's color,
 **This feature only** on a row of several features, and a rename of a row that color rules or a
 per-feature color edit draw. Renaming a row that a feature type's default
