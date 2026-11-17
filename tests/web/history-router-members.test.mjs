@@ -184,6 +184,25 @@ test('restoring captured members gives back every History and the project stream
   assert.deepEqual([values.circular, values.linear], ['', ''], 'the project step undoes in both drawings');
 });
 
+// OV-3509: a Load's History baseline enforces the byte budget, whose release keeps only the files the router's
+// members name. The members the Load captured for its rollback name the previous project's files: they keep them
+// stored until the Load ends, so a rollback gives back drawings whose files are still there.
+test('the members a Load captured keep their files stored until the Load ends', async () => {
+  const { router, shown, files, fileStore } = makeRouter({ drawingIds: ['circular'], shownId: 'circular' });
+  files.circular = makeFile('F.gbk');
+  await router.captureBaseline();
+  const fileId = fileStore.registerFile(files.circular).fileId;
+
+  const members = router.captureMembers();
+  router.replaceMembers(['circular-2']);
+  shown.value = 'circular-2';
+  await router.captureBaseline();
+  assert.equal(fileStore.has(fileId), true, 'the baseline of the loaded drawing keeps the captured files');
+
+  router.releaseCapturedMembers(members);
+  assert.equal(fileStore.has(fileId), false, 'a Load that ended lets them go at once, with no step after it');
+});
+
 // OV-2210: a Duplicate shows its source's Result, so the source's last
 // Generate entry and the copy's first one name the same artifact (the same
 // fingerprint and compact signature). The shared budget counts it once across

@@ -1208,6 +1208,7 @@ const sessionImportRollbackState = createSessionImportRollbackState({
   captureHistoryMembers: () => historyMembersBefore,
   replaceHistoryMembers: () => {},
   restoreHistoryMembers: (members) => restoredHistoryMembers.push(members),
+  releaseHistoryMembers: () => {},
   captureDisplayedArtifact: () => {
     const slot = artifactPort.captureArtifactSlot();
     capturedArtifacts.push(slot);
@@ -1220,7 +1221,11 @@ const sessionImportRollbackState = createSessionImportRollbackState({
   featureListScrollTop: state.featureListScrollTop,
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId,
-  alignment: { endReviewOutside: () => {} }
+  alignment: { endReviewOutside: () => {} },
+  shownDrawing: state.activeDrawing,
+  keepDrawingSearch: () => {},
+  returnToDrawingSearch: () => {},
+  drawingCopyFollowers: []
 });
 
 const jsonClone = (value) => JSON.parse(JSON.stringify(value));

@@ -61,9 +61,11 @@ const { exportSession, importSession } = callerSession(sessionConfig, state, rol
 const spyOnPort = (onCapture, onRestore = () => {}) => ({
   capture: () => { onCapture(); return rollbackPort.capture(); },
   replaceHistoryMembers: rollbackPort.replaceHistoryMembers,
+  followDrawingCopy: rollbackPort.followDrawingCopy,
   restoreHistoryMembers: rollbackPort.restoreHistoryMembers,
   restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); },
-  endWorkOutside: rollbackPort.endWorkOutside
+  endWorkOutside: rollbackPort.endWorkOutside,
+  release: rollbackPort.release
 });
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
@@ -2090,4 +2092,107 @@ test('a Session 50 Depth series and blank number fields read as one blank, with 
     assert.deepEqual([adv.depth_large_tick_interval, adv.legend_font_size, adv.gc_content_tick_interval], [5000, null, 20], mode);
     assert.deepEqual(filters.map((field) => adv[field]), [null, null, null], mode);
   }
+});
+
+// OV-3772 and review M1: a drawing's CLI options are the drawing's. A Load that fails after its commit gives the
+// drawing back with them, and a legacy configuration Load onto it, which changes its draft and not the committed
+// request the options were written with, keeps them.
+test('a drawing keeps its CLI options through a rolled-back Load and a legacy configuration Load', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  const shownId = state.activeDrawingId.value;
+  const cliOf = (document) => document.drawings.find((drawing) => drawing.id === shownId).cliOptions ?? null;
+  const withCli = await savedSession('cli');
+  withCli.drawings.find((drawing) => drawing.id === shownId).cliOptions = { marker: 'kept' };
+  await loadAnswering(withCli);
+  assert.deepEqual(cliOf(await savedSession('cli')), { marker: 'kept' });
+  const failed = await importSession(await input(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz')), {
+    confirmLoadRepairs: async () => true, afterImport: async () => { throw new Error('a failure after the commit'); }
+  });
+  assert.equal(failed.status, 'error');
+  assert.deepEqual(cliOf(await savedSession('cli')), { marker: 'kept' }, 'the rollback gives them back');
+  const legacy = await importSession(await input({ form: { legend: 'left' } }), { confirmLoadRepairs: async () => true });
+  assert.equal(legacy.status, 'legacy', JSON.stringify(legacy.error));
+  assert.deepEqual(cliOf(await savedSession('cli')), { marker: 'kept' }, 'the legacy configuration keeps them');
+});
+
+// Review M3: every Load, whether it succeeds, fails after its commit or applies a legacy configuration, lets the
+// History members it captured for its rollback go when it ends (the composition root's port), so they keep the
+// previous project's files no longer.
+test('every Load lets the History members it captured go when it ends', async () => {
+  /** @type {object[]} */
+  const captured = [];
+  /** @type {object[]} */
+  const released = [];
+  const history = {
+    captureMembers: () => { const members = Object.freeze({ histories: [] }); captured.push(members); return members; },
+    replaceMembers: () => {},
+    restoreMembers: () => {},
+    releaseCapturedMembers: (/** @type {object} */ members) => { released.push(members); }
+  };
+  const rollbackState = await sessionRollbackPort(state, history);
+  const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async () => true, rollbackState });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const failed = await importSession(await input(session), {
+    confirmLoadRepairs: async () => true, rollbackState, afterImport: async () => { throw new Error('a failure after the commit'); }
+  });
+  assert.equal(failed.status, 'error');
+  const legacy = await importSession(await input({ form: { legend: 'left' } }), { confirmLoadRepairs: async () => true, rollbackState });
+  assert.equal(legacy.status, 'legacy', JSON.stringify(legacy.error));
+  assert.equal(captured.length, 3);
+  assert.deepEqual(released, captured);
+});
+
+// OV-3774: a Load leaves the shown drawing with its Preview search, as a drawing switch does. A Load that fails
+// after its commit shows that drawing again and gives the search back to it; a Load that succeeds shows the drawings
+// it loaded, which have no search.
+test('a rolled-back Load gives the shown drawing its Preview search back', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  /** @type {[string, object][]} */
+  const calls = [];
+  const drawingSearch = {
+    keepDrawingSearch: (/** @type {object} */ drawing) => { calls.push(['keep', drawing]); },
+    returnToDrawingSearch: (/** @type {object} */ drawing) => { calls.push(['return', drawing]); }
+  };
+  const rollbackState = await sessionRollbackPort(state, null, undefined, drawingSearch);
+  const shown = state.activeDrawing();
+  const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  const failed = await importSession(await input(session), {
+    confirmLoadRepairs: async () => true, rollbackState, afterImport: async () => { throw new Error('a failure after the commit'); }
+  });
+  assert.equal(failed.status, 'error');
+  assert.equal(state.activeDrawing(), shown, 'the rollback shows the same drawing');
+  assert.deepEqual(calls, [['keep', shown], ['return', shown]]);
+  calls.length = 0;
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async () => true, rollbackState });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.notEqual(state.activeDrawing(), shown);
+  assert.deepEqual(calls, [['keep', shown]], 'a Load that succeeds gives no search back');
+});
+
+// Review 3 M1: the legacy configuration Load shows a same-ID copy of the shown drawing, which keeps its History. The
+// copy takes every value kept by the drawing object through the rollback port's one reaction, each owner's follower
+// called once with the drawing and its copy; the drawing keeps its own for a rollback. No value reaches the copy
+// another way: without the CLI options' follower the copy has none.
+test('a legacy configuration Load gives the copy it shows the values kept by the drawing, through one reaction', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  const shownId = state.activeDrawingId.value;
+  const withCli = await savedSession('cli');
+  withCli.drawings.find((drawing) => drawing.id === shownId).cliOptions = { marker: 'kept' };
+  await loadAnswering(withCli);
+  /** @type {[object, object][]} */
+  const followed = [];
+  const rollbackState = await sessionRollbackPort(state, null, undefined, {
+    drawingCopyFollowers: [(/** @type {object} */ drawing, /** @type {object} */ copy) => { followed.push([drawing, copy]); }]
+  });
+  const shown = state.activeDrawing();
+  const legacy = await importSession(await input({ form: { legend: 'left' } }), { confirmLoadRepairs: async () => true, rollbackState });
+  assert.equal(legacy.status, 'legacy', JSON.stringify(legacy.error));
+  const copy = state.activeDrawing();
+  assert.notEqual(copy, shown);
+  assert.equal(copy.id, shown.id);
+  assert.deepEqual(followed, [[shown, copy]]);
+  const saved = await savedSession('cli');
+  assert.equal(saved.drawings.find((drawing) => drawing.id === shownId).cliOptions ?? null, null,
+    'the CLI options reach the copy only through their follower');
 });

@@ -315,11 +315,13 @@ test('the Load rollback port ends the review only on a Load that succeeded', asy
   const replaced = [];
   const ended = [];
   const port = createSessionImportRollbackState({
-    artifactSlots: /** @type {any} */ ({}), captureHistoryMembers: () => ({}), restoreHistoryMembers: () => {},
+    artifactSlots: /** @type {any} */ ({}), captureHistoryMembers: () => ({}), restoreHistoryMembers: () => {}, releaseHistoryMembers: () => {},
     replaceHistoryMembers: (ids) => replaced.push([...ids]),
     captureDisplayedArtifact: () => /** @type {any} */ ({}), installDisplayedArtifact: () => {},
     featureListScrollTop: { value: 0 }, featureListScrollRef: { value: null }, selectedPairwiseBlockOrthogroupId: { value: '' },
-    alignment: { endReviewOutside: (ids) => ended.push([...ids]) }
+    alignment: { endReviewOutside: (ids) => ended.push([...ids]) },
+    shownDrawing: () => /** @type {any} */ ({}), keepDrawingSearch: () => {}, returnToDrawingSearch: () => {},
+    drawingCopyFollowers: []
   });
   port.replaceHistoryMembers(['linear-2']);
   assert.deepEqual({ replaced, ended }, { replaced: [['linear-2']], ended: [] }, 'the commit ends no review');

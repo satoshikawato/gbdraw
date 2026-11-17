@@ -142,6 +142,7 @@ import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend, requestS
 import {
   base64ToBytes,
   contentFactsOfStream,
+  describedFileReader,
   fileDescriptorOf,
   getSessionResourceSource,
   copyInputStream,
@@ -149,7 +150,6 @@ import {
   inputCopiesAvailable,
   keepSaveData,
   readFileContentFacts,
-  readStoredBytes,
   rememberFileDescriptor,
   storedFileBytes
 } from './file-content-cache.js';
@@ -865,9 +865,19 @@ let lastSessionFilename = null;
  */
 /** @param {unknown} value @returns {SessionCliOptions | null} */
 const cliOptionsOf = (value) => (isPlainObject(value) ? cloneJsonData(value) : null);
-// Each drawing's CLI options, by drawing ID (B2-D9: they go with the request's drawing).
-/** @type {Map<DrawingId, SessionCliOptions>} */
-const preservedCliOptions = new Map();
+// Each drawing's CLI options (B2-D9: they go with the request's drawing), keyed by the drawing Load made: a new
+// drawing that takes a deleted drawing's ID has none, and a Load's rollback puts back drawings that keep theirs (OV-3510).
+/** @type {WeakMap<DrawingState, SessionCliOptions>} */
+const preservedCliOptions = new WeakMap();
+/**
+ * The legacy configuration Load replaced `drawing` with its same-ID `copy` (`commitDrawingCopy`): the copy keeps the
+ * drawing's CLI options, since the configuration changes its draft, not the committed request they were written with.
+ * One of the followers of that replacement (`followDrawingCopy` of the Load rollback port).
+ * @param {DrawingState} drawing @param {DrawingState} copy
+ */
+export const followDrawingCopyCliOptions = (drawing, copy) => {
+  if (preservedCliOptions.has(drawing)) preservedCliOptions.set(copy, /** @type {SessionCliOptions} */ (preservedCliOptions.get(drawing)));
+};
 // The variable keeps its earlier type: `applyResultsData` passes the request's
 // `diagramOptions.selectedFeaturesSet` on as feature types without a check,
 // which the true type refuses (stage 1d).
@@ -3871,7 +3881,7 @@ export const serializeFile = async (file) => {
     type: String(view?.type || ''),
     size: byteLength,
     lastModified: Number(view?.lastModified ?? Date.now())
-  }, viewReader ?? (() => readStoredBytes(file)), stored);
+  }, viewReader ?? describedFileReader(/** @type {FileLike} */ (file)), stored);
   return cacheSerializedFileDescriptor(owner, descriptor);
 };
 
@@ -6126,12 +6136,18 @@ export const applyDrawingStyle = (drawing, source, paletteColors) => {
  * The legacy configuration Load's commit (D-15-112): a copy of the shown
  * drawing under its own ID (`duplicateDrawingState`) replaces it in the store,
  * so the configuration applies to the copy and the rollback puts the drawing
- * back unchanged (`restoreSessionImportSnapshot`).
+ * back unchanged (`restoreSessionImportSnapshot`). The CLI options, Preview
+ * search, record binding and Sequence search sets follow the drawing to its
+ * copy, through the rollback port's one reaction (`followDrawingCopy`). Work
+ * in flight for the drawing (pending live settings, discoveries, `redrawOwed`)
+ * stays with it, as on dev.
  * @param {DrawingState} drawing The shown drawing.
+ * @param {SessionImportRollbackState} rollbackState
  * @returns {DrawingState} The copy, shown.
  */
-const commitDrawingCopy = (drawing) => {
+const commitDrawingCopy = (drawing, rollbackState) => {
   const copy = duplicateDrawingState(drawing, drawing.id);
+  rollbackState.followDrawingCopy(drawing, copy);
   state.replaceDrawings(state.drawingList().map((each) => (each.id === drawing.id ? copy : each)), state.drawingTabs.value);
   return installShownDrawing(drawing.id);
 };
@@ -6142,7 +6158,6 @@ const commitDrawingCopy = (drawing) => {
 // (`commitLoadedDrawings`), and its rollback puts the previous ones back.
 const resetSessionProject = () => {
   previewRuntimePorts.clearActiveRuntime();
-  preservedCliOptions.clear();
   setCommittedCanonicalSession(null, NO_CONSERVATION_PAIRS);
   loadedTrackSettings = null;
   activeSessionResourceTable = null;
@@ -6977,7 +6992,7 @@ const exportSessionDocument = async (
           orthogroupState: { selectedOrthogroupId: String(state.selectedOrthogroupId.value || '') }
         } : {}),
         modes: { [saved.mode]: slice },
-        ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
+        ...(preservedCliOptions.has(state.drawingOf(saved.id)) ? { cliOptions: cloneJsonData(preservedCliOptions.get(state.drawingOf(saved.id))) } : {}),
         losatCache: { entries: losatEntriesResolvingIn(
           losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs, losatEntries, editorState?.featureCatalog ?? null),
           proteinIdentityManifests[index], validatedWith
@@ -8126,7 +8141,7 @@ const importSessionDocument = async (e, options = {}) => {
       rollbackSnapshot = captureSessionImportSnapshot(legacyDrawing.id);
       rollbackExtensionSnapshot = rollbackState.capture();
       commitStarted = true;
-      applyLegacyConfigPayload(commitDrawingCopy(legacyDrawing), legacyConfig.value);
+      applyLegacyConfigPayload(commitDrawingCopy(legacyDrawing, rollbackState), legacyConfig.value);
       return { status: 'legacy', repairs: Object.freeze(legacyRepairs) };
     }
 
@@ -9096,13 +9111,12 @@ const importSessionDocument = async (e, options = {}) => {
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
     // The committed set's CLI options and each other Session 51 drawing's own.
-    preservedCliOptions.clear();
     /** @type {[DrawingId, SessionCliOptions | null][]} */
     const cliOptionsByDrawing = [
       [committedSetDrawingId, cliOptionsOf(sessionCliOptions)],
       ...[...storedDrawingInputs].map(([id, inputs]) => /** @type {[DrawingId, SessionCliOptions | null]} */ ([id, inputs.cliOptions]))
     ];
-    for (const [id, options] of cliOptionsByDrawing) if (options) preservedCliOptions.set(id, options);
+    for (const [id, options] of cliOptionsByDrawing) if (options) preservedCliOptions.set(state.drawingOf(id), options);
     const draftAlignmentSlots = installLoadedAlignments({
       committed, shownDrawing, opensSlot: openingSlot !== null, committedSetDrawingId,
       committedLayout: canonicalProjection?.config?.linearRecordLayout ?? null,
@@ -9392,6 +9406,7 @@ const importSessionDocument = async (e, options = {}) => {
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
     if (!loadedOk) giveBackUnfinishedLoad(loadCopies, storedFigureWithdrawal, storedFigurePreview);
+    if (rollbackExtensionSnapshot !== undefined) rollbackState.release(rollbackExtensionSnapshot);
   }
 };
 
@@ -9582,11 +9597,14 @@ export const exportSession = (titleOverride = null, options) => {
  * shown drawing's; OV-2131). When the Load fails, `restoreHistoryMembers` gives the captured members back in the
  * task that restores the store (OV-2132), then `restore` the rest; both take what `capture` returned (the method
  * form keeps the owner's own snapshot type assignable). When the Load succeeds, `endWorkOutside` with the loaded
- * drawings' IDs ends the work of a drawing it did not keep (an open alignment review, OV-3618; R15).
+ * drawings' IDs ends the work of a drawing it did not keep (an open alignment review, OV-3618; R15). When the Load
+ * ends, `release` lets the captured History members go, which keep the previous project's files until then (OV-3509).
+ * A legacy configuration Load's commit tells it that a same-ID copy replaced the shown drawing (`followDrawingCopy`).
  * @typedef {{ capture(): unknown, replaceHistoryMembers(drawingIds: readonly DrawingId[]): void,
+ *   followDrawingCopy(drawing: DrawingState, copy: DrawingState): void,
  *   restoreHistoryMembers(snapshot: unknown): void,
  *   restore(snapshot: unknown): void | Promise<void>,
- *   endWorkOutside(drawingIds: readonly DrawingId[]): void }} SessionImportRollbackState
+ *   endWorkOutside(drawingIds: readonly DrawingId[]): void, release(snapshot: unknown): void }} SessionImportRollbackState
  */
 /**
  * What the composition root passes to `importSession`: the Save and Load availability and the shown drawing

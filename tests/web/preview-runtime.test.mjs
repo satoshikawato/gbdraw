@@ -654,4 +654,25 @@ assert.equal(targetReceipt.phase, 'target-history-finalization-rollback');
 assert.equal(keptBindCount, 3);
 assert.equal(keptRuntime.isActiveResultReady(), true);
 
+// OV-3773: a drawing switch whose arriving drawing shows the Result the mounted root already shows (a drawing that
+// displays another's Result) releases it and expects it again. The mount watcher observes no change, so the
+// expectation binds that root itself and settles; a Save waiting on the readiness ends.
+{
+  const switchedBefore = keptBindCount;
+  keptRuntime.clearActiveRuntime();
+  const arrival = keptRuntime.presentSelectedResult({ modeArrival: true });
+  const arrivalReceipt = await settleWithin(arrival.promise);
+  assert.notEqual(arrivalReceipt, 'unsettled', 'the arrival must settle when the mounted root shows its Result');
+  assert.equal(arrivalReceipt.phase, 'result-selection');
+  assert.equal(await settleWithin(keptRuntime.pendingReadiness() ?? Promise.resolve(arrivalReceipt)), arrivalReceipt);
+  assert.equal(keptBindCount, switchedBefore + 1);
+  assert.equal(keptRuntime.isActiveResultReady(), true);
+  // A Result switch to another Result is the mount watcher's to bind: nothing binds before the render.
+  const otherResult = { name: 'other.svg', content: '<svg id="other"></svg>' };
+  keptState.results.value = [keptResult, otherResult];
+  keptRuntime.selectResult(1);
+  assert.equal(keptBindCount, switchedBefore + 1);
+  assert.equal(await settleWithin(keptRuntime.pendingReadiness()), 'unsettled');
+}
+
 console.log('preview runtime tests passed');

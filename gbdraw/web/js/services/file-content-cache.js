@@ -63,7 +63,10 @@ const fileContentFacts = new WeakMap();
 // the store `state.js` gives (`useInputCopyStore`), the Files the input store
 // holds (`keepFileCopy`), whose first read writes a copy, the other uses that
 // keep a copy (`holdFileCopy`), the copy of each such File, and the Files no
-// longer kept or used, whose copies are given back once no reading runs.
+// longer kept or used, whose copies are given back once no reading runs
+// (`releaseFileCopy`). A File that Generate described keeps its copy while it
+// lives: its reader (`describedFileReader`) gives the copy back when the File
+// is collected.
 /** @type {InputCopyStore | null} */
 let copyStore = null;
 /** @type {WeakSet<object>} */
@@ -93,11 +96,16 @@ const asCacheKey = (file) => (
 // API, "file read errors"): the file was moved, deleted, or changed on disk
 // after it was picked, or the browser deems it unsafe to read.
 const REFUSED_FILE_READS = new Set(['NotFoundError', 'NotReadableError', 'SecurityError']);
-/** @param {unknown} error */
-const refusedReadError = (error) => (
-  error instanceof DOMException && REFUSED_FILE_READS.has(error.name)
-    ? diagnosticError('INPUT_UNREADABLE', {}, { stage: 'read' })
-    : error
+/**
+ * The refusal of a read of `file`: `INPUT_UNREADABLE`, naming the file (OV-3770).
+ * @param {{ readonly name?: unknown }} file
+ */
+const unreadableFile = (file) => diagnosticError('INPUT_UNREADABLE', {
+  ...(typeof file.name === 'string' && file.name ? { inputName: file.name } : {})
+}, { stage: 'read' });
+/** @param {unknown} error @param {{ readonly name?: unknown }} file */
+const refusedReadError = (error, file) => (
+  error instanceof DOMException && REFUSED_FILE_READS.has(error.name) ? unreadableFile(file) : error
 );
 
 const MIB = 1024 * 1024;
@@ -275,7 +283,7 @@ export const holdReadBytes = () => {
  */
 const readSource = (file) => Promise.resolve()
   .then(() => file.arrayBuffer())
-  .then(asBytes, (error) => { throw refusedReadError(error); });
+  .then(asBytes, (error) => { throw refusedReadError(error, file); });
 
 /**
  * A later read of a File that has no copy: its bytes are checked against the
@@ -288,7 +296,7 @@ const readAgain = async (file, knownFacts) => {
   const bytes = await readSource(file);
   const facts = await knownFacts;
   if (bytes.byteLength !== facts.byteLength || await contentTokenOfBytes(bytes) !== facts.token) {
-    throw diagnosticError('INPUT_UNREADABLE', {}, { stage: 'read' });
+    throw unreadableFile(file);
   }
   return bytes;
 };
@@ -452,14 +460,18 @@ const streamUntil = (source, end) => {
 const checkedFileStream = async (key, file) => {
   const known = key ? fileContentFacts.get(key) : undefined;
   const expected = known ? await known : null;
-  const changed = () => diagnosticError('INPUT_UNREADABLE', {}, { stage: 'read' });
+  const changed = () => unreadableFile(file);
   if (expected && typeof file.size === 'number' && file.size !== expected.byteLength) throw changed();
   const source = typeof file.stream === 'function' ? file.stream() : new Blob([/** @type {Uint8Array<ArrayBuffer>} */ (await readSource(file))]).stream();
   const reader = source.getReader();
   const hasher = expected ? pieceHasher() : null;
   return new ReadableStream({
     async pull(controller) {
-      const step = await reader.read().catch((error) => { throw refusedReadError(error); });
+      // Chromium fails a stream of a File changed on disk with a TypeError ("network error"), not a DOMException:
+      // a read of the File's own stream that fails is a refused read (OV-3770).
+      const step = await reader.read().catch((error) => {
+        throw error instanceof TypeError ? unreadableFile(file) : refusedReadError(error, file);
+      });
       if (!step.done) {
         await hasher?.add(step.value);
         controller.enqueue(step.value);
@@ -823,6 +835,32 @@ export const holdFileCopy = (file) => {
     if (fileCopies.has(key)) releasedFiles.add(key);
     dropSharedReads();
   };
+};
+
+// The copies the readers of described Files keep (`describedFileReader`). The reader reads its File and is the File's
+// cached descriptor's (`fileDescriptors`, never replaced), so the two are collected together: the copy lives while
+// the File is reachable and is given back when it is collected, as Load's copies are. The record holds the copy
+// only, never the File.
+/** @type {FinalizationRegistry<Promise<InputCopy | null> | undefined>} */
+const describedFileCopies = new FinalizationRegistry((copy) => {
+  void copy?.then((held) => held?.release());
+});
+
+/**
+ * The reader of a File as Generate describes it (`serializeFile`): the File's bytes as chosen. The reader keeps the
+ * File's copy while it lives, and every descriptor of the resource shares it: a committed Result, shown, kept by
+ * another drawing or held by History, reads the bytes chosen after the input store lets the File go and it changes
+ * on disk (PD-OI-121, OV-3508).
+ * @param {FileLike} file
+ * @returns {() => Promise<Uint8Array>}
+ */
+export const describedFileReader = (file) => {
+  const read = () => readStoredBytes(file);
+  const key = asCacheKey(file);
+  if (!key) return read;
+  copyUses.set(key, (copyUses.get(key) ?? 0) + 1);
+  describedFileCopies.register(read, fileCopies.get(key));
+  return read;
 };
 
 /**

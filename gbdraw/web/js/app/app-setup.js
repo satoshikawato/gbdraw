@@ -130,6 +130,7 @@ import {
   setHeldPreviewViewportReader,
   installShownDrawing,
   duplicateDrawingState,
+  followDrawingCopyCliOptions,
   applyDrawingStyle,
   writeLosatCacheInfo,
   CIRCULAR_RECORD_FORM_DEFAULTS,
@@ -317,6 +318,7 @@ const loadExportService = () => {
 };
 
 /** @typedef {ReturnType<typeof createHistoryRouter>} HistoryRouter */
+/** @typedef {ReturnType<typeof createPreviewFeatureSearch>} PreviewFeatureSearch */
 /**
  * @typedef {object} SessionImportRollbackOptions
  * @property {ArtifactSlotStore} artifactSlots
@@ -326,6 +328,8 @@ const loadExportService = () => {
  * @property {HistoryRouter['replaceMembers']} replaceHistoryMembers The History router's: each drawing a Load's commit
  *   made starts with an empty History.
  * @property {HistoryRouter['restoreMembers']} restoreHistoryMembers
+ * @property {HistoryRouter['releaseCapturedMembers']} releaseHistoryMembers The History router's: the members a Load
+ *   captured no longer keep their files once it ends (OV-3509).
  * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture
  *   of the shown drawing.
  * @property {(slot: Readonly<ArtifactSlot>) => void} installDisplayedArtifact
@@ -337,12 +341,26 @@ const loadExportService = () => {
  * @property {((drafts: any) => void) | null} [restoreSpecificRulePatternDrafts]
  * @property {Pick<SimilarityAlignmentPorts, 'endReviewOutside'>} alignment The Similarity alignment owner's: a Load
  *   that succeeded ends the review of a drawing it did not keep (OV-3618).
+ * @property {() => DrawingState} shownDrawing The drawing shown when the Load starts.
+ * @property {PreviewFeatureSearch['keepDrawingSearch']} keepDrawingSearch The Preview search owner's: a Load leaves
+ *   the shown drawing with its search (OV-3774).
+ * @property {PreviewFeatureSearch['returnToDrawingSearch']} returnToDrawingSearch The Preview search owner's: the
+ *   rollback that shows the drawing again gives the search back.
+ * @property {readonly DrawingCopyFollower[]} drawingCopyFollowers The owners of the values kept by the drawing
+ *   object, each by the one function that gives a same-ID copy the drawing's value.
+ */
+/**
+ * A same-ID copy replaced a drawing in the store (the legacy configuration Load's commit): the owner of a value kept by
+ * the drawing object gives the copy the drawing's value. The drawing keeps its own, so the rollback that puts the
+ * drawing back finds it.
+ * @typedef {(drawing: DrawingState, copy: DrawingState) => void} DrawingCopyFollower
  */
 
 /**
  * What `capture` holds for `restore`.
  * @typedef {object} SessionImportRollbackSnapshot
  * @property {ArtifactSlotSnapshot} artifactSlots
+ * @property {DrawingState} shownDrawing The drawing the Load left, which the rollback shows again.
  * @property {ReturnType<HistoryRouter['captureMembers']>} historyMembers
  * @property {Readonly<ArtifactSlot>} displayedArtifact
  * @property {number} featureListScrollTop
@@ -356,6 +374,7 @@ export const createSessionImportRollbackState = ({
   captureHistoryMembers,
   replaceHistoryMembers,
   restoreHistoryMembers,
+  releaseHistoryMembers,
   captureDisplayedArtifact,
   installDisplayedArtifact,
   featureListScrollTop,
@@ -363,20 +382,36 @@ export const createSessionImportRollbackState = ({
   selectedPairwiseBlockOrthogroupId,
   captureSpecificRulePatternDrafts = null,
   restoreSpecificRulePatternDrafts = null,
-  alignment
+  alignment,
+  shownDrawing,
+  keepDrawingSearch,
+  returnToDrawingSearch,
+  drawingCopyFollowers
 }) => ({
-  capture: () => ({
-    artifactSlots: artifactSlots.snapshot(),
-    historyMembers: captureHistoryMembers(),
-    // The displayed artifact's parts outside state: its transport identity,
-    // match-sequence owner, committed Session and CLI helper files.
-    displayedArtifact: captureDisplayedArtifact(),
-    featureListScrollTop: featureListScrollTop.value,
-    selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
-    ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
-  }),
+  capture: () => {
+    // A Load leaves the shown drawing as a drawing switch does: the drawing keeps the search shown (OV-3774).
+    const shown = shownDrawing();
+    keepDrawingSearch(shown);
+    return {
+      artifactSlots: artifactSlots.snapshot(),
+      shownDrawing: shown,
+      historyMembers: captureHistoryMembers(),
+      // The displayed artifact's parts outside state: its transport identity,
+      // match-sequence owner, committed Session and CLI helper files.
+      displayedArtifact: captureDisplayedArtifact(),
+      featureListScrollTop: featureListScrollTop.value,
+      selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
+      ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
+    };
+  },
   // A Load's commit, in the task that writes the store: each drawing it made starts with an empty History.
   replaceHistoryMembers,
+  // The legacy configuration Load's commit replaced `drawing` with its same-ID `copy`: the CLI options, Preview
+  // search, record binding and Sequence search sets follow it (its History is kept by ID). In-flight work tied to the
+  // old drawing (pending live settings, discoveries, `redrawOwed`) stays with it, as on dev.
+  followDrawingCopy: (/** @type {DrawingState} */ drawing, /** @type {DrawingState} */ copy) => {
+    for (const follow of drawingCopyFollowers) follow(drawing, copy);
+  },
   // A Load that succeeded, with the drawings it loaded: the alignment review of a drawing it did not keep ends
   // (OV-3618). Not at the commit: a Load that fails after it gives the drawings back, and the review with them (R15).
   endWorkOutside: (/** @type {readonly DrawingId[]} */ drawingIds) => alignment.endReviewOutside(drawingIds),
@@ -385,9 +420,14 @@ export const createSessionImportRollbackState = ({
   restoreHistoryMembers: (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     restoreHistoryMembers(snapshot.historyMembers);
   },
+  // The Load that captured `snapshot` ended, rolled back or not: the members it captured keep their files until then.
+  release: (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
+    releaseHistoryMembers(snapshot.historyMembers);
+  },
   restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     artifactSlots.restore(snapshot.artifactSlots);
     installDisplayedArtifact(snapshot.displayedArtifact);
+    returnToDrawingSearch(snapshot.shownDrawing);
     // The restored document holds each drawing's Depth series, and so its Depth panel count (OV-1165, OV-2200).
     await nextTick();
     featureListScrollTop.value = snapshot.featureListScrollTop;
@@ -2157,24 +2197,6 @@ export const createAppSetup = () => {
   );
   let nextSessionPreviewToken = 1;
   const circularDrawings = () => state.drawingList().filter((drawing) => drawing.mode === 'circular');
-  // The Load rollback port: the one the Load options carry and `window.__GBDRAW_APP__` hands to page callers.
-  const sessionImportRollbackState = createSessionImportRollbackState({
-    artifactSlots,
-    captureHistoryMembers: () => history.captureMembers(),
-    replaceHistoryMembers: (drawingIds) => history.replaceMembers(drawingIds),
-    restoreHistoryMembers: (members) => history.restoreMembers(members),
-    captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(),
-    // The rollback restored the pan already; the install keeps it.
-    installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
-      drawing: state.drawingOf(slot.drawingId), ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
-    }),
-    featureListScrollTop,
-    featureListScrollRef,
-    selectedPairwiseBlockOrthogroupId,
-    captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
-    restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts,
-    alignment: similarityAlignmentPorts
-  });
   // A loaded Session says so in the notice banner, with what the load changed
   // without a loss as a list; what it could not restore was listed in the
   // Load dialog before. A Gallery example's notice also offers its tutorial
@@ -3454,6 +3476,31 @@ export const createAppSetup = () => {
     shownRoot: shownResultRoot,
     closeRegionPopup,
     revealSection: () => settingsPaneActions.revealSettingsSection('sequence-search')
+  });
+  // The Load rollback port: the one the Load options carry and `window.__GBDRAW_APP__` hands to page callers. It is
+  // made after the owners whose values follow a drawing's same-ID copy (`drawingCopyFollowers`); Load reads it when it runs.
+  const sessionImportRollbackState = createSessionImportRollbackState({
+    artifactSlots,
+    captureHistoryMembers: () => history.captureMembers(),
+    replaceHistoryMembers: (drawingIds) => history.replaceMembers(drawingIds),
+    restoreHistoryMembers: (members) => history.restoreMembers(members),
+    releaseHistoryMembers: (members) => history.releaseCapturedMembers(members),
+    captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(),
+    // The rollback restored the pan already; the install keeps it.
+    installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
+      drawing: state.drawingOf(slot.drawingId), ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
+    }),
+    featureListScrollTop,
+    featureListScrollRef,
+    selectedPairwiseBlockOrthogroupId,
+    captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
+    restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts,
+    alignment: similarityAlignmentPorts,
+    shownDrawing: state.activeDrawing,
+    keepDrawingSearch: previewFeatureSearch.keepDrawingSearch,
+    returnToDrawingSearch: previewFeatureSearch.returnToDrawingSearch,
+    drawingCopyFollowers: [followDrawingCopyCliOptions, recordDisplayControls.followDrawingCopy,
+      previewFeatureSearch.followDrawingCopy, sequenceSearch.followDrawingCopy]
   });
   // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
   // match frame's (the one Result popup).

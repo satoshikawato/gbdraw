@@ -518,7 +518,7 @@ test('a slot install installs the slot\'s Legend inventory and colors', async ()
 // The drawing switch with History's slot capture and install, the slot store,
 // and the install of the shown drawing; its other ports do nothing. `installs`
 // holds the displayed Legend inventory and colors right after each slot install.
-const legendSwitch = () => {
+const legendSwitch = ({ switchDrawingSearch = () => {} } = {}) => {
   const store = createArtifactSlotStore();
   const installs = [];
   const remembered = new Map();
@@ -530,7 +530,7 @@ const legendSwitch = () => {
     ruleWritePending: () => false, suspendSpecificRulePatternDrafts: () => {}, clearFeatureSelection: () => {},
     rememberDepartingResultProjection: () => {}, auxiliaryImportFailureOnArrival: () => null,
     resetModeTransientUi: () => {}, alignment: { arriveAtDrawing: () => {}, refreshCanvas: () => {}, busy: () => null }, installShownDrawing, dismissNotice: () => {},
-    switchDrawingSearch: () => {},
+    switchDrawingSearch,
     rebindAnnotationRecords: () => {}, clearActiveRuntime: () => {}, getResultIdentity: (result) => result.name,
     presentSelectedResult: () => {}, showArrivingFigure: async () => {},
     rememberResultInventory: (identity, inventory) => remembered.set(identity, inventory),
@@ -567,6 +567,20 @@ test('a drawing switch installs the arriving set\'s Legend inventory and colors 
   store.replaceLoaded([]);
   showDrawingNow('linear');
   assert.deepEqual(installs.at(-1), { order: [], colors: {} });
+  installShownDrawing('circular');
+});
+
+// OV-3510: the Preview search is kept per drawing, and a new drawing can take a
+// deleted drawing's ID, so the switch hands the search owner the drawings
+// themselves, never their IDs.
+test('a drawing switch hands the Preview search the departing and arriving drawings', () => {
+  installShownDrawing('circular');
+  const calls = [];
+  const { showDrawingNow } = legendSwitch({ switchDrawingSearch: (departing, arriving) => calls.push([departing, arriving]) });
+  showDrawingNow('linear');
+  assert.equal(calls.length, 1);
+  assert.strictEqual(calls[0][0], modeDrawing(state, 'circular'));
+  assert.strictEqual(calls[0][1], modeDrawing(state, 'linear'));
   installShownDrawing('circular');
 });
 

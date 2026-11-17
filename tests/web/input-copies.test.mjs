@@ -8,8 +8,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { webcrypto } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
+setFlagsFromString('--expose-gc');
+/** @type {() => void} The engine's collection, exposed above. */
+const collectGarbage = runInNewContext('gc');
 
 const {
   chosenFileRefusal, contentTokenOfBytes, copyInputStream, holdFileCopy, holdReadBytes, inputContentBlob, keepFileCopy, readFileBytes,
@@ -594,6 +599,55 @@ const chunkedStream = (bytes, size, fail = null) => new ReadableStream({
   }
 });
 
+// OV-3508: a committed Result reads a File through the reader its descriptor shares. The input store lets the File
+// go once no History step and no binding names it, but the Result still names it: its copy stays while the reader
+// lives, so a Save or a Generate reads the bytes chosen after the file changed on disk.
+// Generate describes the File with `serializeFile` (config.js), the descriptor a committed Result keeps.
+const describe = async (file) => {
+  globalThis.window ??= ({ Vue: { ref: (value) => ({ value }), reactive: (value) => value,
+    computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {} } });
+  globalThis.document ??= ({ body: { appendChild: () => {} }, createElement: () => ({}) });
+  const { serializeFile } = await import('../../gbdraw/web/js/services/config.js');
+  const { fileBackedReaderOf } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+  return /** @type {() => Promise<Uint8Array>} */ (fileBackedReaderOf(await serializeFile(file)));
+};
+test('the reader of a described File keeps its copy after the input store lets the File go', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new TextEncoder().encode('LOCUS described\n//\n');
+  const file = chosenFile(bytes);
+  await choose(file);
+  const read = await describe(file);
+  releaseFileCopy(file);
+  await flush();
+  assert.equal(fileSystem.copyFiles().length, 1, 'the reader keeps the copy');
+  file.change(new TextEncoder().encode('LOCUS changed on disk\n//\n'));
+  assert.deepEqual(await read(), bytes);
+  assert.deepEqual(new Uint8Array(await (await inputContentBlob(file)).arrayBuffer()), bytes, 'Generate stages the copy');
+  const stored = await storedFileBytes(file);
+  assert.deepEqual(new Uint8Array(await new Response(await stored.open()).arrayBuffer()), bytes, 'Save streams the copy');
+  assert.equal(file.reads, 1);
+});
+
+// The copy lives while the File is reachable: the File, its descriptor and their reader are collected together, and
+// the copy is given back then.
+test('a described File that is collected gives its copy back', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  await (async () => {
+    const file = chosenFile(new TextEncoder().encode('LOCUS collected\n//\n'));
+    await choose(file);
+    await describe(file);
+    releaseFileCopy(file);
+    await flush();
+  })();
+  assert.equal(fileSystem.copyFiles().length, 1, 'the copy stays while the File is reachable');
+  await until(() => {
+    collectGarbage();
+    return fileSystem.copyFiles().length === 0;
+  });
+});
+
 test('what a Session file stores for a File streams from its copy, not from memory, with the size and token of its first read', async () => {
   const fileSystem = createFakeFileSystem();
   useInputCopyStore(copyStoreOn(fileSystem));
@@ -637,6 +691,30 @@ test('without a copy, what a Session file stores for a File is the File, checked
   await assert.rejects(new Response(await stored.open()).arrayBuffer(), (error) => error.code === 'INPUT_UNREADABLE');
   read.change(new Uint8Array(3));
   await assert.rejects(stored.open(), (error) => error.code === 'INPUT_UNREADABLE');
+});
+
+// OV-3770: Chromium fails the stream of a File changed on disk with a TypeError ("network error"), not with the
+// DOMException an arrayBuffer() read gives. A Save that streams the File without a copy reports the refused read
+// with the file's name, not an unrecognized failure.
+test('a File stream the browser fails with a TypeError is a refused read that names the file', async () => {
+  const bytes = new TextEncoder().encode('LOCUS refused\n//\n');
+  let failing = false;
+  const file = {
+    name: 'F.gbk', size: bytes.byteLength, async arrayBuffer() { return bytes.slice().buffer; },
+    stream() {
+      return failing ? new ReadableStream({ pull(controller) { controller.error(new TypeError('network error')); } })
+        : new Blob([bytes]).stream();
+    }
+  };
+  assert.deepEqual(await readFileBytes(file), bytes);
+  const stored = await storedFileBytes(file);
+  failing = true;
+  await assert.rejects(new Response(await stored.open()).arrayBuffer(),
+    (error) => error.code === 'INPUT_UNREADABLE' && error.context.inputName === 'F.gbk');
+  // A changed size or content names it too.
+  failing = false;
+  file.size += 1;
+  await assert.rejects(stored.open(), (error) => error.code === 'INPUT_UNREADABLE' && error.context.inputName === 'F.gbk');
 });
 
 test('a stream is copied in 16 MiB pieces through one buffer, under the token its bytes have', async () => {

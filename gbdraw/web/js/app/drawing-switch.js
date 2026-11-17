@@ -59,7 +59,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  *   again on the arriving figure; `busy`, why a switch waits for its work in flight.
  * @property {(id: DrawingId) => DrawingState} installShownDrawing The one writer of the shown drawing.
  * @property {() => void} dismissNotice
- * @property {(departing: DrawingId, arriving: DrawingId) => void} switchDrawingSearch
+ * @property {(departing: DrawingState, arriving: DrawingState) => void} switchDrawingSearch
  * @property {() => void} rebindAnnotationRecords Rebinds the shown drawing's annotations to its record catalog (R10).
  * @property {() => void} clearActiveRuntime Releases the displayed Result.
  * @property {(result: SvgResultEntry) => string} getResultIdentity
@@ -201,7 +201,7 @@ export const createDrawingSwitch = ({
     // only on the review's own drawing (D-38, OV-3586).
     alignment.refreshCanvas();
     dismissNotice();
-    switchDrawingSearch(departing.id, arriving.id);
+    switchDrawingSearch(departing, arriving);
     failedGeneratePreservedResult.value = false;
     // OV-372: an operation error belongs to the drawing it was raised in,
     // except one that names the arriving drawing's Result (PD-OI-079).

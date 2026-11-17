@@ -40,9 +40,13 @@ import { createSearchHitTable } from './sequence-search/hit-table.js';
  */
 
 /**
+ * The drawing a search runs on: the store's drawing object, which keeps its identity while it lives.
+ * @typedef {{ id: DrawingId, mode: 'circular' | 'linear', annotationSets: readonly { id: string }[] }} SearchedDrawing
+ */
+/**
  * The ports the composition root gives the panel.
  * @typedef {object} SequenceSearchPorts
- * @property {{ activeDrawing: () => { id: DrawingId, mode: 'circular' | 'linear', annotationSets: readonly { id: string }[] } }} state
+ * @property {{ activeDrawing: () => SearchedDrawing }} state
  * @property {() => RegionAxisRecord[]} readAxisRecords Every drawn record of the shown drawing's Results.
  * @property {(spans: readonly RecordSpanRead[]) => Promise<RecordSpanSequencesReply>} readRecordSpans
  * @property {() => readonly { id: string }[]} committedSets The annotation sets of the committed request the shown
@@ -109,6 +113,17 @@ const initialPanel = () => ({
   selectedHit: ''
 });
 
+/**
+ * A same-ID copy replaced `drawing` (a legacy configuration Load) and keeps its History: the copy keeps the drawing's
+ * search sets too, so a step that added one still draws at once; the drawing keeps its own for the Load's rollback.
+ * @param {WeakMap<SearchedDrawing, Map<string, string>>} searched @param {SearchedDrawing} drawing
+ * @param {SearchedDrawing} copy
+ */
+const followDrawingCopy = (searched, drawing, copy) => {
+  const sets = searched.get(drawing);
+  if (sets) searched.set(copy, new Map(sets));
+};
+
 /** @param {SequenceSearchPorts} ports */
 export const createSequenceSearch = ({
   state, readAxisRecords, readRecordSpans, committedSets, readRecordBindings, runLosatJobs, runHelper, helperOperations,
@@ -119,9 +134,11 @@ export const createSequenceSearch = ({
   // overtook adds nothing to that document and writes nothing in the panel it empties.
   let loads = 0;
   // The sets each drawing's searches added, by id, with the set as written: a History step that adds one of them
-  // (its own, its Redo) or whose Undo removes it draws at once.
-  /** @type {Map<DrawingId, Map<string, string>>} */
-  const searched = new Map();
+  // (its own, its Redo) or whose Undo removes it draws at once. Keyed by the drawing, not its ID: a new drawing that
+  // takes a deleted drawing's ID has no search sets (OV-3780), and a Load that rolls back gives the drawings back
+  // with theirs.
+  /** @type {WeakMap<SearchedDrawing, Map<string, string>>} */
+  const searched = new WeakMap();
   const queries = createSearchQueries(panel, runHelper, helperOperations.readQueries);
   const table = createSearchHitTable(panel, { activeDrawing: state.activeDrawing, shownRoot });
 
@@ -160,7 +177,7 @@ export const createSequenceSearch = ({
       // A cancelled search, or one a Generate or a Session load kept from running, adds nothing and keeps the Result.
       if (load !== loads) return;
       if (run.status === 'busy') panel.busy = run.reason;
-      if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id) return;
+      if (run.status !== 'ok' || state.activeDrawing() !== drawing) return;
       const text = searchRawText(run.results);
       /** @type {SequenceSearchInput} */
       const input = {
@@ -168,7 +185,7 @@ export const createSequenceSearch = ({
         // Unique against the draft, the committed Session, and every set a search added (B2): a freed id that the
         // committed Session still draws, or that History can bring back, is not reused.
         setId: nextSearchSetId([...drawing.annotationSets, ...committedSets()].map(({ id }) => id)
-          .concat([...(searched.get(drawing.id)?.keys() ?? [])])),
+          .concat([...(searched.get(drawing)?.keys() ?? [])])),
         subjects: searchSubjects(read, bindings),
         thresholds: {
           evalue: Number(thresholds.evalue), bitscore: Number(thresholds.bitscore),
@@ -179,7 +196,7 @@ export const createSequenceSearch = ({
         queryColors: Object.fromEntries(searchQueries.map(({ name, color }) => [name, color]))
       };
       const reply = readSequenceSearchReply((await runHelper(helperOperations.buildHitSet, { search: input })).result);
-      if (state.activeDrawing().id !== drawing.id || load !== loads) return;
+      if (state.activeDrawing() !== drawing || load !== loads) return;
       const [found] = reply.annotationSet ? draftAnnotationSetsOfRequest([/** @type {Partial<AnnotationSet>} */ (reply.annotationSet)]) : [];
       const set = found && boundSearchSet(found, reply.hits, bindings);
       panel.outcome = {
@@ -191,8 +208,8 @@ export const createSequenceSearch = ({
       panel.selectedHit = '';
       panel.folded = true;
       if (!set) return;
-      const sets = searched.get(drawing.id) ?? new Map();
-      searched.set(drawing.id, sets.set(set.id, JSON.stringify(set)));
+      const sets = searched.get(drawing) ?? new Map();
+      searched.set(drawing, sets.set(set.id, JSON.stringify(set)));
       addSearchSet(drawing.id, set);
     } catch (error) {
       if (load === loads) panel.searchError = normalizeUserFacingError(error, { stage: 'losat', operation: helperOperations.buildHitSet });
@@ -223,7 +240,7 @@ export const createSequenceSearch = ({
    * The sets a History step of the shown drawing added that its searches wrote (`searchSetIdsOfStep`).
    * @param {readonly HistoryIntentChange[] | null | undefined} changes
    */
-  const searchSetIdsOf = (changes) => searchSetIdsOfStep(changes, searched.get(state.activeDrawing().id) ?? new Map());
+  const searchSetIdsOf = (changes) => searchSetIdsOfStep(changes, searched.get(state.activeDrawing()) ?? new Map());
 
   // The programs of the listed queries (blastn before any query is listed). The Task applies to blastn only.
   const programs = computed(() => (panel.queries.length ? searchPrograms(panel.queries) : ['blastn']));
@@ -235,11 +252,11 @@ export const createSequenceSearch = ({
 
   // A Session Load starts: a search still running is overtaken.
   const loadStarts = () => { loads += 1; };
-  // The Session Load replaced the document: the panel empties (receipt), and its searches' sets are no search's any more.
+  // The Session Load replaced the document: the panel empties (receipt). The loaded drawings are new drawings, with no
+  // search sets.
   const reset = () => {
     loadStarts();
     Object.assign(panel, initialPanel(), { running: panel.running });
-    searched.clear();
     queries.clearReads();
   };
 
@@ -247,6 +264,8 @@ export const createSequenceSearch = ({
   return reactive({
     ...queries, ...table, panel, addQuery, useSpanAsQuery, searchDisabledReason, search, searchSetIdsOf, programs, taskApplies, programText,
     loadStarts, reset,
+    /** @param {SearchedDrawing} drawing @param {SearchedDrawing} copy */
+    followDrawingCopy: (drawing, copy) => followDrawingCopy(searched, drawing, copy),
     tasks: SEARCH_TASKS,
     // The panel's bar of the gradient by query position, the colours of the Legend's "Query position" bar.
     gradientBar: `linear-gradient(to right, ${SEARCH_GRADIENT_START_COLOR}, ${SEARCH_GRADIENT_END_COLOR})`,
