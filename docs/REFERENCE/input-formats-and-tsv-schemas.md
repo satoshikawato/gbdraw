@@ -65,6 +65,29 @@ its records have unknown topology: a setting that needs a complete circular
 record, such as a display start, needs **Circular record** in the Web app or
 `--record_topology circular`.
 
+gbdraw can draw the ORFs predicted from a record's sequence as CDS
+(`--predict_orfs`, or `FeatureOptions.orf_prediction` in Python; off by
+default). It reads both strands in every frame: an ORF starts at the first
+start codon after the previous stop codon in its frame and ends at the next
+stop codon. Predicted ORFs have their own Legend row, "Predicted ORF", and
+their own color, unless a color rule colors them. On a record without features of its own, such as a FASTA
+record, they are its features; beside a record's own features they take lanes
+of their own, outside the circle in Circular and below the line in Linear,
+and the record's own features stay where they are drawn without prediction.
+A predicted protein has at least 50 residues, the stop codon not counted
+(`--orf_min_length`). The genetic code is the table that every CDS of the
+record states in `/transl_table`; when they state different tables, when one
+states none or a table gbdraw does not know, or when the record has no CDS, it
+is table 11 (`--orf_genetic_code` sets a table number). The start codons are
+the codons the table reads as M (`--orf_start_codons table` adds the table's
+alternative start codons). An ORF that lies inside another ORF is left out
+(`--orf_keep_nested` keeps it). On a record drawn as circular, an ORF may run
+across the origin; on any other record an ORF without a stop codon runs to the record end
+and is marked 3'-partial. The prediction finds open reading frames, not genes:
+a gene shorter than the minimum length is not drawn, and a mitochondrial FASTA
+record is read with table 11 unless its table is set (for example
+`--orf_genetic_code 2`).
+
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
 source annotation model. Rows that share an `ID` form one multipart feature;

@@ -222,13 +222,19 @@ def _codon_meanings(genetic_code: int, start_codons: StartCodonSet) -> _CodonMea
     return _CodonMeanings(residues=residues, stops=residues == ord("*"), starts=starts)
 
 
+# Bases read from the sequence at a time: a record's sequence reads its bases from the input file on demand
+# (``io.record_sequences``), so the codes array is the only whole-length copy.
+_READ_BASES = 1 << 20
+
+
 def _plus_strand_codes(sequence: Seq | MutableSeq | str | bytes) -> NDArray[np.uint8]:
-    raw = (
-        bytes(sequence)
-        if isinstance(sequence, (Seq, MutableSeq, bytes, bytearray))
-        else sequence.encode("utf-8")
-    )
-    return np.frombuffer(raw.translate(_BYTE_CODES), dtype=np.uint8)
+    codes = np.empty(len(sequence), dtype=np.uint8)
+    for start in range(0, len(sequence), _READ_BASES):
+        piece = sequence[start : start + _READ_BASES]
+        # A character outside ASCII is one unknown base ("?"), as every other character outside IUPAC is.
+        raw = piece.encode("ascii", errors="replace") if isinstance(piece, str) else bytes(piece)
+        codes[start : start + len(raw)] = np.frombuffer(raw.translate(_BYTE_CODES), dtype=np.uint8)
+    return codes
 
 
 def _frames(
