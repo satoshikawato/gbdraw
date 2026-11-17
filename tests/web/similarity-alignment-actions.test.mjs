@@ -23,6 +23,7 @@ const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-draw
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 const { SOURCE_LOCALE, setUiLocale, t, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
+const { itemListText } = await import('../../gbdraw/web/js/utils/item-list.js');
 const { templateBinding } = await import('./helpers/template-binding.mjs');
 const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
 const reviewView = await import('../../gbdraw/web/js/services/alignment-review-view.js');
@@ -1174,7 +1175,7 @@ test('the review draft keeps the candidate line\'s English keys when it opens in
     const strand = templateBinding(/<span class="alignment-review-facts">.*? · \{\{ candidate\.coordinates \}\} \(\{\{ (.+?) \}\}\)<\/span>/);
     const recommended = templateBinding(/<template v-if="record\.recommendedKey">\{\{ (.+?) \}\}<\/template>/);
     const [candidate] = row.candidates;
-    assert.equal(facts({ candidate, t, tm }), '相互ベストヒット, helper_kind');
+    assert.equal(facts({ candidate, t, tm, itemListText }), '相互ベストヒット, helper_kind');
     assert.equal(strand({ candidate, tm }), candidate.displayedStrand);
     assert.match(recommended({ record: row, t, tm, alignmentFeatureName: reviewView.alignmentFeatureName }), /グループの代表である唯一の候補/);
   } finally {

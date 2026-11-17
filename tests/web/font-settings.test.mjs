@@ -130,7 +130,7 @@ test('the font-file error rewords after a UI language change', async () => {
   nextFiles = [{ name: 'gone.ttf', text: '', unreadable: true }];
   await settings.loadFontFile();
   assert.match(settings.loadError.value, /TrueType or OpenType font file/);
-  const reason = 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.';
+  const reason = 'Choose a readable TrueType or OpenType font file ({trueType}, {openType}, {trueTypeCollection}, {openTypeCollection}) that names its font family.';
   await setUiLocale('ja', async () => ({ default: { [reason]: '読み取れるフォントファイルを選んでください。' } }));
   try {
     assert.match(settings.loadError.value, /読み取れるフォントファイルを選んでください。/);
