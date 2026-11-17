@@ -142,7 +142,11 @@ def test_circular_manual_tick_interval_bypasses_the_tiers() -> None:
 @pytest.mark.parametrize(
     ("length", "expected"),
     [
-        (1, 100),
+        (1, 1),
+        (9, 1),
+        (10, 10),
+        (99, 10),
+        (100, 100),
         (1_999, 100),
         (2_000, 1_000),
         (19_999, 1_000),
@@ -167,6 +171,15 @@ def test_circular_manual_tick_interval_bypasses_the_tiers() -> None:
 )
 def test_linear_tick_tiers(length: int, expected: int) -> None:
     assert linear_tick_interval(length) == expected
+
+
+def test_linear_auto_tick_interval_never_exceeds_the_record() -> None:
+    """OV-3653: a record under 100 bp must not get a scale bar longer than itself."""
+    for length in range(1, 2_000):
+        interval = linear_tick_interval(length)
+        assert interval <= length, length
+        if length >= 100:
+            assert interval == 100, length
 
 
 @pytest.mark.parametrize(

@@ -45,10 +45,12 @@ _CIRCULAR_TICK_TIERS: tuple[tuple[int, int, int], ...] = (
 # Its labels keep the gap on records up to 12.4 Gbp.
 _CIRCULAR_TICKS_ABOVE_TIERS = (500_000_000, 100_000_000)
 # (below bp, tick interval); longer records use the last interval. The scale bar takes its length from them
-# too. Above 5 Mbp the interval steps 1-2-5 Mbp, and each row ends where neighbouring ruler labels, at their
+# too, so a record under 100 bp gets a bar no longer than itself (OV-3653). Above 5 Mbp the interval steps 1-2-5 Mbp, and each row ends where neighbouring ruler labels, at their
 # drawn widths and the default width, would come closer than a quarter em (labels.label_style.ROW_LABEL_GAP_EM;
 # OV-2747, OV-2748; tests/test_linear_ruler_ticks.py measures every bound again).
 _LINEAR_TICK_TIERS: tuple[tuple[int, int], ...] = (
+    (10, 1),
+    (100, 10),
     (2_000, 100),
     (20_000, 1_000),
     (50_000, 5_000),

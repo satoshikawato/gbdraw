@@ -324,8 +324,13 @@ def test_a_session_without_a_committed_render_cannot_render(tmp_path: Path) -> N
     assert _svgs(tmp_path) == []
 
 
+_WIDE_FIGURE = "25000px"  # --figure_width of the 8 bp fixture figure: 25,000 px
+
+
 def _legacy_session_27_30(tmp_path: Path, *extra_args: str) -> Path:
-    """A Session 30 of one Linear drawing, drawn from its CLI arguments (``extra_args`` are stored too)."""
+    """A Session 30 of one Linear drawing, drawn from its CLI arguments (``extra_args`` are stored too).
+
+    The figure is ``_WIDE_FIGURE`` wide on purpose, so a PNG of it is over the PNG size limit at high DPI."""
 
     source_path = tmp_path / "legacy.gb"
     SeqIO.write(
@@ -346,7 +351,8 @@ def _legacy_session_27_30(tmp_path: Path, *extra_args: str) -> Path:
         }}]},
         "cliInvocation": {
             "schema": 1, "mode": "linear",
-            "args": ["--gbk", source_path.name, "--format", "svg", "--no-gc", "--no-skew", *extra_args],
+            "args": ["--gbk", source_path.name, "--format", "svg", "--no-gc", "--no-skew",
+                     "--figure_width", _WIDE_FIGURE, *extra_args],
             "renderFormats": ["svg"],
             "fileBindings": [{"argIndex": 1, "slot": "files.linearSeqs[0].gb", "name": source_path.name}],
             "generatedBy": "gbdraw",
@@ -1554,7 +1560,7 @@ def test_a_session_27_30_replay_draws_its_png_at_the_dpi_it_is_given(tmp_path: P
     def run(*options: str) -> None:
         render_main(["--session", str(path), *options])
 
-    # The 8 bp figure is 25,000 px wide: 300 dpi is over the PNG limit.
+    # The figure is 25,000 px wide (--figure_width): 300 dpi is over the PNG limit.
     plain, dense, phys = _png_at_dpi(run, tmp_path, dpi=120)
     assert dense[0] == pytest.approx(plain[0] * 120 / 96, abs=2)
     assert phys == (4724, 4724, 1)
@@ -1589,7 +1595,7 @@ def test_a_cli_session_records_no_dpi_and_a_replay_ignores_a_stored_one(tmp_path
     assert '"-f","png"' in document.replace(" ", "")  # the arguments are recorded; --dpi is not
     assert "--dpi" not in document
     # A Session 27-30 whose stored arguments hold --dpi (no released one does) draws at the default: its
-    # 25,000 px figure is refused at 300 dpi, where the stored 50 dpi would have fit.
+    # 25,000 px figure (--figure_width) is refused at 300 dpi, where the stored 50 dpi would have fit.
     legacy = _legacy_session_27_30(tmp_path, "--dpi", "50")
     with pytest.raises(ExportError, match=r"at 300 dpi \(the default PNG DPI\)"):
         render_main(["--session", str(legacy), "-o", str(tmp_path / "legacy"), "-f", "png"])
@@ -1763,13 +1769,13 @@ def test_a_resave_keeps_the_session_png_dpi_and_records_no_dpi(tmp_path: Path) -
 
 
 def test_a_png_too_large_at_the_session_dpi_names_that_dpi_and_its_override(tmp_path: Path) -> None:
-    """The 8 bp figure is 25,000 px wide: at the Session's 150 dpi its PNG is over the 32,767 px limit."""
+    """The figure is 25,000 px wide (--figure_width): at the Session's 150 dpi its PNG is over the 32,767 px limit."""
 
     pytest.importorskip("cairosvg")
     legacy = _legacy_session_27_30(tmp_path)
     canonical = tmp_path / "canonical.gbdraw"
     linear_main(
-        ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "-o", str(tmp_path / "fresh"),
+        ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "--figure_width", _WIDE_FIGURE, "-o", str(tmp_path / "fresh"),
          "--session_output", str(canonical)]
     )
     for path in (legacy, canonical):
@@ -1792,13 +1798,13 @@ def test_a_png_too_large_at_the_session_dpi_names_that_dpi_and_its_override(tmp_
 
 
 def test_a_png_too_large_at_the_default_dpi_names_the_default_and_a_lower_dpi(tmp_path: Path) -> None:
-    """The 8 bp figure is 25,000 px wide: a Session without ui.downloadDpi draws its PNG at 300 dpi, over the limit."""
+    """The figure is 25,000 px wide (--figure_width): a Session without ui.downloadDpi draws its PNG at 300 dpi, over the limit."""
 
     pytest.importorskip("cairosvg")
     canonical = tmp_path / "canonical.gbdraw"
     _legacy_session_27_30(tmp_path)
     linear_main(
-        ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "-o", str(tmp_path / "fresh"),
+        ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "--figure_width", _WIDE_FIGURE, "-o", str(tmp_path / "fresh"),
          "--session_output", str(canonical)]
     )
     assert "downloadDpi" not in read_session_text(canonical)
