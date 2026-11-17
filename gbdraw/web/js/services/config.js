@@ -17,7 +17,7 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
-import { INPUTS_SLICE, bindDrawingCanonicalComparisons, createCircularSource, createLinearSeq, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, losatRecordGencode, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
+import { INPUTS_SLICE, bindDrawingCanonicalComparisons, createCircularSource, createLinearSeq, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, drawingInputsDiffer, idleCircularRecordDiscovery, losatRecordGencode, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, parseColorTable, userTableRows } from './file-imports.js';
@@ -61,7 +61,7 @@ import {
   readNamedCardRecords
 } from './record-draw-selection.js';
 import { circularRecordEntries } from './record-options.js';
-import { readCircularSourceRecords, readStoredRecordIdPlaces } from './record-discovery.js';
+import { readCircularSourceRecords, readStoredRecordIdPlaces, readStoredTokenRecordIds } from './record-discovery.js';
 import { isInputFileRef } from './history-files.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
@@ -598,59 +598,11 @@ const replaceQualifierPriorityRules = (drawing, rules) => {
   LABEL_TABLES_SLICE.install(drawing.slices.labelTables, { manualPriorityRules: readQualifierPriorityRules(rules).value });
 };
 
-/** @param {unknown} value */
-const parseMultiRecordPositionToken = (value) => {
-  const raw = String(value ?? '').trim();
-  const separatorIndex = raw.lastIndexOf('@');
-  if (separatorIndex <= 0 || separatorIndex === raw.length - 1) return null;
-
-  const selector = raw.slice(0, separatorIndex).trim();
-  const row = Number(raw.slice(separatorIndex + 1).trim());
-  if (!selector || !Number.isInteger(row) || row <= 0) return null;
-  return { selector, row };
-};
-
 /**
  * One row of `adv.multi_record_positions`: a record selector and its 1-based row on the Multi-Record Canvas.
  * `applyConfigData` writes the checked rows.
  * @typedef {{ selector: string, row: number }} MultiRecordPosition
  */
-/** @param {{ args?: unknown } | null | undefined} cliInvocation */
-const multiRecordPositionsFromCliInvocation = (cliInvocation) => {
-  const args = Array.isArray(cliInvocation?.args) ? cliInvocation.args : [];
-  /** @type {MultiRecordPosition[]} */
-  const positions = [];
-  const seenSelectors = new Set();
-
-  args.forEach((arg, index) => {
-    if (arg !== '--multi_record_position') return;
-    const position = parseMultiRecordPositionToken(args[index + 1]);
-    if (!position || seenSelectors.has(position.selector)) return;
-    seenSelectors.add(position.selector);
-    positions.push(position);
-  });
-
-  return positions;
-};
-
-/**
- * @param {Record<string, unknown>} config A restored draft; its `adv` is written.
- * @param {{ args?: unknown } | null | undefined} cliInvocation
- */
-const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocation) => {
-  if (!isPlainObject(config) || !isPlainObject(config.form) || config.form.multi_record_canvas !== true) {
-    return;
-  }
-
-  const adv = isPlainObject(config.adv) ? config.adv : {};
-  if (Array.isArray(adv.multi_record_positions)) return;
-
-  const positions = multiRecordPositionsFromCliInvocation(cliInvocation);
-  if (positions.length === 0) return;
-
-  adv.multi_record_positions = positions;
-  config.adv = adv;
-};
 
 /**
  * @param {Record<string, any> | null | undefined} invocation
@@ -1504,9 +1456,10 @@ const readStoredLeaves = async (data) => {
 };
 
 /**
- * Adds to `readings` the place in its file of each stored record ID that a record text reads as a `#N` (OV-3311),
+ * Adds to `readings` the place in its file of each stored record ID that a record text reads as a `#N` (OV-3311)
+ * and the record ID of each record a Linear Record Order token names by an ID the request does not hold (OV-3473),
  * read through `table`, the resources Load adopted, so a card's own read of the file is this one; `repairs` lists
- * each such ID Load could not place, which keeps its text.
+ * each record ID Load could not place, which keeps its text.
  * @param {SessionInput | Session51} data The Session Load reads, or the document of a stored drawing.
  * @param {ReturnType<typeof adoptCurrentSessionResources>} table
  * @param {Map<string, unknown>} readings `readStoredLeaves`'s.
@@ -1517,8 +1470,44 @@ const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
     storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
     (resourceId) => createSessionResourceFileView(table, resourceId));
   places.forEach((place, key) => readings.set(key, place));
+  const tokenRecordIds = await readStoredTokenRecordIds(
+    storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
+    (resourceId) => createSessionResourceFileView(table, resourceId), readings);
+  tokenRecordIds.forEach((recordId, key) => readings.set(key, recordId));
   repairs.push(...unresolved.map(({ path, recordId }) => loadRepair({ code: 'record-id-unresolved', path, effect: 'changed', stored: recordId })));
 };
+
+/**
+ * The resource table of one Load: adopted once for the resources object Load reads (`adoptCurrentSessionResources`),
+ * so the record IDs read before the requests and the cards' own reads read each file once, through one table
+ * (`readOncePerFile` keeps a read by the table's resource; OV-3313 review 3 L1).
+ * @returns {(resources: unknown) => ReturnType<typeof adoptCurrentSessionResources>}
+ */
+const loadResourceTable = () => {
+  /** @type {{ resources: unknown, table: ReturnType<typeof adoptCurrentSessionResources> } | null} */
+  let adopted = null;
+  return (resources) => {
+    const table = adopted !== null && adopted.resources === resources
+      ? adopted.table : adoptCurrentSessionResources(/** @type {Record<string, unknown>} */ (resources));
+    adopted = { resources, table };
+    return table;
+  };
+};
+
+/**
+ * The record IDs Record Order tokens name by ID, read from the Session's files before Load reads its requests
+ * (`readStoredTokenRecordIds`), so the request reader refuses a token list the renderer refuses for those IDs
+ * (`refusedRecordPlacement`, OV-3313 review 2 M1). The files are read through Load's one resource table
+ * (`loadResourceTable`), adopted when a token needs a file. Load has read the resources before
+ * (`readSessionDocument`): a descriptor it cannot read is dropped there and Load goes on, so the table holds each kept
+ * one.
+ * @param {SessionInput} data The Session Load reads.
+ * @param {ReturnType<typeof loadResourceTable>} tableOf
+ * @returns {Promise<Map<string, string | null>>}
+ */
+const readTokenRecordIdsBeforeRequests = async (data, tableOf) => readStoredTokenRecordIds(
+  storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
+  (resourceId) => createSessionResourceFileView(tableOf(data.resources), resourceId));
 
 // History's restore of an editor state it captured, installed as it is.
 /** @param {DrawingState} drawing @param {EditorStateData} editorState */
@@ -2579,7 +2568,8 @@ const readResultSetRequest = ({ at, set }, project) => {
     legacyOrthogroupState: project.orthogroupState ?? null,
     resourceIds: new Set(isPlainObject(project.resources) ? Object.keys(/** @type {object} */ (project.resources)) : []),
     path: `${at}renderRequest`,
-    holdComparisons: classified.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+    holdComparisons: classified.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE,
+    ...(project.readings ? { readings: project.readings } : {})
   });
   // Inherit copies a preserved comparison as Load read it, in the current schema: the request the drawing commits.
   const classification = classified.source && !('kind' in read)
@@ -2607,10 +2597,11 @@ const readResultSetRequest = ({ at, set }, project) => {
  * @param {T} rawData
  * @param {number} version The Session version Load read.
  * @param {LoadRepair[]} repairs
+ * @param {ReadonlyMap<string, unknown>} [readings] The record IDs tokens name (`readTokenRecordIdsBeforeRequests`).
  * @returns {{ data: T, storedSchemas: StoredRequestSchemas, settingsOnly: boolean,
  *   comparisonClassification: ImportedComparisonIntent | null }}
  */
-const readSessionRequests = (rawData, version, repairs) => {
+const readSessionRequests = (rawData, version, repairs, readings) => {
   const sets = storedResultSets(rawData);
   // A Session 51 drawing without a request that holds saved Results or a
   // feature list, which only a drawing with a request holds, has a request
@@ -2628,11 +2619,11 @@ const readSessionRequests = (rawData, version, repairs) => {
         repairs.push(loadRepair({
           code: entry.id === openedId ? 'request-dropped' : 'other-result-set-dropped',
           path: `${drawingSetPath(index)}renderRequest`, effect: 'dropped',
-          ...(entry.id === openedId ? {} : { mode: entry.mode })
+          ...(entry.id === openedId ? { drawingStays: true } : { mode: entry.mode })
         }));
         data = withStoredResultSet(data, drawingSetPath(index), null);
       }
-      return readSessionRequests(data, version, repairs);
+      return readSessionRequests(data, version, repairs, readings);
     }
   }
   // A Session 51 whose opened drawing holds no request projects no set.
@@ -2650,12 +2641,15 @@ const readSessionRequests = (rawData, version, repairs) => {
     return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
   }
   /** @type {StoredSetProject} */
-  const project = { resources: rawData.resources, orthogroupState: rawData.orthogroupState };
+  const project = { resources: rawData.resources, orthogroupState: rawData.orthogroupState, ...(readings ? { readings } : {}) };
   if (!projected) return { data: readStoredSetRequests(rawData, stored, project, repairs), storedSchemas, settingsOnly: false, comparisonClassification: null };
   const { read: projectedRead, classification: comparisonClassification } = readResultSetRequest(projected, project);
   if ('kind' in projectedRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
-    repairs.push(loadRepair({ code: 'request-dropped', path: projectedRead.path, effect: 'dropped' }));
+    // A Session 51 drawing (`at`, its place in the drawings) stays without its request (OV-3472).
+    repairs.push(loadRepair({
+      code: 'request-dropped', path: projectedRead.path, effect: 'dropped', ...(projected.at === '' ? {} : { drawingStays: true })
+    }));
     // A Session 51 drawing whose request cannot be read stays, without its
     // set, as a stored drawing's does (`readStoredSetRequests`).
     if (projected.at !== '') {
@@ -2971,7 +2965,9 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
       used: outcome.rowKey
     }));
   });
-  const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
+  const resourceTableOf = loadResourceTable();
+  const tokenRecordIds = await readTokenRecordIdsBeforeRequests(legendRead.session, resourceTableOf);
+  const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs, tokenRecordIds);
   const requestData = readSettingsOnlyMode(requestRead.data, repairs);
   // R4 decided by the request row of a Session 31-41 (K22): nothing after can restore it.
   if (restoresNothing(stored, repairs)) throw SESSION_FIELDS_ERROR();
@@ -2987,6 +2983,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
   const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(
     entry, project, repairs, storedRequests.get(entry.at)));
   const leafReadings = await readStoredLeaves(rawData);
+  tokenRecordIds.forEach((recordId, key) => leafReadings.set(key, recordId));
   const currentSession = isDrawingsBand(rawData) || isAuthorityBand(rawData);
   /** @type {ModeScopedUpgrade | null} The Session 51 of a Session 46-50, below. */
   let upgrade = null;
@@ -3047,7 +3044,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     });
     recordSessionLifecycleEvent('editor-state-normalization-end');
     recordSessionLifecycleEvent('resource-table-adoption-start');
-    currentResourceTable = adoptCurrentSessionResources(catalogData.resources);
+    currentResourceTable = resourceTableOf(catalogData.resources);
     recordSessionLifecycleEvent('resource-table-adoption-end');
     await readStoredRecordIdReadings(rawData, currentResourceTable, leafReadings, repairs);
     // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in
@@ -3261,9 +3258,6 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     recordStructuralMetric('activeConfigCanonicalOverwriteCount', 0, { domains: restoredDomains });
   }
   recordSessionLifecycleEvent('current-draft-validation-end');
-  if (!canonicalProjection && restoredConfig) {
-    hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, /** @type {UnvalidatedFields<'args'>} */ (data.cliInvocation));
-  }
   restoredConfig = withSavedDefinitionAlignment(restoredConfig);
   const unmanagedConfigValidation = canonicalProjection
     ? unmanagedConfigValidationOf(canonicalProjection.mode, currentSession && hasStoredDraft ? runtimeStoredConfig : null, storedRequest)
@@ -9518,11 +9512,12 @@ export const exportSession = (titleOverride = null, options) => {
     const namedRecords = new Map(savedDrawings.map((saved) => [saved.id, savedNamedRecordsOf(saved)]));
     const readArtifacts = () => sessionArtifactsByDrawing(drawing, options?.readKeptArtifacts?.() ?? []);
     let artifacts = readArtifacts();
-    // A drawing is written when it has an input file, a setting or an edit
-    // that differs from its mode's default, or a Result (R16-8, DESIGN §4.4).
+    // A drawing is written when it binds a file or reads another input type
+    // than a new drawing (OV-3701), has a setting or an edit that differs from
+    // its mode's default, or a Result (R16-8, DESIGN §4.4).
     /** @param {DrawingState} saved */
     const isUsed = (saved) => Boolean(savedArtifactOf(artifacts.get(saved.id) ?? null))
-      || hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs, circularSources: saved.circularSources })
+      || drawingInputsDiffer(saved)
       || sliceDiffersFromDefault(/** @type {Record<string, unknown>} */ (slices.get(saved.id)), saved.mode);
     const { drawings: writtenDrawings, activeDrawingId } = savedDrawingsOf(savedDrawings, drawing, isUsed);
     const shownArtifact = /** @type {SessionArtifactView} */ (artifacts.get(drawing.id));

@@ -67,11 +67,15 @@ class RecordSelector:
         return "(unspecified)"
 
 
+# The words a record selector reads as naming no record (lower case; the Web reads them from the generated contracts).
+NULL_RECORD_SELECTOR_WORDS: frozenset[str] = frozenset({"none", "null", "jsnull", "undefined", "jsundefined", "-"})
+
+
 def parse_record_selector(text: str | None) -> RecordSelector | None:
     if text is None:
         return None
     raw = str(text).strip()
-    if not raw or raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
+    if not raw or raw.lower() in NULL_RECORD_SELECTOR_WORDS:
         return None
     if raw.startswith("#"):
         number = record_index_number(raw)

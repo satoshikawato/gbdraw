@@ -1,0 +1,18 @@
+{
+  "purpose": "A CLI Linear Session from a records table whose rows place the records out of request order (OV-3775, OV-3313 review 3 H1): record 1 (TESTA) on row 2, record 2 (REGEX.1) at row 1 column 1, record 3 (FORCEDLBL) at row 1 column 2; the CLI draws REGEX.1 and FORCEDLBL on the first row and TESTA on the second",
+  "writer": "gbdraw/linear.py --save_session (CLI sidecar), run from the fix/record-order-row-one-rule worktree on PYTHONPATH",
+  "writerCommit": "6d84350e332eb232cc0556138ec1d5b3fa8994f8 (branch fix/record-order-row-one-rule)",
+  "command": "PYTHONPATH=<worktree> python -c 'from gbdraw.cli import main; main()' linear --records_table rt.tsv --save_session -o cli-linear-records-table-grid",
+  "workingDirectory": "a scratch folder; the inputs are tests/fixtures/b_collide.gb, tests/fixtures/regex_rules.gb and tests/fixtures/forced_label_underlay.gb",
+  "recordsTable": "gbk\torder\trow\tcolumn / b_collide.gb\t1\t2\t1 / regex_rules.gb\t2\t1\t1 / forced_label_underlay.gb\t3\t1\t2 (tab-separated, one line per slash)",
+  "inputs": {
+    "b_collide.gb": "dc00783b14c141cd3f7d7993f7e7578e974f03707e61790e9389483cb231ba05",
+    "regex_rules.gb": "e33d282b370b092a0d3b4ccf26a70db9b01f3b28ea8758b728fee1812b7be88b",
+    "forced_label_underlay.gb": "aa5c441b8a03f97c8d6c1cebfe5111af2e40b811392da6efdcef8ef9545e645b"
+  },
+  "values": "drawings[0].renderRequest.records[*].presentation.gridRow and gridColumn (2/1, 1/1, 1/2); layout.multiRecordPositions is null",
+  "cliSvg": "data-record-row/data-record-column: record-1 1/0, record-2 0/0, record-3 0/1",
+  "documentSha256": "b021a029436ad0423289515e34fd5e9abc988fa65b4e15f49a926508b58fe038",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

@@ -57,6 +57,25 @@ test('the choice prompt resolves to the chosen action, and a new question cancel
   assert.equal(prompt.show, false);
 });
 
+// OV-3761: a dotted path in a listed item (a Load repair's place in the file) may break after each `.` and `[`, so a
+// long path does not widen the dialog past a phone screen; the rest of the item breaks only between words.
+test('the choice prompt breaks a listed item only inside the paths the question names', async () => {
+  const { prompt, ask, itemParts } = createChoicePrompt({ reactive });
+  const path = 'drawings[0].renderRequest.layout.multiRecordPositions[0]';
+  const item = `Saved diagram: the settings (${path}) of sample.gb could not be read.`;
+  ask({ title: 'Load this file?', items: [item], breakPaths: [path, 'missing.path'], actions: [{ id: 'load', label: 'Load' }] });
+  assert.deepEqual(itemParts(prompt.items[0]), [
+    'Saved diagram: the settings (drawings[', '0].', 'renderRequest.', 'layout.', 'multiRecordPositions[', '0]) of sample.gb could not be read.'
+  ]);
+  assert.equal(itemParts(prompt.items[0]).join(''), item);
+  ask({ title: 'Other', items: [item], actions: [{ id: 'ok', label: 'OK' }] });
+  assert.deepEqual(itemParts(prompt.items[0]), [item]);
+  const html = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
+  const body = html.slice(html.indexOf('<choice-dialog v-if="choicePrompt.show"'));
+  assert.match(body.slice(0, body.indexOf('</choice-dialog>')),
+    /<li v-for="\(item, index\) in choicePrompt\.items" :key="index"><template v-for="\(part, at\) in choicePromptItemParts\(item\)" :key="at"><wbr v-if="at">\{\{ part \}\}<\/template><\/li>/);
+});
+
 // OV-3153: options that carry a detail line show as a list above Cancel, and
 // focus starts on Cancel there, so that Enter adds nothing; the button row of
 // every other question keeps the first-button focus.

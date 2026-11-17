@@ -457,6 +457,70 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
   }
 });
 
+// OV-3461: the feature popup names the Legend row the figure draws the feature
+// in (featureLegendRows, the twin of Python's FeatureLegendRows): a CDS of no
+// rule beside a used captioned CDS rule is in "other proteins", and a tRNA,
+// whose type no rule colors, in "tRNA". D-23: the Legend editor's rename of
+// that "other proteins" row, a row the drawing names, changes its name only:
+// no rule is written and the row keeps its place, live and after Generate.
+// D-26: a feature that no Legend row draws has no Legend name.
+test('HMMT Session: the popup names the Legend row the figure draws a default feature in (OV-3461), and its rename keeps the row (D-23)', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const page = await load(browser, HMMT_SESSION);
+  try {
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val: '^NADH dehydrogenase subunit 1$', color: '#e63946', cap: 'ND1' });
+      await app.addSpecificRule();
+    });
+    await settle(page);
+    await generate(page);
+    expect(await legendCaptions(page, { source: 'result' })).toEqual(expect.arrayContaining(['ND1', 'other proteins', 'tRNA']));
+    for (const [product, row] of [['cytochrome b', 'other proteins'], ['tRNA-Leu', 'tRNA']]) {
+      await evaluateWithRetainedPromise(page, async (name) => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === name), null);
+      }, product);
+      await expect(page.getByLabel('Feature legend name', { exact: true }), product).toHaveValue(row);
+      await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+    }
+    const rules = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => `${rule.cap}: ${rule.val}`));
+    const before = await rules();
+    const featureRows = async (source) => (await legendCaptions(page, { source })).filter((caption) => /ND1|CDS|proteins/.test(caption));
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'other proteins'), 'other CDS');
+    });
+    await settle(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rename onto a new name asks nothing').toBe(false);
+    expect(await rules(), 'the rename writes no rule').toEqual(before);
+    expect(await featureRows('mounted'), 'live').toEqual(['ND1', 'other CDS']);
+    await generate(page);
+    expect(await featureRows('result'), 'after Generate').toEqual(['ND1', 'other CDS']);
+    // D-26: a CDS that an uncaptioned rule colors is in no Legend row: its popup names none, and its
+    // Color Change Scope dialog offers no Legend item.
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val: '^cytochrome b$', color: '#00aa00', cap: '' });
+      await app.addSpecificRule();
+    });
+    await settle(page);
+    await generate(page);
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === 'cytochrome b'), null);
+    });
+    await expect(page.getByLabel('Feature legend name', { exact: true }), 'no Legend row').toHaveValue('');
+    await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.updateClickedFeatureColor('#123456'); });
+    const scope = page.getByRole('dialog').filter({ has: page.locator('#feature-style-scope-title') });
+    await expect(scope.getByRole('button', { name: 'This feature only' })).toBeVisible();
+    await expect(scope.getByRole('button', { name: /^Legend item/ })).toHaveCount(0);
+    await scope.getByRole('button', { name: 'Cancel', exact: true }).click();
+  } finally {
+    await page.context().close();
+  }
+});
+
 // The Linear LAMBDA Gallery Session on one page. A page error anywhere in the
 // case fails the legend-free step.
 test('lambda: a Linear legend side change applies on Generate or at once, and a position change after a legend-free Generate raises no page error', async ({ browser }) => {

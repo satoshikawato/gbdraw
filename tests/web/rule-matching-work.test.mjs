@@ -126,7 +126,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
       findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
       effectiveLegendCaptions: () => caption,
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      groupColorRules: groupColorRulesOver(preparation), getLegendRowRules: () => []
+      groupColorRules: groupColorRulesOver(preparation), getLegendRowRules: () => [], otherLegendRowType: () => null
     });
     measured.push(await count_.measure(() => actions.handleColorScopeChoice('caption')));
     assert.equal(committed.length, count);

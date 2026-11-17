@@ -34,6 +34,9 @@ import { t, tm, tx } from '../utils/i18n.js';
  * @property {string} [description] One or two sentences: what the choice is about.
  * @property {ChoiceLine[]} [lines] Short icon-led lines in place of a description.
  * @property {string[]} [items] Short lines listed under the description.
+ * @property {string[]} [breakPaths] Dotted paths inside the items (a Load repair's place in the file): the dialog may
+ *   break a line after each `.` and `[` of one (`itemParts`), so a long path fits a phone screen (OV-3761). The rest of
+ *   an item breaks only between words.
  * @property {string} [note] A closing sentence under the list.
  * @property {ChoiceAction[]} actions
  * @property {string} [cancelLabel] The text of the button that changes nothing.
@@ -100,6 +103,7 @@ export const createChoicePrompt = ({ reactive }) => {
     description: '',
     lines: /** @type {ChoiceLine[]} */ ([]),
     items: /** @type {string[]} */ ([]),
+    breakPaths: /** @type {string[]} */ ([]),
     note: '',
     actions: /** @type {ChoiceAction[]} */ ([]),
     cancelLabel: '',
@@ -122,6 +126,7 @@ export const createChoicePrompt = ({ reactive }) => {
       description: request.description || '',
       lines: [...(request.lines || [])],
       items: [...(request.items || [])],
+      breakPaths: [...(request.breakPaths || [])],
       note: request.note || '',
       actions: request.actions.map((action) => ({ tone: 'secondary', ...action })),
       cancelLabel: request.cancelLabel || t('Cancel'),
@@ -129,6 +134,25 @@ export const createChoicePrompt = ({ reactive }) => {
       show: true
     });
     return new Promise((settle) => { answer = settle; });
+  };
+  /**
+   * An item in the parts the dialog shows with a line break opportunity (`<wbr>`) between them: split after each `.`
+   * and `[` inside a path the question names (`breakPaths`), and nowhere else.
+   * @param {string} item
+   * @returns {string[]}
+   */
+  const itemParts = (item) => {
+    /** @type {Set<number>} */
+    const breaks = new Set();
+    prompt.breakPaths.filter(Boolean).forEach((path) => {
+      for (let from = item.indexOf(path); from >= 0; from = item.indexOf(path, from + path.length)) {
+        for (let at = 0; at < path.length - 1; at += 1) {
+          if (path[at] === '.' || path[at] === '[') breaks.add(from + at + 1);
+        }
+      }
+    });
+    const ends = [...breaks].sort((left, right) => left - right);
+    return [0, ...ends].map((start, at) => item.slice(start, ends[at] ?? item.length));
   };
   /** @type {AskText} */
   const askText = async ({ title, description, label, value = '', actionLabel }) => {
@@ -145,7 +169,7 @@ export const createChoicePrompt = ({ reactive }) => {
     event.preventDefault();
     resolve('ok');
   };
-  return { prompt, ask, askText, submitField, resolve };
+  return { prompt, ask, askText, submitField, resolve, itemParts };
 };
 
 /**

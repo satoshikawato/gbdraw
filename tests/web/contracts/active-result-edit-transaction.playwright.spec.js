@@ -491,7 +491,10 @@ test.describe('active Result Feature fill transaction', () => {
   // OV-280: a hash rule captioned tRNA makes Python draw the other tRNAs as
   // `other tRNAs`, so adding it asks for the automatic rerender. Apply to all
   // chosen while that rerender runs waits for it and then applies in one
-  // History step; it used to do nothing and leave the dialog open.
+  // History step; it used to do nothing and leave the dialog open. The other
+  // tRNAs are in the row Python draws them in, `other tRNAs` (OV-3461), whose
+  // Legend item sets the tRNA default color (D-15); the tRNA of the rule keeps
+  // the rule's color.
   test('Apply to all chosen while the rerender of a rule add runs applies after it (OV-280)', async ({ page }, testInfo) => {
     test.setTimeout(300_000);
     expect(testInfo.retry).toBe(0);
@@ -536,8 +539,9 @@ test.describe('active Result Feature fill transaction', () => {
       .getByLabel('Feature fill color', { exact: true }).first().fill(AFTER_COLOR);
     const scopeDialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
     await expect(scopeDialog).toBeVisible();
+    const otherRow = inventory.targets.slice(1);
     await scopeDialog.getByRole('button').filter({
-      hasText: `Legend item "${TARGET_CAPTION}" (${inventory.targets.length})`
+      hasText: `Legend item "other ${TARGET_CAPTION}s" (${otherRow.length})`
     }).last().click();
     expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
     await expect(page.getByRole('dialog', { name: 'Color Change Scope' }).getByRole('status'))
@@ -548,11 +552,16 @@ test.describe('active Result Feature fill transaction', () => {
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
     const applied = await inspectState(page, inventory);
     expect(applied.history.undoCount).toBe(undoAfterAdd + 1);
-    expectFillState(applied, inventory, AFTER_COLOR, nonTargetBaseline);
-    // A group color is Python's synthesized rule set (exact rules and a hash
-    // remainder), not one hash rule per target; the fills above pin what it colors.
-    expect(applied.canonical.targetRules.length).toBeGreaterThan(0);
-    expect(applied.canonical.targetRules.every((rule) => rule.color === AFTER_COLOR)).toBe(true);
+    for (const [index, { id }] of inventory.targets.entries()) {
+      const color = index === 0 ? BEFORE_COLOR : AFTER_COLOR;
+      expect(applied.mounted.targetFills[id], `mounted ${id}`).not.toHaveLength(0);
+      expect(applied.mounted.targetFills[id].every((fill) => fill === color), `mounted ${id} in ${color}`).toBe(true);
+      expect(applied.selectedResult.targetFills[id], `selected Result ${id}`).toEqual(applied.mounted.targetFills[id]);
+    }
+    expect(applied.mounted.nonTargetFills).toEqual(nonTargetBaseline);
+    expect(applied.canonical.defaultColor).toBe(AFTER_COLOR);
+    expect(applied.canonical.targetRules.map(({ qual, color }) => [qual, color])).toEqual([['hash', BEFORE_COLOR]]);
+    expect(applied.feedback).toBeNull();
     await assertNoUnexpectedErrors(page, diagnostics);
   });
 });

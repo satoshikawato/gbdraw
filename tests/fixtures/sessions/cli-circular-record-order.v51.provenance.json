@@ -1,0 +1,15 @@
+{
+  "purpose": "A CLI Circular multi-record canvas of two one-record files whose Record Order names each record by record ID (OV-3313 review 2 M2): no record has a selector, so Load reads each record's ID from its file",
+  "writer": "gbdraw/circular.py --save_session (CLI sidecar), run from the fix/record-order-row-one-rule worktree on PYTHONPATH",
+  "writerCommit": "1e5b856aa51b69528bdd81589d32b815c739d07d (branch fix/record-order-row-one-rule)",
+  "command": "PYTHONPATH=<worktree> python -c 'from gbdraw.cli import main; main()' circular --gbk b_collide.gb regex_rules.gb --multi_record_canvas --multi_record_position 'REGEX.1@1' --multi_record_position 'TESTA@2' --save_session -o cli-circular-record-order",
+  "workingDirectory": "a scratch folder; the inputs are tests/fixtures/b_collide.gb and tests/fixtures/regex_rules.gb",
+  "inputs": {
+    "b_collide.gb": "dc00783b14c141cd3f7d7993f7e7578e974f03707e61790e9389483cb231ba05",
+    "regex_rules.gb": "e33d282b370b092a0d3b4ccf26a70db9b01f3b28ea8758b728fee1812b7be88b"
+  },
+  "values": "drawings[0].renderRequest.layout.multiRecordPositions ['REGEX.1@1', 'TESTA@2']; grouping grid; records without selectors",
+  "documentSha256": "5f1717c6471dab75cb3106c41985c729b5e0cf01d87f7223c118b2d923b09c90",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

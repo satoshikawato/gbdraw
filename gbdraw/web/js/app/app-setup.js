@@ -2742,7 +2742,7 @@ export const createAppSetup = () => {
     LEGEND_FILL_DOMAINS, STROKE_DOMAINS, addFeatureVisibilityRule, moveFeatureVisibilityRuleDown, moveFeatureVisibilityRuleUp,
     removeFeatureVisibilityRule, setFeatureVisibilityRuleField, setFeatureVisibility, updateClickedFeatureVisibility,
     handleFeatureVisibilityScopeChoice, requestFeatureColorChange, setFeatureColorValue, updateClickedFeatureColor,
-    updateLegendEntryColor, legendRowHasRules, setTypeDefaultColor: featureActions.setTypeDefaultColor,
+    updateLegendEntryColor, legendRowHasRules, setLegendRowDefaultColor: featureActions.setLegendRowDefaultColor,
     preparedLegendRowDefaultColorType: featureActions.preparedLegendRowDefaultColorType, setLegendEntryStrokeColorValue,
     cancelFeatureStyleScope, handleColorScopeChoice, handleFeatureStyleScopeChoice
   });
@@ -4439,6 +4439,7 @@ export const createAppSetup = () => {
     choicePrompt: choicePrompt.prompt,
     resolveChoicePrompt: choicePrompt.resolve,
     submitChoicePromptField: choicePrompt.submitField,
+    choicePromptItemParts: choicePrompt.itemParts,
     circularRegionNote,
     circularWindowRows,
     linearRegionNote,

@@ -1812,8 +1812,9 @@ test('legend names: Undo and Redo of a color rule commit keep the name of the ru
 // OV-1985 (release-tier random walk, seed 40634318370): a caption-scope stroke
 // on a rule row whose key a later rule edit changes. The fill of FL2 "Use
 // existing color" writes a CDS rule in the palette color, and a second CDS rule
-// in another color makes Python draw the row as `CDS [#54bcf8]`; the stroke is
-// stored under that key. A caption edit of the second rule leaves CDS in one
+// in another color makes Python draw the row as `CDS [#54bcf8]`; the stroke of
+// FL2, the row's feature, is stored under that key (a CDS of no rule is in
+// `other proteins`, OV-3461). A caption edit of the second rule leaves CDS in one
 // color, so the commit moves the row and its stroke to the key `CDS` (OV-660);
 // after Generate, the caption written back moves them to `CDS [#54bcf8]`
 // again. Each time the live Result shows the stroke on the moved row, as
@@ -1824,7 +1825,7 @@ test('a Legend row stroke moves with its row when a rule caption edit re-keys it
   await open(page, { mode: 'linear', results: 'single', reflow: 'on' });
   await popupEdit(page, { type: 'CDS', start: 2000, end: 2600 }, { fill: '#e63946', scope: 'useExisting' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#e63946', cap: 'CDS' });
-  await popupEdit(page, { type: 'CDS', start: 2850, end: 2900 }, { stroke: '#123456', scope: 'caption' });
+  await popupEdit(page, { type: 'CDS', start: 2000, end: 2600 }, { stroke: '#123456', scope: 'caption' });
   const setCaption = async (value) => {
     await evaluateWithRetainedPromise(page, (caption) => {
       const app = window.__GBDRAW_APP__;

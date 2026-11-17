@@ -295,7 +295,7 @@ def test_rule_caption_equal_to_a_default_type_with_the_same_color_shares_one_row
         numeric,
         feature_config,
         ["tRNA", "rRNA"],
-        used_color_rules={("rRNA", "#71ee7d")},
+        used_color_rules={("tRNA", "rRNA", "#71ee7d")},
         default_used_features={"rRNA"},
         show_gc=False,
         show_skew=False,
@@ -579,7 +579,7 @@ def test_rule_captioned_like_a_comparison_legend_row_keeps_its_own_row(caption: 
     table = prepare_legend_table(
         numeric, numeric, features, ["CDS"],
         comparison=ComparisonLegendSource.of(SimpleNamespace(min_color="#ffffff", max_color="#000000", identity_domain=identity_color_domain(0, None))),
-        used_color_rules={(caption, "#ff0000")},
+        used_color_rules={("CDS", caption, "#ff0000")},
         show_gc=False, show_skew=False, show_depth=False,
         pairwise_identity_legend=legend,
     )
@@ -590,3 +590,34 @@ def test_rule_captioned_like_a_comparison_legend_row_keeps_its_own_row(caption: 
     names = legend_row_names(table)
     assert (names[caption].name, names[gradient_key].name) == (caption, caption)
     assert (names[caption].drawn, names[gradient_key].drawn) == (f"{caption} (1)", f"{caption} (2)")
+
+
+def test_a_feature_hash_rule_draws_its_feature_in_its_row_over_a_matching_captioned_rule(tmp_path):
+    """A color edit's `hash` rule outranks a qualifier rule whatever the table
+    order, so its feature is drawn in the edit's row and the qualifier rule,
+    which colors no other feature, draws none (the editor reads the same row:
+    tests/web/specific-color-actions.test.mjs)."""
+    from gbdraw.features.selector_values import get_feature_hash
+
+    record = SeqRecord(
+        Seq("ATGC" * 250),
+        id="legend",
+        annotations={"molecule_type": "DNA", "topology": "circular"},
+    )
+    edited = SeqFeature(SimpleLocation(10, 190, strand=1), type="CDS", qualifiers={"product": ["ribosomal protein L2"]})
+    record.features = [edited]
+    rows = table([
+        ["CDS", "product", "ribosomal", "#aa0000", "Ribosomal"],
+        ["CDS", "hash", get_feature_hash(edited, record.id), "#00bb00", "Edited"],
+    ])
+    result = render_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(colors=ColorOptions(color_table=rows), selected_features_set=("CDS",)),
+            output=RenderOutputRequest(formats=("svg",), output_directory=tmp_path, output_prefix="legend"),
+        )
+    )
+    drawn = legend_rows(result.output_paths[0])
+
+    assert drawn["Edited"] == ("Edited", "Edited", "#00bb00")
+    assert "Ribosomal" not in drawn

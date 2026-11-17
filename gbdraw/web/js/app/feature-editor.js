@@ -157,7 +157,7 @@ export const createFeatureEditor = ({
     isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot, isRulePrepared: rulePreparation.isPrepared, prepareRuleCandidate: rulePreparation.prepareCandidate, synthesizeGroupRules: rulePreparation.synthesizeGroup, ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice, revealSetting
   });
   const { commitSpecificRules, countFeaturesMatchingRule, findExistingColorForCaption, findFeaturesWithSameDisplayedLabel, findFeaturesWithSameIndividualLabel, findFeaturesWithSameLegendItem,
-    findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, groupColorRules, reviseColorRules, runWithRuleMatches } = ruleActions;
+    findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, otherLegendRowType, groupColorRules, reviseColorRules, runWithRuleMatches } = ruleActions;
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -177,7 +177,7 @@ export const createFeatureEditor = ({
   const colorActions = createFeatureColorActions({
     state, showEditorIntent,
     commitSpecificRules, countFeaturesMatchingRule, findExistingColorForCaption, findFeaturesWithSameDisplayedLabel, findFeaturesWithSameIndividualLabel, findFeaturesWithSameLegendItem,
-    findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, groupColorRules, reviseColorRules, runWithRuleMatches,
+    findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, otherLegendRowType, groupColorRules, reviseColorRules, runWithRuleMatches,
     getFeatureElements: featureSvgActions.getFeatureElements,
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
     closeAfterDialogChoice,
@@ -318,7 +318,7 @@ export const createFeatureEditor = ({
     setFeatureColor: colorActions.setFeatureColor,
     legendRowDefaultColorType: colorActions.legendRowDefaultColorType,
     preparedLegendRowDefaultColorType: colorActions.preparedLegendRowDefaultColorType,
-    setTypeDefaultColor: colorActions.setTypeDefaultColor,
+    setLegendRowDefaultColor: colorActions.setLegendRowDefaultColor,
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,

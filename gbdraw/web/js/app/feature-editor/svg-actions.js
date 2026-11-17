@@ -29,13 +29,12 @@ import {
   buildPairwiseMatchHoverSummary,
   buildMatchPopupPayload
 } from '../../services/pairwise-match-popup.js';
-import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { matchSequenceRecordsOf } from '../../services/catalog-sequences.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import { attachRingHover, ringPopupShows } from './ring-hover.js';
-import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
+import { legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../../services/match-frame-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
@@ -188,7 +187,8 @@ export {
  * @typedef {object} FeatureSvgActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
- * @property {(feature: Record<string, any>) => string} [getEffectiveLegendCaption] The rule owner's Legend caption of a feature.
+ * @property {(feature: Record<string, any>) => string} getEffectiveLegendCaption The rule owner's Legend row of a feature,
+ *   by its key; '' for a feature that no Legend row draws (D-26).
  * @property {ShownLegendNamePort} [shownLegendName]
  * @property {(() => void) | null} [onFeaturePopupOpened] The label owner's sync of its editor when the popup opens.
  * @property {PrepareDrawnFeatureMatchesPort} [prepareDrawnFeatureMatches]
@@ -513,7 +513,7 @@ export const createFeatureSvgActions = ({
     const note = getQualifierFirstValue(feat, 'note');
     const locationText = formatFeatureLocation(feat);
     // The feature's row as the Legend draws it; its caption is the row's key, which is never shown.
-    const legendName = shownLegendName(String(getEffectiveLegendCaption?.(feat) || '').trim());
+    const legendName = shownLegendName(String(getEffectiveLegendCaption(feat)).trim());
     /** @type {Array<[string, unknown, boolean?]>} */
     const rows = [];
 
@@ -646,11 +646,12 @@ export const createFeatureSvgActions = ({
    * @returns {FeaturePopup}
    */
   const buildClickedFeaturePayload = (drawing, feat, featureElements, renderedSvgId = undefined) => {
-    const existingOverride = fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feat));
     const fillElement = filterFeatureFillTargets(featureElements)[0] || featureElements[0] || null;
     return buildFeaturePopup(feat, {
       svgId: String(renderedSvgId ?? renderedFeatureSvgId(feat)).trim(),
-      legendName: String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || getFeatureCaption(feat) || '').trim(),
+      // The feature's Legend row, as the figure draws it (its own Legend name included); none, '', for a
+      // feature that no Legend row draws, never another name (D-26).
+      legendName: String(getEffectiveLegendCaption(feat)).trim(),
       color: resolveColorToHex(fillElement?.getAttribute('fill') || getFeatureColor(feat)),
       ...popupBlockStroke(featureElements, fillElement),
       featureVisibility: normalizeVisibilityMode(featureOverrideValue(drawing.featureOverrides, feat, 'featureVisibility')),

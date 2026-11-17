@@ -41,3 +41,16 @@ export const storedRecordIdOf = (record) => {
   if (typeof recordId !== 'string' || resourceIds.length === 0) return null;
   return { recordId, resourceIds, key: storedLeafKey('records.selector', [resourceIds, recordId]) };
 };
+
+/**
+ * The key of the record ID Load read from the file of a stored request record that names no record of it, the record
+ * of a file of one record as the CLI writes it: a Linear Record Order token may name that record by its ID
+ * (`readStoredTokenRecordIds`, services/record-discovery.js; `recordOrderPlaces`, OV-3473). The one builder of the key,
+ * for its writer and its reader. Null for a record that has a selector, and for a source of no file.
+ * @param {UnreadStoredRecord | null | undefined} record
+ * @returns {string | null}
+ */
+export const storedOneRecordIdKey = (record) => {
+  const resourceIds = storedRecordSourceResourceIds(record?.source);
+  return record?.selector != null || resourceIds.length === 0 ? null : storedLeafKey('records.source', resourceIds);
+};
