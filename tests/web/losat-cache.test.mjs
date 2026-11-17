@@ -1261,10 +1261,11 @@ for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expe
   const searchA = { key: 'a' };
   const searchB = { key: 'b' };
   const payload = { key: 'p' };
+  // Each drawing's evidence is whole (review 2 L2): a kept slot carries every key.
   const project = cache.projectLosatSearches([
-    { losatCache: new Map([['a', searchA]]), losatDerivedCache: new Map([['p', payload]]) },
-    { losatCache: new Map([['b', searchB]]) },
-    {}
+    { ...cache.emptyLosatEvidence(), losatCache: new Map([['a', searchA]]), losatDerivedCache: new Map([['p', payload]]) },
+    { ...cache.emptyLosatEvidence(), losatCache: new Map([['b', searchB]]) },
+    cache.emptyLosatEvidence()
   ]);
   assert.deepEqual([...project.searches], [['a', searchA], ['b', searchB]]);
   assert.deepEqual([...project.payloads], [['p', payload]]);

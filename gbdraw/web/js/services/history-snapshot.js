@@ -985,24 +985,19 @@ const checkpointCatalogFeatures = (snapshot) => {
  * slot's. Reads and one writer of its rows; nothing here counts holders or reaches a drawing History holds.
  * @param {{ shownDrawingId: () => DrawingId,
  *   artifactSlots: { kept: () => readonly Readonly<ArtifactSlot>[] },
- *   readSlotValues: (drawingId: DrawingId, keys: readonly (typeof LOSAT_EVIDENCE_KEYS)[number][]) => Partial<LosatEvidence>,
+ *   losatEvidenceOf: (drawingId: DrawingId) => LosatEvidence,
  *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void }} owner
  */
-const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, readSlotValues, writeArtifactValues }) => {
-  /**
-   * Drawing `drawingId`'s LOSAT evidence.
-   * @param {DrawingId} drawingId @returns {Partial<LosatEvidence>}
-   */
-  const losatEvidenceOf = (drawingId) => readSlotValues(drawingId, LOSAT_EVIDENCE_KEYS);
+const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, losatEvidenceOf, writeArtifactValues }) => {
   return {
     losatEvidenceOf,
     /**
      * The LOSAT evidence of every drawing of the project: the shown drawing's and each kept slot's. A drawing History
      * holds out of the project (a Delete, an undone New or Duplicate) is none of them (D-224).
-     * @returns {Partial<LosatEvidence>[]}
+     * @returns {LosatEvidence[]}
      */
     projectLosatEvidence: () => [losatEvidenceOf(shownDrawingId()), ...artifactSlots.kept()
-      .filter((slot) => slot.drawingId !== shownDrawingId()).map(({ values }) => values)],
+      .filter((slot) => slot.drawingId !== shownDrawingId()).map(({ drawingId }) => losatEvidenceOf(drawingId))],
     /**
      * Rewrites drawing `drawingId`'s LOSAT result rows (a ring edit, a Linear comparison edit, a file name): only its
      * own (OV-3470). Rows equal one by one keep the array, so the History owner-set capture keeps it (OV-2210).
@@ -1884,10 +1879,17 @@ export const createHistorySnapshotService = ({
     artifactSlots.writeValues(state.drawingOf(drawingId), values);
   };
   const losatEvidence = createLosatEvidenceAccess({
-    shownDrawingId: () => state.activeDrawingId.value, artifactSlots, readSlotValues, writeArtifactValues
+    shownDrawingId: () => state.activeDrawingId.value, artifactSlots, writeArtifactValues,
+    // A drawing's six values where its artifact is: the shown drawing's state, a kept slot (every key filled).
+    losatEvidenceOf: (drawingId) => {
+      const values = readSlotValues(drawingId, LOSAT_EVIDENCE_KEYS);
+      return {
+        losatCacheInfo: values.losatCacheInfo, losatCache: values.losatCache, losatDerivedCache: values.losatDerivedCache,
+        proteinIdentityManifest: values.proteinIdentityManifest, legacyProteinRawCandidates: values.legacyProteinRawCandidates,
+        legacyProteinDerivedEvidence: values.legacyProteinDerivedEvidence
+      };
+    }
   });
-  const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
-  const ALIGNMENT_SLOT_KEYS = /** @type {const} */ (['similarityAlignmentResetReceipt', 'similarityAlignmentPlan', 'linearRecordTranslations']);
 
   // Synchronous: History captures it without an await (OV-922).
   /** @param {DrawingId} drawingId */

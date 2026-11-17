@@ -1915,6 +1915,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ...generatedArtifactHandleOptions,
     state,
     projectLosatEvidence: () => projectEvidence,
+    editLosatRows: artifactSnapshots.editLosatRows,
     recordDisplayRows,
     writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
@@ -2037,7 +2038,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       // leaves it).
       const kept = { cache: state.losatCache.value, rows: state.losatCacheInfo.value, derived: state.losatDerivedCache.value };
       const ownKey = ringKeys[2];
+      const { emptyLosatEvidence } = await import('../../gbdraw/web/js/services/losat-cache.js');
       projectEvidence = [{
+        ...emptyLosatEvidence(),
         losatCacheInfo: kept.rows.filter(({ key }) => key !== ownKey),
         losatCache: new Map([...kept.cache].filter(([key]) => key !== ownKey))
       }];
@@ -2504,6 +2507,15 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       'failed candidate provenance must roll back with the committed artifact'
     );
     assert.equal(losatCalls, 2, 'the failed candidate must execute without becoming committed evidence');
+    // Design R2, C5 (a): Clear LOSAT results ends the retry, and its Undo, which gives the drawing back the very
+    // values the Clear replaced, revives it (review 2 M4). Clear and its Undo write the six values as the History
+    // command does (`clearLosatResultsCommand`): empty ones, then the held ones, by reference.
+    const heldEvidence = ['losatCacheInfo', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest',
+      'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'].map((key) => [key, state[key].value]);
+    state.losatCache.value = new Map();
+    state.losatDerivedCache.value = new Map();
+    state.losatCacheInfo.value = [];
+    heldEvidence.forEach(([key, value]) => { state[key].value = value; });
 
     state.activeDrawing().losat.blastn.task = 'blastn';
     workerHelperResponses.push({
@@ -2512,7 +2524,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     });
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
-    assert.equal(losatCalls, 2, 'retry after artifact rollback must reuse completed raw searches');
+    assert.equal(losatCalls, 2, 'retry after artifact rollback, and after a Clear and its Undo, must reuse completed raw searches');
 
     const warmCacheInfo = [{
       key: 'warm-cache', edgeKey: 'multi->third', queryUid: 'multi', subjectUid: 'third',

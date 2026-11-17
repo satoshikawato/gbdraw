@@ -599,7 +599,7 @@ const restoreOfDeletedRows = (state, indexes, restore) => {
  * values (fresh for this step, never shared with another drawing). No step when the drawing lists no result (the
  * button is off then, D-223).
  * @param {DrawingId} drawingId
- * @param {{ losatEvidenceOf: (drawingId: DrawingId) => Partial<LosatEvidence>,
+ * @param {{ losatEvidenceOf: (drawingId: DrawingId) => LosatEvidence,
  *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void }} owner
  */
 const clearLosatResultsCommand = (drawingId, { losatEvidenceOf, writeArtifactValues }) => {
@@ -617,7 +617,7 @@ const clearLosatResultsCommand = (drawingId, { losatEvidenceOf, writeArtifactVal
  * results, one per cache key (D-223); the hint says whether a drawing of the project lists some, reading the kept slots
  * through `slotRevision`, which every slot change bumps (the slots are not reactive); Clear is one History step.
  * @param {{ runUndoableCommand: (label: string, build: () => ReturnType<typeof clearLosatResultsCommand>) => Promise<unknown>,
- *   owner: Parameters<typeof clearLosatResultsCommand>[1] & { projectLosatEvidence: () => Partial<LosatEvidence>[] },
+ *   owner: Parameters<typeof clearLosatResultsCommand>[1] & { projectLosatEvidence: () => LosatEvidence[] },
  *   slotRevision: { readonly value: number } }} ports
  */
 const createLosatResultsPanel = ({ runUndoableCommand, owner, slotRevision }) => ({
@@ -1994,6 +1994,7 @@ export const createAppSetup = () => {
     installRedrawnArtifact: historySnapshots.installRedrawnArtifact,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     projectLosatEvidence: historySnapshots.projectLosatEvidence,
+    editLosatRows: historySnapshots.editLosatRows,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
     runGeneratedArtifactReplacement: (...args) => history.runUndoableArtifactReplacement(...args),
     previewRuntime,

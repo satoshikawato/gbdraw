@@ -334,6 +334,34 @@ test('each Linear drawing\'s protein pairs resolve in its own manifest after ano
   } finally { resetLosat(); }
 });
 
+// Review 2 M4, design R1 and D-223: searches a drawing keeps without a listed row leave Clear disabled, and a Clear
+// called anyway records no step and keeps them. A Duplicate shares its source's values (the same objects); Clear in the
+// copy empties only the copy's, and its Undo gives the copy the shared objects back.
+test('Clear with no listed row records no step; Clear in a Duplicate leaves its source (review 2 M4)', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  resetLosat();
+  try {
+    onlyShownDrawing(app);
+    const a = state.activeDrawingId.value;
+    await generateRows([], { searches: new Map([['pool', { key: 'pool' }]]) });
+    const steps = history.getUndoCount();
+    assert.equal(app.losatResultRows.value.length, 0, 'Clear is disabled');
+    assert.equal(await app.clearLosatCache(), false, 'a Clear called anyway is refused');
+    assert.deepEqual([history.getUndoCount(), searchKeysOf(app, a)], [steps, ['pool']], 'no step; the searches stay');
+    await generateRows([ringRow('k1')]);
+    const source = valuesOf(app, a);
+    const { drawingId: d } = app.drawingList.duplicateDrawing(a);
+    app.selectDrawing(d);
+    assert.ok(sameValues(valuesOf(app, d), source), 'the copy shares the source\'s values');
+    await app.clearLosatCache();
+    assert.deepEqual([keysOf(app, d), searchKeysOf(app, d)], [[], []], 'the copy is cleared');
+    assert.ok(sameValues(valuesOf(app, a), source), 'the source keeps the same objects');
+    await history.undo();
+    assert.ok(sameValues(valuesOf(app, d), source), 'Undo gives the copy the shared objects back');
+  } finally { resetLosat(); }
+});
+
 // OV-3211, D-223 (rewritten for D-221): the count is the shown drawing's results; the hint says whether another drawing
 // of the project lists some. A drawing a Delete holds is none of them; its Undo brings it back with its results.
 test('Clear counts the shown drawing\'s results; the hint reads the project\'s drawings only (OV-3211)', async () => {

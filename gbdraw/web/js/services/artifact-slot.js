@@ -231,7 +231,9 @@ export const artifactSlotAs = (slot, drawing, { copyResults, copyRecords }) => {
  * the values the intent owns as `shown` has them
  * (`ARTIFACT_SLOT_PALETTE_KEYS`, `ARTIFACT_SLOT_ALIGNMENT_KEYS`). The slot
  * holds them as they were when it was held, which a later step open then may
- * have changed; the figure itself is the slot's.
+ * have changed; the figure itself is the slot's, and so is its LOSAT evidence
+ * (D-221): the drawing's at the figure's History position, since every change
+ * of it is a step (Clear LOSAT results is one, C5 (a)).
  * @param {Readonly<ArtifactSlot>} slot
  * @param {DrawingIdentity} drawing
  * @param {Readonly<ArtifactSlot>} shown

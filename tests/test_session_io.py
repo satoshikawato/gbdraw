@@ -5008,7 +5008,7 @@ def test_a_cli_resave_keeps_a_circular_drawing_without_web_file_bindings(tmp_pat
 
 def test_a_cli_resave_writes_a_hidden_losat_entry_without_a_name_as_the_web_does() -> None:
     # OV-1013: a hidden (`display: false`) raw entry is cache only. The Web Load
-    # gives it no Raw LOSAT row (config.js applyLosatCache) and its Save writes
+    # gives it no Raw LOSAT row (config.js loadedLosatEvidenceOf) and its Save writes
     # an entry without a row with `filename: ""` (serializeLosatCache;
     # tests/web/session-export-validation.test.mjs pins it). The CLI writer kept
     # a hidden entry's text name.

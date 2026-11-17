@@ -92,7 +92,7 @@ export const losatRowsOnePerKey = (rows) => {
  * One row of a drawing's `losatCacheInfo`, the pairs its Generate keeps cache entries for: a circular conservation
  * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
  * @typedef {object} LosatCacheInfoEntry
- * @property {unknown} key The raw cache key: a string from Generate; a Session load stores the saved key (truthy, unchecked).
+ * @property {string} key The raw cache key: Generate's, or the saved one a Session load reads (text, not empty).
  * @property {string} filename A file name: Generate's, or the saved one a Session load reads (a default when it is
  *   no text or empty).
  * @property {boolean} display
@@ -111,8 +111,8 @@ export const losatRowsOnePerKey = (rows) => {
  * Writers make new arrays and Maps, never change one in place (a Duplicate and History share them).
  * @typedef {object} LosatEvidence
  * @property {readonly LosatCacheInfoEntry[]} losatCacheInfo The listed results; every key is in `losatCache`.
- * @property {ReadonlyMap<unknown, unknown>} losatCache Every raw search the drawing used or keeps for reuse.
- * @property {ReadonlyMap<unknown, unknown>} losatDerivedCache The converted protein payloads (at most
+ * @property {ReadonlyMap<string, RawLosatCacheEntry>} losatCache Every raw search the drawing used or keeps for reuse.
+ * @property {ReadonlyMap<string, LosatDerivedCacheEntry>} losatDerivedCache The converted protein payloads (at most
  *   `LOSAT_DERIVED_CACHE_LIMIT`).
  * @property {ProteinIdentityManifest} proteinIdentityManifest The record instances its protein searches resolve in (D-197).
  * @property {LegacyProteinCandidateEnvelope} legacyProteinRawCandidates The older Session's protein candidates Load gave it.
@@ -134,8 +134,8 @@ export const LOSAT_EVIDENCE_KEYS = /** @type {const} */ ([
  */
 export const LOSAT_EVIDENCE_EMPTY = Object.freeze({
   losatCacheInfo: () => /** @type {LosatCacheInfoEntry[]} */ ([]),
-  losatCache: () => new Map(),
-  losatDerivedCache: () => new Map(),
+  losatCache: () => /** @type {Map<string, RawLosatCacheEntry>} */ (new Map()),
+  losatDerivedCache: () => /** @type {Map<string, LosatDerivedCacheEntry>} */ (new Map()),
   proteinIdentityManifest: () => emptyProteinIdentityManifest(),
   legacyProteinRawCandidates: () => createLegacyProteinCandidateEnvelope([]),
   legacyProteinDerivedEvidence: () => ({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] })
@@ -156,12 +156,12 @@ export const listsLosatResults = (values) => Array.isArray(values?.losatCacheInf
  * The raw searches and converted payloads a Generate may reuse besides its drawing's own: those the drawings of the
  * project hold now (D-224: not a held drawing's, not a History step's). A lookup index that owns nothing; the Generate
  * drops it.
- * @param {readonly Partial<LosatEvidence>[]} project Every project drawing's evidence (`projectLosatEvidence`).
- * @returns {{ searches: Map<unknown, unknown>, payloads: Map<unknown, unknown> }}
+ * @param {readonly LosatEvidence[]} project Every project drawing's evidence (`projectLosatEvidence`).
+ * @returns {{ searches: Map<string, RawLosatCacheEntry>, payloads: Map<string, LosatDerivedCacheEntry> }}
  */
 export const projectLosatSearches = (project) => ({
-  searches: new Map(project.flatMap(({ losatCache }) => [...(losatCache ?? [])])),
-  payloads: new Map(project.flatMap(({ losatDerivedCache }) => [...(losatDerivedCache ?? [])]))
+  searches: new Map(project.flatMap(({ losatCache }) => [...losatCache])),
+  payloads: new Map(project.flatMap(({ losatDerivedCache }) => [...losatDerivedCache]))
 });
 
 // The runtime identity the Web stores beside each raw entry it searches

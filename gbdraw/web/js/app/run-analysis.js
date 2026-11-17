@@ -501,7 +501,7 @@ export const buildLosatCachePayload = ({
 };
 
 /** @import { DraftRequestFacts, MultiRecordPosition } from '../services/config.js' */
-/** @import { LosatCacheInfoEntry, LosatEvidence } from '../services/losat-cache.js' */
+/** @import { EditLosatRows, LosatCacheInfoEntry, LosatEvidence } from '../services/losat-cache.js' */
 /** @import { LiveSearchSets, LiveSettingWrite } from '../services/session-request.js' */
 /** @import { SearchRecordSelector } from '../services/sequence-search.js' */
 /** @import { UndoneTrackHide } from '../services/setting-application.js' */
@@ -1032,7 +1032,7 @@ export const requireLegacyProteinReferencesMigrate = (idMap, ...values) => {
 /**
  * The searches and payloads the drawings of the project hold now, read once, when a Generate's first lookup needs them
  * (D-224).
- * @param {() => readonly Partial<LosatEvidence>[]} projectLosatEvidence
+ * @param {() => readonly LosatEvidence[]} projectLosatEvidence
  */
 const lazyProjectLosatSearches = (projectLosatEvidence) => {
   /** @type {ReturnType<typeof projectLosatSearches> | null} */
@@ -1043,12 +1043,13 @@ const lazyProjectLosatSearches = (projectLosatEvidence) => {
 /**
  * A converted payload another drawing of the project holds now (D-224), taken into this Generate's own payloads.
  * @param {Map<string, LosatDerivedCacheEntry> | null} cacheMap The Generate's own payloads.
- * @param {Map<unknown, unknown>} project @param {string} key @param {unknown} manifest
+ * @param {Map<string, LosatDerivedCacheEntry>} project @param {string} key @param {unknown} manifest
  */
 const reuseLosatDerivedCacheEntry = (cacheMap, project, key, manifest) => {
-  const payload = getLosatDerivedCacheEntry(/** @type {Map<string, LosatDerivedCacheEntry>} */ (project), key, manifest);
-  if (payload && cacheMap) {
-    cacheMap.set(key, /** @type {LosatDerivedCacheEntry} */ (project.get(key)));
+  const payload = getLosatDerivedCacheEntry(project, key, manifest);
+  const entry = project.get(key);
+  if (payload && cacheMap && entry) {
+    cacheMap.set(key, entry);
     pruneLosatDerivedCache(cacheMap);
   }
   return payload;
@@ -1784,7 +1785,9 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: SvgResultEntry[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
- * @property {() => readonly Partial<LosatEvidence>[]} [projectLosatEvidence] The LOSAT evidence of every drawing of the
+ * @property {EditLosatRows} editLosatRows The one writer of a drawing's LOSAT result rows (D-221): a downloaded
+ *   result's file name.
+ * @property {() => readonly LosatEvidence[]} [projectLosatEvidence] The LOSAT evidence of every drawing of the
  *   project (D-221), whose searches a Generate may reuse (D-224).
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
@@ -1859,6 +1862,7 @@ export const createRunAnalysis = ({
   installRedrawnArtifact,
   restoreGeneratedArtifactHandle,
   projectLosatEvidence = () => [],
+  editLosatRows,
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
   previewRuntime = null,
@@ -2536,9 +2540,7 @@ export const createRunAnalysis = ({
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
     if (!state.sessionOperationAvailability?.()) {
-      losatCacheInfo.value = losatCacheInfo.value.map((/** @type {LosatCacheInfoEntry} */ candidate) => (
-        candidate === entry ? { ...candidate, filename } : candidate
-      ));
+      editLosatRows(drawing.id, (rows) => rows.map((candidate) => (candidate === entry ? { ...candidate, filename } : candidate)));
     }
     const hydrated = await hydrateLosatDownloadText(entry.key, cached);
     downloadTextFile(
@@ -2961,6 +2963,7 @@ export const createRunAnalysis = ({
     const previousRecordIdentities = previousRequestRecords.length > 0
       ? committedRecordIdentities.get(getCommittedCanonicalSession?.()?.resources ?? {}) ?? null : null;
     // A Circular Generate writes its drawing's rows anew (OV-3201): its rings' searches.
+    /** @type {readonly LosatCacheInfoEntry[]} */
     let workingLosatCacheInfo = mode.value === 'circular' ? []
       : committedArtifactHandle?.ownerSet?.losatCacheInfo ?? losatCacheInfo.value;
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
@@ -3529,8 +3532,7 @@ export const createRunAnalysis = ({
               };
               losatPairs.push(pair);
               cacheInfo.push({ key: cacheKey, filename: fallbackName, display: true });
-              const cached = getReusableLosatCacheEntry(cacheMap, cacheKey, cacheMetadata, null,
-                /** @type {Map<string, RawLosatCacheEntry>} */ (projectSearches().searches));
+              const cached = getReusableLosatCacheEntry(cacheMap, cacheKey, cacheMetadata, null, projectSearches().searches);
               const hasCachedText = Boolean(cached);
               if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
               if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
@@ -4568,7 +4570,7 @@ export const createRunAnalysis = ({
               cacheKey,
               cacheMetadata,
               workingProteinIdentityManifest,
-              /** @type {Map<string, RawLosatCacheEntry>} */ (projectSearches().searches)
+              projectSearches().searches
             );
             if (useProteinBlastp && !cacheMetadata.searchContext) {
               cached = await tryPromoteLegacyProteinEntry({

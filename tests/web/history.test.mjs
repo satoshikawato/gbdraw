@@ -1909,9 +1909,9 @@ const createLayoutPreferences = () => ({
     entries: [{ id: 'derived-evidence-a' }]
   };
   const rawCacheValueA = { text: 'raw-a\n' };
-  const derivedCacheValueA = { payload: { id: 'derived-a' }, rawKeys: ['raw-a'] };
-  // A row names its drawing (`LosatCacheInfoEntry.drawingId`): a step installs its drawing's rows (OV-3207).
-  const losatCacheInfoA = [{ key: 'raw-a', drawingId: 'circular' }];
+  const derivedCacheValueA = { payload: { id: 'derived-a' } };
+  // A step installs its drawing's rows (OV-3207): the rows are the drawing's artifact values (D-221).
+  const losatCacheInfoA = [{ key: 'raw-a' }];
   const appliedPaletteColorsA = { CDS: '#54bcf8' };
   const pendingPaletteColorsA = {};
   const noticesA = [{
@@ -2232,8 +2232,8 @@ const createLayoutPreferences = () => ({
     entries: [{ id: 'derived-evidence-b' }]
   };
   const rawCacheValueB = { text: 'raw-b\n' };
-  const derivedCacheValueB = { payload: { id: 'derived-b' }, rawKeys: ['raw-b'] };
-  const losatCacheInfoB = [{ key: 'raw-b', drawingId: 'circular' }];
+  const derivedCacheValueB = { payload: { id: 'derived-b' } };
+  const losatCacheInfoB = [{ key: 'raw-b' }];
   state.proteinIdentityManifest.value = proteinIdentityManifestB;
   state.legacyProteinRawCandidates.value = legacyProteinRawCandidatesB;
   state.legacyProteinDerivedEvidence.value = legacyProteinDerivedEvidenceB;
@@ -2272,7 +2272,7 @@ const createLayoutPreferences = () => ({
   state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
   state.losatCache.value = new Map([['replacement', { text: 'replacement\n' }]]);
   state.losatDerivedCache.value = new Map([['replacement', { payload: {} }]]);
-  state.losatCacheInfo.value = [{ key: 'replacement', drawingId: 'circular' }];
+  state.losatCacheInfo.value = [{ key: 'replacement' }];
   const clearsBeforeUndo = copyFeedbackClears;
   await snapshots.restoreGeneratedArtifactHandle(handleA);
   // Undo of a Generate step clears the copy feedback.
@@ -2444,7 +2444,7 @@ const createLayoutPreferences = () => ({
     state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [{ id: status }] };
     state.losatCache.value = new Map([[status, { text: `${status}\n` }]]);
     state.losatDerivedCache.value = new Map([[status, { payload: { id: status } }]]);
-    state.losatCacheInfo.value = [{ key: status, drawingId: 'circular' }];
+    state.losatCacheInfo.value = [{ key: status }];
   };
   const undoCountBeforeDiscardedRuns = ownerHistory.getUndoCount();
   await assert.rejects(
@@ -3716,6 +3716,22 @@ for (const previousSuppressed of [false, true]) {
   assert.ok(losatKeys.every((key) => world.shown.values[key] === held.values[key] && held.values[key] === before[key]),
     'with the LOSAT values it was held with, the drawing\'s at that History position');
   console.log('history held figure after Clear tests passed');
+}
+
+// Review 2 M4: while a Save or Load runs (the mutation gate is busy), Clear LOSAT results, a History command, is
+// refused: nothing is written and no step is recorded.
+{
+  let busy = null;
+  let applied = 0;
+  const history = createHistoryManager({
+    mutationAvailability: () => busy,
+    buildIntent: () => ({}), applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
+  });
+  await history.captureBaseline('initial');
+  busy = { reason: 'session-save' };
+  const refused = await history.runUndoableCommand('Clear LOSAT results', () => ({ apply: () => { applied += 1; }, revert: () => {} }));
+  assert.deepEqual([refused, applied, history.getUndoCount()], [busy, 0, 0], 'refused while busy');
+  console.log('history command busy tests passed');
 }
 
 // D-07 (b) (Owner 2026-10-16 「確認を出す」): a change outside History (the

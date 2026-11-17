@@ -626,6 +626,41 @@ test('a Load that fails in its commit leaves the drawings, their order and the s
   assert.equal(modeDrawing(state, 'linear').adv.label_font_size, 11);
 });
 
+// Review 2 M2, D-221: a Load that fails gives each drawing its six LOSAT values back by reference, the shown drawing's
+// in state (a protein identity manifest no Load adopted too) and a kept drawing's in its slot.
+test('a Load that fails gives back every drawing\'s LOSAT values by reference (review 2 M2)', async () => {
+  resetDrawings();
+  installShownDrawing('linear');
+  const slots = createArtifactSlotStore();
+  const { importSession: importKeeping } = callerSession(sessionConfig, state, await sessionRollbackPort(state, null, undefined, { slots }));
+  const evidence = () => ({
+    losatCacheInfo: [{ key: 'k', filename: 'k.tsv', display: true }], losatCache: new Map([['k', { key: 'k' }]]),
+    losatDerivedCache: new Map([['d', { payload: {} }]]),
+    proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} },
+    legacyProteinRawCandidates: { schema: 1, entries: [] }, legacyProteinDerivedEvidence: { schema: 1, entries: [] }
+  });
+  const shown = evidence();
+  Object.entries(shown).forEach(([key, value]) => { state[key].value = value; });
+  const other = state.drawingList().find((drawing) => drawing.id !== 'linear');
+  slots.writeValues(other, evidence());
+  const keptOf = () => slots.snapshot().find((slot) => slot.drawingId === other.id);
+  const kept = keptOf();
+  let replaced = [];
+  const loaded = await importKeeping(await sessionLoadEvent(fixtureSession('two-mode-linear-shown.v48')), {
+    confirmLoadRepairs: async () => true,
+    afterLoad: async () => {
+      replaced = Object.keys(shown).filter((key) => state[key].value !== shown[key]);
+      throw new Error('install failed');
+    }
+  });
+  assert.equal(loaded.status, 'error');
+  assert.deepEqual(replaced, Object.keys(shown), 'the Load had replaced every value');
+  for (const key of Object.keys(shown)) {
+    assert.equal(state[key].value, shown[key], `shown ${key}`);
+    assert.equal(keptOf().values[key], kept.values[key], `kept ${key}`);
+  }
+});
+
 test('Load reads each drawing\'s saved Result set from its own entry of the 51 document, not from `otherModeResult`', () => {
   // The Load body after preflight reads the upgraded document's drawings; the
   // file's location of a set beside the committed one is only a repair path,
@@ -1837,6 +1872,57 @@ test('a drawing whose shared ring searches were cleared writes none of them (OV-
   });
   assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
   assert.deepEqual(saved['circular-2'], [], 'circular-2 lists no result after its Clear');
+});
+
+// Review 2 M1, D-224: an older Session's protein candidates and derived evidence are written once each. A Duplicate
+// shares the drawing's envelopes; a protein Generate in the copy promotes one candidate into a new envelope (the other
+// stays pending there, as a fresh copy) and may write the evidence anew: Save writes c1 (pending in the source) and c2
+// once, and the one evidence entry once.
+test('Save writes each older Session protein candidate and evidence entry once after a copy promoted one (review 2 M1)', async () => {
+  const { writtenLegacyProteinArtifacts } = await import('../../gbdraw/web/js/services/losat-cache.js');
+  const { LEGACY_PROTEIN_CANDIDATE_SCHEMA, LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, NUCLEOTIDE_LOSAT_CACHE_SCHEMA } =
+    await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const { session } = await twoConservationDrawings();
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const candidate = (name) => ({ state: 'pending', rejectionReason: null, originalEntry: {
+    kind: 'raw-losat', schema: NUCLEOTIDE_LOSAT_CACHE_SCHEMA, program: 'blastp', key: name, text: `${name}\tq\t90.0\n`
+  } });
+  const sourceCandidates = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [candidate('c1'), candidate('c2')] };
+  const sourceEvidence = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [{ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, kind: 'derived-losatp-payload', key: 'derived-1', payload: {} }] };
+  const copy = writtenLegacyProteinArtifacts({
+    candidates: sourceCandidates, evidence: structuredClone(sourceEvidence), promoted: [0], hasCurrentDerived: false
+  });
+  const legacyOf = (id) => (id === 'circular'
+    ? { legacyProteinRawCandidates: sourceCandidates, legacyProteinDerivedEvidence: sourceEvidence }
+    : { legacyProteinRawCandidates: copy.candidates, legacyProteinDerivedEvidence: copy.evidence });
+  const shownId = state.activeDrawing().id;
+  if (!loaded.opening) Object.entries(legacyOf(shownId)).forEach(([key, value]) => { state[key].value = value; });
+  const withLegacy = (slot) => slot && withArtifactSlotValues(slot, state.drawingOf(slot.drawingId), legacyOf(slot.drawingId));
+  const result = await exportSession('legacy once', {
+    readKeptArtifacts: () => [withLegacy(loaded.opening), ...loaded.stashed.map(withLegacy)].filter(Boolean)
+  });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = await readSavedSession(result.blob);
+  assert.deepEqual(saved.legacyArtifacts.proteinRawCandidates.entries.map(({ originalEntry }) => originalEntry.key).sort(), ['c1', 'c2']);
+  assert.deepEqual(saved.legacyArtifacts.proteinDerivedEvidence.entries.map(({ key }) => key), ['derived-1']);
+});
+
+// Review 2 L1, D-221: Load lists a drawing's entry by the drawing's own kind alone: an entry of the other kind (one
+// neither Save writes) stays in the drawing's searches and lists in no drawing, whatever another drawing holds.
+test('Load lists no entry of the other kind in a drawing, by that drawing alone (review 2 L1)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  const circular = session.drawings.find((entry) => entry.id === 'circular');
+  const { flow, ...linearKind } = circular.losatCache.entries[0];
+  assert.ok(flow);
+  circular.losatCache.entries.push({ ...linearKind, key: 'f'.repeat(64), display: true });
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const evidence = loadedLosatEvidenceOf('circular', loaded);
+  assert.deepEqual(evidence.losatCacheInfo.map(({ key }) => key), [keys.ring1, keys.ring2, keys.ring3]);
+  assert.ok(evidence.losatCache.has('f'.repeat(64)), 'the entry stays among the drawing\'s searches');
 });
 
 // K-3 (D-15-124): a drawing's entries are its request's. A ring file bound in
