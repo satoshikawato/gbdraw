@@ -1045,13 +1045,17 @@ export const createLegendEntryActions = ({
     const returning = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => picked.has(index));
     if (!svgContainer.value?.querySelector?.('svg') || returning.length === 0) return false;
     const inventory = originalLegendOrder.value.map((/** @type {unknown} */ caption) => String(caption || '').trim());
+    const context = displayedLegendRowContext(state, drawing);
     /** @type {EntryRecord[]} */
     let entries = [...drawing.legendEntries.value];
     for (const entry of returning) {
       // OV-282: a row of Python's returns holding only the user's Legend color, so it shows the color
-      // Generate gives it (`displayedLegendRowColors`); an editor row, its own.
+      // Generate gives it (`displayedLegendRowColors`); an editor row, its rule's current color (a rule
+      // commit recolors only the listed rows), else its own.
       const key = legendEntryKey(entry);
-      const own = withOwnLegendColor(entry, key, { python: inventory.includes(key), overrides: drawing.legendColorOverrides });
+      const python = inventory.includes(key);
+      const ruleColor = python ? '' : legendRowRules(key, context)[0]?.color;
+      const own = withOwnLegendColor(ruleColor ? { ...entry, color: ruleColor } : entry, key, { python, overrides: drawing.legendColorOverrides });
       entries = withEntryAtDefaultPlace(entries, own, inventory);
     }
     restoreLegendRows(drawing.slices.paint, picked, listedRowsOf(entries));

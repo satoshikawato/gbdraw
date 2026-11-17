@@ -315,29 +315,32 @@ const mockLegendEntry = (caption, color, x) => {
       featureIds: ['feature-unsafe']
     }
   ];
-  // A new Result: its swatches are Python's (OV-282), which the extraction keeps.
-  state.originalLegendColors.value = {};
+  // A new Result: the extraction writes its swatches (OV-282, OV-1725).
   actions.extractLegendEntries();
-  assert.deepEqual(state.originalLegendColors.value, { Beta: '#abcdef', Gamma: '#778899' });
+  const shown = displayedLegendRowColors({ ...NO_DISPLAYED_RESULT,
+    originalLegendOrder: state.originalLegendOrder, originalLegendColors: state.originalLegendColors }, state, []);
   assert.deepEqual(
     state.legendEntries.value.map((entry) => ({
       caption: entry.caption,
       color: entry.color,
+      shown: shown.listed(entry),
       featureIds: entry.featureIds
     })),
     [
       {
         caption: 'Beta',
         color: undefined,
+        shown: '#abcdef',
         featureIds: ['feature-safe']
       },
       {
         caption: 'Gamma',
         color: undefined,
+        shown: '#778899',
         featureIds: ['feature-unsafe']
       }
     ],
-    'a row of Python\'s holds no color, not a recorded one (OV-282), and each row keeps the feature ids of its key (U3b)'
+    'the paint is the sanitized Result\'s, which no row of Python\'s holds (OV-282), and each row keeps the feature ids of its key (U3b)'
   );
   assert.equal(state.legendEntries.value.some((entry) => Object.hasOwn(entry, 'showStroke')), false,
     'the Stroke options disclosure is view state, not a Legend entry field (OV-157)');
@@ -946,8 +949,16 @@ const mockLegendEntry = (caption, color, x) => {
   });
   assert.deepEqual(recolored.diff.update, [{ caption: 'New', color: '#00aa00' }]);
   assert.equal(recolored.apply(), null);
-  // The row of Python's shows its rules' color (`displayedLegendRowColors`); the commit writes none into it (OV-282).
+  // The row of Python's shows its rules' color once the caller writes them (`displayedLegendRowColors`); the
+  // commit writes none into it (OV-282).
   assert.equal(state.legendEntries.value[1], listedRows[1]);
+  const rules = state.manualSpecificRules;
+  state.manualSpecificRules = [{ feat: 'CDS', qual: 'gene', val: 'new', color: '#00aa00', cap: 'New' }];
+  const shownOnResult = displayedLegendRowColors({
+    ...state, svgContent: { value: '<svg/>' }, extractedFeatures: ref([{ type: 'CDS', svg_id: 'cds', qualifiers: { gene: ['new'] } }])
+  }, withDrawings(state).activeDrawing(), []);
+  assert.deepEqual(shownOnResult.listed(state.legendEntries.value[1]), '#00aa00');
+  state.manualSpecificRules = rules;
   await assert.rejects(
     actions.prepareFileLegendEntries([{ caption: 'tRNA', color: '#000000' }]),
     // OV-644: a typed refusal that names no row key.
@@ -1109,6 +1120,32 @@ const mockLegendEntry = (caption, color, x) => {
   const colors = Object.fromEntries(state.legendEntries.value.map((entry) => [entry.caption, entry.color]));
   assert.deepEqual(colors, { constructor: '#112233', Alpha: '#aabbcc', Zed: '#778899' },
     'a caption named like an inherited member keeps its recorded color; an own override and an unknown caption read as before');
+}
+
+// Review r1 of OV-282: an editor row a rule commit added before a Generate
+// returns from Restore in its rule's current color, which the live compile
+// draws (`legendAdds` reads the row's color) and Generate draws, not the color
+// it held when it was deleted.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]), selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }), displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([{ caption: 'Phage', originalCaption: 'Phage', color: '#ff0000', featureIds: [] }]),
+    dormantLegendEntries: ref([]), originalLegendOrder: ref(['CDS']), originalLegendColors: ref({ CDS: '#84b9ec' }),
+    legendStrokeOverrides: {}, legendColorOverrides: {},
+    // The rule was recolored blue while its row was deleted; the commit maps only the listed rows.
+    manualSpecificRules: [{ feat: 'CDS', qual: 'gene', val: 'phage', color: '#0000ff', cap: 'Phage' }],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state: withDrawings(state), commitActiveResultEdit: () => true,
+    readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, [])
+  });
+  await actions.restoreDeletedLegendEntries();
+  assert.deepEqual(state.legendEntries.value.map(({ caption, color }) => [caption, color]), [['Phage', '#0000ff']]);
 }
 
 // OV-532: a first stroke edit reads the existing override by the row's caption.
