@@ -418,15 +418,17 @@ def _overlap_depth(p: list[tuple[float, float]], q: list[tuple[float, float]]) -
     return depth
 
 
+# Drawn outside their features: ndhD of tobacco goes outside, its glyphs touching its arrowhead's stroke; in the serif
+# face "NADH dehydrogenase subunit 4" comes inside, its glyphs clear of its outline on a lane outside the axis (OV-3649).
 GALLERY_CASES = {
-    "tobacco": (["--session", str(SESSIONS / "tobacco-chloroplast.gbdraw")], 118),
+    "tobacco": (["--session", str(SESSIONS / "tobacco-chloroplast.gbdraw")], 119),
     "hmmtdna-serif": (
         [
             "--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"), "--separate_strands",
             "--track_type", "middle", "--labels", "out", "--species", "<i>Homo sapiens</i>",
             "--font_family", "Liberation Serif",
         ],
-        32,
+        31,
     ),
     "hmmtdna-basic": (["--session", str(SESSIONS / "HmmtDNA_basic_circular.gbdraw")], 32),
 }

@@ -34,7 +34,7 @@ from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
 )
-from ..core.text import drawn_text_box
+from ..core.text import drawn_text_box, text_ink
 from ..diagrams.circular.presets import CircularTrackPreset, circular_feature_lane_direction_for_preset
 from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
@@ -5602,6 +5602,107 @@ def rearrange_labels_fc(
     return _assign_leader_start_points(best_labels, total_length)
 
 
+# Where an embedded label's glyphs are tested against its feature's drawn outline: the ink's two ends and the points
+# that cut the text into this many equal parts between them.
+EMBEDDED_OUTLINE_SAMPLE_PARTS = 4
+
+
+@dataclass(frozen=True)
+class EmbeddedTextPath:
+    """The circle an embedded label's text runs on (its baseline) and the way it runs.
+
+    The baseline lies a quarter of the label's line box from the lane centre, the same offset for every label of one
+    face and size (OV-1743): inside the centre in the upper half, where the text runs clockwise with its glyphs
+    pointing outward, and outside it in the lower half, where the text runs anticlockwise (``reverse``) with its
+    glyphs pointing inward, so it stays upright. ``LabelDrawer.embed_label`` draws this path and the embed test
+    reads it.
+    """
+
+    baseline_radius_px: float
+    reverse: bool
+
+
+def embedded_text_path(
+    center_radius_px: float, line_height_px: float, middle_bp: float, total_length: int
+) -> EmbeddedTextPath:
+    """The text path of an embedded label centred on ``middle_bp`` in a lane centred at ``center_radius_px``."""
+
+    reverse = 90 <= position_turn_angle(middle_bp, total_length) < 270
+    offset = float(line_height_px) / 4
+    return EmbeddedTextPath(float(center_radius_px) + offset if reverse else float(center_radius_px) - offset, reverse)
+
+
+class EmbeddedGlyphBox(NamedTuple):
+    """Where an embedded label's glyphs are painted, in px: along the text from the middle of its advance (the point
+    ``text-anchor="middle"`` puts on the path's middle) and across it from the baseline, positive toward the glyphs'
+    tops."""
+
+    along_start_px: float
+    along_end_px: float
+    bottom_px: float
+    top_px: float
+
+
+def embedded_glyph_box(
+    text: str, font_family: str, font_size: float, font_style: LabelFontStyle, box_width_px: float, line_height_px: float
+) -> EmbeddedGlyphBox:
+    """The painted glyphs of ``text`` (``text_ink``); without a readable font, the laid-out box less its gap
+    (``CIRCULAR_LABEL_GAP_EM``) along the text and the line box centred on the lane across it."""
+
+    size = float(font_size)
+    ink = text_ink(text, font_family, "normal", font_style)
+    if ink is not None:
+        middle = 0.5 * ink.advance
+        return EmbeddedGlyphBox((ink.left - middle) * size, (ink.right - middle) * size, ink.bottom * size, ink.top * size)
+    half_width = 0.5 * max(0.0, float(box_width_px) - CIRCULAR_LABEL_GAP_EM * size)
+    return EmbeddedGlyphBox(-half_width, half_width, -0.25 * float(line_height_px), 0.75 * float(line_height_px))
+
+
+def embedded_glyphs_outline_margin_px(
+    path: EmbeddedTextPath,
+    glyphs: EmbeddedGlyphBox,
+    middle_bp: float,
+    total_length: int,
+    outline_radii_at: Callable[[float], tuple[float, float]],
+) -> float:
+    """The least distance from an embedded label's glyphs to the inner and outer edge of its feature's drawn
+    outline; negative where the glyphs cross it.
+
+    ``outline_radii_at`` gives the outline's inner and outer radius at a position (``circular_feature_edge_radii_at``):
+    beside an arrowhead or on a narrowed shaft it lies inside the lane's edges. The glyphs are read at their two ends
+    and at points between them (``EMBEDDED_OUTLINE_SAMPLE_PARTS``), each across the band from their bottom to their
+    top at the baseline of ``path``. The gap along the ray from the centre is taken across the edge: an arrowhead's
+    slanted edge comes nearer the glyphs than the ray shows.
+    """
+
+    baseline = path.baseline_radius_px
+    if baseline <= 0.0:
+        return -math.inf
+    if path.reverse:
+        band = (baseline - glyphs.top_px, baseline - glyphs.bottom_px)
+        along_bp = (-glyphs.along_start_px, -glyphs.along_end_px)
+    else:
+        band = (baseline + glyphs.bottom_px, baseline + glyphs.top_px)
+        along_bp = (glyphs.along_start_px, glyphs.along_end_px)
+    bp_per_px = float(total_length) / (2 * math.pi * baseline)
+    # Half a pixel of arc on each side of a sample, where the edge's slope is read.
+    step_bp = 0.5 * bp_per_px
+    step_rad = 2 * math.pi * (2 * step_bp) / float(total_length)
+    margin = math.inf
+    for part in range(EMBEDDED_OUTLINE_SAMPLE_PARTS + 1):
+        share = part / EMBEDDED_OUTLINE_SAMPLE_PARTS
+        position = float(middle_bp) + (along_bp[0] + (along_bp[1] - along_bp[0]) * share) * bp_per_px
+        inner_px, outer_px = outline_radii_at(position)
+        before = outline_radii_at(position - step_bp)
+        after = outline_radii_at(position + step_bp)
+        for gap, edge_px, slope in (
+            (band[0] - inner_px, inner_px, (after[0] - before[0]) / step_rad),
+            (outer_px - band[1], outer_px, (after[1] - before[1]) / step_rad),
+        ):
+            margin = min(margin, gap / math.hypot(1.0, slope / edge_px) if edge_px > 0.0 else gap)
+    return margin
+
+
 def _is_label_embedded_in_segment(
     label_start: float,
     label_end: float,
@@ -5735,6 +5836,8 @@ def prepare_label_list(
     automatic_circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
     arrow_head_length_ratio = cfg.objects.features.arrow_geometry.head_length_ratio
     arrow_shaft_width_ratio = cfg.objects.features.arrow_geometry.shaft_width_ratio
+    # An embedded label's glyphs keep clear of the inner edge of its feature's stroke.
+    outline_clearance_px = 0.5 * float(cfg.objects.features.block_stroke_width.for_length_param(length_param))
 
     cached_candidates = (
         _candidate_cache.get("candidates")
@@ -5796,18 +5899,14 @@ def prepare_label_list(
                 feature_inner_radius = float(lane.inner_px)
                 feature_center_radius = float(lane.center_px)
                 feature_outer_radius = float(lane.outer_px)
-            # The laid-out box, ``CIRCULAR_LABEL_GAP_EM`` included: the 1.1x embed test reads the same width as
+            # The laid-out box, ``CIRCULAR_LABEL_GAP_EM`` included: the 1.1x span test reads the same width as
             # the placer and the fit count, so the gap is part of deciding which labels go inside their feature.
-            # It holds at the lane centre the label is drawn on (``feature_center_radius_px``): measured at the
-            # axis alone, a label on a lane well inside the axis ran past its feature (OV-3646). It also holds at
-            # the axis radius, where the 1.1x margin was set: the margin leaves no room for an arrowhead, and the
-            # longer arc of a lane outside the axis would put labels into their heads (OV-3649).
+            # It holds at the lane centre the label is drawn on (``feature_center_radius_px``, OV-3646); the
+            # glyphs also stay inside the feature's drawn outline (arrowhead, narrowed shaft), tested below (OV-3649).
             bbox_width_px = candidate.width_px
             bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle
-            label_as_feature_length = (
-                total_length * (1.1 * bbox_width_px) / (2 * math.pi * min(float(radius), feature_center_radius))
-            )
+            label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * feature_center_radius)
             label_start = label_middle - (label_as_feature_length / 2)
             label_end = label_middle + (label_as_feature_length / 2)
             feature_angle_deg = position_angle(label_middle, total_length)
@@ -5862,7 +5961,22 @@ def prepare_label_list(
                 longest_segment_start,
                 longest_segment_end,
                 total_length,
-            )
+            ) and embedded_glyphs_outline_margin_px(
+                embedded_text_path(feature_center_radius, bbox_height_px, label_middle, total_length),
+                embedded_glyph_box(
+                    feature_label_text, font_family, font_size, candidate.font_style, bbox_width_px, bbox_height_px
+                ),
+                label_middle,
+                total_length,
+                partial(
+                    circular_feature_edge_radii_at,
+                    feature_object,
+                    total_length=total_length,
+                    head_length_bp=circular_arrow_length_bp,
+                    radii_px=(feature_inner_radius, feature_center_radius, feature_outer_radius),
+                    shaft_width_ratio=arrow_shaft_width_ratio,
+                ),
+            ) >= outline_clearance_px
             if label_rendering == "external_only":
                 is_embedded = False
             elif label_rendering == "embedded_only" and not is_embedded:
