@@ -1210,37 +1210,41 @@ export const readStoredRecordIdPlaces = async (requests, fileOf) => {
 };
 
 /**
- * The record ID of each stored Linear request record that names no record of its file (a file of one record, as the
- * CLI writes it), by `storedOneRecordIdKey`, when a Record Order token of its request names a record by an ID no
- * record's selector names: the renderer finds that record by the ID of its record (`record_order_selector`), so Load
- * reads it, and the Linear projection gives the token's row to that record's card (`recordOrderPlaces`, OV-3473). Only
- * such a request's files are read; a file that cannot be listed, or holds other than one record, gives no ID.
+ * The record ID of each stored Linear or Circular request record that names no record of its file (a file of one
+ * record, as the CLI writes it), by `storedOneRecordIdKey`, when a Record Order token of its request names a record by
+ * an ID no record's selector names: the renderer finds that record by the ID of its record (`record_order_selector`),
+ * so Load reads it, the reader refuses a token list the renderer refuses (`refusedRecordPlacement`, OV-3313 review 2),
+ * and the projection gives the token's row to that record's card (`recordOrderPlaces`, OV-3473). Only such a request's
+ * files are read, and none whose key `known` holds; a file that cannot be listed, or holds other than one record,
+ * gives null, so a second read of the same Session reads it no more.
  * @param {readonly { at: string, renderRequest: unknown }[]} requests Each stored request (`storedResultSets`).
  * @param {(resourceId: string) => FileLike} fileOf As for `readStoredRecordIdPlaces`.
- * @returns {Promise<Map<string, string>>}
+ * @param {ReadonlyMap<string, unknown>} [known] Readings Load holds already.
+ * @returns {Promise<Map<string, string | null>>}
  */
-export const readStoredTokenRecordIds = async (requests, fileOf) => {
-  /** @type {Map<string, string>} */
+export const readStoredTokenRecordIds = async (requests, fileOf, known = new Map()) => {
+  /** @type {Map<string, string | null>} */
   const recordIds = new Map();
   for (const { renderRequest } of requests) {
     const request = /** @type {{ mode?: unknown, schema?: unknown, records?: unknown, layout?: { multiRecordPositions?: unknown } | null } | null} */ (
       typeof renderRequest === 'object' ? renderRequest : null);
     const tokens = request?.layout?.multiRecordPositions;
-    // Schemas 2 to 5 turn their tokens into card rows (`olderLinearCardRows` in session-request.js).
-    if (request?.mode !== 'linear' || Number(request.schema) < 6 || !Array.isArray(tokens) || !Array.isArray(request.records)) continue;
+    // Linear schemas 2 to 5 turn their tokens into card rows (`olderLinearCardRows` in session-request.js).
+    const read = request?.mode === 'circular' || (request?.mode === 'linear' && Number(request.schema) >= 6);
+    if (!read || !Array.isArray(tokens) || !Array.isArray(request.records)) continue;
     const records = /** @type {(UnreadStoredRecord | null)[]} */ (request.records);
     const named = new Set(records.map((record) => storedRecordIdOf(record)?.recordId));
     const byId = tokens.map(recordOrderSelector).some((selector) => selector && !selector.startsWith('#') && !named.has(selector));
     if (!byId) continue;
     for (const record of records) {
       const key = storedOneRecordIdKey(record);
-      if (key === null || recordIds.has(key)) continue;
+      if (key === null || recordIds.has(key) || known.has(key)) continue;
       const [primaryFile, pairedFile] = storedRecordSourceResourceIds(record?.source);
       const listed = await Promise.resolve()
         .then(() => discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(record?.source?.kind)), fileOf(primaryFile),
           pairedFile === undefined ? null : fileOf(pairedFile)))
         .catch(() => []);
-      if (listed.length === 1 && typeof listed[0].recordId === 'string') recordIds.set(key, listed[0].recordId);
+      recordIds.set(key, listed.length === 1 && typeof listed[0].recordId === 'string' ? listed[0].recordId : null);
     }
   }
   return recordIds;

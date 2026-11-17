@@ -808,11 +808,13 @@ def test_the_web_reads_a_record_order_token_s_record_with_the_renderer_s_rule(mo
     assert len(_RECORD_ORDER_PLACEMENTS) >= 20
     for case in _RECORD_ORDER_PLACEMENTS:
         records = [SeqRecord(Seq("A"), id=record_id) for record_id in case["recordIds"]]
+        mode = case.get("mode", "linear")
         if case["order"] is None:
             with pytest.raises(ValidationError):
-                record_placement.resolve_record_row_positions(records, case["tokens"])
+                record_placement.resolve_record_row_positions(records, case["tokens"], _compatibility=mode)
         else:
-            assert list(record_placement.resolve_record_row_positions(records, case["tokens"])[0]) == case["order"], case
+            resolved = record_placement.resolve_record_row_positions(records, case["tokens"], _compatibility=mode)
+            assert list(resolved[0]) == case["order"], case
     assert all(chr(code).isspace() == bool(re.fullmatch(record_placement.PYTHON_SPACE_PATTERN, chr(code)))
                for code in range(0x110000))
     generator = _generator()

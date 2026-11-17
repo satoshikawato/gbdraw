@@ -6,12 +6,11 @@ import { pythonStrip } from './genbank-header.js';
 /** @import { CircularListRecord } from './record-discovery.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
 import { numberText } from '../utils/i18n.js';
+import { NULL_RECORD_SELECTOR_WORDS } from '../contracts/schema.generated.js';
 
 /** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
-const NULL_RECORD_SELECTOR_TOKENS = new Set([
-  'none', 'null', 'jsnull', 'undefined', 'jsundefined', '-'
-]);
+const NULL_RECORD_SELECTOR_TOKENS = new Set(NULL_RECORD_SELECTOR_WORDS);
 
 /** @param {unknown} value */
 export const isUnspecifiedRecordSelectorValue = (value) => {
@@ -51,30 +50,41 @@ const recordOfSelector = (selector, recordIds) => {
  * Where Record Order tokens place the records of a request each of whose records draws one record, as Python's
  * renderer resolves them (`resolve_record_row_positions`, gbdraw/layout/record_placement.py): one token per record,
  * each naming its record by `#N` (`recordSelectorNumber`), by its ID, or, when one record is drawn, by a word that
- * names no record (`none`, `-`), with a row it reads (`recordOrderRows`). `placed`: each record's row, and each
- * record's place in its row (from 1) when a row lists its records out of request order, since the renderer draws a
- * row in token order (else `places` is null). `refused`: the list the renderer refuses, at the token it stops at (null
- * for a list of another length). `unread`: a token names an ID no known record has while a record's ID is not known.
- * The one Web reader of the record a token names (OV-3473): the Linear Load projection, Load's refusal of a request
- * and the records table.
+ * names no record (`none`, `-`), with a row it reads (`recordOrderRows`). A Linear list of another length is refused
+ * before its tokens are read; a Circular canvas reads its tokens first, then refuses a list that leaves a record out
+ * or names one twice. `placed`: each record's row, and each record's place in its row (from 1) when a row lists its
+ * records out of request order, since the renderer draws a row in token order (else `places` is null). `refused`:
+ * the list the renderer refuses, at the token it stops at (null for a list of another length). `unread`: a token
+ * names an ID no known record has while a record's ID is not known. Every outcome has `tokenRecords`: the record each
+ * token's selector names (-1 where the renderer refuses it, null where it is not known). The one Web reader of the
+ * record a token names (OV-3473): the Linear and Circular Load projections, Load's refusal of a request and the
+ * records table.
  * @typedef {{ kind: 'placed', rows: number[], places: number[] | null } | { kind: 'refused', at: number | null }
- *   | { kind: 'unread' }} RecordOrderPlacement
+ *   | { kind: 'unread' }} RecordOrderOutcome
+ * @typedef {RecordOrderOutcome & { tokenRecords: (number | null)[] }} RecordOrderPlacement
  * @param {readonly unknown[]} tokens
  * @param {readonly (string | null)[]} recordIds Each record's ID, in request order; null where it is not known.
+ * @param {'linear' | 'circular'} [mode]
  * @returns {RecordOrderPlacement}
  */
-export const recordOrderPlaces = (tokens, recordIds) => {
-  if (tokens.length !== recordIds.length) return { kind: 'refused', at: null };
+export const recordOrderPlaces = (tokens, recordIds, mode = 'linear') => {
   const tokenRows = recordOrderRows(tokens);
+  const tokenRecords = tokens.map((token) => {
+    const selector = recordOrderSelector(token);
+    return selector ? recordOfSelector(selector, recordIds) : -1;
+  });
+  /** @param {RecordOrderOutcome} outcome @returns {RecordOrderPlacement} */
+  const placement = (outcome) => ({ ...outcome, tokenRecords });
+  if (mode === 'linear' && tokens.length !== recordIds.length) return placement({ kind: 'refused', at: null });
   /** @type {number[]} */
   const recordAt = [];
-  for (const [at, token] of tokens.entries()) {
-    const selector = recordOrderSelector(token);
-    const record = tokenRows[at] === null || !selector ? -1 : recordOfSelector(selector, recordIds);
-    if (record === null) return { kind: 'unread' };
-    if (record < 0 || recordAt.includes(record)) return { kind: 'refused', at };
+  for (const [at, record] of tokenRecords.entries()) {
+    if (tokenRows[at] === null) return placement({ kind: 'refused', at });
+    if (record === null) return placement({ kind: 'unread' });
+    if (record < 0 || recordAt.includes(record)) return placement({ kind: 'refused', at });
     recordAt.push(record);
   }
+  if (recordAt.length !== recordIds.length) return placement({ kind: 'refused', at: null });
   // Every row is read (above).
   const rows = /** @type {number[]} */ (recordIds.map((_id, record) => tokenRows[recordAt.indexOf(record)]));
   /** @type {Map<number, number[]>} The records of each row, in token order. */
@@ -84,7 +94,7 @@ export const recordOrderPlaces = (tokens, recordIds) => {
   /** @type {number[]} */
   const places = Array(recordIds.length).fill(0);
   members.forEach((row) => row.forEach((record, at) => { places[record] = at + 1; }));
-  return { kind: 'placed', rows, places: inOrder ? null : places };
+  return placement({ kind: 'placed', rows, places: inOrder ? null : places });
 };
 
 /** @param {unknown} value */

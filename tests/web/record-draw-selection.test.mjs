@@ -162,11 +162,11 @@ test('the rows of a Record Order list keep the order the renderer draws, beyond 
 // `places` carries when it is not the records' order. An ID no known record has, while one record's ID is not known,
 // is not read.
 test('a Record Order token names the record the renderer places', () => {
-  /** @type {{ placements: { recordIds: string[], tokens: string[], order: number[] | null }[] }} */
+  /** @type {{ placements: { mode?: 'circular', recordIds: string[], tokens: string[], order: number[] | null }[] }} */
   const { placements } = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
   assert.ok(placements.length >= 20);
-  for (const { recordIds, tokens, order } of placements) {
-    const placement = recordOrderPlaces(tokens, recordIds);
+  for (const { mode, recordIds, tokens, order } of placements) {
+    const placement = recordOrderPlaces(tokens, recordIds, mode ?? 'linear');
     const at = JSON.stringify(tokens);
     if (order === null) {
       assert.equal(placement.kind, 'refused', at);
@@ -179,9 +179,13 @@ test('a Record Order token names the record the renderer places', () => {
       .sort((left, right) => rows[left] - rows[right] || (places ? places[left] - places[right] : left - right));
     assert.deepEqual(drawn, order, at);
   }
-  assert.deepEqual(recordOrderPlaces(['#2@1', 'b@2'], [null, null]), { kind: 'unread' });
-  assert.deepEqual(recordOrderPlaces(['#2@1', 'a@2'], ['a', null]), { kind: 'placed', rows: [2, 1], places: null });
-  assert.deepEqual(recordOrderPlaces(['#2@1', '#1@1.0'], [null, null]), { kind: 'refused', at: 1 });
+  assert.deepEqual(recordOrderPlaces(['#2@1', 'b@2'], [null, null]), { kind: 'unread', tokenRecords: [1, null] });
+  assert.deepEqual(recordOrderPlaces(['#2@1', 'a@2'], ['a', null]), { kind: 'placed', rows: [2, 1], places: null, tokenRecords: [1, 0] });
+  assert.deepEqual(recordOrderPlaces(['#2@1', '#1@1.0'], [null, null]), { kind: 'refused', at: 1, tokenRecords: [1, 0] });
+  // A Circular canvas reads its tokens before it counts them (OV-3313 review 2 M2): a record named twice is refused at
+  // its token; a Linear list of another length is refused before its tokens are read.
+  assert.deepEqual(recordOrderPlaces(['#1@1', '#2@1', '#1@2'], ['a', 'b'], 'circular'), { kind: 'refused', at: 2, tokenRecords: [0, 1, 0] });
+  assert.deepEqual(recordOrderPlaces(['#1@1', '#2@1', '#1@2'], ['a', 'b']), { kind: 'refused', at: null, tokenRecords: [0, 1, 0] });
 });
 
 // OV-3760: the Web's Python strip, which reads a Record Order selector, removes the spaces Python's `str.strip` removes

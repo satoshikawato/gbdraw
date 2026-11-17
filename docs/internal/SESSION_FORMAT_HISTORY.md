@@ -596,10 +596,18 @@ place, so a CLI Session with `#2@1,#1@2` drew record 1 first on the Web and reco
 rows now take the row of the token that names them, and a row listed out of record order keeps that order as the cards'
 places in the row. Load leaves out the request, as the CLI refuses it, when a Linear request's records have `gridRow`
 on some records only (in a schema 8 or later request, naming the first record without one), carry `gridRow` beside
-tokens, or have tokens of another count, a record named twice, a `#N` past the records, or an ID no record's selector
-names when every record has a selector (`refusedLinearPlacement`, `services/session-request.js`). Load also leaves out
-two forms the Web's cards cannot hold, which no gbdraw writer writes: tokens beside a record of a whole file
-(`cardinality: all`), and a row listed out of record order beside a record drawn in several windows. Vector:
+tokens, or have tokens of another count, a record named twice, a `#N` past the records, or an ID no record has, by its
+selector or by the ID Load reads from the file of a record without one before it reads the request
+(`refusedLinearPlacement`, `services/session-request.js`; `readTokenRecordIdsBeforeRequests`, `services/config.js`;
+OV-3313 review 2). A record drawn in several windows (the CLI's `--region '#1:1-3000' --region '#1:5000-8000'`) takes
+its token's place with its windows, together and in window order (`_unit_positions`): Load gives each cell of a row
+listed out of record order its place in token order, a whole card its `canonicalColumn` and each window its `column`
+(`storedLinearCellPlaces`). Load also leaves out a form the Web's cards cannot hold, which the CLI does not write:
+tokens beside a record of a whole file (`cardinality: all`). A Circular canvas (`grouping: grid`, not one circle) whose
+records each draw one record reads its tokens as `_circular_drawn_order` does (`resolve_record_row_positions(...,
+"circular")`): a record named twice, a `#N` past the records, an ID no record has, or a record left out leaves the
+request out, and the draft names each token's record through the same reader (`recordOrderPlaces` in Circular mode).
+The words a selector reads as naming no record (`none`, `-`) reach the Web as `NULL_RECORD_SELECTOR_WORDS`. Vector:
 `placements` in `tests/fixtures/record_order_row_vectors.json`; Python's `\s`, which the pattern and the selector's
 spaces read, reaches the Web as `PYTHON_SPACE_PATTERN` (OV-3760: the Web's copy of `str.strip` kept U+001C to U+001F
 and U+0085).

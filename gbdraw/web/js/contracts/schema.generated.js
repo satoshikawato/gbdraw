@@ -64,6 +64,10 @@ export const ROW_GAPS_MAX_SHARE = 0.25;
 /** @type {readonly string[]} */
 export const STORED_REGION_FIELDS = Object.freeze(['end', 'reverseComplement', 'selector', 'start']);
 
+// gbdraw/io/record_select.py: NULL_RECORD_SELECTOR_WORDS
+/** @type {readonly string[]} */
+export const NULL_RECORD_SELECTOR_WORDS = Object.freeze(['-', 'jsnull', 'jsundefined', 'none', 'null', 'undefined']);
+
 // gbdraw/io/comparisons.py: COMPARISON_COLUMNS
 /** @type {readonly ['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']} */
 export const COMPARISON_COLUMNS = Object.freeze(['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']);

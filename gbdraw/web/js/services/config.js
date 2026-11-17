@@ -1462,9 +1462,27 @@ const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
   places.forEach((place, key) => readings.set(key, place));
   const tokenRecordIds = await readStoredTokenRecordIds(
     storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
-    (resourceId) => createSessionResourceFileView(table, resourceId));
+    (resourceId) => createSessionResourceFileView(table, resourceId), readings);
   tokenRecordIds.forEach((recordId, key) => readings.set(key, recordId));
   repairs.push(...unresolved.map(({ path, recordId }) => loadRepair({ code: 'record-id-unresolved', path, effect: 'changed', stored: recordId })));
+};
+
+/**
+ * The record IDs Record Order tokens name by ID, read from the Session's files before Load reads its requests
+ * (`readStoredTokenRecordIds`), so the request reader refuses a token list the renderer refuses for those IDs
+ * (`refusedRecordPlacement`, OV-3313 review 2 M1). The files are read through a table of the Session's resources
+ * adopted when a token needs one; a Session whose resources that table refuses gives no ID here, and Load refuses it
+ * where it adopts them.
+ * @param {SessionInput} data The Session Load reads.
+ * @returns {Promise<Map<string, string | null>>}
+ */
+const readTokenRecordIdsBeforeRequests = async (data) => {
+  /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
+  let table = null;
+  return readStoredTokenRecordIds(
+    storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
+    (resourceId) => createSessionResourceFileView(
+      table ??= adoptCurrentSessionResources(/** @type {Record<string, unknown>} */ (data.resources)), resourceId));
 };
 
 // History's restore of an editor state it captured, installed as it is.
@@ -2526,7 +2544,8 @@ const readResultSetRequest = ({ at, set }, project) => {
     legacyOrthogroupState: project.orthogroupState ?? null,
     resourceIds: new Set(isPlainObject(project.resources) ? Object.keys(/** @type {object} */ (project.resources)) : []),
     path: `${at}renderRequest`,
-    holdComparisons: classified.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+    holdComparisons: classified.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE,
+    ...(project.readings ? { readings: project.readings } : {})
   });
   // Inherit copies a preserved comparison as Load read it, in the current schema: the request the drawing commits.
   const classification = classified.source && !('kind' in read)
@@ -2554,10 +2573,11 @@ const readResultSetRequest = ({ at, set }, project) => {
  * @param {T} rawData
  * @param {number} version The Session version Load read.
  * @param {LoadRepair[]} repairs
+ * @param {ReadonlyMap<string, unknown>} [readings] The record IDs tokens name (`readTokenRecordIdsBeforeRequests`).
  * @returns {{ data: T, storedSchemas: StoredRequestSchemas, settingsOnly: boolean,
  *   comparisonClassification: ImportedComparisonIntent | null }}
  */
-const readSessionRequests = (rawData, version, repairs) => {
+const readSessionRequests = (rawData, version, repairs, readings) => {
   const sets = storedResultSets(rawData);
   // A Session 51 drawing without a request that holds saved Results or a
   // feature list, which only a drawing with a request holds, has a request
@@ -2579,7 +2599,7 @@ const readSessionRequests = (rawData, version, repairs) => {
         }));
         data = withStoredResultSet(data, drawingSetPath(index), null);
       }
-      return readSessionRequests(data, version, repairs);
+      return readSessionRequests(data, version, repairs, readings);
     }
   }
   // A Session 51 whose opened drawing holds no request projects no set.
@@ -2597,7 +2617,7 @@ const readSessionRequests = (rawData, version, repairs) => {
     return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
   }
   /** @type {StoredSetProject} */
-  const project = { resources: rawData.resources, orthogroupState: rawData.orthogroupState };
+  const project = { resources: rawData.resources, orthogroupState: rawData.orthogroupState, ...(readings ? { readings } : {}) };
   if (!projected) return { data: readStoredSetRequests(rawData, stored, project, repairs), storedSchemas, settingsOnly: false, comparisonClassification: null };
   const { read: projectedRead, classification: comparisonClassification } = readResultSetRequest(projected, project);
   if ('kind' in projectedRead) {
@@ -2921,7 +2941,8 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
       used: outcome.rowKey
     }));
   });
-  const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
+  const tokenRecordIds = await readTokenRecordIdsBeforeRequests(legendRead.session);
+  const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs, tokenRecordIds);
   const requestData = readSettingsOnlyMode(requestRead.data, repairs);
   // R4 decided by the request row of a Session 31-41 (K22): nothing after can restore it.
   if (restoresNothing(stored, repairs)) throw SESSION_FIELDS_ERROR();
@@ -2937,6 +2958,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
   const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(
     entry, project, repairs, storedRequests.get(entry.at)));
   const leafReadings = await readStoredLeaves(rawData);
+  tokenRecordIds.forEach((recordId, key) => leafReadings.set(key, recordId));
   const currentSession = isDrawingsBand(rawData) || isAuthorityBand(rawData);
   /** @type {ModeScopedUpgrade | null} The Session 51 of a Session 46-50, below. */
   let upgrade = null;

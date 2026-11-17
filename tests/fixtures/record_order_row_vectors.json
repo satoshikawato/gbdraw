@@ -263,7 +263,7 @@
       ]
     }
   ],
-  "placementsDescription": "Record Order tokens of a request whose records have the IDs `recordIds`, and the order Python's renderer draws the records in (`resolve_record_row_positions` with `record_order_selector`, gbdraw/layout/record_placement.py), null where it refuses the list. The Web reads the same lists with `recordOrderPlaces` (services/record-options.js, OV-3473).",
+  "placementsDescription": "Record Order tokens of a request whose records have the IDs `recordIds`, and the order Python's renderer draws the records in (`resolve_record_row_positions` with `record_order_selector`, gbdraw/layout/record_placement.py), null where it refuses the list; `mode` \"circular\" reads the list as a Circular canvas does (`_compatibility=\"circular\"`: the tokens first, then a record left out), else as a Linear request does. The Web reads the same lists with `recordOrderPlaces` (services/record-options.js, OV-3473).",
   "placements": [
     {
       "recordIds": [
@@ -593,6 +593,96 @@
       "tokens": [
         "none@1",
         "b@2"
+      ],
+      "order": null
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "#2@1",
+        "#1@2"
+      ],
+      "order": [
+        1,
+        0
+      ]
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "b@1",
+        "a@1"
+      ],
+      "order": [
+        1,
+        0
+      ]
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "#1@1",
+        "#1@2"
+      ],
+      "order": null
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "#3@1",
+        "#1@2"
+      ],
+      "order": null
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "BOGUS@1",
+        "#1@2"
+      ],
+      "order": null
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "#1@1"
+      ],
+      "order": null
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "#1@1",
+        "#2@1",
+        "#1@2"
       ],
       "order": null
     }

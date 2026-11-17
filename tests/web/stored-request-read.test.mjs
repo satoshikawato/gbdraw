@@ -49,6 +49,7 @@ const {
   readStoredRenderRequest, readPublishedRenderRequest, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
+const { linearLayoutCells } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -367,6 +368,70 @@ test('a CLI Linear Record Order gives each card the row of the token that names 
   // gridColumn (the renderer draws a row in token order).
   assert.deepEqual(await places(['#2@1', '#1@1', '#3@2'])(), [['record-1', 1, 2], ['record-2', 1, 1], ['record-3', 2, 1]]);
   assert.deepEqual(await places(['#1@1', '#2@1', '#3@2'])(), [['record-1', 1, null], ['record-2', 1, null], ['record-3', 2, null]]);
+});
+
+// OV-3313 review 2 H1: the CLI writes and draws a record drawn in windows beside Record Order tokens; the renderer
+// places the record's windows together, in window order, at its token's place in the row (`_unit_positions`). Load
+// gives each cell of the row its place in token order (a whole card its `canonicalColumn`, each window its `column`),
+// so the next Generate draws the CLI's order, by `#N` and by record ID, with the windowed record last or first.
+const fixtureSession = async (name) => readSavedSession(new Blob([readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))]));
+const loadedCells = async (document) => {
+  const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  const drawing = state.activeDrawing();
+  return {
+    repairs: result.repairs.map(({ code, path }) => `${code} ${path}`),
+    cells: linearLayoutCells(drawing.linearSeqs, drawing.linearRecordRows).map(({ uid, window, row }) => `${uid}${window === null ? '' : `~w${window + 1}`}@${row}`)
+  };
+};
+test('a CLI Linear Record Order places a record drawn in windows at its token, in token order (OV-3313 review 2 H1)', async () => {
+  // gbdraw linear --gbk b_collide.gb regex_rules.gb --region '#1:1-1000' --region '#1:2000-3000'
+  //   --multi_record_position '#2@1' --multi_record_position '#1@1': REGEX.1, then TESTA's two windows.
+  assert.deepEqual(await loadedCells(await fixtureSession('cli-linear-windows-record-order.v51.gbdraw')),
+    { repairs: [], cells: ['record-2@1', 'record-1~w1@1', 'record-1~w2@1'] });
+  // --region '#2:1-800' --region '#2:1000-2000' --multi_record_position 'REGEX.1@1' --multi_record_position 'TESTA@1':
+  // REGEX.1's two windows, then TESTA.
+  assert.deepEqual(await loadedCells(await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw')),
+    { repairs: [], cells: ['record-2~w1@1', 'record-2~w2@1', 'record-1@1'] });
+  // The same request with `#N` tokens.
+  const byNumber = await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw');
+  byNumber.drawings[0].renderRequest.layout.multiRecordPositions = ['#2@1', '#1@1'];
+  assert.deepEqual(await loadedCells(byNumber), { repairs: [], cells: ['record-2~w1@1', 'record-2~w2@1', 'record-1@1'] });
+});
+
+// OV-3313 review 2 M1: a Record Order Python refuses is refused at Load also when the records name no record by a
+// selector (the CLI's one-record files): Load reads each record's ID from its file before it reads the request.
+test('Load refuses a Linear Record Order by record ID that Python refuses for one-record files (OV-3313 review 2 M1)', async () => {
+  // The drawing stays without its request (OV-3472).
+  for (const [tokens, at] of [[['BOGUS@1', 'TESTA@1'], 0], [['TESTA@1', 'TESTA@2'], 1], [['none@1', 'TESTA@1'], 0]]) {
+    const document = await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw');
+    document.drawings[0].renderRequest.layout.multiRecordPositions = tokens;
+    const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.deepEqual(result.repairs.map(({ code, path }) => `${code} ${path}`),
+      [`request-dropped drawings[0].renderRequest.layout.multiRecordPositions[${at}]`], JSON.stringify(tokens));
+  }
+});
+
+// OV-3313 review 2 M2: a Circular canvas's Record Order reads as Python's `resolve_record_row_positions(...,
+// "circular")` reads it: Load refuses a record named twice, a `#N` past the records, and an ID no record has (by the
+// IDs Load reads from one-record files), and the draft names each token's record by its identity.
+test('Load reads and refuses a Circular canvas Record Order as Python does (OV-3313 review 2 M2)', async () => {
+  const circular = async (tokens) => {
+    const document = await fixtureSession('cli-circular-record-order.v51.gbdraw');
+    if (tokens) document.drawings[0].renderRequest.layout.multiRecordPositions = tokens;
+    const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    return {
+      repairs: result.repairs.map(({ code, path }) => `${code} ${path}`),
+      positions: (state.activeDrawing().adv.multi_record_positions || []).map(({ selector, row }) => `${selector}@${row}`)
+    };
+  };
+  assert.deepEqual(await circular(null), { repairs: [], positions: ['record-2@1', 'record-1@2'] });
+  for (const [tokens, at] of [[['TESTA@1', 'TESTA@2'], 1], [['#3@1', 'TESTA@2'], 0], [['BOGUS@1', 'TESTA@2'], 0]]) {
+    assert.deepEqual((await circular(tokens)).repairs, [`request-dropped drawings[0].renderRequest.layout.multiRecordPositions[${at}]`],
+      JSON.stringify(tokens));
+  }
 });
 
 // OV-3313 fix round 2: a Linear request Python refuses for its record placement leaves no request to draw, as a

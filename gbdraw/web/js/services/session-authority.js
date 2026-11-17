@@ -1829,8 +1829,9 @@ export const openedDrawingOf = (document) => {
  * @typedef {{ at: ResultSetPath, projected: boolean, set: SessionInput }} StoredResultSet
  */
 /**
- * The project fields a Result set's readers read beside the set.
- * @typedef {{ resources: unknown, orthogroupState?: unknown }} StoredSetProject
+ * The project fields a Result set's readers read beside the set, and the record IDs Load read from the files of
+ * records Record Order tokens name by ID (`readStoredTokenRecordIds`), which the request reader reads.
+ * @typedef {{ resources: unknown, orthogroupState?: unknown, readings?: ReadonlyMap<string, unknown> }} StoredSetProject
  */
 /**
  * The committed Result sets of a Session, the projected one first: a Session

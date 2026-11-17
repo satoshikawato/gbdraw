@@ -101,7 +101,8 @@ import {
   circularRecordEntries,
   circularRecordRange,
   isSingleCircularJourney,
-  recordOrderPlaces
+  recordOrderPlaces,
+  recordOrderSelector
 } from './record-options.js';
 import {
   cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, namedRecordSelectorOf, placeNamedCardRecords, readNamedCardRecords,
@@ -2245,33 +2246,6 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
     return positions.length > 0 ? positions : null;
   }
 });
-/**
- * The identity a Record Order token of a committed request names (OV-2845): a
- * Record Order row names its record by identity, and a committed request's
- * record key is its record's identity. The token `#k` names the request's k-th
- * record, a record ID the record its selector names by that ID; any other
- * token stays as it is (the request writer leaves out a row no drawn record has).
- * A record ID of a one-record file, whose request record has no selector (the
- * CLI's), stays too: the first settled read of the cards places it at the
- * record of that ID (`placeCircularRecordChoices`, OV-2906).
- * @param {readonly { recordKey?: unknown, selector?: unknown }[]} records The committed request's records.
- * @param {string} token
- * @param {(index: number) => string | null} identityAt The identity the reader gives the request's record at that
- *   index when a File card reads it (`canvasRecordIdentity`), null when it gives none; the record's key names it then.
- */
-const positionRecordIdentity = (records, token, identityAt) => {
-  const number = recordSelectorNumber(token);
-  const index = number !== null
-    ? number - 1
-    : records.findIndex(({ selector }) => {
-      const named = /** @type {{ kind?: unknown, value?: unknown } | null} */ (selector && typeof selector === 'object' ? selector : null);
-      return named?.kind === 'recordId' && named.value === token;
-    });
-  const record = records[index];
-  const identity = record ? identityAt(index) : null;
-  if (identity !== null) return identity;
-  return typeof record?.recordKey === 'string' && record.recordKey ? record.recordKey : token;
-};
 // OV-1072: the identity of each record a committed Circular request draws, for
 // the live layout projector and the kept Depth parts: a committed request names
 // its records resolved, each by its key, which is its identity (`<uid>:<k>` or
@@ -3442,7 +3416,7 @@ export const requestRunsProteinSearch = (request) => {
 };
 
 /**
- * Each record's ID as a Linear Record Order token names it (`recordOrderPlaces`): the ID its selector names, else the
+ * Each record's ID as a Record Order token names it (`recordOrderPlaces`): the ID its selector names, else the
  * ID Load read from the file of a record of a file of one record (`storedOneRecordIdKey`, OV-3473), else null.
  * @param {readonly unknown[]} records The request's records (unvalidated).
  * @param {StoredLeafReadings} readings
@@ -3483,6 +3457,41 @@ const storedLinearRecordRows = (records, positions, readings = NO_STORED_READING
     places: null,
     fromRecords
   };
+};
+
+/**
+ * The place in its row of each cell of a stored Linear request whose tokens list a row out of record order
+ * (`storedLinearRecordRows` `places`; OV-3313 review 2 H1): the renderer draws the row in token order, a record drawn in
+ * several windows as its windows, together and in window order, at its token's place (`_unit_positions` in
+ * gbdraw/api/request_render.py). `columns`: a whole card's place (the draft's `canonicalColumn`); `windowColumns`: the
+ * place of each window of a card drawn in several (the window's `column`), as the draft's Record Layout holds them
+ * (`linearLayoutCells`). Null where every row keeps its records' order, or the records place themselves.
+ * @param {readonly unknown[]} records The request's records (unvalidated).
+ * @param {{ rows: number[], places: number[] | null, fromRecords: boolean }} storedRows
+ * @returns {{ columns: (number | null)[], windowColumns: (number[] | null)[] } | null}
+ */
+const storedLinearCellPlaces = (records, { rows, places, fromRecords }) => {
+  if (fromRecords || places === null) return null;
+  const windowCounts = records.map((record) => {
+    const { windows } = /** @type {UnvalidatedFields<'windows'>} */ (record) ?? {};
+    return Array.isArray(windows) && windows.length > 1 ? windows.length : 0;
+  });
+  /** @type {Map<number, number>} The cells placed in each row so far. */
+  const filled = new Map();
+  /** @type {(number | null)[]} */
+  const columns = records.map(() => null);
+  /** @type {(number[] | null)[]} */
+  const windowColumns = records.map(() => null);
+  records.map((_record, index) => index)
+    .sort((left, right) => rows[left] - rows[right] || places[left] - places[right])
+    .forEach((record) => {
+      const start = (filled.get(rows[record]) || 0) + 1;
+      const count = windowCounts[record] || 1;
+      filled.set(rows[record], start + count - 1);
+      if (windowCounts[record]) windowColumns[record] = Array.from({ length: count }, (_cell, at) => start + at);
+      else columns[record] = start;
+    });
+  return { columns, windowColumns };
 };
 
 /**
@@ -6953,27 +6962,33 @@ const canvasRecordIdentity = (record, cardOfRecord) => {
 };
 /**
  * The Multi-Record Canvas places of a request (`layout.multiRecordPositions`, `#k@row` tokens) as the draft holds them
- * (`adv.multi_record_positions`): each names its record by the identity the reader gives it (`canvasRecordIdentity`),
- * else as `positionRecordIdentity` reads the token, and the row `recordOrderRows` reads. A token whose row the renderer
- * refuses is left out: only a one-circle layout keeps one at Load (`refusedRecordPlacement`), and the renderer does not
- * read it there (OV-3313).
+ * (`adv.multi_record_positions`): each names the record its token names (`recordOrderPlaces`, the one Web reader of
+ * it: a `#N`, the ID a record's selector names, or the ID Load read from the file of a record without one, OV-3313
+ * review 2 M2) by the identity the reader gives that record (`canvasRecordIdentity`), else by its key, which is its
+ * identity in a committed request (OV-2845); a token whose record is not known keeps its selector text (the first
+ * settled read of the cards places it, `placeCircularRecordChoices`, OV-2906). The row is the one `recordOrderRows`
+ * reads; a token whose row the renderer refuses is left out: only a one-circle layout keeps one at Load
+ * (`refusedRecordPlacement`), and the renderer does not read it there (OV-3313).
  * @param {unknown} tokens
- * @param {readonly { recordKey?: unknown, selector?: unknown }[]} sourceRecords The request's records, in its order.
+ * @param {readonly unknown[]} sourceRecords The request's records, in its order.
  * @param {{ records: readonly IdentityRequestRecord[], projectedIndexBySourceIndex: ReadonlyMap<number, number>,
- *   cardOfRecord: ReadonlyMap<unknown, string> }} reading `records`: the projected records the card of each is read
- *   for (`projectedIndexBySourceIndex` places a request record among them).
+ *   cardOfRecord: ReadonlyMap<unknown, string>, readings: StoredLeafReadings }} reading `records`: the projected
+ *   records the card of each is read for (`projectedIndexBySourceIndex` places a request record among them).
  * @returns {{ selector: string, row: number }[]}
  */
-const canvasRecordPositions = (tokens, sourceRecords, { records, projectedIndexBySourceIndex, cardOfRecord }) => {
+const canvasRecordPositions = (tokens, sourceRecords, { records, projectedIndexBySourceIndex, cardOfRecord, readings }) => {
   /** @param {number} index */
   const identityAt = (index) => canvasRecordIdentity(records[projectedIndexBySourceIndex.get(index) ?? -1], cardOfRecord);
   const list = Array.isArray(tokens) ? tokens : [];
   const rows = recordOrderRows(list);
+  const { tokenRecords } = recordOrderPlaces(list, tokenRecordIds(sourceRecords, readings), 'circular');
   return list.flatMap((/** @type {unknown} */ token, /** @type {number} */ index) => {
     const row = rows[index];
-    return row === null ? [] : [{
-      selector: positionRecordIdentity(sourceRecords, String(token).slice(0, String(token).lastIndexOf('@')), identityAt), row
-    }];
+    const record = tokenRecords[index];
+    const recordKey = record === null || record < 0
+      ? null : /** @type {UnvalidatedFields<'recordKey'>} */ (sourceRecords[record])?.recordKey;
+    const named = record === null || record < 0 ? null : identityAt(record) ?? (typeof recordKey === 'string' && recordKey ? recordKey : null);
+    return row === null ? [] : [{ selector: named ?? recordOrderSelector(token), row }];
   });
 };
 /**
@@ -7003,6 +7018,27 @@ const namedCardRecordsConfig = (cardOfRecord, grouping, storedConfig) => {
   });
   const recordsNamed = [...named].flatMap(([uid, records]) => (records === null ? [] : [{ uid, named: records }]));
   return recordsNamed.length ? { recordsNamed } : {};
+};
+
+/**
+ * The records of a request the projection reads, with the rows a Linear request's records take (`storedLinearRecordRows`)
+ * and, for a row its tokens list out of record order, each cell's place in it (`storedLinearCellPlaces`): each window
+ * of a record drawn in several takes its place as its `column` (OV-3313 review 2 H1).
+ * @param {{ mode: string, records?: unknown, layout?: { multiRecordPositions?: unknown } | null }} renderRequest
+ * @param {StoredLeafReadings} readings
+ * @returns {{ storedRows: ReturnType<typeof storedLinearRecordRows>, cellPlaces: ReturnType<typeof storedLinearCellPlaces>,
+ *   sourceRecords: ProjectionRecordView[] }}
+ */
+const placedProjectionRecords = (renderRequest, readings) => {
+  /** @type {ProjectionRecordView[]} */
+  const records = Array.isArray(renderRequest.records) ? renderRequest.records : [];
+  const storedRows = storedLinearRecordRows(records, renderRequest.layout?.multiRecordPositions, readings);
+  const cellPlaces = renderRequest.mode === 'linear' ? storedLinearCellPlaces(records, storedRows) : null;
+  const sourceRecords = records.map((record, index) => {
+    const columns = cellPlaces?.windowColumns[index];
+    return columns ? { ...record, windows: record.windows.map((window, at) => ({ ...window, column: columns[at] })) } : record;
+  });
+  return { storedRows, cellPlaces, sourceRecords };
 };
 
 /**
@@ -7037,8 +7073,7 @@ export const projectCanonicalSessionRequest = ({
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
     throw new Error('Unsupported canonical renderRequest mode.');
   }
-  /** @type {ProjectionRecordView[]} */
-  const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
+  const { storedRows, cellPlaces, sourceRecords } = placedProjectionRecords(renderRequest, leafReadings);
   sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
   if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
     throw new Error('Canonical featurePlacements must be an array.');
@@ -7963,14 +7998,15 @@ export const projectCanonicalSessionRequest = ({
     linear_track_slots: linearStack.slots,
     multi_record_positions: canvasRecordPositions(renderRequest.layout?.multiRecordPositions, sourceRecords, {
       records, projectedIndexBySourceIndex: normalizedRecordOrdering.projectedIndexBySourceIndex,
-      cardOfRecord: circularCardOfRecord
+      cardOfRecord: circularCardOfRecord, readings: leafReadings
     })
   };
-  const storedRows = storedLinearRecordRows(records, renderRequest.layout?.multiRecordPositions, leafReadings);
+  // Records placed by tokens keep the request's order (no gridColumn), so `storedRows` reads them as `records` lists them.
   const presentationOwnsLinearRows = storedRows.fromRecords;
   const linearLayoutRows = storedRows.rows.map((row, index) => {
-    // A row the renderer draws out of record order: each card's place in it (`linearLayoutCells`).
-    const place = storedRows.places?.[index];
+    // A row the renderer draws out of record order: each whole card's place in it (`linearLayoutCells`); a card drawn
+    // in several windows places each window (above).
+    const place = cellPlaces?.columns[index];
     if (!presentationOwnsLinearRows) {
       return { uid: files.linearSeqs[index]?.uid || '', row, ...(place ? { canonicalRow: row, canonicalColumn: place } : {}) };
     }
@@ -8570,6 +8606,9 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
  *   shows (receipt 〔今までの知らせ〕), so they are not dropped. A reference to a
  *   resource the Session lacks is dropped as any other is: no Save can write
  *   it (OV-899).
+ * @property {StoredLeafReadings} [readings] The record IDs Load read from the files of records a Record Order token
+ *   names by ID (`readStoredTokenRecordIds`): the refusal of a placement Python refuses reads them
+ *   (`refusedRecordPlacement`, OV-3313 review 2 M1).
  */
 /**
  * The committed Session: the request that drew the shown Result, with its
@@ -8895,7 +8934,8 @@ export const readStoredRenderRequest = (value, context) => {
   }
   // The cast: the root was checked above (an integer schema, a `records` array).
   const refusedPlacement = refusedRecordPlacement(
-    /** @type {StoredRequestBeforeSchema8} */ (stored), /** @type {Record<string, unknown>} */ (repaired.value), path
+    /** @type {StoredRequestBeforeSchema8} */ (stored), /** @type {Record<string, unknown>} */ (repaired.value), path,
+    context.readings ?? NO_STORED_READINGS
   );
   if (refusedPlacement !== null) return { kind: 'request-dropped', ...refusedPlacement };
   const rebound = keepConservationSlotsOnTheirRings(
@@ -8916,20 +8956,32 @@ export const readStoredRenderRequest = (value, context) => {
  * Where the CLI refuses a request because of where it places its records, and why: the first token whose row the
  * renderer refuses (`recordOrderRows`; "multi_record_position entry '#1@1.0' must use a positive integer row."; reason
  * `pattern`), except in a one-circle layout, which the renderer draws without reading its tokens
- * (`_assemble_one_circle`); then a Linear request's placement (`refusedLinearPlacement`). Null where the CLI draws it.
- * Such a request leaves nothing to draw, as a layout its owner refuses does (C-OD20; OV-3313).
+ * (`_assemble_one_circle`); then a Linear request's placement (`refusedLinearPlacement`), or a Circular canvas's
+ * tokens when each of its records draws one record (`recordOrderPlaces` in Circular mode, as `_circular_drawn_order`
+ * resolves them: a record named twice, a `#N` past the records, an ID no record has, a record left out; OV-3313 review
+ * 2 M2). A record of a file drawn whole, or drawn in several windows, draws records only Python counts: its tokens are
+ * not read here. Null where the CLI draws it. Such a request leaves nothing to draw, as a layout its owner refuses
+ * does (C-OD20; OV-3313).
  * @param {StoredRequestBeforeSchema8} stored The request as stored.
  * @param {Record<string, unknown>} read The request as read.
  * @param {string} path The request's place.
+ * @param {StoredLeafReadings} readings Load's readings of the record IDs tokens name (`tokenRecordIds`).
  * @returns {{ path: string, reason: string } | null}
  */
-const refusedRecordPlacement = (stored, read, path) => {
+const refusedRecordPlacement = (stored, read, path, readings) => {
   const at = `${path}.layout.multiRecordPositions`;
   const layout = isPlainObject(read.layout) ? read.layout : {};
   const tokens = Array.isArray(layout.multiRecordPositions) && layout.recordLayout !== 'one_circle' ? layout.multiRecordPositions : [];
   const index = recordOrderRows(tokens).indexOf(null);
   if (index >= 0) return { path: `${at}[${index}]`, reason: 'pattern' };
-  return read.mode === 'linear' ? refusedLinearPlacement(stored, Array.isArray(read.records) ? read.records : [], tokens, path) : null;
+  const records = Array.isArray(read.records) ? read.records : [];
+  if (read.mode === 'linear') return refusedLinearPlacement(stored, records, tokens, path, readings);
+  const fields = /** @type {UnvalidatedFields<'cardinality' | 'windows'>[]} */ (records);
+  const counted = read.grouping === 'grid' && tokens.length > 0 && fields.every((record) => (
+    record?.cardinality === 'exactly_one' && !(Array.isArray(record.windows) && record.windows.length > 1)));
+  const placement = counted ? recordOrderPlaces(tokens, tokenRecordIds(records, readings), 'circular') : null;
+  return placement?.kind === 'refused'
+    ? { path: placement.at === null ? at : `${at}[${placement.at}]`, reason: 'unknown-record' } : null;
 };
 
 /**
@@ -8938,17 +8990,18 @@ const refusedRecordPlacement = (stored, read, path) => {
  * have it."; in a schema 2 to 5 request, whose tokens the promotion turned into card rows beside a card's own
  * (`olderLinearCardRows`), at the token of the first card without one, reason `pattern`); gridRows beside tokens
  * ("Specify Linear placement in RecordPresentation or layout, not both."); a token list the renderer refuses
- * (`recordOrderPlaces`: another length, a record named twice, a `#N` past the records, an ID no record's selector
- * names when every record has one). Load also refuses what the Web's draft cannot hold: tokens on a record of a file
- * drawn whole (one row per card; the renderer places each of its records), and a row drawn out of record order beside
- * a card drawn in several windows (the draft places a card's windows by their own columns, OV-3473).
+ * (`recordOrderPlaces`: another length, a record named twice, a `#N` past the records, an ID no record has, by its
+ * selector or by the ID Load read from its file, `readings`). Load also refuses what the Web's draft cannot hold:
+ * tokens on a record of a file drawn whole (one row per card; the renderer places each of its records). A card drawn
+ * in several windows takes its token's place with its windows (`storedLinearCellPlaces`, OV-3313 review 2 H1).
  * @param {StoredRequestBeforeSchema8} stored
  * @param {readonly unknown[]} records The read request's records.
  * @param {readonly unknown[]} tokens The read request's tokens.
  * @param {string} path
+ * @param {StoredLeafReadings} readings
  * @returns {{ path: string, reason: string } | null}
  */
-const refusedLinearPlacement = (stored, records, tokens, path) => {
+const refusedLinearPlacement = (stored, records, tokens, path, readings) => {
   const at = `${path}.layout.multiRecordPositions`;
   const gridRows = records.map((record) => (
     /** @type {UnvalidatedFields<'presentation', UnvalidatedFields<'gridRow'>>} */ (record)?.presentation?.gridRow ?? null));
@@ -8959,14 +9012,11 @@ const refusedLinearPlacement = (stored, records, tokens, path) => {
   }
   if (tokens.length === 0) return null;
   if (unplaced < 0) return { path: at, reason: 'combination' };
-  const fields = /** @type {UnvalidatedFields<'cardinality' | 'windows'>[]} */ (records);
+  const fields = /** @type {UnvalidatedFields<'cardinality'>[]} */ (records);
   if (fields.some((record) => record?.cardinality === 'all')) return { path: at, reason: 'combination' };
-  const placement = recordOrderPlaces(tokens, tokenRecordIds(records, NO_STORED_READINGS));
-  if (placement.kind === 'refused') {
-    return { path: placement.at === null ? at : `${at}[${placement.at}]`, reason: 'unknown-record' };
-  }
-  const windowed = fields.some((record) => Array.isArray(record?.windows) && record.windows.length > 1);
-  return placement.kind === 'placed' && placement.places && windowed ? { path: at, reason: 'combination' } : null;
+  const placement = recordOrderPlaces(tokens, tokenRecordIds(records, readings));
+  return placement.kind === 'refused'
+    ? { path: placement.at === null ? at : `${at}[${placement.at}]`, reason: 'unknown-record' } : null;
 };
 
 /**

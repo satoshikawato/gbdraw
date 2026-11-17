@@ -75,6 +75,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEFAULT_RECORD_GAP_PX", "gbdraw.layout.linear_multi_record", "DEFAULT_RECORD_GAP_PX"),
     ("ROW_GAPS_MAX_SHARE", "gbdraw.layout.linear_multi_record", "ROW_GAPS_MAX_SHARE"),
     ("STORED_REGION_FIELDS", "gbdraw.session_request_codec", "STORED_REGION_FIELDS"),
+    # The words a record selector reads as naming no record (`parse_record_selector`).
+    ("NULL_RECORD_SELECTOR_WORDS", "gbdraw.io.record_select", "NULL_RECORD_SELECTOR_WORDS"),
     # The columns of a BLAST table: Load reads a given table of schema 2 or 5-9 that has these alone, in any order,
     # as a BLAST table (OV-3573), as comparison_table_text writes one.
     ("COMPARISON_COLUMNS", "gbdraw.io.comparisons", "COMPARISON_COLUMNS"),
