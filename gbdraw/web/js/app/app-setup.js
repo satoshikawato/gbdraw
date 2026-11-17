@@ -864,7 +864,7 @@ export const createAppSetup = () => {
     // What a held figure's Results show, read with the shown drawing's paint, and written back as it shows again.
     heldResultPaint: {
       capture: (results, drawing) => resultPaintRecord.heldPaint(results, editorPaintState(state, state.activeDrawing()), drawing),
-      arrive: resultPaintRecord.arrive
+      arrive: (results, paints) => resultPaintRecord.arrive(results, paints, state.appliedPaletteColors.value)
     },
     buildConfigData: captureConfigData,
     applyConfigData: applyCapturedConfigData,

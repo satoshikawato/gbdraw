@@ -21,7 +21,7 @@ await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const {
-  ARTIFACT_SLOT_KEYS, artifactSlotAs, artifactSlotShowing, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact
+  ARTIFACT_SLOT_ALIGNMENT_KEYS, ARTIFACT_SLOT_KEYS, ARTIFACT_SLOT_PALETTE_KEYS, artifactSlotAs, artifactSlotShowing, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact
 } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createDrawingSwitch } = await import('../../gbdraw/web/js/app/drawing-switch.js');
@@ -267,9 +267,30 @@ test('a copied slot holds copies of its Results; a held figure keeps the display
   assert.deepEqual(copy.values.results, results.map((result) => ({ ...result, copy: true })));
   assert.deepEqual(copied, [[results, copy.values.results]], 'the records follow the copies');
   assert.equal(copy.values.selectedResultIndex, 1);
-  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, 5).values.selectedResultIndex, 1, 'clamped');
-  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, 0).values.selectedResultIndex, 0);
-  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, 0).values.results, results, 'by reference');
+  const shownAt = (selectedResultIndex) => createArtifactSlot({ drawing: { id: 'd1', mode: 'linear' }, values: { selectedResultIndex } });
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, shownAt(5)).values.selectedResultIndex, 1, 'clamped');
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, shownAt(0)).values.selectedResultIndex, 0);
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, shownAt(0)).values.results, results, 'by reference');
+});
+
+// A held figure is its slot's, but the values the restored intent owns are
+// the shown drawing's: a live edit in a later open step may have written its
+// own into the slot (a Default colors pick, a record drag's drop).
+test('a held figure shows with the palette and alignment state the restored intent left', () => {
+  const drawing = { id: 'd1', mode: 'linear' };
+  const results = [{ name: 'a.svg', content: '<svg/>' }];
+  const intentKeys = [...ARTIFACT_SLOT_PALETTE_KEYS, ...ARTIFACT_SLOT_ALIGNMENT_KEYS];
+  assert.deepEqual(intentKeys.filter((key) => !ARTIFACT_SLOT_KEYS.includes(key)), [], 'every key is a slot key');
+  const held = createArtifactSlot({ drawing, values: {
+    results, lastRunInfo: { held: true },
+    ...Object.fromEntries(intentKeys.map((key) => [key, { held: key }]))
+  } });
+  const restored = Object.fromEntries(intentKeys.map((key) => [key, { restored: key }]));
+  const shown = createArtifactSlot({ drawing, values: { results: [], lastRunInfo: { shown: true }, ...restored } });
+  const showing = artifactSlotShowing(held, drawing, shown);
+  intentKeys.forEach((key) => assert.equal(showing.values[key], restored[key], `${key} as the intent restore left it`));
+  assert.equal(showing.values.results, results, 'the figure is the slot\'s');
+  assert.deepEqual(showing.values.lastRunInfo, { held: true }, 'and so is what it was drawn with');
 });
 
 test('the slot store keeps a hidden drawing\'s artifact through its named operations', async () => {

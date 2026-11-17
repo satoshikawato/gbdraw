@@ -8,6 +8,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { featureVisibilityRows } from '../services/feature-visibility.js';
 import { featureIdentityKey } from '../services/feature-placement.js';
+import { paletteColorsEqual } from './svg-styles.js';
 
 // Which editor state each Result's bytes were drawn with and show: one
 // record per Result. A Result displayed again receives a
@@ -104,6 +105,16 @@ export const paintRuleTable = (paint) => (paint.colors[1]
 // Whether two paint states show the same palette and color edits.
 /** @param {EditorPaintState['colors']} left @param {EditorPaintState['colors']} right */
 export const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
+
+// A held paint whose palette gives every key the color of `palette`, the
+// applied one, shows `palette` (a restore clones the palette it restores).
+/** @param {EditorPaintState} paint @param {unknown} palette @returns {EditorPaintState} */
+const withAppliedPalette = (paint, palette) => {
+  const [held, edits] = paint.colors;
+  return held !== palette && paletteColorsEqual(
+    /** @type {Record<string, unknown> | null} */ (held), /** @type {Record<string, unknown> | null} */ (palette)
+  ) ? { ...paint, colors: [palette, edits] } : paint;
+};
 
 // Whether two paint states show the same fills: palette and color edits, and visibility.
 /** @param {Pick<EditorPaintState, 'colors' | 'visibility'>} left @param {Pick<EditorPaintState, 'colors' | 'visibility'>} right */
@@ -409,14 +420,18 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
      * A figure History holds shows again (OV-2436): its Results' bytes show
      * `paints` (`heldPaint`, in their order), whatever their records said
      * since, and left no drawing, so their next display shows the edits
-     * since. Called once the displayed Result has left (`depart`).
+     * since. A held palette that gives every key the color of `applied`, the
+     * applied palette the restored intent left, is that palette: the restore
+     * clones it, and the same colors ask for no fills. Called once the
+     * displayed Result has left (`depart`).
      * @param {readonly SvgResultEntry[]} results
      * @param {readonly EditorPaintState[]} paints
+     * @param {unknown} applied
      */
-    arrive(results, paints) {
+    arrive(results, paints, applied) {
       results.forEach((result, index) => {
         const record = recordOf(result);
-        if (record) Object.assign(record, { shown: paints[index], left: null });
+        if (record) Object.assign(record, { shown: withAppliedPalette(paints[index], toRaw(applied)), left: null });
       });
     },
     /** @param {SvgResultEntry} result The Result shown again with the intent it left with (E1). */

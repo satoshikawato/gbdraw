@@ -1572,6 +1572,80 @@ test.describe('Undo and Redo', () => {
         await expectLiveEqualsGenerate(page, { label: `Undo, Redo, and Undo again of ${domain}, Auto Reflow on` });
       });
     }
+    // A label rerender of step R that installs while a Default colors pick
+    // (step F, open from its first `input` to its `change`) has changed the
+    // applied palette: the figures R holds carry that palette in their slot.
+    // The palette is the restored intent's, so after the Undo of F the Undo
+    // and Redo of R show R's own palette, as Generate draws it.
+    for (const ends of ['Undo', 'Redo']) {
+      test(`Undo and Redo of a Label Off whose rerender installed during a Default color pick keep the palette of the step, ending on ${ends} (${mode})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single', reflow: 'on' });
+        const id = await featureIdOf(page, 'FL2');
+        await page.locator('summary[aria-label="Colors"]').click();
+        const read = () => page.evaluate(async (featureId) => {
+          const { state } = await import('/gbdraw/web/js/state.js');
+          const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+          const fills = [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)]
+            .filter((element) => !element.closest('[display="none"]'))
+            .map((element) => String(element.getAttribute('fill') || '').toLowerCase());
+          return { applied: String(state.appliedPaletteColors.value.CDS).toLowerCase(), fill: [...new Set(fills)] };
+        }, id);
+        const pick = (type) => page.evaluate((eventType) => {
+          const input = document.querySelector('input[type="color"][aria-label="CDS feature color"]');
+          input.value = '#ff0000';
+          input.dispatchEvent(new Event(eventType, { bubbles: true }));
+        }, type);
+        const start = await read();
+        expect(start.fill, 'FL2 is drawn in the CDS color').toEqual([start.applied]);
+        const steps = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+        const opened = await steps();
+        await holdRerenders(page);
+        // The Label Off (`popupEdit` would wait for its held rerender).
+        await evaluateWithRetainedPromise(page, async () => {
+          const app = window.__GBDRAW_APP__;
+          await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.locus_tag === 'FL2'), null);
+          await window.Vue.nextTick();
+          app.clickedFeature.labelVisibility = 'off';
+          window.__labelOff = Promise.resolve(app.updateClickedFeatureLabelText());
+        });
+        await rerenderHeld(page);
+        await expect.poll(steps, 'the Label Off is a step before its rerender draws').toBe(opened + 1);
+        await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+        await pick('input');
+        await expect.poll(async () => (await read()).applied, 'the pick applies its color while its step is open').toBe('#ff0000');
+        // The rerender installs and binds while the pick's step is open.
+        await page.evaluate(() => {
+          window.__heldRerenderReplaces = window.__GBDRAW_APP__.results;
+          delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+          window.__heldRerenders.forEach((resolve) => resolve());
+        });
+        await page.waitForFunction(() => window.__GBDRAW_APP__.results !== window.__heldRerenderReplaces
+          && !window.__GBDRAW_APP__.labelReflowProcessing);
+        await page.evaluate(() => new Promise((resolve) => { requestAnimationFrame(() => requestAnimationFrame(resolve)); }));
+        expect(await steps(), 'the pick\'s step is open as the rerender installs').toBe(opened + 1);
+        await pick('change');
+        await evaluateWithRetainedPromise(page, () => window.__labelOff);
+        await settleLive(page);
+        expect(await steps(), 'the change closes the pick\'s step').toBe(opened + 2);
+        expect(await stepAndRead(page, null, id), 'the rerender drew the Label Off').toEqual({ feature: true, labels: [] });
+        await history(page, 'undo');
+        await settleLive(page);
+        expect(await read(), 'Undo of the pick').toEqual(start);
+        expect(await stepAndRead(page, 'undo', id), 'Undo of the Label Off').toEqual(SHOWN);
+        await settleLive(page);
+        expect(await read(), 'Undo of the Label Off keeps the palette').toEqual(start);
+        expect(await stepAndRead(page, 'redo', id), 'Redo of the Label Off').toEqual({ feature: true, labels: [] });
+        await settleLive(page);
+        expect(await read(), 'Redo of the Label Off keeps the palette').toEqual(start);
+        if (ends === 'Undo') {
+          expect(await stepAndRead(page, 'undo', id), 'Undo again').toEqual(SHOWN);
+          await settleLive(page);
+          expect(await read(), 'Undo again keeps the palette').toEqual(start);
+        }
+        await expectLiveEqualsGenerate(page, { label: `the palette after the Label Off's ${ends}` });
+      });
+    }
     test(`a moved Legend returns through Undo of a label edit, and comes back through Redo, Auto Reflow off (${mode})`, async ({ page }) => {
       test.setTimeout(180_000);
       await open(page, { mode, results: 'single', reflow: 'off' });

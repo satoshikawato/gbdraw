@@ -424,6 +424,29 @@ test('the committed editor state records a Result as drawn only in a phase that 
     && error.context.reason === 'DRAWN_PAINT_MISSING');
 });
 
+// A held figure shows with the palette the restored intent left, which the
+// restore clones: held colors equal to it are that palette, so the Result's
+// next display asks for no fills; held colors that differ (a palette a later
+// open step applied as the figure was held) stay, so it asks for them.
+test('a held figure takes the applied palette when its held colors equal it', () => {
+  const [a, other] = ['a', 'other'].map(resultNamed);
+  const record = createResultPaintRecord();
+  const before = paint('before');
+  record.commit([a, other], a, before, { draws: before });
+  const picked = { ...before, colors: /** @type {typeof before.colors} */ ([{ CDS: 'picked' }, before.colors[1]]) };
+  const held = record.heldPaint([a, other], picked, false);
+  const restored = { ...before, colors: /** @type {typeof before.colors} */ ([{ CDS: 'before' }, before.colors[1]]) };
+  record.depart(restored, 'signature');
+  record.arrive([a, other], held, restored.colors[0]);
+  assert.equal(record.display(a, restored).colors[0], picked.colors[0], 'other colors stay: the display paints the restored ones');
+  record.depart(restored, 'signature');
+  record.arrive([a, other], record.heldPaint([a, other], before, false), restored.colors[0]);
+  const shownA = record.display(a, restored);
+  assert.equal(shownA.colors[0], restored.colors[0], 'the same colors are the applied palette');
+  assert.deepEqual(changed(shownA, restored), NOTHING, 'and ask for no projection');
+  assert.equal(record.display(other, restored).colors[0], restored.colors[0], 'for a batch Result too');
+});
+
 // OV-2436, review H1: a figure History holds keeps what its Results' bytes
 // show, and its records say so again when it shows: the figure a rerender
 // replaced was captured with the edit shown on it, so a second Undo, after a
@@ -445,11 +468,11 @@ test('a held figure shows again with the paint its bytes show', () => {
   assert.deepEqual(record.heldPaint([b], meanwhile, false), [lacking], 'once bound, the current state but the fills it lacks');
   // Undo shows A; Redo leaves it with the intent before the edit.
   record.depart(meanwhile, 'signature before');
-  record.arrive([a, other], heldA);
+  record.arrive([a, other], heldA, before.colors[0]);
   assert.deepEqual(record.display(a, before), edited, 'Undo projects the step undone onto A');
   record.depart(before, 'signature before');
   // Undo again: A's record says it left with the current intent, but the held bytes show the edit.
-  record.arrive([a, other], heldA);
+  record.arrive([a, other], heldA, before.colors[0]);
   assert.equal(record.takeLeft(a), null, 'the held figure left no drawing');
   assert.deepEqual(record.display(a, before), edited, 'the second Undo projects the step undone again');
   assert.deepEqual(record.heldPaint([b], before, false), [lacking],

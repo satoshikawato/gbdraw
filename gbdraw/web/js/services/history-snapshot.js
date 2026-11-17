@@ -22,7 +22,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLayoutPreferences } from './layout-preferences.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
-  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore, installShownSetLegend
+  ARTIFACT_SLOT_ALIGNMENT_KEYS, ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, ARTIFACT_SLOT_PALETTE_KEYS, FEATURE_EDITOR_STATUS_IDLE,
+  createArtifactSlot, createArtifactSlotStore, installShownSetLegend
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { losatEvidenceAfterStep, losatRowsAfterStep, losatRowsOfDrawing } from './losat-cache.js';
@@ -868,8 +869,11 @@ const applyFilesData = (drawing, filesData, fileStore) => {
 
 /**
  * The ports take the drawing type `D` the composition root's drawings have
- * (state.js `DrawingState`); the service reads them as a `DrawingView`.
+ * (state.js `DrawingState`); the service reads them as a `DrawingView`. `P`
+ * is the Result paint record's paint type, which the service only carries
+ * from `heldResultPaint.capture` to its `arrive`.
  * @template {DrawingView} [D=DrawingView]
+ * @template [P=unknown]
  * @typedef {object} HistorySnapshotServiceOptions
  * @property {Record<string, any> & { drawingOf: (id: DrawingId) => D, drawingList: () => readonly D[] } & ShownSetLegendRefs} state
  *   App state (state.js; not yet typed but for these members).
@@ -906,16 +910,17 @@ const applyFilesData = (drawing, filesData, fileStore) => {
  *   discovery derived from them reads them again, or keeps a read that still matches them.
  *   Clears the Similarity groups "Copied!" feedback when a Generate's artifact replaces the shown
  *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
- * @property {HeldResultPaint | null} [heldResultPaint] What the Results of a figure History holds show (the Result
+ * @property {HeldResultPaint<P> | null} [heldResultPaint] What the Results of a figure History holds show (the Result
  *   paint record's); without it no figure is held.
  */
 /**
  * The Result paint record's part in a figure History holds (OV-2436): what each Result's bytes show as the figure is
- * held, and their records made to say so when it shows again. Opaque here; a method type, so the record owner's own
- * paint type fits it.
+ * held (`P`, the record owner's paint type, which the snapshot service carries without reading it), and their
+ * records made to say so when it shows again: `arrive` takes only what `capture` gave.
+ * @template P
  * @typedef {{
- *   capture(results: readonly SvgResultEntry[], drawing: boolean): readonly object[],
- *   arrive(results: readonly SvgResultEntry[], paints: readonly object[]): void
+ *   capture: (results: readonly SvgResultEntry[], drawing: boolean) => readonly P[],
+ *   arrive: (results: readonly SvgResultEntry[], paints: readonly P[]) => void
  * }} HeldResultPaint
  */
 
@@ -1023,7 +1028,8 @@ const committedSessionOf = (runtimeState) => runtimeState?.canonical?.committedC
 /**
  * What the snapshot service keeps of a figure History holds (`HeldFigure.slot`): the shown artifact by reference,
  * what each of its Results' bytes show (`HeldResultPaint.capture`), and the count of Clear LOSAT results then.
- * @typedef {{ artifact: Readonly<ArtifactSlot>, shown: readonly object[], losatClears: number }} HeldFigureCapture
+ * @template P
+ * @typedef {{ artifact: Readonly<ArtifactSlot>, shown: readonly P[], losatClears: number }} HeldFigureCapture
  */
 /**
  * The figures History holds on the sides of a drawing's intent steps (OV-2436) are its shown artifact, by reference
@@ -1033,14 +1039,15 @@ const committedSessionOf = (runtimeState) => runtimeState?.canonical?.committedC
  * was drawn from is the current one (compared by reference), while no Clear LOSAT results ran since it was held
  * (the Clear is no step and empties the artifact's protein identities, as for a drawing History holds), and only
  * when it is not the figure shown (its Result array is not the shown one).
- * @param {{ captureArtifactSlot: () => Readonly<ArtifactSlot>, paint: HeldResultPaint | null,
+ * @template P
+ * @param {{ captureArtifactSlot: () => Readonly<ArtifactSlot>, paint: HeldResultPaint<P> | null,
  *   losatClearedSince: (count: number) => boolean, losatClearCount: () => number }} ports
  */
 export const createHeldFigurePorts = ({ captureArtifactSlot, paint, losatClearedSince, losatClearCount }) => {
   /** @type {HeldFigureDisplay | null} */
   let display = null;
-  /** @param {HeldFigure} figure @returns {HeldFigureCapture} The snapshot service's own capture. */
-  const captureOf = (figure) => /** @type {HeldFigureCapture} */ (figure.slot);
+  /** @param {HeldFigure} figure @returns {HeldFigureCapture<P>} The snapshot service's own capture. */
+  const captureOf = (figure) => /** @type {HeldFigureCapture<P>} */ (figure.slot);
   /** @param {Readonly<ArtifactSlot>} slot @returns {readonly SvgResultEntry[]} */
   const resultsOf = (slot) => slot.values.results;
   return {
@@ -1051,7 +1058,7 @@ export const createHeldFigurePorts = ({ captureArtifactSlot, paint, losatCleared
       capture: (role) => {
         const artifact = captureArtifactSlot();
         const results = resultsOf(artifact);
-        /** @type {HeldFigureCapture} */
+        /** @type {HeldFigureCapture<P>} */
         const slot = { artifact, shown: paint ? paint.capture(results, role === 'drawn') : [], losatClears: losatClearCount() };
         return {
           slot,
@@ -1084,7 +1091,8 @@ export const createHeldFigurePorts = ({ captureArtifactSlot, paint, losatCleared
 
 /**
  * @template {DrawingView} D
- * @param {HistorySnapshotServiceOptions<D>} options
+ * @template [P=unknown]
+ * @param {HistorySnapshotServiceOptions<D, P>} options
  */
 export const createHistorySnapshotService = ({
   state,
@@ -1764,7 +1772,7 @@ export const createHistorySnapshotService = ({
   // (`readSlotValues`, OV-1195, OV-3532).
   /** @param {DrawingId} drawingId */
   const captureAlignmentState = (drawingId) => {
-    const values = readSlotValues(drawingId, ALIGNMENT_SLOT_KEYS);
+    const values = readSlotValues(drawingId, ARTIFACT_SLOT_ALIGNMENT_KEYS);
     return { receipt: values.similarityAlignmentResetReceipt, plan: values.similarityAlignmentPlan,
       recordTranslations: values.linearRecordTranslations ?? [] };
   };
@@ -1885,8 +1893,6 @@ export const createHistorySnapshotService = ({
     artifactSlots.writeValues(state.drawingOf(drawingId), values);
   };
   const losatClearReach = createLosatClearReach(artifactSlots, writeArtifactValues);
-  const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
-  const ALIGNMENT_SLOT_KEYS = /** @type {const} */ (['similarityAlignmentResetReceipt', 'similarityAlignmentPlan', 'linearRecordTranslations']);
 
   // Synchronous: History captures it without an await (OV-922).
   /** @param {DrawingId} drawingId */
@@ -1895,7 +1901,7 @@ export const createHistorySnapshotService = ({
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
-    const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, UI_SLOT_KEYS) });
+    const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, ARTIFACT_SLOT_PALETTE_KEYS) });
     uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
     // B17, D-15-50: the composition offsets of this drawing's Results.
     const compositionDeltas = captures.composition ? cloneJsonData(captures.composition(drawingId)) : null;

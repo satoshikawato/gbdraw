@@ -104,16 +104,18 @@ export const createDrawingSwitch = ({
   // displayed Result leaves with what it shows, `restoreIntent` restores the
   // step's intent and the records of the arriving Results (what their bytes
   // show), and the figure arrives at the displayed Result index (clamped to
-  // its Results) and keeps the pan (a History step is no drawing switch, so it
-  // is not centred), and shows the intent once (R3). Resolves once the
-  // arriving Result is bound.
+  // its Results) with the values the restored intent owns
+  // (`artifactSlotShowing`), keeps the pan (a History step is no drawing
+  // switch, so it is not centred), and shows the intent once (R3). Resolves
+  // once the arriving Result is bound.
   /** @param {Readonly<ArtifactSlot>} slot @param {() => Promise<unknown>} restoreIntent */
   const showHeldFigure = async (slot, restoreIntent) => {
     const drawing = state.activeDrawing();
     rememberDepartingResultProjection(drawing);
     await restoreIntent();
+    const shown = captureArtifactSlot();
     clearActiveRuntime();
-    installArrivingSlot(artifactSlotShowing(slot, drawing, Number(selectedResultIndex.value) || 0), {
+    installArrivingSlot(artifactSlotShowing(slot, drawing, shown), {
       canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y }
     });
     await presentSelectedResult()?.promise;
