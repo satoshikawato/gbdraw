@@ -245,7 +245,7 @@ from .builders import (
     add_record_definition_group_on_canvas,
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
-    tick_group_content,
+    tick_slot_layout,
 )
 from ...render.groups.circular.definition import (
     CircularDefinitionProfile,
@@ -2590,18 +2590,22 @@ def _with_slot_row(error: ValidationError, slot: CircularResolvedSlot) -> Valida
     return ValidationError(str(error), diagnostic=cannot_fit_diagnostic(slot.slot_index, renderer=str(slot.renderer)))
 
 
-def _refuse_unfit_scale_labels(
+def _drawn_tick_numbers(
     radial_layout: CircularRadialLayout,
     units: Sequence[_DrawnUnit],
     canvas_config: CircularCanvasConfigurator,
     user_slot_mode: bool,
-) -> None:
-    """Refuse the figure, before its feature labels are placed, when a tick slot of the layout it draws has scale
+) -> tuple[CircularInkRing, ...]:
+    """The letters of the scale numbers the figure draws, for its feature labels to keep off (OV-3636), from the
+    tick groups the figure draws (``tick_slot_layout``, a render stage: within a Worker transaction, drawing them
+    reuses the build).
+
+    Before its feature labels are placed, the figure is refused when a tick slot of the layout it draws has scale
     labels longer than their circle (OV-2559): the slot's row does not fit, and a radius too small for its scale
-    labels fails at once, so a requested figure size tries it cheaply. It builds the tick groups the figure draws (a
-    render stage: within a Worker transaction, drawing them reuses the build); drawing a slot refuses the same way.
+    labels fails at once, so a requested figure size tries it cheaply; drawing a slot refuses the same way.
     """
 
+    numbers: list[CircularInkRing] = []
     for slot in radial_layout.slots:
         tick_group = (
             _tick_group_options(slot, use_slot_tick_options=user_slot_mode)
@@ -2612,9 +2616,11 @@ def _refuse_unfit_scale_labels(
             continue
         try:
             for unit in units:
-                tick_group_content(unit.record.gb_record, canvas_config, **tick_group, record_transform=unit.transform)
+                layout = tick_slot_layout(unit.record.gb_record, canvas_config, **tick_group, record_transform=unit.transform)
+                numbers.extend(number.letters for number in layout.numbers)
         except ValidationError as error:
             raise _with_slot_row(error, slot) from None
+    return tuple(numbers)
 
 
 def _feature_band_overrides(
@@ -4245,8 +4251,10 @@ def add_record_on_circular_canvas(
     )
     annotation_track_layouts = dict(annotation_tracks.layouts)
     radial_layout = centre_fit.layout
-    if not (show_external_labels and profile.label_placement == "radial"):  # Radial labels can move the tracks.
-        _refuse_unfit_scale_labels(radial_layout, units, canvas_config, user_slot_mode)
+    tick_numbers = (  # Radial labels can move the tracks.
+        () if show_external_labels and profile.label_placement == "radial"
+        else _drawn_tick_numbers(radial_layout, units, canvas_config, user_slot_mode)
+    )
     definition_reserved_radius_px = centre_fit.reserved_radius_px
     band = _feature_band_overrides(radial_layout, float(canvas_config.radius), float(canvas_config.track_ratio))
     if band is not None:
@@ -4279,7 +4287,7 @@ def add_record_on_circular_canvas(
             geometry=canvas_config.geometry(),
             # The labels read the centre band only as their inner reserve (OV-2103).
             resolved_slots=radial_layout.slots,
-            label_radii=circular_label_radii(radial_layout),
+            label_radii=circular_label_radii(radial_layout, tick_numbers),
             layout_slots=tuple(layout_slots),
             feature_slot=feature_slot,
             feature_lane_direction=feature_lane_direction,

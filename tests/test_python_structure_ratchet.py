@@ -248,7 +248,7 @@ FUNCTION_STATEMENTS: dict[str, int] = {
     "gbdraw/api/session_compat.py::_main_drawn_hash_selectors_to_source": 59,
     "gbdraw/cli_utils/session.py::collect_embedded_files_from_cli_args": 79,
     "gbdraw/diagrams/circular/assemble.py::_try_shift_labels_away_from_legend": 102,
-    "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 156,
+    "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 155,
     "gbdraw/diagrams/circular/assemble.py::circular_labels": 60,
     "gbdraw/io/regions.py::assign_region_specs": 69,
     "gbdraw/labels/circular.py::_legacy_improved_label_placement_fc": 112,

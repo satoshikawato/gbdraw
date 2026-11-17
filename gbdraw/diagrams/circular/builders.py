@@ -40,7 +40,9 @@ from ...render.group_content import (
 )
 from ...render.numeric_series import NumericSeriesConfig, NumericSeriesStage
 from ...render_stages import _pre_keyed, render_stage
-from ...render.groups.circular.ticks import backed_tick_content, backed_tick_numbers, build_tick_slot_layout
+from ...render.groups.circular.ticks import (
+    TickSlotLayout, backed_tick_content, backed_tick_numbers, build_tick_slot_layout,
+)
 from ...svg.ids import stable_svg_id
 from ...render.groups.circular.definition import DefinitionNameLines, DefinitionRecordFacts
 from .positioning import (
@@ -357,6 +359,37 @@ def add_axis_group_on_canvas(
     return _add_track_content(canvas, content, canvas_config, group_key, slot_id=None, slot_renderer=None)
 
 
+def tick_slot_layout(
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    *,
+    radius_override: float | None = None,
+    label_side: str = "legacy",
+    tick_side: str = "legacy",
+    tick_length_px: float | None = None,
+    track_preset: str | None = None,
+    slot_id: str,
+    record_transform: RecordDisplayTransform | None = None,
+) -> TickSlotLayout:
+    """The tick group of a tick slot before any number is backed: its content and its numbers' letters (render stage
+    ``ticks_layout``, so a Worker transaction builds it once for the feature labels and the drawing)."""
+    return render_stage(
+        "ticks_layout",
+        build_tick_slot_layout,
+        TickGroup,
+        gb_record,
+        canvas_config.geometry(),
+        profile=canvas_config.profile,
+        radius=radius_override,
+        label_side=label_side,
+        tick_side=tick_side,
+        tick_length_px=tick_length_px,
+        track_preset=track_preset,
+        slot_id=slot_id,
+        record_transform=record_transform,
+    )
+
+
 def tick_group_content(
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
@@ -372,17 +405,13 @@ def tick_group_content(
 ) -> GroupContent:
     """The tick group of a tick slot: its ticks and scale labels, the numbers ``feature_leaders`` run behind backed
     (OV-3301). Three render stages, so a Worker transaction reuses a second build: ``ticks_layout`` builds the group
-    without the leaders, ``ticks_backed_numbers`` finds the numbers the leaders back (a render with the same leaders
-    tests none again, OV-3628), and ``ticks_content`` takes those numbers by value, so a leader that meets no number
-    (one that moves with the arrow shape) does not build the group again."""
-    layout = render_stage(
-        "ticks_layout",
-        build_tick_slot_layout,
-        TickGroup,
+    without the leaders (``tick_slot_layout``), ``ticks_backed_numbers`` finds the numbers the leaders back (a render
+    with the same leaders tests none again, OV-3628), and ``ticks_content`` takes those numbers by value, so a leader
+    that meets no number (one that moves with the arrow shape) does not build the group again."""
+    layout = tick_slot_layout(
         gb_record,
-        canvas_config.geometry(),
-        profile=canvas_config.profile,
-        radius=radius_override,
+        canvas_config,
+        radius_override=radius_override,
         label_side=label_side,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
@@ -469,5 +498,6 @@ __all__ = [
     "add_axis_group_on_canvas",
     "add_tick_group_on_canvas",
     "tick_group_content",
+    "tick_slot_layout",
     "add_labels_group_on_canvas",
 ]
