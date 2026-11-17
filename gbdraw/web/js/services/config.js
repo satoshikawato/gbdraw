@@ -6142,9 +6142,11 @@ export const applyDrawingStyle = (drawing, source, paletteColors) => {
  * The legacy configuration Load's commit (D-15-112): a copy of the shown
  * drawing under its own ID (`duplicateDrawingState`) replaces it in the store,
  * so the configuration applies to the copy and the rollback puts the drawing
- * back unchanged (`restoreSessionImportSnapshot`). Every value an owner keeps
- * by the drawing object follows the drawing to its copy, through the rollback
- * port's one reaction (`followDrawingCopy`).
+ * back unchanged (`restoreSessionImportSnapshot`). The CLI options, Preview
+ * search, record binding and Sequence search sets follow the drawing to its
+ * copy, through the rollback port's one reaction (`followDrawingCopy`). Work
+ * in flight for the drawing (pending live settings, discoveries, `redrawOwed`)
+ * stays with it, as on dev.
  * @param {DrawingState} drawing The shown drawing.
  * @param {SessionImportRollbackState} rollbackState
  * @returns {DrawingState} The copy, shown.

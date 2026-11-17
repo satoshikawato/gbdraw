@@ -406,8 +406,9 @@ export const createSessionImportRollbackState = ({
   },
   // A Load's commit, in the task that writes the store: each drawing it made starts with an empty History.
   replaceHistoryMembers,
-  // The legacy configuration Load's commit replaced `drawing` with its same-ID `copy`: every value kept by the
-  // drawing object follows it, so the copy has what the drawing had (its History is kept by ID).
+  // The legacy configuration Load's commit replaced `drawing` with its same-ID `copy`: the CLI options, Preview
+  // search, record binding and Sequence search sets follow it (its History is kept by ID). In-flight work tied to the
+  // old drawing (pending live settings, discoveries, `redrawOwed`) stays with it, as on dev.
   followDrawingCopy: (/** @type {DrawingState} */ drawing, /** @type {DrawingState} */ copy) => {
     for (const follow of drawingCopyFollowers) follow(drawing, copy);
   },
