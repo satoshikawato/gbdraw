@@ -933,9 +933,10 @@ def test_the_tracks_keep_the_definition_band_the_labels_stage_reads_only_as_a_re
         assert band is not None and layout.definition_reserved_band_px == band
     else:
         assert layout is placed.radial_layout
-    # The reserve the labels read is the one owner's value for the layout they read.
+    # The reserve the labels read is the one owner's value for the layout they read (with the scale numbers the
+    # tick groups drew, which the radii do not derive).
     assert placed.state.label_radii == assemble_module.circular_label_radii(
-        layout if placed.radial_layout is not None else fits[0].layout
+        layout if placed.radial_layout is not None else fits[0].layout, placed.state.label_radii.tick_numbers
     )
 
 

@@ -9,7 +9,7 @@ import heapq
 import math
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property, lru_cache, partial
 from typing import Any, Literal, NamedTuple, TypeAlias, get_args
 
@@ -24,6 +24,7 @@ from .circular_capacity import (
     check_label_capacity,
     circular_label_capacity,
     label_capacity_checked,
+    label_capacity_unchecked,
     sides_packable,
 )
 from .circular_types import (
@@ -196,7 +197,7 @@ class CircularLabelRadii:
     # Horizontal outer labels and their leader elbows keep past it (``outer_label_scale_floor_px``).
     outer_floor_px: float = 0.0
     # The letters of the record's scale numbers, from the tick groups that draw them (``TickSlotLayout.numbers``):
-    # horizontal inner labels keep inside those they would be drawn over (``_placed_clear_of_tick_numbers``).
+    # horizontal inner labels keep inside those they would be drawn over (``place_clear_of_tick_numbers``).
     tick_numbers: tuple[CircularInkRing, ...] = ()
 
 
@@ -2695,15 +2696,18 @@ def _hold_inner_labels_clear(
     *,
     total_length: int,
     feature_intervals: list[tuple[float, float, float]] | None,
-    ceiling_px: float | None,
+    tick_numbers: Sequence[CircularInkRing],
+    gap_px: float,
     text_clearance_px: float,
     anchor_clearance_px: float,
 ) -> list[CircularLabel] | None:
     """The inner labels held inside the feature lanes they name (``feature_intervals``, when the lanes hold them),
-    then inside ``ceiling_px`` (off the scale numbers, ``_placed_clear_of_tick_numbers``); None when nothing holds
-    them."""
+    then, when one is over a scale number of ``tick_numbers`` (OV-3636), all of them ``gap_px`` inside the letters
+    of the numbers they meet: the inner labels share one circle, and holding only those over a number crosses
+    their leaders with their neighbours'. None when nothing holds them."""
 
-    if not labels or (feature_intervals is None and ceiling_px is None):
+    met = [ring for label in labels for ring in _numbers_met(label, tick_numbers, total_length)] if tick_numbers else []
+    if not labels or (feature_intervals is None and not met):
         return None
     if feature_intervals is not None:
         labels = _stabilize_inner_label_clearance(
@@ -2713,41 +2717,53 @@ def _hold_inner_labels_clear(
             text_clearance_px=text_clearance_px,
             anchor_clearance_px=anchor_clearance_px,
         )
-    return labels if ceiling_px is None else _hold_inner_text_inside(labels, total_length, ceiling_px)
+    if not met:
+        return labels
+    ceiling = max(0.0, min(float(ring.band.inner_px) for ring in met) - gap_px)
+    return _hold_inner_text_inside(labels, total_length, ceiling)
 
 
-def _placed_clear_of_tick_numbers(
-    dense_outer_rows: DenseOuterRows,
-    packed: PackedSides | None = None,
+def place_clear_of_tick_numbers(
+    place: Callable[[CircularLabelRadii | None], PlacedCircularLabels],
+    room: CircularLabelRadii | None,
     *,
-    place: Callable[[DenseOuterRows, PackedSides | None, float | None], list[CircularLabel]],
-    tick_numbers: tuple[CircularInkRing, ...],
-    gap_px: float,
     total_length: int,
     definition_text: Sequence[Aabb],
-) -> list[CircularLabel]:
-    """The external labels ``place`` places, the inner labels held off the scale numbers (OV-3636) when one is over
-    a number and holding them makes the figure no worse.
+    label_pass: CircularLabelPass,
+) -> PlacedCircularLabels:
+    """A record's labels as ``place`` places them with ``room`` (``prepare_label_list``), the inner labels held off
+    the scale numbers (``CircularLabelRadii.tick_numbers``, OV-3636) when one is drawn over a number and holding
+    them makes the drawn labels no worse.
 
-    A record whose inner labels are over no number is placed as before. Otherwise the labels are placed again with
-    every inner label held ``gap_px`` (the label spacing) inside the letters of the numbers they met: the inner
-    labels share one circle, and holding only those over a number would cross their leaders with their neighbours'.
-    That placement is kept when no inner label is then over a number and it has no more overlapping pairs,
-    crossing leader pairs or labels over the definition text than the first; otherwise the first is kept, with its
-    labels over the numbers."""
+    The labels are placed first without the numbers. When no inner label is then over a number, or in a probe (a
+    fit search), that placement is the result: a record whose inner labels reach no number is placed as before.
+    Otherwise they are placed again with the numbers held (``_hold_inner_labels_clear``); that placement is drawn
+    when no inner label is over a number and the fit check counts no more overlapping pairs, crossing leader pairs
+    or labels over the definition text of either side than in the first, which is otherwise drawn, its labels over
+    the numbers."""
 
-    labels = place(dense_outer_rows, packed, None)
-    over = labels_over_tick_numbers([label for label in labels if label.get("is_inner")], tick_numbers, total_length)
-    if not over:
-        return labels
-    ceiling = min(float(ring.band.inner_px) for label in over for ring in _numbers_met(label, tick_numbers, total_length))
-    held = place(dense_outer_rows, packed, max(0.0, ceiling - gap_px))
+    if room is None or not room.tick_numbers:
+        return place(room)
+    first = place(replace(room, tick_numbers=()))
+    if label_pass == "probe" or not _inner_labels_over_numbers(first.labels, room.tick_numbers, total_length):
+        return first
+    with label_capacity_unchecked():  # the first placement checked the same labels on the same arcs
+        held = place(room)
     before, after = (
-        Counter(defect.kind for defect in circular_label_defects(placed, total_length, definition_text=definition_text))
-        for placed in (labels, held)
+        Counter(defect.kind for defect in circular_label_defects(placed.labels, total_length, definition_text=definition_text))
+        for placed in (first, held)
     )
-    clear = not labels_over_tick_numbers([label for label in held if label.get("is_inner")], tick_numbers, total_length)
-    return held if clear and all(after[kind] <= before[kind] for kind in after) else labels
+    clear = not _inner_labels_over_numbers(held.labels, room.tick_numbers, total_length)
+    return held if clear and all(after[kind] <= before[kind] for kind in after) else first
+
+
+def _inner_labels_over_numbers(
+    labels: Sequence[CircularLabel], tick_numbers: Sequence[CircularInkRing], total_length: int
+) -> bool:
+    """Whether a horizontal inner label of ``labels`` is over a scale number."""
+
+    inner = [label for label in labels if label.get("is_inner") and not label.get("is_embedded")]
+    return bool(labels_over_tick_numbers(inner, tick_numbers, total_length))
 
 
 def _stabilize_inner_label_clearance(
@@ -6139,11 +6155,10 @@ def prepare_label_list(
     if record_id is not None and not probe and label_capacity_checked():
         check_label_capacity(record_id, capacities)
 
-    def place_holding(
-        dense_outer_rows: DenseOuterRows, packed: PackedSides | None, inner_ceiling_px: float | None
+    def place_external_labels(
+        dense_outer_rows: DenseOuterRows, packed: PackedSides | None = None
     ) -> list[CircularLabel]:
-        """The external labels placed as today, or from the packer's sides (``packed``, CP-D04), the inner labels
-        held inside ``inner_ceiling_px`` (``_placed_clear_of_tick_numbers``)."""
+        """The external labels placed as today, or from the packer's sides (``packed``, CP-D04)."""
         outer_labels_rearranged = packed[0] if packed is not None else rearrange_labels_fc(
             [label.copy() for label in outer_labels],
             radius,
@@ -6208,7 +6223,8 @@ def prepare_label_list(
             _hold_inner_labels_clear,
             total_length=total_length,
             feature_intervals=feature_inner_radius_intervals,
-            ceiling_px=inner_ceiling_px,
+            tick_numbers=room.tick_numbers if room is not None else (),
+            gap_px=label_spacing_px,
             text_clearance_px=effective_text_clearance_px,
             anchor_clearance_px=effective_anchor_clearance_px,
         )
@@ -6284,15 +6300,6 @@ def prepare_label_list(
         # The drawer reads leader starts from this final assignment.
         assign_leader_start_points(external_labels_ordered, total_length)
         return external_labels_ordered
-
-    place_external_labels = partial(
-        _placed_clear_of_tick_numbers,
-        place=place_holding,
-        tick_numbers=room.tick_numbers if room is not None and not probe else (),
-        gap_px=label_spacing_px,
-        total_length=total_length,
-        definition_text=definition_text,
-    )
 
     # OV-479 / LP-D45: dense outer rows keep the circular label spacing when the
     # drawn layout then fits; otherwise the record is placed as in earlier releases.
@@ -6405,6 +6412,7 @@ __all__ = [
     "CircularLabelRadii",
     "circular_label_radii",
     "labels_over_tick_numbers",
+    "place_clear_of_tick_numbers",
     "calculate_angle_degrees",
     "circular_label_defects",
     "circular_label_fits",

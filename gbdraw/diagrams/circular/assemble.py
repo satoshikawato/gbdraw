@@ -83,6 +83,7 @@ from ...labels.circular import (
     circular_label_shape,
     minimum_bbox_gap_px,
     circular_label_radii,
+    place_clear_of_tick_numbers,
     prepare_label_list,
     x_overlap,
     y_overlap,
@@ -3354,37 +3355,47 @@ def _place_circular_labels(
     """Place one record's labels with ``label_profile`` and the geometry of ``state``, as far as ``label_pass``."""
 
     font_size = circular_label_font_size(label_profile.config, state.total_length)
-    return prepare_label_list(
-        state.feature_dict,
-        state.total_length,
-        (
-            float(state.resolved_feature_anchor_radius_px)
-            if state.resolved_feature_anchor_radius_px is not None
-            else state.geometry.radius
-        ),
-        state.geometry.track_ratio,
-        label_profile,
-        # The arena follows the outer label offsets, which a probe may change.
-        outer_arena=(
-            _default_outer_label_arena(
-                geometry=state.geometry,
-                cfg=label_profile.config,
-                strandedness=state.strandedness,
-            )
-            if state.outer_arena_enabled
-            else None
-        ),
-        feature_track_ratio_factor_override=state.feature_track_ratio_factor_override,
-        label_lanes=state.label_lanes,
-        room=state.label_radii,
-        track_preset=state.track_preset,
-        feature_lane_direction=state.feature_lane_direction,
-        _candidate_cache=candidate_caches.setdefault(font_size, {}),
-        record_transform=state.record_transform,
-        label_pass=label_pass,
+    def place(room: CircularLabelRadii | None) -> PlacedCircularLabels:
+        """The labels placed with ``room``."""
+
+        return prepare_label_list(
+            state.feature_dict,
+            state.total_length,
+            (
+                float(state.resolved_feature_anchor_radius_px)
+                if state.resolved_feature_anchor_radius_px is not None
+                else state.geometry.radius
+            ),
+            state.geometry.track_ratio,
+            label_profile,
+            # The arena follows the outer label offsets, which a probe may change.
+            outer_arena=(
+                _default_outer_label_arena(
+                    geometry=state.geometry,
+                    cfg=label_profile.config,
+                    strandedness=state.strandedness,
+                )
+                if state.outer_arena_enabled
+                else None
+            ),
+            feature_track_ratio_factor_override=state.feature_track_ratio_factor_override,
+            label_lanes=state.label_lanes,
+            room=room,
+            track_preset=state.track_preset,
+            feature_lane_direction=state.feature_lane_direction,
+            _candidate_cache=candidate_caches.setdefault(font_size, {}),
+            record_transform=state.record_transform,
+            label_pass=label_pass,
+            definition_text=state.definition_text,
+            label_filtering=state.label_filtering,
+            record_id=state.record_id,
+        )
+    return place_clear_of_tick_numbers(
+        place,
+        state.label_radii,
+        total_length=state.total_length,
         definition_text=state.definition_text,
-        label_filtering=state.label_filtering,
-        record_id=state.record_id,
+        label_pass=label_pass,
     )
 
 
