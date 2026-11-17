@@ -900,6 +900,9 @@
   },
   "web-50": {
    "fixture": "tests/fixtures/sessions/drawings-circular-only.v51.gbdraw"
+  },
+  "web-51-losatp": {
+   "fixture": "tests/fixtures/sessions/BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw"
   }
  },
  "vectors": [
@@ -5979,6 +5982,191 @@
    "pythonMessage": "drawing contains unclassified field(s): unknownField",
    "webRepairs": [
     "session-field-dropped@drawings[0].unknownField"
+   ]
+  },
+  {
+   "id": "s51-adopted-comparisons",
+   "finding": "OV-3826: the comparisons a Session 51 Linear drawing's draft adopted from its committed request (webFiles.bindings.linearCanonicalComparisons, written by the Web's Save)",
+   "base": "web-51-losatp",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/0/webFiles/bindings/linearCanonicalComparisons",
+     "value": [
+      {
+       "kind": "precomputedProteinComparison",
+       "encoding": "canonicalTsv",
+       "queryRecordIndex": 0,
+       "subjectRecordIndex": 1,
+       "file": {
+        "resourceId": "comparison-canonical-protein-1",
+        "name": "comparison-canonical-protein-1.tsv",
+        "type": "text/tab-separated-values",
+        "lastModified": 0
+       }
+      },
+      {
+       "kind": "orthogroupResult",
+       "encoding": "canonicalJson",
+       "file": {
+        "resourceId": "comparison-canonical-orthogroups-1",
+        "name": "comparison-canonical-orthogroups-1.json",
+        "type": "application/json",
+        "lastModified": 0
+       }
+      }
+     ]
+    }
+   ],
+   "python": "accept",
+   "web": "loaded",
+   "note": "Each entry names the resource the drawing's committed comparison of its kind names."
+  },
+  {
+   "id": "s51-adopted-comparisons-none",
+   "finding": "OV-3826: the comparisons a Session 51 Linear drawing's draft adopted from its committed request (webFiles.bindings.linearCanonicalComparisons, written by the Web's Save)",
+   "base": "web-51-losatp",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/0/webFiles/bindings/linearCanonicalComparisons",
+     "value": []
+    }
+   ],
+   "python": "accept",
+   "web": "loaded",
+   "note": "A drawing whose draft adopted none, as after Clear LOSAT results: Load gives its draft none."
+  },
+  {
+   "id": "s51-adopted-comparisons-other-drawing",
+   "finding": "OV-3826: the comparisons a Session 51 Linear drawing's draft adopted from its committed request (webFiles.bindings.linearCanonicalComparisons, written by the Web's Save)",
+   "base": "web-51-losatp",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/0/webFiles/bindings/linearCanonicalComparisons",
+     "value": [
+      {
+       "kind": "precomputedProteinComparison",
+       "encoding": "canonicalTsv",
+       "queryRecordIndex": 0,
+       "subjectRecordIndex": 1,
+       "file": {
+        "resourceId": "resource-0001",
+        "name": "comparison-canonical-protein-1.tsv",
+        "type": "text/tab-separated-values",
+        "lastModified": 0
+       }
+      }
+     ]
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "cannot bind comparison artifacts outside the committed request",
+   "web": "repaired",
+   "note": "An entry names a resource the file holds for another drawing's request: Python refuses the file, the Web's Load drops the entry with a row.",
+   "webRepairs": [
+    "file-entry-dropped@drawings[0].webFiles.bindings.linearCanonicalComparisons[0]"
+   ]
+  },
+  {
+   "id": "s51-adopted-comparisons-other-drawing-opened",
+   "finding": "OV-3826: the comparisons a Session 51 Linear drawing's draft adopted from its committed request (webFiles.bindings.linearCanonicalComparisons, written by the Web's Save)",
+   "base": "web-51-losatp",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/1/webFiles/bindings/linearCanonicalComparisons",
+     "value": [
+      {
+       "kind": "precomputedProteinComparison",
+       "encoding": "canonicalTsv",
+       "queryRecordIndex": 0,
+       "subjectRecordIndex": 1,
+       "file": {
+        "resourceId": "comparison-canonical-protein-1",
+        "name": "comparison-canonical-protein-1.tsv",
+        "type": "text/tab-separated-values",
+        "lastModified": 0
+       }
+      }
+     ]
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "cannot bind comparison artifacts outside the committed request",
+   "web": "repaired",
+   "note": "The same in the drawing the file opens.",
+   "webRepairs": [
+    "file-entry-dropped@drawings[1].webFiles.bindings.linearCanonicalComparisons[0]"
+   ]
+  },
+  {
+   "id": "s51-adopted-comparisons-other-kind",
+   "finding": "OV-3826: the comparisons a Session 51 Linear drawing's draft adopted from its committed request (webFiles.bindings.linearCanonicalComparisons, written by the Web's Save)",
+   "base": "web-51-losatp",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/0/webFiles/bindings/linearCanonicalComparisons",
+     "value": [
+      {
+       "kind": "orthogroupResult",
+       "encoding": "canonicalJson",
+       "file": {
+        "resourceId": "comparison-canonical-protein-1",
+        "name": "comparison-canonical-protein-1.tsv",
+        "type": "text/tab-separated-values",
+        "lastModified": 0
+       }
+      }
+     ]
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "cannot bind comparison artifacts outside the committed request",
+   "web": "repaired",
+   "note": "An entry names a committed resource of a comparison of another kind.",
+   "webRepairs": [
+    "file-entry-dropped@drawings[0].webFiles.bindings.linearCanonicalComparisons[0]"
+   ]
+  },
+  {
+   "id": "s51-adopted-comparisons-not-list",
+   "finding": "OV-3826: the comparisons a Session 51 Linear drawing's draft adopted from its committed request (webFiles.bindings.linearCanonicalComparisons, written by the Web's Save)",
+   "base": "web-51-losatp",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/0/webFiles/bindings/linearCanonicalComparisons",
+     "value": {}
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "cannot bind comparison artifacts outside the committed request",
+   "web": "repaired",
+   "note": "The adopted comparisons are a list.",
+   "webRepairs": [
+    "session-field-dropped@drawings[0].webFiles.bindings.linearCanonicalComparisons"
+   ]
+  },
+  {
+   "id": "s46-adopted-comparisons",
+   "finding": "OV-3826: the comparisons a Session 51 Linear drawing's draft adopted from its committed request (webFiles.bindings.linearCanonicalComparisons, written by the Web's Save)",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles/bindings/linearCanonicalComparisons",
+     "value": []
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "cannot bind comparison artifacts outside the committed request",
+   "web": "repaired",
+   "note": "A Session 40-50 binds none (its drafts are projected from the committed request): Python refuses the file, the Web's Load drops the field with a row.",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings.linearCanonicalComparisons"
    ]
   }
  ]

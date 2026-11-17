@@ -3,7 +3,7 @@
 // a test finds a drawing by its ID.
 import { drawingViewOf, sessionDocumentOfViews } from '../../../gbdraw/web/js/services/session-drawings-upgrade.js';
 import { MODE_SCOPED_SETTINGS } from '../../../gbdraw/web/js/mode-scoped-settings.generated.js';
-import { FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION } from '../../../gbdraw/web/js/contracts/schema.generated.js';
+import { FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION, SESSION_DRAWINGS_LAYOUT } from '../../../gbdraw/web/js/contracts/schema.generated.js';
 
 const drawingById = (document, id) => {
   const drawing = document.drawings.find((entry) => entry.id === id);
@@ -72,5 +72,7 @@ export const drawingViewAt = (view, version) => {
       if (since > version && container && typeof container === 'object') delete container[path];
     }
   }
+  // Only a Session 51 drawing binds the comparisons its draft adopted (OV-3826); an older Session's Load drops them.
+  if (version < SESSION_DRAWINGS_LAYOUT.version) delete at.webFiles?.bindings?.linearCanonicalComparisons;
   return { ...at, version };
 };

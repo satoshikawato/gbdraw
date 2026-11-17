@@ -753,12 +753,13 @@ const v51File = (file) => structuredClone(V51_FIXTURES[file]);
 const v49Session = (name) => v51File(`${name}.v51.gbdraw`);
 const loadKeepingSlots = async (session) => {
   const stashed = [];
+  const dialogs = [];
   let opening = null;
   const loaded = await importSession(await sessionLoadEvent(session), {
-    confirmLoadRepairs: async () => true,
+    confirmLoadRepairs: async (dialog) => { dialogs.push(dialog); return true; },
     installLoadedArtifactSlots: (slots) => { opening = slots.opening; stashed.push(...slots.stashed); }
   });
-  return { loaded, stashed, opening };
+  return { loaded, stashed, opening, dialogs };
 };
 // Each drawing's LOSAT evidence after a Load (D-221): the shown one's from state, any other's from its slot.
 const loadedLosatEvidenceOf = (id, { stashed, opening }) => {
@@ -1561,13 +1562,9 @@ test('Load and Save keep each Session 51 drawing\'s own protein identity manifes
 // record instance key names other proteins in each drawing's manifest. A Load validates each drawing's saved protein
 // entries with that drawing's own manifest, and Save reuses that check only for the manifest it ran with: Load, Save,
 // Load, Save writes into each drawing only the protein entries its own manifest resolves, which the CLI requires.
-test('Load and Save keep each Linear drawing\'s protein LOSAT entries to those its own manifest resolves (OV-3273)', async () => {
-  const fixture = v51File('BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw');
-  const proteinKeysOf = (session) => Object.fromEntries(session.drawings.map((entry) => [entry.id,
-    entry.losatCache.entries.filter((cached) => cached.queryRecordInstanceKey !== undefined).map(({ key }) => key).sort()]));
-  assert.deepEqual(Object.values(proteinKeysOf(fixture)).map((keys) => keys.length), [4, 4]);
-  /** @param {Blob} file A saved Session file. */
-  const pythonAdmits = async (file) => JSON.parse(String(await evaluatePython(`
+// What the CLI's Load says of a saved Session file: 'admitted', or its refusal.
+/** @param {Blob} file A saved Session file. */
+const pythonAdmits = async (file) => JSON.parse(String(await evaluatePython(`
 import base64, json, os, tempfile
 from gbdraw.session_io import load_session
 with tempfile.NamedTemporaryFile(suffix='.gbdraw', delete=False) as handle:
@@ -1580,6 +1577,11 @@ except Exception as error:
 finally:
     os.unlink(handle.name)
 `, Buffer.from(await file.arrayBuffer()).toString('base64'))));
+test('Load and Save keep each Linear drawing\'s protein LOSAT entries to those its own manifest resolves (OV-3273)', async () => {
+  const fixture = v51File('BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw');
+  const proteinKeysOf = (session) => Object.fromEntries(session.drawings.map((entry) => [entry.id,
+    entry.losatCache.entries.filter((cached) => cached.queryRecordInstanceKey !== undefined).map(({ key }) => key).sort()]));
+  assert.deepEqual(Object.values(proteinKeysOf(fixture)).map((keys) => keys.length), [4, 4]);
   let session = fixture;
   for (const round of [1, 2]) {
     resetDrawings();
@@ -1612,6 +1614,69 @@ finally:
   for (const entry of session.drawings) {
     assert.deepEqual(entry.proteinIdentityManifest, fixture.drawings.find(({ id }) => id === entry.id).proteinIdentityManifest, entry.id);
   }
+});
+
+// OV-3826: a Linear drawing's draft holds the stored protein results its Generate adopted from its Result
+// (`linearCanonicalComparisons`), which an unchanged Generate reuses with no search. Save writes them as the drawing's
+// bindings, naming the committed request's resources, so Load gives each draft what it held: after Clear LOSAT results,
+// which takes them, the next Generate searches again; a drawing not cleared still reuses its stored results. A Session
+// the CLI wrote holds no such binding: Load projects the draft from its request, and the Web's Save writes that.
+test('Save and Load keep what each Linear drawing\'s draft adopted: none after Clear, the stored results otherwise (OV-3826)', async () => {
+  const { INPUTS_SLICE, bindDrawingCanonicalComparisons } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { LOSATP_NO_SEARCH_MODE } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const adopted = (id) => state.drawingOf(id).files.linearCanonicalComparisons
+    .map(({ file, ...entry }) => ({ ...entry, file: file ? state.inputFiles.fileOf(file)?.name ?? 'unbound' : null }));
+  // The marker of stored results an unchanged Generate reuses (`canReuseResolvedProteinArtifacts`).
+  const reuses = (id) => adopted(id).some(({ kind, mode }) => kind === 'generatedProteinComparison' && mode === LOSATP_NO_SEARCH_MODE);
+  const saveLoaded = async (loaded, title) => {
+    const result = await exportSession(title, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+    assert.equal(result.status, 'saved', result.error?.message);
+    assert.equal(await pythonAdmits(result.blob), 'admitted', `${title}: the CLI admits it`);
+    return readSavedSession(result.blob);
+  };
+  resetDrawings();
+  let loaded = await loadKeepingSlots(v51File('BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw'));
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const held = adopted('linear-2');
+  assert.deepEqual(held.map(({ kind }) => kind), ['precomputedProteinComparison', 'orthogroupResult', 'generatedProteinComparison']);
+  assert.equal(reuses('linear') && reuses('linear-2'), true);
+  // Clear LOSAT results of drawing `linear`: its draft keeps only what a CLI or Python request gave as its input.
+  const inputs = state.drawingOf('linear').slices.inputs;
+  bindDrawingCanonicalComparisons(state.inputFiles, inputs, INPUTS_SLICE.capture(inputs).files.linearCanonicalComparisons
+    .filter(({ canonicalInput }) => canonicalInput === true));
+  const saved = await saveLoaded(loaded, 'cleared');
+  const savedDrawing = (id) => saved.drawings.find((entry) => entry.id === id);
+  assert.deepEqual(savedDrawing('linear').webFiles.bindings.linearCanonicalComparisons, [], 'a cleared drawing adopted none');
+  // Each entry names, by resource, the committed comparison of its kind; a generated pipeline names none.
+  const committed = Object.fromEntries(savedDrawing('linear-2').renderRequest.comparisons.map(({ kind, resourceId }) => [kind, resourceId ?? null]));
+  assert.deepEqual(savedDrawing('linear-2').webFiles.bindings.linearCanonicalComparisons
+    .map(({ kind, file }) => [kind, file?.resourceId ?? null]), Object.entries(committed));
+  resetDrawings();
+  loaded = await loadKeepingSlots(saved);
+  assert.deepEqual([loaded.loaded.status, loaded.dialogs], ['ok', []], JSON.stringify(loaded.loaded.error));
+  assert.deepEqual(adopted('linear'), [], 'after Clear, Save and Load the next Generate searches again');
+  assert.deepEqual(adopted('linear-2'), held, 'a drawing not cleared keeps its stored results');
+  assert.equal(reuses('linear-2'), true);
+  // A stored result the drawing's committed request does not store (here another drawing's) is left out, so the list
+  // adds no bytes, and Save still saves.
+  const other = state.drawingOf('linear').slices.inputs;
+  bindDrawingCanonicalComparisons(state.inputFiles, other,
+    INPUTS_SLICE.capture(state.drawingOf('linear-2').slices.inputs).files.linearCanonicalComparisons);
+  const foreign = await saveLoaded(loaded, 'foreign');
+  assert.deepEqual(foreign.drawings.find((entry) => entry.id === 'linear').webFiles.bindings.linearCanonicalComparisons
+    .map(({ kind, file }) => [kind, file?.resourceId ?? null]), [['generatedProteinComparison', null]]);
+  assert.deepEqual(Object.keys(foreign.resources).sort(), Object.keys(saved.resources).sort(), 'no resource is added');
+  // A CLI Session's draft is its request's projection, which the Web's Save then writes as it held it.
+  resetDrawings();
+  loaded = await loadKeepingSlots(v51File('cli-linear-records-table-grid.v51.gbdraw'));
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const cli = adopted('linear');
+  assert.equal(reuses('linear'), true);
+  const resaved = await saveLoaded(loaded, 'cli-resaved');
+  resetDrawings();
+  loaded = await loadKeepingSlots(resaved);
+  assert.deepEqual([loaded.loaded.status, loaded.dialogs], ['ok', []], JSON.stringify(loaded.loaded.error));
+  assert.deepEqual(adopted('linear'), cli);
 });
 
 // #1777 round 19 (OV-3277, D-201): a Session 40-50 (what 0.14.5 writes) holds one LOSAT list and one manifest, the

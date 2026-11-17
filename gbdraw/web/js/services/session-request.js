@@ -306,8 +306,8 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { DefinitionLineStyle } from './definition-line-style-state.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
 /**
- * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
- *   WebFileBindings } from './session-resource-backing.js'
+ * @import { CanonicalComparisonBinding, FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata,
+ *   SessionResourceTable, WebFileBindingRow, WebFileBindings } from './session-resource-backing.js'
  */
 /** @import { CircularRecordDrawing, CircularRecordRange, CircularRegionForm } from './record-options.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
@@ -5787,10 +5787,13 @@ const applyWebFileBindings = (
       ))
     }));
   }
+  // A Session 51 Linear drawing's adopted comparisons (OV-3826): the draft's, in place of the request's projection.
+  // A generated pipeline has no file.
   if (Array.isArray(bindings.linearCanonicalComparisons)) {
-    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((/** @type {WebFileBindingRow} */ comparison) => ({
+    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((/** @type {CanonicalComparisonBinding} */ comparison) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
+      ...(Object.hasOwn(comparison, 'file')
+        ? { file: webBindingValueAsLegacyFile(resources, comparison.file, resolveBinding, bindings.schema) } : {})
     }));
   }
   return restored;
@@ -7050,7 +7053,7 @@ export const projectCanonicalSessionRequest = ({
   // A Load passes the input slot of the Session it reads (`c_gb` for a Session 41-48); a committed request
   // projected again (label reflow, orientation, alignment) holds its own mode's input slot (OV-1814).
   let explicitBindings = validateWebFileBindings(
-    webMetadata, canonicalResources, bindingInputSlot ?? webBindingInputSlot(true, renderRequest.mode)
+    webMetadata, canonicalResources, bindingInputSlot ?? webBindingInputSlot(true, renderRequest.mode), renderRequest
   );
   // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
   // values, not a user's cleared inputs. Keep real original CLI bindings (in

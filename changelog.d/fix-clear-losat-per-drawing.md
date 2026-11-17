@@ -27,9 +27,11 @@
 - Fixed: after **Clear LOSAT results** in a Linear drawing with a LOSATP
   comparison, a Generate with nothing changed ran no LOSAT search and drew the
   comparison from the stored results, so the drawing listed no results. It now
-  runs LOSAT again, or reuses a search another drawing's diagram uses. A file
-  saved after the Clear and opened again still draws the stored comparison
-  without a search, as a file saved without LOSAT searches does.
+  runs LOSAT again, or reuses a search another drawing's diagram uses, also
+  after **Save Session** and Load of the file. **Save Session** now writes
+  which stored LOSATP results each Linear drawing reuses; a file the CLI, the
+  Python API, or an earlier version wrote reuses the results its drawings'
+  requests store, as before.
 - Changed: after **Undo** of a Generate, the next Generate runs the LOSAT
   searches the undone Generate had added again; it no longer takes them from
   the undone step.

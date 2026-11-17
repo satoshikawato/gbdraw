@@ -1777,7 +1777,11 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
     )
     source = load_session(fixture_path)
     assert source["version"] == 39
-    source["webFiles"] = {"linearRecords": [{"uid": "record-1"}]}
+    # A Session 39 Web inventory could bind the draft's adopted comparisons; the move to the current writer drops them.
+    source["webFiles"] = {
+        "linearRecords": [{"uid": "record-1"}],
+        "bindings": {"schema": 1, "linearCanonicalComparisons": [{"kind": "generatedProteinComparison"}]},
+    }
     source["editorState"] = {"legend": {"entries": []}}
     source["features"] = {
         "featureSelectorSafetyScope": "all-records",
@@ -1846,6 +1850,8 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
             "linearRecords"
         ]
         assert payload["webFiles"]["bindings"]["schema"] == 2
+        # Only the Web's Save writes the comparisons a Session 51 Linear draft adopted (OV-3826); Python's writers write
+        # none, and a Session 40-50 binds none.
         assert "linearCanonicalComparisons" not in payload["webFiles"]["bindings"]
         assert linear["config"]["linearComparisonPlan"] == {
             "mode": "adjacent",

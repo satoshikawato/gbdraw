@@ -213,14 +213,16 @@ FEATURE_IDENTITY_NOTICE_KINDS = literal_values(SessionFeatureIdentityNotice, "ki
 # Web file binding slots (``webFiles.bindings``, schema 2): the five file
 # cards, which every drawing binds, and the slots of each diagram mode's inputs
 # in a Session 51 drawing. A Circular drawing's input files are its File cards,
-# ``circularSources`` (``{uid, gb, gff, fasta}`` rows, like ``linearSeqs``).
+# ``circularSources`` (``{uid, gb, gff, fasta}`` rows, like ``linearSeqs``). A
+# Linear drawing's ``linearCanonicalComparisons`` are the comparisons its draft
+# adopted from its committed request (:func:`_validate_adopted_comparisons`).
 WEB_BINDING_CARD_SLOTS = frozenset({"d_color", "t_color", "blacklist", "whitelist", "qualifier_priority"})
 WEB_BINDING_MODE_SLOTS: Mapping[str, frozenset[str]] = {
     "circular": frozenset({
         "circularSources", "c_depth", "c_conservation_blasts",
         "c_conservation_blasts_source", "c_conservation_fastas", "c_conservation_sequence_sources",
     }),
-    "linear": frozenset({"linearSeqs", "linearComparisons"}),
+    "linear": frozenset({"linearSeqs", "linearComparisons", "linearCanonicalComparisons"}),
 }
 # The slot that holds a mode's main input; schema 2 bindings always hold it.
 WEB_BINDING_INPUT_SLOT: Mapping[str, str] = {"circular": "circularSources", "linear": "linearSeqs"}
@@ -1562,6 +1564,39 @@ def _validate_comparison_plan_edge(
         )
 
 
+def _validate_adopted_comparisons(session: Mapping[str, Any], version: int, entries: object) -> None:
+    """The comparisons a Session 51 Linear drawing's draft adopted from its
+    committed request (``webFiles.bindings.linearCanonicalComparisons``, which
+    only the Web's Save writes): a list of entries of a ``kind``, each with a
+    ``file`` naming the resource that a committed comparison of its kind names;
+    an entry with no file (a generated protein pipeline) names none. An older Session binds
+    none: its drafts are projected from the committed request."""
+
+    refusal = (
+        f"Session version {version} cannot bind comparison artifacts outside "
+        "the committed request."
+    )
+    if version < DRAWINGS_SESSION_MIN_VERSION or not isinstance(entries, list):
+        raise ValidationError(refusal)
+    request = session.get("renderRequest")
+    comparisons = request.get("comparisons") if isinstance(request, Mapping) else None
+    committed = {
+        (comparison.get("kind"), comparison.get("resourceId"))
+        for comparison in (comparisons if isinstance(comparisons, list) else [])
+        if isinstance(comparison, Mapping)
+        and isinstance(comparison.get("kind"), str) and isinstance(comparison.get("resourceId"), str)
+    }
+    for entry in entries:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get("kind"), str):
+            raise ValidationError(refusal)
+        file = entry.get("file")
+        # ``_validate_web_file_bindings`` checked a file binding's own fields.
+        if file is not None and (
+            not isinstance(file, Mapping) or (entry["kind"], file.get("resourceId")) not in committed
+        ):
+            raise ValidationError(refusal)
+
+
 def _validate_current_comparison_authority(
     session: Mapping[str, Any],
     version: int,
@@ -1623,10 +1658,7 @@ def _validate_current_comparison_authority(
                     f"Session version {version} cannot contain per-record LOSAT filenames."
                 )
     if "linearCanonicalComparisons" in bindings:
-        raise ValidationError(
-            f"Session version {version} cannot bind comparison artifacts outside "
-            "the committed request."
-        )
+        _validate_adopted_comparisons(session, version, bindings["linearCanonicalComparisons"])
 
     comparison_bindings_value = bindings.get("linearComparisons")
     if (

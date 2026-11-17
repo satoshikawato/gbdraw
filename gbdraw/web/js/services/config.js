@@ -189,7 +189,8 @@ import {
 } from './orthogroup-feature-metadata.js';
 import {
   isResourceBackedCanonicalComparison,
-  mapResourceBackedCanonicalComparison
+  mapResourceBackedCanonicalComparison,
+  writeDraftComparisons
 } from './canonical-comparisons.js';
 import {
   browserStorageFreeBytes,
@@ -401,7 +402,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { CircularSourceInput } from './input-types.js' */
 /** @import { NamedCardRecord, NamedCardRecords } from './record-draw-selection.js' */
 /** @import { CircularListRecord } from './record-discovery.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedFileValue, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedFileValue, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -4796,19 +4797,7 @@ export const serializeActiveRenderFiles = async (
   const linearCanonicalComparisons = mode === 'linear'
     && resolvedComparisonPlan?.mode !== 'none'
     && resolvedComparisonPlan?.edges?.length > 0
-    ? await Promise.all(
-    (Array.isArray(sourceFiles.linearCanonicalComparisons)
-      ? sourceFiles.linearCanonicalComparisons
-      : []
-    ).map(async (/** @type {BoundCanonicalComparison} */ comparison) => (
-      isResourceBackedCanonicalComparison(comparison)
-        ? {
-            ...mapResourceBackedCanonicalComparison(comparison),
-            file: await serializeFileValue(store, comparison.file)
-          }
-        : cloneJsonData(comparison)
-    ))
-    )
+    ? await writeDraftComparisons(sourceFiles.linearCanonicalComparisons, (file) => serializeFileValue(store, file))
     : [];
   const conservationEnabled = mode === 'circular'
     && Boolean(drawing.circularConservation?.enabled);

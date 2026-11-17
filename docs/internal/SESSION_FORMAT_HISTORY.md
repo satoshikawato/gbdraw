@@ -118,6 +118,24 @@ so a Session 50 ring cache entry stays valid. Fixtures: `tests/fixtures/sessions
 40, read by `tests/web/load-silent-rows.test.mjs`) and the schema-5 request in
 `tests/web/session-losat-cache-validation.test.mjs`. Session 51 has not reached `main`, so the version does not change.
 
+Session 51 also stores the comparisons a Linear drawing's draft adopted from its committed request (OV-3826). The
+Web app's Save writes them in the drawing's `webFiles.bindings.linearCanonicalComparisons`, as the draft holds them:
+the stored protein results a Generate copied from its Result (`precomputedProteinComparison`, `orthogroupResult`,
+`collinearityResult`, each with a `file` binding of the resource that the committed comparison of its kind names) and
+its generated protein pipeline (`generatedProteinComparison`, with no file). No bytes are added: each entry names a
+resource the committed request holds, and a stored result that the request does not store is left out (that
+drawing's next Generate searches again). A drawing whose draft adopted none writes an empty list, which **Clear LOSAT
+results** leaves, so its next Generate searches again after Save and Load. Load gives the draft the list when the
+key is present; when it is absent (a Session the CLI or Python wrote, every Session the Web app saved before, every
+Gallery Session until it is saved again) Load projects the draft from the committed request as before. Python
+(`_validate_adopted_comparisons` in `gbdraw/session_io.py`) admits the key only in a Session 51 drawing, as a list of
+entries of a `kind`, each `file` naming the resource that a committed comparison of its kind names, and refuses any
+other; the Web app's Save refuses the same, and its Load drops an entry it cannot read, or the key of a Session 40 to
+50, with a row (`webFileBindingFaults` in `gbdraw/web/js/services/session-resource-backing.js`). Python's writers do
+not write it. Session 40 to 50 still bind none (Python strips the key from a Session 39 or older). The vectors are
+the `adopted-comparisons` rows of `tests/fixtures/session_admission_vectors.json`. Session 51 has not reached `main`,
+so the version does not change.
+
 Session 51 also adds two keys to each record of a drawing's `runMetadata.trackSlotGeometry` (PD-OI-115):
 `recordKey`, the request's record key, and `axis`, where the record's axis lies in the frame of its drawn group
 (Circular: `radiusPx`, the feature band `bandInnerPx` to `bandOuterPx`, `startAngleDeg`, `degreesPerBp`; Linear: one
