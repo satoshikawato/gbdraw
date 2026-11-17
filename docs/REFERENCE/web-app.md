@@ -324,8 +324,8 @@ edits are carried forward. Generate places legend entries in the edited order
 on its new layout; an entry that appears later follows them. Generate may not
 draw a legend row, such as GC content while it is off or a Depth row while
 **Show Depth** is off. If you rename such a row, the new name waits with the
-colors and applies when a later Generate draws the row. Removing the row's data
-also discards the waiting name and colors. Canvas padding
+colors and applies when a later Generate draws the row, also after the File is
+replaced. Removing the row's data discards the waiting name and colors. Canvas padding
 applies once to every Result, including each Result of a batch. For the same
 diagram, a manually moved legend, plot title, or Linear scale keeps its offset
 from the newly calculated position. The absolute position can change when

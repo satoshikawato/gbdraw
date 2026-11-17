@@ -13,3 +13,5 @@
   rule group in the row's color, "This feature only" on a row of several
   features, and renaming a row that color rules or a per-feature color edit
   draw still write rules.
+  A Legend name of a row that a Generate does not draw waits for the row,
+  also when a File is replaced; before, replacing a File dropped it.
