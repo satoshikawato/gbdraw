@@ -386,6 +386,45 @@ def test_a_type_row_named_from_the_cli_keeps_its_palette_color_and_replays(tmp_p
     assert (tmp_path / "replay.svg").read_text(encoding="utf-8") == drawn
 
 
+MARKER_TABLE = "CDS\tproduct\tcytochrome c oxidase subunit I\t#ff0000\tMarker\n"
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        # The type's name names its default row, the "other" row while a captioned rule draws some of its features.
+        ("CDS\tCoding\n", {"Marker": "Marker", "other proteins": "Coding"}),
+        # The other row's own name wins (D-23).
+        ("CDS\tCoding\nother proteins\tOther coding\n", {"Marker": "Marker", "other proteins": "Other coding"}),
+        # A rule caption's key is no type's row: it names no other row.
+        ("Marker\tKey genes\n", {"Marker": "Key genes", "other proteins": "other proteins"}),
+        ("Unknown\tCoding\n", {"Marker": "Marker", "other proteins": "other proteins"}),
+    ],
+)
+def test_a_type_name_names_its_other_row_while_a_captioned_rule_draws_some_of_its_features(
+    mode: str, rows: str, expected: dict[str, str], tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """``--legend_rows CDS<TAB>Coding`` with a captioned rule for one CDS (OV-244 (c), V-OD26): Python draws no CDS row
+    then, and the name names the type's "other" row, drawn ``Coding``; the row keeps Python's key as a record."""
+
+    table = tmp_path / "rules.tsv"
+    table.write_text(MARKER_TABLE, encoding="utf-8")
+    rows_table = _rows_table(tmp_path, "key\tname\thidden\tposition\n" + rows)
+    status, err = _gbdraw(monkeypatch, capsys, mode, "--gbk", str(MITO), "-t", str(table), "--legend_rows",
+                          str(rows_table), "-o", str(tmp_path / "named"), "-f", "svg")
+    assert status == 0, err
+    svg = (tmp_path / "named.svg").read_text(encoding="utf-8")
+    drawn = {}
+    for match in re.finditer(r'<g ([^>]*data-legend-key="[^"]*"[^>]*)>(.*?)</g>', svg):
+        attributes = {name: html.unescape(value) for name, value in re.findall(r'([\w:-]+)="([^"]*)"', match[1])}
+        key = attributes.get("data-gbdraw-base-data-legend-key", attributes["data-legend-key"])
+        text = re.search(r"<text[^>]*>([^<]*)</text>", match[2])
+        drawn.setdefault(key, html.unescape(text[1]) if text else "")
+    assert "CDS" not in drawn
+    assert {key: drawn[key] for key in expected} == expected
+
+
 @pytest.mark.parametrize(
     ("text", "message"),
     [

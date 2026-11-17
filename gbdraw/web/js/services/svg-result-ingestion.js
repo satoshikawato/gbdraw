@@ -40,7 +40,7 @@ import { legendEntryKey } from './drawing/paint.js';
 import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { drawnLegendNames } from './legend-row-names.js';
-import { NO_DRAWN_FEATURES, ruleLegendCaptions } from './specific-color-rules.js';
+import { NO_DRAWN_FEATURES, otherFeatureRowKey, ruleLegendCaptions } from './specific-color-rules.js';
 import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -1141,6 +1141,22 @@ const applyFeatureOperations = (index, operations) => {
   });
 };
 
+// The rows a rename of `from` names (`apply_legend_row_edits`, V-OD26): the rows of its key; else, while the
+// Result has no row of that key, the "other" row of `from` read as a feature type, unless a rename (`renames`)
+// names that row. A key that is no feature type's has no "other" row in a Result.
+/**
+ * @param {LazyMutationIndex} index @param {{ from: string, allowMissing?: boolean }} rename
+ * @param {readonly { from?: unknown }[]} renames @param {((caption: string) => boolean) | undefined} mayBeAbsent
+ * @returns {Element[]}
+ */
+const renamedLegendRows = (index, { from, allowMissing }, renames, mayBeAbsent) => {
+  const { entries } = index.legends();
+  const other = otherFeatureRowKey(from);
+  const otherRows = entries.has(/** @type {PythonLegendKey} */ (from)) || renames.some((rename) => rename.from === other)
+    ? [] : entries.get(other) || [];
+  return otherRows.length > 0 ? otherRows : requireLegendEntries(index, from, { allowMissing }, mayBeAbsent);
+};
+
 // `mayBeAbsent(caption)` says whether Python's Legend row facts let a required row
 // be missing from this Result (OV-63). Fills, strokes, renames, and deletes
 // address a row of Python's by Python's key; an addition and its styles address
@@ -1262,7 +1278,7 @@ const applyLegendOperations = (index, operations, {
   // A rename keeps the row in place and Python's key as a record; the Legend
   // layout then places every row in the Legend's order, as Python does (OV-156).
   operations.legendRenames.forEach(({ from, to, allowMissing }) => {
-    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => {
+    renamedLegendRows(index, { from, allowMissing }, operations.legendRenames, mayBeAbsent).forEach((entry) => {
       changed = setPaintAttribute(index, entry, 'data-legend-key', to) || changed;
     });
   });

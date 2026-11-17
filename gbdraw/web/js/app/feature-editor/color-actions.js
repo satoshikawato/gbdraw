@@ -867,9 +867,10 @@ export const createFeatureColorActions = ({
     // the row's name and color follow one rule. A rename that joins a listed
     // row (`joins`) or a color-rule group (its name in its color: a Merge, a
     // pick from the popup's list, a typed name of a group of the row's color)
-    // moves the features into that row's rules, and "This feature only"
-    // splits a feature off: both write rules.
-    const namesRowOnly = request.sourceScope === 'group' && !request.joins && takesWholeRow(request.sourceKey, features)
+    // moves the features into that row's rules, and "This feature only" on a
+    // row of several features splits a feature off: both write rules. A rename
+    // of a row of one feature takes the whole row, whichever scope it has.
+    const namesRowOnly = !request.joins && takesWholeRow(request.sourceKey, features)
       && paletteRowType(drawing, request.sourceKey, features) !== null
       && !colorRuleLegendGroups(drawing.manualSpecificRules).some((group) => captionsMatch(group.name, caption) && colorsMatch(group.color, color));
     if ((sourceRules.length || features.length) && !namesRowOnly) {

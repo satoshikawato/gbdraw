@@ -110,12 +110,11 @@ test('a rename that writes color rules fits again; a rule color edit does not', 
 
 // OV-244 (c): the rename of a type's palette row (`CDS`, no color rule draws it) writes no color rule. The request
 // names the row by its key (`objects.legends.row_names`), Python draws the name, and a sized figure is fitted again.
-// The name is the row's, not the type's: while a captioned rule for the type is used, Python draws its features in the
-// rule's row and the type's "other" row, no `CDS` row; the renamed row waits (OV-120) and the request names no row.
-// Once the rule goes, the request built from the figure that had the rule still names no row, so Python draws `CDS`;
-// the live edit renames that drawn row from the waiting entry, and once the row is listed again under its name the
-// request names it again.
-test('a palette row rename is a row name the request carries, with no rule; a captioned rule for its type sets it aside', () => {
+// The name is the type's (V-OD26): while a captioned rule for the type is used, Python draws its features in the rule's
+// row and the type's "other" row, no `CDS` row; the rule commit keeps the rename as a dormant entry (OV-120), the
+// request still carries `[CDS, Coding]`, and Python and the live executor name the "other" row "Coding". Once the
+// rule goes, the same request names the drawn `CDS` row "Coding" again.
+test('a palette row rename is a row name the request carries, with no rule, in every state of a captioned rule for its type', () => {
   const renamed = [row('CDS', 'Coding'), row('tRNA'), row('rRNA')];
   const named = { 'objects.legends.row_names': [['CDS', 'Coding']] };
   assert.deepEqual(legendEditConfigLeaves({ ...drawing({ legendEntries: renamed }), rules: [] }), named);
@@ -123,14 +122,18 @@ test('a palette row rename is a row name the request carries, with no rule; a ca
   const nd1 = { feat: 'CDS', qual: 'product', val: '^ND1$', color: '#e63946', cap: 'ND1' };
   const ruledRows = ['ND1', 'other proteins', 'tRNA', 'rRNA'];
   const waiting = drawing({ legendEntries: ruledRows.map((key) => row(key)), dormantLegendEntries: [row('CDS', 'Coding')], originalLegendOrder: ruledRows });
-  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [nd1] }), {}, 'with the rule, no row of the name is drawn');
-  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [] }), {}, 'the rule removed: the next request still names no row');
+  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [nd1] }), named, 'with the rule, the request still names the type');
+  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [] }), named, 'the rule removed: the next request names it');
   const live = compileDirectEditorMutationPlan({
     catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
     legendEntries: waiting.legendEntries, originalLegendOrder: ruledRows, dormantLegendEntries: waiting.dormantLegendEntries
   }).operationsByResult[0];
   assert.deepEqual(live.legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]), [['CDS', 'Coding', true]],
-    'the live edit renames a drawn CDS row from the waiting entry');
+    'the live edit renames the type\'s drawn row from the waiting entry: CDS, else its "other" row');
+  // The "other" row's own name is its own (D-23) and goes with the type's.
+  const ownName = drawing({ ...waiting, legendEntries: [row('ND1'), row('other proteins', 'Other coding'), row('tRNA'), row('rRNA')] });
+  assert.deepEqual(legendEditConfigLeaves({ ...ownName, rules: [nd1] }),
+    { 'objects.legends.row_names': [['other proteins', 'Other coding'], ['CDS', 'Coding']] });
   assert.deepEqual(legendEditConfigLeaves({ ...drawing({ legendEntries: renamed }), rules: [] }), named, 'listed again, the row is named');
 });
 

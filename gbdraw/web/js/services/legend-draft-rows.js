@@ -163,8 +163,9 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
 /**
  * The config leaves a request carries for a drawing's Legend row edits and canvas padding. A leaf is present only
  * when it is not empty, so a drawing without these edits sends the request it sent before them: the renamed rows
- * Python draws (`[key, name]`), the deleted rows Python draws, the rows Python draws in their edited order (only
- * when the order is edited), all by key, and the padding (top, right, bottom, left, px; only when a side is not 0).
+ * Python draws and the dormant renames (`[key, name]`), the deleted rows Python draws, the rows Python draws in their
+ * edited order (only when the order is edited), all by key, and the padding (top, right, bottom, left, px; only when
+ * a side is not 0).
  * @typedef {{
  *   'objects.legends.row_names'?: Array<[PythonLegendKey, string]>,
  *   'objects.legends.hidden_rows'?: PythonLegendKey[],
@@ -237,7 +238,9 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ..
   const ruleRowKeys = new Set(rules.filter((rule) => text(rule?.cap)).map(ruleRowOf));
   const pythonRows = rows.currentEntries.filter((entry) => rows.originalCaptions.has(entry.originalCaption));
   const key = (/** @type {NormalizedLegendEntry} */ entry) => /** @type {PythonLegendKey} */ (entry.originalCaption);
-  const names = pythonRows
+  // A dormant rename (OV-120) is sent too: Python names the row when it draws it, and a type's name names its
+  // "other" row while a captioned rule draws some of its features (`apply_legend_row_edits`).
+  const names = [...pythonRows, ...rows.dormantEntries]
     .filter((entry) => entry.caption !== entry.originalCaption && !ruleRowKeys.has(key(entry)))
     .map((entry) => /** @type {[PythonLegendKey, string]} */ ([key(entry), entry.caption]));
   const hidden = /** @type {PythonLegendKey[]} */ ([...rows.deletedCaptions]);

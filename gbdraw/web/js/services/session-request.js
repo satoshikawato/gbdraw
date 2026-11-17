@@ -3585,6 +3585,7 @@ export const requestLegendEditLeaves = (state, drawing) => {
   return legendEditConfigLeaves({
     legendEntries: drawing.legendEntries.value,
     deletedLegendEntries: drawing.deletedLegendEntries.value,
+    dormantLegendEntries: drawing.dormantLegendEntries.value,
     originalLegendOrder: inventory,
     pythonRowKeys: pythonLegendRowKeys(inventory, state.results ? state.results.value : []),
     rules: drawing.manualSpecificRules,

@@ -181,6 +181,48 @@ const placeByInventory = (placed, unplaced, inventory, keyOf) => {
  *   which the Legend list leaves out as the live compile deletes them.
  */
 
+/**
+ * The renamed rows a draw leaves out (OV-120): each keeps its generated
+ * caption and its rename, unless the row is deleted.
+ * @param {DrawingState} drawing
+ * @param {{ previous: EntryRecord[], drawn: EntryRecord[] }} rows
+ * @returns {EntryRecord[]}
+ */
+const dormantAfterDraw = (drawing, { previous, drawn }) => {
+  const drawnOriginals = new Set(drawn.map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
+  const deleted = new Set(drawing.deletedLegendEntries.value
+    .map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
+  /** @type {Set<string>} */
+  const seen = new Set();
+  return previous.flatMap((entry) => {
+    const caption = String(entry?.caption || '').trim();
+    const originalCaption = String(entry?.originalCaption || '').trim();
+    if (!caption || !originalCaption || caption === originalCaption || drawnOriginals.has(originalCaption)
+      || deleted.has(originalCaption) || seen.has(originalCaption)) return [];
+    seen.add(originalCaption);
+    // A dormant row is Python's: it holds no color (V-OD22).
+    return [{ caption, originalCaption, featureIds: [] }];
+  });
+};
+
+// The listed rows a rule commit keeps, without the rows it removes (`removed`, by key). A renamed row it stops
+// drawing keeps its rename, as a draw keeps it (OV-120): `keepDormant` takes the dormant renames then. A captioned
+// rule that takes some of a type's features so leaves the type's name to its "other" row, and the type's row shows it
+// again once the rule goes (V-OD26).
+/**
+ * @param {DrawingState} drawing @param {EntryRecord[]} entries @param {ReadonlySet<string>} removed
+ * @param {(rows: readonly KeptLegendRow[]) => void} keepDormant
+ * @returns {EntryRecord[]}
+ */
+const withoutRemovedRows = (drawing, entries, removed, keepDormant) => {
+  const kept = entries.filter((entry) => !removed.has(legendEntryKey(entry)));
+  const leaving = entries.filter((entry) => removed.has(legendEntryKey(entry)) && legendCaption(entry) !== legendEntryKey(entry));
+  if (leaving.length > 0) {
+    keepDormant(keptRowsOf(dormantAfterDraw(drawing, { previous: [...leaving, ...drawing.dormantLegendEntries.value], drawn: kept })));
+  }
+  return kept;
+};
+
 // OV-2194, OV-2247, OV-2248 (Owner 2026-10-29): `items` (listed rows, or the
 // keys of an inventory) where Generate draws them from the next rule table,
 // by Python's answer (`legendOrder`, the keys of its feature rows in Legend
@@ -570,7 +612,7 @@ export const createLegendEntryActions = ({
           added.delete(placement.caption);
           placed.push(placement.caption);
         }
-        entries = entries.filter((entry) => !removed.has(legendEntryKey(entry)));
+        entries = withoutRemovedRows(drawing, entries, removed, (rows) => replaceDormantLegendRows(drawing.slices.paint, rows));
         /** @type {PythonLegendKey[] | null} */
         let order = null;
         if (legendOrder) {
@@ -801,29 +843,6 @@ export const createLegendEntryActions = ({
     .map(entry => entry.originalCaption)
     .filter(caption => generatedCaptions.has(caption));
 
-  /**
-   * The renamed rows a draw leaves out (OV-120): each keeps its generated
-   * caption and its rename, unless the row is deleted.
-   * @param {DrawingState} drawing
-   * @param {{ previous: EntryRecord[], drawn: EntryRecord[] }} rows
-   * @returns {EntryRecord[]}
-   */
-  const dormantAfterDraw = (drawing, { previous, drawn }) => {
-    const drawnOriginals = new Set(drawn.map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
-    const deleted = new Set(drawing.deletedLegendEntries.value
-      .map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
-    /** @type {Set<string>} */
-    const seen = new Set();
-    return previous.flatMap((entry) => {
-      const caption = String(entry?.caption || '').trim();
-      const originalCaption = String(entry?.originalCaption || '').trim();
-      if (!caption || !originalCaption || caption === originalCaption || drawnOriginals.has(originalCaption)
-        || deleted.has(originalCaption) || seen.has(originalCaption)) return [];
-      seen.add(originalCaption);
-      // A dormant row is Python's: it holds no color (V-OD22).
-      return [{ caption, originalCaption, featureIds: [] }];
-    });
-  };
 
   // A drawn Result's inventory (OV-1486). Python's order of its rows is the
   // order the executor recorded when it replayed an edited order over them

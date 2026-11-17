@@ -1050,6 +1050,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     // Catalog features: each has its catalog identity, here its rendered id in one record.
     const featureList = ref(features.map((feature) => ({ record_key: 'record-1', biological_feature_id: feature.svg_id, ...feature })));
+    // The popup's feature is the catalog's, as the feature click gives it (`buildClickedFeaturePayload`).
+    if (clicked?.feat) clicked.feat = featureList.value.find((feature) => feature.svg_id === clicked.feat.svg_id) ?? clicked.feat;
     const renameState = { ...preparationMembers(), extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
     const renamePreparation = createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules, synthesisQualifiers: synthesisPythonQualifiers });
     // Python's rows of the displayed Result: the listed rows as Python drew them.
@@ -1433,8 +1435,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
 
   // Review r1 (OV-244): a group edit whose rule synthesis Python refuses shows
   // the failure, on the Legend panel rename and on Selected features alike.
-  // The row is a rule row's (`Leu`), not its type's palette row, whose rename
-  // writes no rule.
+  // The row's key (`Leu`) is not its feature type, so the row is not its
+  // type's palette row, whose rename writes no rule.
   for (const [name, run] of [
     ['the Legend panel rename', (fixture) => fixture.renameActions.renameLegendEntry(0, 'Leucine')],
     ['Selected features', (fixture) => fixture.renameActions.applyColorToSelectedFeatures([{ ...trna, legendCaption: 'Leu' }], '#123456', 'Leucine')]
@@ -1684,11 +1686,12 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual(committedFor(ruleOwned, 't1'), [['t1', 'Special', '#ff0000']]);
   // A typed rename onto the name of a rule that draws no row asks too, from
   // the Legend editor and from the popup's field. Keep both of the tRNA row
-  // (its type's palette row) renamed whole names the row only (OV-244 (c));
-  // the popup's only feature of the row is named by itself, with a rule.
+  // (its type's palette row) renamed whole names the row only (OV-244 (c)),
+  // also from the popup on the row's only feature: the rename takes the whole
+  // row, so it writes no rule there either.
   for (const [typed, keptRule, keptName] of [
     [(fixture) => fixture.renameActions.renameLegendEntry(0, 'Connector'), [], 'Connector'],
-    [(fixture) => fixture.renameActions.handleLegendNameCommit(), [['t1', 'Connector', '#e8b441']], 'tRNA']
+    [(fixture) => fixture.renameActions.handleLegendNameCommit(), [], 'Connector']
   ]) {
     const asked = ruleRows({ clicked: { svg_id: 't1', feat: t1, legendName: 'Connector', appliedLegendName: 'tRNA' } });
     await typed(asked);

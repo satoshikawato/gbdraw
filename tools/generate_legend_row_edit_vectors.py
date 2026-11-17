@@ -88,6 +88,7 @@ class Case:
     note: str = ""
     legend: str = "right"
     rules: bool = False
+    marker: bool = False
     extra: dict[str, object] = field(default_factory=dict)
 
 
@@ -102,6 +103,8 @@ COLOR_RULES = (
     ("CDS", "product", "p6", "#0000ff", "Kinase"),
 )
 RULE_RED, RULE_GREEN = f"{RULE_CAPTION} [#ff0000]", f"{RULE_CAPTION} [#00aa00]"
+# A captioned rule for one of the three CDS features: Python then draws the rule's row and "other proteins", no CDS row.
+MARKER_RULES = (("CDS", "product", "p0", "#ff0000", "Marker"),)
 
 CASES: tuple[Case, ...] = (
     Case("circular-rename-plain", "circular", row_names=(("CDS", "Protein-coding genes"),)),
@@ -151,6 +154,15 @@ CASES: tuple[Case, ...] = (
          note="a rule row renamed onto another rule row of another swatch: the names are numbered"),
     Case("linear-missing-key", "linear", row_names=(("No such row", "Renamed"),), hidden_rows=("No such row",),
          row_order=("No such row", "rRNA"), note="a key the table lacks is ignored"),
+    Case("circular-type-name-other-row", "circular", marker=True, row_names=(("CDS", "Coding"),),
+         note="no CDS row while a captioned rule draws some CDS: the type's name names its other row"),
+    Case("linear-type-name-other-row", "linear", marker=True, row_names=(("CDS", "Coding"),),
+         note="no CDS row while a captioned rule draws some CDS: the type's name names its other row"),
+    Case("circular-type-name-own-other-name", "circular", marker=True,
+         row_names=(("CDS", "Coding"), ("other proteins", "Other coding")), note="the other row's own name wins"),
+    Case("circular-rule-caption-names-no-other-row", "circular", marker=True,
+         row_names=(("Marker", "Key genes"), ("No such type", "Coding")),
+         note="a rule caption's key or a key the table lacks names no other row"),
 )
 
 
@@ -188,9 +200,10 @@ def _overrides(case: Case, edited: bool) -> dict[str, object]:
 
 def _draw(case: Case, edited: bool, workdir: Path) -> str:
     color_table = None
-    if case.rules:
+    if case.rules or case.marker:
         color_table = workdir / "rules.tsv"
-        color_table.write_text("".join("\t".join(rule) + "\n" for rule in COLOR_RULES), encoding="utf-8")
+        rules = COLOR_RULES if case.rules else MARKER_RULES
+        color_table.write_text("".join("\t".join(rule) + "\n" for rule in rules), encoding="utf-8")
     features = gbdraw.FeatureOptions(types=list(FEATURE_TYPES), color_table=color_table)
     overrides = _overrides(case, edited)
     if case.mode == "circular":
