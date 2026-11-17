@@ -584,6 +584,7 @@ under "Cited ids without a record".
   - `tests/web/specific-color-actions.test.mjs`
 
 - [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette): Default colors a user edits win over the palette. ACCEPTED, concern `web.default-colors-over-palette`, scenario revision 2, supersedes scenario revision 1.
+  - `tests/web/feature-color-actions.test.mjs`
   - `tests/web/palette-default-colors.playwright.spec.js`
   - `tests/web/palette-default-colors.test.mjs`
 
