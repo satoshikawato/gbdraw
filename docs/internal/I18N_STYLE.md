@@ -2898,7 +2898,7 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
   بعد; Generate again: دوبارہ بنائیں.
 - **Drawing mode**: before a part of the drawing (ریکارڈ, ٹریک, لیبل, محور, تیر, فائل) it attaches to the diagram with کا: دائروی خاکے کا ریکارڈ, لکیری خاکے کے ٹریک کی اونچائی; دائروی ریکارڈ is the topology. Before the drawing itself, its layout or mode, and before the names fixed per mode (موازنہ, پیمانہ, رولر), the adjective stands alone: لکیری ڈرائنگ, دائروی لے آؤٹ, لکیری موازنہ, لکیری پیمانہ.
 - **Word order**: the verb last; a postposition (کا کی کے, میں, پر, سے, کو, تک) is its own word after the noun or
-  placeholder; the adjective before its noun (طے شدہ رنگ).
+  placeholder; the adjective before its noun (طے شدہ رنگ). In a genitive phrase, an adjective or participle that qualifies the second noun stands after the genitive, next to that noun, even where its gender would already rule out the first noun: سیشن کی برقرار رکھی گئی ترتیبات, موازنے کے اپ لوڈ شدہ جدول, فائل کا خودکار نام. Before the genitive it qualifies the first noun (منتخب ریکارڈ کے محددات). A participle with words of its own may instead become a relative clause after the head (نوع کا نام، جو … استعمال ہوتا ہے).
 - **Scope tag in an aria name**: an aria name that tags a Collinear control with its scope is the visible label plus (collinear): یونٹ موڈ (collinear), ریکارڈوں کے درمیان تلاش (collinear).
 
 ### 22.3 Punctuation and spacing
