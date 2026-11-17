@@ -574,6 +574,7 @@ under "Cited ids without a record".
   - `tests/web/record-display-discovery.playwright.spec.js`
 
 - [PD-OI-088](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-088-popup-dialog-busy-until-its-choice-commits): Popup dialog busy until its choice commits. ACCEPTED, concern `web.popup-dialog-choice-application`, scenario revision 1.
+  - `tests/web/feature-color-actions.test.mjs`
   - `tests/web/feature-fill-scope.playwright.spec.js`
   - `tests/web/label-fit.playwright.spec.js`
   - `tests/web/label-fit.test.mjs`
