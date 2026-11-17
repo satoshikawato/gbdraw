@@ -533,7 +533,7 @@ test('a folded card that TLOSATX cannot search says Gencode required, as its ope
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.losatProgram = 'tblastx';
-    app.linearSeqs[0].losat_gencode = '';
+    app.linearSeqs[0].losat_gencode = null; // a cleared field (v-blank-null)
   });
   const mark = header(card).getByText('Gencode required', { exact: true });
   await expect(mark).toBeVisible();
