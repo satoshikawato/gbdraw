@@ -141,6 +141,19 @@ export const installShownSetLegend = (refs, { originalOrder, originalColors }) =
 };
 
 /**
+ * The Legend inventory and colors of the Result set that `store` keeps for drawing `drawingId` while drawing
+ * `shownDrawingId` is shown (null: that drawing is shown, or it keeps no artifact). The reader of the Legend
+ * of a drawing that is not shown.
+ * @param {Pick<ArtifactSlotStore, 'readOfDrawing'>} store
+ * @param {DrawingId} drawingId
+ * @param {DrawingId} shownDrawingId
+ * @returns {Readonly<ShownSetLegend> | null}
+ */
+export const keptSetLegend = (store, drawingId, shownDrawingId) => (
+  store.readOfDrawing(drawingId, shownDrawingId, () => null, (slot) => slot.legend) ?? null
+);
+
+/**
  * A slot of `drawing`'s artifact; a value it is not given is the empty
  * slot's for the drawing's mode, and a slot given no `legend` has no
  * inventory and its own empty colors; the Legend owner writes the displayed

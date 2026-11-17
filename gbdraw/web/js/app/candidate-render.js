@@ -6,6 +6,7 @@
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack, TrackLegendRows } from '../services/track-legend-rows.js' */
 /** @import { DrawingState, WebState } from '../state.js' */
+/** @import { ShownSetLegend } from '../services/artifact-slot.js' */
 /** @import { LegendCaption, UserLegendColor } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
@@ -388,7 +389,7 @@ export const displayedLegendRowColors = (state, drawing, drawnTracks) => {
     dormantLegendEntries: drawing.dormantLegendEntries.value, legendColorOverrides: drawing.legendColorOverrides,
     paletteColors: appliedFeatureColors(state), drawnTracks
   }) : { listed: new Map(), deleted: new Map() };
-  const result = legendRowResult(state.originalLegendOrder.value, state.originalLegendColors.value);
+  const result = legendRowResult({ originalOrder: state.originalLegendOrder.value, originalColors: state.originalLegendColors.value });
   return {
     listed: legendRowColorOf(colors.listed, drawing.legendColorOverrides, result),
     deleted: legendRowColorOf(colors.deleted, drawing.legendColorOverrides, result)
@@ -400,12 +401,13 @@ export const displayedLegendRowColors = (state, drawing, drawnTracks) => {
  * @typedef {{ inventory: readonly string[], swatches: Readonly<Record<string, SwatchColor>> }} LegendRowResult
  */
 /**
- * @param {readonly string[]} inventory
- * @param {Readonly<Record<string, string>>} colors The `originalLegendColors` the Legend owner writes.
+ * @param {Readonly<ShownSetLegend> | null} legend The shown or kept Result set's; null: none.
  * @returns {LegendRowResult}
  */
-// The cast: the Legend owner writes only the fills of Python's swatches into `originalLegendColors`.
-export const legendRowResult = (inventory, colors) => ({ inventory, swatches: /** @type {Readonly<Record<string, SwatchColor>>} */ (colors) });
+// The cast: the Legend owner writes only the fills of Python's swatches into the colors (`originalLegendColors`).
+const legendRowResult = (legend) => ({
+  inventory: legend?.originalOrder ?? [], swatches: /** @type {Readonly<Record<string, SwatchColor>>} */ (legend?.originalColors ?? {})
+});
 // OV-282 (D-26): one precedence, by the row's key: the derived color (the
 // palette's, a rule's, a slot's: `draftLegendPanelColors`), else the user's
 // Legend color, else an editor row's own color, else Python's swatch of the
@@ -427,11 +429,11 @@ const legendRowColorOf = (derived, overrides, { inventory, swatches }) => (entry
  * The colors the rows of a drawing that is not shown show: its kept Result has no derived color, so
  * a row shows the user's Legend color, an editor row's own, else Python's swatch of its kept Result.
  * @param {Pick<DrawingState, 'legendColorOverrides'>} drawing
- * @param {LegendRowResult} result
+ * @param {Readonly<ShownSetLegend> | null} legend The Legend of the Result set it keeps (`keptSetLegend`); null: none.
  * @returns {LegendRowColors}
  */
-export const keptLegendRowColors = (drawing, result) => {
-  const colorOf = legendRowColorOf(new Map(), drawing.legendColorOverrides, result);
+export const keptLegendRowColors = (drawing, legend) => {
+  const colorOf = legendRowColorOf(new Map(), drawing.legendColorOverrides, legendRowResult(legend));
   return { listed: colorOf, deleted: colorOf };
 };
 

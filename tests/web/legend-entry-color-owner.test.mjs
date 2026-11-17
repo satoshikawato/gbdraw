@@ -142,8 +142,7 @@ test('a Session that recorded swatches shows the same Legend colors after Load',
   const session = JSON.parse(readFileSync(new URL('../fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json', import.meta.url), 'utf8'));
   const stored = session.editorState.legend;
   const { legend } = normalizeEditorStateData(session.editorState, { repairs: [], sessionVersion: session.version });
-  const result = { inventory: legend.originalOrder, swatches: legend.originalColors };
-  const shown = keptLegendRowColors({ legendColorOverrides: legend.colorOverrides }, result);
+  const shown = keptLegendRowColors({ legendColorOverrides: legend.colorOverrides }, legend);
   assert.ok(legend.entries.length > 0);
   assert.equal(legend.entries.some((entry) => Object.hasOwn(entry, 'color')), false, 'no row of Python\'s holds its swatch');
   assert.deepEqual(legend.entries.map((entry) => shown.listed(entry)), stored.entries.map((entry) => entry.color));
@@ -154,7 +153,7 @@ test('a Session that recorded swatches shows the same Legend colors after Load',
 // swatch of its own Result, not a copy an earlier extraction recorded.
 test('a drawing that is not shown shows its kept Result\'s swatches, the user\'s colors and its editor rows\' own', () => {
   const drawing = { legendColorOverrides: { tRNA: '#ff8800' } };
-  const shown = keptLegendRowColors(drawing, { inventory: ['CDS', 'tRNA'], swatches: { CDS: '#2e7d32', tRNA: '#ddce76' } });
+  const shown = keptLegendRowColors(drawing, { originalOrder: ['CDS', 'tRNA'], originalColors: { CDS: '#2e7d32', tRNA: '#ddce76' } });
   assert.equal(shown.listed({ caption: 'CDS', originalCaption: 'CDS', color: '#84b9ec' }), '#2e7d32', 'not a stale copy');
   assert.equal(shown.listed({ caption: 'CDS', originalCaption: 'CDS' }), '#2e7d32');
   assert.equal(shown.deleted({ caption: 'tRNA', originalCaption: 'tRNA' }), '#ff8800');

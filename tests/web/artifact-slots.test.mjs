@@ -21,7 +21,7 @@ await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const {
-  ARTIFACT_SLOT_ALIGNMENT_KEYS, ARTIFACT_SLOT_KEYS, ARTIFACT_SLOT_PALETTE_KEYS, artifactSlotAs, artifactSlotShowing, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact
+  ARTIFACT_SLOT_ALIGNMENT_KEYS, ARTIFACT_SLOT_KEYS, ARTIFACT_SLOT_PALETTE_KEYS, artifactSlotAs, artifactSlotShowing, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact, keptSetLegend
 } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createDrawingSwitch } = await import('../../gbdraw/web/js/app/drawing-switch.js');
@@ -585,8 +585,8 @@ test('a drawing switch hands the Preview search the departing and arriving drawi
 });
 
 // OV-1725: a drawing that is not shown reads Python's swatches from the slot
-// it keeps (`keptLegendRowColors` through `readOfDrawing`, as the composition
-// root reads them). The Legend extraction of each Generate writes them, so
+// it keeps (`keptLegendRowColors` of `keptSetLegend`, as the composition root
+// reads them). The Legend extraction of each Generate writes them, so
 // after a palette switch and a second Generate the kept rows show the second
 // Result's swatches, also a row no palette, rule or slot colors.
 test('a drawing that is not shown shows the swatches of its newest Generate', async () => {
@@ -604,9 +604,7 @@ test('a drawing that is not shown shows the swatches of its newest Generate', as
   actions.extractLegendEntries({ replaceGeneratedInventory: true });
   const { showDrawingNow, store } = legendSwitch();
   showDrawingNow('linear');
-  const kept = store.readOfDrawing(circular.id, state.activeDrawingId.value, () => null,
-    (slot) => ({ inventory: slot.legend.originalOrder, swatches: slot.legend.originalColors }));
-  const colors = keptLegendRowColors(circular, kept ?? { inventory: [], swatches: {} });
+  const colors = keptLegendRowColors(circular, keptSetLegend(store, circular.id, state.activeDrawingId.value));
   assert.deepEqual(circular.legendEntries.value.map((entry) => [entry.originalCaption, colors.listed(entry)]),
     [['CDS', '#2e7d32'], ['tRNA', '#ddce76'], ['My regions', '#abcdef']]);
   state.svgContainer.value = null;

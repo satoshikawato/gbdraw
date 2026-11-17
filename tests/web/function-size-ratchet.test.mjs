@@ -94,7 +94,7 @@ const FUNCTION_STATEMENTS = {
   'app/label-fit-dialog.js::createLabelFitDialog': 99,
   'app/legend-layout/diagram-drag.js::createDiagramDragActions': 338,
   'app/legend/drag-actions.js::createLegendDragActions': 154,
-  'app/legend/entry-actions.js::createLegendEntryActions': 485,
+  'app/legend/entry-actions.js::createLegendEntryActions': 480,
   'app/legend/entry-actions.js::createLegendEntryActions.prepareFileLegendEntries': 98,
   'app/linear-comparison-edits.js::createLinearComparisonGapEdits': 98,
   'app/linear-comparison-edits.js::createLinearComparisonPairEdits': 102,
