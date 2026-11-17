@@ -189,10 +189,10 @@ import { msg } from '../../utils/i18n.js';
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureElements The mounted elements of a feature.
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
  * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
- * @property {(label: string, fn: () => unknown) => unknown} [runUndoableCheckpoint]
- *   History's checkpoint step (services/history.js): a step of its own, after the open step of a control settles.
  *   Runs a dialog's close at once, or once the History step of the dialog's
  *   choice in flight ends (D-12, OIC-028).
+ * @property {(label: string, fn: () => unknown) => unknown} [runUndoableCheckpoint]
+ *   History's checkpoint step (services/history.js): a step of its own, after the open step of a control settles.
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
  * @property {ReadDrawnTracksPort} readDrawnTracks
