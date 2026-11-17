@@ -687,6 +687,11 @@ export const createLegendEntryActions = ({
         if (!named && !asShown) return;
       } else {
         const key = named ? legendEntryKey(named) : row.key;
+        const own = ownLegendColor(key, { python: true, overrides });
+        // Python's swatch of every row it drew (OV-1725). A Legend color edit keeps it as a record; a swatch
+        // that shows the user's color without one shows the edit (a Result saved before the records).
+        const edited = Boolean(own) && row.pythonColor === row.color && normalizedColor(own) === normalizedColor(row.color);
+        if (row.pythonColor && !edited) swatches.set(key, row.pythonColor);
         if (!asShown && deletedKeys.has(key)) return;
         // Python drew the row of a hidden track: it stays in the inventory.
         if (!asShown && hiddenKeys.has(key)) {
@@ -697,8 +702,6 @@ export const createLegendEntryActions = ({
         const entry = intentEntry((each) => legendEntryKey(each) === key && legendCaption(each) === caption)
           || intentEntry((each) => legendEntryKey(each) === key);
         generatedCaptions.add(key);
-        swatches.set(key, row.color);
-        const own = ownLegendColor(key, { python: true, overrides });
         const item = {
           caption, originalCaption: key, ...(own ? { color: own } : {}), xPos: row.xPos, yPos: row.yPos, featureIds: entry?.featureIds || []
         };
@@ -958,14 +961,16 @@ export const createLegendEntryActions = ({
       inventoryByResult.set(identity, [...originalLegendOrder.value]);
     }
 
-    // Python's swatch of each of its rows, the one owner of it (OV-282); kept as a
-    // Session holds them, so a Save and Load round trip keeps them (B24).
-    if (Object.keys(originalLegendColors.value).length === 0 && mounted.swatches.size > 0) {
-      mounted.swatches.forEach((swatch, key) => {
-        const color = normalizeOptionalHexColor(swatch);
-        if (color) originalLegendColors.value[key] = color;
-      });
-    }
+    // Python's swatch of each of its rows, the one owner of it (OV-282): each extraction writes those of the rows
+    // the Result draws (OV-1725), into a new object, as a held figure keeps the old one; the rows of a batch's
+    // other Results keep theirs. Kept as a Session holds them, so a Save and Load round trip keeps them (B24).
+    /** @type {Record<string, string>} */
+    const drawn = {};
+    mounted.swatches.forEach((swatch, key) => {
+      const color = normalizeOptionalHexColor(swatch);
+      if (color && originalLegendColors.value[key] !== color) drawn[key] = color;
+    });
+    if (Object.keys(drawn).length > 0) originalLegendColors.value = { ...originalLegendColors.value, ...drawn };
   };
 
   // The Legend color of the rows of `keys`: the drawing's override of each key

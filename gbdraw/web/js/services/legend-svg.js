@@ -598,6 +598,7 @@ export const legendEntryAnchor = (entryGroup) => {
  * @property {boolean} shown The row shows.
  * @property {boolean} merged The naming pass hides it: an earlier row has its name and its swatch (D-28).
  * @property {SwatchColor} color The fill its swatch shows.
+ * @property {SwatchColor | null} pythonColor The fill Python drew on its swatch (`pythonLegendRow`).
  * @property {number} xPos
  * @property {number} yPos
  */
@@ -627,6 +628,7 @@ export const resultLegendRows = (svg) => {
       shown: legendRowShown(row),
       merged: row.hasAttribute(LEGEND_MERGED_ROW),
       color: /** @type {SwatchColor} */ (getLegendEntrySwatch(row)?.getAttribute('fill') || '#cccccc'),
+      pythonColor: pythonLegendRow(row).color,
       xPos: anchor.x,
       yPos: anchor.y
     }];

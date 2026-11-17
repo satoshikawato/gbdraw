@@ -143,8 +143,8 @@ export const installShownSetLegend = (refs, { originalOrder, originalColors }) =
 /**
  * A slot of `drawing`'s artifact; a value it is not given is the empty
  * slot's for the drawing's mode, and a slot given no `legend` has no
- * inventory and its own empty colors, which the Legend owner fills in place
- * after a draw.
+ * inventory and its own empty colors; the Legend owner writes the displayed
+ * colors anew after a draw.
  * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legend?: Readonly<ShownSetLegend>,
  *   runtimeState?: ArtifactSlot['runtimeState'],
  *   transportIdentity?: ArtifactSlot['transportIdentity'], retainedBytes?: number }} slot

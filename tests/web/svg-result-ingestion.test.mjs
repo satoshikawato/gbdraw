@@ -1584,6 +1584,48 @@ test('Load records no Python color for a Legend row named like an Object member'
   assert.equal(swatchBase('constructor'), null);
 });
 
+// OV-1725: the Legend extraction after Load reads Python's swatch of each
+// row (`originalLegendColors`) from the Result. A Session older than 46 saved
+// its swatches with the Legend colors drawn in and no record: Load records the
+// saved swatch first (`recordSavedEditBases`), so the extraction reads it, and
+// a user-colored row with no saved swatch gets none, never the user's color.
+test('the Legend extraction after Load reads no user color as Python\'s swatch', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const { withDrawings } = await import('./helpers/drawing-state.mjs');
+  const content = '<svg><path id="f0001" fill="#aaaaaa"></path><g id="legend"><g id="feature_legend">'
+    + '<g data-legend-key="CDS" transform="translate(0,0)"><path fill="#ff0000"></path><text>CDS</text></g>'
+    + '<g data-legend-key="tRNA" transform="translate(0,20)"><path fill="#ffaa00"></path><text>tRNA</text></g>'
+    + '<g data-legend-key="rRNA" transform="translate(0,40)"><path fill="#7cecd5"></path><text>rRNA</text></g></g></g></svg>';
+  const results = [{ name: 'diagram.svg', content }];
+  const saved = {
+    legendColorOverrides: { CDS: '#ff0000', tRNA: '#ffaa00' }, originalLegendColors: { CDS: '#84b9ec', rRNA: '#7cecd5' }
+  };
+  const plan = createSavedResultPlan(results, admitFeatureCatalog(catalog(), results, { mode: 'linear' }), {
+    featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [], legendStrokeOverrides: {},
+    originalLegendOrder: ['CDS', 'tRNA', 'rRNA'], rules: [], mode: 'linear', resultsRecordPythonPaint: false, ...saved
+  });
+  /** The swatches after Load installs `originalColors` and the extraction reads the admitted Result. */
+  const extracted = (originalColors) => {
+    const svg = parseSvgText(content);
+    plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
+    const ref = (value) => ({ value });
+    const state = withDrawings({
+      results: ref(results), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => svg }),
+      displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+      legendEntries: ref([]), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+      originalLegendOrder: ref(['CDS', 'tRNA', 'rRNA']), originalLegendColors: ref({ ...originalColors }),
+      legendStrokeOverrides: {}, legendColorOverrides: { ...saved.legendColorOverrides }, manualSpecificRules: [],
+      skipCaptureBaseConfig: ref(false), svgContent: ref(null)
+    });
+    createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors(state, drawing, []) })
+      .extractLegendEntries({ replaceGeneratedInventory: true });
+    return state.originalLegendColors.value;
+  };
+  assert.deepEqual(extracted(saved.originalLegendColors), { CDS: '#84b9ec', rRNA: '#7cecd5' });
+  // Shown with no swatch installed (a drawing whose colors are not loaded yet), the drawn-in edits are still no swatch.
+  assert.deepEqual(extracted({}), { CDS: '#84b9ec', rRNA: '#7cecd5' });
+});
+
 // Python's paint is recorded only for a Session older than 46: a Session 46
 // Result carries its own records, and its bytes are admitted as saved. The
 // fact is the file's own version's (`sessionSourceFactsOf`), not the version

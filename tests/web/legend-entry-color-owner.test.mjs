@@ -11,6 +11,7 @@ import { File } from 'node:buffer';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { Node, row, svgOf } from './helpers/legend-result-svg.mjs';
 
 globalThis.window = {
   Vue: {
@@ -32,37 +33,6 @@ const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legen
 const { displayedLegendRowColors, keptLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
 
 const ref = (value) => ({ value });
-
-// A Result's feature Legend: Python's rows, and an editor row the live compile added.
-class Node {
-  constructor(tag, attributes = {}, children = [], text = '') {
-    this.tagName = tag;
-    this.localName = tag;
-    this.attributes = new Map(Object.entries(attributes));
-    this.children = [];
-    this.parentElement = null;
-    this.textContent = text;
-    children.forEach((child) => { child.parentElement = this; this.children.push(child); });
-  }
-
-  get id() { return this.getAttribute('id') || ''; }
-  getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; }
-  hasAttribute(name) { return this.attributes.has(name); }
-  setAttribute(name, value) { this.attributes.set(name, String(value)); }
-  matches(selector) {
-    if (selector === 'text' || selector === 'path') return this.tagName === selector;
-    if (selector === 'g[data-legend-key]') return this.tagName === 'g' && this.hasAttribute('data-legend-key');
-    if (selector.startsWith('#')) return this.id === selector.slice(1);
-    return false;
-  }
-  querySelectorAll(selector) {
-    return this.children.flatMap((child) => [...(child.matches(selector) ? [child] : []), ...child.querySelectorAll(selector)]);
-  }
-  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
-  getElementById(id) { return this.querySelector(`#${id}`); }
-}
-const row = (key, fill, y, attributes = {}) => new Node('g', { 'data-legend-key': key, transform: `translate(0,${y})`, ...attributes },
-  [new Node('path', { fill }), new Node('text', {}, [], key)]);
 
 const drawnResult = () => {
   const legend = new Node('g', { id: 'legend' }, [new Node('g', { id: 'feature_legend' }, [
@@ -94,6 +64,38 @@ test('a Generate lists the rows of Python\'s with no color but the user\'s, and 
   assert.deepEqual(state.originalLegendColors.value, { CDS: '#84b9ec', tRNA: '#ddce76' }, 'Python\'s swatches are the Result\'s');
   const shown = displayedLegendRowColors(state, state.activeDrawing(), []);
   assert.deepEqual(state.activeDrawing().legendEntries.value.map((entry) => shown.listed(entry)), ['#84b9ec', '#ff8800', '#123456']);
+});
+
+// OV-1725: each extraction writes Python's swatch of every row the Result
+// draws, so a second Generate's swatches replace the first's, and a row with
+// no derived color shows its swatch of the newest Result.
+test('a second Generate\'s swatches replace the first\'s, and the rows show them', () => {
+  let svg = svgOf([row('CDS', '#84b9ec', 0), row('tRNA', '#ddce76', 20)]);
+  const state = withDrawings({
+    results: ref([{ name: 'r.svg', content: 'unchanged' }]), selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
+    displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+    legendEntries: ref([]), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+    originalLegendOrder: ref([]), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: {}, manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false), svgContent: ref(null)
+  });
+  const actions = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors(state, drawing, []) });
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  const first = state.originalLegendColors.value;
+  svg = svgOf([row('CDS', '#2e7d32', 0), row('tRNA', '#ddce76', 20), row('My regions', '#abcdef', 40)]);
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  assert.deepEqual(state.originalLegendColors.value, { CDS: '#2e7d32', tRNA: '#ddce76', 'My regions': '#abcdef' });
+  assert.deepEqual(first, { CDS: '#84b9ec', tRNA: '#ddce76' }, 'the first Result\'s colors, which a held figure keeps, stay as they were');
+  const shown = displayedLegendRowColors(state, state.activeDrawing(), []);
+  assert.deepEqual(state.activeDrawing().legendEntries.value.map((entry) => [entry.originalCaption, shown.listed(entry)]),
+    [['CDS', '#2e7d32'], ['tRNA', '#ddce76'], ['My regions', '#abcdef']]);
+  // A row the user colored shows the edit; its record keeps Python's swatch, which the extraction reads.
+  svg = svgOf([row('CDS', '#ff0000', 0, {}, { 'data-gbdraw-base-fill': '#2e7d32' }), row('tRNA', '#ddce76', 20)]);
+  state.activeDrawing().legendColorOverrides.CDS = '#ff0000';
+  actions.extractLegendEntries();
+  assert.equal(state.originalLegendColors.value.CDS, '#2e7d32');
+  assert.equal(state.originalLegendColors.value['My regions'], '#abcdef', 'a row this Result does not draw keeps its swatch');
 });
 
 // A Session saved before this change holds the swatch of each row of

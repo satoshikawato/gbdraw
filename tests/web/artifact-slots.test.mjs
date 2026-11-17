@@ -512,7 +512,7 @@ test('a slot install installs the slot\'s Legend inventory and colors', async ()
   assert.deepEqual(state.originalLegendOrder.value, []);
   assert.deepEqual(state.originalLegendColors.value, {});
   assert.notStrictEqual(createArtifactSlot({ drawing: linear, values: {} }).legend.originalColors, empty.legend.originalColors,
-    'each empty slot has its own colors, which the Legend owner fills in place after a draw');
+    'each empty slot has its own colors');
 });
 
 // The drawing switch with History's slot capture and install, the slot store,
@@ -581,6 +581,35 @@ test('a drawing switch hands the Preview search the departing and arriving drawi
   assert.equal(calls.length, 1);
   assert.strictEqual(calls[0][0], modeDrawing(state, 'circular'));
   assert.strictEqual(calls[0][1], modeDrawing(state, 'linear'));
+  installShownDrawing('circular');
+});
+
+// OV-1725: a drawing that is not shown reads Python's swatches from the slot
+// it keeps (`keptLegendRowColors` through `readOfDrawing`, as the composition
+// root reads them). The Legend extraction of each Generate writes them, so
+// after a palette switch and a second Generate the kept rows show the second
+// Result's swatches, also a row no palette, rule or slot colors.
+test('a drawing that is not shown shows the swatches of its newest Generate', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const { displayedLegendRowColors, keptLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const { row, svgOf } = await import('./helpers/legend-result-svg.mjs');
+  installShownDrawing('circular');
+  const circular = modeDrawing(state, 'circular');
+  snapshots.installArtifactSlot(createArtifactSlot({ drawing: circular, values: { results: [{ name: 'c.svg' }] } }), { drawing: circular });
+  let svg = svgOf([row('CDS', '#84b9ec', 0), row('tRNA', '#ddce76', 20)]);
+  state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? svg : null) };
+  const actions = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors(state, drawing, []) });
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  svg = svgOf([row('CDS', '#2e7d32', 0), row('tRNA', '#ddce76', 20), row('My regions', '#abcdef', 40)]);
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  const { showDrawingNow, store } = legendSwitch();
+  showDrawingNow('linear');
+  const kept = store.readOfDrawing(circular.id, state.activeDrawingId.value, () => null,
+    (slot) => ({ inventory: slot.legend.originalOrder, swatches: slot.legend.originalColors }));
+  const colors = keptLegendRowColors(circular, kept ?? { inventory: [], swatches: {} });
+  assert.deepEqual(circular.legendEntries.value.map((entry) => [entry.originalCaption, colors.listed(entry)]),
+    [['CDS', '#2e7d32'], ['tRNA', '#ddce76'], ['My regions', '#abcdef']]);
+  state.svgContainer.value = null;
   installShownDrawing('circular');
 });
 
