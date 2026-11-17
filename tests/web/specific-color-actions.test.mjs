@@ -8,7 +8,7 @@ import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors } from '../../gbdraw/web/js/app/candidate-render.js';
 import { readFileSync } from 'node:fs';
 import {
-  createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
+  createRuleLegendCaptions, diffLegendIntents, legendRowRules, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules, specificRuleHasQualifier
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
@@ -457,6 +457,34 @@ test('a feature of a caption written in two colors belongs to the row of its col
   assert.deepEqual([a, b, edited].map(captionOf), ['Shared [#112233]', 'Shared [#445566]', 'Shared [#445566]']);
 });
 
+// A feature that a captioned rule matches and whose color edit names another
+// row: Python ranks the edit's `hash` rule above a qualifier rule whatever the
+// table order (`iter_specific_color_rules`), so it draws the feature in the
+// edit's row (tests/test_legend_row_facts.py), and so does the editor. An edit
+// that no rule draws (its `hash` rule gone) is not in Python's table: Python
+// draws the feature in the matching rule's row, and so does the editor.
+test('a color edit over a matching captioned rule puts its feature in the row Python draws it in', async () => {
+  const s = setup();
+  const feature = {
+    type: 'CDS', svg_id: 'f1_record_1', stable_feature_id: 'f1', record_id: 'TESTA',
+    selector: { type: 'CDS', start: 300, end: 600, strand: '+', hash: 'f1', qualifiers: { product: ['ribosomal protein L2'] } },
+    qualifiers: { product: ['ribosomal protein L2'] }
+  };
+  s.state.extractedFeatures.value = [feature];
+  const ribosomal = { feat: 'CDS', qual: 'product', val: 'ribosomal', color: '#aa0000', cap: 'Ribosomal' };
+  const edit = { feat: 'CDS', ...s.actions.getFeatureQualifier(feature), color: '#00bb00', cap: 'Edited' };
+  assert.equal(await s.actions.commitSpecificRules(() => [{ ...ribosomal }, { ...edit }]), true);
+  const [key] = Object.keys(s.state.featureColorOverrides);
+  assert.deepEqual(s.state.featureColorOverrides[key], { color: '#00bb00', caption: 'Edited' });
+  s.state.svgContainer = mounted([['Edited', '#00bb00']]);
+  assert.equal(s.actions.getEffectiveLegendCaption(feature), 'Edited');
+
+  assert.equal(await s.actions.commitSpecificRules(() => [{ ...ribosomal }]), true);
+  s.state.featureColorOverrides[key] = { color: '#00bb00', caption: 'Edited' };
+  s.state.svgContainer = mounted([['Ribosomal', '#aa0000']]);
+  assert.equal(s.actions.getEffectiveLegendCaption(feature), 'Ribosomal');
+});
+
 // OV-308 (OV-306 on the commit path): Python draws no row for a feature type
 // once a rule captioned with that type colors a feature, so the rule draws the
 // row under the type's name in its own color. The commit adds that row, not
@@ -694,22 +722,6 @@ test('a rule captioned with a track row draws its own row, and the commit leaves
   assert.deepEqual([...ruleCommitLegendRows({ ...context, rules: [live, next] }).takenKeys], []);
 });
 
-// The Python rows the Web app reads from their keys are those Python
-// generates (tests/test_legend_row_facts.py): a present type's row with the
-// palette key of its fill, or a track's row, whose fill the track rows of the
-// request give (tests/web/track-legend-row-colors.test.mjs).
-test('the generated Legend rows read from their keys are Python\'s', () => {
-  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
-  for (const { name, features_present: types, rows } of cases) {
-    for (const [key, paletteKey] of rows) {
-      const row = generatedLegendRow(key);
-      assert.equal(row.track, !types.includes(paletteKey), `${name}: ${key} is a track row or a present type's row`);
-      assert.equal(row.paletteKey, row.track ? '' : paletteKey, `${name}: ${key}`);
-    }
-  }
-  assert.deepEqual(generatedLegendRow('Group'), { track: false, paletteKey: 'Group' }, 'any other key names a type\'s row');
-});
-
 test('the Legend editor recolors the rule of a suffixed row, and only that row', () => {
   const ref = (value) => ({ value });
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
@@ -776,23 +788,23 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
   const ref = (value) => ({ value });
   const cds = { id: 'c1', svg_id: 'c1', type: 'CDS', qualifiers: {} };
   // CDS renamed `Shared` in the color of the tRNA rule row `Shared`: one row.
-  const fixture = (defaultColorType) => {
+  const fixture = (defaultColorType, key = 'CDS') => {
     const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#445566', cap: 'Shared' };
     const state = {
       manualSpecificRules: [rule],
-      svgContainer: mounted([['CDS', '#445566'], ['Shared', '#445566', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+      svgContainer: mounted([[key, '#445566'], ['Shared', '#445566', { display: 'none', 'data-legend-merged': key }]]),
       results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#445566' }),
       extractedFeatures: ref([cds]), biologicalFeatures: ref([cds]), clickedFeature: ref(null),
       featureStyleScopeDialog: { show: true, kind: 'fill', feat: cds, color: '#ff0000', strokeColor: null, strokeWidth: null,
-        legendName: 'CDS', matchingRule: null, siblingCount: 1, ruleMatchCount: 0, defaultColorType },
+        legendName: key, matchingRule: null, siblingCount: 1, ruleMatchCount: 0, defaultColorType },
       resetColorDialog: {}, legendRenameDialog: {},
       legendEntries: ref([
-        { caption: 'Shared', originalCaption: 'CDS', color: '#445566' },
+        { caption: 'Shared', originalCaption: key, color: '#445566' },
         { caption: 'Shared', originalCaption: 'Shared', color: '#445566' }
       ]),
-      originalLegendOrder: ref(['CDS', 'Shared']), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+      originalLegendOrder: ref([key, 'Shared']), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
       originalLegendColors: ref({}), featureColorOverrides: {}, featureStrokeOverrides: {},
-      legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#445566' }, adv: {}
+      legendStrokeOverrides: {}, legendColorOverrides: { [key]: '#445566' }, adv: {}
     };
     const committed = [];
     const defaults = [];
@@ -809,7 +821,8 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
         return true;
       },
       getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
-      effectiveLegendCaptions: () => () => 'CDS',
+      otherLegendRowType: () => null,
+      effectiveLegendCaptions: () => () => key,
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
       findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), groupColorRules: () => assert.fail('a merged rule row is recolored through its rule'),
@@ -826,17 +839,21 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
     if (defaultColorType) assert.deepEqual(defaults, [['CDS', '#ff0000']], 'the palette row\'s default color');
     else assert.deepEqual(state.legendColorOverrides, { CDS: '#ff0000' }, 'the other key\'s Legend color, in the rule commit');
   }
-  // One route sets a type's default color: the Legend popup (`setTypeDefaultColor`) ends where the scope choice does,
-  // the row's own Legend color released through the Legend owner.
-  const viaScope = fixture('CDS');
-  await viaScope.popup.handleColorScopeChoice('caption');
-  const viaPopup = fixture('CDS');
-  await viaPopup.popup.setTypeDefaultColor('CDS', '#ff0000');
-  const outcome = ({ state, committed, defaults }) => ({
-    rules: state.manualSpecificRules, overrides: { ...state.legendColorOverrides }, committed, defaults
-  });
-  assert.deepEqual(outcome(viaPopup), outcome(viaScope));
-  assert.equal('CDS' in viaScope.state.legendColorOverrides, false, 'the row follows its type\'s default color again');
+  // One route sets a type's default color: the Legend popup (`setLegendRowDefaultColor`) ends where the scope choice
+  // does, the row's own Legend color released through the Legend owner by the row's key: a type's own row, or its
+  // "other" row, whose type's default color draws it too (OV-3497).
+  for (const key of ['CDS', 'other proteins']) {
+    const viaScope = fixture('CDS', key);
+    await viaScope.popup.handleColorScopeChoice('caption');
+    assert.equal(key in viaScope.state.legendColorOverrides, false, `${key}: the row follows its type's default color again`);
+    assert.deepEqual(viaScope.defaults, [['CDS', '#ff0000']], `${key}: the CDS default color`);
+    const viaPopup = fixture('CDS', key);
+    await viaPopup.popup.setLegendRowDefaultColor(key, 'CDS', '#ff0000');
+    const outcome = ({ state, committed, defaults }) => ({
+      rules: state.manualSpecificRules, overrides: { ...state.legendColorOverrides }, committed, defaults
+    });
+    assert.deepEqual(outcome(viaPopup), outcome(viaScope), key);
+  }
   const { state, popup } = fixture(null);
   Object.assign(state.featureStyleScopeDialog, { kind: 'stroke', color: null, strokeColor: '#00aa00', strokeWidth: 2 });
   assert.equal(await popup.handleFeatureStyleScopeChoice('caption'), true);
@@ -1694,4 +1711,22 @@ test('rule evaluation sends only the qualifier values the rules read and matches
   // A visibility or label rule reads its key in any case.
   assert.deepEqual(ruleFeaturePayloadReading(translated, qualifiersRead([{ qualifier: ' Translation ' }], 'qualifier'))
     .qualifiers.translation, ['MKVLAAGIVAL']);
+});
+
+// OV-3461: a feature of no captioned rule is in the row Generate draws for it:
+// its type's "other" row while a captioned rule of its type is used, no row
+// for a feature of an uncaptioned rule then, and its type's row otherwise.
+test('the popup reads a feature of no captioned rule in the row Generate draws for it (OV-3461)', () => {
+  const s=setup();
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Alpha'});
+  const [a,b]=s.state.extractedFeatures.value;
+  recordRuleMatches([a,b],s.state.manualSpecificRules.map(ruleKey),index=>({matched:index===0?[0]:[],priorities:index===0?[0]:[],declined:[]}));
+  const captionOf=s.actions.effectiveLegendCaptions();
+  assert.equal(captionOf(a),'Alpha');
+  assert.equal(captionOf(b),'other proteins','the default CDS is in the "other proteins" row');
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''});
+  recordRuleMatches([a,b],s.state.manualSpecificRules.map(ruleKey),index=>({matched:[index],priorities:[0],declined:[]}));
+  assert.equal(s.actions.effectiveLegendCaptions()(b),'','a feature of an uncaptioned rule is in no row');
+  s.state.manualSpecificRules.splice(0,1);
+  assert.equal(s.actions.effectiveLegendCaptions()(b),'CDS','without a used captioned rule the type keeps its row');
 });

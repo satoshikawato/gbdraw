@@ -213,6 +213,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
   // The port's answer for this table, whose row `Core` holds every rule captioned `Core` (the key
   // allocation, which gives one caption in several colors a row per color, has its own fixture).
   getLegendRowRules: (caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
+  otherLegendRowType: () => null,
   getIndividualFeatureLabel: (feature) => feature.product || '',
   // FE-09 (rule-actions.js): a feature's single-feature condition is its stable hash.
   getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
@@ -935,6 +936,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     },
     effectiveLegendCaptions: () => (feature) => feature.type,
     getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }),
+    otherLegendRowType: () => null,
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
     findFeaturesWithSameLegendItem: () => [],
     findFeaturesWithSameDisplayedLabel: () => [],
@@ -987,7 +989,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     };
   };
   const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed,
-    legendRowName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {} }) => {
+    legendRowName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {} }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -1036,6 +1038,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       },
       effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
       getLegendRowRules: rowRules,
+      otherLegendRowType: (key) => otherRows[key] ?? null,
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
       findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
@@ -1159,6 +1162,55 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual(onRule.committed, [], 'no rule commit');
   assert.deepEqual(onRule.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
     [['CDS', 'CDS'], ['Zeta', 'GC content']], 'Keep both keeps the typed name (PD-OI-061 scenario revision 5)');
+  // D-23: the rename of a type's "other" row, which the drawing names, is a
+  // name change in its place, as for a row without features, also now that
+  // the editor knows the row's features (OV-3461): no rule is written. Onto
+  // that row, a rename asks Keep both or Cancel (PD-OI-061 scenario revision
+  // 2, accepted residual risk). Its features take their type's default color
+  // (PD-OI-089), as on its type's own row.
+  const nd1Rule = { feat: 'CDS', qual: 'product', val: '^ND1$', color: '#e63946', cap: 'ND1' };
+  const cds = (id, product, legendCaption) => ({ id, svg_id: id, type: 'CDS', product, legendCaption, qualifiers: { product: [product] }, start: 1, end: 90 });
+  const otherRow = () => build({
+    entries: [{ caption: 'ND1', color: '#e63946' }, { caption: 'other proteins', color: '#54bcf8' }], order: ['ND1', 'other proteins'],
+    rules: [nd1Rule], features: [cds('n1', 'ND1', 'ND1'), cds('c1', 'COX1', 'other proteins'), cds('c2', 'COX2', 'other proteins')],
+    otherRows: { 'other proteins': 'CDS' }
+  });
+  const renamedOther = otherRow();
+  await renamedOther.renameActions.renameLegendEntry(1, 'other CDS');
+  assert.notEqual(renamedOther.legendRenameDialog.show, true, 'a rename onto a new name asks nothing');
+  assert.deepEqual(renamedOther.committed, [], 'no rule is written');
+  assert.deepEqual(renamedOther.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+    [['ND1', 'ND1'], ['other CDS', 'other proteins']], 'the row is renamed in its place');
+  const ontoOther = otherRow();
+  await ontoOther.renameActions.renameLegendEntry(0, 'other proteins');
+  assert.deepEqual([ontoOther.legendRenameDialog.show, ontoOther.legendRenameDialog.mergeAvailable], [true, false],
+    'a rename onto the "other" row offers Keep both and Cancel');
+  assert.equal(await otherRow().renameActions.preparedLegendRowDefaultColorType('other proteins'), 'CDS',
+    'the "other" row is drawn in the CDS default color');
+  // D-26: a CDS that an uncaptioned rule colors while a captioned CDS rule is
+  // used is in no Legend row ('' from the rule owner). Its Color Change Scope
+  // dialog names no Legend item, and a popup rename from its empty name takes
+  // This feature only, from no row: one rule for it, the typed name.
+  const cytb = cds('b1', 'CYTB', '');
+  const greenRule = { feat: 'CDS', qual: 'product', val: '^CYTB$', color: '#00aa00', cap: '' };
+  const noRow = (clicked = null) => build({
+    entries: [{ caption: 'ND1', color: '#e63946' }, { caption: 'other proteins', color: '#54bcf8' }], order: ['ND1', 'other proteins'],
+    rules: [nd1Rule, greenRule], features: [cds('n1', 'ND1', 'ND1'), cds('c1', 'COX1', 'other proteins'), cytb],
+    otherRows: { 'other proteins': 'CDS' }, scopeDialog: {}, clicked,
+    ruleOverrides: { effectiveLegendCaptions: () => (feature) => feature.legendCaption,
+      findMatchingRegexRule: (feature) => (feature.svg_id === 'b1' ? greenRule : null), countFeaturesMatchingRule: () => 1,
+      findExistingColorForCaption: () => null }
+  });
+  const noRowScope = noRow();
+  await noRowScope.renameActions.requestFeatureColorChange(cytb, '#123456');
+  assert.equal(noRowScope.errorLog.value, null);
+  assert.deepEqual([noRowScope.scopeDialog.show, noRowScope.scopeDialog.legendName, noRowScope.scopeDialog.siblingCount], [true, '', 0],
+    'no Legend item for a feature of no row');
+  const renamedNoRow = noRow({ svg_id: 'b1', feat: cytb, legendName: 'Cytochrome', appliedLegendName: '' });
+  await renamedNoRow.renameActions.handleLegendNameCommit();
+  assert.notEqual(renamedNoRow.legendRenameDialog.show, true, 'no scope to ask: the feature alone');
+  assert.deepEqual(renamedNoRow.committed.map((rules) => rules.filter(({ cap }) => cap === 'Cytochrome').map(({ val }) => val)),
+    [['^CYTB$']], 'one rule names the feature');
   // OV-294 residual: a renamed row's rules are read by its Python key, not by
   // the caption it shows, so renaming a row that shows a rule's caption
   // renames the row and leaves that rule alone.
@@ -1754,6 +1806,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     countFeaturesMatchingRule: () => 0,
     effectiveLegendCaptions: () => () => 'CDS',
     getLegendRowRules: () => [],
+    otherLegendRowType: () => null,
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
     findMatchingRegexRule: () => null,
     findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],

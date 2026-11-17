@@ -85,7 +85,8 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
     // Python takes the feature's own rules back (PD-OI-069 revision 2).
     groupColorRules: groupColorRulesOver(preparation),
-    getLegendRowRules: () => []
+    getLegendRowRules: () => [],
+    otherLegendRowType: () => null
   });
   assert.equal(await preparation.prepare([savedRule, hashRule]), true);
   stages.length = 0;
