@@ -528,7 +528,7 @@ test('a rule captioned with its own feature type commits while the type\'s row s
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#ff8800' }], 'the listed row, by its key');
   // The Legend preparation, which runs before the rule transition retires the Legend color (OV-61),
   // owns that row and updates it.
-  s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#ff8800' }];
+  s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS' }];
   const { view } = s;
   setLegendColor(view.activeDrawing().slices.paint, 'CDS', '#ff8800');
   const legend = createLegendManager({

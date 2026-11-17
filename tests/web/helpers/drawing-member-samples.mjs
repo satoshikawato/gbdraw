@@ -435,9 +435,9 @@ export const MEMBER_SAMPLES = {
   // paint: Load reads the Legend rows as `normalizeEditorStateData` gives them.
   featureColorOverrides: { value: () => ({ '["record-1","CDS_1"]': { color: '#123456', caption: 'Kinase' } }) },
   featureStrokeOverrides: { value: () => ({ 'record-1\u0000CDS_1': { strokeColor: '#654321', strokeWidth: 2 } }) },
-  legendEntries: { value: () => [{ caption: 'Renamed CDS', originalCaption: 'CDS', color: '#abcdef', featureIds: [] }] },
-  deletedLegendEntries: { value: () => [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#fedcba', featureIds: [] }] },
-  // A dormant row is Python's: it holds no color (V-OD22).
+  // Rows of Python's hold no color; the user's Legend color is in `legendColorOverrides` (V-OD22).
+  legendEntries: { value: () => [{ caption: 'Renamed CDS', originalCaption: 'CDS', featureIds: [] }] },
+  deletedLegendEntries: { value: () => [{ caption: 'tRNA', originalCaption: 'tRNA', featureIds: [] }] },
   dormantLegendEntries: { value: () => [{ caption: 'Coverage', originalCaption: 'depth', featureIds: [] }] },
   legendColorOverrides: { value: () => ({ CDS: '#abcdef' }) },
   legendStrokeOverrides: { value: () => ({ CDS: { strokeColor: '#222222', strokeWidth: 1.5 } }) },
