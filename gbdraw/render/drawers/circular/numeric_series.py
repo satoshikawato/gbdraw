@@ -10,7 +10,7 @@ import math
 
 from gbdraw.svg.elements import Circle, ClipPath, Group, Path
 
-from ....auto_sizes import depth_axis_tick_font_size_px
+from ....auto_sizes import scalar_axis_tick_font_size_px
 from ....layout.circular import RadialBand
 from ....layout.circular_depth_axis import (
     DEPTH_AXIS_SMALL_TICK_SIZE_PX,
@@ -62,7 +62,7 @@ def _axis_ticks(
     so no later record paints over it."""
 
     track_width = place.track_width
-    font_size = depth_axis_tick_font_size_px(axis.style, track_width)
+    font_size = scalar_axis_tick_font_size_px("circular", axis.style, track_width)
     labels = axis.labels(track_width, font_size)
     ticks = [
         ScalarAxisTick(baseline_radius + float(track_width) * axis.fraction(value), DEPTH_AXIS_SMALL_TICK_SIZE_PX, None)
@@ -88,7 +88,7 @@ def _frame_ink(frame: SeriesBandFrame, place: CircularTrackPlace) -> list[Circul
     if float(place.track_width) > 0 and frame.paints_background:
         inks.append(CircularInkRing(RadialBand(baseline_radius, outer_radius), *turns))
     if frame.paints_border:
-        half = 0.5 * frame.border_width
+        half = frame.border_overhang_px
         inks.extend(CircularInkRing(RadialBand(edge - half, edge + half), *turns) for edge in (baseline_radius, outer_radius))
     return inks
 
@@ -103,7 +103,7 @@ def _axis_ink(axis: ScalarAxis, place: CircularTrackPlace) -> list[CircularInk]:
                 baseline_radius,
                 outer_radius,
                 ticks,
-                font_size=depth_axis_tick_font_size_px(axis.style, place.track_width),
+                font_size=scalar_axis_tick_font_size_px("circular", axis.style, place.track_width),
                 font_family=axis.font_family,
                 range_label=range_label,
                 baseline_circle=circle is None,
@@ -176,7 +176,7 @@ def _add_frame_border(group: Group, frame: SeriesBandFrame, place: CircularTrack
 def _add_axis(group: Group, axis: ScalarAxis, place: CircularTrackPlace, axis_group_id: str) -> None:
     baseline_radius, outer_radius = _band_radii(place)
     ticks, range_label = _axis_ticks(axis, baseline_radius, place)
-    font_size = depth_axis_tick_font_size_px(axis.style, place.track_width)
+    font_size = scalar_axis_tick_font_size_px("circular", axis.style, place.track_width)
     circle = _axis_circle(axis, place)
     if circle is None or circle.draws_scalar_axes:
         group.add(
@@ -223,7 +223,7 @@ def _series_paths(plot: NumericSeriesPlot, desc: str, place: CircularTrackPlace,
         clip.add(Path(d=generate_circle_path_desc(place.radius, place.norm_factor), fill="white", stroke="none"))
         below = Path(d=desc, fill=paint.below_fill, clip_path=f"url(#{clip_id})", clip_rule="nonzero", **style)
         elements = [clip, main, below]
-    if paint.writes_stroke_width("circular"):
+    if paint.writes_stroke_width:
         for element in elements:
             if isinstance(element, Path):
                 element["stroke-width"] = paint.stroke_width

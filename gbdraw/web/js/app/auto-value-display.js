@@ -461,7 +461,7 @@ const circularDepthWidthPx = (state, drawing, trackIndex) => {
 /**
  * The tick font Circular Depth series `trackIndex` draws its numbers in: its own Tick Font Size, else the drawing's
  * Depth tick font, else the Auto size of its track's width (Python's `depth_track_config` and
- * `depth_axis_tick_font_size_px`).
+ * `scalar_axis_tick_font_size_px` in mode "circular").
  * @param {RecordLengthState} state
  * @param {DrawingState} drawing
  * @param {number} trackIndex

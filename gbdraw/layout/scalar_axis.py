@@ -12,7 +12,7 @@ from numpy.typing import ArrayLike, NDArray
 from pandas import DataFrame, Index, Series
 
 from gbdraw.analysis.skew import DeviationScale, deviation_scale
-from gbdraw.auto_sizes import TickedAxisSource, TickFontSource, scalar_axis_tick_font_size
+from gbdraw.auto_sizes import TickedAxisSource
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
 from .series_style import ScalarAxisStyle
@@ -443,16 +443,6 @@ def _prepare_depth_plot_dataframe(
     return plot_df
 
 
-def linear_scalar_axis_tick_font_size_px(
-    axis_config: TickFontSource,
-    track_height_px: float,
-) -> float:
-    tick_font_size = axis_config.tick_font_size
-    if tick_font_size is not None:
-        return max(0.0, float(tick_font_size))
-    return scalar_axis_tick_font_size("linear", track_height_px)
-
-
 __all__ = [
     "DEPTH_UNIT",
     "LINEAR_SCALAR_AXIS_LABEL_GAP_PX",
@@ -469,7 +459,6 @@ __all__ = [
     "band_samples",
     "deviation_samples",
     "has_tick_value",
-    "linear_scalar_axis_tick_font_size_px",
     "project_scalar_line",
     "scalar_axis_kept_labels",
     "scalar_axis_large_ticks",

@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gbdraw.config.models.objects import ScalarAxisLabelStyle
-    from gbdraw.mode_profiles import DiagramMode
 
     from .scalar_axis import ScalarAxisSource
 
@@ -28,13 +27,13 @@ class SeriesPaint:
     stroke_width: float
     fill_opacity: float
     below_fill: str | None
-    # The modes in which a stroke that paints nothing (width 0 and colour ``none``) writes no ``stroke-width``;
-    # the other modes always write it. GC content leaves it out in both modes, GC skew in Circular only, depth in
-    # neither: the old drawers differed, and the output keeps their bytes.
-    bare_stroke_modes: frozenset[DiagramMode]
 
-    def writes_stroke_width(self, mode: DiagramMode) -> bool:
-        return mode not in self.bare_stroke_modes or self.stroke_width > 0 or self.stroke.strip().lower() != "none"
+    @property
+    def writes_stroke_width(self) -> bool:
+        """Whether the drawers of both modes write the path's ``stroke-width``: not for a stroke of width 0 in colour
+        ``none``, which paints nothing either way."""
+
+        return self.stroke_width > 0 or self.stroke.strip().lower() != "none"
 
     @property
     def low_fill(self) -> str:

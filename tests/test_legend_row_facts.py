@@ -35,7 +35,7 @@ from gbdraw.api import (
 from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.layout.series_style import SeriesPaint
-from gbdraw.legend.sources import DepthLegendSource, DinucleotideLegendSource, legend_slot_sources
+from gbdraw.legend.sources import DepthLegendSource, GcContentLegendSource, GcSkewLegendSource, legend_slot_sources
 from gbdraw.diagrams.circular.assemble import _circular_legend_slots, _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
 from gbdraw.legend.table import LegendTable, _generated_legend_rows
@@ -342,14 +342,14 @@ GENERATED_ROWS = json.loads(
 
 
 def _paint(fill: str, low_fill: str) -> SeriesPaint:
-    return SeriesPaint(fill, "none", 0, 1.0, low_fill, frozenset())
+    return SeriesPaint(fill, "none", 0, 1.0, low_fill)
 
 
 @pytest.mark.parametrize("case", GENERATED_ROWS, ids=[case["name"] for case in GENERATED_ROWS])
 def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
     """The Web app reads these keys as Python's own rows (OV-307) and their palette keys (OV-309)."""
     def track(kind, fills):
-        return DinucleotideLegendSource(kind, case["dinucleotide"], _paint(fills[0], fills[1]))
+        return kind(case["dinucleotide"], _paint(fills[0], fills[1]))
 
     default_colors = pd.DataFrame(
         [{"feature_type": key, "color": color} for key, color in (
@@ -362,8 +362,8 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
         default_colors,
         used_color_rules={tuple(row) for row in case["used_color_rules"]},
         default_used_features=set(case["default_used_features"]),
-        gc=track("content", case["gc"]),
-        skew=track("skew", case["skew"]),
+        gc=track(GcContentLegendSource, case["gc"]),
+        skew=track(GcSkewLegendSource, case["skew"]),
         depth=DepthLegendSource("", 0, _paint(case["depth"], case["depth"])),
         show_gc=case["show_gc"],
         show_skew=case["show_skew"],
@@ -391,10 +391,8 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
     """The Web app reads each of these rows' slot and fill from the request's slot entries (OV-484)."""
     palette = case["palette"]
 
-    gc_config = DinucleotideLegendSource(
-        "content", case["dinucleotide"], _paint(palette["gc_content"], palette["gc_content"])
-    )
-    skew_config = DinucleotideLegendSource("skew", case["dinucleotide"], _paint(palette["skew_high"], palette["skew_low"]))
+    gc_config = GcContentLegendSource(case["dinucleotide"], _paint(palette["gc_content"], palette["gc_content"]))
+    skew_config = GcSkewLegendSource(case["dinucleotide"], _paint(palette["skew_high"], palette["skew_low"]))
     # The request's Depth series (diagramOptions.depthTracks); a blank label takes Python's own fallback (OV-1198).
     raw_depth = case.get("depthTracks") or []
     depth_tracks = tuple(

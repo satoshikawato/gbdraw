@@ -64,7 +64,7 @@ class DepthConfigurator:
     def series_paint(self) -> SeriesPaint:
         """How the track's path is painted, as drawn and as its Legend row shows it."""
 
-        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None, frozenset())
+        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None)
 
     @property
     def axis_style(self) -> ScalarAxisStyle:

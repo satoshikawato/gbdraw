@@ -2770,14 +2770,15 @@ for (const mode of ['circular', 'linear']) {
     // Circular: gc lies inside the features ring, whose recorded band is its
     // primary band; the span covers every feature lane (LANES-ALL, LP-D21), so
     // it reaches at least that band's outer edge. Linear: gc lies below the
-    // axis, and the features paint band holds every lane.
+    // axis, and the features paint band holds every lane; a deviation-mode gc
+    // slot keeps no border room, so it may meet that band.
     if (mode === 'circular') {
       expect(drawn.gc[1]).toBeLessThan(drawn.features[0]);
       expect(drawn.regions[0]).toBeCloseTo(drawn.gc[0], 3);
       expect(drawn.regions[1]).toBeGreaterThanOrEqual(drawn.features[1] - 1e-6);
       drawn.drawn.forEach((edge, index) => expect(edge).toBeCloseTo(drawn.regions[index], 2));
     } else {
-      expect(drawn.features[1]).toBeLessThan(drawn.gc[0]);
+      expect(drawn.features[1]).toBeLessThanOrEqual(drawn.gc[0] + 1e-6);
       expect(drawn.regions[0]).toBeCloseTo(drawn.features[0], 3);
       expect(drawn.regions[1]).toBeCloseTo(drawn.gc[1], 3);
       expect(drawn.drawnHeight).toBeCloseTo(drawn.regions[1] - drawn.regions[0], 2);

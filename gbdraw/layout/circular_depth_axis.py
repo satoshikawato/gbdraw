@@ -10,8 +10,8 @@ from typing import NamedTuple
 
 from gbdraw.auto_sizes import (
     TickFontSource,
-    depth_axis_tick_font_size_px,
     gc_axis_tick_font_size_of_depth_rows,
+    scalar_axis_tick_font_size_px,
 )
 from gbdraw.core.text import calculate_svg_bbox_dimensions
 from gbdraw.svg.circular_arcs import position_turn_rad
@@ -60,7 +60,7 @@ def scalar_axis_footprint(
 
     extra = float(edge_px)
     if axis.draws_numbered_labels:
-        extra = max(extra, 0.5 * depth_axis_tick_font_size_px(axis, track_width_px))
+        extra = max(extra, 0.5 * scalar_axis_tick_font_size_px("circular", axis, track_width_px))
     return ScalarAxisFootprint(extra, extra)
 
 

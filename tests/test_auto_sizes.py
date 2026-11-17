@@ -21,13 +21,13 @@ from gbdraw.auto_sizes import (
     auto_setting_values,
     circular_tick_intervals,
     circular_track_width_px,
-    depth_axis_tick_font_size_px,
     depth_sliding_window,
     determine_length_parameter,
     linear_label_font_size,
     linear_label_size_lengths,
     linear_tick_interval,
     scalar_axis_tick_font_size,
+    scalar_axis_tick_font_size_px,
     sliding_window,
     tick_and_window_tiers,
 )
@@ -36,11 +36,10 @@ from gbdraw.config.models import CircularRenderProfile, GbdrawConfig, LinearRend
 from gbdraw.config.models.labels import LinearLabelScope
 from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_for_preset
 from gbdraw.diagrams.linear.precalc import _resolve_linear_diagram_label_font_size
-from gbdraw.layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from gbdraw.layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth
-from gbdraw.layout.series_style import ScalarAxisStyle
 from gbdraw.analysis.depth_tracks import DepthTrackStyle, depth_track_config
-from gbdraw.configurators import DepthConfigurator
+from gbdraw.configurators import DepthConfigurator, GcContentConfigurator
+from gbdraw.io.colors import load_default_colors
 from gbdraw.mode_profiles import DiagramMode
 from gbdraw.svg.circular_ticks import get_circular_tick_intervals
 from gbdraw.web_support.mode_profile_data import mode_profiles_payload
@@ -189,8 +188,8 @@ def test_scalar_axis_tick_font_clamps_a_fraction_of_the_thickness(
 
 def test_explicit_tick_fonts_bypass_the_auto_size() -> None:
     explicit = SimpleNamespace(tick_font_size=11)
-    assert depth_axis_tick_font_size_px(explicit, 74.1) == 11.0
-    assert linear_scalar_axis_tick_font_size_px(explicit, 20.0) == 11.0
+    assert scalar_axis_tick_font_size_px("circular", explicit, 74.1) == 11.0
+    assert scalar_axis_tick_font_size_px("linear", explicit, 20.0) == 11.0
 
 
 @pytest.mark.parametrize(
@@ -314,8 +313,8 @@ def test_circular_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, le
     )
     assert values["objects.scale.interval"] == get_circular_tick_intervals(length)[0]
     auto_font = SimpleNamespace(tick_font_size=None)
-    assert values["objects.gc_content.tick_font_size"] == depth_axis_tick_font_size_px(auto_font, widths["gc_content"])
-    assert values["objects.depth.tick_font_size"] == depth_axis_tick_font_size_px(auto_font, widths["depth"])
+    assert values["objects.gc_content.tick_font_size"] == scalar_axis_tick_font_size_px("circular", auto_font, widths["gc_content"])
+    assert values["objects.depth.tick_font_size"] == scalar_axis_tick_font_size_px("circular", auto_font, widths["depth"])
 
 
 @pytest.mark.parametrize("lengths", [(length,) for length in _LENGTHS] + [(200_000, 30_000)])
@@ -347,11 +346,11 @@ def test_linear_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, leng
     assert values["canvas.linear.default_gc_height"] == canvas.default_gc_height
     assert values["canvas.linear.depth_height"] == canvas.default_depth_height
     auto_font = SimpleNamespace(tick_font_size=None)
-    assert values["objects.gc_content.tick_font_size"] == linear_scalar_axis_tick_font_size_px(
-        auto_font, canvas.default_gc_height
+    assert values["objects.gc_content.tick_font_size"] == scalar_axis_tick_font_size_px(
+        "linear", auto_font, canvas.default_gc_height
     )
-    assert values["objects.depth.tick_font_size"] == linear_scalar_axis_tick_font_size_px(
-        auto_font, canvas.default_depth_height
+    assert values["objects.depth.tick_font_size"] == scalar_axis_tick_font_size_px(
+        "linear", auto_font, canvas.default_depth_height
     )
 
 
@@ -511,13 +510,13 @@ def test_the_gc_axis_tick_font_vectors_are_the_fonts_the_circular_drawing_draws(
         index: depth_track_config(DepthTrackStyle(None, None, None, track["tickFontSize"]), base, 10, 10, None)
         for index, track in enumerate(case.get("depthTracks", [{"tickFontSize": None}]))
     }
-    gc = cfg.objects.gc_content
+    gc_axis = GcContentConfigurator(10, 10, "GC", profile, load_default_colors("", "default")).axis_style
     axes = CircularScalarAxes.of(
         base.axis_style if case["showDepth"] else None,
-        ScalarAxisStyle.of(gc) if gc.mode == "percent" else None,
+        gc_axis,
         {index: track.axis_style for index, track in tracks.items()},
     )
-    gc_font = axes.gc_tick_font_size(gc, slots) if gc.mode == "percent" else None
+    gc_font = None if gc_axis is None else axes.gc_tick_font_size(gc_axis, slots)
     if gc_font is None:
         gc_font = scalar_axis_tick_font_size(
             "circular", float(thickness.get("gc_content", auto["circularSlot.gc_content.width"]))

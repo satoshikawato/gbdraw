@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
 import copy
 
 from pandas import DataFrame
@@ -8,10 +10,13 @@ from pandas import DataFrame
 from gbdraw.config.models import RenderProfile
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 from gbdraw.layout.series_style import ScalarAxisStyle, SeriesPaint
-from gbdraw.tracks.parsing import slot_skew_fill_colors
+from gbdraw.tracks.parsing import SlotWithParams, slot_skew_fill_colors
 
 
-def _slot_skew_config(skew_config, slot, dinucleotide: str):
+def _slot_skew_config(skew_config: GcSkewConfigurator, slot: SlotWithParams, dinucleotide: str) -> GcSkewConfigurator:
+    """The skew configuration slot ``slot`` draws with: its ``dinucleotide`` and its own fills
+    (``slot_skew_fill_colors``)."""
+
     cloned = copy.copy(skew_config)
     cloned.dinucleotide = str(dinucleotide).upper()
     cloned.high_fill_color, cloned.low_fill_color = slot_skew_fill_colors(
@@ -86,10 +91,7 @@ class GcContentConfigurator:
     def series_paint(self) -> SeriesPaint:
         """How the track's path is painted, as drawn and as its Legend row shows it."""
 
-        return SeriesPaint(
-            self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None,
-            frozenset({"circular", "linear"}),
-        )
+        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None)
 
     @property
     def axis_style(self) -> ScalarAxisStyle | None:
@@ -146,8 +148,7 @@ class GcSkewConfigurator:
         baseline and the low fill below it."""
 
         return SeriesPaint(
-            self.high_fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, self.low_fill_color,
-            frozenset({"circular"}),
+            self.high_fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, self.low_fill_color
         )
 
 __all__ = [

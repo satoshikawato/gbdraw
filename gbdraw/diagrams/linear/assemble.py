@@ -45,7 +45,7 @@ from ...analysis.depth_tracks import (
     representative_depth_tracks,
     sync_depth_track_legend_entries,
 )
-from ...auto_sizes import linear_tick_interval
+from ...auto_sizes import gc_axis_takes_depth_font, linear_tick_interval, scalar_axis_tick_font_size_px
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import (
     GbdrawConfig,
@@ -87,6 +87,8 @@ from ...legend.sources import (
     ComparisonLegendSource,
     DepthLegendSource,
     DinucleotideLegendSource,
+    GcContentLegendSource,
+    GcSkewLegendSource,
     LegendSlotSource,
     LegendSources,
     depth_legend_sources,
@@ -156,7 +158,6 @@ from ...linear_comparison import (
     search_frame_linear_comparisons,
     validate_linear_comparison_record_ids,
 )
-from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
     LINEAR_SCALAR_AXIS_STROKE_PX,
@@ -236,7 +237,8 @@ from .annotation_labels import (
     place_linear_annotation_labels,
 )
 from ...render.groups.linear import build_linear_feature_dom_index
-from ...render.numeric_series import depth_axis, gc_content_axis
+from ...layout.circular_ink import stroke_pad_px
+from ...render.numeric_series import depth_axis, gc_content_axis, gc_content_band_frame
 from ...render.composition import CompositionPrimary, compose_drawing, place_legend, place_title
 
 from .builders import (
@@ -563,8 +565,8 @@ def _sync_legend_table_for_linear_slots(
     legend_table: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: DinucleotideLegendSource,
-    skew: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
+    skew: GcSkewLegendSource,
     depth_tracks: Sequence[DepthLegendSource] | None,
 ) -> LegendTable:
     """Replace singleton numeric legends with slot-authoritative entries.
@@ -847,18 +849,16 @@ def _gc_config_matching_linear_depth_axis_font_size(
     depth_height: float,
     depth_enabled: bool,
 ) -> GcContentConfigurator:
-    if (
-        not depth_enabled
-        or depth_config is None
-        or str(getattr(gc_config, "mode", "deviation")).strip().lower() != "percent"
-        or getattr(gc_config, "tick_font_size", None) is not None
-        or not bool(getattr(depth_config, "show_axis", True))
-        or not bool(getattr(depth_config, "show_ticks", True))
-    ):
+    """``gc_config`` with the depth axis's tick font when its Percent axis takes it (``gc_axis_takes_depth_font``,
+    the rule Circular reads): that of the record's primary depth track at ``depth_height``."""
+
+    gc_axis = gc_config.axis_style
+    depth_axis_style = depth_config.axis_style if depth_enabled and depth_config is not None else None
+    if gc_axis is None or depth_axis_style is None or not gc_axis_takes_depth_font(gc_axis, depth_axis_style):
         return gc_config
 
     cloned = copy.copy(gc_config)
-    cloned.tick_font_size = linear_scalar_axis_tick_font_size_px(depth_config, depth_height)
+    cloned.tick_font_size = scalar_axis_tick_font_size_px("linear", depth_axis_style, depth_height)
     return cloned
 
 
@@ -942,13 +942,14 @@ def _axis_text_overhang(axis: ScalarAxisStyle | None, track_height: float) -> fl
     axis_stroke = 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX
     if not axis.draws_numbered_labels:
         return axis_stroke
-    return max(axis_stroke, 0.5 * linear_scalar_axis_tick_font_size_px(axis, track_height))
+    return max(axis_stroke, 0.5 * scalar_axis_tick_font_size_px("linear", axis, track_height))
 
 
 def _stroke_overhang(paint: SeriesPaint) -> float:
-    """How far a series path's stroke paints past its band."""
+    """How far a series path's stroke paints past its band: half its width when it paints (``stroke_pad_px``, the
+    rule of the Circular ink), else nothing (OV-3744)."""
 
-    return 0.5 * max(0.0, float(paint.stroke_width))
+    return stroke_pad_px(paint.stroke, paint.stroke_width)
 
 
 def _linear_slot_footprints_for_record(
@@ -1025,11 +1026,11 @@ def _linear_slot_footprints_for_record(
 
         if slot.renderer == "dinucleotide_content":
             slot_gc_config = gc_config_of(slot.params, depth_by_index)
+            # The border keeps room only where it paints: in percent mode, the band frame (OV-3743).
+            band_frame = gc_content_band_frame(slot_gc_config)
             overhang = max(
                 _stroke_overhang(slot_gc_config.series_paint),
-                # Half the percent border width in either mode, though only percent mode draws the border (its
-                # band frame): reading the frame would move every figure with a deviation GC track (OV-3743).
-                0.5 * max(0.0, float(slot_gc_config.percent_border_width)),
+                0.0 if band_frame is None else band_frame.border_overhang_px,
                 _axis_text_overhang(slot_gc_config.axis_style, float(slot.height)),
             )
             expanded = body_band.expand(overhang)
@@ -1709,7 +1710,6 @@ def _linear_scalar_axis_left_room(
     *,
     gc_config_of: LinearGcConfigOf,
     depth_by_index: Mapping[int, DepthTrackData],
-    cfg: GbdrawConfig,
 ) -> LinearScalarAxisLeftRoom:
     """One record's left-facing scalar axes as the drawers draw them, measured once from the resolved
     data with the drawn (SVG) text width: the figure bound and the definition column read it (OV-1399,
@@ -1727,7 +1727,7 @@ def _linear_scalar_axis_left_room(
             axis = gc_content_axis(gc_config_of(slot.params, depth_by_index))
         if axis is None:
             continue
-        font_size = linear_scalar_axis_tick_font_size_px(axis.style, float(slot.height))
+        font_size = scalar_axis_tick_font_size_px("linear", axis.style, float(slot.height))
         axis_labels = axis.labels(float(slot.height), font_size)
         axis_px = max(axis_px, 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX)
         texts = [tick.label for tick in axis_labels.ticks] + [axis_labels.range_label]
@@ -1891,7 +1891,7 @@ def _collect_linear_primary_bounds(
     record_plans: list[LinearRecordVerticalPlan],
     record_collision_bands: list[tuple[CollisionBand, ...]],
     labels_by_record: list[list[LinearLabel]],
-    record_scalar_axis_rooms: Sequence[LinearScalarAxisLeftRoom],
+    depth: _LinearDepthData,
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     annotation_labels_by_record: Sequence[AnnotationLabelsBySlot],
     normalized_comparisons: list[LinearComparison],
@@ -1906,33 +1906,48 @@ def _collect_linear_primary_bounds(
     length_bar_bounds: Aabb | None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Aabb:
-    """Collect one authoritative plot-space box without inspecting rendered SVG."""
+    """Collect one authoritative plot-space box without inspecting rendered SVG. A record's box reaches half the
+    widest stroke it draws past the ends of its rows: the axis, the features, and each series track it draws (its
+    GC content and GC skew slots and its depth tracks, by ``_stroke_overhang``, the series' own room). Above and
+    below, a series slot's paint band already holds its stroke, so only the axis and feature strokes pad the rows."""
 
     axis_stroke = cfg.objects.axis.linear.stroke_width.for_length_param(
         canvas_config.length_param
     )
-    half_stroke = 0.5 * max(
+    line_half_stroke = max(
         0.0,
-        float(axis_stroke),
-        float(feature_config.block_stroke_width),
-        float(feature_config.line_stroke_width),
-        float(gc_config.stroke_width),
-        float(skew_config.stroke_width),
+        0.5 * float(axis_stroke),
+        0.5 * float(feature_config.block_stroke_width),
+        0.5 * float(feature_config.line_stroke_width),
     )
+    series_half_stroke = {
+        "dinucleotide_content": _stroke_overhang(gc_config.series_paint),
+        "dinucleotide_skew": _stroke_overhang(skew_config.series_paint),
+    }
     horizontal_offset = float(canvas_config.horizontal_offset)
     bounds: list[Aabb] = []
     for record_index, record in enumerate(records):
         placement = record_placements[record_index]
         plan = record_plans[record_index]
-        scalar_axis = record_scalar_axis_rooms[record_index]
+        scalar_axis = depth.record_scalar_axis_rooms[record_index]
+        end_half_stroke = max(
+            [
+                line_half_stroke,
+                *(series_half_stroke.get(slot.renderer, 0.0) for slot in plan.slots),
+                *(
+                    _stroke_overhang(track.config.series_paint)
+                    for track in depth.record_depth_by_index[record_index].values()
+                ),
+            ]
+        )
         bounds.append(
             Aabb(
                 horizontal_offset
                 + placement.x
-                - max(half_stroke, scalar_axis.axis_px, scalar_axis.tick_labels_px),
-                placement.axis_y + plan.paint_band.top_y - half_stroke,
-                horizontal_offset + placement.x + placement.sequence_width + half_stroke,
-                placement.axis_y + plan.paint_band.bottom_y + half_stroke,
+                - max(end_half_stroke, scalar_axis.axis_px, scalar_axis.tick_labels_px),
+                placement.axis_y + plan.paint_band.top_y - line_half_stroke,
+                horizontal_offset + placement.x + placement.sequence_width + end_half_stroke,
+                placement.axis_y + plan.paint_band.bottom_y + line_half_stroke,
             )
         )
 
@@ -2796,7 +2811,6 @@ def _linear_depth_data(
     definition column keeps its gap from them (LP-D122, OV-1399).
     """
 
-    cfg = canvas_config.profile.config
     records = record_inputs.records
     gc_config = configurators.gc
     depth_config = configurators.depth
@@ -2854,7 +2868,6 @@ def _linear_depth_data(
             tracks.linear_track_layout.slots,
             gc_config_of=drawn_gc_config,
             depth_by_index=depth_by_index,
-            cfg=cfg,
         )
         for depth_by_index in record_depth_by_index
     ]
@@ -4373,7 +4386,7 @@ def _linear_primary_bounds(
         record_plans=plan.vertical.record_vertical_plans,
         record_collision_bands=plan.stacking.record_collision_bands,
         labels_by_record=labels.labels_by_record,
-        record_scalar_axis_rooms=plan.depth.record_scalar_axis_rooms,
+        depth=plan.depth,
         annotation_track_layouts=plan.tracks.annotation_track_layouts,
         annotation_labels_by_record=labels.annotation_labels_by_record,
         normalized_comparisons=plan.comparisons.normalized,

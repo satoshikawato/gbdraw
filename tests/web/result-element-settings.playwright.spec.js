@@ -72,14 +72,23 @@ const inkPoint = async (page, selector) => {
   await figureSettled(page);
   const point = await page.evaluate((selector) => {
     const surface = document.querySelector('.gbdraw-preview-surface');
-    for (const element of surface.querySelectorAll(selector)) {
-      const box = element.getBoundingClientRect();
-      for (let row = 1; row < 32; row += 1) {
-        for (let column = 1; column < 32; column += 1) {
-          const x = box.left + (box.width * column) / 32;
-          const y = box.top + (box.height * row) / 32;
-          const hit = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight ? document.elementFromPoint(x, y) : null;
-          if (hit && element.contains(hit)) return { x, y };
+    const inside = (element, x, y) => {
+      const hit = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight ? document.elementFromPoint(x, y) : null;
+      return Boolean(hit && element.contains(hit));
+    };
+    // A point whose neighbours 1 px away are ink too, so the click lands on the
+    // element wherever the browser rounds the pointer; else, for a line thinner
+    // than that, any point of its ink.
+    const NEIGHBOURS = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
+    for (const within of [(element, x, y) => NEIGHBOURS.every(([dx, dy]) => inside(element, x + dx, y + dy)), inside]) {
+      for (const element of surface.querySelectorAll(selector)) {
+        const box = element.getBoundingClientRect();
+        for (let row = 1; row < 32; row += 1) {
+          for (let column = 1; column < 32; column += 1) {
+            const x = box.left + (box.width * column) / 32;
+            const y = box.top + (box.height * row) / 32;
+            if (within(element, x, y)) return { x, y };
+          }
         }
       }
     }

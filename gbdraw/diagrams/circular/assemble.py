@@ -141,7 +141,8 @@ from ...comparisons.identity_scale import IdentityColorDomain, identity_color_do
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     DepthLegendSource,
-    DinucleotideLegendSource,
+    GcContentLegendSource,
+    GcSkewLegendSource,
     LegendSlotSource,
     LegendSources,
     depth_legend_sources,
@@ -1714,25 +1715,19 @@ def _primary_radial_half_stroke_px(
     skew_config: GcSkewConfigurator,
     depth_config: DepthConfigurator | None,
 ) -> float:
-    """Return conservative stroke safety for radial record/track geometry."""
+    """Return conservative stroke safety for radial record/track geometry: half the widest stroke, and for a series
+    track half its stroke only when it paints (``stroke_pad_px``, the rule of the series' own room)."""
     cfg = canvas_config.profile.config
-    widths = [
-        float(
-            cfg.objects.axis.circular.stroke_width.for_length_param(
-                canvas_config.length_param
-            )
-        ),
-        float(feature_config.block_stroke_width),
-        float(feature_config.line_stroke_width),
-        float(gc_config.stroke_width),
-        float(skew_config.stroke_width),
-    ]
+    series = [gc_config.series_paint, skew_config.series_paint]
     if depth_config is not None:
-        widths.append(float(depth_config.stroke_width))
-    conservation = getattr(cfg.objects, "conservation", None)
-    if conservation is not None:
-        widths.append(float(getattr(conservation, "stroke_width", 0.0)))
-    return 0.5 * max(widths, default=0.0)
+        series.append(depth_config.series_paint)
+    return max(
+        0.5 * float(cfg.objects.axis.circular.stroke_width.for_length_param(canvas_config.length_param)),
+        0.5 * float(feature_config.block_stroke_width),
+        0.5 * float(feature_config.line_stroke_width),
+        0.5 * float(cfg.objects.conservation.stroke_width),
+        *(stroke_pad_px(paint.stroke, paint.stroke_width) for paint in series),
+    )
 
 
 def _collect_circular_primary_bounds(
@@ -2277,16 +2272,12 @@ def _resolve_radial_layout_fitting_definition(
     return _CentreDefinitionFit(layout, reserved, narrow_radius)
 
 
-def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
-    if str(getattr(config, "dinucleotide", "")).upper() == str(nt).upper():
+def _slot_config_with_dinucleotide(config: GcContentConfigurator, nt: str) -> GcContentConfigurator:
+    if config.dinucleotide.upper() == str(nt).upper():
         return config
     cloned = copy.copy(config)
     cloned.dinucleotide = str(nt).upper()
     return cloned
-
-
-
-
 
 
 def _slot_gc_config_with_axis_font_size(
@@ -2295,7 +2286,7 @@ def _slot_gc_config_with_axis_font_size(
     tick_font_size: float | None,
 ) -> GcContentConfigurator:
     slot_config = _slot_config_with_dinucleotide(config, nt)
-    if tick_font_size is None or getattr(slot_config, "tick_font_size", None) is not None:
+    if tick_font_size is None or slot_config.tick_font_size is not None:
         return slot_config
     cloned = copy.copy(slot_config)
     cloned.tick_font_size = float(tick_font_size)
@@ -2362,11 +2353,11 @@ def _gc_content_axis_font_size(
     """The tick font the Percent GC axis takes from the first drawn depth axis, as the radial layout kept its room
     for it."""
 
-    gc = configurators.gc
-    if gc.axis_style is None:
+    gc_axis = configurators.gc.axis_style
+    if gc_axis is None:
         return None
     return scalar_axes.gc_tick_font_size(
-        gc,
+        gc_axis,
         (
             DepthSlotWidth(depth_slot_track_index(str(slot.id), slot.params), float(slot.requested_width_px))
             for slot in resolved_track_slots
@@ -2400,7 +2391,7 @@ def _slot_content_source(
 ) -> tuple[str, DataFrame | None, GcContentConfigurator]:
     """The dinucleotide, data (``None`` when there are none) and settings a content slot draws with."""
 
-    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
+    default_nt = gc_config.dinucleotide.upper()
     nt = slot_dinucleotide(resolved_slot.params, default_nt)
     slot_df = _slot_dataframe_for_nt(nt=nt, default_df=gc_df, default_nt=default_nt, dinucleotide_dataframes=dataframes)
     config = _slot_gc_config_with_axis_font_size(gc_config, nt, tick_font_size_override)
@@ -2417,7 +2408,7 @@ def _slot_skew_source(
 ) -> tuple[str, DataFrame | None, GcSkewConfigurator]:
     """The dinucleotide, data (``None`` when there are none) and settings a skew slot draws with."""
 
-    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
+    default_nt = gc_config.dinucleotide.upper()
     nt = slot_dinucleotide(resolved_slot.params, default_nt)
     slot_df = _slot_dataframe_for_nt(nt=nt, default_df=gc_df, default_nt=default_nt, dinucleotide_dataframes=dataframes)
     config = _slot_skew_config(skew_config, resolved_slot, nt)
@@ -2637,8 +2628,8 @@ def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: DinucleotideLegendSource,
-    skew: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
+    skew: GcSkewLegendSource,
     depth: DepthLegendSource | None,
     depth_tracks: Sequence[DepthLegendSource] | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
@@ -2681,12 +2672,7 @@ def _sync_legend_table_for_circular_slots(
             else:
                 swatch = depth
                 label = slot_legend_label(slot, "Depth")
-            out.add_source(label, {
-                "type": "solid",
-                "fill": swatch.paint.fill,
-                "stroke": swatch.paint.stroke,
-                "width": swatch.paint.stroke_width,
-            })
+            out.add_numeric_source(label, swatch.paint)
         elif renderer in ("dinucleotide_content", "dinucleotide_skew"):
             source = gc if renderer == "dinucleotide_content" else skew
             nt = slot_dinucleotide(slot.params, default_nt)
@@ -4010,7 +3996,7 @@ def _circle_slot_plan(
         show_gc=show_gc_track,
         show_skew=show_skew_track,
         track_ids=tuple(canvas_config.track_ids.items()),
-        dinucleotide=str(getattr(configurators.gc, "dinucleotide", "GC")),
+        dinucleotide=configurators.gc.dinucleotide,
     )
     plan = (
         circular_radial_plan_for_preset(circular_preset, context)
@@ -4661,7 +4647,7 @@ def _circular_legend_slots(
     *,
     show_gc: bool,
     show_skew: bool,
-    gc: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
 ) -> tuple[LegendSlotSource, ...] | None:
     """The slots whose order the legend's track rows follow: the explicit ones, else, with Depth series, the
     default stack the rings are drawn in (``default_circular_track_slots``), so the Depth rows stand between
