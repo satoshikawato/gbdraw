@@ -862,6 +862,16 @@ once:
   `tests/web/owner-graph-baseline.test.mjs`, with the merge's locked Node
   packages.
 
+The merge is computed with `git merge-tree --write-tree` and checked out as a
+commit of its own, not with `git merge`. The checkout of `dev` is blob-less, and
+with git 2.56 the checkout of a `git merge` asks the remote for every file it
+writes, including a file both sides changed, whose merged content exists only
+on the runner; GitHub answers `not our ref`, and the merge failed on a clean
+merge (OV-3782, #2102). `merge-tree` writes the merged objects first, so the
+checkout finds them. Only its exit status 1 is a conflict, reported as
+`Conflict with dev` with git's `CONFLICT` lines; any other failure is reported
+as `Merge into dev failed` and is rerun, not fixed by updating the branch.
+
 The gate fails when a guard fails or when the pull request conflicts with
 `dev`. The step summary names the merged `dev` commit and each guard's result
 and time. Update the branch from `dev` and fix the pull request. When `dev`
