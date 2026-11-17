@@ -2880,7 +2880,7 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
 
 - **Buttons, menu commands, toggles, History step labels, tabs**: the polite plural imperative -یں, as Firefox ur writes
   every command (محفوظ کریں, ہٹائیں, منسوخ کریں, دوبارہ کوشش کریں, صاف کریں); it has no gender, so no gendered verb ever
-  addresses the user. Headings, column and field labels, and the legend of a group of options, also one that only a screen reader reads: nouns or verbal nouns (ترتیبات, سیشن, لے آؤٹ ترمیم, بھرنا, درستی کا طریقہ). A
+  addresses the user. Headings, column and field labels, and the legend of a group of options, also one that only a screen reader reads: nouns or verbal nouns (ترتیبات, سیشن, لے آؤٹ ترمیم, بھرنا, درستی کا طریقہ). A dialog title that repeats the command which opens the dialog keeps that command (دوسری ڈرائنگ میں کاپی کریں). A
   command that opens a further step keeps `…` (چنیں…). A short and a long label are given in the glossary as "long /
   short".
 - **Instructions and help**: complete sentences ending in `۔`. Prefer the impersonal passive (… کیا جا سکتا ہے۔, … ہو
