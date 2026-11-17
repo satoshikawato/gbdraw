@@ -306,7 +306,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { DefinitionLineStyle } from './definition-line-style-state.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
 /**
- * @import { CanonicalComparisonBinding, FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata,
+ * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata,
  *   SessionResourceTable, WebFileBindingRow, WebFileBindings } from './session-resource-backing.js'
  */
 /** @import { CircularRecordDrawing, CircularRecordRange, CircularRegionForm } from './record-options.js' */
@@ -5790,7 +5790,7 @@ const applyWebFileBindings = (
   // A Session 51 Linear drawing's adopted comparisons (OV-3826): the draft's, in place of the request's projection.
   // A generated pipeline has no file.
   if (Array.isArray(bindings.linearCanonicalComparisons)) {
-    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((/** @type {CanonicalComparisonBinding} */ comparison) => ({
+    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
       ...(Object.hasOwn(comparison, 'file')
         ? { file: webBindingValueAsLegacyFile(resources, comparison.file, resolveBinding, bindings.schema) } : {})

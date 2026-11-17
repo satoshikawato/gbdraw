@@ -1564,7 +1564,7 @@ def _validate_comparison_plan_edge(
         )
 
 
-def _validate_adopted_comparisons(session: Mapping[str, Any], version: int, entries: object) -> None:
+def _validate_adopted_comparisons(session: Mapping[str, object], version: int, entries: object) -> None:
     """The comparisons a Session 51 Linear drawing's draft adopted from its
     committed request (``webFiles.bindings.linearCanonicalComparisons``, which
     only the Web's Save writes): a list of entries of a ``kind``, each with a

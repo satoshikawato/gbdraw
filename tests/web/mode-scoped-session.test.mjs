@@ -1679,6 +1679,42 @@ test('Save and Load keep what each Linear drawing\'s draft adopted: none after C
   assert.deepEqual(adopted('linear'), cli);
 });
 
+// Review 7 L5: the Web's own writer path. A Linear drawing that was never cleared holds what a Generate's commit
+// (`adoptCanonicalRenderArtifacts`) gave its draft, as new file views of the committed request's resources, not the
+// views Load made. Save writes them (each found by content, no resource added), Load gives them back, and the next
+// Generate reuses the stored results with no LOSAT run (`canReuseResolvedProteinArtifacts`' marker is still there).
+// A real Generate (worker, canvas) cannot run in this file: the draft is filled by the commit path Generate calls.
+test('a Linear drawing a Generate filled and nobody cleared keeps its stored results through Save and Load (OV-3826, review 7 L5)', async () => {
+  const { bindDrawingCanonicalComparisons } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { adoptCanonicalRenderArtifacts, getCommittedCanonicalSession } = await import('../../gbdraw/web/js/services/config.js');
+  const { LOSATP_NO_SEARCH_MODE } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const adopted = () => state.activeDrawing().files.linearCanonicalComparisons
+    .map(({ file, ...entry }) => ({ ...entry, file: file ? state.inputFiles.fileOf(file)?.name ?? 'unbound' : null }));
+  const reuses = () => adopted().some(({ kind, mode }) => kind === 'generatedProteinComparison' && mode === LOSATP_NO_SEARCH_MODE);
+  resetDrawings();
+  let loaded = await loadKeepingSlots(v51File('BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw'));
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const loadedList = adopted();
+  assert.equal(reuses(), true);
+  // Generate's commit: the draft's comparisons are projected again from the request it committed.
+  const drawing = state.activeDrawing();
+  bindDrawingCanonicalComparisons(state.inputFiles, drawing.slices.inputs, []);
+  adoptCanonicalRenderArtifacts(getCommittedCanonicalSession(), { drawing, conservationPairs: null });
+  const generated = adopted();
+  assert.deepEqual(generated, loadedList, 'the commit gives the draft the stored results again');
+  assert.equal(reuses(), true);
+  const result = await exportSession('generated', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = await readSavedSession(result.blob);
+  const written = saved.drawings.find(({ id }) => id === drawing.id).webFiles.bindings.linearCanonicalComparisons;
+  assert.deepEqual(written.map(({ kind }) => kind), generated.map(({ kind }) => kind), 'Save writes what the commit gave the draft');
+  resetDrawings();
+  loaded = await loadKeepingSlots(saved);
+  assert.deepEqual([loaded.loaded.status, loaded.dialogs], ['ok', []], JSON.stringify(loaded.loaded.error));
+  assert.deepEqual(adopted(), generated, 'Load gives the draft the same stored results: the next Generate runs no LOSAT');
+  assert.equal(reuses(), true);
+});
+
 // #1777 round 19 (OV-3277, D-201): a Session 40-50 (what 0.14.5 writes) holds one LOSAT list and one manifest, the
 // file's; Load validates the list with it and marks each adopted entry with it, so the first Save checks none again.
 // A manifest Load did not check (a new object, as a Generate installs) is never trusted: Save checks every entry.

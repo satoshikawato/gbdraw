@@ -35,3 +35,8 @@
 - Changed: after **Undo** of a Generate, the next Generate runs the LOSAT
   searches the undone Generate had added again; it no longer takes them from
   the undone step.
+- Fixed: opening a Session of version 41 to 50 that holds a Linear drawing's
+  list of reused LOSATP results (a key no writer of those versions wrote) failed
+  with an unclassified error. The Web now opens it, leaves the list out, and
+  lists it in the **Load this file?** dialog; Python still refuses the file
+  (OV-3835).

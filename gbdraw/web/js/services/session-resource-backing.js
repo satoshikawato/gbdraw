@@ -360,6 +360,7 @@ export const readSessionResources = (resources) => {
  *   schema: 1 | 2,
  *   c_gb?: WebFileCompositeBinding | WebFileLeafBinding | (ReadonlyArray<unknown> & { readonly kind?: undefined }) | null,
  *   circularSources?: ReadonlyArray<WebFileCircularSourceBinding>,
+ *   linearCanonicalComparisons?: ReadonlyArray<CanonicalComparisonBinding>,
  *   [field: string]: unknown
  * }>} WebFileBindings
  */
