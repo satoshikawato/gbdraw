@@ -12,9 +12,14 @@ import { NULL_RECORD_SELECTOR_WORDS } from '../contracts/schema.generated.js';
 const cleanText = (value) => String(value ?? '').trim();
 const NULL_RECORD_SELECTOR_TOKENS = new Set(NULL_RECORD_SELECTOR_WORDS);
 
-/** @param {unknown} value */
+/**
+ * Whether a record selector names no record, as Python's `parse_record_selector` reads it: empty or a word of
+ * `NULL_RECORD_SELECTOR_WORDS` once stripped of the spaces Python's `str.strip` removes (`pythonStrip`; JavaScript's
+ * `trim()` also removes U+FEFF, which Python keeps; OV-3313 review 3 L2).
+ * @param {unknown} value
+ */
 export const isUnspecifiedRecordSelectorValue = (value) => {
-  const text = cleanText(value);
+  const text = pythonStrip(String(value ?? ''));
   return !text || NULL_RECORD_SELECTOR_TOKENS.has(text.toLowerCase());
 };
 

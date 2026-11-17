@@ -8001,22 +8001,24 @@ export const projectCanonicalSessionRequest = ({
       cardOfRecord: circularCardOfRecord, readings: leafReadings
     })
   };
-  // Records placed by tokens keep the request's order (no gridColumn), so `storedRows` reads them as `records` lists them.
+  // `storedRows` and `cellPlaces` are indexed by the request's record order and the cards by the projected order
+  // (records that place themselves by grid row and column are sorted by their cells; OV-3775): each card reads the
+  // values of its own record at its source index.
   const presentationOwnsLinearRows = storedRows.fromRecords;
-  const linearLayoutRows = storedRows.rows.map((row, index) => {
+  const linearLayoutRows = storedRows.rows.map((_stored, index) => {
+    const sourceIndex = normalizedRecordOrdering.sourceIndexByProjectedIndex[index] ?? index;
+    const row = storedRows.rows[sourceIndex];
     // A row the renderer draws out of record order: each whole card's place in it (`linearLayoutCells`); a card drawn
     // in several windows places each window (above).
-    const place = cellPlaces?.columns[index];
+    const place = cellPlaces?.columns[sourceIndex];
     if (!presentationOwnsLinearRows) {
       return { uid: files.linearSeqs[index]?.uid || '', row, ...(place ? { canonicalRow: row, canonicalColumn: place } : {}) };
     }
-    const sourceColumn = sourceRecords[
-      normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
-    ]?.presentation?.gridColumn;
+    const sourceRecord = sourceRecords[sourceIndex];
+    const sourceColumn = sourceRecord?.presentation?.gridColumn;
     return {
       uid: files.linearSeqs[index]?.uid || '', row,
-      ...(initializeCliInputs && storedConfig == null
-        && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
+      ...(initializeCliInputs && storedConfig == null && sourceRecord?.cardinality === 'exactly_one'
         ? { canonicalCardinality: 'exactly_one' } : {}),
       // An integer is a number.
       ...(initializeCliInputs && storedConfig == null

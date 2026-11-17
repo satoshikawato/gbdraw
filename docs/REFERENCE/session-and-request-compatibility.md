@@ -731,10 +731,14 @@ Which records Web draws from a CLI session depends on the request:
   entries that name a record twice, a record past the records or an ID no
   record has, or another number of records; the drawing then loads as above.
   A record ID is checked against the ID Load reads from the file, also for a
-  file of one record, which the CLI stores without a record ID.
-- A Circular Multi-Record Canvas's Record Order is refused, as the CLI refuses
-  it, when its entries name a record twice, a record past the records or an ID
-  no record has, or leave a record out; the drawing then loads as above.
+  file of one record, which the CLI stores without a record ID; when Load
+  cannot read such a file, each record takes the row of the entry at its place.
+- A Circular Multi-Record Canvas whose records each draw one record (a record
+  of a file, whole or cropped to one range) has its Record Order refused, as
+  the CLI refuses it, when its entries name a record twice, a record past the
+  records or an ID no record has, or leave a record out; the drawing then
+  loads as above. A canvas with a record that stands for every record of its
+  file is not checked at Load; the CLI checks it when it draws.
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or

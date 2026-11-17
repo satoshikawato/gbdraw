@@ -762,6 +762,8 @@ _RECORD_ROW_VECTORS = json.loads((REPO_ROOT / "tests" / "fixtures" / "record_ord
 _RECORD_ROW_TOKENS = tuple((case["token"], case["row"]) for case in _RECORD_ROW_VECTORS["tokens"])
 _RECORD_ROW_LISTS = _RECORD_ROW_VECTORS["rowLists"]
 _RECORD_ORDER_PLACEMENTS = _RECORD_ROW_VECTORS["placements"]
+_RECORD_ORDER_WINDOW_PLACEMENTS = _RECORD_ROW_VECTORS["windowPlacements"]
+_RECORD_ORDER_CIRCULAR_COUNTS = _RECORD_ROW_VECTORS["circularCounts"]
 
 
 def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -821,6 +823,56 @@ def test_the_web_reads_a_record_order_token_s_record_with_the_renderer_s_rule(mo
     monkeypatch.setattr(record_placement, "PYTHON_SPACE_PATTERN", r" ")
 
     assert "export const PYTHON_SPACE_PATTERN = ' ';\n" in generator.render_web_contracts_module()
+
+
+def _vector_record_inputs(case: dict) -> tuple:
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api import InMemoryRecordSource, RecordInput
+    from gbdraw.io.regions import RecordWindow
+
+    inputs = []
+    for number, (record_id, windows) in enumerate(zip(case["recordIds"], case["windows"]), start=1):
+        record = SeqRecord(Seq("A" * 4000), id=record_id)
+        record.annotations["molecule_type"] = "DNA"
+        inputs.append(RecordInput(InMemoryRecordSource(record), record_key=f"record-{number}",
+                                  windows=tuple(RecordWindow(start, end) for start, end in windows)))
+    return tuple(inputs)
+
+
+def test_the_web_places_record_order_windows_and_counts_circular_records_as_the_renderer_does() -> None:
+    # OV-3313 review 3 M2: the renderer draws a record's windows together, in window order, at its token's place
+    # (`_unit_positions`), and a Circular canvas whose records each draw one record counts its tokens against the
+    # request's records. The Web test loads the same cases (tests/web/stored-request-read.test.mjs).
+    from gbdraw.api import CircularDiagramRequest, LinearDiagramRequest, LinearMultiRecordOptions, build_request_diagram
+    from gbdraw.api.options import CircularMultiRecordOptions
+    from gbdraw.exceptions import ValidationError
+
+    assert len(_RECORD_ORDER_WINDOW_PLACEMENTS) >= 8 and len(_RECORD_ORDER_CIRCULAR_COUNTS) >= 5
+    for case in _RECORD_ORDER_WINDOW_PLACEMENTS:
+        request = LinearDiagramRequest(records=_vector_record_inputs(case),
+                                       layout=LinearMultiRecordOptions(multi_record_positions=tuple(case["tokens"])))
+        if case["cells"] is None:
+            with pytest.raises(ValidationError):
+                build_request_diagram(request)
+            continue
+        units = build_request_diagram(request).drawing._gbdraw_track_slot_geometry["records"]
+        rows = sorted({unit["axisYpx"] for unit in units})
+        cells = [
+            unit["recordKey"] + ("" if "windowIndex" not in unit else f"~w{unit['windowIndex'] + 1}")
+            + f"@{rows.index(unit['axisYpx']) + 1}"
+            for unit in sorted(units, key=lambda unit: (unit["axisYpx"], unit["axisXpx"]))
+        ]
+        assert cells == case["cells"], case
+    for case in _RECORD_ORDER_CIRCULAR_COUNTS:
+        request = CircularDiagramRequest(records=_vector_record_inputs(case),
+                                         layout=CircularMultiRecordOptions(multi_record_positions=tuple(case["tokens"])))
+        if case["refused"]:
+            with pytest.raises(ValidationError):
+                build_request_diagram(request)
+        else:
+            build_request_diagram(request)
 
 
 _PYTHON_STRIP_SCRIPT = """

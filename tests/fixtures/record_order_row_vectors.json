@@ -685,6 +685,454 @@
         "#1@2"
       ],
       "order": null
+    },
+    {
+      "recordIds": [
+        "TESTA"
+      ],
+      "tokens": [
+        "none\ufeff@1"
+      ],
+      "order": null
+    },
+    {
+      "mode": "circular",
+      "recordIds": [
+        "TESTA"
+      ],
+      "tokens": [
+        "none\ufeff@1"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "TESTA"
+      ],
+      "tokens": [
+        "\u001cnone\u0085@1"
+      ],
+      "order": [
+        0
+      ]
+    }
+  ],
+  "windowPlacementsDescription": "Linear requests whose records, with the IDs `recordIds`, are drawn whole (no `windows`) or in the windows `windows` ([start, end] spans), with Record Order `tokens`, and the cells Python's renderer draws, row by row and left to right (`record-<n>` for a whole record, `record-<n>~w<k>` for its k-th window, `@<row>`); null where it refuses the list. The renderer places a record's windows together, in window order, at its token's place in the row (`_unit_positions`, gbdraw/api/request_render.py); the Web gives each cell its place at Load (`storedLinearCellPlaces`, services/session-request.js). tests/test_web_contracts_generated.py draws each case with `build_request_diagram`; tests/web/stored-request-read.test.mjs loads each into the CLI Session tests/fixtures/sessions/cli-linear-records-table-grid.v51.gbdraw, whose one-record files hold these IDs, and reads the cells of the loaded draft.",
+  "windowPlacements": [
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        [],
+        []
+      ],
+      "tokens": [
+        "#2@1",
+        "#1@1",
+        "#3@2"
+      ],
+      "cells": [
+        "record-2@1",
+        "record-1~w1@1",
+        "record-1~w2@1",
+        "record-3@2"
+      ]
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        [],
+        []
+      ],
+      "tokens": [
+        "#1@1",
+        "#2@1",
+        "#3@1"
+      ],
+      "cells": [
+        "record-1~w1@1",
+        "record-1~w2@1",
+        "record-2@1",
+        "record-3@1"
+      ]
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [],
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        []
+      ],
+      "tokens": [
+        "FORCEDLBL@1",
+        "REGEX.1@1",
+        "TESTA@1"
+      ],
+      "cells": [
+        "record-3@1",
+        "record-2~w1@1",
+        "record-2~w2@1",
+        "record-1@1"
+      ]
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [],
+        [],
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ],
+          [
+            1201,
+            1700
+          ]
+        ]
+      ],
+      "tokens": [
+        "#3@1",
+        "#1@2",
+        "#2@1"
+      ],
+      "cells": [
+        "record-3~w1@1",
+        "record-3~w2@1",
+        "record-3~w3@1",
+        "record-2@1",
+        "record-1@2"
+      ]
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        []
+      ],
+      "tokens": [
+        "#2@1",
+        "#3@1",
+        "#1@1"
+      ],
+      "cells": [
+        "record-2~w1@1",
+        "record-2~w2@1",
+        "record-3@1",
+        "record-1~w1@1",
+        "record-1~w2@1"
+      ]
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        [],
+        []
+      ],
+      "tokens": [
+        "REGEX.1@2",
+        "FORCEDLBL@1",
+        "TESTA@1"
+      ],
+      "cells": [
+        "record-3@1",
+        "record-1~w1@1",
+        "record-1~w2@1",
+        "record-2@2"
+      ]
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [],
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        []
+      ],
+      "tokens": [
+        "#3@1",
+        "#2@2",
+        "#1@1"
+      ],
+      "cells": [
+        "record-3@1",
+        "record-1@1",
+        "record-2~w1@2",
+        "record-2~w2@2"
+      ]
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        [],
+        []
+      ],
+      "tokens": [
+        "#1@1",
+        "#1@1",
+        "#3@1"
+      ],
+      "cells": null
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1",
+        "FORCEDLBL"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ],
+          [
+            601,
+            1100
+          ]
+        ],
+        [],
+        []
+      ],
+      "tokens": [
+        "#2@1",
+        "#1@1"
+      ],
+      "cells": null
+    }
+  ],
+  "circularCountsDescription": "Circular canvases whose records, with the IDs `recordIds`, are drawn whole or cropped to one window (`windows`), with Record Order `tokens`, and whether Python's renderer refuses the list (`refused`): a Circular record with one window draws one record, so the tokens count the request's records (the Web's Load check of a canvas whose records each draw one record, `refusedRecordPlacement`, services/session-request.js). tests/test_web_contracts_generated.py draws each case with `build_request_diagram`; tests/web/stored-request-read.test.mjs loads each into tests/fixtures/sessions/cli-circular-record-order.v51.gbdraw.",
+  "circularCounts": [
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ]
+        ],
+        []
+      ],
+      "tokens": [
+        "#2@1",
+        "#1@2"
+      ],
+      "refused": false
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ]
+        ],
+        []
+      ],
+      "tokens": [
+        "#1@1"
+      ],
+      "refused": true
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ]
+        ],
+        []
+      ],
+      "tokens": [
+        "REGEX.1@1",
+        "TESTA@2"
+      ],
+      "refused": false
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1"
+      ],
+      "windows": [
+        [
+          [
+            1,
+            500
+          ]
+        ],
+        []
+      ],
+      "tokens": [
+        "TESTA@1",
+        "TESTA@2"
+      ],
+      "refused": true
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1"
+      ],
+      "windows": [
+        [],
+        [
+          [
+            1,
+            500
+          ]
+        ]
+      ],
+      "tokens": [
+        "#1@1",
+        "#2@1",
+        "#3@1"
+      ],
+      "refused": true
+    },
+    {
+      "recordIds": [
+        "TESTA",
+        "REGEX.1"
+      ],
+      "windows": [
+        [],
+        [
+          [
+            1,
+            500
+          ]
+        ]
+      ],
+      "tokens": [
+        "#2@1",
+        "BOGUS@2"
+      ],
+      "refused": true
     }
   ]
 }

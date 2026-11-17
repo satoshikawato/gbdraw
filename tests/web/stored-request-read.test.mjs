@@ -50,6 +50,7 @@ const {
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { linearLayoutCells } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
+const { discoverSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -397,6 +398,69 @@ test('a CLI Linear Record Order places a record drawn in windows at its token, i
   const byNumber = await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw');
   byNumber.drawings[0].renderRequest.layout.multiRecordPositions = ['#2@1', '#1@1'];
   assert.deepEqual(await loadedCells(byNumber), { repairs: [], cells: ['record-2~w1@1', 'record-2~w2@1', 'record-1@1'] });
+});
+
+// OV-3775 (OV-3313 review 3 H1): records that place themselves by grid row and column, listed in another order than
+// their cells (a CLI records table), keep each record's own row: Load reads the rows in the request's order and the
+// cards in the cells' order, so each card reads the row of its own record.
+test('a CLI records table Session keeps each record on its own row at Load (OV-3775)', async () => {
+  // gbdraw linear --records_table rt.tsv: TESTA row 2, REGEX.1 row 1 column 1, FORCEDLBL row 1 column 2.
+  assert.deepEqual(await loadedCells(await fixtureSession('cli-linear-records-table-grid.v51.gbdraw')),
+    { repairs: [], cells: ['record-2@1', 'record-3@1', 'record-1@2'] });
+});
+
+// OV-3313 review 3 M2: the shared vector's window placements and Circular counts (tests/fixtures/record_order_row_vectors.json,
+// drawn by Python's renderer in tests/test_web_contracts_generated.py), loaded into the CLI Sessions whose one-record
+// files hold the vector's record IDs: Load places each window as the renderer does (`storedLinearCellPlaces`) and
+// refuses the Circular lists the renderer refuses (`refusedRecordPlacement`).
+const RECORD_ORDER_VECTORS = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+/** @param {string} name @param {{ windows: number[][][], tokens: string[] }} vector */
+const vectorSession = async (name, { windows, tokens }) => {
+  const document = await fixtureSession(name);
+  const request = document.drawings[0].renderRequest;
+  request.records.forEach((record, index) => {
+    record.presentation = { ...record.presentation, gridRow: null, gridColumn: null };
+    record.windows = windows[index].map(([start, end]) => ({ start, end, reverseComplement: false, column: null }));
+  });
+  request.layout.multiRecordPositions = tokens;
+  return document;
+};
+test('Load places Record Order windows and refuses Circular counts as the renderer does (shared vector, OV-3313 review 3 M2)', async () => {
+  assert.ok(RECORD_ORDER_VECTORS.windowPlacements.length >= 8 && RECORD_ORDER_VECTORS.circularCounts.length >= 5);
+  for (const vector of RECORD_ORDER_VECTORS.windowPlacements) {
+    const { repairs, cells } = await loadedCells(await vectorSession('cli-linear-records-table-grid.v51.gbdraw', vector));
+    const at = JSON.stringify(vector.tokens);
+    if (vector.cells === null) assert.match(repairs.join(), /^request-dropped drawings\[0\]\.renderRequest\.layout\.multiRecordPositions/, at);
+    else assert.deepEqual({ repairs, cells }, { repairs: [], cells: vector.cells }, at);
+  }
+  for (const vector of RECORD_ORDER_VECTORS.circularCounts) {
+    const document = await vectorSession('cli-circular-record-order.v51.gbdraw', vector);
+    const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    const dropped = result.repairs.some(({ code, path }) => code === 'request-dropped' && path.startsWith('drawings[0].renderRequest.layout.multiRecordPositions'));
+    assert.equal(dropped, vector.refused, JSON.stringify(vector));
+  }
+});
+
+// OV-3313 review 3 L1: the record IDs Load reads before the requests and each card's own listing of its records go
+// through one resource table, so the file's bytes are read once (`resourceByteReadCount`).
+test('Load and the cards read each one-record file once when Record Order tokens name records by ID (OV-3313 review 3 L1)', async () => {
+  const reads = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => { if (metric.name === 'resourceByteReadCount') reads.push(metric.resourceId); } };
+  try {
+    assert.deepEqual((await loadedCells(await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw'))).repairs, []);
+    for (const seq of state.activeDrawing().linearSeqs) {
+      const records = await discoverSequenceRecords({
+        file: state.inputFiles.fileOf(seq.gb), format: 'genbank', runHelperOperation: () => { throw new Error('fast path'); }
+      });
+      assert.equal(records.length, 1);
+    }
+  } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+  }
+  assert.equal(reads.length, 2, JSON.stringify(reads));
+  assert.deepEqual(reads.filter((resourceId, index) => reads.indexOf(resourceId) !== index), [], JSON.stringify(reads));
 });
 
 // OV-3313 review 2 M1: a Record Order Python refuses is refused at Load also when the records name no record by a

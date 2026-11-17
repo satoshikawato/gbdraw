@@ -230,6 +230,8 @@ const NOT_WRITERS = new Set(SLICE_READERS.filter((name) => !name.includes('.')))
 // project-level binders and readers (they take the store or its bindings, not a
 // handle; `readCardGencode`, `readStoredCardGencode` and `losatRecordGencode`
 // read a card's LOSAT Gencode for `createLinearSeq`, Load and the request;
+// `drawingInputsDiffer` reads whether a drawing's inputs differ from a new
+// drawing's, for Save (it takes the drawing);
 // `sessionFilesOfKind` lists the files of a kind for the picker,
 // `circularSlotFileKind` names the kind of a Circular card slot, and
 // `projectInputReplacement` the places a Replace writes), and the writers
@@ -241,7 +243,7 @@ const INPUTS_NO_HANDLE_CALLS = new Set([
   'bindCanonicalComparisons', 'bindLoadedInputs',
   'createCircularSource', 'bindDrawingInputFileList', 'bindDrawingInputFileTree', 'setConservationBlastsSource',
   'bindDrawingCanonicalComparisons', 'sessionFilesOfKind', 'circularSlotFileKind', 'projectInputReplacement',
-  'readCardGencode', 'readStoredCardGencode', 'losatRecordGencode'
+  'readCardGencode', 'readStoredCardGencode', 'losatRecordGencode', 'drawingInputsDiffer'
 ]);
 const isHandleCall = (name, key) => !NOT_WRITERS.has(key) && !(name === 'inputs' && INPUTS_NO_HANDLE_CALLS.has(key));
 const inputStore = { registerFile: (file) => (file ? { id: 'file-1', name: file.name } : null) };

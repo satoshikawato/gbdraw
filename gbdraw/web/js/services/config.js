@@ -1468,22 +1468,36 @@ const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
 };
 
 /**
+ * The resource table of one Load: adopted once for the resources object Load reads (`adoptCurrentSessionResources`),
+ * so the record IDs read before the requests and the cards' own reads read each file once, through one table
+ * (`readOncePerFile` keeps a read by the table's resource; OV-3313 review 3 L1).
+ * @returns {(resources: unknown) => ReturnType<typeof adoptCurrentSessionResources>}
+ */
+const loadResourceTable = () => {
+  /** @type {{ resources: unknown, table: ReturnType<typeof adoptCurrentSessionResources> } | null} */
+  let adopted = null;
+  return (resources) => {
+    const table = adopted !== null && adopted.resources === resources
+      ? adopted.table : adoptCurrentSessionResources(/** @type {Record<string, unknown>} */ (resources));
+    adopted = { resources, table };
+    return table;
+  };
+};
+
+/**
  * The record IDs Record Order tokens name by ID, read from the Session's files before Load reads its requests
  * (`readStoredTokenRecordIds`), so the request reader refuses a token list the renderer refuses for those IDs
- * (`refusedRecordPlacement`, OV-3313 review 2 M1). The files are read through a table of the Session's resources
- * adopted when a token needs one; a Session whose resources that table refuses gives no ID here, and Load refuses it
- * where it adopts them.
+ * (`refusedRecordPlacement`, OV-3313 review 2 M1). The files are read through Load's one resource table
+ * (`loadResourceTable`), adopted when a token needs a file. Load has read the resources before
+ * (`readSessionDocument`): a descriptor it cannot read is dropped there and Load goes on, so the table holds each kept
+ * one.
  * @param {SessionInput} data The Session Load reads.
+ * @param {ReturnType<typeof loadResourceTable>} tableOf
  * @returns {Promise<Map<string, string | null>>}
  */
-const readTokenRecordIdsBeforeRequests = async (data) => {
-  /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
-  let table = null;
-  return readStoredTokenRecordIds(
-    storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
-    (resourceId) => createSessionResourceFileView(
-      table ??= adoptCurrentSessionResources(/** @type {Record<string, unknown>} */ (data.resources)), resourceId));
-};
+const readTokenRecordIdsBeforeRequests = async (data, tableOf) => readStoredTokenRecordIds(
+  storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
+  (resourceId) => createSessionResourceFileView(tableOf(data.resources), resourceId));
 
 // History's restore of an editor state it captured, installed as it is.
 /** @param {DrawingState} drawing @param {EditorStateData} editorState */
@@ -2941,7 +2955,8 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
       used: outcome.rowKey
     }));
   });
-  const tokenRecordIds = await readTokenRecordIdsBeforeRequests(legendRead.session);
+  const resourceTableOf = loadResourceTable();
+  const tokenRecordIds = await readTokenRecordIdsBeforeRequests(legendRead.session, resourceTableOf);
   const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs, tokenRecordIds);
   const requestData = readSettingsOnlyMode(requestRead.data, repairs);
   // R4 decided by the request row of a Session 31-41 (K22): nothing after can restore it.
@@ -3019,7 +3034,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     });
     recordSessionLifecycleEvent('editor-state-normalization-end');
     recordSessionLifecycleEvent('resource-table-adoption-start');
-    currentResourceTable = adoptCurrentSessionResources(catalogData.resources);
+    currentResourceTable = resourceTableOf(catalogData.resources);
     recordSessionLifecycleEvent('resource-table-adoption-end');
     await readStoredRecordIdReadings(rawData, currentResourceTable, leafReadings, repairs);
     // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in

@@ -22,12 +22,13 @@
   records have grid rows on some records only, grid rows together with a
   Record Order, or a Record Order that names a record twice, names a record
   the drawing does not have, or lists another number of records, also when
-  each record comes from a file of its own: the drawing loads without its
-  saved diagram (OV-3473).
+  each record comes from a file of its own that Load can read: the drawing
+  loads without its saved diagram (OV-3473).
 - Fixed: Web app: Load refuses, as the command line does, a Circular
-  Multi-Record Canvas whose Record Order names a record twice, names a record
-  the drawing does not have, or leaves one out: the drawing loads without its
-  saved diagram (OV-3313).
+  Multi-Record Canvas of records that each draw one record (a record of a
+  file, whole or cropped) whose Record Order names a record twice, names a
+  record the drawing does not have, or leaves one out: the drawing loads
+  without its saved diagram (OV-3313).
 - Fixed: Web app: Save Session keeps a drawing whose only change is a color
   table or another card file, or its input type; before, such a drawing was
   left out of the file (OV-3701).
