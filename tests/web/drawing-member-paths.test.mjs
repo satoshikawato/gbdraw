@@ -247,21 +247,21 @@ const startCase = async (mode, member, foreign) => {
 // from Reset's own code (`resetSettings`, services/reset.js, which the dialog
 // runs): a drawing's reset resets every slice through the slice's own `reset`
 // (R15 in gbdraw/web/CLAUDE.md), which keeps the input bindings and record
-// choices PD-OI-070 keeps (services/drawing/inputs.js, settings.js); here it
+// choices PD-OI-091 keeps (services/drawing/inputs.js, settings.js); here it
 // runs on a new drawing holding the member's value before Reset. So the guard
 // finds a Reset that skips a slice or a member's reset, or that changes what
 // a slice's reset leaves, but not a defect inside a slice's own reset: a
 // member dropped from the members a slice's reset keeps (the records OFF
 // taken out of the kept members in services/drawing/settings.js) moves the
-// expectation with it, so PD-OI-070's list of what Reset keeps is held only
+// expectation with it, so the list of what Reset keeps (PD-OI-070, PD-OI-091) is held only
 // by the slices' own tests (tests/web/drawing-slices.test.mjs, test 7).
 // `RESET_DECLARED` gives the members another rule decides, from the slice's
 // reset (`reset`), a new drawing's value (`fresh`), the value before Reset
-// (`before`), what Reset left (`actual`), and the drawing's bound record rows
-// (`bound`).
+// (`before`), what Reset left (`actual`), and the uids of the drawing's live
+// Files rows in order (`seqUids`).
 /**
  * @typedef {{ mode: 'circular' | 'linear', fresh: unknown, reset: unknown, before: unknown, actual: unknown,
- *   bound: readonly string[] }} ResetValues
+ *   seqUids: readonly string[] }} ResetValues
  * @typedef {{ c_conservation_blasts: unknown, c_conservation_blasts_source: unknown }} RingFileSlots
  * @typedef {{ uid: string, row: unknown }} RecordRowEntry
  */
@@ -285,16 +285,19 @@ const RESET_DECLARED = {
   },
   // A Linear Reset keeps the record rows (services/drawing/settings.js) and
   // fits them to the kept Files again (`applyLinearSeqMutation`), which may
-  // give a bound record its row: each kept entry stays as it was, and an
-  // added one names a bound record. Here the rows Reset left, of which an
-  // entry neither kept nor naming a bound record is dropped and a kept entry
+  // give a Files row its row: each kept entry stays as it was, and a Files
+  // row without one gets `{ uid, row: index + 1 }`, its place in the live
+  // Files rows (`reconcileLinearRecordLayout`). Here the rows Reset left, of
+  // which an entry neither kept nor naming a Files row is dropped, an added
+  // one is set to that row, and a kept entry
   // gone is added back, so either differs from what Reset left.
-  linearRecordRows: ({ mode, reset, actual, bound }) => {
+  linearRecordRows: ({ mode, reset, actual, seqUids }) => {
     if (mode !== 'linear') return reset;
     const kept = /** @type {RecordRowEntry[]} */ (reset);
     const left = /** @type {RecordRowEntry[]} */ (actual);
     const keptOf = (uid) => kept.find((entry) => entry.uid === uid);
-    return [...left.flatMap((entry) => (keptOf(entry.uid) ? [keptOf(entry.uid)] : bound.includes(entry.uid) ? [entry] : [])),
+    return [...left.flatMap((entry) => (keptOf(entry.uid) ? [keptOf(entry.uid)]
+      : seqUids.includes(entry.uid) ? [{ uid: entry.uid, row: seqUids.indexOf(entry.uid) + 1 }] : [])),
       ...kept.filter((entry) => !left.some((row) => row.uid === entry.uid))];
   }
 };
@@ -306,8 +309,8 @@ const resetExpectation = (mode, member, before, live) => {
   const name = sliceOfMember(member);
   DRAWING_SLICES[name].reset(drawing.slices[name]);
   const reset = captureMember(drawing, member);
-  const bound = mode === 'linear' ? captureMember(live, 'linearSeqs').filter((row) => row.gb).map((row) => row.uid) : [];
-  return RESET_DECLARED[member]?.({ mode, fresh, reset, before, actual: captureMember(live, member), bound }) ?? reset;
+  const seqUids = mode === 'linear' ? captureMember(live, 'linearSeqs').map((row) => row.uid) : [];
+  return RESET_DECLARED[member]?.({ mode, fresh, reset, before, actual: captureMember(live, member), seqUids }) ?? reset;
 };
 const same = (member, actual, expected) => refFree({ [member]: actual }) === refFree({ [member]: expected });
 const held = (id, member) => (state.drawingTabs.value.some((tab) => tab.id === id)
@@ -376,6 +379,14 @@ function saveThenLoad(rewrite) {
   return async ({ id, peer, mode }, member, { loaded }) => {
     const drawn = (MEMBER_SAMPLES[member].modes ?? MODES).includes(mode) ? MEMBER_SAMPLES[member].drawn : undefined;
     const drawnBefore = drawn?.(state.drawingOf(id));
+    if (drawn) {
+      // The sample must change what the drawing draws, or a Save that drops it passes.
+      const sampleValue = captureMember(state.drawingOf(id), member);
+      installMember(state.drawingOf(id), member, []);
+      const drawnWithout = drawn(state.drawingOf(id));
+      installMember(state.drawingOf(id), member, sampleValue);
+      assert.notDeepEqual(drawnBefore, drawnWithout, `${member}: the sample is drawn differently from an empty value`);
+    }
     assert.deepEqual(app.selectDrawing(peer), { status: 'ok' });
     const { blob: saved, refused } = await saveSession();
     if (refused) return [{ where: 'Save', expected: loaded, actual: `Save refused: ${refused}` }];
