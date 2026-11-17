@@ -374,6 +374,8 @@ const owner = (uid, bindingKeys) => ({ key: uid, requestKeys: [uid], ownsExpansi
 const runPanelSearch = async (ports = {}) => {
   const { createSequenceSearch } = await import('../../gbdraw/web/js/app/sequence-search.js');
   const drawing = { id: 'linear', mode: 'linear', annotationSets: [] };
+  // The drawing shown; a case shows another one in its place.
+  const shown = { drawing };
   const added = [];
   const sent = [];
   const axis = { kind: 'linear', rows: [], source: { anchorBase: 1, recordBase: 1, step: 1, sourceLength: 100, drawnLength: 100, isCircular: false } };
@@ -396,7 +398,7 @@ const runPanelSearch = async (ports = {}) => {
     { resultIndex: 0, recordIndex: 1, recordKey: 'card-b', recordId: 'X', axis }
   ];
   const panel = createSequenceSearch({
-    state: { activeDrawing: () => drawing },
+    state: { activeDrawing: () => shown.drawing },
     readAxisRecords: () => axisRecords,
     readRecordSpans: async () => ({ fasta: '>X:1-100\nACGT\n', spans: [span] }),
     committedSets: () => [],
@@ -408,16 +410,17 @@ const runPanelSearch = async (ports = {}) => {
       return { result: reply(payload.search) };
     },
     helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
-    addSearchSet: (_drawingId, set) => { added.push(set); drawing.annotationSets.push(set); },
+    addSearchSet: (_drawingId, set) => { added.push(set); shown.drawing.annotationSets.push(set); },
     shownRoot: () => null,
     closeRegionPopup: () => {},
     revealSection: async () => {},
     ...(typeof ports === 'function' ? ports(ref) : ports)
   });
   ref.panel = panel;
+  ref.shown = shown;
   await panel.readQueries('>q\nACGT\n');
   await panel.search();
-  return { panel, drawing, added, sent };
+  return { panel, drawing, shown, added, sent };
 };
 
 // Review N1 and r2 B1 (#1667): a search's rows bind their record as Add to annotation set binds a row, by the key of
@@ -570,7 +573,7 @@ test('a search whose helper fails adds nothing and shows the reason', async () =
 // Review B1 (#1667), receipt: the panel's queries and settings are not saved; after a Load the panel is empty, and a
 // History step of the loaded document is no search step.
 test('a Session Load empties the panel: queries, settings, hit table, chips and outline', async () => {
-  const { panel, added } = await runPanelSearch();
+  const { panel, drawing, shown, added } = await runPanelSearch();
   panel.panel.task = 'blastn';
   panel.panel.colorMode = 'gradient';
   panel.chooseChip('q');
@@ -580,6 +583,8 @@ test('a Session Load empties the panel: queries, settings, hit table, chips and 
   const step = [{ path: ['config', 'annotationSets'], before: [], after: [JSON.parse(JSON.stringify(added[0]))] }];
   assert.deepEqual(panel.searchSetIdsOf(step), ['Search 1']);
   panel.reset();
+  // The Load shows the drawings it loaded, new drawings.
+  shown.drawing = { id: 'linear', mode: 'linear', annotationSets: [] };
   const { queryText, queries, outcome, folded, chip, selectedHit, task, colorMode, searchError, queryError } = panel.panel;
   assert.deepEqual({ queryText, queries, outcome, folded, chip, selectedHit, task, colorMode, searchError, queryError }, {
     queryText: '', queries: [], outcome: null, folded: false, chip: '', selectedHit: '', task: 'megablast', colorMode: 'query',
@@ -588,6 +593,47 @@ test('a Session Load empties the panel: queries, settings, hit table, chips and 
   assert.deepEqual(panel.hitRows.value, []);
   assert.equal(panel.outline.value, null);
   assert.deepEqual(panel.searchSetIdsOf(step), []);
+  // OV-3780: a Load that rolls back shows the previous drawing again, and its History steps name its search sets.
+  shown.drawing = drawing;
+  assert.deepEqual(panel.searchSetIdsOf(step), ['Search 1']);
+});
+
+// OV-3780: the sets a search added are its drawing's, not its ID's. A drawing is deleted and a new drawing takes its
+// ID: the new drawing's first search set is "Search 1", and a step that adds the deleted drawing's set is no search
+// step of the new drawing.
+test('a new drawing that takes a deleted drawing\'s ID starts with no search sets', async () => {
+  const { panel, shown, added } = await runPanelSearch();
+  assert.equal(added[0].id, 'Search 1');
+  const step = [{ path: ['config', 'annotationSets'], before: [], after: [JSON.parse(JSON.stringify(added[0]))] }];
+  shown.drawing = { id: 'linear', mode: 'linear', annotationSets: [] };
+  assert.deepEqual(panel.searchSetIdsOf(step), []);
+  await panel.search();
+  assert.equal(added[1].id, 'Search 1');
+  // A search still running when its drawing is deleted and a new drawing of its ID is shown adds nothing to it.
+  const late = await runPanelSearch((ref) => ({
+    runLosatJobs: async () => {
+      ref.shown.drawing = { id: 'linear', mode: 'linear', annotationSets: [] };
+      return { status: 'ok', results: [{ text: 'q\tX:1-100\t100\t16\t0\t0\t1\t16\t5\t20\t1e-5\t30\n' }] };
+    }
+  }));
+  assert.deepEqual(late.added, []);
+});
+
+// Review 3 M1 (the reviewer's probe): a legacy configuration Load shows a same-ID copy of the drawing, which keeps
+// its History. The copy keeps the drawing's search sets, so Undo or Redo of a search step made before that Load still
+// draws at once; the drawing keeps its own for the Load's rollback.
+test('a same-ID copy of the drawing keeps its search sets', async () => {
+  const { panel, drawing, shown, added } = await runPanelSearch();
+  const step = [{ path: ['config', 'annotationSets'], before: [], after: [JSON.parse(JSON.stringify(added[0]))] }];
+  const copy = { id: 'linear', mode: 'linear', annotationSets: [...drawing.annotationSets] };
+  panel.followDrawingCopy(drawing, copy);
+  shown.drawing = copy;
+  assert.deepEqual(panel.searchSetIdsOf(step), ['Search 1']);
+  await panel.search();
+  assert.equal(added[1].id, 'Search 2');
+  shown.drawing = drawing;
+  assert.deepEqual(panel.searchSetIdsOf(step), ['Search 1'], 'the drawing keeps its own sets, not the copy\'s');
+  assert.deepEqual(panel.searchSetIdsOf([{ ...step[0], after: [JSON.parse(JSON.stringify(added[1]))] }]), []);
 });
 
 // Review r2 N-r2-1, receipt "after a Load the panel is empty": a Session Load counts from its start (`loadStarts`,

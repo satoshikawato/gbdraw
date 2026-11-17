@@ -231,12 +231,51 @@ assert.equal(search.previewFeatureSearchStatusText.value, 'No matches');
 assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
 search.hideSearchBar();
 assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
-search.switchDrawingSearch('circular', 'linear');
+const circularDrawing = { id: 'circular' };
+const linearDrawing = { id: 'linear' };
+search.switchDrawingSearch(circularDrawing, linearDrawing);
 assert.equal(state.previewFeatureSearchVisible.value, false);
 assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
-search.switchDrawingSearch('linear', 'circular');
+search.switchDrawingSearch(linearDrawing, circularDrawing);
 assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
+// OV-3510: a search is its drawing's, not its ID's. The Circular drawing is
+// deleted (its search kept on the way out) and a new drawing takes its ID: it
+// arrives with no search.
+search.switchDrawingSearch(circularDrawing, linearDrawing);
+search.switchDrawingSearch(linearDrawing, { id: 'circular' });
+assert.equal(state.previewFeatureSearchInput.value, '');
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
 search.resetModeSearches();
 assert.equal(state.previewFeatureSearchVisible.value, true);
+// A Load that is rolled back gives the drawings back with the searches they kept.
+search.switchDrawingSearch({ id: 'linear' }, circularDrawing);
+assert.equal(state.previewFeatureSearchInput.value, 'no such feature');
+// OV-3774: a Load leaves the shown drawing as a drawing switch does, with its
+// search, and clears the search bar for the drawings it loads. A rollback that
+// shows the drawing again gives the search back and runs it on the Result shown.
+state.previewFeatureSearchInput.value = 'kinase';
+search.applySearch();
+assert.deepEqual(state.previewFeatureSearchMatches.value, ['feature-1']);
+search.keepDrawingSearch(circularDrawing);
+search.resetModeSearches();
+assert.equal(state.previewFeatureSearchInput.value, '');
+search.returnToDrawingSearch(circularDrawing);
+assert.equal(state.previewFeatureSearchInput.value, 'kinase');
+assert.deepEqual(state.previewFeatureSearchMatches.value, ['feature-1'], 'the search runs again on the Result shown');
+// The search went back to its drawing: a later arrival there starts from the search the drawing leaves with.
+search.switchDrawingSearch(circularDrawing, linearDrawing);
+search.switchDrawingSearch(linearDrawing, circularDrawing);
+assert.equal(state.previewFeatureSearchInput.value, 'kinase');
+// Review 3 M1: a legacy configuration Load leaves the drawing (`keepDrawingSearch`) and shows a same-ID copy of it,
+// which keeps the drawing's search; the drawing keeps its own for the Load's rollback.
+const circularCopy = { id: 'circular' };
+search.keepDrawingSearch(circularDrawing);
+search.followDrawingCopy(circularDrawing, circularCopy);
+search.resetModeSearches();
+search.returnToDrawingSearch(circularCopy);
+assert.equal(state.previewFeatureSearchInput.value, 'kinase');
+search.resetModeSearches();
+search.returnToDrawingSearch(circularDrawing);
+assert.equal(state.previewFeatureSearchInput.value, 'kinase');
 
 console.log('preview feature search tests passed');

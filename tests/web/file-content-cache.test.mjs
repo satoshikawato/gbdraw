@@ -140,7 +140,7 @@ assert.equal(await readFileText(plainNamedGz), 'LOCUS plain');
     assert.equal(error?.stage, 'read', name);
     const model = normalizeUserFacingError(error, { operation: 'input-records', stage: 'helper' });
     assert.equal(model?.code, 'INPUT_UNREADABLE', name);
-    assert.equal(model?.summary, 'An input could not be read. Replace or reselect it.', name);
+    assert.equal(model?.summary, 'An input could not be read. Replace or reselect it. File: gone.gb.', name);
     const textError = await readFileText(refused).then(() => null, (cause) => cause);
     assert.equal(textError?.code, 'INPUT_UNREADABLE', `${name} through readFileText`);
   }

@@ -418,7 +418,7 @@ assert.ok(downloadedBlob instanceof Blob);
     assert.equal(result.status, 'error');
     assert.equal(result.error.code, 'INPUT_UNREADABLE');
     assert.equal(result.error.operation, 'session-save');
-    assert.equal(result.error.summary, 'An input could not be read. Replace or reselect it.');
+    assert.equal(result.error.summary, 'An input could not be read. Replace or reselect it. File: changed.gbk.');
     assert.deepEqual(shown, [result.error]);
     assert.equal(downloads, 0, 'a refused Save starts no download');
   } finally {

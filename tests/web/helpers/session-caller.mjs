@@ -10,8 +10,9 @@
  * @param {{ activeDrawing: () => unknown }} state The state.js `state` of
  *   that module.
  * @param {{ capture: () => unknown, replaceHistoryMembers: (drawingIds: readonly string[]) => void,
+ *   followDrawingCopy: (drawing: never, copy: never) => void,
  *   restoreHistoryMembers: (snapshot: never) => void, restore: (snapshot: never) => unknown,
- *   endWorkOutside: (drawingIds: readonly string[]) => void }} rollbackState The Load rollback port:
+ *   endWorkOutside: (drawingIds: readonly string[]) => void, release: (snapshot: never) => void }} rollbackState The Load rollback port:
  *   `helpers/session-rollback-port.mjs` in node, the app's own
  *   (`window.__GBDRAW_APP__.sessionImportRollbackState`) in the page.
  */

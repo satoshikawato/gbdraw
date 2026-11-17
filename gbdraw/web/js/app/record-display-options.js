@@ -276,6 +276,25 @@ const shownRowsOnce = (sourcesOf) => {
   };
 };
 
+/** @typedef {Pick<DrawingRecordSource, 'drawingId' | 'scope' | 'sourceUid' | 'source' | 'paired'>} BoundSource */
+/**
+ * The cards `drawing` showed when `request`, its committed request, first reached the rows: bound once per drawing and
+ * request, since a Duplicate shows its source's request object until its own Generate (OV-3507).
+ * @param {WeakMap<DrawingState, { request: object, sources: BoundSource[] }>} bindings
+ * @param {DrawingState} drawing @param {object} request
+ * @param {(drawing: DrawingState) => readonly DrawingRecordSource[]} sourcesOf
+ * @returns {BoundSource[]}
+ */
+const boundCardsOf = (bindings, drawing, request, sourcesOf) => {
+  let binding = bindings.get(drawing);
+  if (binding?.request !== request) {
+    binding = { request, sources: sourcesOf(drawing)
+      .map(({ drawingId, scope, sourceUid, source, paired }) => ({ drawingId, scope, sourceUid, source, paired })) };
+    bindings.set(drawing, binding);
+  }
+  return binding.sources;
+};
+
 /**
  * @param {RecordDisplayControlsOptions} options
  */
@@ -285,9 +304,10 @@ export const createRecordDisplayControls = ({
 }) => {
   /** @type {CommittedDisplayRow[]} */
   let committedRows = [];
-  /** @type {Record<string, any> | null} */
-  let boundRequest = null;
-  /** @type {Pick<DrawingRecordSource, 'drawingId' | 'scope' | 'sourceUid' | 'source' | 'paired'>[]} */
+  // The cards each drawing showed when its committed request first reached the rows (`boundCardsOf`).
+  /** @type {WeakMap<DrawingState, { request: object, sources: BoundSource[] }>} */
+  const requestBindings = new WeakMap();
+  /** @type {BoundSource[]} */
   let boundSources = [];
   // The record sources of one drawing, each named by that drawing's ID: a
   // Circular drawing's source cards with its crop and orientation, a Linear
@@ -444,14 +464,10 @@ export const createRecordDisplayControls = ({
   const refreshCommittedRows = () => {
     if (state.semanticFileWatchersSuppressed?.value || state.sessionImportPending?.value) return;
     const request = getCommittedRequest();
-    if (!request) { committedRows = []; boundRequest = null; return; }
-    if (request !== boundRequest) {
-      boundRequest = request;
-      // The committed request is the shown drawing's: its cards, by drawing and uid (another drawing, one that Find in
-      // other files created, can hold cards of the same uids; OV-3375).
-      boundSources = sourcesOf(state.activeDrawing())
-        .map(({ drawingId, scope, sourceUid, source, paired }) => ({ drawingId, scope, sourceUid, source, paired }));
-    }
+    if (!request) { committedRows = []; boundSources = []; return; }
+    // The committed request is the shown drawing's: its cards, by drawing and uid (another drawing, one that Find in
+    // other files created, can hold cards of the same uids; OV-3375).
+    boundSources = boundCardsOf(requestBindings, state.activeDrawing(), request, sourcesOf);
     committedRows = allRows.value.filter((row) => row.scope === request.mode
       && boundSources.some((source) => source.drawingId === row.drawingId && source.scope === row.scope
         && source.sourceUid === row.sourceUid && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
@@ -731,6 +747,12 @@ export const createRecordDisplayControls = ({
     });
   };
   return { rows, allRows, draftFor, surfaceFor, hasPendingChanges, changeRecordSources,
+    // A same-ID copy replaced `drawing` and shows its committed request: the request stays bound to the cards the
+    // drawing showed when it first reached the rows.
+    /** @param {DrawingState} drawing @param {DrawingState} copy */
+    followDrawingCopy: (drawing, copy) => {
+      if (requestBindings.has(drawing)) requestBindings.set(copy, /** @type {{ request: object, sources: BoundSource[] }} */ (requestBindings.get(drawing)));
+    },
     // The data of isCurrentFeature (services/feature-identity.js), refreshed
     // for the committed request before it is read (R13).
     sourceBinding: () => {

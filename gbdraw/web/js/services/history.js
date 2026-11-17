@@ -2595,6 +2595,53 @@ const projectStepFileIds = (parts, heldFileIds) => {
   return fileIds;
 };
 
+/**
+ * @typedef {{ budgetMembers: readonly HistoryBudgetMember[] }} BudgetHolder
+ * @typedef {{ histories: readonly BudgetHolder[], undo: readonly ProjectEntry[], redo: readonly ProjectEntry[] }} CapturedFiles
+ */
+/**
+ * What `createLoadCaptures` returns: `hold` adds a capture and returns it, `release` lets it go and the budget lets go
+ * of the files no member names any more (a second call does nothing), `withFileIds` adds the files of every held
+ * capture to `ids` and returns it.
+ * @template T
+ * @typedef {{ hold: (captured: T) => T, release: (captured: T) => void, withFileIds: (ids: Set<string>) => Set<string> }} LoadCaptures
+ */
+/**
+ * The members Loads captured for their rollbacks, each held until its Load ends (OV-3509): the files they name, those
+ * of each captured History's budget members and of the project steps with the Histories the steps hold
+ * (`heldBy`), stay stored.
+ * @template {CapturedFiles} T
+ * @param {WeakMap<ProjectEntry, readonly BudgetHolder[]>} heldBy
+ * @param {Pick<HistoryBudget, 'releaseUnreferencedFiles'>} budget The router's budget, whose file retention runs
+ *   when a capture is let go, so the previous project's files leave when the Load ends, not at the next step.
+ * @returns {LoadCaptures<T>}
+ */
+const createLoadCaptures = (heldBy, budget) => {
+  /** @type {Set<T>} */
+  const captures = new Set();
+  /** @param {Set<string>} ids @param {readonly BudgetHolder[]} held */
+  const addHeld = (ids, held) => held.forEach(({ budgetMembers }) => budgetMembers.forEach((member) => member.retainedFileIds().forEach((id) => ids.add(id))));
+  return {
+    hold: (captured) => {
+      captures.add(captured);
+      return captured;
+    },
+    release: (captured) => {
+      if (captures.delete(captured)) budget.releaseUnreferencedFiles();
+    },
+    withFileIds: (ids) => {
+      for (const { histories, undo, redo } of captures) {
+        addHeld(ids, histories);
+        [...undo, ...redo].forEach((entry) => {
+          entry.fileIds.forEach((id) => ids.add(id));
+          addHeld(ids, heldBy.get(entry) ?? []);
+        });
+      }
+      return ids;
+    }
+  };
+};
+
 /** @param {HistoryRouterOptions} options */
 export const createHistoryRouter = ({
   drawingIds,
@@ -2785,6 +2832,10 @@ export const createHistoryRouter = ({
   const heldHistories = () => [...projectEntries().flatMap((entry) => heldBy.get(entry) ?? []), ...openRemovals.flat()];
   const heldMembers = () => heldHistories()
     .flatMap(({ budgetMembers }) => budgetMembers);
+  // The members a Load captured for its rollback, held until the Load ends (`releaseCapturedMembers`): the files
+  // they name stay stored, so a rollback gives back drawings whose files are there (OV-3509).
+  /** @type {LoadCaptures<CapturedMembers>} */
+  const loadCaptures = createLoadCaptures(heldBy, budget);
   /** @param {HeldHistory} held Gives a held History back to the router. */
   const reinstate = ({ drawingId, history, budgetMembers }) => {
     managers.set(drawingId, history);
@@ -2813,10 +2864,10 @@ export const createHistoryRouter = ({
     ),
     retainedArtifacts: () => heldMembers().flatMap((member) => member.retainedArtifacts()),
     dropOldestFigure: () => heldMembers().some((member) => member.dropOldestFigure()),
-    retainedFileIds: () => new Set([
+    retainedFileIds: () => loadCaptures.withFileIds(new Set([
       ...[...projectEntries(), ...openParts.flat().map(({ entry }) => entry)].flatMap((entry) => [...entry.fileIds]),
       ...heldMembers().flatMap((member) => [...member.retainedFileIds()])
-    ]),
+    ])),
     dropOldestStep: (kept) => {
       if (projectUndo.length > 0 && projectUndo[0] !== kept) { dropOldestProject(); touchProject(); return 'undo'; }
       const keptRedo = projectRedo.filter((entry) => entry === kept);
@@ -3184,7 +3235,7 @@ export const createHistoryRouter = ({
     // OV-1769: the members and the project stream as a Load found them, which
     // its rollback gives back after `replaceMembers` (`restoreMembers`).
     /** @returns {CapturedMembers} */
-    captureMembers: () => Object.freeze({
+    captureMembers: () => loadCaptures.hold(Object.freeze({
       histories: Object.freeze([...managers].map(([drawingId, history]) => Object.freeze({
         drawingId, history,
         budgetMembers: [...memberStreams].filter(([, stream]) => stream === drawingId).map(([member]) => member)
@@ -3193,7 +3244,10 @@ export const createHistoryRouter = ({
       redo: Object.freeze([...projectRedo]),
       savePoint: projectSavePoint,
       session: sessionCurrent
-    }),
+    })),
+    // The Load that captured the members ended, rolled back or not: they no longer keep their files (the next budget
+    // check lets go of those no member names).
+    releaseCapturedMembers: loadCaptures.release,
     /** @param {CapturedMembers} members */
     restoreMembers: (members) => {
       [...managers.keys()].forEach(leaveBudget);

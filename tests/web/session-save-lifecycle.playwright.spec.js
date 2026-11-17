@@ -434,3 +434,66 @@ test('Rename Session is one History step: Undo and Redo move the title apart fro
   await history('redo');
   expect(await read()).toEqual({ ...changed, title: 'Renamed' });
 });
+
+// OV-3510: a Session's CLI options are its drawing's. A new drawing that takes the ID of a deleted drawing is saved
+// without them.
+test('a new drawing that takes a deleted drawing\'s ID is saved without its CLI options', async ({ page }, testInfo) => {
+  test.setTimeout(240000);
+  const { gallerySessionBytes, readSessionFile } = require('./helpers/session-file.cjs');
+  const { openFresh, settle } = require('./helpers/audit-browser.cjs');
+  await openFresh(page);
+  const bytes = await gallerySessionBytes('BGC0000708-BGC0000713', (document) => {
+    document.drawings[0].cliOptions = { marker: 'deleted-drawing' };
+  });
+  await evaluateWithRetainedPromise(page, async (b64) => {
+    const binary = atob(b64);
+    const data = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const result = await window.__GBDRAW_APP__.importSession({ target: { files: [new File([data], 'cli.gbdraw')], value: 'selected' } });
+    if (result.status !== 'ok') throw new Error(JSON.stringify(result.error));
+  }, bytes.toString('base64'));
+  await settle(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.drawingList.newDrawing('circular'));
+  await settle(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.drawingList.deleteDrawing('linear'));
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.drawingList.newDrawing('linear').drawingId)).toBe('linear');
+  await settle(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'cli'; });
+  const download = page.waitForEvent('download');
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const saved = testInfo.outputPath('cli.gbdraw');
+  await (await download).saveAs(saved);
+  const document = await readSessionFile(saved);
+  expect(document.drawings.map((drawing) => [drawing.id, drawing.cliOptions ?? null]))
+    .toEqual(document.drawings.map((drawing) => [drawing.id, null]));
+});
+
+// OV-3771: a Duplicate that was never Generated shows its source's figure; switching to it must leave nothing for
+// Save to wait on, so Save Session downloads.
+test('Save Session downloads with an ungenerated Duplicate of a Gallery Linear drawing shown', async ({ page }, testInfo) => {
+  test.setTimeout(240000);
+  const { gallerySessionBytes, readSessionFile } = require('./helpers/session-file.cjs');
+  const { openFresh, settle } = require('./helpers/audit-browser.cjs');
+  await openFresh(page);
+  const bytes = await gallerySessionBytes('BGC0000708-BGC0000713');
+  await evaluateWithRetainedPromise(page, async (b64) => {
+    const binary = atob(b64);
+    const data = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const result = await window.__GBDRAW_APP__.importSession({ target: { files: [new File([data], 'dup.gbdraw')], value: 'selected' } });
+    if (result.status !== 'ok') throw new Error(JSON.stringify(result.error));
+  }, bytes.toString('base64'));
+  await settle(page);
+  const copy = await page.evaluate(() => window.__GBDRAW_APP__.drawingList.duplicateDrawing('linear').drawingId);
+  await settle(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'dup'; });
+  const download = page.waitForEvent('download', { timeout: 60000 });
+  const saved = await evaluateWithRetainedPromise(page, () => Promise.race([
+    window.__GBDRAW_APP__.saveSessionWithTitle().then((result) => result?.status ?? 'done'),
+    new Promise((resolve) => { setTimeout(() => resolve('still saving after 60 s'), 60000); })
+  ]));
+  expect(saved).toBe('saved');
+  const file = testInfo.outputPath('dup.gbdraw');
+  await (await download).saveAs(file);
+  const document = await readSessionFile(file);
+  expect(document.drawings.map((drawing) => drawing.id)).toEqual(['linear', copy]);
+});

@@ -1,6 +1,5 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
-/** @import { DrawingId } from '../../services/drawing-view.js' */
 import {
   buildFeatureSearchIndex,
   formatSearchMatchLine,
@@ -140,6 +139,43 @@ const EMPTY_SEARCH = Object.freeze({
   input: '', query: '', field: 'all', qualifierKey: '', useRegex: false,
   appliedField: 'all', appliedQualifierKey: '', appliedUseRegex: false
 });
+
+/**
+ * A search belongs to the drawing it was typed in: a drawing that is left
+ * (a drawing switch, a Load) keeps the search shown, and the drawing that
+ * arrives installs its own, which the arriving Result's mount applies
+ * (`handleMountedResultReady`). Keyed by the drawing, not its ID: a new drawing
+ * that takes a deleted drawing's ID starts with no search (OV-3510), and a
+ * search leaves with its drawing, so a Load's rollback gives the drawings back
+ * with theirs.
+ * @param {() => SearchDraft} capture The search shown.
+ * @param {(draft: Readonly<SearchDraft>) => void} install Shows a search.
+ */
+const searchesByDrawing = (capture, install) => {
+  /** @type {WeakMap<DrawingState, SearchDraft>} */
+  const kept = new WeakMap();
+  /** @param {DrawingState} departing */
+  const leave = (departing) => { kept.set(departing, capture()); };
+  /** @param {DrawingState} arriving */
+  const arrive = (arriving) => {
+    install(kept.get(arriving) || EMPTY_SEARCH);
+    kept.delete(arriving);
+  };
+  return {
+    leave,
+    arrive,
+    // A same-ID copy replaced `drawing`: the copy keeps the drawing's search too.
+    /** @param {DrawingState} drawing @param {DrawingState} copy */
+    follow: (drawing, copy) => {
+      if (kept.has(drawing)) kept.set(copy, /** @type {SearchDraft} */ (kept.get(drawing)));
+    },
+    /** @param {DrawingState} departing @param {DrawingState} arriving */
+    switch: (departing, arriving) => {
+      leave(departing);
+      arrive(arriving);
+    }
+  };
+};
 
 /**
  * @param {PreviewFeatureSearchOptions} options
@@ -501,16 +537,14 @@ export const createPreviewFeatureSearch = ({
     scheduleRefreshSearch({ preserveActive: false });
   };
 
-  // A search belongs to the drawing it was typed in: the drawing transition
-  // keeps the departing drawing's search and installs the arriving one's,
-  // which the arriving Result's mount applies (`handleMountedResultReady`).
-  /** @type {Map<DrawingId, SearchDraft>} */
-  const searchByDrawing = new Map();
-  /** @param {DrawingId} departing @param {DrawingId} arriving */
-  const switchDrawingSearch = (departing, arriving) => {
-    searchByDrawing.set(departing, captureSearch());
-    installSearch(searchByDrawing.get(arriving) || EMPTY_SEARCH);
-    searchByDrawing.delete(arriving);
+  const drawingSearches = searchesByDrawing(captureSearch, installSearch);
+  // A Load's rollback shows the drawing the Load left (`keepDrawingSearch`)
+  // again: its search comes back and runs on the Result shown, or on the
+  // Result's mount when it is not ready yet (OV-3774).
+  /** @param {DrawingState} drawing */
+  const returnToDrawingSearch = (drawing) => {
+    drawingSearches.arrive(drawing);
+    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch({ preserveActive: false });
   };
   // Hiding the search bar changes its visibility only: the search, its
   // matches, and its highlights stay. While an active search dims the diagram
@@ -531,9 +565,10 @@ export const createPreviewFeatureSearch = ({
   ));
 
   // A loaded Session replaces the Results of both modes that a search named,
-  // and shows the search bar again.
+  // and shows the search bar again. The loaded drawings are new drawings, with
+  // no search kept for them; the drawing the Load left keeps its search
+  // (`keepDrawingSearch`), which a rollback gives back.
   const resetModeSearches = () => {
-    searchByDrawing.clear();
     clearSearch();
     previewFeatureSearchVisible.value = true;
   };
@@ -602,7 +637,10 @@ export const createPreviewFeatureSearch = ({
     goToNext,
     goToPrevious,
     clearSearch,
-    switchDrawingSearch,
+    switchDrawingSearch: drawingSearches.switch,
+    keepDrawingSearch: drawingSearches.leave,
+    returnToDrawingSearch,
+    followDrawingCopy: drawingSearches.follow,
     resetModeSearches,
     handleMountedResultReady,
     openActiveMatch,

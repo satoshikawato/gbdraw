@@ -297,6 +297,47 @@ test('the pending notice reads the shown drawing\'s cards only, when another dra
   assert.equal(controls.hasPendingChanges.value, true, 'a change of the shown card is pending');
 });
 
+// OV-3507: a Duplicate shows its source's committed request object until its own Generate. The rows that request
+// draws are bound to the cards of the drawing shown with it, so the copy's popup and Align at feature write the
+// copy's drafts, never the source's.
+test('a Duplicate that shares its source\'s committed request binds the request to its own cards', () => {
+  const model = circularControls({ linear: true });
+  const { state, controls } = model;
+  const source = state.activeDrawing();
+  assert.equal(controls.targetForFeature(model.feature).row.drawingId, 'linear');
+  const copy = Object.create(source, { id: { value: 'linear-2' },
+    linearSeqs: { value: source.linearSeqs.map((card) => ({ ...card })) }, recordDisplayDrafts: { value: [] } });
+  Object.defineProperties(state, {
+    drawingList: { value: () => [source, copy], configurable: true },
+    drawingOf: { value: (id) => (id === 'linear-2' ? copy : source), configurable: true },
+    activeDrawing: { value: () => copy, configurable: true }
+  });
+  assert.equal(controls.targetForFeature(model.feature).row.drawingId, 'linear-2');
+  const [target] = controls.recordStartTargets(copy, [{ recordKey: 'record-2', startCoordinate: 5 }]);
+  assert.equal(target.row.drawingId, 'linear-2');
+  // Back on the source, its binding is its own again.
+  Object.defineProperty(state, 'activeDrawing', { value: () => source, configurable: true });
+  assert.equal(controls.targetForFeature(model.feature).row.drawingId, 'linear');
+});
+
+// Review 3 M1: a legacy configuration Load shows a same-ID copy of the drawing with the drawing's committed request.
+// The copy keeps the drawing's binding of that request, the cards the drawing showed when the request first reached
+// the rows, and the drawing keeps it too for the Load's rollback.
+test('a same-ID copy of the drawing keeps the binding of its committed request', () => {
+  const model = circularControls({ linear: true });
+  const { state, controls } = model;
+  const source = state.activeDrawing();
+  const bound = controls.sourceBinding().boundSources;
+  const copy = Object.create(source, { linearSeqs: { value: source.linearSeqs.map((card) => ({ ...card })) },
+    recordDisplayDrafts: { value: [] } });
+  controls.followDrawingCopy(source, copy);
+  Object.defineProperty(state, 'activeDrawing', { value: () => copy, configurable: true });
+  assert.equal(controls.sourceBinding().boundSources, bound);
+  assert.equal(controls.targetForFeature(model.feature).row.drawingId, 'linear');
+  Object.defineProperty(state, 'activeDrawing', { value: () => source, configurable: true });
+  assert.equal(controls.sourceBinding().boundSources, bound);
+});
+
 test('manual start and orientation edits clear feature provenance', () => {
   const model = circularControls();
   const row = model.controls.allRows.value[0];

@@ -891,6 +891,27 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
     return true;
   };
 
+  // R10: an expectation for the Result the mounted root already shows, bound
+  // to it or released with it, changes nothing the mount watcher observes, so
+  // it binds that root here, as the watcher binds a remounted one (a rollback
+  // that restores the mounted Result, a drawing switch to a drawing that shows
+  // the same Result: OV-3773).
+  /** @param {ReadinessExpectation} expectation */
+  const bindUnchangedMount = (expectation) => {
+    const root = getMountedSvg();
+    const shown = activeRuntime?.svg === root ? activeRuntime.resultIdentity
+      : released?.root === root ? released.resultIdentity : null;
+    if (!root || activeExpectation !== expectation || shown !== expectation.resultIdentity || !expectation.isCurrent()) return;
+    if (activeRuntime?.readyReceipt) invalidateReadyReceipt(activeRuntime.readyReceipt);
+    state.skipCaptureBaseConfig.value = false;
+    void bindMountedResult(createMountedResultContext({
+      root,
+      result: expectation.result,
+      resultIndex: expectation.resultIndex,
+      catalogState: expectation.catalogState
+    })).catch(() => {});
+  };
+
   /**
    * @param {PreviousResultRestoreOptions} options
    * @returns {Promise<ReadyReceipt | null>}
@@ -942,26 +963,8 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
       return null;
     }
     // R10: a failure before any candidate replaced the Result restores the
-    // Result that is still mounted. The mount watcher observes no change, so
-    // bind that root here, as the watcher binds a remounted one.
-    const root = getMountedSvg();
-    if (
-      root
-      && root === rootBeforeRestore
-      && activeExpectation === expectation
-      && activeRuntime?.svg === root
-      && activeRuntime.resultIdentity === expectation.resultIdentity
-      && expectation.isCurrent()
-    ) {
-      if (activeRuntime.readyReceipt) invalidateReadyReceipt(activeRuntime.readyReceipt);
-      state.skipCaptureBaseConfig.value = false;
-      void bindMountedResult(createMountedResultContext({
-        root,
-        result,
-        resultIndex,
-        catalogState: expectation.catalogState
-      })).catch(() => {});
-    }
+    // Result that is still mounted.
+    if (getMountedSvg() === rootBeforeRestore) bindUnchangedMount(expectation);
     const receipt = await expectation.promise;
     recordSessionLifecycleEvent('preview.restore-bind-completed', {
       phase,
@@ -1071,6 +1074,8 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
       )
     });
     void expectation.promise.catch(() => {});
+    // After the render the selection caused (queued before this task): a root it replaced is the watcher's to bind.
+    queueMicrotask(() => bindUnchangedMount(expectation));
     return expectation;
   };
 
