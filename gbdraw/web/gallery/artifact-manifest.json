@@ -39,16 +39,16 @@
       "sha256": "e8157118335c19a94ecbd094cd8c599654222a867b97f47f1f0918f6e7fd2aab"
     },
     "gallery/examples/hepatoplasma_scabrum_depth.svg": {
-      "bytes": 2858570,
-      "sha256": "12cd447b24b695fa228ea995a36dabd7126bd99b51b560b3fc0f27db0c1c1675"
+      "bytes": 2858551,
+      "sha256": "b4b9803ea80006f9f209b9e470ebcae9660d9e82d3b7a60c64569df343ca7335"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
-      "bytes": 14708627,
-      "sha256": "fb803bb29712b2d2814f8290bea589321cfe58053f17fd467268cabc2efb8368"
+      "bytes": 14708333,
+      "sha256": "3b40b323f54bc83306d9deaed5af829df1e228d3a60f01196f8cc93f2ef62728"
     },
     "gallery/examples/hepatoplasmataceae_orthogroup.svg": {
-      "bytes": 16668996,
-      "sha256": "8fc9803601423dab96314ae4c1f68eeb3557f1e00e984831690533ede5a6a4f8"
+      "bytes": 16668702,
+      "sha256": "b26f2cc870ca9bbbd7ecd027dc3e293546fd20326f52e54810ca9360f4a769bc"
     },
     "gallery/examples/lambda_basic_linear.svg": {
       "bytes": 870616,
@@ -87,16 +87,16 @@
       "sha256": "fe7903e9f12a3789bed041b460f5055022d1ab5aa15de982fbf75552cbebbb40"
     },
     "gallery/sessions/hepatoplasma_scabrum_depth.gbdraw": {
-      "bytes": 719611,
-      "sha256": "492c70c1257604b819c1a90dd1d92afd6fe3000d9d394a5771efb46c2adca177"
+      "bytes": 719610,
+      "sha256": "e5bff88161946b4b6f7252a0d726132ff5ca13f699ffa8d684e15294a8c552c3"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw": {
-      "bytes": 8924239,
-      "sha256": "cf083dc0789342d52638d667a5115d917f2f9ef7c2bb0096669d33be5fb6f0c8"
+      "bytes": 8923978,
+      "sha256": "65f1eecb722bb4e82818921227dc5fac0153a0535f645fc920fdf1c2b93310e9"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw": {
-      "bytes": 12026269,
-      "sha256": "a5aacf71c4c9247954150731875c996671951b403ed5a1e3c674c066bcb29e1f"
+      "bytes": 12026047,
+      "sha256": "183efd3cb9e7cf364dd6a5da334954662e76aa83cc94081d34017a527030e158"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw": {
       "bytes": 92593,
@@ -135,16 +135,16 @@
       "sha256": "55d3f81ce04d6bb127091dd479fdf27c0a258aed6262244a4bdfc92523df9caa"
     },
     "gallery/sources/hepatoplasma_scabrum_depth.svg": {
-      "bytes": 481958,
-      "sha256": "755bd92a56131dca28e2a270e0614f1959e65b01221705e6151c4efd65dd1996"
+      "bytes": 481939,
+      "sha256": "a81ee85f4c4778a05f2f063805fd8e0bc9640f550b185b4876a0e43a47f5d6ca"
     },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
-      "bytes": 3718997,
-      "sha256": "8b3a5f77c124f5887bb93c8c64be3cf30f244e9b596ba2d2b25418c5a7f2f0de"
+      "bytes": 3718703,
+      "sha256": "32882e9bc49464c4a32a1cbbfe030b7225c7a9993ff7fad3ad322ccfa6106b74"
     },
     "gallery/sources/hepatoplasmataceae_orthogroup.svg": {
-      "bytes": 5551212,
-      "sha256": "f9994c716a95429efa614bfec5a6b16800609fbf7bfc4953624232e1dc49ea6f"
+      "bytes": 5550918,
+      "sha256": "880c6644a5f203347d6b92786f82021790c884a6e8681ab4d2fe29357b35e2b9"
     },
     "gallery/sources/lambda_basic_linear.svg": {
       "bytes": 129602,
@@ -187,12 +187,12 @@
       "sha256": "387ae246abcded897dc17c3a7b48d952eaca16de84d68e0398c07dea9da270c7"
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
-      "bytes": 19732,
-      "sha256": "02cbc9a8769efc78d9254ad0275964ff173e001947302fcff391a38f23eec78a"
+      "bytes": 19412,
+      "sha256": "c5119136d1d5b8b1e0b116929b428267b26892345fa6bb8a86535b343da62315"
     },
     "gallery/thumbnails/hepatoplasmataceae_orthogroup.webp": {
-      "bytes": 21256,
-      "sha256": "4b91e5e9071f94f44948ad83dd49cbcc16561c531ae7ba8a407f8da04ef47290"
+      "bytes": 21118,
+      "sha256": "64ea1e068ee88c77dad558a99f35778fbb3c74d8c8fd1fddfd2f2df203a2e2ff"
     },
     "gallery/thumbnails/lambda_basic_linear.webp": {
       "bytes": 24090,
