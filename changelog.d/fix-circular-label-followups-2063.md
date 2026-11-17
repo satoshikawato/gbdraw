@@ -3,5 +3,6 @@
   end could turn a whole group by several degrees and slant its leaders (for example the rotated tobacco
   plastome in the command-line reference).
 - Fixed: Circular labels inside a feature: whether a label fits inside its feature is measured at the radius
-  the label is drawn at. A features lane well inside the axis circle (the inner copy of two features slots)
-  no longer draws a label longer than its feature inside it; the label goes outside instead.
+  the label is drawn at. A features lane inside the axis circle (the inner copy of two features slots, or
+  the minus-strand lane with `--separate_strands`) no longer draws a label longer than its feature inside
+  it; the label goes outside instead.
