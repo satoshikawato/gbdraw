@@ -163,6 +163,8 @@ CASES: tuple[Case, ...] = (
     Case("circular-rule-caption-names-no-other-row", "circular", marker=True,
          row_names=(("Marker", "Key genes"), ("No such type", "Coding")),
          note="a rule caption's key or a key the table lacks names no other row"),
+    Case("circular-type-named-its-key-other-row", "circular", marker=True, row_names=(("CDS", "CDS"),),
+         note="the type named by its own key names its other row so while a captioned rule draws some CDS"),
 )
 
 

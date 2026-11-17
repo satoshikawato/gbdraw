@@ -2031,6 +2031,7 @@ export const createAppSetup = () => {
     if (undrawn && !direction) return;
     if (!stepRefitsDrawnLegend(changes, direction, {
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
+      dormantLegendEntries: drawing.dormantLegendEntries.value,
       rules: drawing.manualSpecificRules, canvasPadding: drawing.canvasPadding, originalLegendOrder: originalLegendOrder.value,
       // The rows the request names (`requestLegendEditLeaves`): those Python drew in every Result of the drawing.
       pythonRowKeys: pythonLegendRowKeys(originalLegendOrder.value, results.value)

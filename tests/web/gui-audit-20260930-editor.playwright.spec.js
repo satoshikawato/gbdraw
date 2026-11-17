@@ -617,7 +617,8 @@ test('HMMT Session: the rename of the CDS row, which no color rule draws, names 
     await expect(page.getByLabel('Feature legend name', { exact: true })).toHaveValue('Coding');
     // V-OD26: the name is the type's. A captioned rule for COX1 ("This feature only") takes one CDS: Python
     // draws no CDS row then, and the other CDS are drawn in the type's "other" row, named "Coding" live and at
-    // Generate, in the Legend tab and in the popup. Removing the rule draws the CDS row as "Coding" again.
+    // Generate, in the Legend tab and in the popup. V-OD27: renaming that row from the Legend tab names the type
+    // ("Proteins"), and removing the rule draws the CDS row by that name.
     const featureRows = async (source) => (await legendCaptions(page, { source })).filter((caption) => !/RNA|GC/.test(caption));
     const panelRows = () => page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
@@ -643,7 +644,13 @@ test('HMMT Session: the rename of the CDS row, which no color rule draws, names 
     if (await scope.isVisible()) await scope.getByRole('button', { name: 'This feature only' }).click();
     await settle(page);
     await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
-    for (const [state, edit] of [['with the rule', null], ['the rule removed', async () => {
+    for (const [state, rows, edit] of [['with the rule', ['Marker', 'Coding'], null], ['the "other" row renamed', ['Marker', 'Proteins'], async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.originalCaption === 'other proteins'), 'Proteins');
+      });
+      await settle(page);
+    }], ['the rule removed', ['Proteins'], async () => {
       await evaluateWithRetainedPromise(page, async () => {
         const app = window.__GBDRAW_APP__;
         await app.removeSpecificRule(app.manualSpecificRules.findIndex((rule) => rule.cap === 'Marker'));
@@ -651,14 +658,14 @@ test('HMMT Session: the rename of the CDS row, which no color rule draws, names 
       await settle(page);
     }]]) {
       if (edit) await edit();
-      const rows = state === 'with the rule' ? ['Marker', 'Coding'] : ['Coding'];
+      const name = rows.at(-1);
       expect(await featureRows('mounted'), `${state}: live`).toEqual(rows);
       expect(await panelRows(), `${state}: the Legend tab`).toEqual(rows);
-      expect(await popupOfCytb(), `${state}: the popup names the drawn row`).toBe('Coding');
+      expect(await popupOfCytb(), `${state}: the popup names the drawn row`).toBe(name);
       await generate(page);
       expect(await featureRows('result'), `${state}: Generate draws the live rows`).toEqual(rows);
       expect(await panelRows(), `${state}: the Legend tab after Generate`).toEqual(rows);
-      expect(await popupOfCytb(), `${state}: the popup after Generate`).toBe('Coding');
+      expect(await popupOfCytb(), `${state}: the popup after Generate`).toBe(name);
     }
   } finally {
     await page.context().close();

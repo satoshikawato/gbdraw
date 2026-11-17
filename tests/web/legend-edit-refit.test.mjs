@@ -35,7 +35,8 @@ test('the Legend editor and Canvas padding rows are live, name the draft fields 
   const rows = Object.fromEntries(SETTING_APPLICATION.map((entry) => [entry.id, entry]));
   assert.equal(rows['legend-editor'].application, 'live');
   assert.deepEqual(rows['legend-editor'].refitPaths, {
-    'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries', 'config.rules': 'rules'
+    'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries',
+    'editorState.legend.dormantEntries': 'dormantLegendEntries', 'config.rules': 'rules'
   });
   assert.equal(rows['canvas-padding'].application, 'live');
   assert.deepEqual(rows['canvas-padding'].refitPaths, { 'ui.canvasPadding': 'canvasPadding' });
@@ -111,9 +112,10 @@ test('a rename that writes color rules fits again; a rule color edit does not', 
 // OV-244 (c): the rename of a type's palette row (`CDS`, no color rule draws it) writes no color rule. The request
 // names the row by its key (`objects.legends.row_names`), Python draws the name, and a sized figure is fitted again.
 // The name is the type's (V-OD26): while a captioned rule for the type is used, Python draws its features in the rule's
-// row and the type's "other" row, no `CDS` row; the rule commit keeps the rename as a dormant entry (OV-120), the
-// request still carries `[CDS, Coding]`, and Python and the live executor name the "other" row "Coding". Once the
-// rule goes, the same request names the drawn `CDS` row "Coding" again.
+// row and the type's "other" row, no `CDS` row. Given the rename as a dormant entry (OV-120; the rule commit that
+// keeps it is pinned in tests/web/legend-sync.test.mjs), the request still carries `[CDS, Coding]`, and the live
+// executor's operation names the type, which it gives the "other" row. Once the rule goes, the same request names the
+// drawn `CDS` row "Coding" again. This test covers the request projection and the live compile only.
 test('a palette row rename is a row name the request carries, with no rule, in every state of a captioned rule for its type', () => {
   const renamed = [row('CDS', 'Coding'), row('tRNA'), row('rRNA')];
   const named = { 'objects.legends.row_names': [['CDS', 'Coding']] };
@@ -135,6 +137,12 @@ test('a palette row rename is a row name the request carries, with no rule, in e
   assert.deepEqual(legendEditConfigLeaves({ ...ownName, rules: [nd1] }),
     { 'objects.legends.row_names': [['other proteins', 'Other coding'], ['CDS', 'Coding']] });
   assert.deepEqual(legendEditConfigLeaves({ ...drawing({ legendEntries: renamed }), rules: [] }), named, 'listed again, the row is named');
+  // V-OD27: while the rule holds, a rename of the drawn "other" row names the type: the step changes only the dormant
+  // entry, which the request carries, so a sized figure is fitted again.
+  const proteins = [row('CDS', 'Proteins')];
+  const dormantChange = { path: ['editorState', 'legend', 'dormantEntries'], before: waiting.dormantLegendEntries, after: proteins, beforeHas: true, afterHas: true };
+  assert.equal(stepRefitsDrawnLegend([dormantChange], undefined, { ...waiting, dormantLegendEntries: proteins, rules: [nd1] }), true,
+    'a rename of the type on its "other" row fits again');
 });
 
 test('an Undo or a Redo of such a step fits again; the Undo reads the drawing as it was before the step', () => {

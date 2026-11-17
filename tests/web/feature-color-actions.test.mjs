@@ -1033,7 +1033,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     };
   };
   const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed,
-    legendRowName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {}, featureColorOverrides = {} }) => {
+    legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {}, featureColorOverrides = {}, dormant = [] }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -1061,14 +1061,15 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         entry.originalCaption, { key: entry.originalCaption, color: entry.color }
       ]))
     });
-    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, findLegendRowNamed, keepBothNamesOf,
+    const stateDormantEntries = ref(dormant.map((entry) => ({ featureIds: [], ...entry })));
+    const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
         featureColorOverrides, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
         displayedResultMetadata: () => null,
         clickedFeature: ref(clicked), featureStyleScopeDialog: scopeDialog, resetColorDialog: {}, legendRenameDialog,
-        legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), dormantLegendEntries: ref([]),
+        legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), dormantLegendEntries: stateDormantEntries,
         legendStrokeOverrides: {}, legendColorOverrides,
         // Python's swatch of each of its rows is the Result's (OV-282): the fixture's colors of the rows of `order`.
         originalLegendOrder: originalOrder, originalLegendColors: ref(Object.fromEntries([...stateLegendEntries.value, ...deleted]
@@ -1097,7 +1098,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       getFeatureElements: () => [],
       getFeatureFillElements: () => []
     });
-    return { renameActions, committed, commitOptions, errorLog, scopeDialog, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides, deleted, derivations };
+    return { renameActions, committed, commitOptions, errorLog, scopeDialog, legendRenameDialog, stateLegendEntries, stateDormantEntries, originalOrder, legendColorOverrides, deleted, derivations };
   };
 
   // A row's name field shows the name the Legend draws (`Shared (1)`), not the
@@ -1227,8 +1228,12 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await renamedOther.renameActions.renameLegendEntry(1, 'other CDS');
   assert.notEqual(renamedOther.legendRenameDialog.show, true, 'a rename onto a new name asks nothing');
   assert.deepEqual(renamedOther.committed, [], 'no rule is written');
+  // V-OD27: the row is the type's default row while no CDS row is listed; its name is written on the type's key,
+  // which Python gives the "other" row in its place (`apply_legend_row_edits`).
   assert.deepEqual(renamedOther.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
-    [['ND1', 'ND1'], ['other CDS', 'other proteins']], 'the row is renamed in its place');
+    [['ND1', 'ND1'], ['other proteins', 'other proteins']], 'the "other" row has no name of its own');
+  assert.deepEqual(renamedOther.stateDormantEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+    [['other CDS', 'CDS']], 'the type is named');
   const ontoOther = otherRow();
   await ontoOther.renameActions.renameLegendEntry(0, 'other proteins');
   assert.deepEqual([ontoOther.legendRenameDialog.show, ontoOther.legendRenameDialog.mergeAvailable], [true, false],
@@ -1283,7 +1288,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await popupOther.renameActions.handleLegendNameCommit();
   await popupOther.renameActions.handleLegendRenameChoice('group');
   assert.deepEqual(popupOther.committed, [], 'the popup group rename of the "other" row writes no rule');
-  assert.deepEqual(namesOf(popupOther), [['ND1', 'ND1'], ['other CDS', 'other proteins']]);
+  assert.deepEqual(namesOf(popupOther), [['ND1', 'ND1'], ['other proteins', 'other proteins']]);
+  assert.deepEqual(popupOther.stateDormantEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]), [['other CDS', 'CDS']]);
   // "This feature only" splits the feature off with a rule of its own.
   const singleClicked = { svg_id: 'p1', feat: paletteFeatures[0], color: '#54bcf8', legendName: 'Coding', appliedLegendName: 'CDS' };
   const singlePalette = paletteRow({ clicked: singleClicked });
@@ -1318,6 +1324,80 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   });
   await overridden.renameActions.renameLegendEntry(0, 'Coding');
   assert.equal(overridden.committed.length, 1, 'a row with a per-feature color edit takes rules');
+  // V-OD27 (review R2 findings 1 and 2): a type's default row has one name, on the type's key. In S2 (CDS renamed
+  // Coding, then a captioned rule "Marker" for COX1) the figure draws CDS's default row as its "other" row, named
+  // "Coding" from the dormant [CDS, Coding]. A rename of that row from the Legend tab or the popup writes the name on
+  // CDS (the dormant entry) and leaves the "other" row no name of its own; the request then names the type in either
+  // state of the rule. The row's default caption, "other proteins", names neither key; the type's own key, "CDS", is a
+  // name the type keeps ([CDS, CDS], which Python gives the "other" row while the rule holds).
+  const markerRule = { feat: 'CDS', qual: 'product', val: '^COX1$', color: '#e63946', cap: 'Marker' };
+  const s2Features = [cds('m1', 'COX1', 'Marker'), cds('c2', 'COX2', 'other proteins'), cds('c3', 'ATP6', 'other proteins')];
+  const s2 = ({ dormantName = 'Coding', clicked = null } = {}) => {
+    // The displayed Result draws the "other" row by the type's name (the Legend owner's drawn name), as the live
+    // edit of the last rename left it.
+    let fixture = null;
+    const drawnName = (key) => (key === 'other proteins'
+      ? fixture?.stateDormantEntries.value.find((entry) => entry.originalCaption === 'CDS')?.caption ?? key : key);
+    fixture = build({
+      entries: [{ caption: 'Marker', color: '#e63946' }, { caption: 'other proteins', color: '#54bcf8' }], order: ['Marker', 'other proteins'],
+      rules: [markerRule], features: s2Features, otherRows: { 'other proteins': 'CDS' }, clicked,
+      dormant: dormantName ? [{ caption: dormantName, originalCaption: 'CDS', color: '#54bcf8' }] : [],
+      legendRowName: drawnName, legendEntryName: (entry) => drawnName(entry.originalCaption),
+      legendRowIsNamed: (key, typed) => typed === key || typed === drawnName(key)
+    });
+    return fixture;
+  };
+  const s2Leaves = (fixture, rules) => legendEditConfigLeaves({
+    legendEntries: fixture.stateLegendEntries.value, deletedLegendEntries: [], dormantLegendEntries: fixture.stateDormantEntries.value,
+    originalLegendOrder: fixture.originalOrder.value, pythonRowKeys: fixture.originalOrder.value, rules,
+    canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
+  });
+  const dormantOf = (fixture) => fixture.stateDormantEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]);
+  const s2Renames = [
+    ['Proteins', [['Proteins', 'CDS']], { 'objects.legends.row_names': [['CDS', 'Proteins']] }],
+    ['other proteins', [], {}],
+    ['CDS', [['CDS', 'CDS']], { 'objects.legends.row_names': [['CDS', 'CDS']] }]
+  ];
+  for (const [typed, dormantRows, leaves] of s2Renames) {
+    for (const [route, rename] of [
+      ['the Legend tab', async () => {
+        const fixture = s2();
+        await fixture.renameActions.renameLegendEntry(1, typed);
+        return fixture;
+      }],
+      ['the popup', async () => {
+        const clicked = { svg_id: 'c2', feat: s2Features[1], color: '#54bcf8', legendName: typed, appliedLegendName: 'other proteins' };
+        const fixture = s2({ clicked });
+        await fixture.renameActions.handleLegendNameCommit();
+        await fixture.renameActions.handleLegendRenameChoice('group');
+        return fixture;
+      }]
+    ]) {
+      const fixture = await rename();
+      const label = `S2, ${route}, "${typed}"`;
+      assert.deepEqual(fixture.committed, [], `${label}: no rule`);
+      assert.deepEqual(namesOf(fixture), [['Marker', 'Marker'], ['other proteins', 'other proteins']], `${label}: the "other" row has no name of its own`);
+      assert.deepEqual(dormantOf(fixture), dormantRows, `${label}: the type's name`);
+      assert.deepEqual(s2Leaves(fixture, [markerRule]), leaves, `${label}: the request with the rule`);
+      assert.deepEqual(s2Leaves(fixture, []), leaves, `${label}: the request once the rule goes`);
+    }
+  }
+  // The drawn name is no rename; with no earlier rename, the rename adds the type's name.
+  const sameName = s2();
+  await sameName.renameActions.renameLegendEntry(1, 'Coding');
+  assert.deepEqual(dormantOf(sameName), [['Coding', 'CDS']], 'the drawn name is no rename');
+  const unnamed = s2({ dormantName: '' });
+  await unnamed.renameActions.renameLegendEntry(1, 'Proteins');
+  assert.deepEqual([namesOf(unnamed)[1], dormantOf(unnamed)], [['other proteins', 'other proteins'], [['Proteins', 'CDS']]]);
+  await unnamed.renameActions.renameLegendEntry(1, 'other proteins');
+  assert.deepEqual(dormantOf(unnamed), [], 'its default caption is no name');
+  // The type's own row, listed again, takes the name; the "other" row's own name (an older Session's) goes with it.
+  const ownRow = build({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }], order: ['CDS'], features: paletteFeatures,
+    dormant: [{ caption: 'Other coding', originalCaption: 'other proteins', color: '#54bcf8' }]
+  });
+  await ownRow.renameActions.renameLegendEntry(0, 'Proteins');
+  assert.deepEqual([namesOf(ownRow), dormantOf(ownRow)], [[['Proteins', 'CDS']], []]);
   // D-26: a CDS that an uncaptioned rule colors while a captioned CDS rule is
   // used is in no Legend row ('' from the rule owner). Its Color Change Scope
   // dialog names no Legend item, and a popup rename from its empty name takes

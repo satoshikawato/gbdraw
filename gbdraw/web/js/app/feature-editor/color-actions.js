@@ -23,13 +23,14 @@ import {
   fillRecordOf,
   legendEntryKey,
   renameListedLegendRow,
+  replaceDormantLegendRows,
   replaceLegendRows,
   setFeatureStroke,
   setLegendColor,
   setLegendStroke
 } from '../../services/drawing/paint.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
-import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys } from '../../services/specific-color-rules.js';
+import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys, otherFeatureRowKey } from '../../services/specific-color-rules.js';
 import { drawnBlockStrokeElement, featureStrokeElements } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
@@ -252,6 +253,35 @@ const legendNameConflictReason = ({ name, ruleOnly, deleted, mergeAvailable, sam
   const row = deleted ? 'is a deleted Legend item' : 'already exists';
   if (!mergeAvailable) return `${named} ${row} and draws a different feature type, so the two cannot be merged.`;
   return deleted ? `${named} ${row}.` : `${named} ${row} with another color.`;
+};
+
+// V-OD27: a type's default row has one name, on the type's key. While no row
+// of the type is listed (a captioned rule draws some of its features), the
+// type's "other" row (`type`: the type whose "other" row `row` is, which the
+// rule owner finds by the row's key) is that row: Python names it by the
+// type's name (`apply_legend_row_edits`), so a rename of it names the type, a
+// dormant entry until its row is drawn again, and the "other" row keeps no
+// name of its own. The row's own key, its default caption, names neither. A
+// rename of the type's own row drops the "other" row's own name (an older
+// Session's) the same way. `keepDormant` takes the dormant renames when they
+// change; returns the caption the listed row takes.
+/**
+ * @param {{ listed: readonly LegendRow[], dormant: readonly KeptLegendRow[] }} lists The drawing's rows.
+ * @param {LegendRow} row @param {PythonLegendKey | null} type @param {string} name The typed name.
+ * @param {(rows: readonly KeptLegendRow[]) => void} keepDormant
+ * @returns {LegendCaption}
+ */
+const typeDefaultRowRename = ({ listed, dormant }, row, type, name, keepDormant) => {
+  const key = legendEntryKey(row);
+  const namesType = type !== null && !listed.some((entry) => legendEntryKey(entry) === type);
+  const typeKey = namesType ? type : key;
+  const unnamed = new Set([typeKey, otherFeatureRowKey(typeKey)]);
+  const kept = dormant.filter((entry) => !unnamed.has(legendEntryKey(entry)));
+  /** @type {KeptLegendRow[]} */
+  const typeName = namesType && name !== key
+    ? [{ caption: /** @type {LegendCaption} */ (name), originalCaption: typeKey, color: row.color, featureIds: [] }] : [];
+  if (namesType || kept.length !== dormant.length) keepDormant([...kept, ...typeName]);
+  return /** @type {LegendCaption} */ (namesType ? key : name);
 };
 
 /** @param {FeatureColorActionsOptions} options */
@@ -834,7 +864,8 @@ export const createFeatureColorActions = ({
   // row of its own from the request's row names (`objects.legends.row_names`,
   // PD-OI-114); the live edit shows it (`legendRenames`, PV-02) and names an
   // editor row (`legendAdds`), in its place in the order. The text control's
-  // open step holds the edit.
+  // open step holds the edit. A type's default row is named on the type's key
+  // (`typeDefaultRowRename`, V-OD27).
   /**
    * @param {DrawingState} drawing @param {PythonLegendKey} sourceKey @param {string} newCaption
    * @param {readonly ColorFeature[]} features The row's features the rename takes, if any.
@@ -842,9 +873,11 @@ export const createFeatureColorActions = ({
   const renameLegendRow = (drawing, sourceKey, newCaption, features) => {
     const legendEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === sourceKey);
     if (!legendEntry) return false;
+    const caption = typeDefaultRowRename({ listed: drawing.legendEntries.value, dormant: drawing.dormantLegendEntries.value }, legendEntry,
+      /** @type {PythonLegendKey | null} */ (otherLegendRowType(sourceKey)), newCaption, (rows) => replaceDormantLegendRows(drawing.slices.paint, rows));
     // An entry without a key record (an older editor row) records its key
     // first. The rename's own step holds it.
-    renameListedLegendRow(drawing.slices.paint, legendEntry, { caption: /** @type {LegendCaption} */ (newCaption), originalCaption: sourceKey });
+    renameListedLegendRow(drawing.slices.paint, legendEntry, { caption, originalCaption: sourceKey });
     showEditorIntent?.({ domains: RENAMED_ROW_DOMAINS });
     updateClickedFeatureLegendState(features);
     return true;
@@ -1286,13 +1319,12 @@ export const createFeatureColorActions = ({
     const requestedCaption = popupLegendCaption();
     const currentCaption =
       normalizeCaption(clickedFeature.value.appliedLegendName) || normalizeCaption(getEffectiveLegendCaption(feat));
+    // The name the row is drawn with: typing it, or another name of the row, is no rename; the row's key names a
+    // row drawn by another name back (OV-1216), also a type's "other" row drawn by the type's name (V-OD27).
+    const currentName = normalizeCaption(legendRowName(currentCaption));
 
-    if (!requestedCaption) {
-      clickedFeature.value.legendName = currentCaption;
-      return;
-    }
-
-    if (requestedCaption === currentCaption) {
+    if (!requestedCaption || (requestedCaption === currentCaption
+      && (normalizeCaption(clickedFeature.value.legendName) !== currentCaption || currentName === currentCaption))) {
       clickedFeature.value.legendName = currentCaption;
       return;
     }
@@ -1301,7 +1333,7 @@ export const createFeatureColorActions = ({
     await continueLegendRenameRequest(drawing, {
       source: 'popup',
       feat,
-      oldCaption: currentCaption,
+      oldCaption: currentName,
       sourceKey: /** @type {PythonLegendKey} */ (currentCaption),
       newCaption: requestedCaption,
       joinGroup,
@@ -1377,8 +1409,9 @@ export const createFeatureColorActions = ({
 
     const requestedCaption = normalizeCaption(newCaption);
     const key = legendEntryKey(entry);
-    // The row's name or drawn name is no rename; its key names a renamed row back (OV-1216).
-    if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption)
+    // The row's name or drawn name is no rename; its key names a renamed row back (OV-1216). The name is the one
+    // the Legend draws (`legendEntryName`), also a type's name on its "other" row (V-OD27).
+    if (!requestedCaption || requestedCaption === normalizeCaption(legendEntryName(entry))
       || (requestedCaption !== key && legendRowIsNamed(key, requestedCaption))) {
       return;
     }
@@ -1390,7 +1423,7 @@ export const createFeatureColorActions = ({
     // no rule is written.
     await continueLegendRenameRequest(drawing, {
       source: 'legend',
-      oldCaption: normalizeCaption(entry.caption),
+      oldCaption: normalizeCaption(legendEntryName(entry)),
       sourceKey: key,
       newCaption: requestedCaption,
       currentColor: resolveColorToHex(shownColor) || shownColor || '#cccccc',

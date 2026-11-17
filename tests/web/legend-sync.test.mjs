@@ -971,6 +971,53 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(commits, 0);
 }
 
+{
+  // OV-3783, V-OD27 (review R2 findings 3 and 4): a rule commit that stops drawing a renamed type row keeps its name
+  // dormant while the type still has a default row after the commit (`defaultRowOf`, which the rule owner reads from
+  // the next table; tests/web/specific-color-actions.test.mjs): a captioned rule takes some of the CDS features, and
+  // Python draws the rest in the type's "other" row, which it names by the type's name. A Merge of the whole row into
+  // another row's rules leaves the type no default row: the name retires, as before OV-3783, also when the commit
+  // names no next table.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  [['CDS', '#112233'], ['tRNA', '#334455']]
+    .forEach(([caption, color], index) => featureLegend.appendChild(mockLegendEntry(caption, color, index * 70)));
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const commit = async (defaultRowOf) => {
+    const state = {
+      results: ref([{ name: 'r1.svg', content: 'unchanged' }]), selectedResultIndex: ref(0),
+      svgContainer: ref({ querySelector: () => svg }), displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+      legendEntries: ref([
+        { caption: 'Coding', originalCaption: 'CDS', color: '#112233' }, { caption: 'tRNA', originalCaption: 'tRNA', color: '#334455' }
+      ]),
+      deletedLegendEntries: ref([]), dormantLegendEntries: ref([]), originalLegendOrder: ref(['CDS', 'tRNA']), originalLegendColors: ref({}),
+      legendStrokeOverrides: {}, legendColorOverrides: {}, addedLegendCaptions: ref(new Set()), manualSpecificRules: [],
+      skipCaptureBaseConfig: ref(false)
+    };
+    const actions = createLegendEntryActions({
+      state: withDrawings(state), commitActiveResultEdit: () => true, readActiveResultIdentity: () => 'result-1',
+      readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, [])
+    });
+    const prepared = await actions.prepareFileLegendEntries([{ caption: 'Marker', color: '#e63946' }], {
+      previousFileIntents: [{ caption: 'CDS', color: '#112233' }], ...(defaultRowOf ? { defaultRowOf } : {})
+    });
+    assert.deepEqual(prepared.diff.remove, [{ caption: 'CDS', color: '#112233' }]);
+    prepared.apply();
+    return {
+      listed: state.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+      dormant: state.dormantLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption])
+    };
+  };
+  const listed = [['tRNA', 'tRNA'], ['Marker', 'Marker']];
+  assert.deepEqual(await commit((type) => (type === 'CDS' ? 'other proteins' : type)), { listed, dormant: [['Coding', 'CDS']] },
+    'a split: the type keeps its name');
+  assert.deepEqual(await commit(() => null), { listed, dormant: [] }, 'a Merge of the whole row: the name retires');
+  assert.deepEqual(await commit(null), { listed, dormant: [] }, 'no next table: the name retires');
+}
+
 // OV-645: a rule row whose key the allocation changes (its name starts or
 // stops being written in several colors) is the same row. `apply` writes it in
 // the place of its old key, in the list and in the generated inventory, so the

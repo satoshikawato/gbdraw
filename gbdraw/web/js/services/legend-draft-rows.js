@@ -135,10 +135,11 @@ export const draftLegendRows = ({
   );
   // OV-120: a renamed row an earlier Generate hid (GC off, Show Depth off)
   // waits in the drawing; this Result may draw it again or still leave it out.
+  // A type named by its own key waits too (V-OD27): Python gives that name to
+  // the type's "other" row while it draws no row of the type.
   const shownOriginals = new Set(currentEntries.map((entry) => entry.originalCaption));
   const dormantEntries = normalizedLegendEntries(dormantLegendEntries)
-    .filter((entry) => entry.caption !== entry.originalCaption && !shownOriginals.has(entry.originalCaption)
-      && !deletedCaptions.has(entry.originalCaption));
+    .filter((entry) => !shownOriginals.has(entry.originalCaption) && !deletedCaptions.has(entry.originalCaption));
   const dormantOriginals = new Set(dormantEntries.map((entry) => entry.originalCaption));
   const entriesByKey = new Map([...dormantEntries, ...currentEntries].map(entry => [entry.originalCaption, entry]));
   /** @param {string} key */
@@ -240,8 +241,8 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ..
   const key = (/** @type {NormalizedLegendEntry} */ entry) => /** @type {PythonLegendKey} */ (entry.originalCaption);
   // A dormant rename (OV-120) is sent too: Python names the row when it draws it, and a type's name names its
   // "other" row while a captioned rule draws some of its features (`apply_legend_row_edits`).
-  const names = [...pythonRows, ...rows.dormantEntries]
-    .filter((entry) => entry.caption !== entry.originalCaption && !ruleRowKeys.has(key(entry)))
+  const names = [...pythonRows.filter((entry) => entry.caption !== entry.originalCaption), ...rows.dormantEntries]
+    .filter((entry) => !ruleRowKeys.has(key(entry)))
     .map((entry) => /** @type {[PythonLegendKey, string]} */ ([key(entry), entry.caption]));
   const hidden = /** @type {PythonLegendKey[]} */ ([...rows.deletedCaptions]);
   const order = isLegendOrderEdited(rows.currentEntries, legend.originalLegendOrder) ? pythonRows.map(key) : [];
@@ -264,20 +265,23 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ..
  * @param {Readonly<Record<RefitField, unknown>> & DrawnRowsOfDrawing} draft
  * @returns {string}
  */
-const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLegendOrder, pythonRowKeys, canvasPadding }) => {
+const drawnLegendKey = ({ legendEntries, deletedLegendEntries, dormantLegendEntries, rules, originalLegendOrder, pythonRowKeys, canvasPadding }) => {
   // The paint lists reach `legendEditConfigLeaves` under these local names, and it only reads them. The paint intent
   // writer guard does not follow a local name, so this read-only use is not in its reader list (`SLICE_READERS`).
   /** @type {readonly (LegendEntryInput | null | undefined)[]} */
   const listed = Array.isArray(legendEntries) ? legendEntries : [];
   /** @type {readonly (LegendEntryInput | null | undefined)[]} */
   const deleted = Array.isArray(deletedLegendEntries) ? deletedLegendEntries : [];
+  /** @type {readonly (LegendEntryInput | null | undefined)[]} */
+  const dormant = Array.isArray(dormantLegendEntries) ? dormantLegendEntries : [];
   // History captures the canvas slice (`CANVAS_SLICE.capture`), four numbers; a step without it holds none.
   const padding = /** @type {Readonly<CanvasPadding>} */ (
     canvasPadding && typeof canvasPadding === 'object' ? canvasPadding : { top: 0, right: 0, bottom: 0, left: 0 });
   /** @type {readonly (Partial<SpecificColorRule> | null | undefined)[]} */
   const ruleRows = Array.isArray(rules) ? rules : [];
   return JSON.stringify([legendEditConfigLeaves({
-    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, originalLegendOrder, pythonRowKeys
+    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, dormantLegendEntries: dormant,
+    originalLegendOrder, pythonRowKeys
   }), ruleRows.map((rule) => [rule?.feat, rule?.qual, rule?.val, rule?.cap])]);
 };
 
