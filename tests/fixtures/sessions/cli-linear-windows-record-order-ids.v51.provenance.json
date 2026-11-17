@@ -1,0 +1,15 @@
+{
+  "purpose": "A CLI Linear Session whose record 2 is drawn in two windows, with a Record Order that names both records by record ID and lists the windowed record first (OV-3313 review 2 H1): the CLI draws REGEX.1's two windows, then TESTA",
+  "writer": "gbdraw/linear.py --save_session (CLI sidecar), run from the fix/record-order-row-one-rule worktree on PYTHONPATH",
+  "writerCommit": "1e5b856aa51b69528bdd81589d32b815c739d07d (branch fix/record-order-row-one-rule)",
+  "command": "PYTHONPATH=<worktree> python -c 'from gbdraw.cli import main; main()' linear --gbk b_collide.gb regex_rules.gb --region '#2:1-800' --region '#2:1000-2000' --multi_record_position 'REGEX.1@1' --multi_record_position 'TESTA@1' --save_session -o cli-linear-windows-record-order-ids",
+  "workingDirectory": "a scratch folder; the inputs are tests/fixtures/b_collide.gb and tests/fixtures/regex_rules.gb",
+  "inputs": {
+    "b_collide.gb": "dc00783b14c141cd3f7d7993f7e7578e974f03707e61790e9389483cb231ba05",
+    "regex_rules.gb": "e33d282b370b092a0d3b4ccf26a70db9b01f3b28ea8758b728fee1812b7be88b"
+  },
+  "values": "drawings[0].renderRequest.layout.multiRecordPositions and the records' windows; no record has a selector (one-record files)",
+  "documentSha256": "96ac234478c0443cc8d62563cd9c4d62b498177b6e344c3544f899c17353ec21",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

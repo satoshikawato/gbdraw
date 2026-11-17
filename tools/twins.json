@@ -1522,7 +1522,7 @@
     },
     {
       "id": "vector:tests/fixtures/record_order_row_vectors.json",
-      "concern": "Record Order tokens: the row each `<selector>@<row>` token gives, and the record its selector names (OV-3313, OV-3473)",
+      "concern": "Record Order tokens: the row each `<selector>@<row>` token gives, and the record its selector names, in Linear and Circular requests (OV-3313, OV-3473, OV-3764)",
       "pythonOwner": [
         "gbdraw/layout/record_placement.py:parse_record_row_position",
         "gbdraw/layout/record_placement.py:resolve_record_row_positions"
@@ -1532,10 +1532,9 @@
         "gbdraw/web/js/services/record-options.js:recordOrderPlaces"
       ],
       "vector": "tests/fixtures/record_order_row_vectors.json",
-      "reason": "Web Load projects a stored Linear request's Record Order into its card rows, and refuses the token lists the renderer refuses, without starting the Worker (a saved preview loads without Python); the records table of a Result reads the same tokens. The row pattern and Python's whitespace class are generated from Python (RECORD_ROW_PATTERN, PYTHON_SPACE_PATTERN in tools/generate_web_contracts.py); the selector rule (`#N`, a record ID, the record of a one-record file) reads each request's records and cannot be generated, so the shared vector pins both the rows and the placements.",
+      "reason": "Web Load projects a stored Linear request's Record Order into its card rows and a stored Circular canvas's into its record positions, and refuses the token lists the renderer refuses in either mode, without starting the Worker (a saved preview loads without Python); the records table of a Result reads the same tokens. The row pattern and Python's whitespace class are generated from Python (RECORD_ROW_PATTERN, PYTHON_SPACE_PATTERN in tools/generate_web_contracts.py); the selector rule (`#N`, a record ID, the record of a one-record file) reads each request's records and cannot be generated, so the shared vector pins both the rows and the placements.",
       "retireWhen": "Web Load reads a stored request's record placement through Python",
-      "source": "twin.unregistered.v1 on fix/record-order-row-one-rule (OV-3313 fix round 2, 2026-11-17); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)",
-      "pending": true
+      "source": "twin.unregistered.v1 on fix/record-order-row-one-rule (OV-3313 fix round 2, 2026-11-17); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)"
     }
   ]
 }

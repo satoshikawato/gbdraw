@@ -49,6 +49,8 @@ const {
   readStoredRenderRequest, readPublishedRenderRequest, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
+const { linearLayoutCells } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
+const { discoverSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -84,6 +86,8 @@ const readRequest = (session, change = () => {}) => {
   return readStoredRenderRequest(request, contextOf(session));
 };
 const rows = (result) => result.repairs.map(({ code, path, used }) => ({ code, path, ...(used === undefined ? {} : { used }) }));
+// The dialog line of a Session 51 drawing whose request Load cannot read: the drawing stays without it (OV-3472).
+const DRAWING_REQUEST_DROPPED = (path) => `Saved diagram: the settings of the saved diagram (${path}) could not be read. The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings and the input files they name.`;
 
 const input = (session) => sessionLoadEvent(asSaved(session));
 /** Load with [Load] answered; the dialog lines and the result. */
@@ -244,6 +248,300 @@ test('a Linear layout that omits fields with a default is read as a Linear layou
     .map((key) => ({ code: 'setting-replaced', path: `renderRequest.layout.${key}` })));
 });
 
+// OV-3313: Python's renderer refuses a Record Order token whose row is no positive integer (`parse_record_row_position`;
+// `gbdraw render` stops: "multi_record_position entry '#2@2.0' must use a positive integer row."). The reader reads the
+// row with the renderer's pattern (`recordOrderRows`), so such a layout leaves no request to draw, as a layout its owner
+// refuses does (C-OD20); `Number()` read `2.0`, `0x2` and `2e0` as row 2. A row the renderer reads is kept as stored.
+test('a Record Order token whose row the renderer refuses leaves no request to draw (OV-3313)', async () => {
+  const session = gallery('BGC0000708-BGC0000713');
+  const tokens = (row) => (request) => {
+    request.records.forEach((record) => { record.presentation.gridRow = null; });
+    request.layout.multiRecordPositions = ['#1@1', `#2@${row}`, '#3@2', '#4@3', '#5@3'];
+  };
+  for (const row of ['2.0', '0x2', '2e0', '0', '-2', 'two', '']) {
+    assert.deepEqual(readRequest(session, tokens(row)),
+      { kind: 'request-dropped', path: 'renderRequest.layout.multiRecordPositions[1]', reason: 'pattern' }, row);
+  }
+  for (const row of ['2', '+2', '02', ' 2 ']) {
+    const result = readRequest(session, tokens(row));
+    assert.deepEqual(rows(result), [], row);
+    assert.equal(result.value.layout.multiRecordPositions[1], `#2@${row}`, row);
+  }
+  // At Load the drawing stays without its request and the dialog names the token's place, as for C-OD20. A Gallery
+  // publication names its input files only in its request, so its drawing keeps its settings and no input files; the
+  // sentence says the drawing keeps the input files its settings name, which are none (OV-3472).
+  tokens('2.0')(session.renderRequest);
+  const { result, dialogs } = await load(session);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.equal(state.results.value.length, 0);
+  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]),
+    [['request-dropped', 'drawings[0].renderRequest.layout.multiRecordPositions[1]']]);
+  assert.deepEqual(dialogs[0], [DRAWING_REQUEST_DROPPED('drawings[0].renderRequest.layout.multiRecordPositions[1]')]);
+  assert.deepEqual(state.activeDrawing().linearSeqs.filter((card) => card.gb || card.gff || card.fasta), []);
+  // A drawing that holds its input bindings (a Web or CLI Save) keeps its files and its Web settings; only the
+  // request and what it drew (Results, feature list, run metadata) are left out (`withStoredResultSet`), as the dialog
+  // says (OV-3472).
+  const saved = await readSavedSession(new Blob([readFileSync(new URL('tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.gbdraw', REPO))]));
+  saved.drawings[0].renderRequest.layout.multiRecordPositions = ['#1@1.0'];
+  const keptDialogs = [];
+  const kept = await importSession(await sessionLoadEvent(saved), {
+    transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { keptDialogs.push(dialog.items); return true; }
+  });
+  assert.equal(kept.status, 'ok', JSON.stringify(kept.error));
+  assert.deepEqual(keptDialogs, [[DRAWING_REQUEST_DROPPED('drawings[0].renderRequest.layout.multiRecordPositions[0]')]]);
+  assert.deepEqual(kept.repairs.map(({ code, path }) => [code, path]),
+    [['request-dropped', 'drawings[0].renderRequest.layout.multiRecordPositions[0]']]);
+  assert.equal(state.results.value.length, 0);
+  const drawing = state.activeDrawing();
+  assert.deepEqual(drawing.circularSources.map((card) => card.gb?.name), ['HmmtDNA.gbk']);
+  assert.deepEqual(drawing.adv.multi_record_positions, [{ selector: 'record-1', row: 1 }]);
+});
+
+// OV-3313 review 1 (H1, M1, M2): Load refuses a request for its Record Order exactly where `gbdraw render --session`
+// refuses it, and nowhere else (probed with decode and render_request on 2026-11-14: logs/ov3313/fix-1/cli-shapes-*.log).
+// Schemas 6 and 7 keep their Linear tokens, which the renderer reads by selector: a row it refuses refuses the request,
+// and a token list it reads stays the request's (it was turned into each card's gridRow, by token place, and dropped).
+// A schema 2 to 5 Linear request turns its tokens into card rows; when some cards get a row and some none, the CLI
+// refuses it ("If one Linear record has grid_row, every record must have it."); when none gets one, it draws the order
+// of its cards. A one-circle layout draws without reading its tokens (`_assemble_one_circle`), so it keeps them.
+test('a Record Order token refuses a request where the command line reads it and nowhere else (OV-3313)', () => {
+  const linear = (name, tokens) => {
+    const session = fixture(name);
+    const request = clone(session.renderRequest);
+    request.layout = { ...request.layout, recordGapPx: 10, multiRecordPositions: tokens };
+    return readStoredRenderRequest(request, contextOf(session));
+  };
+  const dropped = (index) => ({
+    kind: 'request-dropped', path: `renderRequest.layout.multiRecordPositions${index === null ? '' : `[${index}]`}`, reason: 'pattern'
+  });
+  for (const [name, tokens] of [['cli-linear-tables.v40.gbdraw-session.json.gz', ['#1@1.0']],
+    ['q-frame-main-linear-reverse.v42.gbdraw-session.json.gz', ['#1@1', '#2@1.0']]]) {
+    assert.deepEqual(linear(name, tokens), dropped(tokens.length - 1), name);
+  }
+  for (const [name, tokens] of [['cli-linear-tables.v40.gbdraw-session.json.gz', ['#1@+1']],
+    ['q-frame-main-linear-reverse.v42.gbdraw-session.json.gz', ['#2@1', '#1@2']]]) {
+    const result = linear(name, tokens);
+    assert.deepEqual(result.value.layout.multiRecordPositions, tokens, name);
+    assert.deepEqual(result.value.records.map((record) => record.presentation.gridRow), tokens.map(() => null), name);
+  }
+  const bgc = 'BGC0000708-BGC0000713.v40-schema5.json';
+  assert.deepEqual(linear(bgc, ['#1@2.0', '#2@1', '#3@2', '#4@3', '#5@3']), dropped(0));
+  assert.deepEqual(linear(bgc, ['#1@1', '#2@1', '#3@2']), dropped(null));
+  const unplaced = linear(bgc, ['#1@2.0', '#2@1.0', '#3@x', '#4@', '#5']);
+  assert.deepEqual(unplaced.value.records.map((record) => record.presentation.gridRow), [null, null, null, null, null]);
+  assert.equal(unplaced.value.layout.multiRecordPositions, null);
+  const circular = (recordLayout) => readRequest(gallery('HmmtDNA_basic_circular'), (request) => {
+    request.grouping = 'grid';
+    request.layout = {
+      multiRecordSizeMode: 'equal', multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.1,
+      multiRecordPositions: ['#1@1.0'], recordLayout, oneCircleGapDegrees: 2.5, oneCircleMinLength: 0, oneCircleRecordBand: false
+    };
+  });
+  assert.deepEqual(circular('grid'), dropped(0));
+  assert.deepEqual(circular('one_circle').value.layout.multiRecordPositions, ['#1@1.0']);
+});
+
+// OV-3473: a CLI Linear Session keeps the tokens its `--multi_record_position` names, and the renderer places each
+// record by the token whose selector names it (`resolve_record_row_positions`), not by the token's place in the list.
+// Load gives each card the row and the place in its row of the record its token names (`recordOrderPlaces`): a `#N`,
+// the ID of a record whose selector names it, or the ID Load reads from the file of a record of a file of one record,
+// which the CLI names by no selector. `gbdraw linear --gbk b_collide.gb regex_rules.gb forced_label_underlay.gb
+// --multi_record_position '#2@1' ...` draws REGEX first; the draft gave the first token's row to the first card.
+const LINEAR_TOKEN_SESSION = 'python-api-linear-pairs.v50.gbdraw-session.json.gz';
+const withLinearTokens = (tokens) => {
+  const session = read(`tests/fixtures/sessions/${LINEAR_TOKEN_SESSION}`);
+  session.renderRequest.layout = { recordGapPx: 24, multiRecordPositions: tokens, recordTranslations: [], similarityAlignment: null };
+  return session;
+};
+test('a CLI Linear Record Order gives each card the row of the token that names its record (OV-3473)', async () => {
+  const places = (tokens) => async () => {
+    const result = await importSession(await sessionLoadEvent(withLinearTokens(tokens)), {
+      transformLegacyResultSvg, confirmLoadRepairs: async () => true
+    });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.deepEqual(result.repairs, [], JSON.stringify(tokens));
+    return state.activeDrawing().linearRecordRows.map(({ uid, row, canonicalColumn }) => [uid, row, canonicalColumn ?? null]);
+  };
+  for (const tokens of [['#2@1', '#1@2', '#3@3'], ['REGEX.1@1', 'TESTA@2', 'FORCEDLBL@3'], ['#2@1', ' TESTA @2', '#3@3']]) {
+    assert.deepEqual(await places(tokens)(), [['record-1', 2, null], ['record-2', 1, null], ['record-3', 3, null]], JSON.stringify(tokens));
+  }
+  // A row drawn out of record order takes each record's place in its row, which the next Generate writes as its
+  // gridColumn (the renderer draws a row in token order).
+  assert.deepEqual(await places(['#2@1', '#1@1', '#3@2'])(), [['record-1', 1, 2], ['record-2', 1, 1], ['record-3', 2, 1]]);
+  assert.deepEqual(await places(['#1@1', '#2@1', '#3@2'])(), [['record-1', 1, null], ['record-2', 1, null], ['record-3', 2, null]]);
+});
+
+// OV-3313 review 2 H1: the CLI writes and draws a record drawn in windows beside Record Order tokens; the renderer
+// places the record's windows together, in window order, at its token's place in the row (`_unit_positions`). Load
+// gives each cell of the row its place in token order (a whole card its `canonicalColumn`, each window its `column`),
+// so the next Generate draws the CLI's order, by `#N` and by record ID, with the windowed record last or first.
+const fixtureSession = async (name) => readSavedSession(new Blob([readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))]));
+const loadedCells = async (document) => {
+  const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  const drawing = state.activeDrawing();
+  return {
+    repairs: result.repairs.map(({ code, path }) => `${code} ${path}`),
+    cells: linearLayoutCells(drawing.linearSeqs, drawing.linearRecordRows).map(({ uid, window, row }) => `${uid}${window === null ? '' : `~w${window + 1}`}@${row}`)
+  };
+};
+test('a CLI Linear Record Order places a record drawn in windows at its token, in token order (OV-3313 review 2 H1)', async () => {
+  // gbdraw linear --gbk b_collide.gb regex_rules.gb --region '#1:1-1000' --region '#1:2000-3000'
+  //   --multi_record_position '#2@1' --multi_record_position '#1@1': REGEX.1, then TESTA's two windows.
+  assert.deepEqual(await loadedCells(await fixtureSession('cli-linear-windows-record-order.v51.gbdraw')),
+    { repairs: [], cells: ['record-2@1', 'record-1~w1@1', 'record-1~w2@1'] });
+  // --region '#2:1-800' --region '#2:1000-2000' --multi_record_position 'REGEX.1@1' --multi_record_position 'TESTA@1':
+  // REGEX.1's two windows, then TESTA.
+  assert.deepEqual(await loadedCells(await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw')),
+    { repairs: [], cells: ['record-2~w1@1', 'record-2~w2@1', 'record-1@1'] });
+  // The same request with `#N` tokens.
+  const byNumber = await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw');
+  byNumber.drawings[0].renderRequest.layout.multiRecordPositions = ['#2@1', '#1@1'];
+  assert.deepEqual(await loadedCells(byNumber), { repairs: [], cells: ['record-2~w1@1', 'record-2~w2@1', 'record-1@1'] });
+});
+
+// OV-3775 (OV-3313 review 3 H1): records that place themselves by grid row and column, listed in another order than
+// their cells (a CLI records table), keep each record's own row: Load reads the rows in the request's order and the
+// cards in the cells' order, so each card reads the row of its own record.
+test('a CLI records table Session keeps each record on its own row at Load (OV-3775)', async () => {
+  // gbdraw linear --records_table rt.tsv: TESTA row 2, REGEX.1 row 1 column 1, FORCEDLBL row 1 column 2.
+  assert.deepEqual(await loadedCells(await fixtureSession('cli-linear-records-table-grid.v51.gbdraw')),
+    { repairs: [], cells: ['record-2@1', 'record-3@1', 'record-1@2'] });
+});
+
+// OV-3313 review 3 M2: the shared vector's window placements and Circular counts (tests/fixtures/record_order_row_vectors.json,
+// drawn by Python's renderer in tests/test_web_contracts_generated.py), loaded into the CLI Sessions whose one-record
+// files hold the vector's record IDs: Load places each window as the renderer does (`storedLinearCellPlaces`) and
+// refuses the Circular lists the renderer refuses (`refusedRecordPlacement`).
+const RECORD_ORDER_VECTORS = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+/** @param {string} name @param {{ windows: number[][][], tokens: string[] }} vector */
+const vectorSession = async (name, { windows, tokens }) => {
+  const document = await fixtureSession(name);
+  const request = document.drawings[0].renderRequest;
+  request.records.forEach((record, index) => {
+    record.presentation = { ...record.presentation, gridRow: null, gridColumn: null };
+    record.windows = windows[index].map(([start, end]) => ({ start, end, reverseComplement: false, column: null }));
+  });
+  request.layout.multiRecordPositions = tokens;
+  return document;
+};
+test('Load places Record Order windows and refuses Circular counts as the renderer does (shared vector, OV-3313 review 3 M2)', async () => {
+  assert.ok(RECORD_ORDER_VECTORS.windowPlacements.length >= 8 && RECORD_ORDER_VECTORS.circularCounts.length >= 5);
+  for (const vector of RECORD_ORDER_VECTORS.windowPlacements) {
+    const { repairs, cells } = await loadedCells(await vectorSession('cli-linear-records-table-grid.v51.gbdraw', vector));
+    const at = JSON.stringify(vector.tokens);
+    if (vector.cells === null) assert.match(repairs.join(), /^request-dropped drawings\[0\]\.renderRequest\.layout\.multiRecordPositions/, at);
+    else assert.deepEqual({ repairs, cells }, { repairs: [], cells: vector.cells }, at);
+  }
+  for (const vector of RECORD_ORDER_VECTORS.circularCounts) {
+    const document = await vectorSession('cli-circular-record-order.v51.gbdraw', vector);
+    const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    const dropped = result.repairs.some(({ code, path }) => code === 'request-dropped' && path.startsWith('drawings[0].renderRequest.layout.multiRecordPositions'));
+    assert.equal(dropped, vector.refused, JSON.stringify(vector));
+  }
+});
+
+// OV-3313 review 3 L1: the record IDs Load reads before the requests and each card's own listing of its records go
+// through one resource table, so the file's bytes are read once (`resourceByteReadCount`).
+test('Load and the cards read each one-record file once when Record Order tokens name records by ID (OV-3313 review 3 L1)', async () => {
+  const reads = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => { if (metric.name === 'resourceByteReadCount') reads.push(metric.resourceId); } };
+  try {
+    assert.deepEqual((await loadedCells(await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw'))).repairs, []);
+    for (const seq of state.activeDrawing().linearSeqs) {
+      const records = await discoverSequenceRecords({
+        file: state.inputFiles.fileOf(seq.gb), format: 'genbank', runHelperOperation: () => { throw new Error('fast path'); }
+      });
+      assert.equal(records.length, 1);
+    }
+  } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+  }
+  assert.equal(reads.length, 2, JSON.stringify(reads));
+  assert.deepEqual(reads.filter((resourceId, index) => reads.indexOf(resourceId) !== index), [], JSON.stringify(reads));
+});
+
+// OV-3313 review 2 M1: a Record Order Python refuses is refused at Load also when the records name no record by a
+// selector (the CLI's one-record files): Load reads each record's ID from its file before it reads the request.
+test('Load refuses a Linear Record Order by record ID that Python refuses for one-record files (OV-3313 review 2 M1)', async () => {
+  // The drawing stays without its request (OV-3472).
+  for (const [tokens, at] of [[['BOGUS@1', 'TESTA@1'], 0], [['TESTA@1', 'TESTA@2'], 1], [['none@1', 'TESTA@1'], 0]]) {
+    const document = await fixtureSession('cli-linear-windows-record-order-ids.v51.gbdraw');
+    document.drawings[0].renderRequest.layout.multiRecordPositions = tokens;
+    const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.deepEqual(result.repairs.map(({ code, path }) => `${code} ${path}`),
+      [`request-dropped drawings[0].renderRequest.layout.multiRecordPositions[${at}]`], JSON.stringify(tokens));
+  }
+});
+
+// OV-3313 review 2 M2: a Circular canvas's Record Order reads as Python's `resolve_record_row_positions(...,
+// "circular")` reads it: Load refuses a record named twice, a `#N` past the records, and an ID no record has (by the
+// IDs Load reads from one-record files), and the draft names each token's record by its identity.
+test('Load reads and refuses a Circular canvas Record Order as Python does (OV-3313 review 2 M2)', async () => {
+  const circular = async (tokens) => {
+    const document = await fixtureSession('cli-circular-record-order.v51.gbdraw');
+    if (tokens) document.drawings[0].renderRequest.layout.multiRecordPositions = tokens;
+    const result = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    return {
+      repairs: result.repairs.map(({ code, path }) => `${code} ${path}`),
+      positions: (state.activeDrawing().adv.multi_record_positions || []).map(({ selector, row }) => `${selector}@${row}`)
+    };
+  };
+  assert.deepEqual(await circular(null), { repairs: [], positions: ['record-2@1', 'record-1@2'] });
+  for (const [tokens, at] of [[['TESTA@1', 'TESTA@2'], 1], [['#3@1', 'TESTA@2'], 0], [['BOGUS@1', 'TESTA@2'], 0]]) {
+    assert.deepEqual((await circular(tokens)).repairs, [`request-dropped drawings[0].renderRequest.layout.multiRecordPositions[${at}]`],
+      JSON.stringify(tokens));
+  }
+});
+
+// OV-3313 fix round 2: a Linear request Python refuses for its record placement leaves no request to draw, as a
+// refused row does: a Record Order the renderer refuses (a token list of another length, a record named twice, a `#N`
+// past the records, an ID no record has; `resolve_record_row_positions`), a token list on a record of a file drawn
+// whole, whose records' rows the Web's one row per card cannot hold, a gridRow on some records only ("If one Linear
+// record has grid_row, every record must have it."), gridRows beside tokens ("Specify Linear placement in
+// RecordPresentation or layout, not both."), and, in a schema 2 to 5 request, a card whose token gives no row beside one
+// whose token or own presentation gives one (Python's promotion keeps a card's own gridRow).
+test('Load refuses a Linear request whose record placement Python refuses (OV-3313 fix round 2)', () => {
+  const dropped = (path, reason = 'unknown-record') => ({ kind: 'request-dropped', path: `renderRequest.${path}`, reason });
+  const tokens = (list) => {
+    const session = withLinearTokens(list);
+    return readStoredRenderRequest(clone(session.renderRequest), contextOf(session));
+  };
+  assert.deepEqual(tokens(['#2@1', '#1@2']), dropped('layout.multiRecordPositions'));
+  assert.deepEqual(tokens(['#2@1', '#2@2', '#3@3']), dropped('layout.multiRecordPositions[1]'));
+  assert.deepEqual(tokens(['#4@1', '#1@2', '#2@3']), dropped('layout.multiRecordPositions[0]'));
+  assert.deepEqual(tokens(['#2@1', '@2', '#3@3']), dropped('layout.multiRecordPositions[1]'));
+  // An ID the request names no record by is read at Load from the files (above); a record that names its ID refuses it.
+  assert.equal(tokens(['NOPE@1', '#1@2', '#3@3']).kind, undefined);
+  const named = withLinearTokens(['NOPE@1', '#1@2', '#3@3']);
+  named.renderRequest.records.forEach((record, index) => { record.selector = { kind: 'recordId', value: `R${index}` }; });
+  assert.deepEqual(readStoredRenderRequest(clone(named.renderRequest), contextOf(named)), dropped('layout.multiRecordPositions[0]'));
+  const whole = withLinearTokens(['#2@1', '#1@2', '#3@3']);
+  whole.renderRequest.records[1].cardinality = 'all';
+  assert.deepEqual(readStoredRenderRequest(clone(whole.renderRequest), contextOf(whole)), dropped('layout.multiRecordPositions', 'combination'));
+  const bgc = gallery('BGC0000708-BGC0000713');
+  assert.deepEqual(readRequest(bgc, (request) => { request.records[1].presentation.gridRow = null; }),
+    dropped('records[1].presentation.gridRow', 'combination'));
+  assert.deepEqual(readRequest(bgc, (request) => { request.layout.multiRecordPositions = request.records.map((_record, index) => `#${index + 1}@1`); }),
+    dropped('layout.multiRecordPositions', 'combination'));
+  const older = (tokenList, ownRows) => {
+    const session = read('tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json');
+    const request = clone(session.renderRequest);
+    request.layout = { recordGapPx: 10, multiRecordPositions: tokenList };
+    ownRows.forEach((row, index) => { request.records[index].presentation.gridRow = row; });
+    return readStoredRenderRequest(request, contextOf(session));
+  };
+  // Records 4 and 5 hold their own rows: every card has one.
+  assert.deepEqual(older(['#1@1', '#2@1', '#3@2'], [null, null, null, 3, 3]).value.records.map((record) => record.presentation.gridRow),
+    [1, 1, 2, 3, 3]);
+  // No token gives a row, but record 1 holds its own: the others have none.
+  assert.deepEqual(older(['#1@x', '#2@x', '#3@x', '#4@x', '#5@x'], [2]), dropped('layout.multiRecordPositions[1]', 'pattern'));
+});
+
 test('the reader turns only the layout owner\'s refusal into a dropped request; a programming error there is thrown (N2)', () => {
   const session = gallery('lambda_basic_linear');
   const request = clone(session.renderRequest);
@@ -364,7 +662,7 @@ test('a request that cannot be read at its root loads the Session as settings on
     assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error)}`);
     assert.equal(state.results.value.length, 0, name);
     assert.equal(dialogs.length, 1, name);
-    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest(\.mode)?\) could not be read\. The file loads as settings only/);
+    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest(\.mode)?\) could not be read\. The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings/);
     assert.ok(result.repairs.some((repair) => repair.code === 'request-dropped'), name);
   }
 });
@@ -377,7 +675,7 @@ test('a Session 42 to 47 with no stored request loads as settings only, listed; 
   assert.equal(state.results.value.length, 0);
   assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest']]);
   assert.equal(dialogs.length, 1);
-  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\) could not be read\. The file loads as settings only/);
+  assert.deepEqual(dialogs[0], [DRAWING_REQUEST_DROPPED('drawings[0].renderRequest')]);
 });
 
 test('a Linear layout whose record translations do not cover the drawn records drops the request at its root (vector 027, C-OD20)', async () => {
@@ -390,7 +688,7 @@ test('a Linear layout whose record translations do not cover the drawn records d
   assert.equal(state.results.value.length, 0);
   assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest.layout']]);
   assert.equal(dialogs.length, 1);
-  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.layout\) could not be read\. The file loads as settings only/);
+  assert.deepEqual(dialogs[0], [DRAWING_REQUEST_DROPPED('drawings[0].renderRequest.layout')]);
 });
 
 test('the other diagram\'s request is read at Load: its repairs are listed, and an unreadable one leaves only that set out (OV-670)', async () => {
@@ -702,7 +1000,7 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
     assert.equal(result.status, 'ok', `${JSON.stringify(request)}: ${JSON.stringify(result.error)}`);
     assert.equal(state.results.value.length, 0);
     assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest.schema']]);
-    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.schema\) could not be read\. The file loads as settings only/);
+    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.schema\) could not be read\. The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings/);
     for (const name of ['se08-main-linear-cli.v42.gbdraw-session.json.gz', 'scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz']) {
       const cli = fixture(name);
       cli.renderRequest = clone(request);

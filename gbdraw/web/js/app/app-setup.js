@@ -4392,6 +4392,7 @@ export const createAppSetup = () => {
     choicePrompt: choicePrompt.prompt,
     resolveChoicePrompt: choicePrompt.resolve,
     submitChoicePromptField: choicePrompt.submitField,
+    choicePromptItemParts: choicePrompt.itemParts,
     circularRegionNote,
     circularWindowRows,
     linearRegionNote,

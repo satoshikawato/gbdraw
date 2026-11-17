@@ -755,3 +755,183 @@ def test_the_web_owner_reads_every_bmp_character_in_a_record_selector_as_python_
     # The texts reach both branches: the spaces Python's `\s` holds (ASCII and others) and the ten ASCII digits.
     assert [python[2 * ord(digit) + 1] for digit in "0123456789"] == list(range(10, 20))
     assert sum(number == 1 for number in python[0::2]) > 20
+
+
+# Record Order tokens and the row the renderer reads (None where it refuses it); the Web test reads the same file.
+_RECORD_ROW_VECTORS = json.loads((REPO_ROOT / "tests" / "fixtures" / "record_order_row_vectors.json").read_text())
+_RECORD_ROW_TOKENS = tuple((case["token"], case["row"]) for case in _RECORD_ROW_VECTORS["tokens"])
+_RECORD_ROW_LISTS = _RECORD_ROW_VECTORS["rowLists"]
+_RECORD_ORDER_PLACEMENTS = _RECORD_ROW_VECTORS["placements"]
+_RECORD_ORDER_WINDOW_PLACEMENTS = _RECORD_ROW_VECTORS["windowPlacements"]
+_RECORD_ORDER_CIRCULAR_COUNTS = _RECORD_ROW_VECTORS["circularCounts"]
+# The refusals of `resolve_record_row_positions` for a token or the count of tokens, not another error of the same call.
+_PLACEMENT_REFUSAL = r"multi_record_position (entry|selector|must (provide|include))|Invalid record selector|Record index must be"
+
+
+def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-3313: the Web reads the row of a Record Order token (`<selector>@<row>`) with the pattern Python's
+    # `parse_record_row_position` reads it with; the generator writes the Python owner's pattern.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.layout import record_placement
+
+    for token, row in _RECORD_ROW_TOKENS:
+        if row is None:
+            with pytest.raises(ValidationError, match=r"multi_record_position entry .* must (use a positive integer row|be in)"):
+                record_placement.parse_record_row_position(token)
+        else:
+            assert record_placement.parse_record_row_position(token)[1] == row, token
+    # Lists: the order the renderer draws their records in (`resolve_record_row_positions`), None where it refuses a row;
+    # rows above 2^53 and up to `int()`'s 4300 digits are read exactly (review 1 L1). The Web test reads the same lists.
+    for case in _RECORD_ROW_LISTS:
+        records = [SeqRecord(Seq("A"), id=f"r{index}") for index in range(len(case["tokens"]))]
+        if case["order"] is None:
+            with pytest.raises(ValidationError, match=r"multi_record_position entry .* must use a positive integer row"):
+                record_placement.resolve_record_row_positions(records, case["tokens"])
+        else:
+            assert list(record_placement.resolve_record_row_positions(records, case["tokens"])[0]) == case["order"]
+    generator = _generator()
+    monkeypatch.setattr(record_placement, "RECORD_ROW_PATTERN", r"([0-9]+)")
+
+    assert "export const RECORD_ROW_PATTERN = '([0-9]+)';\n" in generator.render_web_contracts_module()
+
+
+def test_the_web_reads_a_record_order_token_s_record_with_the_renderer_s_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-3473: each list of the shared vectors draws its records in the order Python's renderer resolves
+    # (`resolve_record_row_positions` with `record_order_selector`), or Python refuses it; the Web test reads the same
+    # lists with `recordOrderPlaces`. The Web strips a selector with the space Python's `str.strip` removes, carried by
+    # the generator (`PYTHON_SPACE_PATTERN`).
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.layout import record_placement
+
+    assert len(_RECORD_ORDER_PLACEMENTS) >= 20
+    for case in _RECORD_ORDER_PLACEMENTS:
+        records = [SeqRecord(Seq("A"), id=record_id) for record_id in case["recordIds"]]
+        mode = case.get("mode", "linear")
+        if case["order"] is None:
+            with pytest.raises(ValidationError, match=_PLACEMENT_REFUSAL):
+                record_placement.resolve_record_row_positions(records, case["tokens"], _compatibility=mode)
+        else:
+            resolved = record_placement.resolve_record_row_positions(records, case["tokens"], _compatibility=mode)
+            assert list(resolved[0]) == case["order"], case
+    assert all(chr(code).isspace() == bool(re.fullmatch(record_placement.PYTHON_SPACE_PATTERN, chr(code)))
+               for code in range(0x110000))
+    generator = _generator()
+    monkeypatch.setattr(record_placement, "PYTHON_SPACE_PATTERN", r" ")
+
+    assert "export const PYTHON_SPACE_PATTERN = ' ';\n" in generator.render_web_contracts_module()
+
+
+def _vector_record_inputs(case: dict) -> tuple:
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api import InMemoryRecordSource, RecordInput
+    from gbdraw.io.regions import RecordWindow
+
+    inputs = []
+    for number, (record_id, windows) in enumerate(zip(case["recordIds"], case["windows"]), start=1):
+        record = SeqRecord(Seq("A" * 4000), id=record_id)
+        record.annotations["molecule_type"] = "DNA"
+        inputs.append(RecordInput(InMemoryRecordSource(record), record_key=f"record-{number}",
+                                  windows=tuple(RecordWindow(start, end) for start, end in windows)))
+    return tuple(inputs)
+
+
+def test_the_web_places_record_order_windows_and_counts_circular_records_as_the_renderer_does() -> None:
+    # OV-3313 review 3 M2: the renderer draws a record's windows together, in window order, at its token's place
+    # (`_unit_positions`), and a Circular canvas whose records each draw one record counts its tokens against the
+    # request's records. The Web test loads the same cases (tests/web/stored-request-read.test.mjs).
+    from gbdraw.api import CircularDiagramRequest, LinearDiagramRequest, LinearMultiRecordOptions, build_request_diagram
+    from gbdraw.api.options import CircularMultiRecordOptions
+    from gbdraw.exceptions import ValidationError
+
+    assert len(_RECORD_ORDER_WINDOW_PLACEMENTS) >= 8 and len(_RECORD_ORDER_CIRCULAR_COUNTS) >= 5
+    for case in _RECORD_ORDER_WINDOW_PLACEMENTS:
+        request = LinearDiagramRequest(records=_vector_record_inputs(case),
+                                       layout=LinearMultiRecordOptions(multi_record_positions=tuple(case["tokens"])))
+        if case["cells"] is None:
+            with pytest.raises(ValidationError, match=r"multi_record_position must provide exactly \d+ entry"):
+                build_request_diagram(request)
+            continue
+        units = build_request_diagram(request).drawing._gbdraw_track_slot_geometry["records"]
+        rows = sorted({unit["axisYpx"] for unit in units})
+        cells = [
+            unit["recordKey"] + ("" if "windowIndex" not in unit else f"~w{unit['windowIndex'] + 1}")
+            + f"@{rows.index(unit['axisYpx']) + 1}"
+            for unit in sorted(units, key=lambda unit: (unit["axisYpx"], unit["axisXpx"]))
+        ]
+        assert cells == case["cells"], case
+    for case in _RECORD_ORDER_CIRCULAR_COUNTS:
+        request = CircularDiagramRequest(records=_vector_record_inputs(case),
+                                         layout=CircularMultiRecordOptions(multi_record_positions=tuple(case["tokens"])))
+        if case["refused"]:
+            with pytest.raises(ValidationError, match=r"multi_record_position (selector|must include)"):
+                build_request_diagram(request)
+        else:
+            build_request_diagram(request)
+
+
+_PYTHON_STRIP_SCRIPT = """
+const { pythonStrip } = await import('./gbdraw/web/js/services/genbank-header.js');
+const read = [];
+for (let code = 0; code < 0x10000; code += 1) read.push(pythonStrip(`${String.fromCharCode(code)}a${String.fromCharCode(code)}`));
+process.stdout.write(JSON.stringify(read));
+"""
+
+
+@pytest.mark.browser
+def test_the_web_python_strip_removes_every_bmp_space_python_removes() -> None:
+    # OV-3760: `pythonStrip` (services/genbank-header.js), run by Node over the BMP, strips what `str.strip` strips.
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", _PYTHON_STRIP_SCRIPT],
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+    )
+    web = json.loads(completed.stdout)
+    python = [f"{chr(code)}a{chr(code)}".strip() for code in range(0x10000)]
+    assert [code for code in range(0x10000) if web[code] != python[code]] == []
+
+
+# Each BMP character around and inside a token's row (a space before and after the row; a digit), read by the Web owner.
+_RECORD_ROW_TEXTS_SCRIPT = """
+const { recordOrderRows } = await import('./gbdraw/web/js/services/record-draw-selection.js');
+const read = [];
+for (let code = 0; code < 0x10000; code += 1) {
+  const c = String.fromCharCode(code);
+  read.push(...recordOrderRows([`#1@${c}1${c}`]), ...recordOrderRows([`#1@1${c}`]));
+}
+process.stdout.write(JSON.stringify(read));
+"""
+
+
+@pytest.mark.browser
+def test_the_web_owner_reads_every_bmp_character_in_a_record_order_row_as_python_does() -> None:
+    # OV-3313: `recordOrderRows` (services/record-draw-selection.js), run by Node over the BMP, gives the row Python's
+    # `parse_record_row_position` gives for each token, or none where Python refuses it.
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.layout.record_placement import parse_record_row_position
+
+    def python_row(token: str) -> int | None:
+        try:
+            return parse_record_row_position(token)[1]
+        except ValidationError:
+            return None
+
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", _RECORD_ROW_TEXTS_SCRIPT],
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+    )
+    web = json.loads(completed.stdout)
+    tokens = [token for code in range(0x10000) for token in (f"#1@{chr(code)}1{chr(code)}", f"#1@1{chr(code)}")]
+    python = [python_row(token) for token in tokens]
+    assert len(web) == len(python)
+    differing = [(token, web_row, row) for token, web_row, row in zip(tokens, web, python) if web_row != row]
+    assert differing == []
+    # The tokens reach both branches: the spaces Python's `\s` holds and the ten ASCII digits.
+    assert [python[2 * ord(digit) + 1] for digit in "0123456789"] == list(range(10, 20))
+    assert sum(row == 1 for row in python[0::2]) > 20

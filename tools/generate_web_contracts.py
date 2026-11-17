@@ -75,6 +75,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEFAULT_RECORD_GAP_PX", "gbdraw.layout.linear_multi_record", "DEFAULT_RECORD_GAP_PX"),
     ("ROW_GAPS_MAX_SHARE", "gbdraw.layout.linear_multi_record", "ROW_GAPS_MAX_SHARE"),
     ("STORED_REGION_FIELDS", "gbdraw.session_request_codec", "STORED_REGION_FIELDS"),
+    # The words a record selector reads as naming no record (`parse_record_selector`).
+    ("NULL_RECORD_SELECTOR_WORDS", "gbdraw.io.record_select", "NULL_RECORD_SELECTOR_WORDS"),
     # The columns of a BLAST table: Load reads a given table of schema 2 or 5-9 that has these alone, in any order,
     # as a BLAST table (OV-3573), as comparison_table_text writes one.
     ("COMPARISON_COLUMNS", "gbdraw.io.comparisons", "COMPARISON_COLUMNS"),
@@ -226,6 +228,10 @@ _LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
 _PATTERNS: tuple[tuple[str, str, str], ...] = (
     # A `#N` record selector, as the renderer reads it (OV-2960).
     ("RECORD_INDEX_SELECTOR_PATTERN", "gbdraw.io.record_select", "RECORD_INDEX_SELECTOR_PATTERN"),
+    # The row of a Record Order token, as the renderer reads it (OV-3313).
+    ("RECORD_ROW_PATTERN", "gbdraw.layout.record_placement", "RECORD_ROW_PATTERN"),
+    # A space as Python's `str.strip` removes one: the Web's one Python strip (OV-3473, OV-3760).
+    ("PYTHON_SPACE_PATTERN", "gbdraw.layout.record_placement", "PYTHON_SPACE_PATTERN"),
 )
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 

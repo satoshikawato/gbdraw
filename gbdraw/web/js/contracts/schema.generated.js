@@ -64,6 +64,10 @@ export const ROW_GAPS_MAX_SHARE = 0.25;
 /** @type {readonly string[]} */
 export const STORED_REGION_FIELDS = Object.freeze(['end', 'reverseComplement', 'selector', 'start']);
 
+// gbdraw/io/record_select.py: NULL_RECORD_SELECTOR_WORDS
+/** @type {readonly string[]} */
+export const NULL_RECORD_SELECTOR_WORDS = Object.freeze(['-', 'jsnull', 'jsundefined', 'none', 'null', 'undefined']);
+
 // gbdraw/io/comparisons.py: COMPARISON_COLUMNS
 /** @type {readonly ['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']} */
 export const COMPARISON_COLUMNS = Object.freeze(['query', 'subject', 'identity', 'alignment_length', 'mismatches', 'gap_opens', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']);
@@ -926,3 +930,9 @@ export const SCALAR_AXIS_LABELS = Object.freeze({
 
 // gbdraw/io/record_select.py: RECORD_INDEX_SELECTOR_PATTERN
 export const RECORD_INDEX_SELECTOR_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*#[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*\\+?([0-9]+)[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*';
+
+// gbdraw/layout/record_placement.py: RECORD_ROW_PATTERN
+export const RECORD_ROW_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*\\+?([0-9]{1,4300})[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*';
+
+// gbdraw/layout/record_placement.py: PYTHON_SPACE_PATTERN
+export const PYTHON_SPACE_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]';

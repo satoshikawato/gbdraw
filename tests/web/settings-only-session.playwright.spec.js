@@ -292,8 +292,9 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   expect(full.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
   expect(savedDrawing(full.document, 'circular').webFiles.bindings.d_color).toBeNull();
   const unbound =(slot, id = 'circular') => `Input files: 1 entry of drawings[${at(id)}].webFiles.bindings.${slot} could not be read and was dropped.`;
+  // The drawing stays without its saved diagram, with its settings and the input files they name (OV-3472).
   const requestDropped = `Saved diagram: the settings of the saved diagram (drawings[${at('circular')}].renderRequest) could not be read.`
-    + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
+    + ' The saved diagram, its Results, the feature list and the run metadata are left out; the drawing keeps its settings and the input files they name.';
   const cases = [
     ['config', d => { savedDrawing(d, 'circular').config.form = []; }, [`Settings: the value "[]" (drawings[${at('circular')}].config.form) cannot be used; its default is used.`]],
     ['binding', d => { savedDrawing(d, 'circular').webFiles.bindings.circularSources[0].gb.resourceId = 'absent'; }, [unbound('circularSources[0].gb')]],

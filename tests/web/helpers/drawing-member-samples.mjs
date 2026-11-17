@@ -489,12 +489,8 @@ export const MEMBER_SAMPLES = {
   // inputs: a file bound in the drawing's own input fields, which the store
   // registers. A Circular drawing binds its GenBank file in a File card, a
   // Linear drawing in its one record row.
-  // OV-3701: Save drops a drawing whose only change is a card file or the
-  // input type (`isUsed` in `exportSession`, services/config.js), so the
-  // `files` and `inputType` samples run in a drawing whose records are bound
-  // (`needs: ['records']`). The fix removes both `needs` and the known-defect
-  // case in tests/web/drawing-member-paths.test.mjs.
-  files: { needs: ['records'] /* OV-3701 */, value: filesSample },
+  // A drawing whose only change is a card file is saved (OV-3701).
+  files: { value: filesSample },
   // Save writes a drawing's record rows (Linear) or File cards (Circular),
   // not both (`serializeActiveRenderFiles` in services/config.js).
   linearSeqs: { modes: ['linear'], otherModeLoad: 'default', value: (mode, drawing, { registerFile }) => [createLinearSeq({
@@ -507,7 +503,8 @@ export const MEMBER_SAMPLES = {
     gff: registerFile(new File([`##gff-version 3\nsample_${mode}\tsample\tCDS\t1\t30\t.\t+\t0\tID=cds1\n`], `sample-${mode}.gff`, { lastModified: 1 })),
     fasta: registerFile(new File([`>sample_${mode}\n${'a'.repeat(40)}\n`], `sample-${mode}.fasta`, { lastModified: 1 }))
   })] },
-  inputType: { needs: ['records'] /* OV-3701 */, value: () => 'gff' },
+  // A drawing whose only change is its input type is saved (OV-3701).
+  inputType: { value: () => 'gff' },
   // What the record read of the drawing's File cards finds.
   circularRecordList: { modes: ['circular'], needs: ['records'], byContext: true, value: (mode, drawing) => captureMember(drawing, 'circularRecordList') },
   circularRecordDiscovery: { modes: ['circular'], needs: ['records'], byContext: true,

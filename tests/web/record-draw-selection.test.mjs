@@ -2,6 +2,8 @@
 // answers of services/record-draw-selection.js.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { pythonStrip } from '../../gbdraw/web/js/services/genbank-header.js';
 import {
   circularRecordDrawKey,
   circularRecordsToDraw,
@@ -15,8 +17,10 @@ import {
   pruneRecordsOff,
   recordIndexNumber,
   recordListRows,
+  recordOrderRows,
   recordSelectorNumber
 } from '../../gbdraw/web/js/services/record-draw-selection.js';
+import { recordOrderPlaces } from '../../gbdraw/web/js/services/record-options.js';
 
 const cards = ['a', 'b', 'c', 'd'].map((uid) => ({ uid }));
 
@@ -113,4 +117,81 @@ test('a #N record selector names the record the renderer draws', () => {
     assert.equal(recordIndexNumber(text), number, JSON.stringify(text));
   }
   assert.equal(recordSelectorNumber(1), null);
+});
+
+// OV-3313: the row of a Record Order token (`<selector>@<row>`, the text after its last `@`) reads as Python's
+// renderer reads it (`parse_record_row_position` in gbdraw/layout/record_placement.py, whose pattern the generated
+// contracts carry; tests/fixtures/record_order_row_vectors.json holds the tokens, which
+// tests/test_web_contracts_generated.py checks in Python). `1.0`, `0x1` and `1e0`,
+// which `Number()` read as 1, are no rows; a row is read from the token as stored (U+FEFF, which `trim()` strips and
+// Python's `strip()` does not, stays and refuses it).
+test('a Record Order token\'s row is the row the renderer reads', () => {
+  /** @type {{ tokens: { token: string, row: number | null }[] }} */
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(vectors.tokens.length > 20);
+  for (const { token, row } of vectors.tokens) assert.deepEqual(recordOrderRows([token]), [row], JSON.stringify(token));
+  assert.deepEqual(recordOrderRows([1, '#1']), [null, null]);
+});
+
+// OV-3313 review 1 L1: the renderer reads rows of up to 4300 digits exactly and only their order (`resolve_record_row_positions`
+// ranks them; a longer row is refused). The rows of one list read as safe integers in the same order: each row's value
+// when every row is a safe integer, else each row's rank, so `9007199254740993` stays after `9007199254740992`.
+test('the rows of a Record Order list keep the order the renderer draws, beyond 2^53 and up to 4300 digits', () => {
+  /** @type {{ rowLists: { tokens: string[], order: number[] | null }[] }} */
+  const { rowLists } = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(rowLists.length >= 8);
+  for (const { tokens, order } of rowLists) {
+    const rows = recordOrderRows(tokens);
+    const at = tokens.map((token) => token.slice(0, 24)).join(' ');
+    if (order === null) {
+      assert.ok(rows.includes(null), at);
+      continue;
+    }
+    assert.ok(rows.every((row) => Number.isSafeInteger(row) && row >= 1), at);
+    const drawn = tokens.map((_token, index) => index).sort((left, right) => rows[left] - rows[right] || left - right);
+    assert.deepEqual(drawn, order, at);
+  }
+  assert.deepEqual(recordOrderRows(['#1@9007199254740991', '#2@3']), [9007199254740991, 3]);
+  assert.deepEqual(recordOrderRows(['#1@9007199254740993', '#2@3', '#3@3', '#4@x']), [2, 1, 1, null]);
+});
+
+// OV-3473: the record each Record Order token names reads as Python's renderer reads it (`resolve_record_row_positions`
+// with `record_order_selector`; tests/fixtures/record_order_row_vectors.json `placements`, which
+// tests/test_web_contracts_generated.py checks in Python): a `#N`, an ID (stripped of the spaces Python's `strip()`
+// removes), or a word that names no record when one record is drawn; the renderer draws a row in token order, which
+// `places` carries when it is not the records' order. An ID no known record has, while one record's ID is not known,
+// is not read.
+test('a Record Order token names the record the renderer places', () => {
+  /** @type {{ placements: { mode?: 'circular', recordIds: string[], tokens: string[], order: number[] | null }[] }} */
+  const { placements } = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(placements.length >= 20);
+  for (const { mode, recordIds, tokens, order } of placements) {
+    const placement = recordOrderPlaces(tokens, recordIds, mode ?? 'linear');
+    const at = JSON.stringify(tokens);
+    if (order === null) {
+      assert.equal(placement.kind, 'refused', at);
+      continue;
+    }
+    assert.equal(placement.kind, 'placed', at);
+    if (placement.kind !== 'placed') continue;
+    const { rows, places } = placement;
+    const drawn = recordIds.map((_id, index) => index)
+      .sort((left, right) => rows[left] - rows[right] || (places ? places[left] - places[right] : left - right));
+    assert.deepEqual(drawn, order, at);
+  }
+  assert.deepEqual(recordOrderPlaces(['#2@1', 'b@2'], [null, null]), { kind: 'unread', tokenRecords: [1, null] });
+  assert.deepEqual(recordOrderPlaces(['#2@1', 'a@2'], ['a', null]), { kind: 'placed', rows: [2, 1], places: null, tokenRecords: [1, 0] });
+  assert.deepEqual(recordOrderPlaces(['#2@1', '#1@1.0'], [null, null]), { kind: 'refused', at: 1, tokenRecords: [1, 0] });
+  // A Circular canvas reads its tokens before it counts them (OV-3313 review 2 M2): a record named twice is refused at
+  // its token; a Linear list of another length is refused before its tokens are read.
+  assert.deepEqual(recordOrderPlaces(['#1@1', '#2@1', '#1@2'], ['a', 'b'], 'circular'), { kind: 'refused', at: 2, tokenRecords: [0, 1, 0] });
+  assert.deepEqual(recordOrderPlaces(['#1@1', '#2@1', '#1@2'], ['a', 'b']), { kind: 'refused', at: null, tokenRecords: [0, 1, 0] });
+});
+
+// OV-3760: the Web's Python strip, which reads a Record Order selector, removes the spaces Python's `str.strip` removes
+// (the generated `PYTHON_SPACE_PATTERN`, Python's `\s`): U+001C to U+001F and U+0085 too, which `String.trim` keeps;
+// U+FEFF stays, as in Python. tests/test_web_contracts_generated.py runs it over the BMP against Python.
+test('pythonStrip removes the spaces Python\'s str.strip removes', () => {
+  assert.equal(pythonStrip('\u001c\u0085 Escherichia coli \u001f\u3000'), 'Escherichia coli');
+  assert.equal(pythonStrip('\ufeffE. coli\ufeff'), '\ufeffE. coli\ufeff');
 });

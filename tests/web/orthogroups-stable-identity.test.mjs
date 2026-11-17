@@ -78,6 +78,7 @@ await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schem
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');
+await copyModule('gbdraw/web/js/services/genbank-header.js', 'services/genbank-header.js');
 // It finds the annotation groups by the drawn-group owner's marks.
 await copyModule('gbdraw/web/js/services/drawn-groups.js', 'services/drawn-groups.js');
 await copyModule('gbdraw/web/js/services/drawn-attributes.generated.js', 'services/drawn-attributes.generated.js');

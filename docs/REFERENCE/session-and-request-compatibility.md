@@ -711,6 +711,34 @@ Which records Web draws from a CLI session depends on the request:
   or the Circular record range that place (`#k`). When the file cannot be read,
   or no single record has that ID, Load lists it in its repair dialog and the
   text reads as that record number.
+- A Record Order entry (`#1@2`) whose row is not a whole number above zero,
+  written with an optional `+`, leading zeros and spaces around it, is refused
+  where the CLI reads the entry: `1.0`, `0x1` and `1e0` are no rows. Only a
+  hand edit stores one. Load leaves out the drawing's saved diagram, Results,
+  feature list and run metadata and names the entry's place in its repair
+  dialog; the drawing keeps its Web settings and the input files they name. A
+  one-circle drawing, which the CLI draws without reading its entries, loads as
+  saved. An older Linear request (schema 2 to 5) reads each card's row the same
+  way, and is refused, as the CLI refuses it, when some cards have a row and
+  some none.
+- A Linear request's Record Order places each record in the row of the entry
+  that names it (`#2@1` puts record 2 in row 1; an entry may also name a
+  record ID), as the CLI draws it, and a row keeps the order of its entries. A
+  record drawn in several windows (`--region`) keeps its windows together, in
+  their order, at its entry's place in the row.
+  Load refuses, as the CLI does, a Linear request whose records have a grid
+  row on some records only, grid rows together with Record Order entries, or
+  entries that name a record twice, a record past the records or an ID no
+  record has, or another number of records; the drawing then loads as above.
+  A record ID is checked against the ID Load reads from the file, also for a
+  file of one record, which the CLI stores without a record ID; when Load
+  cannot read such a file, each record takes the row of the entry at its place.
+- A Circular Multi-Record Canvas whose records each draw one record (a record
+  of a file, whole or cropped to one range) has its Record Order refused, as
+  the CLI refuses it, when its entries name a record twice, a record past the
+  records or an ID no record has, or leave a record out; the drawing then
+  loads as above. A canvas with a record that stands for every record of its
+  file is not checked at Load; the CLI checks it when it draws.
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or
