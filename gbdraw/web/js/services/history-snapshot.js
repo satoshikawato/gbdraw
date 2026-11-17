@@ -7,7 +7,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 /** @import { LoadedSourceName } from './linear-comparisons.js' */
-import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
+import { INPUTS_SLICE, bindDrawingCanonicalComparisons, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
 import { loadedSourceNameField, restoreComparisonEdgeFile } from './linear-comparisons.js';
 import { captureLinearCardOrientation } from './record-display-model.js';
@@ -28,7 +28,7 @@ import {
   createArtifactSlot, createArtifactSlotStore, installShownSetLegend
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { LOSAT_EVIDENCE_EMPTY, LOSAT_EVIDENCE_KEYS } from './losat-cache.js';
+import { LOSAT_EVIDENCE_EMPTY, LOSAT_EVIDENCE_KEYS, emptyLosatEvidence } from './losat-cache.js';
 /** @import { LosatEvidence, LosatCacheInfoEntry } from './losat-cache.js' */
 import { CANVAS_SLICE } from './drawing/canvas.js';
 /** @import { CanvasPadding, CanvasSlice } from './drawing/canvas.js' */
@@ -991,16 +991,53 @@ const checkpointCatalogFeatures = (snapshot) => {
 };
 
 /**
+ * The values of a drawing that **Clear LOSAT results** writes (D-221, OV-3826): its LOSAT evidence, and the comparisons
+ * of its draft (`linearCanonicalComparisons`, History's capture of them), which a Linear Generate adopts from the
+ * request it committed: the stored protein results a later Generate reuses with no search
+ * (`canReuseResolvedProteinArtifacts`).
+ * @typedef {object} LosatClearValues
+ * @property {LosatEvidence} evidence
+ * @property {DrawingInputFiles['linearCanonicalComparisons']} comparisons
+ */
+/**
  * A drawing's LOSAT evidence where its artifact is (D-221): the displayed values while it is shown, else its kept
  * slot's. Reads and one writer of its rows; nothing here counts holders or reaches a drawing History holds.
  * @param {{ shownDrawingId: () => DrawingId,
  *   artifactSlots: { kept: () => readonly Readonly<ArtifactSlot>[] },
  *   losatEvidenceOf: (drawingId: DrawingId) => LosatEvidence,
- *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void }} owner
+ *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void,
+ *   drawingOf: (drawingId: DrawingId) => Pick<DrawingView, 'slices'>,
+ *   fileStore: Pick<InputFileStore, 'registerFile'> }} owner
  */
-const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, losatEvidenceOf, writeArtifactValues }) => {
+const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, losatEvidenceOf, writeArtifactValues, drawingOf, fileStore }) => {
   return {
     losatEvidenceOf,
+    /**
+     * What Clear LOSAT results takes from drawing `drawingId` (`held`) and what it leaves (`cleared`, new values every
+     * call): empty evidence, and of its draft's comparisons only those a CLI or Python request gave as its own input
+     * (`canonicalInput`), which no LOSAT search made. So the drawing's next Generate searches again, or reuses only a
+     * search another drawing names (PD-OI-022 Revision #2101).
+     * @param {DrawingId} drawingId
+     * @returns {{ held: LosatClearValues, cleared: LosatClearValues }}
+     */
+    losatClearOf: (drawingId) => {
+      // The draft's comparisons as History's checkpoint captures them (`filesDataOf`).
+      const comparisons = INPUTS_SLICE.capture(drawingOf(drawingId).slices.inputs).files.linearCanonicalComparisons;
+      return {
+        held: { evidence: losatEvidenceOf(drawingId), comparisons },
+        cleared: { evidence: emptyLosatEvidence(), comparisons: comparisons.filter(({ canonicalInput }) => canonicalInput === true) }
+      };
+    },
+    /**
+     * Writes Clear's values into drawing `drawingId`: its evidence where its artifact is, its draft's comparisons
+     * through the inputs slice's writer (a released file binds nothing).
+     * @param {DrawingId} drawingId
+     * @param {LosatClearValues} values
+     */
+    writeLosatClear: (drawingId, { evidence, comparisons }) => {
+      writeArtifactValues(drawingId, evidence);
+      bindDrawingCanonicalComparisons(fileStore, drawingOf(drawingId).slices.inputs, comparisons);
+    },
     /**
      * The LOSAT evidence of every drawing of the project: the shown drawing's and each kept slot's. A drawing History
      * holds out of the project (a Delete, an undone New or Duplicate) is none of them (D-224).
@@ -1876,7 +1913,7 @@ export const createHistorySnapshotService = ({
     artifactSlots.writeValues(state.drawingOf(drawingId), values);
   };
   const losatEvidence = createLosatEvidenceAccess({
-    shownDrawingId: () => state.activeDrawingId.value, artifactSlots, writeArtifactValues,
+    shownDrawingId: () => state.activeDrawingId.value, artifactSlots, writeArtifactValues, drawingOf: state.drawingOf, fileStore,
     // A drawing's seven values where its artifact is: the shown drawing's state, a kept slot (every key filled).
     losatEvidenceOf: (drawingId) => {
       const values = readSlotValues(drawingId, LOSAT_EVIDENCE_KEYS);
@@ -2169,6 +2206,8 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRuntimeOwner,
     losatEvidenceOf: losatEvidence.losatEvidenceOf,
     projectLosatEvidence: losatEvidence.projectLosatEvidence,
+    losatClearOf: losatEvidence.losatClearOf,
+    writeLosatClear: losatEvidence.writeLosatClear,
     editLosatRows: losatEvidence.editLosatRows,
     setAfterApplyHistoryIntent,
     setHeldFigureDisplay: heldFigures.setDisplay,

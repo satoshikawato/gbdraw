@@ -197,8 +197,9 @@ test('Swapping Linear rows reconverts LOSATP Similarity groups and draws the fre
 // PD-OI-022 Revision #2101 (OV-3785): Clear in one drawing leaves the searches another drawing names, and the cleared
 // drawing's next Generate reuses them. Similarity groups search both directions of the pair and each record against
 // itself; the drawing lists one row, the displayed direction. A Duplicate's Result uses all four searches, so the
-// cleared drawing reuses all of them, the three without a row included, and runs no LOSAT search. Its Generate swaps
-// the rows: an unchanged Generate would redraw the committed result without looking up a search.
+// cleared drawing reuses all of them, the three without a row included, and runs no LOSAT search. Its Generate changes
+// nothing: Clear also took the stored results the drawing's draft held, so it looks the searches up (OV-3826) instead
+// of redrawing them with no search and no listed result.
 test('Clear in a drawing reuses the LOSATP searches a Duplicate uses without a row for them', async ({ page }) => {
   test.setTimeout(420000);
   await openSimilarityGroups(page, [1, 2]);
@@ -214,10 +215,8 @@ test('Clear in a drawing reuses the LOSATP searches a Duplicate uses without a r
   await showDrawing(page, { id: source });
   await page.getByRole('button', { name: 'Clear 1 LOSAT result', exact: true }).click();
   await expect.poll(rows).toBe(0);
-  if (!await page.getByLabel('Linear record row for sequence 1').isVisible()) await openLayoutControls(page);
-  await setRows(page, [2, 1]);
   const again = await generate(page);
-  expect(again.cache).toEqual({ cacheHits: 4, cacheMisses: 0, derivedHits: 0, derivedMisses: 1 });
+  expect(again.cache).toEqual({ cacheHits: 4, cacheMisses: 0, derivedHits: 1, derivedMisses: 0 });
   expect(again.executorCalls).toBe(first.executorCalls);
   expect(await rows()).toBe(1);
 });

@@ -48,6 +48,7 @@ const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { LOSAT_EVIDENCE_KEYS, emptyLosatEvidence, validateProteinRawEntryReferences } =
   await import('../../gbdraw/web/js/services/losat-cache.js');
 const { createLinearComparisonView } = await import('../../gbdraw/web/js/app/linear-comparison-panel.js');
+const { bindDrawingCanonicalComparisons } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { LEGACY_PROTEIN_CANDIDATE_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { LOSAT_DERIVED_CACHE_SCHEMA, PROTEIN_IDENTITY_MANIFEST_SCHEMA, PROTEIN_LOSAT_CACHE_SCHEMA } =
   await import('../../gbdraw/web/js/contracts/schema.generated.js');
@@ -255,6 +256,15 @@ test('Clear LOSAT results is one History step: Undo brings back what it cleared,
         manifest: proteinManifest('a', ['u1', 'u2']), derived: [derivedEvidence('pA')],
         legacy: { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [{ state: 'pending' }] }
       } : {});
+      // OV-3826: a Linear Generate adopts its Result's stored protein results into the draft, which a later Generate
+      // reuses with no search; Clear takes them with the evidence, and its Undo puts them back with their files.
+      const storedTable = new File(['q\ts\n'], 'pA.tsv');
+      const stored = linear ? [{ kind: 'precomputedProteinComparison', edgeKey: 'edge-k1', ordinal: 0, queryRecordIndex: 0,
+        subjectRecordIndex: 1, encoding: 'canonicalTsv', file: storedTable },
+      { kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: {} }] : [];
+      bindDrawingCanonicalComparisons(state.inputFiles, state.drawingOf(a).slices.inputs, stored);
+      const adopted = () => state.drawingOf(a).files.linearCanonicalComparisons
+        .map((comparison) => ('file' in comparison ? { ...comparison, file: state.inputFiles.fileOf(comparison.file) } : comparison));
       const cleared = shownValues();
       assert.equal(app.losatResultRows.value.length, 2, `${mode}: "Clear 2 LOSAT results"`);
       // OV-3785: the searches A's Result uses go with Clear and come back, the same Set, with its Undo.
@@ -264,13 +274,16 @@ test('Clear LOSAT results is one History step: Undo brings back what it cleared,
       assert.equal(history.getUndoCount(), undoCount + 1, `${mode}: one History step`);
       const empty = emptyLosatEvidence();
       assert.deepEqual(Object.fromEntries(LOSAT_EVIDENCE_KEYS.map((key) => [key, state[key].value])), empty, `${mode}: A's values are empty`);
+      assert.deepEqual(adopted(), [], `${mode}: Clear takes the stored protein results from A's draft (OV-3826)`);
       assert.equal(app.losatResultRows.value.length, 0);
       assert.ok(sameValues(valuesOf(app, b), bValues), `${mode}: B's values stay`);
       await history.undo();
       assert.ok(sameValues(shownValues(), cleared), `${mode}: Undo brings back exactly what Clear cleared`);
+      assert.deepEqual(adopted(), stored, `${mode}: Undo gives the draft its stored protein results back, with their file`);
       assert.equal(app.losatResultRows.value.length, 2);
       await history.redo();
       assert.deepEqual(shownValues(), empty, `${mode}: Redo clears again`);
+      assert.deepEqual(adopted(), [], `${mode}: Redo takes them again`);
       assert.ok(sameValues(valuesOf(app, b), bValues), `${mode}: B's values stay through Undo and Redo`);
       await history.undo();
       await history.undo();

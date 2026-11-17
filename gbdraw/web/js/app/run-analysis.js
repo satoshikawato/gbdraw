@@ -1041,9 +1041,10 @@ const namedLosatKeysOf = (pairs, payloadKey) => new Set([...pairs.map(({ cacheKe
  * The LOSAT rows and named searches a Generate starts from. A Circular Generate writes both anew (OV-3201): its rings'
  * searches. A Linear one starts from the committed artifact's (`ownerSet`, History's capture of it; the shown
  * drawing's for a value the capture does not hold), so a Generate that reuses the committed protein result lists and
- * names the same ones (OV-3785).
+ * names the same ones (OV-3785). The capture holds every key, its value null when the state held none
+ * (`capturedLosatEvidence`); no committed artifact has no owner set.
  * @param {boolean} circular
- * @param {Partial<Pick<LosatEvidence, 'losatCacheInfo' | 'losatNamedKeys'>> | null | undefined} ownerSet
+ * @param {{ readonly [K in 'losatCacheInfo' | 'losatNamedKeys']: LosatEvidence[K] | null } | null | undefined} ownerSet
  * @param {Pick<LosatEvidence, 'losatCacheInfo' | 'losatNamedKeys'>} shown
  * @returns {[readonly LosatCacheInfoEntry[], ReadonlySet<string>]}
  */

@@ -22,6 +22,7 @@
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 /** @import { LosatEvidence } from '../services/losat-cache.js' */
+/** @import { LosatClearValues } from '../services/history-snapshot.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
@@ -139,7 +140,7 @@ import {
   linearDrawingWindowsOf
 } from '../services/config.js';
 import { artifactSlotAs, keptSetLegend } from '../services/artifact-slot.js';
-import { emptyLosatEvidence, listsLosatResults, losatRowsOnePerKey } from '../services/losat-cache.js';
+import { listsLosatResults, losatRowsOnePerKey } from '../services/losat-cache.js';
 import {
   setStoredProteinResultFrameConverter
 } from '../services/main-session-comparison-frame.js';
@@ -595,20 +596,21 @@ const restoreOfDeletedRows = (state, indexes, restore) => {
 
 /**
  * **Clear LOSAT results** as one History step of drawing `drawingId` (C5 (a), Owner 2026-11-14): it empties the
- * drawing's LOSAT evidence (D-221); its Undo puts back the values it cleared, and its Redo puts back the same empty
- * values (fresh for this step, never shared with another drawing). No step when the drawing lists no result (the
- * button is off then, D-223).
+ * drawing's LOSAT evidence (D-221) and takes from its draft the stored protein results its Generate adopted, so its next
+ * Generate searches again (OV-3826); its Undo puts back the values it cleared, and its Redo puts back the same cleared
+ * values (fresh for this step, never shared with another drawing). The step keeps the files of the comparisons it takes
+ * stored, so its Undo binds them again. No step when the drawing lists no result (the button is off then, D-223).
  * @param {DrawingId} drawingId
- * @param {{ losatEvidenceOf: (drawingId: DrawingId) => LosatEvidence,
- *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void }} owner
+ * @param {{ losatClearOf: (drawingId: DrawingId) => { held: LosatClearValues, cleared: LosatClearValues },
+ *   writeLosatClear: (drawingId: DrawingId, values: LosatClearValues) => void }} owner
  */
-const clearLosatResultsCommand = (drawingId, { losatEvidenceOf, writeArtifactValues }) => {
-  const cleared = losatEvidenceOf(drawingId);
-  if (!listsLosatResults(cleared)) return null;
-  const empty = emptyLosatEvidence();
+const clearLosatResultsCommand = (drawingId, { losatClearOf, writeLosatClear }) => {
+  const { held, cleared } = losatClearOf(drawingId);
+  if (!listsLosatResults(held.evidence)) return null;
   return {
-    apply: () => writeArtifactValues(drawingId, empty),
-    revert: () => writeArtifactValues(drawingId, cleared)
+    apply: () => writeLosatClear(drawingId, cleared),
+    revert: () => writeLosatClear(drawingId, held),
+    metadata: { comparisons: held.comparisons }
   };
 };
 

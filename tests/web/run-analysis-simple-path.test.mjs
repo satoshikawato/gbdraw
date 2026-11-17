@@ -2616,6 +2616,43 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // drawing's Generate after a Clear reuses them.
     assert.deepEqual([...state.losatNamedKeys.value], [...warmNamedKeys]);
 
+    // OV-3826: stored protein results are reused whatever LOSAT evidence the drawing holds: a Session the Python API
+    // saved again holds none and draws them with no search. After Clear LOSAT results the drawing's next Generate
+    // searches again (PD-OI-022 Revision #2101: Clear invalidates the drawing's retained evidence): it extracts the
+    // records' proteins, which this stub answers with no reply, so the Generate stops there.
+    const warmDrawingId = state.activeDrawingId.value;
+    const warmEvidence = artifactSnapshots.losatEvidenceOf(warmDrawingId);
+    const warmComparisons = modeDrawing(state, 'linear').files.linearCanonicalComparisons;
+    // The committed Session as the warm Generate's: its stored results (that Generate committed the request it built).
+    const warmCommitted = () => {
+      committedRenderRequest = { ...committedRenderRequest, comparisons: [{ kind: 'precomputedProteinComparison' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }] };
+    };
+    warmCommitted();
+    const { emptyLosatEvidence: noEvidence } = await import('../../gbdraw/web/js/services/losat-cache.js');
+    artifactSnapshots.writeArtifactValues(warmDrawingId, noEvidence());
+    const extractionsSince = (count) => workerMessages.slice(count)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta').length;
+    const beforeBareReuse = workerMessages.length;
+    const bareResult = result('lazy-linear-bare.svg', 'lazy-linear-bare');
+    workerResponses.push(response(bareResult, validCatalog(bareResult.name)));
+    assert.deepEqual(await runner.runAnalysis(warmComparisonPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual([losatCalls, extractionsSince(beforeBareReuse)], [2, 0], 'stored results without LOSAT evidence are reused');
+    artifactSnapshots.writeArtifactValues(warmDrawingId, warmEvidence);
+    // Clear LOSAT results, as its History step writes the drawing's values (app-setup.js `clearLosatResultsCommand`).
+    const clearing = artifactSnapshots.losatClearOf(warmDrawingId);
+    assert.deepEqual(clearing.held.comparisons, warmComparisons);
+    artifactSnapshots.writeLosatClear(warmDrawingId, clearing.cleared);
+    assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
+    warmCommitted();
+    const beforeCleared = workerMessages.length;
+    assert.equal((await runner.runAnalysis(warmComparisonPlan)).status, 'error');
+    assert.ok(extractionsSince(beforeCleared) > 0, 'the Generate after Clear searches again (OV-3826)');
+    assert.equal(losatCalls, 2);
+    artifactSnapshots.writeArtifactValues(warmDrawingId, warmEvidence);
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = warmComparisons;
+
     // OV-1128 B (D-114): a Similarity groups Generate draws, records and keys with the stored
     // paralog links per group. The committed result was drawn with 3, so it is reused and the
     // request records 3.
