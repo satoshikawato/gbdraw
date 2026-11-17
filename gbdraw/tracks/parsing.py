@@ -350,14 +350,15 @@ def slot_legend_label(slot: SlotWithParams, fallback: str) -> str:
     return label or fallback
 
 
-def slot_skew_colors(slot: SlotWithParams) -> tuple[str | None, str | None]:
-    """The high and low fill colors a skew slot sets in its params, as hex, or ``None``."""
+def slot_skew_fill_colors(slot: SlotWithParams, high: str, low: str) -> tuple[str, str]:
+    """The high and low fills a skew slot draws: those its params set, as hex, else ``high`` and ``low``. The
+    drawing and the slot's Legend rows both read them here."""
 
     positive_color = _slot_param_text(slot, "positive_color", "high_color")
     negative_color = _slot_param_text(slot, "negative_color", "low_color")
     return (
-        resolve_color_to_hex(positive_color) if positive_color else None,
-        resolve_color_to_hex(negative_color) if negative_color else None,
+        resolve_color_to_hex(positive_color) if positive_color else high,
+        resolve_color_to_hex(negative_color) if negative_color else low,
     )
 
 
@@ -406,7 +407,7 @@ __all__ = [
     "parse_nonnegative_integer",
     "reject_unread_slot_params",
     "slot_legend_label",
-    "slot_skew_colors",
+    "slot_skew_fill_colors",
     "slots_draw_features",
     "parse_track_slot_text",
     "unread_slot_param_keys",

@@ -13,7 +13,8 @@ from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
-from gbdraw.layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth, ScalarAxisStyle, scalar_axis_footprint
+from gbdraw.layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth, scalar_axis_footprint
+from gbdraw.layout.series_style import ScalarAxisStyle
 from gbdraw.exceptions import ValidationError
 from gbdraw.diagrams.circular.radial_layout import (
     build_circular_feature_layout,
@@ -623,7 +624,7 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
         scalar_axes=CircularScalarAxes(depth=ScalarAxisStyle.of(depth_config)),
     )
     depth = layout.tracks[0]
-    footprint = scalar_axis_footprint(depth_config, width_px)
+    footprint = scalar_axis_footprint(ScalarAxisStyle.of(depth_config), width_px)
 
     assert depth.draw_band_px is not None
     assert depth.reserved_band_px is not None

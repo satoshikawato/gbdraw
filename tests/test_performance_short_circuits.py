@@ -11,8 +11,6 @@ import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 import gbdraw.diagrams.linear.precalc as linear_precalc_module
 import gbdraw.features.factory as factory_module
-import gbdraw.render.groups.linear.gc_content as linear_gc_content_module
-import gbdraw.render.groups.linear.gc_skew as linear_gc_skew_module
 import gbdraw.render.export as export_module
 from gbdraw.analysis.skew import skew_df as real_skew_df
 from gbdraw.api import render as api_render
@@ -56,12 +54,7 @@ def test_linear_shared_gc_dataframe_is_computed_once_per_record(
         call_count += 1
         return real_skew_df(*args, **kwargs)
 
-    def unexpected_group_skew_df(*_args, **_kwargs):
-        raise AssertionError("Linear GC groups should reuse the precomputed GC dataframe.")
-
     monkeypatch.setattr(linear_assemble_module, "skew_df", counting_skew_df)
-    monkeypatch.setattr(linear_gc_content_module, "skew_df", unexpected_group_skew_df)
-    monkeypatch.setattr(linear_gc_skew_module, "skew_df", unexpected_group_skew_df)
 
     assemble_linear_diagram_from_records(
         [record],

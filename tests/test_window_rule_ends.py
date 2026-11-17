@@ -283,15 +283,15 @@ def test_a_circular_area_of_a_linear_record_holds_its_last_value_to_the_end(clos
     its last sample (Depth) as before; a linear record's area holds its last value on to 12 o'clock (OV-2920)."""
 
     from gbdraw.layout.record_transform import unset_record_transform
-    from gbdraw.svg.circular_tracks import circular_scalar_area_line
+    from gbdraw.layout.scalar_axis import band_samples
+    from gbdraw.svg.circular_tracks import CircularTrackPlace, circular_series_line
 
     data = pd.DataFrame({"position": [0, 400, 800], "value_normalized": [0.2, 0.5, 0.9]})
+    samples = band_samples(data, "value_normalized", closes_at_record_end=close_at_record_len)
     lines = {}
     for topology in ("linear", "circular"):
         transform = unset_record_transform(_run_record((0, 0), topology, length=1_000))
-        line = circular_scalar_area_line(
-            100.0, 1_000, data, 10.0, 1.0, close_at_record_len=close_at_record_len, record_transform=transform
-        )
+        line = circular_series_line(samples, CircularTrackPlace(100.0, 1_000, 10.0, 1.0, transform))
         assert line is not None
         lines[topology] = line
     linear = lines["linear"]
@@ -311,23 +311,24 @@ def test_a_circular_crop_of_a_circular_record_holds_its_last_value_to_12_oclock(
     not ramp to its first sample's value (D-64). The whole circular record still closes on its first sample."""
 
     from gbdraw.layout.record_transform import unset_record_transform
-    from gbdraw.svg.circular_tracks import circular_gc_content_line, circular_gc_skew_line, circular_scalar_area_line
+    from gbdraw.layout.scalar_axis import band_samples, deviation_samples
+    from gbdraw.svg.circular_tracks import CircularTrackPlace, circular_series_line
 
     source = _run_record((0, 0), "circular", length=10_000)
     crop = crop_record_to_region(source, _region(3_001, 4_000), circular=True)
     data = pd.DataFrame({"position": [0, 400, 800], "value_normalized": [0.2, 0.5, 0.9]})
     frame = pd.DataFrame({"GC content": [0.2, 0.5, 0.9], "GC skew": [-0.2, 0.1, 0.4]}, index=[0, 400, 800])
+    samples = {
+        "gc_content": deviation_samples(frame["GC content"], closes_at_record_end=True),
+        "gc_skew": deviation_samples(frame["GC skew"], closes_at_record_end=False),
+        "depth": band_samples(data, "value_normalized", closes_at_record_end=False),
+        "percent": band_samples(data, "value_normalized", closes_at_record_end=True),
+    }[track]
+    assert samples is not None
     lines = {}
     for name, record in (("crop", crop), ("whole", _run_record((0, 0), "circular", length=1_000))):
         transform = unset_record_transform(record)
-        if track == "gc_content":
-            line = circular_gc_content_line(100.0, 1_000, frame, 10.0, 1.0, "GC", transform)
-        elif track == "gc_skew":
-            line = circular_gc_skew_line(100.0, frame, 1_000, 10.0, 1.0, "GC", transform)
-        else:
-            line = circular_scalar_area_line(
-                100.0, 1_000, data, 10.0, 1.0, close_at_record_len=track == "percent", record_transform=transform
-            )
+        line = circular_series_line(samples, CircularTrackPlace(100.0, 1_000, 10.0, 1.0, transform))
         assert line is not None
         lines[name] = (list(line.positions), list(line.radii))
     positions, radii = lines["crop"]

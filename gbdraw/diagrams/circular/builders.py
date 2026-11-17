@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Literal, ParamSpec, Sequence
 
 from Bio.SeqRecord import SeqRecord
@@ -12,7 +13,6 @@ from pandas import DataFrame
 from svgwrite import Drawing
 from svgwrite.container import Group
 
-from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...analysis.conservation import DrawnConservationRing
 from ...render.drawers.circular.annotations import LeaderSegment
@@ -20,20 +20,13 @@ from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGrou
 from ...features.factory import FeatureBuildResult
 from ...labels.circular_types import CircularLabel
 from ...layout.circular import CircularFeatureRenderContext
-from ...configurators import (
-    FeatureDrawingConfigurator,
-    DepthConfigurator,
-    GcContentConfigurator,
-    GcSkewConfigurator,
-)
+from ...configurators import FeatureDrawingConfigurator
 from ...render.groups.circular import (
     AxisGroup,
     CircularDefinitionStyle,
     ConservationGroup,
     DefinitionGroup,
-    DepthGroup,
-    GcContentGroup,
-    GcSkewGroup,
+    NumericSeriesGroup,
     LabelsGroup,
     SeqRecordGroup,
     TickGroup,
@@ -45,6 +38,7 @@ from ...render.group_content import (
     build_group_content,
     place_content,
 )
+from ...render.numeric_series import NumericSeriesConfig, NumericSeriesStage
 from ...render_stages import _pre_keyed, render_stage
 from ...render.groups.circular.ticks import backed_tick_content, backed_tick_numbers, build_tick_slot_layout
 from ...svg.ids import stable_svg_id
@@ -142,52 +136,6 @@ def _add_track_content(
     canvas.add(group)
     return canvas
 
-def add_depth_group_on_canvas(
-    canvas: Drawing,
-    gb_record: SeqRecord,
-    depth_df: DataFrame,
-    canvas_config: CircularCanvasConfigurator,
-    depth_config: DepthConfigurator,
-    *,
-    group_key: GroupKey,
-    track_width_override: float | None = None,
-    norm_factor_override: float,
-    group_id: str,
-    slot_group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-) -> Drawing:
-    """Adds the depth coverage group to the canvas."""
-    depth_track_width = (
-        float(track_width_override)
-        if track_width_override is not None
-        else circular_track_width_px(
-            "depth",
-            radius=canvas_config.radius,
-            track_ratio=canvas_config.track_ratio,
-            factors=canvas_config.track_ratio_factors,
-        )
-    )
-    content = render_stage(
-        "depth_content",
-        slot_group_content,
-        slot_group_id,
-        DepthGroup,
-        gb_record,
-        depth_df,
-        canvas_config.radius,
-        depth_track_width,
-        depth_config,
-        norm_factor_override=norm_factor_override,
-        group_id=group_id,
-        record_transform=record_transform,
-    )
-    return _add_track_content(
-        canvas, content, canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
-    )
-
-
 def add_feature_density_heatmap_on_canvas(
     canvas: Drawing,
     heatmap: FeatureDensityHeatmapGroup,
@@ -242,103 +190,50 @@ def add_conservation_group_on_canvas(
     return canvas
 
 
-def add_gc_skew_group_on_canvas(
-    canvas: Drawing,
-    gb_record: SeqRecord,
-    gc_df: DataFrame,
-    canvas_config: CircularCanvasConfigurator,
-    skew_config: GcSkewConfigurator,
-    *,
-    group_key: GroupKey,
-    track_width_override: float | None = None,
-    norm_factor_override: float,
-    group_id: str,
-    slot_group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-) -> Drawing:
-    """Adds the GC skew group to the canvas.
+@dataclass(frozen=True)
+class CircularSeriesSlot:
+    """A slot's numeric series track as its group is built and placed: the group key, the track's width and
+    anchor (a share of the canvas radius), the group's ids, the slot it tags, and the record's transform."""
 
-    The group takes its slot DOM ids from ``slot_group_id``; ``slot_id`` and
-    ``slot_renderer`` tag the placed group.
-    """
-    skew_track_width = (
-        float(track_width_override)
-        if track_width_override is not None
-        else circular_track_width_px(
-            "dinucleotide_skew",
-            radius=canvas_config.radius,
-            track_ratio=canvas_config.track_ratio,
-            factors=canvas_config.track_ratio_factors,
-        )
-    )
+    group_key: GroupKey
+    track_width: float
+    norm_factor: float
+    group_id: str
+    slot_group_id: str
+    slot_id: str
+    slot_renderer: str
+    record_transform: RecordDisplayTransform | None
+
+
+def add_numeric_series_group_on_canvas(
+    canvas: Drawing,
+    stage: NumericSeriesStage,
+    gb_record: SeqRecord,
+    frame: DataFrame,
+    canvas_config: CircularCanvasConfigurator,
+    config: NumericSeriesConfig,
+    slot: CircularSeriesSlot,
+) -> Drawing:
+    """Add a numeric series track (GC content, GC skew, depth) to the canvas, built in the render stage
+    ``stage``. The group takes its slot DOM ids from ``slot.slot_group_id``; ``slot.slot_id`` and
+    ``slot.slot_renderer`` tag the placed group."""
+
     content = render_stage(
-        "gc_skew_content",
+        stage,
         slot_group_content,
-        slot_group_id,
-        GcSkewGroup,
+        slot.slot_group_id,
+        NumericSeriesGroup,
         gb_record,
-        gc_df,
+        frame,
         canvas_config.radius,
-        skew_track_width,
-        skew_config,
-        norm_factor_override=norm_factor_override,
-        group_id=group_id,
-        record_transform=record_transform,
+        slot.track_width,
+        config,
+        norm_factor_override=slot.norm_factor,
+        group_id=slot.group_id,
+        record_transform=slot.record_transform,
     )
     return _add_track_content(
-        canvas, content, canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
-    )
-
-
-def add_gc_content_group_on_canvas(
-    canvas: Drawing,
-    gb_record: SeqRecord,
-    gc_df: DataFrame,
-    canvas_config: CircularCanvasConfigurator,
-    gc_config: GcContentConfigurator,
-    *,
-    group_key: GroupKey,
-    track_width_override: float | None = None,
-    norm_factor_override: float,
-    group_id: str,
-    slot_group_id: str,
-    slot_id: str,
-    slot_renderer: str,
-    record_transform: RecordDisplayTransform | None = None,
-) -> Drawing:
-    """Adds the GC content group to the canvas.
-
-    The group takes its slot DOM ids from ``slot_group_id``; ``slot_id`` and
-    ``slot_renderer`` tag the placed group.
-    """
-    gc_content_track_width = (
-        float(track_width_override)
-        if track_width_override is not None
-        else circular_track_width_px(
-            "dinucleotide_content",
-            radius=canvas_config.radius,
-            track_ratio=canvas_config.track_ratio,
-            factors=canvas_config.track_ratio_factors,
-        )
-    )
-    content = render_stage(
-        "gc_content_content",
-        slot_group_content,
-        slot_group_id,
-        GcContentGroup,
-        gb_record,
-        gc_df,
-        canvas_config.radius,
-        gc_content_track_width,
-        gc_config,
-        norm_factor_override=norm_factor_override,
-        group_id=group_id,
-        record_transform=record_transform,
-    )
-    return _add_track_content(
-        canvas, content, canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
+        canvas, content, canvas_config, slot.group_key, slot_id=slot.slot_id, slot_renderer=slot.slot_renderer
     )
 
 
@@ -566,10 +461,9 @@ def add_labels_group_on_canvas(
 
 
 __all__ = [
-    "add_depth_group_on_canvas",
+    "CircularSeriesSlot",
     "add_feature_density_heatmap_on_canvas",
-    "add_gc_skew_group_on_canvas",
-    "add_gc_content_group_on_canvas",
+    "add_numeric_series_group_on_canvas",
     "add_record_definition_group_on_canvas",
     "add_record_group_on_canvas",
     "add_axis_group_on_canvas",

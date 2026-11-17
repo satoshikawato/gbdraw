@@ -1,39 +1,37 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pandas as pd
 import pytest
 from svgwrite.container import Group
 from svgwrite.path import Path
 
-from gbdraw.render.drawers.circular.gc_content import (
-    GcContentDrawer as CircularGcContentDrawer,
-)
-from gbdraw.render.drawers.circular.gc_skew import SkewDrawer as CircularSkewDrawer
-from gbdraw.render.drawers.linear.gc_content import (
-    GcContentDrawer as LinearGcContentDrawer,
-)
-from gbdraw.render.drawers.linear.gc_skew import SkewDrawer as LinearSkewDrawer
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.render.drawers.circular.numeric_series import circular_series_ink, draw_circular_series
+from gbdraw.render.drawers.linear.numeric_series import draw_linear_series
+from gbdraw.render.numeric_series import NumericSeriesPlot, gc_content_series, gc_skew_series
+from gbdraw.svg.circular_tracks import CircularTrackPlace
+from gbdraw.svg.linear_tracks import LinearTrackFrame
+from tests.utils.series_configs import gc_content_config, gc_skew_config
+
+ALONE = RecordDisplayTransform(120, 1, 1, None, True)
 
 
-def _gc_content_config(*, stroke_color: str, stroke_width: float) -> SimpleNamespace:
-    return SimpleNamespace(
-        high_fill_color="#10b981",
-        low_fill_color="#10b981",
-        fill_color="#10b981",
-        stroke_color=stroke_color,
-        stroke_width=stroke_width,
-        fill_opacity=0.75,
-        mode="deviation",
-        font_family="Liberation Sans",
-        percent_background_color="#e5e5e5",
+def _draw_circular(plot: NumericSeriesPlot, group_id: str = "gc_track") -> Group:
+    return draw_circular_series(Group(), plot, CircularTrackPlace(100.0, 120, 20.0, 0.8, ALONE), group_id, None)
+
+
+def _draw_linear(plot: NumericSeriesPlot, group_id: str = "gc_track") -> Group:
+    return draw_linear_series(Group(), plot, LinearTrackFrame(0, 0, 120, 600.0, 24.0), group_id)
+
+
+def _gc_content_config(*, stroke_color: str, stroke_width: float):
+    return gc_content_config(
+        fill_color="#10b981", stroke_color=stroke_color, stroke_width=stroke_width, fill_opacity=0.75, mode="deviation"
     )
 
 
-def _gc_skew_config(*, stroke_color: str, stroke_width: float) -> SimpleNamespace:
-    return SimpleNamespace(
+def _gc_skew_config(*, stroke_color: str, stroke_width: float):
+    return gc_skew_config(
         high_fill_color="#ef4444",
         low_fill_color="#3b82f6",
         stroke_color=stroke_color,
@@ -66,15 +64,8 @@ def test_gc_content_outline_contract_matches_in_both_modes(
 ) -> None:
     stroke_color = "#123456"
     frame = _gc_frame()
-    circular_group = CircularGcContentDrawer(
-        _gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(
-        100.0, Group(), frame, 120, 20.0, 0.8, "GC", "gc_content_track",
-        record_transform=RecordDisplayTransform(120, 1, 1, None, True),
-    )
-    linear_group = LinearGcContentDrawer(
-        _gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(Group(), frame, 120, 600.0, 24.0, 0.0, 0.0, "GC", "gc_content_track")
+    plot = gc_content_series(_gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width), frame)
+    circular_group, linear_group = _draw_circular(plot), _draw_linear(plot)
 
     for group in (circular_group, linear_group):
         paths = _main_paths(group, stroke_color=stroke_color)
@@ -88,22 +79,8 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
 ) -> None:
     stroke_color = "#654321"
     frame = _gc_frame()
-    circular_group = CircularSkewDrawer(
-        _gc_skew_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(100.0, Group(), frame, 120, 20.0, 0.8, "GC", record_transform=RecordDisplayTransform(120, 1, 1, None, True))
-    linear_group = LinearSkewDrawer(
-        _gc_skew_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(
-        Group(),
-        frame,
-        120,
-        600.0,
-        24.0,
-        0.0,
-        0.0,
-        "GC",
-        "gc_skew_track",
-    )
+    plot = gc_skew_series(_gc_skew_config(stroke_color=stroke_color, stroke_width=stroke_width), frame)
+    circular_group, linear_group = _draw_circular(plot), _draw_linear(plot)
 
     for group in (circular_group, linear_group):
         paths = _main_paths(group, stroke_color=stroke_color)
@@ -111,18 +88,9 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
         assert {path.attribs["stroke-width"] for path in paths} == {stroke_width}
 
 
-@pytest.mark.parametrize(
-    ("drawer", "args"),
-    [
-        (CircularGcContentDrawer, (100.0, Group(), _gc_frame(), 120, 20.0, 0.8, "GC", "gc_content_track")),
-        (LinearGcContentDrawer, (Group(), _gc_frame(), 120, 600.0, 24.0, 0.0, 0.0, "GC", "gc_content_track")),
-    ],
-)
-def test_none_stroke_remains_invisible_with_positive_width(drawer, args) -> None:
-    circular = {"record_transform": RecordDisplayTransform(120, 1, 1, None, True)} if drawer is CircularGcContentDrawer else {}
-    group = drawer(
-        _gc_content_config(stroke_color="none", stroke_width=3.0)
-    ).draw(*args, **circular)
+@pytest.mark.parametrize("draw", [_draw_circular, _draw_linear])
+def test_none_stroke_remains_invisible_with_positive_width(draw) -> None:
+    group = draw(gc_content_series(_gc_content_config(stroke_color="none", stroke_width=3.0), _gc_frame()))
 
     paths = _main_paths(group, stroke_color="none")
     assert paths
@@ -138,12 +106,12 @@ def test_a_record_on_a_shared_circle_inks_its_deviation_baseline_along_its_own_a
     frame = _gc_frame()
     shared = RecordDisplayTransform(120, 1, 1, None, False).with_circle(CirclePlace(offset=30, length=300, scale_length=120), 120)
     alone = RecordDisplayTransform(120, 1, 1, None, True)
-    for drawer in (
-        CircularGcContentDrawer(_gc_content_config(stroke_color="black", stroke_width=1.0)),
-        CircularSkewDrawer(_gc_skew_config(stroke_color="black", stroke_width=1.0)),
+    for plot in (
+        gc_content_series(_gc_content_config(stroke_color="black", stroke_width=1.0), frame),
+        gc_skew_series(_gc_skew_config(stroke_color="black", stroke_width=1.0), frame),
     ):
         for transform, turns in ((shared, (0.1, 0.5)), (alone, (0.0, 1.0))):
-            rings = [ink for ink in drawer.ink(100.0, frame, transform.length if transform.circle is None else 300,
-                                              20.0, 0.8, "GC", transform) if isinstance(ink, CircularInkRing)]
+            place = CircularTrackPlace(100.0, transform.length if transform.circle is None else 300, 20.0, 0.8, transform)
+            rings = [ink for ink in circular_series_ink(plot, place) if isinstance(ink, CircularInkRing)]
             assert len(rings) == 1
             assert (rings[0].start_turn, rings[0].end_turn) == pytest.approx(turns)

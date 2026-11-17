@@ -45,6 +45,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.scalar_axis import _prepare_depth_plot_dataframe
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
+from tests.utils.circular_drawer_fakes import patch_series_groups
 
 
 # These tests read the numbered tick labels; the default draws one range label per axis (D-16).
@@ -783,72 +784,55 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
 
     def fake_add_gc_content_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         gc_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured["gc_width"] = float(track_width_override)
-        captured["gc_center"] = float(norm_factor_override) * float(canvas_config.radius)
+        assert slot.track_width is not None
+        assert slot.norm_factor is not None
+        captured["gc_width"] = float(slot.track_width)
+        captured["gc_center"] = float(slot.norm_factor) * float(canvas_config.radius)
         return canvas
 
     def fake_add_gc_skew_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         skew_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured["skew_width"] = float(track_width_override)
-        captured["skew_center"] = float(norm_factor_override) * float(canvas_config.radius)
+        assert slot.track_width is not None
+        assert slot.norm_factor is not None
+        captured["skew_width"] = float(slot.track_width)
+        captured["skew_center"] = float(slot.norm_factor) * float(canvas_config.radius)
         return canvas
 
     def fake_add_depth_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         depth_df,
         canvas_config,
         depth_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured["depth_width"] = float(track_width_override)
-        captured["depth_center"] = float(norm_factor_override) * float(canvas_config.radius)
+        assert slot.track_width is not None
+        assert slot.norm_factor is not None
+        captured["depth_width"] = float(slot.track_width)
+        captured["depth_center"] = float(slot.norm_factor) * float(canvas_config.radius)
         return canvas
 
-    monkeypatch.setattr(
+    patch_series_groups(
+        monkeypatch,
         circular_assemble_module,
-        "add_depth_group_on_canvas",
-        fake_add_depth_group_on_canvas,
-    )
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_gc_content_group_on_canvas",
-        fake_add_gc_content_group_on_canvas,
-    )
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_gc_skew_group_on_canvas",
-        fake_add_gc_skew_group_on_canvas,
+        depth_content=fake_add_depth_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -899,47 +883,35 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
 
     def fake_add_gc_content_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         gc_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        captured["gc_width"] = float(track_width_override)
-        captured["gc_norm"] = float(norm_factor_override)
+        captured["gc_width"] = float(slot.track_width)
+        captured["gc_norm"] = float(slot.norm_factor)
         return canvas
 
     def fake_add_gc_skew_group_on_canvas(
         canvas,
+        _stage,
         gb_record,
         gc_df,
         canvas_config,
         skew_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        record_transform=None,
-        **_unused,
+        slot,
     ):
-        captured["skew_width"] = float(track_width_override)
-        captured["skew_norm"] = float(norm_factor_override)
+        captured["skew_width"] = float(slot.track_width)
+        captured["skew_norm"] = float(slot.norm_factor)
         return canvas
 
-    monkeypatch.setattr(
+    patch_series_groups(
+        monkeypatch,
         circular_assemble_module,
-        "add_gc_content_group_on_canvas",
-        fake_add_gc_content_group_on_canvas,
-    )
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_gc_skew_group_on_canvas",
-        fake_add_gc_skew_group_on_canvas,
+        gc_content_content=fake_add_gc_content_group_on_canvas,
+        gc_skew_content=fake_add_gc_skew_group_on_canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -2720,8 +2692,9 @@ def test_depth_df_crop_windows_read_the_source_rows_beside_the_crop() -> None:
 def test_drawn_depth_follows_crop_and_reverse_complement(
     mode: str, case: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import gbdraw.render.drawers.circular.depth as circular_drawer
-    import gbdraw.render.drawers.linear.depth as linear_drawer
+    import gbdraw.render.drawers.circular.numeric_series as circular_drawer
+    import gbdraw.render.drawers.linear.numeric_series as linear_drawer
+    import gbdraw.render.numeric_series as series_owner
     from gbdraw.api.request_render import plan_request
     from gbdraw.api.requests import (
         CircularDiagramRequest,
@@ -2734,24 +2707,28 @@ def test_drawn_depth_follows_crop_and_reverse_complement(
 
     region, reverse, spans, expected = _RECORD_FRAME_CASES[case]
     drawn: list[tuple[int, list[tuple[int, float]]]] = []
-    if mode == "circular":
-        real_circular = circular_drawer.generate_circular_depth_path_desc
+    # The depth frame each series is built from; the path drawn next is built from the latest.
+    prepared: list[pd.DataFrame] = []
+    real_prepare = series_owner._prepare_depth_plot_dataframe
 
-        def capture_circular(radius, record_len, plot_df, *args, **kwargs):
-            drawn.append((int(record_len), list(zip(plot_df["position"], plot_df["depth"]))))
-            return real_circular(radius, record_len, plot_df, *args, **kwargs)
+    def capture_prepare(*args, **kwargs):
+        prepared.append(real_prepare(*args, **kwargs))
+        return prepared[-1]
 
-        monkeypatch.setattr(circular_drawer, "generate_circular_depth_path_desc", capture_circular)
-        request_type, options_type = CircularDiagramRequest, CircularDiagramOptions
-    else:
-        real_linear = linear_drawer.calculate_depth_path_desc
+    monkeypatch.setattr(series_owner, "_prepare_depth_plot_dataframe", capture_prepare)
+    owner, name = ((circular_drawer, "circular_series_path_desc") if mode == "circular"
+                   else (linear_drawer, "linear_series_path_desc"))
+    real_desc = getattr(owner, name)
 
-        def capture_linear(start_x, start_y, plot_df, record_len, *args, **kwargs):
-            drawn.append((int(record_len), list(zip(plot_df["position"], plot_df["depth"]))))
-            return real_linear(start_x, start_y, plot_df, record_len, *args, **kwargs)
+    def capture_desc(samples, frame, *args, **kwargs):
+        plot_df = prepared[-1]
+        drawn.append((int(frame.record_len), list(zip(plot_df["position"], plot_df["depth"]))))
+        return real_desc(samples, frame, *args, **kwargs)
 
-        monkeypatch.setattr(linear_drawer, "calculate_depth_path_desc", capture_linear)
-        request_type, options_type = LinearDiagramRequest, LinearDiagramOptions
+    monkeypatch.setattr(owner, name, capture_desc)
+    request_type, options_type = (
+        (CircularDiagramRequest, CircularDiagramOptions) if mode == "circular" else (LinearDiagramRequest, LinearDiagramOptions)
+    )
 
     request = request_type(
         records=(

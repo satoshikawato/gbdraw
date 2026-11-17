@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -19,7 +19,8 @@ from pandas import DataFrame
 from gbdraw.comparisons.identity_scale import IdentityColorDomain
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.features.colors import precompute_used_color_rules
-from gbdraw.tracks.parsing import SlotView, slot_skew_colors, slots_draw_features
+from gbdraw.layout.series_style import SeriesPaint
+from gbdraw.tracks.parsing import SlotView, slot_skew_fill_colors, slots_draw_features
 
 if TYPE_CHECKING:
     from gbdraw.annotations.models import AnnotationTrackParams
@@ -96,35 +97,68 @@ def feature_legend_presence(
 
 
 @dataclass(frozen=True)
-class NumericLegendSource:
-    """The swatch of a GC content or GC skew track."""
+class DinucleotideLegendSource:
+    """The rows of a GC content or GC skew track: named ``<dinucleotide> content`` or ``<dinucleotide> skew``
+    (``row_name``), in the paint the track draws with (its configurator's ``series_paint``). A paint of one fill
+    shows one row; one whose fill below its baseline differs (GC skew) shows a ``(+)`` and a ``(-)`` row."""
 
+    kind: Literal["content", "skew"]
     dinucleotide: str
-    high_fill_color: str
-    low_fill_color: str
-    stroke_color: str
-    stroke_width: float
+    paint: SeriesPaint
 
     @classmethod
-    def of(cls, config: GcContentConfigurator | GcSkewConfigurator) -> NumericLegendSource:
-        return cls(
-            dinucleotide=config.dinucleotide,
-            high_fill_color=config.high_fill_color,
-            low_fill_color=config.low_fill_color,
-            stroke_color=config.stroke_color,
-            stroke_width=config.stroke_width,
-        )
+    def gc_content(cls, config: GcContentConfigurator) -> DinucleotideLegendSource:
+        return cls("content", config.dinucleotide, config.series_paint)
 
-    def for_skew_slot(self, slot: LegendSlotSource, dinucleotide: str) -> NumericLegendSource:
-        """The swatch a skew slot draws: its dinucleotide and its own colors."""
+    @classmethod
+    def gc_skew(cls, config: GcSkewConfigurator) -> DinucleotideLegendSource:
+        return cls("skew", config.dinucleotide, config.series_paint)
 
-        high, low = slot_skew_colors(slot)
-        return replace(
-            self,
-            dinucleotide=str(dinucleotide).upper(),
-            high_fill_color=high or self.high_fill_color,
-            low_fill_color=low or self.low_fill_color,
-        )
+    def row_name(self, dinucleotide: str) -> str:
+        """The name of the track's rows for a slot of ``dinucleotide``, before its ``legend_label``."""
+
+        return f"{dinucleotide} {self.kind}"
+
+    @property
+    def name(self) -> str:
+        """The name of the track's rows without a slot of its own."""
+
+        return self.row_name(self.dinucleotide)
+
+    def slot_paint(self, slot: LegendSlotSource) -> SeriesPaint:
+        """The paint a slot of this track draws with: a skew slot's own fills (``slot_skew_fill_colors``)."""
+
+        if self.kind == "content":
+            return self.paint
+        fill, below_fill = slot_skew_fill_colors(slot, self.paint.fill, self.paint.low_fill)
+        return replace(self.paint, fill=fill, below_fill=below_fill)
+
+
+@dataclass(frozen=True)
+class DepthLegendSource:
+    """The row of a depth track, in the paint it draws with (its configurator's ``series_paint``). ``label`` and
+    ``track_index`` name one of several logical tracks (``depth_track_legend_name``); a lone track's row is
+    ``Depth`` (``lone``)."""
+
+    label: str
+    track_index: int
+    paint: SeriesPaint
+
+    @classmethod
+    def of(cls, config: DepthConfigurator, label: str, track_index: int) -> DepthLegendSource:
+        return cls(label, track_index, config.series_paint)
+
+    @classmethod
+    def lone(cls, config: DepthConfigurator) -> DepthLegendSource:
+        """The source of a record's only depth track, which has no label of its own."""
+
+        return cls.of(config, "", 0)
+
+
+def depth_legend_sources(tracks: Iterable[DepthTrackData] | None) -> tuple[DepthLegendSource, ...]:
+    """The legend sources of the drawn depth tracks, each with its name and ring."""
+
+    return tuple(DepthLegendSource.of(track.config, track.label, track.track_index) for track in tracks or ())
 
 
 @dataclass(frozen=True)
@@ -149,8 +183,8 @@ class LegendSources:
     """The feature, GC content, GC skew and feature density sources of one drawing's legend."""
 
     features: FeatureLegendSource
-    gc: NumericLegendSource
-    skew: NumericLegendSource
+    gc: DinucleotideLegendSource
+    skew: DinucleotideLegendSource
     feature_density: tuple[FeatureDensityLegendSource, ...] = ()
 
     @classmethod
@@ -163,38 +197,10 @@ class LegendSources:
     ) -> LegendSources:
         return cls(
             FeatureLegendSource.of(feature_config),
-            NumericLegendSource.of(gc_config),
-            NumericLegendSource.of(skew_config),
+            DinucleotideLegendSource.gc_content(gc_config),
+            DinucleotideLegendSource.gc_skew(skew_config),
             tuple(feature_density),
         )
-
-
-@dataclass(frozen=True)
-class DepthLegendSource:
-    """The swatch and name of one depth track (``track_index`` 0 for a lone track)."""
-
-    label: str
-    fill_color: str
-    stroke_color: str
-    stroke_width: float
-    track_index: int = 0
-
-    @classmethod
-    def of_config(cls, config: DepthConfigurator) -> DepthLegendSource:
-        return cls("", config.fill_color, config.stroke_color, config.stroke_width)
-
-
-def depth_legend_sources(tracks: Iterable[DepthTrackData] | None) -> tuple[DepthLegendSource, ...]:
-    return tuple(
-        DepthLegendSource(
-            track.label,
-            track.config.fill_color,
-            track.config.stroke_color,
-            track.config.stroke_width,
-            track.track_index,
-        )
-        for track in tracks or ()
-    )
 
 
 @dataclass(frozen=True)
@@ -269,11 +275,11 @@ def legend_slot_sources(slots: Iterable[SidedSlotView] | None) -> tuple[LegendSl
 __all__ = [
     "ComparisonLegendSource",
     "DepthLegendSource",
+    "DinucleotideLegendSource",
     "FeatureDensityLegendSource",
     "FeatureLegendSource",
     "LegendSlotSource",
     "LegendSources",
-    "NumericLegendSource",
     "SidedSlotView",
     "depth_legend_sources",
     "feature_legend_presence",

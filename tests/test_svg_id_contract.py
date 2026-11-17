@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import re
 import xml.etree.ElementTree as ET
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -29,8 +28,12 @@ from gbdraw.configurators.legend import measure_legend
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
-from gbdraw.render.drawers.circular.gc_skew import SkewDrawer as CircularSkewDrawer
-from gbdraw.render.drawers.linear.gc_skew import SkewDrawer as LinearSkewDrawer
+from gbdraw.render.drawers.circular.numeric_series import draw_circular_series
+from gbdraw.render.drawers.linear.numeric_series import draw_linear_series
+from gbdraw.render.numeric_series import gc_skew_series
+from tests.utils.series_configs import gc_skew_config
+from gbdraw.svg.circular_tracks import CircularTrackPlace
+from gbdraw.svg.linear_tracks import LinearTrackFrame
 from gbdraw.render.groups.linear.legend import LegendGroup
 from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
@@ -72,14 +75,15 @@ def _assert_unique_ids_and_resolved_references(svg: str) -> None:
     assert references <= known_ids
 
 
-def _skew_config() -> SimpleNamespace:
-    return SimpleNamespace(
-        high_fill_color="#ef4444",
-        low_fill_color="#3b82f6",
-        stroke_color="none",
-        stroke_width=0.0,
-        fill_opacity=1.0,
+def _skew_config():
+    return gc_skew_config(
+        high_fill_color="#ef4444", low_fill_color="#3b82f6", stroke_color="none", stroke_width=0.0, fill_opacity=1.0
     )
+
+
+def _linear_skew_group(group_id: str) -> Group:
+    plot = gc_skew_series(_skew_config(), _skew_frame())
+    return draw_linear_series(Group(id=group_id), plot, LinearTrackFrame(0.0, 0.0, 120, 600.0, 24.0), group_id)
 
 
 def _skew_frame() -> pd.DataFrame:
@@ -326,20 +330,7 @@ def test_multi_record_definition_ids_disambiguate_duplicates_and_safe_aliases(
 def test_linear_skew_clip_id_is_deterministic_unique_and_referenced() -> None:
     def render() -> str:
         drawing = Drawing(debug=False)
-        group = Group(id="gc_skew_record_1")
-        drawing.add(
-            LinearSkewDrawer(_skew_config()).draw(
-                group,
-                _skew_frame(),
-                120,
-                600.0,
-                24.0,
-                0.0,
-                0.0,
-                "GC",
-                "gc_skew_record_1",
-            )
-        )
+        drawing.add(_linear_skew_group("gc_skew_record_1"))
         return drawing.tostring()
 
     first = render()
@@ -352,20 +343,10 @@ def test_linear_skew_clip_id_is_deterministic_unique_and_referenced() -> None:
 def test_repeated_circular_skew_slots_get_distinct_deterministic_clip_ids() -> None:
     drawing = Drawing(debug=False)
     for group_id in ("gc_skew", "gc_skew_2"):
-        group = Group(id=group_id)
+        place = CircularTrackPlace(100.0, 120, 20.0, 0.8, RecordDisplayTransform(120, 1, 1, None, True))
         drawing.add(
-            CircularSkewDrawer(_skew_config()).draw(
-                100.0,
-                group,
-                _skew_frame(),
-                120,
-                20.0,
-                0.8,
-                "GC",
-                record_identifier="record-a",
-                group_identifier=group_id,
-                record_transform=RecordDisplayTransform(120, 1, 1, None, True),
-            )
+            draw_circular_series(Group(id=group_id), gc_skew_series(_skew_config(), _skew_frame()), place, group_id,
+                                 "record-a")
         )
 
     svg = drawing.tostring()
@@ -405,19 +386,7 @@ def test_linear_dual_legend_ids_are_namespaced_deterministic_and_referenced() ->
 @pytest.mark.linear
 def test_current_renderer_output_makes_removed_consumer_id_repair_a_noop() -> None:
     drawing = Drawing(debug=False)
-    drawing.add(
-        LinearSkewDrawer(_skew_config()).draw(
-            Group(id="gc_skew_record_1"),
-            _skew_frame(),
-            120,
-            600.0,
-            24.0,
-            0.0,
-            0.0,
-            "GC",
-            "gc_skew_record_1",
-        )
-    )
+    drawing.add(_linear_skew_group("gc_skew_record_1"))
     skew_svg = drawing.tostring()
     _assert_unique_ids_and_resolved_references(skew_svg)
 

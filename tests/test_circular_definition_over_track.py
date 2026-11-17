@@ -710,23 +710,25 @@ def test_a_percent_background_and_border_count_only_when_they_show(
 ) -> None:
     """Review of 5d358bd2: the percent background and border circles are paint only with a color and opacity."""
 
-    import types
-
     import pandas as pd
 
-    from gbdraw.render.drawers.circular.gc_content import GcContentDrawer
+    from gbdraw.render.drawers.circular.numeric_series import circular_series_ink
+    from gbdraw.render.numeric_series import gc_content_series
+    from gbdraw.svg.circular_tracks import CircularTrackPlace
+    from tests.utils.series_configs import gc_content_config
 
     settings = {
-        "high_fill_color": "#000", "low_fill_color": "#000", "fill_color": "#000", "stroke_color": "none",
+        "fill_color": "#000", "stroke_color": "none",
         "stroke_width": 0.0, "fill_opacity": 1.0, "mode": "percent", "show_axis": False,
         "percent_background_color": "none", "percent_background_opacity": 1.0,
-        "percent_border_color": "#4b5563", "percent_border_width": 2.0, "font_family": "Liberation Sans", **style,
+        "percent_border_color": "#4b5563", "percent_border_width": 2.0, "font_family": "Liberation Sans",
+        "min_percent": None, "max_percent": None, **style,
     }
     if "percent_border_color" in style:
         settings["percent_background_color"] = "none"
-    drawer = GcContentDrawer(types.SimpleNamespace(**settings))
     gc_df = pd.DataFrame({"GC content": [0.0] * 4}, index=[0, 250, 500, 750])
-    inks = drawer.ink(100.0, gc_df, 1000, 20.0, 1.0, "GC", RecordDisplayTransform(1000, 1, 1, None, True))
+    plot = gc_content_series(gc_content_config(**settings), gc_df)
+    inks = circular_series_ink(plot, CircularTrackPlace(100.0, 1000, 20.0, 1.0, RecordDisplayTransform(1000, 1, 1, None, True)))
     assert _lines_at(inks, radius, 0.5) == lines
 
 

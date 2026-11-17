@@ -1,8 +1,6 @@
 """Circular layout SVG object group builders (internal)."""
 
-from .gc_content import GcContentGroup
-from .gc_skew import GcSkewGroup
-from .depth import DepthGroup
+from .numeric_series import NumericSeriesGroup
 from .conservation import ConservationGroup
 from .definition import CircularDefinitionStyle, DefinitionGroup
 from .legend import LegendGroup
@@ -16,11 +14,9 @@ __all__ = [
     "CircularDefinitionStyle",
     "ConservationGroup",
     "DefinitionGroup",
-    "DepthGroup",
-    "GcContentGroup",
-    "GcSkewGroup",
     "LabelsGroup",
     "LegendGroup",
+    "NumericSeriesGroup",
     "SeqRecordGroup",
     "TickGroup",
 ]

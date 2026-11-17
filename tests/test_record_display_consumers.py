@@ -342,23 +342,24 @@ def test_rotation_preserves_physical_and_value_axes_and_definition_visibility(mo
                                             ("linear", "rows"), ("linear", "multi")])
 def test_multi_record_consumers_keep_instance_order_and_sparse_depth(mode, layout_kind, monkeypatch, tmp_path):
     from gbdraw.api.options import CircularMultiRecordOptions, LinearMultiRecordOptions
-    import gbdraw.render.drawers.circular.depth as circular_depth
-    import gbdraw.render.drawers.linear.depth as linear_depth
+    import gbdraw.render.drawers.circular.numeric_series as circular_series
+    import gbdraw.render.drawers.linear.numeric_series as linear_series
     import gbdraw.layout.scalar_axis as scalar_axis
     project = scalar_axis.project_scalar_samples
-    depth_owner, depth_name = ((circular_depth, "generate_circular_depth_path_desc") if mode == "circular"
-                               else (linear_depth, "calculate_depth_path_desc"))
+    depth_owner, depth_name = ((circular_series, "circular_series_path_desc") if mode == "circular"
+                               else (linear_series, "linear_series_path_desc"))
     draw_depth = getattr(depth_owner, depth_name)
     drawing_depth = []
     observed = []
     def capture_depth(*args, **kwargs):
-        drawing_depth.append(True)
+        # The figure's GC tracks draw deviations; its depth tracks are the band series.
+        drawing_depth.append(args[0].deviation is None)
         try:
             return draw_depth(*args, **kwargs)
         finally:
             drawing_depth.pop()
     def capture(positions, values, transform):
-        observed.append((transform.length, transform.start_coordinate, transform.source_step, bool(drawing_depth)))
+        observed.append((transform.length, transform.start_coordinate, transform.source_step, any(drawing_depth)))
         return project(positions, values, transform)
     monkeypatch.setattr(depth_owner, depth_name, capture_depth)
     monkeypatch.setattr(scalar_axis, "project_scalar_samples", capture)

@@ -829,9 +829,9 @@ def sync_depth_track_legend_entries(
             continue
         out.add_source(slot_legend_label(slot, depth_track_legend_name(track, track_count)), {
             "type": "solid",
-            "fill": track.fill_color,
-            "stroke": track.stroke_color,
-            "width": track.stroke_width,
+            "fill": track.paint.fill,
+            "stroke": track.paint.stroke,
+            "width": track.paint.stroke_width,
         })
     return out
 

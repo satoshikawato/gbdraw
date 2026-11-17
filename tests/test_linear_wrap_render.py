@@ -39,8 +39,7 @@ from gbdraw.auto_sizes import DrawnExtent, auto_setting_values
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 import gbdraw.diagrams.linear.assemble as assemble
-import gbdraw.render.drawers.linear.depth as depth_drawer
-import gbdraw.render.drawers.linear.gc_content as gc_drawer
+import gbdraw.render.numeric_series as series_owner
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.session import build_session_document
@@ -338,14 +337,14 @@ def _counting(monkeypatch, module: object, name: str) -> list[int]:
 
 
 def test_depth_plot_data_is_prepared_once_per_record(monkeypatch) -> None:
-    calls = _counting(monkeypatch, depth_drawer, "_prepare_depth_plot_dataframe")
+    calls = _counting(monkeypatch, series_owner, "_prepare_depth_plot_dataframe")
     root = _root(_build(depth_table=_depth_table(), overrides={"canvas.show_depth": True}))
     assert len(_rows_of(root)) >= 5
     assert len(calls) == 1
 
 
 def test_gc_percent_plot_data_is_prepared_once_per_record(monkeypatch) -> None:
-    calls = _counting(monkeypatch, gc_drawer, "gc_content_percent_df")
+    calls = _counting(monkeypatch, series_owner, "gc_content_percent_df")
     _build(overrides={"canvas.show_gc": True, "objects.gc_content.mode": "percent"})
     assert len(calls) == 1
 

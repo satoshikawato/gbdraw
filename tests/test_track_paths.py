@@ -11,12 +11,8 @@ import pytest
 
 import re
 
-from gbdraw.svg.circular_tracks import (
-    generate_circle_path_desc,
-    generate_circular_gc_content_path_desc,
-    generate_circular_gc_skew_path_desc,
-    generate_circular_scalar_area_path_desc,
-)
+from gbdraw.layout.scalar_axis import band_samples, deviation_samples
+from gbdraw.svg.circular_tracks import CircularTrackPlace, circular_series_path_desc, generate_circle_path_desc
 from gbdraw.svg.track_paths import (
     TRACK_PATH_TOLERANCE_PX,
     kept_track_points,
@@ -24,6 +20,26 @@ from gbdraw.svg.track_paths import (
     track_polyline,
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+
+def _deviation_desc(radius: float, record_len: int, series: pd.Series, width: float, *, closes: bool) -> str:
+    samples = deviation_samples(series, closes_at_record_end=closes)
+    assert samples is not None
+    return circular_series_path_desc(samples, CircularTrackPlace(radius, record_len, width, 1.0, _circular_transform(record_len)))
+
+
+def _content_desc(radius: float, record_len: int, df: pd.DataFrame, width: float) -> str:
+    return _deviation_desc(radius, record_len, df["GC content"], width, closes=True)
+
+
+def _skew_desc(radius: float, record_len: int, df: pd.DataFrame, width: float) -> str:
+    return _deviation_desc(radius, record_len, df["GC skew"], width, closes=False)
+
+
+def _area_desc(radius: float, record_len: int, plot: pd.DataFrame, width: float, *, closes: bool = False) -> str:
+    samples = band_samples(plot, "value_normalized", closes_at_record_end=closes)
+    assert samples is not None
+    return circular_series_path_desc(samples, CircularTrackPlace(radius, record_len, width, 1.0, _circular_transform(record_len)))
 
 
 def _reference_keep(xs: np.ndarray, ys: np.ndarray, fixed: list[int]) -> np.ndarray:
@@ -104,7 +120,7 @@ def test_non_finite_samples_are_rejected() -> None:
 
 def test_circular_scalar_area_draws_the_outer_line_and_an_arc_baseline() -> None:
     plot = pd.DataFrame({"position": [0, 25, 50, 75], "value_normalized": [0.5, 0.5, 0.5, 0.5]})
-    desc = generate_circular_scalar_area_path_desc(100, 100, plot, 20, 1.0, record_transform=_circular_transform(100))
+    desc = _area_desc(100, 100, plot, 20)
     # Baseline radius 90, outer radius 100: the outer line keeps only the points the arc of samples needs,
     # the baseline returns from the last sample (9 o'clock) to the first (12 o'clock) as two 135-degree arcs.
     assert desc.startswith("M 0,-90L0 -100")
@@ -199,7 +215,7 @@ def _short_gc_df() -> pd.DataFrame:
 
 def test_short_record_gc_content_follows_the_circle() -> None:
     df = _short_gc_df()
-    desc = generate_circular_gc_content_path_desc(300, 670, df, 60, 1.0, "GC", record_transform=_circular_transform(670))
+    desc = _content_desc(300, 670, df, 60)
     diff = df["GC content"] - df["GC content"].mean()
     radii = (300 + 30 * diff / diff.abs().max()).to_numpy()
     positions = np.append(df.index.to_numpy(dtype=float), 670.0)
@@ -209,7 +225,7 @@ def test_short_record_gc_content_follows_the_circle() -> None:
 
 def test_short_record_gc_skew_follows_the_circle_through_its_close() -> None:
     df = _short_gc_df()
-    desc = generate_circular_gc_skew_path_desc(200, df, 670, 60, 1.0, "GC", record_transform=_circular_transform(670))
+    desc = _skew_desc(200, 670, df, 60)
     diff = df["GC skew"] - df["GC skew"].mean()
     radii = (200 + 30 * diff / diff.abs().max()).to_numpy()
     # The line closes from the last window (600) back to 12 o'clock on the radius of the first.
@@ -221,8 +237,8 @@ def test_short_record_gc_skew_follows_the_circle_through_its_close() -> None:
 def test_a_constant_short_line_is_a_circle() -> None:
     df = pd.DataFrame({"GC content": [0.5] * 7, "GC skew": [0.0] * 7}, index=np.arange(0, 670, 100))
     for desc in (
-        generate_circular_gc_content_path_desc(300, 670, df, 60, 1.0, "GC", record_transform=_circular_transform(670)),
-        generate_circular_gc_skew_path_desc(300, df, 670, 60, 1.0, "GC", record_transform=_circular_transform(670)),
+        _content_desc(300, 670, df, 60),
+        _skew_desc(300, 670, df, 60),
     ):
         vertices = _first_subpath_vertices(desc)
         angles = np.linspace(0.0, 2 * math.pi, 3600, endpoint=False)
@@ -232,7 +248,7 @@ def test_a_constant_short_line_is_a_circle() -> None:
 
 def test_short_record_scalar_area_outer_line_follows_the_circle() -> None:
     plot = pd.DataFrame({"position": np.arange(0, 670, 100), "value_normalized": [0.2, 0.9, 0.4, 0.7, 0.1, 0.6, 0.3]})
-    desc = generate_circular_scalar_area_path_desc(300, 670, plot, 60, 1.0, close_at_record_len=True, record_transform=_circular_transform(670))
+    desc = _area_desc(300, 670, plot, 60, closes=True)
     outer = _first_subpath_vertices(desc)[1:-1]  # drop the baseline ends
     positions = np.append(plot["position"].to_numpy(dtype=float), 670.0)
     radii = 270 + 60 * np.append(plot["value_normalized"].to_numpy(), 0.2)
@@ -249,7 +265,7 @@ def test_densely_sampled_lines_gain_no_points() -> None:
     positions = np.arange(0, total, 100, dtype=float)
     rng = np.random.default_rng(3)
     df = pd.DataFrame({"GC content": 0.5 + rng.normal(0, 0.02, len(positions))}, index=positions.astype(int))
-    desc = generate_circular_gc_content_path_desc(300, total, df, 60, 1.0, "GC", record_transform=_circular_transform(total))
+    desc = _content_desc(300, total, df, 60)
     diff = df["GC content"] - df["GC content"].mean()
     radii = (300 + 30 * diff / diff.abs().max()).to_numpy()
     line_positions = np.append(positions, float(total))

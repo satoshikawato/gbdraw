@@ -6,21 +6,20 @@ import math
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import NamedTuple, Protocol
+from typing import NamedTuple
 
 from gbdraw.auto_sizes import (
-    TickedAxisSource,
     TickFontSource,
     depth_axis_tick_font_size_px,
     gc_axis_tick_font_size_of_depth_rows,
 )
-from gbdraw.config.models.objects import ScalarAxisLabelStyle
 from gbdraw.core.text import calculate_svg_bbox_dimensions
 from gbdraw.svg.circular_arcs import position_turn_rad
 from gbdraw.tracks.parsing import depth_slot_track_index
 
 from .circular import RadialBand
 from .circular_ink import CircularInk, CircularInkPolygon, CircularInkRing
+from .series_style import ScalarAxisStyle
 from .spatial import Aabb
 from .text_geometry import reads_upside_down
 
@@ -41,35 +40,6 @@ class ScalarAxisTick(NamedTuple):
     label: str | None
 
 
-class ScalarAxisSource(TickedAxisSource, Protocol):
-    """What the radial layout reads of a scalar track (depth, GC content in percent): its axis, its ticks, their
-    font size and their labels."""
-
-    @property
-    def axis_labels(self) -> ScalarAxisLabelStyle: ...
-
-
-@dataclass(frozen=True)
-class ScalarAxisStyle:
-    """A scalar track's axis and ticks as a value: a render stage that replans the
-    radial layout takes this instead of the track's configurator, so a window
-    or scale change does not rebuild it."""
-
-    show_axis: bool
-    show_ticks: bool
-    tick_font_size: float | None
-    axis_labels: ScalarAxisLabelStyle
-
-    @classmethod
-    def of(cls, source: ScalarAxisSource) -> ScalarAxisStyle:
-        return cls(
-            show_axis=bool(source.show_axis),
-            show_ticks=bool(source.show_ticks),
-            tick_font_size=source.tick_font_size,
-            axis_labels=source.axis_labels,
-        )
-
-
 @dataclass(frozen=True)
 class ScalarAxisFootprint:
     radial_inner_extra_px: float
@@ -77,7 +47,7 @@ class ScalarAxisFootprint:
 
 
 def scalar_axis_footprint(
-    axis: ScalarAxisSource,
+    axis: ScalarAxisStyle,
     track_width_px: float,
     *,
     edge_px: float = 0.5 * DEPTH_AXIS_STROKE_WIDTH_PX,
@@ -85,13 +55,11 @@ def scalar_axis_footprint(
     """How far a Circular scalar axis on a track ``track_width_px`` wide paints past each edge of its band: the
     ``edge_px`` its strokes take, or half a label line when it draws numbered tick labels."""
 
-    if not bool(axis.show_axis):
+    if not axis.show_axis:
         return ScalarAxisFootprint(0.0, 0.0)
 
     extra = float(edge_px)
-    # Numbered tick labels are centred on their ticks, so the outermost and innermost ones reach half a line past
-    # the band; the range label sits inside the band.
-    if bool(axis.show_ticks) and axis.axis_labels == "numbered":
+    if axis.draws_numbered_labels:
         extra = max(extra, 0.5 * depth_axis_tick_font_size_px(axis, track_width_px))
     return ScalarAxisFootprint(extra, extra)
 
@@ -126,30 +94,22 @@ class CircularScalarAxes:
     @classmethod
     def of(
         cls,
-        depth: ScalarAxisSource | None,
-        gc_content: ScalarAxisSource | None,
-        depth_tracks: Mapping[int, ScalarAxisSource] | None = None,
+        depth: ScalarAxisStyle | None,
+        gc_content: ScalarAxisStyle | None,
+        depth_tracks: Mapping[int, ScalarAxisStyle] | None = None,
         *,
         edge_painting_slot_ids: Iterable[str] = (),
     ) -> CircularScalarAxes:
         """The axes of a drawn depth track (``depth``; each of ``depth_tracks`` by index when the record has
-        them) and a Percent GC content track. A GC axis without numbered labels keeps no room past its band, so
-        it is left out: its other settings then do not replan the layout."""
+        them) and a Percent GC content track, each as its track draws it. A GC axis without numbered labels keeps
+        no room past its band, so it is left out: its other settings then do not replan the layout."""
 
-        keeps_room = (
-            gc_content is not None
-            and bool(gc_content.show_axis)
-            and bool(gc_content.show_ticks)
-            and gc_content.axis_labels == "numbered"
-        )
         indexed = depth is not None and depth_tracks is not None
         return cls(
-            depth=None if depth is None or indexed else ScalarAxisStyle.of(depth),
-            gc_content=ScalarAxisStyle.of(gc_content) if keeps_room and gc_content is not None else None,
+            depth=None if indexed else depth,
+            gc_content=gc_content if gc_content is not None and gc_content.draws_numbered_labels else None,
             depth_tracks=(
-                tuple((index, ScalarAxisStyle.of(track)) for index, track in sorted(depth_tracks.items()))
-                if indexed and depth_tracks is not None
-                else None
+                tuple(sorted(depth_tracks.items())) if indexed and depth_tracks is not None else None
             ),
             edge_painting_slot_ids=tuple(sorted({str(slot_id) for slot_id in edge_painting_slot_ids})),
         )
@@ -358,8 +318,6 @@ __all__ = [
     "CircularScalarAxes",
     "circular_range_label",
     "DepthSlotWidth",
-    "ScalarAxisSource",
-    "ScalarAxisStyle",
     "DEPTH_AXIS_SMALL_TICK_SIZE_PX",
     "DEPTH_AXIS_STROKE_WIDTH_PX",
     "DEPTH_AXIS_TICK_SIZE_PX",

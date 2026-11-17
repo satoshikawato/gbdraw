@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from gbdraw.config.models import RenderProfile
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
+from gbdraw.layout.series_style import ScalarAxisStyle, SeriesPaint
 
 
 class DepthConfigurator:
@@ -58,5 +59,17 @@ class DepthConfigurator:
         # The axis labels are measured and drawn in the figure's font (OV-2757).
         self.font_family: str = str(cfg.objects.text.font_family)
         self.axis_labels: ScalarAxisLabelStyle = cfg.objects.depth.axis_labels
+
+    @property
+    def series_paint(self) -> SeriesPaint:
+        """How the track's path is painted, as drawn and as its Legend row shows it."""
+
+        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None, frozenset())
+
+    @property
+    def axis_style(self) -> ScalarAxisStyle:
+        """The axis the track draws and keeps room for."""
+
+        return ScalarAxisStyle.of(self)
 
 __all__ = ["DepthConfigurator"]
