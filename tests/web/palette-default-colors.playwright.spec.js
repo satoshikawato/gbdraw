@@ -411,3 +411,52 @@ test('Save stores no palette colors for an untouched drawing and keeps a user co
     }
   }
 });
+
+// OV-282, OV-1725: a Legend row shows the swatch of the newest Result (the palette's, or Python's for a row no
+// palette, rule or slot colors) and holds none of it, so after a palette switch and a second Generate the panel
+// shows what the figure draws, and Save and Load keep those colors.
+test('the Legend panel shows the newest Generate\'s swatches and keeps them through Save and Load', async ({ browser }, testInfo) => {
+  test.setTimeout(420_000);
+  const shown = (target) => target.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    const { resultLegendRows } = await import('./js/services/legend-svg.js');
+    const drawn = new Map((resultLegendRows(state.svgContainer.value?.querySelector('svg')) || [])
+      .map((row) => [row.key, String(row.color).toLowerCase()]));
+    return app.legendEntries.map((entry) => {
+      const key = entry.originalCaption || entry.caption;
+      return { key, panel: String(app.legendEntryColor(entry) || '').toLowerCase(), drawn: drawn.get(key) ?? null };
+    });
+  });
+  const page = await browser.newPage();
+  const path = testInfo.outputPath('palette-switched.gbdraw');
+  let before;
+  try {
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    const colors = page.locator('summary[aria-label="Colors"]');
+    if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
+    const first = await shown(page);
+    const next = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames.find((name) => (
+      name !== window.__GBDRAW_APP__.selectedPalette
+    )));
+    await page.getByRole('combobox', { name: 'Palette', exact: true }).selectOption(next);
+    await expect(page.getByRole('dialog', { name: `Change palette to "${next}"`, exact: true })).toHaveCount(0);
+    await generate(page);
+    before = await shown(page);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.some(({ key, drawn }) => drawn !== first.find((row) => row.key === key)?.drawn), 'the palette changed a swatch').toBe(true);
+    for (const { key, panel, drawn } of before) expect(panel, `${key}: the panel shows the swatch`).toBe(drawn);
+    await page.evaluate(async () => { (await import('./js/state.js')).state.sessionTitle.value = 'palette-switched'; });
+    await download(page, 'Save Session', path);
+    const { editorState } = shownSavedDrawing(await readSessionFile(path));
+    expect(editorState.legend.entries.filter((entry) => Object.hasOwn(entry, 'color')), 'no row holds a swatch').toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+  const loaded = await loadSession(browser, path);
+  try {
+    await expect.poll(() => shown(loaded), { timeout: 180_000 }).toEqual(before);
+  } finally {
+    await loaded.context().close();
+  }
+});
