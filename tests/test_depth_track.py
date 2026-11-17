@@ -2879,3 +2879,28 @@ def test_depth_and_gc_percent_tick_labels_carry_the_figure_font(mode: str, label
     family = str(cfg.objects.text.font_family)
     for label in tick_labels:
         assert f'font-family="{family}"' in label.replace("&apos;", "'"), label
+
+
+@pytest.mark.linear
+def test_a_linear_depth_stroke_takes_figure_room_only_when_it_paints() -> None:
+    # A Linear figure's bounds counted the GC content and GC skew strokes but not a depth track's, so a wide depth
+    # outline was cut at the figure's right edge (OV-3745); a depth outline of colour ``none`` paints nothing and
+    # keeps no room above, below or beside its band (OV-3744).
+    def size(color: str, width: float) -> tuple[float, float]:
+        canvas = assemble_linear_diagram_from_records(
+            [_make_record()],
+            LinearAssemblyInputs(
+                legend="none",
+                depth_table=_depth_table("rec1"),
+                cfg=apply_config_overrides(
+                    None, {"objects.depth.stroke_color": color, "objects.depth.stroke_width": width}
+                ),
+            ),
+        )
+        return float(str(canvas["width"]).removesuffix("px")), float(str(canvas["height"]).removesuffix("px"))
+
+    assert size("none", 40.0) == pytest.approx(size("none", 0.0))
+    # Past the stroke of the other tracks, the figure reaches half the depth stroke beyond the sequence's end.
+    (width_20, height_20), (width_40, height_40) = size("#000000", 20.0), size("#000000", 40.0)
+    assert width_40 - width_20 == pytest.approx(10.0)
+    assert height_40 > height_20

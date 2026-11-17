@@ -1891,7 +1891,7 @@ def _collect_linear_primary_bounds(
     record_plans: list[LinearRecordVerticalPlan],
     record_collision_bands: list[tuple[CollisionBand, ...]],
     labels_by_record: list[list[LinearLabel]],
-    record_scalar_axis_rooms: Sequence[LinearScalarAxisLeftRoom],
+    depth: _LinearDepthData,
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     annotation_labels_by_record: Sequence[AnnotationLabelsBySlot],
     normalized_comparisons: list[LinearComparison],
@@ -1906,12 +1906,14 @@ def _collect_linear_primary_bounds(
     length_bar_bounds: Aabb | None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Aabb:
-    """Collect one authoritative plot-space box without inspecting rendered SVG."""
+    """Collect one authoritative plot-space box without inspecting rendered SVG. A record's box reaches half the
+    widest stroke past its rows: the axis, the features, and each series track it draws (GC content, GC skew and
+    its depth tracks, by ``_stroke_overhang``, the series' own room)."""
 
     axis_stroke = cfg.objects.axis.linear.stroke_width.for_length_param(
         canvas_config.length_param
     )
-    half_stroke = max(
+    figure_half_stroke = max(
         0.0,
         0.5 * float(axis_stroke),
         0.5 * float(feature_config.block_stroke_width),
@@ -1924,7 +1926,11 @@ def _collect_linear_primary_bounds(
     for record_index, record in enumerate(records):
         placement = record_placements[record_index]
         plan = record_plans[record_index]
-        scalar_axis = record_scalar_axis_rooms[record_index]
+        scalar_axis = depth.record_scalar_axis_rooms[record_index]
+        depth_tracks = depth.record_depth_by_index[record_index] if record_index < len(depth.record_depth_by_index) else {}
+        half_stroke = max(
+            [figure_half_stroke, *(_stroke_overhang(track.config.series_paint) for track in depth_tracks.values())]
+        )
         bounds.append(
             Aabb(
                 horizontal_offset
@@ -4371,7 +4377,7 @@ def _linear_primary_bounds(
         record_plans=plan.vertical.record_vertical_plans,
         record_collision_bands=plan.stacking.record_collision_bands,
         labels_by_record=labels.labels_by_record,
-        record_scalar_axis_rooms=plan.depth.record_scalar_axis_rooms,
+        depth=plan.depth,
         annotation_track_layouts=plan.tracks.annotation_track_layouts,
         annotation_labels_by_record=labels.annotation_labels_by_record,
         normalized_comparisons=plan.comparisons.normalized,

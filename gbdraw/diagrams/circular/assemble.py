@@ -2290,7 +2290,7 @@ def _slot_gc_config_with_axis_font_size(
     tick_font_size: float | None,
 ) -> GcContentConfigurator:
     slot_config = _slot_config_with_dinucleotide(config, nt)
-    if tick_font_size is None or getattr(slot_config, "tick_font_size", None) is not None:
+    if tick_font_size is None or slot_config.tick_font_size is not None:
         return slot_config
     cloned = copy.copy(slot_config)
     cloned.tick_font_size = float(tick_font_size)
@@ -2395,7 +2395,7 @@ def _slot_content_source(
 ) -> tuple[str, DataFrame | None, GcContentConfigurator]:
     """The dinucleotide, data (``None`` when there are none) and settings a content slot draws with."""
 
-    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
+    default_nt = gc_config.dinucleotide.upper()
     nt = slot_dinucleotide(resolved_slot.params, default_nt)
     slot_df = _slot_dataframe_for_nt(nt=nt, default_df=gc_df, default_nt=default_nt, dinucleotide_dataframes=dataframes)
     config = _slot_gc_config_with_axis_font_size(gc_config, nt, tick_font_size_override)
@@ -2412,7 +2412,7 @@ def _slot_skew_source(
 ) -> tuple[str, DataFrame | None, GcSkewConfigurator]:
     """The dinucleotide, data (``None`` when there are none) and settings a skew slot draws with."""
 
-    default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
+    default_nt = gc_config.dinucleotide.upper()
     nt = slot_dinucleotide(resolved_slot.params, default_nt)
     slot_df = _slot_dataframe_for_nt(nt=nt, default_df=gc_df, default_nt=default_nt, dinucleotide_dataframes=dataframes)
     config = _slot_skew_config(skew_config, resolved_slot, nt)
