@@ -40,7 +40,7 @@ const { createLegendEntryActions } = await import(
 const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
 // The root's reader without a displayed Result or its inventory: a row shows the color it holds.
 const NO_DISPLAYED_RESULT = { svgContent: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} } };
-const { draftLegendRows, legendRowIds } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
+const { draftLegendRows, legendEditConfigLeaves, legendRowIds } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
 const { legendEntryKey } = await import(pathToFileURL(join(tempRoot, 'services', 'drawing', 'paint.js')));
 const { installShownSetLegend } = await import(pathToFileURL(join(tempRoot, 'services', 'artifact-slot.js')));
 const { createLegendStrokeActions } = await import(
@@ -1016,6 +1016,69 @@ const mockLegendEntry = (caption, color, x) => {
     'a split: the type keeps its name');
   assert.deepEqual(await commit(() => null), { listed, dormant: [] }, 'a Merge of the whole row: the name retires');
   assert.deepEqual(await commit(null), { listed, dormant: [] }, 'no next table: the name retires');
+}
+
+{
+  // Review R3 finding 2 (V-OD27): in S2 (CDS renamed Coding, then a captioned rule "Marker" for some CDS) the type's
+  // name waits on its key (dormant [CDS, Coding]) and names its "other" row. A Merge of that whole row into Marker
+  // leaves CDS no default row: the commit maps the removed row to its type by key (`rowTypeOf`, the rule owner's
+  // `otherRowType`), asks `defaultRowOf` with the type, and retires the type's name, also [CDS, CDS] and an own name
+  // of the "other" row (an older Session's). The request then names no CDS row, so once the Marker rules go Python
+  // draws the row `CDS`, as before V-OD27.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  [['Marker', '#e63946'], ['other proteins', '#54bcf8'], ['tRNA', '#334455']]
+    .forEach(([caption, color], index) => featureLegend.appendChild(mockLegendEntry(caption, color, index * 70)));
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const merge = async ({ otherName = 'other proteins', dormant = [], defaultRowOf = () => null } = {}) => {
+    const state = {
+      results: ref([{ name: 'r1.svg', content: 'unchanged' }]), selectedResultIndex: ref(0),
+      svgContainer: ref({ querySelector: () => svg }), displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+      legendEntries: ref([
+        { caption: 'Marker', originalCaption: 'Marker', color: '#e63946' },
+        { caption: otherName, originalCaption: 'other proteins', color: '#54bcf8' },
+        { caption: 'tRNA', originalCaption: 'tRNA', color: '#334455' }
+      ]),
+      deletedLegendEntries: ref([]), dormantLegendEntries: ref(dormant.map(([caption, originalCaption]) => ({ caption, originalCaption, featureIds: [] }))),
+      originalLegendOrder: ref(['Marker', 'other proteins', 'tRNA']), originalLegendColors: ref({}),
+      legendStrokeOverrides: {}, legendColorOverrides: {}, addedLegendCaptions: ref(new Set()), manualSpecificRules: [],
+      skipCaptureBaseConfig: ref(false)
+    };
+    const actions = createLegendEntryActions({
+      state: withDrawings(state), commitActiveResultEdit: () => true, readActiveResultIdentity: () => 'result-1',
+      readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, [])
+    });
+    const prepared = await actions.prepareFileLegendEntries([{ caption: 'Marker', color: '#e63946' }], {
+      previousFileIntents: [{ caption: 'Marker', color: '#e63946' }, { caption: 'other proteins', color: '#54bcf8' }],
+      rowTypeOf: (key) => (key === 'other proteins' ? 'CDS' : key), defaultRowOf
+    });
+    assert.deepEqual(prepared.diff.remove, [{ caption: 'other proteins', color: '#54bcf8' }]);
+    prepared.apply();
+    const leaves = legendEditConfigLeaves({
+      legendEntries: state.legendEntries.value, deletedLegendEntries: [], dormantLegendEntries: state.dormantLegendEntries.value,
+      originalLegendOrder: state.originalLegendOrder.value, pythonRowKeys: state.originalLegendOrder.value, rules: [],
+      canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
+    });
+    return {
+      listed: state.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+      dormant: state.dormantLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+      leaves
+    };
+  };
+  const listed = [['Marker', 'Marker'], ['tRNA', 'tRNA']];
+  for (const [label, options] of [
+    ['the type named Coding', { dormant: [['Coding', 'CDS']] }],
+    ['the type named its key', { dormant: [['CDS', 'CDS']] }],
+    ['the "other" row named by an older Session', { otherName: 'Other coding' }]
+  ]) {
+    assert.deepEqual(await merge(options), { listed, dormant: [], leaves: {} }, `S2 Merge of the whole "other" row, ${label}: the name retires`);
+  }
+  // A split of the "other" row (some CDS still take no rule) keeps the type's name.
+  assert.deepEqual((await merge({ dormant: [['Coding', 'CDS']], defaultRowOf: (type) => (type === 'CDS' ? 'other proteins' : type) })).dormant,
+    [['Coding', 'CDS']], 'S2 split: the type keeps its name');
 }
 
 // OV-645: a rule row whose key the allocation changes (its name starts or

@@ -51,7 +51,7 @@ import {
   setLegendColor
 } from '../../services/drawing/paint.js';
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
-import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
+import { diffLegendIntents, legendColorCopies, legendRowRules, otherFeatureRowKey } from '../../services/specific-color-rules.js';
 import { rekeyLegendRowIds } from '../../services/legend-draft-rows.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
@@ -217,24 +217,35 @@ const dormantAfterDraw = (drawing, { previous, dormant, drawn }) => {
  */
 /** @type {DefaultRowOf} A commit that names no next table: no type keeps a default row. */
 const NO_DEFAULT_ROW = () => null;
+/**
+ * The type whose row a listed row is before a rule commit: K for K's own row and for K's "other" row (the rule owner's
+ * `featureLegendRows(...).otherRowType` of the current rule table), else the row's key.
+ * @typedef {(key: PythonLegendKey) => string} RowTypeOf
+ */
+/** @type {RowTypeOf} A commit that names no rows of a type: each row is its own type. */
+const OWN_ROW_TYPE = (key) => key;
 
 // The listed rows a rule commit keeps, without the rows it removes (`removed`, by key). A renamed row of a type it
 // stops drawing keeps its rename, as a draw keeps it (OV-120), while the type still has a default row
 // (`defaultRowOf`): its "other" row, where a captioned rule took some of the type's features (V-OD26); `keepDormant`
-// takes the dormant renames then. A Merge of the whole row into another row's rules leaves the type no default row,
-// and the name retires (V-OD27).
+// takes the dormant renames then. A Merge of the whole row (the type's own row or its "other" row, `rowTypeOf`) into
+// another row's rules leaves the type no default row, and its names retire (V-OD27): the removed row's, and the
+// dormant ones on the type's key and on its "other" row's key.
 /**
  * @param {DrawingState} drawing @param {EntryRecord[]} entries @param {ReadonlySet<string>} removed
- * @param {DefaultRowOf} defaultRowOf
+ * @param {{ defaultRowOf: DefaultRowOf, rowTypeOf: RowTypeOf }} types
  * @param {(rows: readonly KeptLegendRow[]) => void} keepDormant
  * @returns {EntryRecord[]}
  */
-const withoutRemovedRows = (drawing, entries, removed, defaultRowOf, keepDormant) => {
+const withoutRemovedRows = (drawing, entries, removed, { defaultRowOf, rowTypeOf }, keepDormant) => {
   const kept = entries.filter((entry) => !removed.has(legendEntryKey(entry)));
-  const leaving = entries.filter((entry) => removed.has(legendEntryKey(entry)) && legendCaption(entry) !== legendEntryKey(entry)
-    && defaultRowOf(legendEntryKey(entry)) !== null);
-  if (leaving.length > 0) {
-    keepDormant(keptRowsOf(dormantAfterDraw(drawing, { previous: leaving, dormant: [...drawing.dormantLegendEntries.value], drawn: kept })));
+  const removedRows = entries.filter((entry) => removed.has(legendEntryKey(entry)));
+  const retired = new Set(removedRows.map((entry) => rowTypeOf(/** @type {PythonLegendKey} */ (legendEntryKey(entry))))
+    .filter((type) => defaultRowOf(type) === null).flatMap((type) => [type, otherFeatureRowKey(type)]));
+  const leaving = removedRows.filter((entry) => legendCaption(entry) !== legendEntryKey(entry) && !retired.has(legendEntryKey(entry)));
+  const dormant = drawing.dormantLegendEntries.value.filter((entry) => !retired.has(legendEntryKey(entry)));
+  if (leaving.length > 0 || dormant.length !== drawing.dormantLegendEntries.value.length) {
+    keepDormant(keptRowsOf(dormantAfterDraw(drawing, { previous: leaving, dormant, drawn: kept })));
   }
   return kept;
 };
@@ -527,17 +538,17 @@ export const createLegendEntryActions = ({
   // the old one, with every record stored under the old key, in the list and
   // in the generated inventory, so the order stays the default order or the
   // user's. A renamed type row the commit removes keeps its name dormant
-  // while `defaultRowOf` gives the type a default row (V-OD27). Resolves to
+  // while `defaultRowOf` gives its type (`rowTypeOf`) a default row (V-OD27). Resolves to
   // false when the Result or the caller became stale.
   /**
    * @param {(EntryRecord & { name?: string })[]} intents
    * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean,
    *   placement?: LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
-   *   legendOrder?: readonly PythonLegendKey[] | null, defaultRowOf?: DefaultRowOf }} [options]
+   *   legendOrder?: readonly PythonLegendKey[] | null, defaultRowOf?: DefaultRowOf, rowTypeOf?: RowTypeOf }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
     drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map(),
-    legendOrder = null, defaultRowOf = NO_DEFAULT_ROW
+    legendOrder = null, defaultRowOf = NO_DEFAULT_ROW, rowTypeOf = OWN_ROW_TYPE
   } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
     if (getAllFeatureLegendGroups(mountedSvg).length === 0) {
@@ -630,7 +641,7 @@ export const createLegendEntryActions = ({
           added.delete(placement.caption);
           placed.push(placement.caption);
         }
-        entries = withoutRemovedRows(drawing, entries, removed, defaultRowOf, (rows) => replaceDormantLegendRows(drawing.slices.paint, rows));
+        entries = withoutRemovedRows(drawing, entries, removed, { defaultRowOf, rowTypeOf }, (rows) => replaceDormantLegendRows(drawing.slices.paint, rows));
         /** @type {PythonLegendKey[] | null} */
         let order = null;
         if (legendOrder) {

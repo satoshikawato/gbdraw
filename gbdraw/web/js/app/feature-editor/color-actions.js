@@ -255,6 +255,15 @@ const legendNameConflictReason = ({ name, ruleOnly, deleted, mergeAvailable, sam
   return deleted ? `${named} ${row}.` : `${named} ${row} with another color.`;
 };
 
+// Whether the user edited the popup's Legend name field since it last showed its row (its input handler marks it);
+// a commit reads the mark once and clears it.
+/** @param {import('../../services/feature-popup.js').FeaturePopup} popup @returns {boolean} */
+const takeLegendNameEdit = (popup) => {
+  const edited = popup.legendNameEdited === true;
+  popup.legendNameEdited = false;
+  return edited;
+};
+
 // V-OD27: a type's default row has one name, on the type's key. While no row
 // of the type is listed (a captioned rule draws some of its features), the
 // type's "other" row (`type`: the type whose "other" row `row` is, which the
@@ -773,6 +782,7 @@ export const createFeatureColorActions = ({
     if (!clickedFeature.value || !feat) return;
     if (color) showClickedFeatureColor(feat, color);
     clickedFeature.value.legendName = clickedFeature.value.appliedLegendName = effectiveLegendCaptions()(feat);
+    clickedFeature.value.legendNameEdited = false;
   };
 
   /** @param {DrawingState} drawing */
@@ -1319,12 +1329,14 @@ export const createFeatureColorActions = ({
     const requestedCaption = popupLegendCaption();
     const currentCaption =
       normalizeCaption(clickedFeature.value.appliedLegendName) || normalizeCaption(getEffectiveLegendCaption(feat));
-    // The name the row is drawn with: typing it, or another name of the row, is no rename; the row's key names a
-    // row drawn by another name back (OV-1216), also a type's "other" row drawn by the type's name (V-OD27).
+    // The name the row is drawn with: typing it, or another name of the row, is no rename; the row's key, typed,
+    // names a row drawn by another name back (OV-1216), also a type's "other" row drawn by the type's name (V-OD27).
+    // The field as it opens holds that key too: untouched, it commits nothing.
     const currentName = normalizeCaption(legendRowName(currentCaption));
+    const edited = takeLegendNameEdit(clickedFeature.value) || Boolean(joinGroup);
 
     if (!requestedCaption || (requestedCaption === currentCaption
-      && (normalizeCaption(clickedFeature.value.legendName) !== currentCaption || currentName === currentCaption))) {
+      && (!edited || normalizeCaption(clickedFeature.value.legendName) !== currentCaption || currentName === currentCaption))) {
       clickedFeature.value.legendName = currentCaption;
       return;
     }

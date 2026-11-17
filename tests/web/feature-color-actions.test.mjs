@@ -1366,7 +1366,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         return fixture;
       }],
       ['the popup', async () => {
-        const clicked = { svg_id: 'c2', feat: s2Features[1], color: '#54bcf8', legendName: typed, appliedLegendName: 'other proteins' };
+        // The user typed the text: the field's input handler marks it edited.
+        const clicked = { svg_id: 'c2', feat: s2Features[1], color: '#54bcf8', legendName: typed, appliedLegendName: 'other proteins',
+          legendNameEdited: true };
         const fixture = s2({ clicked });
         await fixture.renameActions.handleLegendNameCommit();
         await fixture.renameActions.handleLegendRenameChoice('group');
@@ -1381,6 +1383,32 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       assert.deepEqual(s2Leaves(fixture, [markerRule]), leaves, `${label}: the request with the rule`);
       assert.deepEqual(s2Leaves(fixture, []), leaves, `${label}: the request once the rule goes`);
     }
+  }
+  // Review R3 finding 1: Enter (or a blur) in the popup's Legend name field as it opens, untouched, is no rename in
+  // every state (as before V-OD27): the field holds the row's key and shows its drawn name, and only a field the user
+  // edited commits. S1 (CDS renamed Coding) on a row of several features and of one feature, and S2.
+  const s1Untouched = (features) => {
+    const clicked = { svg_id: 'p1', feat: features[0], color: '#54bcf8', legendName: 'CDS', appliedLegendName: 'CDS' };
+    return { clicked, fixture: paletteRow({ clicked, features,
+      entries: [{ caption: 'Coding', originalCaption: 'CDS', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }],
+      legendRowName: (key) => (key === 'CDS' ? 'Coding' : key), legendEntryName: (entry) => entry.caption,
+      legendRowIsNamed: (key, typed) => typed === key || (key === 'CDS' && typed === 'Coding') }) };
+  };
+  for (const [label, features] of [['several features', paletteFeatures], ['one feature', paletteFeatures.slice(0, 1)]]) {
+    const { clicked, fixture } = s1Untouched(features);
+    await fixture.renameActions.handleLegendNameCommit();
+    assert.notEqual(fixture.legendRenameDialog.show, true, `S1, ${label}, untouched Enter: no scope dialog`);
+    assert.deepEqual([fixture.committed, namesOf(fixture)[0], dormantOf(fixture)], [[], ['Coding', 'CDS'], []],
+      `S1, ${label}, untouched Enter: the row keeps its name`);
+    assert.deepEqual([clicked.legendName, clicked.appliedLegendName], ['CDS', 'CDS']);
+  }
+  {
+    const clicked = { svg_id: 'c2', feat: s2Features[1], color: '#54bcf8', legendName: 'other proteins', appliedLegendName: 'other proteins' };
+    const fixture = s2({ clicked });
+    await fixture.renameActions.handleLegendNameCommit();
+    assert.notEqual(fixture.legendRenameDialog.show, true, 'S2, untouched Enter: no scope dialog');
+    assert.deepEqual([fixture.committed, namesOf(fixture), dormantOf(fixture)],
+      [[], [['Marker', 'Marker'], ['other proteins', 'other proteins']], [['Coding', 'CDS']]], 'S2, untouched Enter: the type keeps its name');
   }
   // The drawn name is no rename; with no earlier rename, the rename adds the type's name.
   const sameName = s2();
