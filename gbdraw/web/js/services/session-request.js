@@ -7,7 +7,7 @@ import {
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
 /** @import { IdentityRequestRecord, NamedCardRecord, NamedCardRecords } from './record-draw-selection.js' */
 /** @import { LosatRequestRing } from './circular-conservation-keys.js' */
-import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
+import { cardCropWindow, losatRecordGencode, readStoredCardGencode, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
 /** @import { CircularLayoutDraft } from './one-circle-layout.js' */
 import {
@@ -92,7 +92,8 @@ import {
   importedDepthSeriesColor,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
-  parseDepthTrackIndexIdentity
+  parseDepthTrackIndexIdentity,
+  SERIES_TICKS
 } from './depth-track-state.js';
 import {
   circularDrawingRecordSet,
@@ -373,7 +374,7 @@ const requestDrawingMode = (drawing) => {
  * @property {ResourceEntry | null} [gff]
  * @property {ResourceEntry | null} [fasta]
  * @property {DepthFileSlots} [depth]
- * @property {number | ''} [losat_gencode]
+ * @property {number | null} [losat_gencode]
  * @property {string} [definition]
  * @property {string} [record_subtitle]
  * @property {string} [file_definition]
@@ -1528,12 +1529,13 @@ const linearRecordDefinitionLine = (seq) => ({
 });
 /**
  * One entry of `webFiles.linearRecordMetadata`: the record's key and LOSAT
- * genetic code, and the file default and record value of its definition and
+ * genetic code (the card's, `losatRecordGencode`: null when its field is
+ * cleared), and the file default and record value of its definition and
  * subtitle. presentation.label and presentation.subtitle carry the resolved
  * value; the entry records the per-record value too, so an override that
  * happens to equal the file default is restored as an override rather than
  * as inheritance. Generate and the live Record names apply (F-2) build it here.
- * @param {{ recordKey: string, losatGencode: number }} identity
+ * @param {{ recordKey: string, losatGencode: number | null }} identity
  * @param {LinearRecordNameLine} definition @param {LinearRecordNameLine} subtitle
  * @returns {LinearRecordMetadataEntry}
  */
@@ -1546,7 +1548,7 @@ const linearRecordMetadataEntry = ({ recordKey, losatGencode }, definition, subt
   ...(subtitle.file ? { recordSubtitle: subtitle.record } : {})
 });
 /**
- * @typedef {{ recordKey: string, losatGencode: number, fileDefinition?: string, fileSubtitle?: string,
+ * @typedef {{ recordKey: string, losatGencode: number | null, fileDefinition?: string, fileSubtitle?: string,
  *   recordDefinition?: string, recordSubtitle?: string }} LinearRecordMetadataEntry
  */
 
@@ -5339,7 +5341,7 @@ const projectCanonicalRenderInput = ({
       const seq = filesData.linearSeqs[sourceIndex];
       return linearRecordMetadataEntry({
         recordKey: String(records[index]?.recordKey || seq?.uid || `record-${index + 1}`),
-        losatGencode: integerSettingOr(seq?.losat_gencode, 1, 1)
+        losatGencode: losatRecordGencode(seq)
       }, linearRecordDefinitionLine(seq), {
         file: String(seq?.file_subtitle || '').trim(), record: String(seq?.record_subtitle || '')
       });
@@ -6197,18 +6199,12 @@ const projectCanonicalDepthTracks = ({
       height: mode === 'linear'
         ? canonicalDepthNumber(track.height, `${fieldName}.height`)
         : null,
-      large_tick_interval: canonicalDepthNumber(
-        track.largeTickInterval,
-        `${fieldName}.largeTickInterval`
-      ),
-      small_tick_interval: canonicalDepthNumber(
-        track.smallTickInterval,
-        `${fieldName}.smallTickInterval`
-      ),
-      tick_font_size: canonicalDepthNumber(
-        track.tickFontSize,
-        `${fieldName}.tickFontSize`
-      )
+      // A series tick the request leaves null is drawn with the drawing's tick (Python), so the draft series leaves
+      // it unset (absent), and the field shows the drawing's tick (`readDepthTrackConfig`).
+      ...Object.fromEntries(SERIES_TICKS.flatMap(([field, requestField]) => {
+        const tick = canonicalDepthNumber(track[requestField], `${fieldName}.${requestField}`);
+        return tick === null ? [] : [[field, tick]];
+      }))
     };
   });
   return { sourceRows, fileRows, tracks };
@@ -7268,7 +7264,7 @@ export const projectCanonicalSessionRequest = ({
         fasta: slotFile('fasta'),
         depth: null,
         blast: null,
-        losat_gencode: integerSettingOr(savedMetadata.losatGencode ?? savedMetadata.losat_gencode, 1, 1),
+        losat_gencode: readStoredCardGencode(Object.hasOwn(savedMetadata, 'losatGencode') ? savedMetadata.losatGencode : savedMetadata.losat_gencode).value,
         losat_filename: String(
           savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
         ),

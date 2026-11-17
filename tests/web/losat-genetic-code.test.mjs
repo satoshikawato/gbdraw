@@ -5,8 +5,9 @@ import test from 'node:test';
 
 import { LOSAT_GENETIC_CODES, LOSAT_GENETIC_CODE_TEXT } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
-  losatGencodeProblem, losatReadsGeneticCode, losatRecordGencode, requireLosatGeneticCode, searchedLosatGencode
+  losatGencodeProblem, losatReadsGeneticCode, requireLosatGeneticCode, searchedLosatGencode
 } from '../../gbdraw/web/js/services/linear-sources.js';
+import { losatRecordGencode } from '../../gbdraw/web/js/services/drawing/inputs.js';
 import {
   comparisonCauseRepeats, losatGeneticCodeHint, normalizeUserFacingError, renderErrorText
 } from '../../gbdraw/web/js/utils/error-normalization.js';
@@ -29,7 +30,8 @@ test('the tables are the ones Python names', () => {
 test('a Linear card keeps a table LOSAT reads and its default', () => {
   const card = { inputOrdinal: 1, cardUid: 'linear-seq-a' };
   assert.equal(searchedLosatGencode({ losat_gencode: 11 }, card), 11);
-  assert.equal(searchedLosatGencode({ losat_gencode: '' }, card), null);
+  // A cleared card holds null (`v-blank-null`); no card holds '' (`readCardGencode`).
+  assert.equal(searchedLosatGencode({ losat_gencode: null }, card), null);
   assert.equal(searchedLosatGencode({}, card), null);
   // The typed value as the job estimate reads it: no refusal, so the estimate counts what Generate would plan.
   assert.equal(losatRecordGencode({ losat_gencode: 7 }), 7);
@@ -44,7 +46,7 @@ test('one rule says whether LOSAT reads a code', () => {
 // The card's mark: an empty field searches with LOSAT's default table 1 and asks for one; a typed code LOSAT does not
 // read shows the tables, in the Generation Error's words.
 test('the card marks an empty LOSAT Gencode and a typed one LOSAT does not read differently', () => {
-  for (const value of [null, undefined, '']) assert.equal(losatGencodeProblem({ losat_gencode: value }), 'empty');
+  for (const value of [null, undefined]) assert.equal(losatGencodeProblem({ losat_gencode: value }), 'empty');
   assert.equal(losatGencodeProblem({}), 'empty');
   for (const value of [7, 99, 8.5, '7']) assert.equal(losatGencodeProblem({ losat_gencode: value }), 'unread', String(value));
   for (const value of [1, 11, '4', 33]) assert.equal(losatGencodeProblem({ losat_gencode: value }), null, String(value));

@@ -15,5 +15,6 @@
   "rewrittenRingColors": "conservation-ring-colors-impl-20261028 PR-B fix round 1 (2026-11-10): each drawing's config.circularConservation gained colorScheme and reassignOnReorder with their defaults by scripts/rewrite_v51_ring_colors.py in that task folder; nothing else changed",
   "rewrittenCatalog": "large-inputs d5 PR2 S1 (2026-11-09): each drawing's editorState.featureCatalog promoted from schema 5 to 6 (sequences dropped, /translation restored) by d5/impl/rewrite_v51_catalogs.py in that task folder, which applies gbdraw.web_support.feature_catalog.promote_legacy_feature_catalog; resources copied unchanged",
   "rewrittenRecordGap": "multi-contig-locus-20261108 OV-3572 review round 1 (2026-11-15): each drawing's Linear record gap left at the default (config.linearRecordLayout.recordGap, renderRequest.layout.recordGapPx: 24) became null, Auto, by scripts/rewrite_v51_record_gap.py in that task folder; nothing else changed",
-  "documentSha256AfterRecordGap": "d1cf4fcaad7aeb19fccd73bbe132756a71782845bc5fed8bdd1648bb2e83ff70"
+  "documentSha256AfterRecordGap": "ac56e8198a805474031f4c21dbb2049ca57fd14ead1fa49b896a91d257cab2bd",
+  "rewrittenDepthTicks": "ci-review-20261110 D FU-B3 (2026-11-14): each Depth series tick stored as null (never set) left out, the form the Web writer now writes, by scripts/rewrite_v51_depth_ticks.py in that task folder; nothing else changed"
 }

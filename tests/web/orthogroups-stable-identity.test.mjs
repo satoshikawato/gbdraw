@@ -66,6 +66,9 @@ await copyModule('gbdraw/web/js/services/drawing/slice-handle.js', 'services/dra
 await copyModule('gbdraw/web/js/services/drawing/group-names.js', 'services/drawing/group-names.js');
 await copyModule('gbdraw/web/js/services/drawing/feature-edits.js', 'services/drawing/feature-edits.js');
 await copyModule('gbdraw/web/js/services/drawing/paint.js', 'services/drawing/paint.js');
+// linear-sources.js reads a card's gencode with the card owner.
+await copyModule('gbdraw/web/js/services/drawing/inputs.js', 'services/drawing/inputs.js');
+await copyModule('gbdraw/web/js/services/history-files.js', 'services/history-files.js');
 await copyModule('gbdraw/web/js/utils/vue-raw.js', 'utils/vue-raw.js');
 // It reads location-part numbers with the decimal-number owner.
 await copyModule('gbdraw/web/js/utils/optional-positive-number.js', 'utils/optional-positive-number.js');

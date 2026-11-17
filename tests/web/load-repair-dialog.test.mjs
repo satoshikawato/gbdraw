@@ -1432,12 +1432,12 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
 });
 
 // OV-3351: a configuration file installs over the shown drawing, so a number
-// field the user emptied ('' in the draft) takes the file's value, with no
-// row, whether its default is Auto (null) or a number.
+// field the user emptied (null in the draft, `v-blank-null`) takes the file's
+// value, with no row, whether its default is Auto (null) or a number.
 test('a configuration file applies its numbers over emptied number fields, with no row (OV-3351)', async () => {
   await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
   const drawing = () => modeDrawing(state, state.mode.value);
-  Object.assign(drawing().adv, { legend_font_size: '', gc_content_tick_interval: '' });
+  Object.assign(drawing().adv, { legend_font_size: null, gc_content_tick_interval: null });
   const loaded = await importSession(await input({ adv: { legend_font_size: 21, gc_content_tick_interval: 50 } }),
     { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
@@ -2056,4 +2056,34 @@ test('a Load ends the work outside its drawings only when it succeeds', async ()
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(ended, [state.drawingTabs.value.map((tab) => tab.id)], 'a Load that succeeds ends it, once');
+});
+
+// OV-3351, OV-3496: a released Session 50 (v0.14.5) stored a Depth series
+// tick never set as null and a cleared number field as '' (the fixture's
+// provenance names the writer lines). Load reads the never-set tick as absent
+// (a series shows the drawing's tick, as before), a cleared series tick as
+// null (Auto: the field shows the drawing's tick as its Auto value, the tick
+// Generate draws), a blank over an Auto number field as null and a blank over
+// a number default as the default, with no row; no field holds ''. A blank
+// comparison filter, whose kind rule counts a blank text as a number, reads
+// as null too: the field stays blank and Generate takes the mode default.
+test('a Session 50 Depth series and blank number fields read as one blank, with no row (OV-3351)', async () => {
+  const session = fixture('HmmtDNA-depth-tick-cleared.v50-web0145.gbdraw-session.json.gz');
+  const filters = ['min_bitscore', 'identity', 'alignment_length'];
+  for (const mode of ['circular', 'linear']) {
+    assert.deepEqual(session.modes[mode].config.adv.depth_tracks[1].large_tick_interval, '', 'the fixture holds the cleared tick');
+    Object.assign(session.modes[mode].config.adv, Object.fromEntries(filters.map((field) => [field, ''])));
+  }
+  const { items } = await loadAnswering(session);
+  assert.deepEqual(items, []);
+  for (const mode of ['circular', 'linear']) {
+    const { adv } = modeDrawing(state, mode);
+    // A Circular series without its own large tick shows the drawing's, a Linear one after the first does not,
+    // as before.
+    const inherited = mode === 'circular' ? 5000 : undefined;
+    assert.deepEqual(adv.depth_tracks.map((track) => [track.large_tick_interval, track.small_tick_interval, track.tick_font_size]),
+      [[5000, undefined, undefined], [null, undefined, 9], [inherited, undefined, undefined]], mode);
+    assert.deepEqual([adv.depth_large_tick_interval, adv.legend_font_size, adv.gc_content_tick_interval], [5000, null, 20], mode);
+    assert.deepEqual(filters.map((field) => adv[field]), [null, null, null], mode);
+  }
 });

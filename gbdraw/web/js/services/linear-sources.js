@@ -8,6 +8,7 @@ import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
 import { LOSAT_GENETIC_CODES, LOSAT_GENETIC_CODE_TEXT } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { losatRecordGencode } from './drawing/inputs.js';
 
 // Two Session resource views of one stored resource are one source (`sourceId`).
 /** @param {InputFileRef | null | undefined} file */
@@ -365,18 +366,6 @@ export const losatReadsGeneticCode = (code) => LOSAT_GENETIC_CODES.includes(code
 export const requireLosatGeneticCode = (code, at) => {
   if (losatReadsGeneticCode(code)) return code;
   throw diagnosticError('COMPARISON_INPUT', { ...at, reason: 'GENETIC_CODE', geneticCodes: LOSAT_GENETIC_CODE_TEXT });
-};
-
-/**
- * The explicit LOSAT translation table typed on one Linear card, or null for the default.
- * @param {{ losat_gencode?: unknown } | null | undefined} sequence
- * @returns {number | null}
- */
-export const losatRecordGencode = (sequence) => {
-  const raw = sequence?.losat_gencode;
-  if (raw === null || raw === undefined || raw === '') return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
 };
 
 /**

@@ -38,6 +38,7 @@ const {
   normalizeDepthTrackConfig,
   readDepthTrackConfig,
   readDepthTracks,
+  seriesTicksOfOlderWriter,
   normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
@@ -69,7 +70,7 @@ const depthIndexes = (slots) => slots
   // One reader for a stored series and a new one: a color name reads as its
   // hex, and a value it cannot use is a loss named by its place (B45, BA-OD89).
   assert.deepEqual(readDepthTrackConfig({ label: 'A', color: 'red', height: -1 }, 1), {
-    value: { label: 'A', color: '#FF0000', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null },
+    value: { label: 'A', color: '#FF0000', height: null },
     lost: true,
     leaves: [{ at: '.height', stored: -1, used: null }]
   });
@@ -78,7 +79,27 @@ const depthIndexes = (slots) => slots
   // A drawing's single-series settings belong to its first series; every series takes the height.
   const legacy = { depth_color: '#111111', depth_height: 30, depth_large_tick_interval: 100 };
   assert.deepEqual(readDepthTracks([{}, {}], legacy).value.map(({ color, height, large_tick_interval }) => [color, height, large_tick_interval]),
-    [['#111111', 30, 100], ['#E45756', 30, null]]);
+    [['#111111', 30, 100], ['#E45756', 30, undefined]]);
+}
+
+{
+  // A tick the series never set is absent (it takes the drawing's tick); a
+  // cleared one is null, Auto, and stays null, also after a reading (OV-3462).
+  const read = (series) => readDepthTrackConfig({ label: 'A', ...series }, 1).value;
+  assert.equal(Object.hasOwn(read({}), 'large_tick_interval'), false);
+  assert.equal(read({ large_tick_interval: null }).large_tick_interval, null);
+  assert.equal(read({ small_tick_interval: '' }).small_tick_interval, null);
+  assert.equal(read({ tick_font_size: 9 }).tick_font_size, 9);
+  assert.deepEqual(read(read({ large_tick_interval: null })), read({ large_tick_interval: null }));
+  // An older writer (a Session 50 and earlier) stored a never-set tick as null
+  // and a cleared one as '': its null is left out, its '' stays (and reads as
+  // Auto), under the retired name of the large tick too.
+  assert.deepEqual(seriesTicksOfOlderWriter([
+    { label: 'A', large_tick_interval: null, small_tick_interval: '', tick_font_size: 8, height: null },
+    { tick_interval: null },
+    5
+  ]), [{ label: 'A', small_tick_interval: '', tick_font_size: 8, height: null }, {}, 5]);
+  assert.equal(seriesTicksOfOlderWriter(null), null);
 }
 
 {

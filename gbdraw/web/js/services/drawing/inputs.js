@@ -11,11 +11,13 @@
 /** @import { LinearComparisonEdge, LinearComparisonPlan } from '../linear-comparisons.js' */
 /** @import { DepthFileSlots } from '../depth-track-state.js' */
 /** @import { CircularRecordDiscovery } from '../record-discovery.js' */
+/** @import { FieldReader } from '../../utils/field-reading.js' */
 /** @import { SliceHandle } from './slice-handle.js' */
 import { CIRCULAR_SOURCE_FILE_SLOTS } from '../../contracts/schema.generated.js';
 import { isInputFileRef } from '../history-files.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { reactive, ref } from '../../utils/reactivity.js';
+import { numberOr } from '../../utils/field-reading.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
 
 // The Linear record rows (`LinearSeq`): one owner builds and normalizes them.
@@ -45,7 +47,8 @@ const normalizeLinearSeqNumber = (value) => {
  * @property {InputFileRef | null} gff
  * @property {InputFileRef | null} fasta
  * @property {DepthFileSlots<InputFileRef>} depth one file, or a list indexed by series
- * @property {number | ''} losat_gencode `v-model.number` writes an empty string when the field is cleared
+ * @property {number | null} losat_gencode the card's LOSAT translation table; null when the field is cleared
+ *   (`v-blank-null`), which the search passes as no table (`searchedLosatGencode`)
  * @property {string} definition
  * @property {string} record_subtitle
  * @property {string} file_definition
@@ -115,6 +118,45 @@ export const cardCropWindow = (windows) => {
 };
 
 /**
+ * A Linear card's genetic code as stored (a draft, a History step, a Session),
+ * read into a card: null is a cleared field (`v-blank-null`), which stays
+ * cleared (OV-3463); a number above 0 is kept as typed, so a table LOSAT does
+ * not read (`8.5`, `99`) keeps its mark and Generate's refusal
+ * (`losatGencodeProblem`, OV-3326); anything else, a card without one
+ * included, is 1. A '' is a cleared field as gbdraw 0.14.5 saved it (Session
+ * 50), which always loaded as 1 and still does.
+ * @type {FieldReader<number | null>}
+ */
+export const readCardGencode = (value) => (value === null ? { value: null, lost: false } : numberOr((code) => code > 0, 1)(value));
+
+/**
+ * A card's genetic code as Load reads it from a Session (its binding, or its
+ * record metadata): `readCardGencode`, but a number that is not whole names
+ * no table and reads as 1, with a Load-repair row, as Load always did. A
+ * History step and a card built again keep it as typed (`readCardGencode`).
+ * @type {FieldReader<number | null>}
+ */
+export const readStoredCardGencode = (value) => {
+  const reading = readCardGencode(value);
+  return reading.value !== null && !Number.isInteger(reading.value) ? { value: 1, lost: true } : reading;
+};
+
+/**
+ * The one reader of a card's genetic code for what leaves the card: the table a TLOSATX search passes, the request's
+ * files, and the Session's binding and record metadata (`webFiles.linearRecordMetadata`). Null when the field is
+ * cleared (the search passes no table, so LOSAT uses its table 1), else the typed number, which Generate refuses when
+ * LOSAT does not read it (`searchedLosatGencode`). Load reads each copy back with `readStoredCardGencode`.
+ * @param {{ losat_gencode?: unknown } | null | undefined} sequence
+ * @returns {number | null}
+ */
+export const losatRecordGencode = (sequence) => {
+  const raw = sequence?.losat_gencode;
+  if (raw === null || raw === undefined) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+};
+
+/**
  * @param {Partial<LinearSeq> | Record<string, unknown> | null} [overrides] a slot,
  *   or unvalidated data (a session, an import) that is normalized here
  * @returns {LinearSeq}
@@ -124,7 +166,6 @@ export const createLinearSeq = (overrides = {}) => {
     overrides && typeof overrides === 'object' && !Array.isArray(overrides) ? overrides : {}
   );
   const rawUid = String(source.uid ?? '').trim();
-  const rawLosatGencode = Number(source.losat_gencode);
   // One window is the card's own crop, which `region_*` hold and the card edits; `windows` holds the rest.
   const stored = readLinearSeqWindows(source.windows);
   const onlyWindow = cardCropWindow(stored);
@@ -135,7 +176,7 @@ export const createLinearSeq = (overrides = {}) => {
     gff: source.gff ?? null,
     fasta: source.fasta ?? null,
     depth: source.depth ?? null,
-    losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
+    losat_gencode: readCardGencode(source.losat_gencode).value,
     definition: String(source.definition ?? ''),
     record_subtitle: String(source.record_subtitle ?? ''),
     file_definition: String(source.file_definition ?? ''),
