@@ -980,7 +980,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.equal(resetDialog.show, false, 'a type that names an inherited member opens no Reset dialog');
   assert.deepEqual(committed, [], 'and Reset writes no rule for it');
 
-  // OV-3498 (PD-OI-088, Owner choice A 2026-11-17): the Reset dialog asks by
+  // OV-3498 (PD-OI-2108, Owner choice A 2026-11-17): the Reset dialog asks by
   // the feature's Legend row, the row its "Reset all" resets. (a) A feature
   // that shares its label with a feature of another row, alone in its own row,
   // resets at once as "This feature only".

@@ -370,7 +370,7 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
     // The rRNA rows of the Legend; and that the editor reads s-rRNA and l-rRNA
     // in the one row "rRNA": each popup names it, and a color change and a Reset
     // fill of each offer that Legend item with its one other feature, although
-    // their labels differ (OV-3498; Cancel changes nothing).
+    // their labels differ (OV-3498, PD-OI-2108; Cancel changes nothing).
     const rrnaRows = async (options) => (await legendCaptions(page, options)).filter((caption) => /rRNA/.test(caption));
     const expectRrnaRowSiblings = async () => {
       for (const product of ['s-rRNA', 'l-rRNA']) {
