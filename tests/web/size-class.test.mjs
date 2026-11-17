@@ -76,7 +76,8 @@ test('the Circular GC tick font note follows the depth axis beside it, as the sh
     }), { circularDiagramLengths: () => [entry.recordLengths] });
     const px = (/** @type {number} */ value) => `${Number(value.toFixed(1))} px (auto)`;
     assert.equal(display.autoValueText('gcTickFont'), px(entry.expected['objects.gc_content.tick_font_size']), entry.name);
-    assert.equal(display.autoValueText('depthTickFont'), px(entry.expected['objects.depth.tick_font_size']), entry.name);
+    // Series 0's Tick Font Size field: the font a series without its own draws in (OV-3496), as Python computes it.
+    assert.equal(display.autoValueText('depthTickFont'), px(entry.seriesAutoTickFontSize), entry.name);
   }
 });
 
@@ -437,4 +438,30 @@ test('the Depth hints of a set GC window and step are Python\'s whole base pairs
   }), { circularDiagramLengths: () => [[50_000]], linearRecordLengths: () => [50_000] });
   assert.equal(shownBp(display.autoValueText('depthWindow')), 101);
   assert.equal(shownBp(display.autoValueText('depthStep')), 2);
+});
+
+// OV-3496: a Depth series without its own tick draws the drawing's (adv.depth_*; Python's DepthConfigurator reads
+// a series' null tick as the drawing's), so each series field's Auto text shows the drawing's tick when the drawing
+// has one, and the field's own Auto rule otherwise. The small tick shows it as the field's placeholder.
+test('a Depth series field without its own tick shows the drawing\'s tick as its Auto value (OV-3496)', () => {
+  for (const mode of /** @type {const} */ (['circular', 'linear'])) {
+    const display = (/** @type {Record<string, unknown>} */ adv) => createAutoValueDisplay(withDrawings({
+      mode: { value: mode }, form: {}, adv
+    }), { circularDiagramLengths: () => [[16_569]], linearRecordLengths: () => [16_569] });
+    const series = { index: 1, config: { height: null } };
+    const own = display({ depth_large_tick_interval: 5000, depth_small_tick_interval: 1000, depth_tick_font_size: 9 });
+    assert.equal(own.autoValueText('depthLargeTick'), '5000 (auto)', mode);
+    assert.equal(own.autoValueText('depthSmallTick'), '1000 (auto)', mode);
+    assert.equal(own.autoValueText('depthTickFont', series), '9 px (auto)', mode);
+    const none = display({});
+    assert.equal(none.autoValueText('depthLargeTick'), 'endpoints only', mode);
+    assert.equal(none.autoValueText('depthSmallTick'), 'None', mode);
+    assert.match(none.autoValueText('depthTickFont', series), /^\d+(\.\d)? px \(auto\)$/, mode);
+    assert.notEqual(none.autoValueText('depthTickFont', series), '9 px (auto)', mode);
+  }
+  // Every series' Small Tick field shows that text as its placeholder.
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const smallTicks = html.match(/<input [^>]*v-model\.number="track\.config\.small_tick_interval"[^>]*>/g) ?? [];
+  assert.equal(smallTicks.length, 2);
+  for (const field of smallTicks) assert.match(field, /:placeholder="autoValueText\('depthSmallTick'\)"/);
 });

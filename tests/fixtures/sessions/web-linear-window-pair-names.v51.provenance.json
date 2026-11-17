@@ -10,5 +10,6 @@
   "requestSchema": 10,
   "rewritten": "large-inputs d5 PR2 S1 (2026-11-09): each drawing's editorState.featureCatalog promoted from schema 5 to 6 (sequences dropped, /translation restored) by d5/impl/rewrite_v51_catalogs.py in that task folder, which applies gbdraw.web_support.feature_catalog.promote_legacy_feature_catalog; resources copied unchanged",
   "rewrittenRecordGap": "multi-contig-locus-20261108 OV-3572 review round 1 (2026-11-15): each drawing's Linear record gap left at the default (config.linearRecordLayout.recordGap, renderRequest.layout.recordGapPx: 24) became null, Auto, by scripts/rewrite_v51_record_gap.py in that task folder; nothing else changed",
-  "documentSha256AfterRecordGap": "edf73b65e8b7ff57878d977cba6235f674c6cf9cf2286e72ebd857a17b43f743"
+  "documentSha256AfterRecordGap": "446aab288ca32571e87f2cda35a28d2e4897db3d8217acd51c8a74582c6530a2",
+  "rewrittenDepthTicks": "ci-review-20261110 D FU-B3 (2026-11-14): each Depth series tick stored as null (never set) left out, the form the Web writer now writes, by scripts/rewrite_v51_depth_ticks.py in that task folder; nothing else changed"
 }

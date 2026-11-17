@@ -65,12 +65,28 @@ export const shownAfterSourceChange = ({ wasSourced, isSourced, inShownDrawing, 
  */
 
 /**
- * A Depth series config after `readDepthTrackConfig`.
+ * A Depth series config after `readDepthTrackConfig`. A tick field the
+ * series never set is absent: it takes the drawing's tick (`adv.depth_*`) when
+ * a reading has one, and Python draws a series without one with the drawing's
+ * (gbdraw/configurators/depth.py). `null` is Auto: a cleared field writes it
+ * (`v-blank-null`, app/blank-number.js). A Session 50 and earlier wrote `null`
+ * for a tick never set and `''` for a cleared one; Load reads such a file's
+ * series with `seriesTicksOfOlderWriter` first.
  * @typedef {{
- *   label: string, color: string, height: number | null, large_tick_interval: number | null,
- *   small_tick_interval: number | null, tick_font_size: number | null
+ *   label: string, color: string, height: number | null, large_tick_interval?: number | null,
+ *   small_tick_interval?: number | null, tick_font_size?: number | null
  * }} DepthTrackConfig
  */
+/**
+ * The tick fields of a Depth series, each with its camel-case name: the
+ * default that fills one the series never set, and the canonical request's
+ * field (`projectCanonicalDepthTracks`).
+ */
+export const SERIES_TICKS = Object.freeze(/** @type {const} */ ([
+  ['large_tick_interval', 'largeTickInterval'],
+  ['small_tick_interval', 'smallTickInterval'],
+  ['tick_font_size', 'tickFontSize']
+]));
 
 /**
  * A track slot row. Python owns its field set (R7); this module reads
@@ -162,17 +178,14 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
 /**
  * The defaults of a Depth series an edit of a drawing gives it settings for
  * (`depthTrackConfigForEdit`): the series color, and the drawing's stored
- * height. Every writer of a drawing's series uses these; Generate leaves out
- * the height (`shapeDepthTracksForGenerate`).
+ * height; its ticks stay unset. Every writer of a drawing's series uses
+ * these; Generate leaves out the height (`shapeDepthTracksForGenerate`).
  * @param {StoredDepthSettings} adv
  * @returns {DepthTrackDefaults}
  */
 export const depthTrackEditDefaults = (adv) => ({
   depthColor: adv.depth_color,
-  depthHeight: adv.depth_height,
-  largeTickInterval: null,
-  smallTickInterval: null,
-  tickFontSize: null
+  depthHeight: adv.depth_height
 });
 
 /**
@@ -497,8 +510,10 @@ export const removeDepthTrackColumnAt = (rows, trackIndex) => {
 };
 
 // The one reader of a Depth series config: a stored series, a Session's, and
-// the defaults of a series the app adds. Unset fields take `defaults`; a
-// color name reads as its hex. `lost`: a stored value it could not use.
+// the defaults of a series the app adds. A field the series does not hold
+// takes `defaults`; a tick neither names stays absent (it takes the drawing's
+// tick at the next reading that has one). A color name reads as its hex.
+// `lost`: a stored value it could not use.
 /**
  * @param {unknown} entry
  * @param {number} index
@@ -518,17 +533,40 @@ export const readDepthTrackConfig = (entry, index, defaults = {}) => {
     if (reading.lost) leaves.push({ at: `.${field}`, stored: value, used: reading.value });
     return reading.value;
   };
+  /** @type {DepthTrackConfig} */
   const value = {
     // A series nobody named keeps no label: its name follows the series count (OV-1508).
     label: String(source.label ?? ''),
     color: resolveColorToHex(String(source.color || fallbackColor(index, defaults))),
-    height: positive('height', Object.hasOwn(source, 'height') ? source.height : defaults.depthHeight),
-    large_tick_interval: positive('large_tick_interval', source.large_tick_interval ?? defaults.largeTickInterval),
-    small_tick_interval: positive('small_tick_interval', source.small_tick_interval ?? defaults.smallTickInterval),
-    tick_font_size: positive('tick_font_size', source.tick_font_size ?? defaults.tickFontSize)
+    height: positive('height', Object.hasOwn(source, 'height') ? source.height : defaults.depthHeight)
   };
+  for (const [field, defaultKey] of SERIES_TICKS) {
+    // A stored null or '' is Auto; an absent tick takes the drawing's, if it has one.
+    const stored = Object.hasOwn(source, field) ? source[field] : defaults[defaultKey];
+    if (Object.hasOwn(source, field) || !isUnsetValue(stored)) value[field] = positive(field, stored);
+  }
   return { value, lost: lost || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
+
+/**
+ * The Depth series of a draft an older writer stored (a Session 50 and
+ * earlier, a configuration file), in the current form: a tick it stored as
+ * null was never set and takes the drawing's tick, so it is left out; a ''
+ * (a cleared field) stays and reads as Auto (`DepthTrackConfig`). The
+ * evidence: v0.14.5 (Session 50) writes both forms. The retired name of the
+ * large tick (`tick_interval`, read as its current name later) is read the
+ * same way. Other values stay as stored.
+ * @param {unknown} tracks A draft's `adv.depth_tracks`, unvalidated.
+ * @returns {unknown}
+ */
+export const seriesTicksOfOlderWriter = (tracks) => (Array.isArray(tracks) ? tracks.map((entry) => {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  const series = /** @type {Record<string, unknown>} */ (entry);
+  return Object.fromEntries(Object.entries(series)
+    .filter(([field, value]) => value !== null || !OLDER_WRITER_TICKS.includes(field)));
+}) : tracks);
+/** The tick fields an older writer stored, with the retired name of the large tick. */
+const OLDER_WRITER_TICKS = Object.freeze([...SERIES_TICKS.map(([field]) => field), 'tick_interval']);
 
 /**
  * @param {unknown} entry
@@ -612,9 +650,9 @@ export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
     if (current.label === undefined || current.label === null) current.label = fallback.label;
     if (current.color === undefined || current.color === null) current.color = fallback.color;
     if (current.height === undefined) current.height = fallback.height;
-    if (current.large_tick_interval === undefined) current.large_tick_interval = fallback.large_tick_interval;
-    if (current.small_tick_interval === undefined) current.small_tick_interval = fallback.small_tick_interval;
-    if (current.tick_font_size === undefined) current.tick_font_size = fallback.tick_font_size;
+    for (const [field] of SERIES_TICKS) {
+      if (current[field] === undefined && fallback[field] !== undefined) current[field] = fallback[field];
+    }
   }
   return targetTracks;
 };

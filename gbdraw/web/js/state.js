@@ -967,7 +967,7 @@ const settingsDefaults = (drawingMode) => () => ({
   circularConservation: createDefaultCircularConservation(),
   linearComparisonPlan: createDefaultLinearComparisonPlan(),
   linearRecordLayoutEnabled: /** @type {boolean} */ (WEB_UX_PROFILE.linear.arrangeInRowsByDefault),
-  // null: Auto (`draftLinearRecordGap`); the number input holds '' when cleared.
+  // null: Auto (`draftLinearRecordGap`); a cleared number input writes null (`v-blank-null`).
   linearRecordGap: /** @type {number | '' | null} */ (null),
   linearRecordRows: [],
   recordDisplayDrafts: [],

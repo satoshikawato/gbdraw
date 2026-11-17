@@ -4169,6 +4169,18 @@ assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.losat_gencode),
   [11, 4, 1]
 );
+// A cleared card gencode (null, `v-blank-null`) is null in the request's record metadata, as in the Session's
+// binding (`losatRecordGencode`), and reads back as the cleared card: one value for the card, not null and 1.
+{
+  const clearedLinearSeqs = linearFilesData.linearSeqs.map((seq, index) => (index === 2 ? { ...seq, losat_gencode: null } : seq));
+  // Not one of the characterized requests (the raw builder).
+  const clearedFiles = { ...linearFilesData, linearSeqs: clearedLinearSeqs };
+  const cleared = buildCanonicalRenderRequestRaw({
+    state, filesData: clearedFiles, comparisonPlanSnapshot: comparisonSnapshotForState(state, clearedFiles)
+  });
+  assert.deepEqual(cleared.webFiles.linearRecordMetadata.map((entry) => entry.losatGencode), [11, 4, null]);
+  assert.deepEqual(projectCanonicalSessionRequest(cleared).files.linearSeqs.map((seq) => seq.losat_gencode), [11, 4, null]);
+}
 assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.losat_filename),
   ['', '', ''],
@@ -6307,25 +6319,12 @@ if (projectSessionIndex >= 0) {
       projectedSession.files.linearSeqs.map((sequence) => sequence.depth.map(Boolean)),
       [[true, true], [true, false]]
     );
+    // A tick the request leaves unset (null) is a tick the series never set: absent from the draft.
     assert.deepEqual(
       projectedSession.config.adv.depth_tracks,
       [
-        {
-          label: 'Shared',
-          color: '#112233',
-          height: 18,
-          large_tick_interval: 10,
-          small_tick_interval: null,
-          tick_font_size: null
-        },
-        {
-          label: 'Sparse',
-          color: '#445566',
-          height: 24,
-          large_tick_interval: null,
-          small_tick_interval: 5,
-          tick_font_size: 9
-        }
+        { label: 'Shared', color: '#112233', height: 18, large_tick_interval: 10 },
+        { label: 'Sparse', color: '#445566', height: 24, small_tick_interval: 5, tick_font_size: 9 }
       ]
     );
   }
