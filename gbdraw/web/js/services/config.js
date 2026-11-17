@@ -786,12 +786,13 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
     const caption = String(entry.caption || '').trim();
     const key = rowOf(entry);
     const from = entry.dormant === true ? 'dormantEntries' : list;
-    // A dormant row is a renamed row of Python's that the Result does not draw (OV-120).
-    const python = from === 'dormantEntries' || inventory.has(legendEntryKey(entry));
+    // A dormant row is a renamed row of Python's that the Result does not draw (OV-120). An entry without a color
+    // is a row of Python's as Session 51 writes it, also where Load reads it without the inventory (a drawing's
+    // paint apart from its set's), so its record gains no copy of its user color either.
+    const python = from === 'dormantEntries' || inventory.has(legendEntryKey(entry)) || isUnsetValue(entry.color);
     const storedColor = normalizeDefaultColor(entry.color);
     const color = recordedLegendColor(legendEntryKey(entry), { python, overrides, color: storedColor });
-    // An entry without a color is a row of Python's as Session 51 writes it, also where Load reads it without the
-    // inventory (a drawing's paint apart from its set's); an editor row whose color Load cannot read is not drawn.
+    // An editor row whose color Load cannot read is not drawn.
     // A row of Python's loses no color: its stored one is a copy of its swatch or of its user color. An editor row's
     // unreadable color that its user color replaces, which Save writes again, is listed.
     const readable = python || Boolean(color) || isUnsetValue(entry.color);

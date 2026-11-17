@@ -165,7 +165,7 @@ test('a data change retires a waiting Legend rename of a caption it stops naming
 // with the track and return with it. The port asks the Legend list owner to
 // list them (here a stand-in that, like `listLegendRows`, lists the Result's
 // rows except the hidden ones, named by the list's rename, else a dormant one).
-const trackPort = ({ entries, dormant = [], hidden, result = ['CDS', 'depth', 'GC content'] }) => {
+const trackPort = ({ entries, dormant = [], hidden, result = ['CDS', 'depth', 'GC content'], legendColorOverrides = {} }) => {
   const legendEntries = { value: entries };
   const dormantLegendEntries = { value: dormant };
   const state = { hidden };
@@ -173,7 +173,7 @@ const trackPort = ({ entries, dormant = [], hidden, result = ['CDS', 'depth', 'G
   const keyOf = (entry) => entry.originalCaption || entry.caption;
   const renameOf = (key, list) => list.find((entry) => keyOf(entry) === key && entry.caption !== key)?.caption;
   const run = buildLegendStyleRetirement({
-    drawing: paintDrawing({ legendColorOverrides: {}, legendStrokeOverrides: {}, legendEntries, dormantLegendEntries }),
+    drawing: paintDrawing({ legendColorOverrides, legendStrokeOverrides: {}, legendEntries, dormantLegendEntries }),
     namedCaptions: () => new Set(),
     hiddenRows: () => (state.hidden ? ['depth'] : []),
     relistLegendEntries: () => {
@@ -190,17 +190,21 @@ const trackPort = ({ entries, dormant = [], hidden, result = ['CDS', 'depth', 'G
 };
 
 test('a hidden track\'s row leaves the list, and a renamed one waits as after a Generate (OV-120)', () => {
+  const legendColorOverrides = { depth: '#7b2cbf' };
   const port = trackPort({
     entries: [
       { caption: 'CDS', originalCaption: 'CDS' },
       { caption: 'Coverage', originalCaption: 'depth' },
       { caption: 'GC content', originalCaption: 'GC content' }
     ],
-    hidden: false
+    hidden: false,
+    legendColorOverrides
   });
   port.run(() => { port.state.hidden = true; });
   assert.deepEqual(port.captions(), ['CDS', 'GC content']);
   assert.deepEqual(port.dormantLegendEntries.value, [{ caption: 'Coverage', originalCaption: 'depth' }]);
+  // The waiting row's user color stays in its color override (V-OD22).
+  assert.deepEqual(legendColorOverrides, { depth: '#7b2cbf' });
   assert.equal(port.projections(), 1);
   // Nothing is left to move on a later port run that hides nothing more.
   port.run(() => undefined);
