@@ -2900,7 +2900,8 @@ def test_a_linear_depth_stroke_takes_figure_room_only_when_it_paints() -> None:
         return float(str(canvas["width"]).removesuffix("px")), float(str(canvas["height"]).removesuffix("px"))
 
     assert size("none", 40.0) == pytest.approx(size("none", 0.0))
-    # Past the stroke of the other tracks, the figure reaches half the depth stroke beyond the sequence's end.
+    # Past the stroke of the other tracks, the figure reaches half the depth stroke beyond the sequence's end;
+    # above and below, the depth slot's own room alone holds it, and the record adds none again (OV-3746).
     (width_20, height_20), (width_40, height_40) = size("#000000", 20.0), size("#000000", 40.0)
     assert width_40 - width_20 == pytest.approx(10.0)
-    assert height_40 > height_20
+    assert height_40 - height_20 == pytest.approx(20.0)

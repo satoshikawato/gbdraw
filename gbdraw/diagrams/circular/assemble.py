@@ -2272,16 +2272,12 @@ def _resolve_radial_layout_fitting_definition(
     return _CentreDefinitionFit(layout, reserved, narrow_radius)
 
 
-def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
-    if str(getattr(config, "dinucleotide", "")).upper() == str(nt).upper():
+def _slot_config_with_dinucleotide(config: GcContentConfigurator, nt: str) -> GcContentConfigurator:
+    if config.dinucleotide.upper() == str(nt).upper():
         return config
     cloned = copy.copy(config)
     cloned.dinucleotide = str(nt).upper()
     return cloned
-
-
-
-
 
 
 def _slot_gc_config_with_axis_font_size(
@@ -4000,7 +3996,7 @@ def _circle_slot_plan(
         show_gc=show_gc_track,
         show_skew=show_skew_track,
         track_ids=tuple(canvas_config.track_ids.items()),
-        dinucleotide=str(getattr(configurators.gc, "dinucleotide", "GC")),
+        dinucleotide=configurators.gc.dinucleotide,
     )
     plan = (
         circular_radial_plan_for_preset(circular_preset, context)

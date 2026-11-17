@@ -1907,38 +1907,47 @@ def _collect_linear_primary_bounds(
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Aabb:
     """Collect one authoritative plot-space box without inspecting rendered SVG. A record's box reaches half the
-    widest stroke past its rows: the axis, the features, and each series track it draws (GC content, GC skew and
-    its depth tracks, by ``_stroke_overhang``, the series' own room)."""
+    widest stroke it draws past the ends of its rows: the axis, the features, and each series track it draws (its
+    GC content and GC skew slots and its depth tracks, by ``_stroke_overhang``, the series' own room). Above and
+    below, a series slot's paint band already holds its stroke, so only the axis and feature strokes pad the rows."""
 
     axis_stroke = cfg.objects.axis.linear.stroke_width.for_length_param(
         canvas_config.length_param
     )
-    figure_half_stroke = max(
+    line_half_stroke = max(
         0.0,
         0.5 * float(axis_stroke),
         0.5 * float(feature_config.block_stroke_width),
         0.5 * float(feature_config.line_stroke_width),
-        _stroke_overhang(gc_config.series_paint),
-        _stroke_overhang(skew_config.series_paint),
     )
+    series_half_stroke = {
+        "dinucleotide_content": _stroke_overhang(gc_config.series_paint),
+        "dinucleotide_skew": _stroke_overhang(skew_config.series_paint),
+    }
     horizontal_offset = float(canvas_config.horizontal_offset)
     bounds: list[Aabb] = []
     for record_index, record in enumerate(records):
         placement = record_placements[record_index]
         plan = record_plans[record_index]
         scalar_axis = depth.record_scalar_axis_rooms[record_index]
-        depth_tracks = depth.record_depth_by_index[record_index] if record_index < len(depth.record_depth_by_index) else {}
-        half_stroke = max(
-            [figure_half_stroke, *(_stroke_overhang(track.config.series_paint) for track in depth_tracks.values())]
+        end_half_stroke = max(
+            [
+                line_half_stroke,
+                *(series_half_stroke.get(slot.renderer, 0.0) for slot in plan.slots),
+                *(
+                    _stroke_overhang(track.config.series_paint)
+                    for track in depth.record_depth_by_index[record_index].values()
+                ),
+            ]
         )
         bounds.append(
             Aabb(
                 horizontal_offset
                 + placement.x
-                - max(half_stroke, scalar_axis.axis_px, scalar_axis.tick_labels_px),
-                placement.axis_y + plan.paint_band.top_y - half_stroke,
-                horizontal_offset + placement.x + placement.sequence_width + half_stroke,
-                placement.axis_y + plan.paint_band.bottom_y + half_stroke,
+                - max(end_half_stroke, scalar_axis.axis_px, scalar_axis.tick_labels_px),
+                placement.axis_y + plan.paint_band.top_y - line_half_stroke,
+                horizontal_offset + placement.x + placement.sequence_width + end_half_stroke,
+                placement.axis_y + plan.paint_band.bottom_y + line_half_stroke,
             )
         )
 

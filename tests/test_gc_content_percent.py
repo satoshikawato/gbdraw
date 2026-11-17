@@ -409,6 +409,34 @@ def test_a_series_stroke_that_paints_nothing_adds_no_figure_room(mode) -> None:
     assert size("none", 40.0) == size("none", 0.0)
     assert size("#000000", 40.0) != size("none", 0.0)
 
+
+@pytest.mark.linear
+def test_a_linear_series_stroke_keeps_figure_room_once_and_only_where_it_is_drawn() -> None:
+    # OV-3746: a Linear record's bounds padded half a painted GC content stroke above and below its rows again,
+    # though the slot's own room already holds it, and counted the stroke on records that draw no GC content slot.
+    record = _make_record(length=120)
+
+    def size(show_gc: bool, width: float) -> tuple[float, float]:
+        cfg = apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": show_gc,
+                "objects.gc_content.stroke_color": "#000000",
+                "objects.gc_content.stroke_width": width,
+            },
+        )
+        canvas = assemble_linear_diagram_from_records(
+            [record], LinearAssemblyInputs(legend="none", cfg=cfg, window=20, step=20)
+        )
+        return float(str(canvas["width"]).removesuffix("px")), float(str(canvas["height"]).removesuffix("px"))
+
+    (width_20, height_20), (width_40, height_40) = size(True, 20.0), size(True, 40.0)
+    # The ends reach half the stroke past the sequence; above and below, the slot's own room alone holds it.
+    assert width_40 - width_20 == pytest.approx(10.0)
+    assert height_40 - height_20 == pytest.approx(20.0)
+    assert size(False, 40.0) == pytest.approx(size(False, 0.0))
+
+
 def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
     circular_svg = assemble_circular_diagram_from_record(
         _make_record(),
