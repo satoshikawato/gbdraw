@@ -478,6 +478,28 @@ test('Clear LOSAT results during a Generate is refused and records no step (OV-3
   } finally { state.processing.value = false; resetLosat(); }
 });
 
+// Review 4 L-a (D-261): a Generate that starts while History settles a pending edit, after Clear passed the first run
+// check, is caught when History builds the step: the same refusal (the run's reason), no step, nothing cleared.
+test('Clear LOSAT results is refused with the run\'s reason when a Generate starts while History settles a pending edit', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  resetLosat();
+  try {
+    onlyShownDrawing(app);
+    await generateRows([ringRow('k0')]);
+    const before = shownValues();
+    const steps = history.getUndoCount();
+    await history.begin('Edit setting');
+    const clearing = app.clearLosatCache();
+    assert.equal(state.processing.value, false, 'Clear passed the first run check');
+    state.processing.value = true;
+    const refused = await clearing;
+    assert.equal(/** @type {{ status?: string }} */ (refused)?.status, 'busy', 'Clear is refused with the run\'s reason');
+    assert.equal(history.getUndoCount(), steps, 'no step');
+    assert.ok(sameValues(shownValues(), before), 'nothing cleared');
+  } finally { state.processing.value = false; resetLosat(); }
+});
+
 // A project of one drawing: Clear empties every LOSAT value, a search no row names included.
 test('in a project of one drawing, Clear LOSAT results empties every LOSAT value', async () => {
   const app = createAppSetup();

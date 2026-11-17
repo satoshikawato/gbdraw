@@ -629,8 +629,14 @@ const createLosatResultsPanel = ({ runUndoableCommand, owner, slotRevision }) =>
   return {
     losatResultRows: computed(() => losatRowsOnePerKey(state.losatCacheInfo.value)),
     projectHasLosatResults: computed(() => slotRevision.value >= 0 && owner.projectLosatEvidence().some(listsLosatResults)),
-    clearLosatCache: async () => runBusy() || runUndoableCommand(msg('Clear LOSAT results'),
-      () => (runBusy() ? null : clearLosatResultsCommand(state.activeDrawingId.value, owner)))
+    clearLosatCache: async () => {
+      // A run that starts while History settles a pending edit refuses the step when History builds it.
+      let refused = runBusy();
+      if (refused) return refused;
+      const done = await runUndoableCommand(msg('Clear LOSAT results'),
+        () => ((refused = runBusy()) ? null : clearLosatResultsCommand(state.activeDrawingId.value, owner)));
+      return refused || done;
+    }
   };
 };
 
